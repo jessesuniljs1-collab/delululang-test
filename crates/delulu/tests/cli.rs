@@ -102,6 +102,34 @@ fn explain_prints_a_code_title() {
 }
 
 #[test]
+fn run_with_trace_and_assert_trace_passes_and_emits_records() {
+    let o = delulu(&[
+        "run",
+        "examples/demo.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        "fs.read=./config",
+        "--grant",
+        "secret:API_KEY=k",
+        "--trace-effects",
+        "--assert-trace",
+        "--seed",
+        "42",
+        "--clock",
+        "fixed:1000",
+    ]);
+    assert!(o.status.success(), "trace ⊆ row must hold on the demo");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("\"effect\":\"Write\""), "trace records on stderr: {err}");
+    assert!(err.contains("\"op\":\"read_text\""), "{err}");
+    // The demo's secret is requested but never exposed — no Declassify record, and the
+    // granted secret value must never appear in the trace.
+    assert!(!err.contains("\"effect\":\"Declassify\""), "{err}");
+    assert!(!err.contains("\"detail\":\"k\""), "{err}");
+}
+
+#[test]
 fn build_multimodule_package_within_manifest_passes() {
     let o = delulu(&["build", "examples/greeter"]);
     assert!(o.status.success(), "greeter should build clean: {}", stdout(&o));

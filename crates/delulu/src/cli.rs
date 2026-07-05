@@ -22,6 +22,16 @@ struct Opts {
     locked: bool,
     /// `--accept-authority <pkg>`: names packages whose authority widening is explicitly accepted.
     accept_authority: Vec<String>,
+    /// `--trace-effects`: emit one JSON trace record per effectful operation (spec §6.1).
+    trace_effects: bool,
+    /// `--trace-out <file>`: write the trace there instead of stderr.
+    trace_out: Option<String>,
+    /// `--assert-trace`: verify trace ⊆ the checker's row of main; violations are DL1101, exit 3.
+    assert_trace: bool,
+    /// `--seed <u64>`: deterministic Cap[Rand] (spec §6.2).
+    seed: Option<u64>,
+    /// `--clock fixed:<ms>`: deterministic Cap[Clock] (spec §6.2).
+    clock_ms: Option<i64>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -33,6 +43,11 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         no_prompt: false,
         locked: false,
         accept_authority: Vec::new(),
+        trace_effects: false,
+        trace_out: None,
+        assert_trace: false,
+        seed: None,
+        clock_ms: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -49,6 +64,26 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             }
             s if s.starts_with("--accept-authority=") => {
                 opts.accept_authority.push(s["--accept-authority=".len()..].to_string())
+            }
+            "--trace-effects" => opts.trace_effects = true,
+            "--assert-trace" => opts.assert_trace = true,
+            "--trace-out" => {
+                if i + 1 < rest.len() {
+                    opts.trace_out = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--seed" => {
+                if i + 1 < rest.len() {
+                    opts.seed = rest[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            "--clock" => {
+                if i + 1 < rest.len() {
+                    opts.clock_ms = rest[i + 1].strip_prefix("fixed:").and_then(|s| s.parse().ok());
+                    i += 1;
+                }
             }
             "--grant" => {
                 if i + 1 < rest.len() {
@@ -102,6 +137,7 @@ fn usage() -> &'static str {
      \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu explain   <DLxxxx>\n\
@@ -450,9 +486,44 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // Determinism knobs (spec §6.2).
+    if let Some(seed) = opts.seed {
+        delulu_runtime::set_rand_seed(seed);
+    }
+    if let Some(ms) = opts.clock_ms {
+        delulu_runtime::set_fixed_clock_ms(Some(ms));
+    }
+
+    // Effect tracing (spec §6.1) — also attached when --assert-trace needs the witness.
+    let sink = if opts.trace_effects || opts.assert_trace {
+        Some(delulu_runtime::TraceSink::new())
+    } else {
+        None
+    };
+
     let root = Value::Root(Rc::new(build_root(&grants)));
-    let interp = Interp::new(&checked.module);
-    match interp.run_main(root) {
+    let mut interp = Interp::new(&checked.module);
+    if let Some(s) = &sink {
+        interp = interp.with_trace(s.clone());
+    }
+    let run_result = interp.run_main(root);
+
+    // Emit the trace before verdicts, so the witness is available even on a fault.
+    if let Some(s) = &sink {
+        if opts.trace_effects {
+            let lines = s.to_json_lines();
+            match &opts.trace_out {
+                Some(path) => {
+                    if let Err(e) = std::fs::write(path, lines + "\n") {
+                        eprintln!("error: cannot write trace to `{path}`: {e}");
+                    }
+                }
+                None => eprintln!("{lines}"),
+            }
+        }
+    }
+
+    let code = match run_result {
         Ok(_) => 0,
         Err(fault) => {
             let mut d = Diagnostic::error(fault.code, fault.message.clone());
@@ -462,7 +533,27 @@ fn cmd_run(rest: &[String]) -> i32 {
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
+    };
+
+    // The trace ⊆ row law (spec §6.2, invariant 12): a violation is compiler-bug class (DL1101)
+    // and gets the dedicated exit code 3.
+    if opts.assert_trace {
+        if let Some(s) = &sink {
+            let allowed: std::collections::BTreeSet<String> =
+                main_row.iter().map(|e| e.name().to_string()).collect();
+            let violations = delulu_runtime::assert_trace(&allowed, &s.records());
+            if !violations.is_empty() {
+                let diags: Vec<Diagnostic> = violations
+                    .iter()
+                    .map(|v| Diagnostic::error("DL1101", format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it")))
+                    .collect();
+                print_diagnostics("run", &diags, &map, None, opts.json);
+                return 3;
+            }
+        }
     }
+
+    code
 }
 
 fn build_root(grants: &Grants) -> RootVal {
