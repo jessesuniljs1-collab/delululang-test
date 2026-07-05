@@ -1,15 +1,19 @@
 //! Command dispatch and the four Stage-1 commands (§9.5).
 
+use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 use delulu_check::{
-    authority_report, check_pins, check_program, check_self_authority, check_source,
-    check_workspace, compute_lockfile, enforce_semver_law, load_package, program_authority,
-    resolve_workspace, verify_locked, Lockfile,
+    authority_report, authority_widened, check_pins, check_program, check_self_authority,
+    check_source, check_workspace, compute_lockfile, enforce_semver_law, load_package,
+    program_authority, resolve_workspace, verify_locked, Checked, Effect, Lockfile, Program, Row,
+    Workspace,
 };
+use delulu_check::lockfile::api_row_hash;
 use delulu_diag::{envelope_to_string, render_human, Diagnostic, SourceMap};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_runtime::value::RootVal;
+use delulu_syntax::ast::Item;
 use serde_json::{json, Value as Json};
 
 /// Parsed common options.
@@ -22,6 +26,8 @@ struct Opts {
     locked: bool,
     /// `--accept-authority <pkg>`: names packages whose authority widening is explicitly accepted.
     accept_authority: Vec<String>,
+    /// `--diff <old.lock>`: for `authority`, the previous lockfile to diff against (§8).
+    diff: Option<String>,
     /// `--trace-effects`: emit one JSON trace record per effectful operation (spec §6.1).
     trace_effects: bool,
     /// `--trace-out <file>`: write the trace there instead of stderr.
@@ -43,6 +49,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         no_prompt: false,
         locked: false,
         accept_authority: Vec::new(),
+        diff: None,
         trace_effects: false,
         trace_out: None,
         assert_trace: false,
@@ -65,6 +72,13 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--accept-authority=") => {
                 opts.accept_authority.push(s["--accept-authority=".len()..].to_string())
             }
+            "--diff" => {
+                if i + 1 < rest.len() {
+                    opts.diff = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--diff=") => opts.diff = Some(s["--diff=".len()..].to_string()),
             "--trace-effects" => opts.trace_effects = true,
             "--assert-trace" => opts.assert_trace = true,
             "--trace-out" => {
@@ -112,6 +126,7 @@ pub fn run(args: &[String]) -> i32 {
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
         "authority" => cmd_authority(rest),
+        "why" => cmd_why(rest),
         "repl" => repl_cmd(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
@@ -139,10 +154,15 @@ fn usage() -> &'static str {
      \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
+     \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
+     \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu explain   <DLxxxx>\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
+     `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
+     `delulu why <Effect>` explains, at function granularity, why a program can perform an\n\
+     effect — the shortest chain of calls from `main` down to the function that performs it.\n\
      `delulu build` resolves path dependencies and verifies each dependency's authority against\n\
      its pin (DL1001); `delulu lock` writes delulu.lock and enforces the semver-authority law\n\
      (DL1003 — authority never widens silently across versions)."
@@ -213,6 +233,13 @@ fn cmd_check(rest: &[String]) -> i32 {
 
 fn cmd_authority(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
+    if let Some(old_path) = opts.diff.clone() {
+        let Some(new_arg) = file else {
+            eprintln!("error: `authority --diff` needs <old.lock> and <new.lock-or-package-dir>");
+            return 2;
+        };
+        return cmd_authority_diff(&old_path, &new_arg, &opts);
+    }
     let Some(file) = file else {
         eprintln!("error: `authority` needs a file or package directory");
         return 2;
@@ -347,6 +374,11 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
         );
     }
     let failed = n > 0 || git_blocked;
+    // §5.5: `interface.json` is a build artifact, not a check artifact — only `build` writes it,
+    // and only after a clean whole-graph check (never on a failed/diagnostic-bearing build).
+    if command == "build" && !failed {
+        write_interfaces(&ws, &program);
+    }
     if !opts.json {
         if !failed {
             eprintln!(
@@ -363,6 +395,56 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
         1
     } else {
         0
+    }
+}
+
+/// §5.5: write `<pkgdir>/target/<pkg>/interface.json` for every package in the workspace (root +
+/// path dependencies) — its `pub` surface (name, full type, effect row) plus the same
+/// `api_row_hash` the lockfile carries, so an agent can introspect a dependency without reading
+/// its source. The spec text frames this as "per lib package"; this writes it for every package
+/// regardless of `kind`, since a `bin` package's `pub` fns are equally legitimate machine surface
+/// and the extra file is harmless when there are none (`exports: []`).
+fn write_interfaces(ws: &Workspace, program: &Program) {
+    for (idx, pkg) in ws.packages.iter().enumerate() {
+        let mut exports: Vec<Json> = Vec::new();
+        for wm in ws.modules.iter().filter(|m| m.pkg == idx) {
+            for item in &wm.unit.module.items {
+                if let Item::Fn(f) = item {
+                    if !f.public {
+                        continue;
+                    }
+                    let key = format!("{}::{}", wm.unit.name, f.name.name);
+                    let ty = program.fn_types.get(&key).map(|t| t.to_string()).unwrap_or_default();
+                    let row = program
+                        .facts
+                        .get(&key)
+                        .map(|f| Row::closed(f.effects.clone()).to_string())
+                        .unwrap_or_else(|| Row::pure().to_string());
+                    exports.push(json!({ "name": f.name.name, "type": ty, "row": row }));
+                }
+            }
+        }
+        exports.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+        let doc = json!({
+            "package": pkg.name,
+            "version": pkg.manifest.version,
+            "exports": exports,
+            "api_row_hash": api_row_hash(ws, idx),
+        });
+        let out_dir = pkg.dir.join("target").join(&pkg.name);
+        if let Err(e) = std::fs::create_dir_all(&out_dir) {
+            eprintln!("warning: cannot create `{}`: {e}", out_dir.display());
+            continue;
+        }
+        match serde_json::to_string_pretty(&doc) {
+            Ok(text) => {
+                let out_file = out_dir.join("interface.json");
+                if let Err(e) = std::fs::write(&out_file, text) {
+                    eprintln!("warning: cannot write `{}`: {e}", out_file.display());
+                }
+            }
+            Err(e) => eprintln!("warning: cannot serialize interface.json for `{}`: {e}", pkg.name),
+        }
     }
 }
 
@@ -438,6 +520,357 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+// ----- authority --diff (§8: the supply-chain review surface) --------------
+
+/// `delulu authority --diff <old.lock> <new.lock-or-dir>`: compare two authority *states*.
+/// `old_path` is always a `delulu.lock`; `new_arg` is either another lockfile or a package
+/// directory to resolve+check+lock fresh (so a maintainer can diff "what's locked" against
+/// "what HEAD would lock" without writing a file first).
+fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
+    let old_text = match std::fs::read_to_string(old_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{old_path}`: {e}");
+            return 2;
+        }
+    };
+    let old_lock = Lockfile::parse(&old_text);
+
+    let new_lock = if std::path::Path::new(new_arg).is_dir() {
+        let ws = resolve_workspace(new_arg);
+        let program = check_workspace(&ws);
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        diags.extend(program.diagnostics.iter().cloned());
+        if errors(&diags) > 0 {
+            print_diagnostics("authority", &diags, &ws.source_map, None, opts.json);
+            return 1;
+        }
+        compute_lockfile(&ws, &program)
+    } else {
+        let text = match std::fs::read_to_string(new_arg) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: cannot read `{new_arg}`: {e}");
+                return 2;
+            }
+        };
+        Lockfile::parse(&text)
+    };
+
+    // Union of every package name mentioned on either side, so additions/removals surface too.
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    names.extend(old_lock.packages.iter().map(|p| p.name.clone()));
+    names.extend(new_lock.packages.iter().map(|p| p.name.clone()));
+
+    let mut added_effects = serde_json::Map::new();
+    let mut removed_effects = serde_json::Map::new();
+    let mut added_scopes = serde_json::Map::new();
+    let mut api_row_changes = serde_json::Map::new();
+    let mut widened = false;
+
+    for name in &names {
+        // A package missing on one side diffs against an empty (`Default`) entry: a package
+        // that disappeared loses authority (never a widening); a brand-new package's authority
+        // is entirely "added".
+        let old_e = old_lock.get(name).cloned().unwrap_or_default();
+        let new_e = new_lock.get(name).cloned().unwrap_or_default();
+
+        let old_fx: BTreeSet<&str> = old_e.effects.iter().map(String::as_str).collect();
+        let new_fx: BTreeSet<&str> = new_e.effects.iter().map(String::as_str).collect();
+        let added: Vec<&str> = new_fx.difference(&old_fx).copied().collect();
+        let removed: Vec<&str> = old_fx.difference(&new_fx).copied().collect();
+        if !added.is_empty() {
+            added_effects.insert(name.clone(), json!(added));
+        }
+        if !removed.is_empty() {
+            removed_effects.insert(name.clone(), json!(removed));
+        }
+
+        let mut scope_obj = serde_json::Map::new();
+        added_scope_field(&mut scope_obj, "cap_kinds", &old_e.cap_kinds, &new_e.cap_kinds);
+        added_scope_field(&mut scope_obj, "net", &old_e.net, &new_e.net);
+        added_scope_field(&mut scope_obj, "fs.read", &old_e.fs_read, &new_e.fs_read);
+        added_scope_field(&mut scope_obj, "fs.write", &old_e.fs_write, &new_e.fs_write);
+        if !scope_obj.is_empty() {
+            added_scopes.insert(name.clone(), Json::Object(scope_obj));
+        }
+
+        if old_e.api_row_hash != new_e.api_row_hash {
+            api_row_changes.insert(
+                name.clone(),
+                json!({ "old_hash": old_e.api_row_hash, "new_hash": new_e.api_row_hash }),
+            );
+        }
+
+        // Reuses the same subset check the semver-authority law enforces (lockfile.rs) — a
+        // package missing from one side compares against a `Default` (empty-authority) entry.
+        if authority_widened(&old_e, &new_e) {
+            widened = true;
+        }
+    }
+
+    let verdict = if widened {
+        "WIDENING — requires major version + --accept-authority"
+    } else {
+        "OK"
+    };
+
+    let report = json!({
+        "added_effects": added_effects,
+        "removed": removed_effects,
+        "added_scopes": added_scopes,
+        "api_row_changes": api_row_changes,
+        "verdict": verdict,
+    });
+
+    if opts.json {
+        println!("{}", serde_json::to_string_pretty(&report).expect("diff report serializes"));
+    } else {
+        println!("Authority diff: {old_path} -> {new_arg}");
+        if added_effects.is_empty() && removed_effects.is_empty() && added_scopes.is_empty() && api_row_changes.is_empty() {
+            println!("  (no authority or public-API changes)");
+        } else {
+            for (pkg, v) in &added_effects {
+                println!("  {pkg}: + effects {}", strs(v).join(", "));
+            }
+            for (pkg, v) in &removed_effects {
+                println!("  {pkg}: - effects {}", strs(v).join(", "));
+            }
+            for (pkg, v) in &added_scopes {
+                println!("  {pkg}: + scopes {v}");
+            }
+            for (pkg, v) in &api_row_changes {
+                println!(
+                    "  {pkg}: api row changed ({} -> {})",
+                    v["old_hash"].as_str().unwrap_or("?"),
+                    v["new_hash"].as_str().unwrap_or("?")
+                );
+            }
+        }
+        println!("verdict: {verdict}");
+    }
+
+    0
+}
+
+fn added_scope_field(obj: &mut serde_json::Map<String, Json>, key: &str, old: &[String], new: &[String]) {
+    let old_set: BTreeSet<&str> = old.iter().map(String::as_str).collect();
+    let added: Vec<&str> = new.iter().map(String::as_str).filter(|s| !old_set.contains(s)).collect();
+    if !added.is_empty() {
+        obj.insert(key.to_string(), json!(added));
+    }
+}
+
+// ----- why -------------------------------------------------------------------------------------
+
+/// `delulu why <Effect> <file-or-dir>`: explain, at FUNCTION granularity, why a program can
+/// perform an effect (§8). This is an honest approximation, not the spec's full "op with that
+/// effect" story:
+///
+/// - It names the deepest *function* that originates the effect (the one where the effect is
+///   introduced by a capability operation rather than by calling something else that has it),
+///   not the specific call-site/operation within that function's body. `FnFacts` records a
+///   function's row, not a per-statement trace, so finer granularity isn't available from these
+///   facts without walking the body AST again.
+/// - It reports exactly ONE origin path (the first one found, in `BTreeSet` — i.e. lexical —
+///   callee order), not "all minimal paths, ≤ 10" as §8 literally asks for. A same-effect cycle
+///   among callees is cut by the `visited` set so the walk always terminates.
+///
+/// Algorithm: resolve/check the program; if `main`'s declared row doesn't contain the effect,
+/// report "cannot perform" (exit 0). Otherwise walk from `main`: at each step, look at the
+/// current function's callees (resolved to their owning module via `call_owner`); descend into
+/// the first one whose row still contains the effect; stop when none do — that function performs
+/// it directly.
+fn cmd_why(rest: &[String]) -> i32 {
+    // `why` takes two positionals (`<Effect> <file-or-dir>`) where every other command takes one;
+    // peel the effect name off the front and hand the rest to the shared `parse_opts`.
+    let mut effect_name: Option<String> = None;
+    let mut remainder: Vec<String> = Vec::new();
+    for a in rest {
+        if effect_name.is_none() && !a.starts_with('-') {
+            effect_name = Some(a.clone());
+        } else {
+            remainder.push(a.clone());
+        }
+    }
+    let Some(effect_name) = effect_name else {
+        eprintln!("error: `why` needs an effect name and a file or package directory, e.g. `delulu why Net examples/greeter`");
+        return 2;
+    };
+    let (path, opts) = parse_opts(&remainder);
+    let Some(path) = path else {
+        eprintln!("error: `why` needs a file or package directory");
+        return 2;
+    };
+
+    let (diags, program, locations, map): (Vec<Diagnostic>, Program, HashMap<String, (String, u32)>, SourceMap) =
+        if std::path::Path::new(&path).is_dir() {
+            let ws = resolve_workspace(&path);
+            let program = check_workspace(&ws);
+            let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+            diags.extend(program.diagnostics.iter().cloned());
+            let locations = locations_workspace(&ws);
+            (diags, program, locations, ws.source_map)
+        } else {
+            let (map, id, src) = match load(&path) {
+                Ok(x) => x,
+                Err(c) => return c,
+            };
+            let checked = check_source(id, &src);
+            let locations = locations_single(&checked, &map);
+            let diags = checked.diagnostics.clone();
+            let program = synth_single_program(&checked);
+            (diags, program, locations, map)
+        };
+
+    if errors(&diags) > 0 {
+        print_diagnostics("why", &diags, &map, None, opts.json);
+        return 1;
+    }
+
+    // A "known" effect is a core primitive, or a user-declared `effect` that appears anywhere in
+    // this program's facts (reachable or not — a program can ask "why" about a dead branch too).
+    let is_known = Effect::core_from_name(&effect_name).is_some()
+        || program.facts.values().any(|f| f.effects.iter().any(|e| e.name() == effect_name));
+    if !is_known {
+        eprintln!(
+            "error: `{effect_name}` is not a known effect (core effects: Read, Write, Net, Clock, Rand, Declassify; \
+             or a user-declared `effect` visible in this program)"
+        );
+        return 2;
+    }
+
+    let Some(entry_mod) = program.entry_module.clone() else {
+        eprintln!("error: `why` needs an executable entry point (`fn main`); none was found in `{path}`");
+        return 2;
+    };
+    let main_key = format!("{entry_mod}::main");
+    let Some(main_facts) = program.facts.get(&main_key) else {
+        eprintln!("error: no `main` function found in `{path}`");
+        return 2;
+    };
+
+    if !main_facts.effects.iter().any(|e| e.name() == effect_name) {
+        if opts.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": false, "path": [] }))
+                    .expect("why report serializes")
+            );
+        } else {
+            println!("program cannot perform `{effect_name}`");
+        }
+        return 0;
+    }
+
+    // ----- the origin walk ---------------------------------------------------------------------
+    let mut path_nodes = vec![main_key.clone()];
+    let mut visited: std::collections::HashSet<String> = std::iter::once(main_key.clone()).collect();
+    let mut current = main_key;
+    loop {
+        let Some((cur_mod, _)) = current.split_once("::") else { break };
+        let Some(facts) = program.facts.get(&current) else { break };
+        let mut next = None;
+        for callee in &facts.callees {
+            let Some(owner) = program.call_owner.get(cur_mod).and_then(|o| o.get(callee)) else { continue };
+            let key = format!("{owner}::{callee}");
+            if visited.contains(&key) {
+                continue;
+            }
+            if let Some(cf) = program.facts.get(&key) {
+                if cf.effects.iter().any(|e| e.name() == effect_name) {
+                    next = Some(key);
+                    break;
+                }
+            }
+        }
+        match next {
+            Some(k) => {
+                visited.insert(k.clone());
+                path_nodes.push(k.clone());
+                current = k;
+            }
+            None => break,
+        }
+    }
+
+    if opts.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": true, "path": path_nodes }))
+                .expect("why report serializes")
+        );
+    } else {
+        let mut out = String::new();
+        for (i, key) in path_nodes.iter().enumerate() {
+            let fname = key.split_once("::").map(|(_, f)| f).unwrap_or(key.as_str());
+            if i > 0 {
+                out.push_str(" -> ");
+            }
+            out.push_str(fname);
+            if let Some((file, line)) = locations.get(key) {
+                out.push_str(&format!(" ({file}:{line})"));
+            }
+        }
+        out.push_str(&format!(" — {effect_name}"));
+        println!("{out}");
+    }
+    0
+}
+
+/// Function-declaration locations (display file + 1-based line) across a whole workspace,
+/// keyed `"module::fn"` — the same key shape as `Program::facts`.
+fn locations_workspace(ws: &Workspace) -> HashMap<String, (String, u32)> {
+    let mut out = HashMap::new();
+    for wm in &ws.modules {
+        for item in &wm.unit.module.items {
+            if let Item::Fn(f) = item {
+                let (line, _col) = ws.source_map.position(f.name.span.file, f.name.span.start);
+                out.insert(format!("{}::{}", wm.unit.name, f.name.name), (ws.source_map.name(f.name.span.file).to_string(), line));
+            }
+        }
+    }
+    out
+}
+
+/// Same as [`locations_workspace`], for a single checked file (one implicit module).
+fn locations_single(checked: &Checked, map: &SourceMap) -> HashMap<String, (String, u32)> {
+    let mod_name = checked.module.name.dotted();
+    let mut out = HashMap::new();
+    for item in &checked.module.items {
+        if let Item::Fn(f) = item {
+            let (line, _col) = map.position(f.name.span.file, f.name.span.start);
+            out.insert(format!("{mod_name}::{}", f.name.name), (map.name(f.name.span.file).to_string(), line));
+        }
+    }
+    out
+}
+
+/// Build a `Program`-shaped view of one checked file so `why` can walk it exactly like a
+/// multi-module package. There is no cross-module structure for a lone file — the whole file is
+/// treated as its own module (named by its `module` header), and `call_owner` maps every
+/// declared top-level function back to that one module. `Program`'s fields are all `pub`, so this
+/// is a plain struct literal — no new API surface needed in `delulu-check`.
+fn synth_single_program(checked: &Checked) -> Program {
+    let mod_name = checked.module.name.dotted();
+    let mut facts = HashMap::new();
+    let mut fn_types = HashMap::new();
+    for (name, f) in &checked.result.facts {
+        facts.insert(format!("{mod_name}::{name}"), f.clone());
+    }
+    for (name, t) in &checked.result.fn_types {
+        fn_types.insert(format!("{mod_name}::{name}"), t.clone());
+    }
+    let mut owner = HashMap::new();
+    for name in checked.table.fns.keys() {
+        owner.insert(name.clone(), mod_name.clone());
+    }
+    let mut call_owner = HashMap::new();
+    call_owner.insert(mod_name.clone(), owner);
+    let entry_module = if checked.result.main_present { Some(mod_name) } else { None };
+    Program { diagnostics: checked.diagnostics.clone(), facts, fn_types, call_owner, entry_module }
 }
 
 // ----- run -----------------------------------------------------------------

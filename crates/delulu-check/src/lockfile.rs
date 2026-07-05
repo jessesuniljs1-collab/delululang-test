@@ -188,6 +188,13 @@ pub fn compute_entry(ws: &Workspace, program: &Program, pkg_idx: usize) -> LockE
     }
 }
 
+/// The same blake3 hash `compute_entry` uses for `LockEntry.api_row_hash`, exposed additively so
+/// callers that need only the hash (e.g. `interface.json` emission, §5.5) don't have to recompute
+/// a full lock entry to get it.
+pub fn api_row_hash(ws: &Workspace, pkg_idx: usize) -> String {
+    h(api_row_dump(ws, pkg_idx).as_bytes())
+}
+
 /// Compute the full lockfile for a checked workspace.
 pub fn compute_lockfile(ws: &Workspace, program: &Program) -> Lockfile {
     let mut packages: Vec<LockEntry> = (0..ws.packages.len()).map(|i| compute_entry(ws, program, i)).collect();

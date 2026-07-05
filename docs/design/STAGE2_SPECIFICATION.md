@@ -438,11 +438,20 @@ Implementation-forced deviations, recorded for honesty:
 - **Git-dependency resolution is deferred, not faked**: unpinned git deps are DL1007; a pinned
   git dep is refused with a clear "resolution deferred" message rather than pretend-verified.
 
-Not yet done (later Stage-2 increments): acceptance criteria **1** (`interface.json` emission,
-§5.5), **5** (`delulu why`), **6** (`authority --diff`), **9** (fuzz harness ≥100k), **10**
-(`DELULU_CORE.md`), **11** (`pub import` re-exports — the AST `Import` has no `public` field yet).
-Also: `delulu authority <dir>` still uses the single-package path (does not yet resolve
-cross-package imports). CI is Windows-only so far (criterion 12 partial).
+Phase 2a additions (2026-07-05, 127 tests green): criterion **1** `interface.json` emission
+(§5.5 — written per package on `delulu build` to `<pkgdir>/target/<pkg>/interface.json` with pub
+exports + api_row_hash); criterion **5** `delulu why <Effect>` (function-granularity origin path
+from `main` — honest approximation of the op-level story, one path not all-minimal, documented in
+code); criterion **6** `delulu authority --diff <old.lock> <new.lock-or-dir>` (per-package
+effect/scope/api-row-hash diff with the WIDENING verdict — per-package rather than the spec's
+per-function `api_row_changes`, noted); criterion **10** `DELULU_CORE.md` committed (Progress /
+Preservation / Effect-Soundness theorems with paper-proof sketches + a traceability table; honesty
+clause: sketches not mechanized, mechanization is open future work).
+
+Not yet done: criteria **9** (fuzz harness ≥100k) and **11** (`pub import` re-exports — the AST
+`Import` has no `public` field yet) — the last two Stage-2 increments. Also: `delulu authority
+<dir>` still uses the single-package path (does not yet resolve cross-package imports). CI is
+Windows-only so far (criterion 12 partial).
 
 *Stage 2 makes the dependency graph a place where authority cannot hide. Stage 3 gives the
 program a floor to stand on.*

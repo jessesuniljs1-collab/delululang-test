@@ -1,3 +1,6 @@
 /target
+# Rust build output anywhere (e.g. examples/<pkg>/target from `delulu build`,
+# and per-package target/ dirs holding interface.json).
+target/
 **/*.rs.bk
 Cargo.lock
