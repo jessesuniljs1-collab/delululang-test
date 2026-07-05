@@ -10,8 +10,8 @@
 mod codegen;
 mod host;
 
-pub use codegen::{compile_module, CompileError};
-pub use host::{run_int_fn, WasmError};
+pub use codegen::{compile_module, uses_console, CompileError};
+pub use host::{run_console_fn, run_int_fn, WasmError};
 
 use delulu_syntax::ast::Module;
 
@@ -97,5 +97,43 @@ mod tests {
         let src = "module m\nfn greet() -> Str { \"hi\" }\n";
         let checked = check_source(0, src);
         assert!(compile_module(&checked.module).is_ok());
+    }
+
+    // ----- Phase 3b: the delulu:cap host interface (console println) -------------------------
+
+    #[test]
+    fn println_effect_matches_the_interpreter() {
+        use delulu_check::ResourceKind;
+        use delulu_runtime::{set_capture, take_capture, CapScope, CapVal, Value};
+
+        let src = "module m\nfn greet(out: Cap[Console]) ! {Write} { out.println(\"hello from wasm\") }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        assert!(uses_console(&checked.module), "greet must be detected as using the console");
+
+        // WASM engine: run `greet` with a granted Console handle (index 0); the effect goes
+        // through the delulu:cap host import, which reads the string from guest memory.
+        let wasm = compile_module(&checked.module).expect("compile");
+        let wasm_out = run_console_fn(&wasm, "greet", &[0]).expect("wasm run");
+
+        // Interpreter (reference engine): capture its console output for the same call.
+        set_capture(true);
+        let interp = Interp::new(&checked.module);
+        let cap = Value::Cap(std::rc::Rc::new(CapVal { kind: ResourceKind::Console, scope: CapScope::Console }));
+        interp.call_with("greet", vec![cap]).expect("interp run");
+        let interp_out = take_capture().expect("capture was on");
+
+        assert_eq!(wasm_out, interp_out, "console output must match across engines");
+        assert_eq!(wasm_out, "hello from wasm\n");
+    }
+
+    #[test]
+    fn ungranted_console_handle_traps_host_side() {
+        // Handle 5 is out of the granted cap table → the host refuses the effect (scope check).
+        let src = "module m\nfn greet(out: Cap[Console]) ! {Write} { out.println(\"x\") }\n";
+        let checked = check_source(0, src);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let err = run_console_fn(&wasm, "greet", &[5]);
+        assert!(err.is_err(), "an ungranted capability handle must be refused host-side");
     }
 }

@@ -10,7 +10,8 @@ pub mod value;
 
 pub use broker::{parse_manifest, Grants, Manifest};
 pub use interp::Interp;
-pub use prim::{set_fixed_clock_ms, set_rand_seed};
+pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
+pub use value::{CapScope, CapVal};
 pub use trace::{assert_trace, TraceRecord, TraceSink};
 pub use value::{Fault, RootVal, Value};
 

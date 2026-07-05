@@ -134,11 +134,11 @@ fn cap(kind: ResourceKind, scope: CapScope) -> Value {
 pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
     match (capv.kind, method) {
         (ResourceKind::Console, "println") => {
-            println!("{}", str_arg(args, 0, span)?);
+            emit_console(&str_arg(args, 0, span)?, true);
             Ok(Value::Unit)
         }
         (ResourceKind::Console, "print") => {
-            print!("{}", str_arg(args, 0, span)?);
+            emit_console(&str_arg(args, 0, span)?, false);
             Ok(Value::Unit)
         }
         (ResourceKind::Console, "readline") => {
@@ -381,6 +381,42 @@ use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
     static FIXED_CLOCK: Cell<Option<i64>> = Cell::new(None);
+    /// When `Some`, `Cap[Console]` output is captured into this buffer instead of stdout — used by
+    /// tests and by the WASM backend's two-engine parity harness (§9). Off by default.
+    static CAPTURE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Turn Console output capture on (fresh empty buffer) or off (restore stdout).
+pub fn set_capture(on: bool) {
+    CAPTURE.with(|c| *c.borrow_mut() = if on { Some(String::new()) } else { None });
+}
+
+/// Take and clear the captured Console output, if capture is on.
+pub fn take_capture() -> Option<String> {
+    CAPTURE.with(|c| c.borrow_mut().take())
+}
+
+/// Emit a Console string: to the capture buffer if capturing, else to real stdout.
+fn emit_console(s: &str, newline: bool) {
+    let captured = CAPTURE.with(|c| {
+        let mut b = c.borrow_mut();
+        if let Some(buf) = b.as_mut() {
+            buf.push_str(s);
+            if newline {
+                buf.push('\n');
+            }
+            true
+        } else {
+            false
+        }
+    });
+    if !captured {
+        if newline {
+            println!("{s}");
+        } else {
+            print!("{s}");
+        }
+    }
 }
 fn seed() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E3779B9) | 1

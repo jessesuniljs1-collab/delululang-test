@@ -261,11 +261,24 @@ additive `Interp::call_int_fn` must agree — verified on `fib`, `gcd`, polynomi
 booleans, and negation. Constructs outside the fragment are `CompileError` (DL1201-class) and
 stay on the interpreter, which remains the reference engine.
 
-Remaining Phase 3 increments (in order): the **`delulu:cap` host interface** (§4 — string values,
-capabilities as host externref handles, all scope checks host-side); the **`.dwx` artifact** (§5,
-embedded authority manifest + `delulu build --target wasm` / `run --engine wasm`); secrets-stay-
-host-side (§4.4); the DL12xx registry + diagnostics; and **full conformance parity** across both
-engines (§9 criteria 1–3), the hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
+**Phase 3b — the `delulu:cap` host interface, first slice — is implemented and green** (139
+tests). `codegen.rs` now handles `Str` (string literals live length-prefixed in the module's
+linear memory; a `Str` is an i32 pointer), `Cap[Console]` (an i32 handle), and `Unit`, and
+compiles `Cap[Console].println(str)` to an imported host function `delulu:cap.console_println`.
+`host.rs::run_console_fn` provides that import via a Wasmtime `Linker`: it performs the Write
+effect **host-side**, checks the capability handle against a host cap table (an ungranted handle
+is refused — the scope check host-side), and reads the string out of the guest's exported memory
+(the guest gets no OS handle). The runtime gained a capturable console (`set_capture`/
+`take_capture`) and `Interp::call_with`, so the parity test compares the WASM host's captured
+output to the interpreter's — **identical output on a Write effect**, not just pure computation.
+(Implementation note: a capability refusal is recorded in host state and surfaced after the call
+rather than returned from inside the wasm-invoked callback, which aborts on Windows.)
+
+Remaining Phase 3 increments: string concatenation + `Root`/`main` threading in WASM; broader
+`delulu:cap` ops (fs/clock/rand) with host-side scope checks; secrets-stay-host-side (§4.4); the
+**`.dwx` artifact** (§5) + `delulu build --target wasm` / `run --engine wasm` + DL12xx registry;
+and **full conformance parity** across both engines (§9 criteria 1–3), the hostile-guest test
+(§9.4), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

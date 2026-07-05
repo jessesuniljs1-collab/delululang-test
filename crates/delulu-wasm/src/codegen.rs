@@ -1,21 +1,26 @@
-//! Phase 3a code generation: the pure-Int/Bool fragment of DeluluLang → core WebAssembly.
+//! Phase 3a/3b code generation: DeluluLang → core WebAssembly.
 //!
-//! Supported: `Int` (i64), `Bool` (i32), arithmetic, comparisons, `&&`/`||`, unary `-`/`!`,
-//! `if`/`else` as an expression, `let`, calls to other pure functions, and recursion. Anything
-//! outside this fragment (strings, capabilities, GC types, `match`, `while`, foreign, …) is a
-//! `CompileError::Unsupported` — DL1201 — and that function is simply not compiled to WASM; the
-//! interpreter remains the reference engine for it. This is the honest floor Phase 3a stands on;
-//! later phases add the `delulu:cap` host interface, strings, and GC types.
+//! Phase 3a (pure): `Int` (i64), `Bool` (i32), arithmetic, comparisons, `&&`/`||`, unary `-`/`!`,
+//! `if`/`else`, `let`, calls, recursion.
+//! Phase 3b (the `delulu:cap` floor, incrementally): `Str` values (string LITERALS live in the
+//! module's linear memory, length-prefixed; a `Str` is an i32 pointer to `[len:u32-le][bytes]`),
+//! `Cap[Console]` values (i32 handles into a host cap table), `Unit`, and `Cap[Console].println`
+//! compiled to an imported host function `delulu:cap.console_println(cap, str_ptr)`. The host
+//! performs the effect and its scope check (§4); the guest never touches an OS handle.
+//!
+//! Constructs outside this fragment (string concatenation, other capabilities, `match`, `while`,
+//! foreign, GC types) are `CompileError::Unsupported` (DL1201) and stay on the interpreter, which
+//! remains the reference engine.
 
 use std::collections::HashMap;
 
 use delulu_syntax::ast::*;
 use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module as WasmModule,
+    BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
+    FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module as WasmModule,
     TypeSection, ValType,
 };
 
-/// A code-generation failure. Maps to diagnostic DL1201 at the CLI boundary.
 #[derive(Clone, Debug)]
 pub enum CompileError {
     Unsupported(String),
@@ -24,85 +29,257 @@ pub enum CompileError {
 impl CompileError {
     pub fn message(&self) -> String {
         match self {
-            CompileError::Unsupported(what) => format!("WASM codegen (Phase 3a) does not support {what}"),
+            CompileError::Unsupported(what) => format!("WASM codegen does not support {what}"),
         }
     }
 }
 
-/// The two scalar WASM types Phase 3a uses: `Int` is i64, `Bool` is i32.
+/// The value types the backend handles. `Str` and `Cap` are both i32 (a memory pointer / a host
+/// handle); they are kept distinct so the type checker in codegen refuses nonsense like `str + str`
+/// or arithmetic on a capability. `Unit` occupies zero stack slots.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
-    I64,
-    I32,
+    I64,  // Int
+    I32,  // Bool
+    Str,  // i32 pointer into linear memory
+    Cap,  // i32 host handle (Console only, Phase 3b)
+    Unit, // no value
 }
 
-fn valtype(t: Ty) -> ValType {
+/// The single imported host function's index (present only when the module uses the console).
+const CONSOLE_PRINTLN: u32 = 0;
+
+fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
-        Ty::I64 => ValType::I64,
-        Ty::I32 => ValType::I32,
+        Ty::I64 => Some(ValType::I64),
+        Ty::I32 | Ty::Str | Ty::Cap => Some(ValType::I32),
+        Ty::Unit => None,
     }
 }
 
-fn scalar_ty(t: &TypeExpr) -> Option<Ty> {
+fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
     if let TypeExpr::Named { path, args, .. } = t {
-        if args.is_empty() && path.segs.len() == 1 {
-            return match path.segs[0].name.as_str() {
-                "Int" => Some(Ty::I64),
-                "Bool" => Some(Ty::I32),
-                _ => None,
-            };
+        if path.segs.len() == 1 {
+            let name = path.segs[0].name.as_str();
+            if name == "Cap" {
+                if let [TypeExpr::Named { path: rp, args: ra, .. }] = &args[..] {
+                    if ra.is_empty() && rp.segs.len() == 1 && rp.segs[0].name == "Console" {
+                        return Some(Ty::Cap);
+                    }
+                }
+                return None; // other capability kinds are Phase 3b+
+            }
+            if args.is_empty() {
+                return match name {
+                    "Int" => Some(Ty::I64),
+                    "Bool" => Some(Ty::I32),
+                    "Str" => Some(Ty::Str),
+                    "Unit" => Some(Ty::Unit),
+                    _ => None,
+                };
+            }
         }
     }
     None
 }
 
-/// A function is compilable in Phase 3a iff it is non-generic with all-scalar params and a scalar
-/// return type. (Its body may still fail — that surfaces as a `CompileError` while compiling.)
-fn is_compilable(f: &FnDecl) -> bool {
-    f.generics.is_empty()
-        && f.params.iter().all(|p| scalar_ty(&p.ty).is_some())
-        && f.ret.as_ref().and_then(scalar_ty).is_some()
+fn ret_ty(f: &FnDecl) -> Option<Ty> {
+    match &f.ret {
+        None => Some(Ty::Unit),
+        Some(t) => wasm_ty(t),
+    }
 }
 
-/// Compile a checked module's pure-Int/Bool functions to a WASM module that exports each by name.
-/// Returns the WASM bytes. Errors if a compilable function's body uses an unsupported construct.
-pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
-    let mut fns: Vec<&FnDecl> = Vec::new();
-    let mut index: HashMap<String, (u32, Ty)> = HashMap::new();
-    for item in &module.items {
-        if let Item::Fn(f) = item {
-            if is_compilable(f) {
-                let ret = scalar_ty(f.ret.as_ref().unwrap()).unwrap();
-                index.insert(f.name.name.clone(), (fns.len() as u32, ret));
-                fns.push(f);
-            }
+fn is_compilable(f: &FnDecl) -> bool {
+    f.generics.is_empty()
+        && f.params.iter().all(|p| matches!(wasm_ty(&p.ty), Some(t) if t != Ty::Unit))
+        && ret_ty(f).is_some()
+}
+
+/// Does the module perform console output (so it needs the host import)?
+pub fn uses_console(module: &Module) -> bool {
+    module.items.iter().any(|it| {
+        if let Item::Fn(f) = it {
+            is_compilable(f) && block_uses_console(&f.body)
+        } else {
+            false
         }
+    })
+}
+
+fn block_uses_console(b: &Block) -> bool {
+    b.stmts.iter().any(|s| match s {
+        Stmt::Let { value, .. } | Stmt::Assign { value, .. } => expr_uses_console(value),
+        Stmt::While { cond, body, .. } => expr_uses_console(cond) || block_uses_console(body),
+        Stmt::Return { value: Some(e), .. } => expr_uses_console(e),
+        Stmt::Return { value: None, .. } => false,
+        Stmt::Expr(e) => expr_uses_console(e),
+    })
+}
+
+fn expr_uses_console(e: &Expr) -> bool {
+    match e {
+        Expr::Method { name, recv, args, .. } => {
+            (name.name == "println") || expr_uses_console(recv) || args.iter().any(expr_uses_console)
+        }
+        Expr::Call { callee, args, .. } => expr_uses_console(callee) || args.iter().any(expr_uses_console),
+        Expr::Binary { lhs, rhs, .. } => expr_uses_console(lhs) || expr_uses_console(rhs),
+        Expr::Unary { operand, .. } => expr_uses_console(operand),
+        Expr::If { cond, then_, else_, .. } => {
+            expr_uses_console(cond) || block_uses_console(then_) || else_.as_ref().is_some_and(|e| expr_uses_console(e))
+        }
+        Expr::Block(b) => block_uses_console(b),
+        _ => false,
+    }
+}
+
+/// Compile a checked module's compilable functions to a WASM module exporting each by name.
+pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
+    let fns: Vec<&FnDecl> = module
+        .items
+        .iter()
+        .filter_map(|it| if let Item::Fn(f) = it { Some(f) } else { None })
+        .filter(|f| is_compilable(f))
+        .collect();
+
+    let needs_console = uses_console(module);
+    let n_imports: u32 = if needs_console { 1 } else { 0 };
+
+    // Collect string literals into a length-prefixed linear-memory image.
+    let mut str_off: HashMap<String, u32> = HashMap::new();
+    let mut data: Vec<u8> = Vec::new();
+    for f in &fns {
+        collect_strings_block(&f.body, &mut str_off, &mut data);
+    }
+
+    // Function index map: name -> (absolute wasm function index, return type).
+    let mut index: HashMap<String, (u32, Ty)> = HashMap::new();
+    for (i, f) in fns.iter().enumerate() {
+        index.insert(f.name.name.clone(), (n_imports + i as u32, ret_ty(f).unwrap()));
     }
 
     let mut types = TypeSection::new();
-    let mut funcsec = FunctionSection::new();
-    let mut exports = ExportSection::new();
-    let mut code = CodeSection::new();
-
-    for (i, f) in fns.iter().enumerate() {
-        let params: Vec<ValType> = f.params.iter().map(|p| valtype(scalar_ty(&p.ty).unwrap())).collect();
-        let ret = valtype(scalar_ty(f.ret.as_ref().unwrap()).unwrap());
-        types.ty().function(params, [ret]);
-        funcsec.function(i as u32);
-        exports.export(&f.name.name, ExportKind::Func, i as u32);
-        code.function(&compile_fn(f, &index)?);
+    if needs_console {
+        types.ty().function([ValType::I32, ValType::I32], []); // type 0: console_println(cap, ptr)
+    }
+    let type_base = n_imports; // defined function types start after import types
+    for f in &fns {
+        let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&p.ty).unwrap()).unwrap()).collect();
+        let results = result_valtypes(ret_ty(f).unwrap());
+        types.ty().function(params, results);
     }
 
+    let mut imports = ImportSection::new();
+    if needs_console {
+        imports.import("delulu:cap", "console_println", EntityType::Function(0));
+    }
+
+    let mut funcsec = FunctionSection::new();
+    for (i, _) in fns.iter().enumerate() {
+        funcsec.function(type_base + i as u32);
+    }
+
+    let mut mems = MemorySection::new();
+    let min_pages = ((data.len() as u64 + 65535) / 65536).max(1);
+    mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
+
+    let mut exports = ExportSection::new();
+    exports.export("memory", ExportKind::Memory, 0);
+    for (i, f) in fns.iter().enumerate() {
+        exports.export(&f.name.name, ExportKind::Func, n_imports + i as u32);
+    }
+
+    let mut code = CodeSection::new();
+    for f in &fns {
+        code.function(&compile_fn(f, &index, &str_off)?);
+    }
+
+    let mut datas = DataSection::new();
+    if !data.is_empty() {
+        datas.active(0, &ConstExpr::i32_const(0), data.iter().copied());
+    }
+
+    // Section order: Type(1), Import(2), Function(3), Memory(5), Export(7), Code(10), Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
+    if needs_console {
+        m.section(&imports);
+    }
     m.section(&funcsec);
+    m.section(&mems);
     m.section(&exports);
     m.section(&code);
+    m.section(&datas);
     Ok(m.finish())
+}
+
+fn result_valtypes(ret: Ty) -> Vec<ValType> {
+    match wasm_valtype(ret) {
+        Some(v) => vec![v],
+        None => vec![],
+    }
+}
+
+fn collect_strings_block(b: &Block, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
+    for s in &b.stmts {
+        match s {
+            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => collect_strings_expr(value, off, data),
+            Stmt::While { cond, body, .. } => {
+                collect_strings_expr(cond, off, data);
+                collect_strings_block(body, off, data);
+            }
+            Stmt::Return { value: Some(e), .. } => collect_strings_expr(e, off, data),
+            Stmt::Return { value: None, .. } => {}
+            Stmt::Expr(e) => collect_strings_expr(e, off, data),
+        }
+    }
+}
+
+fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
+    match e {
+        Expr::Lit { kind: LitKind::Str(s), .. } => intern_string(s, off, data),
+        Expr::Method { recv, args, .. } => {
+            collect_strings_expr(recv, off, data);
+            for a in args {
+                collect_strings_expr(a, off, data);
+            }
+        }
+        Expr::Call { callee, args, .. } => {
+            collect_strings_expr(callee, off, data);
+            for a in args {
+                collect_strings_expr(a, off, data);
+            }
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            collect_strings_expr(lhs, off, data);
+            collect_strings_expr(rhs, off, data);
+        }
+        Expr::Unary { operand, .. } => collect_strings_expr(operand, off, data),
+        Expr::If { cond, then_, else_, .. } => {
+            collect_strings_expr(cond, off, data);
+            collect_strings_block(then_, off, data);
+            if let Some(e) = else_ {
+                collect_strings_expr(e, off, data);
+            }
+        }
+        Expr::Block(b) => collect_strings_block(b, off, data),
+        _ => {}
+    }
+}
+
+fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
+    if off.contains_key(s) {
+        return;
+    }
+    let ptr = data.len() as u32;
+    data.extend_from_slice(&(s.len() as u32).to_le_bytes());
+    data.extend_from_slice(s.as_bytes());
+    off.insert(s.to_string(), ptr);
 }
 
 struct Cx<'a> {
     index: &'a HashMap<String, (u32, Ty)>,
+    str_off: &'a HashMap<String, u32>,
     scopes: Vec<HashMap<String, (u32, Ty)>>,
     extra_locals: Vec<ValType>,
     nparams: u32,
@@ -111,41 +288,37 @@ struct Cx<'a> {
 
 impl<'a> Cx<'a> {
     fn lookup(&self, name: &str) -> Option<(u32, Ty)> {
-        for s in self.scopes.iter().rev() {
-            if let Some(v) = s.get(name) {
-                return Some(*v);
-            }
-        }
-        None
+        self.scopes.iter().rev().find_map(|s| s.get(name).copied())
     }
-    fn alloc_local(&mut self, ty: Ty) -> u32 {
+    fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
+        let vt = wasm_valtype(ty).ok_or_else(|| CompileError::Unsupported("a `let` binding of type Unit".into()))?;
         let idx = self.nparams + self.extra_locals.len() as u32;
-        self.extra_locals.push(valtype(ty));
-        idx
+        self.extra_locals.push(vt);
+        Ok(idx)
     }
     fn emit(&mut self, i: Instruction<'static>) {
         self.instrs.push(i);
     }
 }
 
-fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>) -> Result<Function, CompileError> {
+fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
-        params.insert(p.name.name.clone(), (i as u32, scalar_ty(&p.ty).unwrap()));
+        params.insert(p.name.name.clone(), (i as u32, wasm_ty(&p.ty).unwrap()));
     }
     let mut cx = Cx {
         index,
+        str_off,
         scopes: vec![params],
         extra_locals: Vec::new(),
         nparams: f.params.len() as u32,
         instrs: Vec::new(),
     };
-    let ret = scalar_ty(f.ret.as_ref().unwrap()).unwrap();
+    let ret = ret_ty(f).unwrap();
     let body_ty = compile_block(&f.body, &mut cx)?;
     if body_ty != ret {
-        return Err(CompileError::Unsupported("a body whose value type differs from the declared return type".into()));
+        return Err(CompileError::Unsupported("a body whose value type differs from the return type".into()));
     }
-
     let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
     for ins in &cx.instrs {
         func.instruction(ins);
@@ -156,45 +329,45 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>) -> Result<Function
 
 fn compile_block(b: &Block, cx: &mut Cx) -> Result<Ty, CompileError> {
     cx.scopes.push(HashMap::new());
-    let mut result: Option<Ty> = None;
+    let mut result = Ty::Unit;
     let n = b.stmts.len();
     for (i, stmt) in b.stmts.iter().enumerate() {
         let is_last = i + 1 == n;
         match stmt {
             Stmt::Let { name, value, .. } => {
                 let ty = compile_expr(value, cx)?;
-                let idx = cx.alloc_local(ty);
+                let idx = cx.alloc_local(ty)?;
                 cx.emit(Instruction::LocalSet(idx));
                 cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
+                result = Ty::Unit;
             }
             Stmt::Expr(e) => {
                 let ty = compile_expr(e, cx)?;
                 if is_last {
-                    result = Some(ty);
-                } else {
+                    result = ty;
+                } else if ty != Ty::Unit {
                     cx.emit(Instruction::Drop);
                 }
             }
-            Stmt::Return { value, .. } => {
-                match value {
-                    Some(e) => {
-                        let ty = compile_expr(e, cx)?;
-                        cx.emit(Instruction::Return);
-                        if is_last && result.is_none() {
-                            result = Some(ty);
-                        }
-                    }
-                    None => return Err(CompileError::Unsupported("`return` without a value".into())),
+            Stmt::Return { value: Some(e), .. } => {
+                let ty = compile_expr(e, cx)?;
+                cx.emit(Instruction::Return);
+                if is_last {
+                    result = ty;
                 }
+            }
+            Stmt::Return { value: None, .. } => {
+                cx.emit(Instruction::Return);
+                result = Ty::Unit;
             }
             Stmt::While { .. } | Stmt::Assign { .. } => {
                 cx.scopes.pop();
-                return Err(CompileError::Unsupported("`while`/assignment (Phase 3a)".into()));
+                return Err(CompileError::Unsupported("`while`/assignment (Phase 3b)".into()));
             }
         }
     }
     cx.scopes.pop();
-    result.ok_or_else(|| CompileError::Unsupported("a block whose value is Unit".into()))
+    Ok(result)
 }
 
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
@@ -208,8 +381,12 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::I32Const(if *b { 1 } else { 0 }));
                 Ok(Ty::I32)
             }
-            LitKind::Float(_) => Err(CompileError::Unsupported("Float literals (Phase 3a)".into())),
-            LitKind::Str(_) => Err(CompileError::Unsupported("Str literals (Phase 3a)".into())),
+            LitKind::Str(s) => {
+                let ptr = *cx.str_off.get(s).expect("interned") as i32;
+                cx.emit(Instruction::I32Const(ptr));
+                Ok(Ty::Str)
+            }
+            LitKind::Float(_) => Err(CompileError::Unsupported("Float literals".into())),
         },
         Expr::Var { path, .. } => {
             if path.segs.len() == 1 {
@@ -218,14 +395,12 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     return Ok(ty);
                 }
             }
-            Err(CompileError::Unsupported(format!("the name `{}` (not a local — consts/caps are Phase 3a+)", path.dotted())))
+            Err(CompileError::Unsupported(format!("the name `{}` (not a local)", path.dotted())))
         }
         Expr::Unary { op, operand, .. } => {
             let ty = compile_expr(operand, cx)?;
             match op {
                 UnOp::Neg if ty == Ty::I64 => {
-                    // 0 - operand: emit 0 first, but operand is already on the stack. Compute via
-                    // a temp: (operand) already pushed; multiply by -1.
                     cx.emit(Instruction::I64Const(-1));
                     cx.emit(Instruction::I64Mul);
                     Ok(Ty::I64)
@@ -244,31 +419,46 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
             }
             let else_ = else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
-            // We need the block type before emitting; compile the then-branch into a sub-buffer to
-            // learn its type, then splice. Simpler: emit If(Empty) placeholder is not possible with
-            // a result. So compile then first into cx (after emitting a placeholder If we patch).
-            // Instead: peek the then type by compiling into a temporary Cx-less path is complex;
-            // emit `If` with the then-branch's type discovered by compiling then-branch first.
             let then_ty = block_result_ty(then_)?;
-            cx.emit(Instruction::If(wasm_encoder::BlockType::Result(valtype(then_ty))));
+            let bt = match wasm_valtype(then_ty) {
+                Some(v) => BlockType::Result(v),
+                None => BlockType::Empty,
+            };
+            cx.emit(Instruction::If(bt));
             let tt = compile_block(then_, cx)?;
             cx.emit(Instruction::Else);
             let et = compile_expr(else_, cx)?;
             cx.emit(Instruction::End);
             if tt != et {
-                return Err(CompileError::Unsupported("`if` branches of differing WASM types".into()));
+                return Err(CompileError::Unsupported("`if` branches of differing types".into()));
             }
             Ok(tt)
+        }
+        Expr::Method { recv, name, args, .. } => {
+            // Phase 3b: Cap[Console].println(str) -> host import; Unit result.
+            if name.name == "println" && args.len() == 1 {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Cap {
+                    return Err(CompileError::Unsupported("println on a non-Console receiver".into()));
+                }
+                let at = compile_expr(&args[0], cx)?;
+                if at != Ty::Str {
+                    return Err(CompileError::Unsupported("println of a non-Str argument (concatenation is Phase 3b+)".into()));
+                }
+                cx.emit(Instruction::Call(CONSOLE_PRINTLN));
+                return Ok(Ty::Unit);
+            }
+            Err(CompileError::Unsupported(format!("the method `.{}` (Phase 3b)", name.name)))
         }
         Expr::Call { callee, args, .. } => {
             let name = match &**callee {
                 Expr::Var { path, .. } if path.segs.len() == 1 => path.segs[0].name.clone(),
-                _ => return Err(CompileError::Unsupported("an indirect or builtin call (Phase 3a)".into())),
+                _ => return Err(CompileError::Unsupported("an indirect or builtin call".into())),
             };
             let (fidx, ret) = *cx
                 .index
                 .get(&name)
-                .ok_or_else(|| CompileError::Unsupported(format!("a call to `{name}` (not a pure compilable function)")))?;
+                .ok_or_else(|| CompileError::Unsupported(format!("a call to `{name}` (not a compilable function)")))?;
             for a in args {
                 compile_expr(a, cx)?;
             }
@@ -276,17 +466,17 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             Ok(ret)
         }
         Expr::Block(b) => compile_block(b, cx),
-        _ => Err(CompileError::Unsupported("this expression form (Phase 3a)".into())),
+        _ => Err(CompileError::Unsupported("this expression form".into())),
     }
 }
 
-/// Statically determine a block's WASM result type without emitting code (needed to type an `if`
-/// before its then-branch is emitted). Only handles the pure fragment; errors otherwise.
+/// Statically determine a block's result type (to type an `if` before its then-branch is emitted).
 fn block_result_ty(b: &Block) -> Result<Ty, CompileError> {
     match b.stmts.last() {
         Some(Stmt::Expr(e)) => expr_result_ty(e),
         Some(Stmt::Return { value: Some(e), .. }) => expr_result_ty(e),
-        _ => Err(CompileError::Unsupported("a block whose value is Unit".into())),
+        Some(Stmt::Let { .. }) | Some(Stmt::Return { value: None, .. }) | None => Ok(Ty::Unit),
+        Some(Stmt::While { .. }) | Some(Stmt::Assign { .. }) => Ok(Ty::Unit),
     }
 }
 
@@ -295,7 +485,8 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::Lit { kind, .. } => match kind {
             LitKind::Int(_) => Ok(Ty::I64),
             LitKind::Bool(_) => Ok(Ty::I32),
-            _ => Err(CompileError::Unsupported("Float/Str (Phase 3a)".into())),
+            LitKind::Str(_) => Ok(Ty::Str),
+            LitKind::Float(_) => Err(CompileError::Unsupported("Float".into())),
         },
         Expr::Unary { op, operand, .. } => match op {
             UnOp::Neg => expr_result_ty(operand),
@@ -307,11 +498,11 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         },
         Expr::If { then_, .. } => block_result_ty(then_),
         Expr::Block(b) => block_result_ty(b),
-        // Var and Call types are context-dependent; the concrete emission path resolves them, and
-        // the branch-type equality check catches any mismatch. Default the branch type to I64 for
-        // typing purposes; if wrong, `compile_expr`'s equality check errors cleanly.
+        Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
+        // Var/Call are context-dependent; default I64 for typing. A mismatch is caught by the
+        // branch-equality check in `compile_expr`.
         Expr::Var { .. } | Expr::Call { .. } => Ok(Ty::I64),
-        _ => Err(CompileError::Unsupported("this expression form (Phase 3a)".into())),
+        _ => Err(CompileError::Unsupported("this expression form".into())),
     }
 }
 
@@ -319,7 +510,6 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     let lt = compile_expr(lhs, cx)?;
     let rt = compile_expr(rhs, cx)?;
     use BinOp::*;
-    // Arithmetic and comparison on Int (i64).
     if lt == Ty::I64 && rt == Ty::I64 {
         let (ins, ty): (Instruction<'static>, Ty) = match op {
             Add => (Instruction::I64Add, Ty::I64),
@@ -338,7 +528,6 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         cx.emit(ins);
         return Ok(ty);
     }
-    // Logical / equality on Bool (i32).
     if lt == Ty::I32 && rt == Ty::I32 {
         let ins: Instruction<'static> = match op {
             And => Instruction::I32And,
@@ -350,5 +539,5 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         cx.emit(ins);
         return Ok(Ty::I32);
     }
-    Err(CompileError::Unsupported("a binary operator on mixed WASM types".into()))
+    Err(CompileError::Unsupported("a binary operator on unsupported operand types (e.g. Str `+`)".into()))
 }

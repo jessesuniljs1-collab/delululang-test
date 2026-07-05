@@ -91,6 +91,13 @@ impl Interp {
         }
     }
 
+    /// Call a function with arbitrary argument values (e.g. a `Cap[Console]`), for the WASM
+    /// backend's effect-parity harness. Additive; the interpreter is the reference engine.
+    pub fn call_with(&self, name: &str, args: Vec<Value>) -> Result<Value, Fault> {
+        self.eval_consts().map_err(unwrap_fault)?;
+        self.call_fn(name, args).map_err(unwrap_fault)
+    }
+
     /// Evaluate one top-level expression (for the REPL), with an optional root binding.
     pub fn eval_toplevel(&self, e: &Expr, root: Option<Value>) -> Result<Value, Fault> {
         self.eval_consts().map_err(unwrap_fault)?;
