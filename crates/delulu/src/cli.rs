@@ -2,7 +2,11 @@
 
 use std::rc::Rc;
 
-use delulu_check::{authority_report, check_program, check_source, load_package, program_authority, program_effects};
+use delulu_check::{
+    authority_report, check_pins, check_program, check_self_authority, check_source,
+    check_workspace, compute_lockfile, enforce_semver_law, load_package, program_authority,
+    resolve_workspace, verify_locked, Lockfile,
+};
 use delulu_diag::{envelope_to_string, render_human, Diagnostic, SourceMap};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_runtime::value::RootVal;
@@ -14,17 +18,38 @@ struct Opts {
     grants: Vec<String>,
     grant_manifest: bool,
     no_prompt: bool,
+    /// `--locked`: refuse any resolution not already pinned in delulu.lock.
+    locked: bool,
+    /// `--accept-authority <pkg>`: names packages whose authority widening is explicitly accepted.
+    accept_authority: Vec<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     let mut file = None;
-    let mut opts = Opts { json: false, grants: Vec::new(), grant_manifest: false, no_prompt: false };
+    let mut opts = Opts {
+        json: false,
+        grants: Vec::new(),
+        grant_manifest: false,
+        no_prompt: false,
+        locked: false,
+        accept_authority: Vec::new(),
+    };
     let mut i = 0;
     while i < rest.len() {
         match rest[i].as_str() {
             "--json" => opts.json = true,
             "--grant-manifest" => opts.grant_manifest = true,
             "--no-prompt" => opts.no_prompt = true,
+            "--locked" => opts.locked = true,
+            "--accept-authority" => {
+                if i + 1 < rest.len() {
+                    opts.accept_authority.push(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--accept-authority=") => {
+                opts.accept_authority.push(s["--accept-authority=".len()..].to_string())
+            }
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -49,6 +74,7 @@ pub fn run(args: &[String]) -> i32 {
     match cmd.as_str() {
         "check" => cmd_check(rest),
         "build" => cmd_build(rest),
+        "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
         "authority" => cmd_authority(rest),
         "repl" => repl_cmd(rest),
@@ -73,13 +99,17 @@ fn usage() -> &'static str {
      \n\
      USAGE:\n\
      \x20 delulu check     <file.delulu | package-dir> [--json]\n\
-     \x20 delulu build     <package-dir> [--json]   (resolve + verify authority vs manifest)\n\
+     \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
+     \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
-     \x20 delulu authority <file.delulu> [--json]\n\
+     \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu explain   <DLxxxx>\n\
      \n\
-     `delulu authority` prints the compiler-computed answer to \"what can this program do?\""
+     `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
+     `delulu build` resolves path dependencies and verifies each dependency's authority against\n\
+     its pin (DL1001); `delulu lock` writes delulu.lock and enforces the semver-authority law\n\
+     (DL1003 — authority never widens silently across versions)."
 }
 
 fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
@@ -120,7 +150,7 @@ fn cmd_check(rest: &[String]) -> i32 {
         return 2;
     };
     if std::path::Path::new(&file).is_dir() {
-        return check_package(&file, &opts);
+        return build_workspace(&file, &opts, "check", opts.locked);
     }
     let (map, id, src) = match load(&file) {
         Ok(x) => x,
@@ -235,63 +265,125 @@ fn cmd_build(rest: &[String]) -> i32 {
         eprintln!("error: `build` expects a package directory (with src/ and delulu.toml)");
         return 2;
     }
-    check_package(&path, &opts)
+    build_workspace(&path, &opts, "build", opts.locked)
 }
 
-fn check_package(dir: &str, opts: &Opts) -> i32 {
-    let mut pkg = load_package(dir);
-    let program = check_program(&pkg);
-    let mut diags = program.diagnostics.clone();
+/// Resolve the workspace (root + path dependencies), check every package under one global type
+/// registry, and verify the whole-graph authority story: DL1009 (package exceeds its own
+/// manifest), DL1001 (a dependency exceeds its pin), and — under `--locked` — DL1010/DL1002/DL1011
+/// against `delulu.lock`. This is the compile-time supply-chain gate: it runs BEFORE any code.
+fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
+    let ws = resolve_workspace(dir);
+    let program = check_workspace(&ws);
 
-    // Package-authority self-check (§4.2): the computed authority must be within the manifest's
-    // declared authority. A package that performs an effect it did not declare fails to build —
-    // DL1009. This is the structural defense that makes "a dependency cannot silently gain an
-    // effect" a compile error rather than a hopeful audit.
-    let manifest_path = std::path::Path::new(dir).join("delulu.toml");
-    if let Ok(toml) = std::fs::read_to_string(&manifest_path) {
-        let manifest = parse_manifest(&toml);
-        let declared: std::collections::HashSet<&str> = manifest.effects.iter().map(|s| s.as_str()).collect();
-        let excess: Vec<String> = program_effects(&program).into_iter().filter(|e| !declared.contains(e.as_str())).collect();
-        if !excess.is_empty() {
-            let mid = pkg.source_map.add_file("delulu.toml", toml.clone());
-            let span = effects_line_span(&toml, mid);
-            for e in excess {
-                diags.push(
-                    delulu_diag::Diagnostic::error(
-                        "DL1009",
-                        format!("package `{}` performs effect `{e}` not permitted by its authority manifest", manifest.name.as_deref().unwrap_or(dir)),
-                    )
-                    .with_span(span, format!("add `{e}` to `[authority] effects` in delulu.toml")),
-                );
+    let mut diags: Vec<Diagnostic> = Vec::new();
+    diags.extend(ws.diagnostics.iter().cloned());
+    diags.extend(program.diagnostics.iter().cloned());
+    diags.extend(check_self_authority(&ws, &program));
+    diags.extend(check_pins(&ws, &program));
+
+    if locked {
+        match std::fs::read_to_string(std::path::Path::new(dir).join("delulu.lock")) {
+            Ok(text) => {
+                let lock = Lockfile::parse(&text);
+                diags.extend(verify_locked(&ws, &program, &lock));
+            }
+            Err(_) => {
+                for pkg in &ws.packages {
+                    diags.push(Diagnostic::error(
+                        "DL1011",
+                        format!("`--locked` build but delulu.lock is missing — package `{}` is unresolved; run `delulu lock`", pkg.name),
+                    ));
+                }
             }
         }
     }
 
     let n = errors(&diags);
-    print_diagnostics("check", &diags, &pkg.source_map, None, opts.json);
+    print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
+    // Git dependencies are parsed and rev/tag-validated, but fetching is deferred to a later stage.
+    // We refuse rather than pretend a git dependency's authority was verified.
+    let git_blocked = !ws.git_deferred.is_empty();
+    if git_blocked && !opts.json {
+        eprintln!(
+            "note: git dependency resolution is deferred to a later stage; cannot verify authority for: {}",
+            ws.git_deferred.join(", ")
+        );
+    }
+    let failed = n > 0 || git_blocked;
     if !opts.json {
-        if n == 0 {
-            eprintln!("ok: package `{}` checked clean ({} module(s), authority within manifest)", dir, pkg.modules.len());
+        if !failed {
+            eprintln!(
+                "ok: `{}` built clean ({} package(s), {} module(s); authority within manifest and pins)",
+                ws.root_pkg().name,
+                ws.packages.len(),
+                ws.modules.len()
+            );
         } else {
             eprintln!("{n} error(s)");
         }
     }
-    if n == 0 {
-        0
-    } else {
+    if failed {
         1
+    } else {
+        0
     }
 }
 
-/// Byte span of the `effects` line in a manifest (for DL1009), or (0,0) if not found.
-fn effects_line_span(toml: &str, file: u32) -> delulu_diag::Span {
-    match toml.find("effects") {
-        Some(off) => {
-            let end = toml[off..].find('\n').map(|n| off + n).unwrap_or(toml.len());
-            delulu_diag::Span::new(file, off as u32, end as u32)
-        }
-        None => delulu_diag::Span::new(file, 0, 0),
+/// `delulu lock`: (re)compute delulu.lock next to the root manifest and enforce the
+/// semver-authority law (DL1003) against the previous lock.
+fn cmd_lock(rest: &[String]) -> i32 {
+    let (path, opts) = parse_opts(rest);
+    let dir = path.unwrap_or_else(|| ".".to_string());
+    if !std::path::Path::new(&dir).is_dir() {
+        eprintln!("error: `lock` expects a package directory (with src/ and delulu.toml)");
+        return 2;
     }
+
+    let ws = resolve_workspace(&dir);
+    let program = check_workspace(&ws);
+    let mut diags: Vec<Diagnostic> = Vec::new();
+    diags.extend(ws.diagnostics.iter().cloned());
+    diags.extend(program.diagnostics.iter().cloned());
+    diags.extend(check_self_authority(&ws, &program));
+    diags.extend(check_pins(&ws, &program));
+    if !ws.git_deferred.is_empty() {
+        diags.push(Diagnostic::error(
+            "DL1007",
+            format!("cannot lock: git dependency resolution is deferred ({})", ws.git_deferred.join(", ")),
+        ));
+    }
+    if errors(&diags) > 0 {
+        print_diagnostics("lock", &diags, &ws.source_map, None, opts.json);
+        if !opts.json {
+            eprintln!("{} error(s) — refusing to write delulu.lock", errors(&diags));
+        }
+        return 1;
+    }
+
+    let mut newlock = compute_lockfile(&ws, &program);
+    let lock_path = std::path::Path::new(&dir).join("delulu.lock");
+    if let Ok(text) = std::fs::read_to_string(&lock_path) {
+        let old = Lockfile::parse(&text);
+        let law = enforce_semver_law(&old, &mut newlock, &opts.accept_authority);
+        if !law.is_empty() {
+            print_diagnostics("lock", &law, &ws.source_map, None, opts.json);
+            if !opts.json {
+                eprintln!("semver-authority law violated — refusing to write delulu.lock");
+            }
+            return 1;
+        }
+    }
+    if let Err(e) = std::fs::write(&lock_path, newlock.render()) {
+        eprintln!("error: cannot write {}: {e}", lock_path.display());
+        return 2;
+    }
+    if opts.json {
+        println!("{}", envelope_to_string("lock", &[], None, &ws.source_map));
+    } else {
+        eprintln!("ok: wrote {} ({} package(s))", lock_path.display(), newlock.packages.len());
+    }
+    0
 }
 
 fn authority_package(dir: &str, opts: &Opts) -> i32 {

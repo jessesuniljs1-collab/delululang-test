@@ -84,6 +84,7 @@ registry! {
     "DL1001" => "dependency authority exceeds its pin",
     "DL1002" => "locked authority hash mismatch (same version, different authority)",
     "DL1003" => "semver-authority violation: authority widened without a major version bump",
+    "DL1004" => "malformed package manifest",
     "DL1005" => "package or re-export cycle",
     "DL1006" => "import is ambiguous between a local module and a dependency",
     "DL1007" => "git dependency without a pinned rev or tag",

@@ -6,6 +6,9 @@
 
 pub mod authority;
 pub mod check;
+pub mod deps;
+pub mod lockfile;
+pub mod manifest;
 pub mod package;
 pub mod program;
 pub mod resolve;
@@ -14,7 +17,16 @@ pub mod unify;
 
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts};
-pub use package::{load_package, ModuleUnit, Package};
+pub use deps::{
+    check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace,
+    PackageAuthority, ResolvedPackage, Workspace,
+};
+pub use lockfile::{
+    authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law,
+    verify_locked, LockEntry, Lockfile,
+};
+pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
+pub use package::{load_package, load_package_into, LoadedModules, ModuleUnit, Package};
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{DeclTable, FnSig, GKind};
 pub use ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};

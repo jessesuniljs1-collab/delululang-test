@@ -280,7 +280,7 @@ fn reachable_qualified(program: &Program) -> HashSet<String> {
 
 // ----- helpers -------------------------------------------------------------
 
-fn build_kind(kind: &TypeDeclKind) -> TypeDefKind {
+pub(crate) fn build_kind(kind: &TypeDeclKind) -> TypeDefKind {
     match kind {
         TypeDeclKind::Record(fields) => {
             TypeDefKind::Record(fields.iter().map(|f| (f.name.name.clone(), f.ty.clone())).collect())
@@ -292,7 +292,7 @@ fn build_kind(kind: &TypeDeclKind) -> TypeDefKind {
     }
 }
 
-fn push_prelude(gtypes: &mut Vec<TypeDef>) {
+pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
     let mk = |name: &str, variants: &[(&str, &[&str])]| TypeDef {
         name: name.to_string(),
         generics: vec![],
@@ -321,12 +321,12 @@ fn dummy() -> delulu_diag::Span {
     delulu_diag::Span::new(u32::MAX, 0, 0)
 }
 
-fn dup(module: &str, what: &str, name: &str, span: delulu_diag::Span) -> Diagnostic {
+pub(crate) fn dup(module: &str, what: &str, name: &str, span: delulu_diag::Span) -> Diagnostic {
     Diagnostic::error("DL0302", format!("duplicate {what} `{name}` in module `{module}`"))
         .with_span(span, "already defined")
 }
 
-fn insert_unique_type(
+pub(crate) fn insert_unique_type(
     type_ix: &mut HashMap<String, TypeDefId>,
     name: &str,
     id: TypeDefId,

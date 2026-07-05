@@ -49,12 +49,21 @@ impl Package {
     }
 }
 
-/// Load and parse a package rooted at `root_dir` (which contains `src/`). Never fails outright:
-/// returns a `Package` whose `diagnostics` carry any problems.
-pub fn load_package(root_dir: impl AsRef<Path>) -> Package {
-    let root_dir = root_dir.as_ref().to_path_buf();
+/// Parsed modules of one package, discovered under `<root_dir>/src`, parsed into a caller-owned
+/// source map. This is the shared engine behind both single-package [`load_package`] and
+/// whole-workspace resolution (`deps.rs`) — the latter parses every package into ONE source map so
+/// cross-package spans and diagnostics stay coherent. Intra-package import validation is NOT run
+/// here (a cross-package import target is unknown to a single package); callers do that.
+pub struct LoadedModules {
+    pub modules: Vec<ModuleUnit>,
+    pub index: HashMap<String, usize>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Discover and parse a package's modules into `source_map`, prefixing each file's display path
+/// with `display_prefix` (e.g. `"dep:mathkit/"`) so diagnostics carry the spec's `dep:` marker.
+pub fn load_package_into(root_dir: &Path, source_map: &mut SourceMap, display_prefix: &str) -> LoadedModules {
     let src_dir = root_dir.join("src");
-    let mut source_map = SourceMap::new();
     let mut modules = Vec::new();
     let mut index = HashMap::new();
     let mut diagnostics = Vec::new();
@@ -71,13 +80,13 @@ pub fn load_package(root_dir: impl AsRef<Path>) -> Package {
                 continue;
             }
         };
-        let display = path.strip_prefix(&root_dir).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        let rel = path.strip_prefix(root_dir).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        let display = format!("{display_prefix}{rel}");
         let file: FileId = source_map.add_file(display, src.clone());
         let (module, mut mdiags) = delulu_syntax::parse_file(file, &src);
         diagnostics.append(&mut mdiags);
         let name = module.name.dotted();
-        if let Some(&prev) = index.get(&name) {
-            let _ = prev;
+        if index.contains_key(&name) {
             diagnostics.push(
                 Diagnostic::error("DL0302", format!("duplicate module `{name}`"))
                     .with_bare_span(Span::new(file, 0, 0)),
@@ -88,7 +97,23 @@ pub fn load_package(root_dir: impl AsRef<Path>) -> Package {
         modules.push(ModuleUnit { name, file, path, module });
     }
 
-    let pkg = Package { root_dir, modules, index, source_map, diagnostics };
+    LoadedModules { modules, index, diagnostics }
+}
+
+/// Load and parse a package rooted at `root_dir` (which contains `src/`). Never fails outright:
+/// returns a `Package` whose `diagnostics` carry any problems.
+pub fn load_package(root_dir: impl AsRef<Path>) -> Package {
+    let root_dir = root_dir.as_ref().to_path_buf();
+    let mut source_map = SourceMap::new();
+    let loaded = load_package_into(&root_dir, &mut source_map, "");
+
+    let pkg = Package {
+        root_dir,
+        modules: loaded.modules,
+        index: loaded.index,
+        source_map,
+        diagnostics: loaded.diagnostics,
+    };
     let mut extra = Vec::new();
     validate_imports(&pkg, &mut extra);
     let mut pkg = pkg;
