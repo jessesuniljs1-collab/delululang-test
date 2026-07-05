@@ -413,5 +413,36 @@ lands in Stage 8.)
 11. `pub import` re-exports work; DL1005/DL1006 fire on the crafted cycles/ambiguities.
 12. All green on Windows, macOS, Linux CI.
 
+## 12a. Implementation status (2026-07-05)
+
+Stage 2's **provenance core is implemented and green** (121 workspace tests). Delivered:
+cross-module resolution with a global type registry (`program.rs`), the package-authority
+self-check (DL1009), cross-**package** path-dependency resolution + one-registry workspace check
+(`deps.rs`: DL1005/DL1006/DL1007/DL1008), authority pins (DL1001, attenuation-order effect+scope
+subset, missing-pin repair flagged `authority_widening`), the `delulu.lock` file with blake3
+content/authority/api-row hashes (`lockfile.rs`: DL1010/DL1002/DL1011) and the semver-authority
+law (DL1003 + `accepted_by`), plus effect tracing and deterministic replay (`trace.rs`, §6). CLI:
+`delulu build [--locked]`, `delulu lock [--accept-authority <pkg>]`, and `run` flags
+`--trace-effects`/`--trace-out`/`--assert-trace` (DL1101, exit 3)/`--seed`/`--clock fixed:MS`.
+Acceptance criteria 2, 3, 4, 7, 8 are met and tested (`crates/delulu/tests/provenance.rs`; the
+xz scenario refuses at DL1001 before any code runs).
+
+Implementation-forced deviations, recorded for honesty:
+- **DL1004** "malformed package manifest" was registered (a free slot in the DL10xx range) for
+  manifest syntax / missing-required-field errors — the §9 table skipped it.
+- `[package] kind` is **optional, defaults to `bin`** (back-compat with Stage-1 single-package
+  manifests that omit it).
+- A dependency that carries a pin must use TOML **table form** (`[dependencies.<name>]` with an
+  `authority` sub-table, or an inline `authority = { … }`); the illustrative §3.2 snippet mixing
+  `x = { … }` with a following `[dependencies.x.authority]` is not valid TOML.
+- **Git-dependency resolution is deferred, not faked**: unpinned git deps are DL1007; a pinned
+  git dep is refused with a clear "resolution deferred" message rather than pretend-verified.
+
+Not yet done (later Stage-2 increments): acceptance criteria **1** (`interface.json` emission,
+§5.5), **5** (`delulu why`), **6** (`authority --diff`), **9** (fuzz harness ≥100k), **10**
+(`DELULU_CORE.md`), **11** (`pub import` re-exports — the AST `Import` has no `public` field yet).
+Also: `delulu authority <dir>` still uses the single-package path (does not yet resolve
+cross-package imports). CI is Windows-only so far (criterion 12 partial).
+
 *Stage 2 makes the dependency graph a place where authority cannot hide. Stage 3 gives the
 program a floor to stand on.*
