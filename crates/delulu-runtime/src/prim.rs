@@ -204,7 +204,9 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             Ok(Value::err(net_err("Refused")))
         }
         (ResourceKind::Clock, "now_ms") => {
-            let ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+            let ms = FIXED_CLOCK.with(|c| c.get()).unwrap_or_else(|| {
+                SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+            });
             Ok(Value::Int(ms))
         }
         (ResourceKind::Rand, "int") => {
@@ -372,10 +374,13 @@ fn scope_bug(span: Span) -> Fault {
     Fault::at("DL0907", "capability scope mismatch (checker bug)", span)
 }
 
-// A small, non-cryptographic xorshift PRNG for `Cap[Rand]` (deterministic seeding lands Stage 2).
+// A small, non-cryptographic xorshift PRNG for `Cap[Rand]`. Deterministic replay (spec §6.2):
+// `set_rand_seed` reseeds this thread-local generator so two runs with the same seed produce
+// identical `Cap[Rand]` sequences (required by the fuzz harness and agent debugging loops).
 use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
+    static FIXED_CLOCK: Cell<Option<i64>> = Cell::new(None);
 }
 fn seed() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0x9E3779B9) | 1
@@ -389,4 +394,82 @@ fn next_rand() -> u64 {
         r.set(x);
         x
     })
+}
+
+/// Deterministic replay (spec §6.2): reseed `Cap[Rand]`'s thread-local xorshift generator. Two
+/// runs on the same thread that call `set_rand_seed` with the same value produce identical
+/// `rand.int`/`rand.float` sequences; different seeds (almost always) diverge. The xorshift
+/// generator gets stuck at zero, so a zero seed is mapped to a fixed nonzero value, matching the
+/// `| 1` bias `seed()` already applies for the non-deterministic default.
+pub fn set_rand_seed(seed: u64) {
+    let s = if seed == 0 { 0x9E3779B9 } else { seed } | 1;
+    RNG.with(|r| r.set(s));
+}
+
+/// Deterministic replay (spec §6.2): fix `Cap[Clock].now_ms()` to always return `ms` on this
+/// thread. `None` restores the real wall clock.
+pub fn set_fixed_clock_ms(ms: Option<i64>) {
+    FIXED_CLOCK.with(|c| c.set(ms));
+}
+
+#[cfg(test)]
+mod determinism_tests {
+    use super::*;
+
+    #[test]
+    fn same_seed_reproduces_the_same_rand_sequence() {
+        set_rand_seed(42);
+        let a: Vec<u64> = (0..8).map(|_| next_rand()).collect();
+        set_rand_seed(42);
+        let b: Vec<u64> = (0..8).map(|_| next_rand()).collect();
+        assert_eq!(a, b, "same seed must reproduce the same xorshift sequence");
+    }
+
+    #[test]
+    fn different_seeds_diverge() {
+        set_rand_seed(1);
+        let a: Vec<u64> = (0..8).map(|_| next_rand()).collect();
+        set_rand_seed(2);
+        let b: Vec<u64> = (0..8).map(|_| next_rand()).collect();
+        assert_ne!(a, b, "different seeds should (overwhelmingly likely) diverge");
+    }
+
+    #[test]
+    fn zero_seed_is_mapped_to_a_nonzero_deterministic_seed() {
+        // The xorshift generator is a fixed point at zero (0 ^ ... == 0 forever); a literal
+        // `--seed 0` must not silently produce an all-zero, non-random-looking sequence.
+        set_rand_seed(0);
+        let first = next_rand();
+        assert_ne!(first, 0);
+        set_rand_seed(0);
+        let again = next_rand();
+        assert_eq!(first, again, "seed 0 must still be deterministic");
+    }
+
+    #[test]
+    fn fixed_clock_overrides_the_cap_clock_now_ms_primitive() {
+        set_fixed_clock_ms(Some(1_700_000_000_123));
+        let cap = CapVal { kind: ResourceKind::Clock, scope: CapScope::Clock };
+        let span = Span::new(0, 0, 0);
+        let v = call_cap_method(&cap, "now_ms", &[], span).expect("now_ms should not fault");
+        set_fixed_clock_ms(None);
+        match v {
+            Value::Int(ms) => assert_eq!(ms, 1_700_000_000_123),
+            other => panic!("expected Int, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clearing_the_fixed_clock_restores_the_wall_clock() {
+        set_fixed_clock_ms(Some(1));
+        set_fixed_clock_ms(None);
+        let cap = CapVal { kind: ResourceKind::Clock, scope: CapScope::Clock };
+        let span = Span::new(0, 0, 0);
+        let before = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
+        let v = call_cap_method(&cap, "now_ms", &[], span).expect("now_ms should not fault");
+        match v {
+            Value::Int(ms) => assert!((ms - before).abs() < 60_000, "expected a real wall-clock value, got {ms}"),
+            other => panic!("expected Int, got {other:?}"),
+        }
+    }
 }

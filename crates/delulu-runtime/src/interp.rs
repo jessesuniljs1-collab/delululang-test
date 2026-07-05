@@ -9,6 +9,7 @@ use std::rc::Rc;
 use delulu_syntax::ast::*;
 
 use crate::prim;
+use crate::trace::{self, TraceRecord, TraceSink};
 use crate::value::{Closure, Env, Fault, Scope, Value};
 
 const MAX_DEPTH: u32 = 10_000;
@@ -27,6 +28,10 @@ pub struct Interp {
     consts: Vec<(String, Expr)>,
     globals: Env,
     depth: Cell<u32>,
+    /// Effect tracing (spec §6.1): absent by default, attached via `with_trace`. Additive — does
+    /// not change `Interp::new`'s signature or behavior.
+    trace: Option<TraceSink>,
+    trace_seq: Cell<u64>,
 }
 
 impl Interp {
@@ -42,7 +47,28 @@ impl Interp {
                 _ => {}
             }
         }
-        Interp { funcs, consts, globals: Scope::root(), depth: Cell::new(0) }
+        Interp {
+            funcs,
+            consts,
+            globals: Scope::root(),
+            depth: Cell::new(0),
+            trace: None,
+            trace_seq: Cell::new(0),
+        }
+    }
+
+    /// Attach a trace sink (builder style, spec §6.1): every EFFECTFUL primitive operation
+    /// dispatched by `eval_method` appends a `TraceRecord` here as it executes. Pure operations
+    /// (attenuation, `verify`, `Str`/`List` methods, `Root` capability minting) are never traced.
+    pub fn with_trace(mut self, sink: TraceSink) -> Interp {
+        self.trace = Some(sink);
+        self
+    }
+
+    fn next_trace_seq(&self) -> u64 {
+        let s = self.trace_seq.get();
+        self.trace_seq.set(s + 1);
+        s
     }
 
     /// Run `main(root)`. Returns the runtime value or a fault.
@@ -379,6 +405,7 @@ impl Interp {
         for a in args {
             argvals.push(self.eval_expr(a, env)?);
         }
+        self.trace_dispatch(&recvv, name, &argvals, span);
         let result = match &recvv {
             Value::Root(r) => prim::call_root_method(r, &name.name, &argvals, span),
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
@@ -388,6 +415,32 @@ impl Interp {
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
         result.map_err(Escape::Fault)
+    }
+
+    /// Append a `TraceRecord` at the dispatch point (spec §6.1) if tracing is enabled and this
+    /// (receiver kind, method) pair is effectful. Secret redaction: if the receiver or any
+    /// argument is a `Secret`, `detail` is always `trace::OPAQUE` — the raw value never reaches
+    /// the trace, regardless of what a human-useful detail would otherwise show.
+    fn trace_dispatch(&self, recvv: &Value, name: &Ident, argvals: &[Value], span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        let cap_kind = match recvv {
+            Value::Cap(c) => Some(c.kind.name()),
+            Value::Secret(_) => Some("Secret"),
+            _ => None,
+        };
+        let Some(kind) = cap_kind else { return };
+        let Some(effect) = trace::effect_for(kind, &name.name) else { return };
+        let involves_secret =
+            matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
+        let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(kind, &name.name, argvals) };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: effect.to_string(),
+            op: name.name.clone(),
+            cap_kind: kind.to_string(),
+            detail,
+            span: Some((span.file, span.start, span.end)),
+        });
     }
 
     fn eval_match(&self, scrutinee: &Expr, arms: &[Arm], span: delulu_diag::Span, env: &Env) -> R<Value> {
@@ -542,6 +595,20 @@ impl Interp {
             _ => unreachable!(),
         };
         Ok(Value::Bool(b))
+    }
+}
+
+/// A human-useful summary of the operation's primary argument for the trace `detail` field
+/// (spec §6.1: "the path for `read_text`, host for `get`"). Only ever called once the caller
+/// (`Interp::trace_dispatch`) has established that no secret is involved — this function trusts
+/// that and never itself redacts.
+fn trace_detail(cap_kind: &str, method: &str, args: &[Value]) -> Option<String> {
+    match (cap_kind, method) {
+        ("Console", "println") | ("Console", "print") => args.first().map(|v| v.display()),
+        ("FsRead", "read_text") | ("FsRead", "list_dir") => args.first().map(|v| v.display()),
+        ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
+        ("Http", "get") => args.first().map(|v| v.display()),
+        _ => None,
     }
 }
 
