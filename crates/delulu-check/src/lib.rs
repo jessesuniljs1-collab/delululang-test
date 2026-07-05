@@ -6,12 +6,14 @@
 
 pub mod authority;
 pub mod check;
+pub mod package;
 pub mod resolve;
 pub mod ty;
 pub mod unify;
 
 pub use authority::{authority_report, ScopeInfo};
 pub use check::{CheckResult, FnFacts};
+pub use package::{load_package, ModuleUnit, Package};
 pub use resolve::{DeclTable, FnSig, GKind};
 pub use ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};
 
