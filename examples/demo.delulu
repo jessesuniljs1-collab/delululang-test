@@ -1,0 +1,43 @@
+module demo
+
+// Pure: omitted row means !{}. The checker PROVES fib performs no effect.
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+// Effectful: the row declares Write; the Cap[Console] param is the permission.
+fn greet(out: Cap[Console], name: Str) ! {Write} {
+  out.println("hello, " + name)
+}
+
+// Higher-order with row polymorphism: apply's row is exactly f's row.
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+  f(x)
+}
+
+// `?` is demonstrated where it is well-typed: in a Result-returning function whose
+// error type matches read_text's. It propagates the IoErr without a match.
+fn read_config(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let text = fs.read_text("app.txt")?
+  Ok(text)
+}
+
+fn main(root: Root) ! {Write, Read} {
+  let out = root.console()
+  greet(out, "delulu world")
+  out.println("fib(10) = " + str(fib(10)))
+
+  // Row polymorphism, concretely: apply with a pure lambda stays pure here.
+  let doubled = apply(fn(x: Int) -> Int { x * 2 }, 21)
+  out.println("apply = " + str(doubled))
+
+  let fs = root.fs_read("./config")          // attenuated: read-only, this subtree
+  match read_config(fs) {
+    Ok(text) => out.println(text),
+    Err(_) => out.println("(no config found)")
+  }
+
+  let key = root.secret("API_KEY")           // Secret[Str]
+  // out.println(key)                         // DL0602: Secret[Str] is not Str
+  // out.println(str(key))                    // DL0604: opaque type cannot be stringified
+}

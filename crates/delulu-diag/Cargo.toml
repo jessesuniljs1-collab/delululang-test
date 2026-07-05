@@ -1,0 +1,9 @@
+[package]
+name = "delulu-diag"
+description = "DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed repairs, human renderer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

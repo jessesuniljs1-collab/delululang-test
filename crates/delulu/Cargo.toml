@@ -1,0 +1,16 @@
+[package]
+name = "delulu"
+description = "The DeluluLang CLI: check | run | repl | authority"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "delulu"
+path = "src/main.rs"
+
+[dependencies]
+delulu-diag = { path = "../delulu-diag" }
+delulu-syntax = { path = "../delulu-syntax" }
+delulu-check = { path = "../delulu-check" }
+delulu-runtime = { path = "../delulu-runtime" }
+serde_json = { workspace = true }

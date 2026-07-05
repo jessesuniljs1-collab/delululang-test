@@ -1,0 +1,8 @@
+[package]
+name = "delulu-syntax"
+description = "DeluluLang lexer, token model, AST, and error-recovering recursive-descent parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+delulu-diag = { path = "../delulu-diag" }
