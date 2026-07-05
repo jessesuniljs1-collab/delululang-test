@@ -1,0 +1,13 @@
+[package]
+name = "delulu-fuzz"
+description = "DeluluLang differential fuzz harness: generate programs, check them, and assert the runtime trace is a subset of the statically computed row (the Effect-Soundness theorem, fuzzed)"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "delulu-fuzz"
+path = "src/main.rs"
+
+[dependencies]
+delulu-check = { path = "../delulu-check" }
+delulu-runtime = { path = "../delulu-runtime" }

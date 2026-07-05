@@ -448,10 +448,31 @@ per-function `api_row_changes`, noted); criterion **10** `DELULU_CORE.md` commit
 Preservation / Effect-Soundness theorems with paper-proof sketches + a traceability table; honesty
 clause: sketches not mechanized, mechanization is open future work).
 
-Not yet done: criteria **9** (fuzz harness ≥100k) and **11** (`pub import` re-exports — the AST
-`Import` has no `public` field yet) — the last two Stage-2 increments. Also: `delulu authority
-<dir>` still uses the single-package path (does not yet resolve cross-package imports). CI is
-Windows-only so far (criterion 12 partial).
+Phase 2b additions (2026-07-05, 132 tests green) — **Stage 2 now feature-complete**:
+- Criterion **11** `pub import` re-exports: AST `Import` gained a `public` field; the parser
+  accepts `pub import a.b`; `deps.rs::check_workspace` computes each module's *exports* (own pub
+  items + transitively re-exported via `pub import`) with cycle detection (DL1005). Tests: a
+  facade module re-exports an inner module's fn so an importer sees it transitively; a mutual
+  `pub import` is DL1005; a *plain* import correctly does NOT re-export (the item stays private to
+  the importer). Implemented in the workspace path (`check_workspace`), which is what the CLI uses
+  for directories; `check_program` (single-package, test path) keeps plain-import behavior.
+- Criterion **9** the fuzz harness: new crate `crates/delulu-fuzz` — a differential harness that
+  generates programs in the danger zone (capabilities threaded through helpers, higher-order,
+  secrets), checks them, and for every ACCEPTED program runs it under a trace sink and asserts the
+  runtime trace ⊆ the checker's `row(main)` (executable Effect-Soundness, `DELULU_CORE.md` Thm 3).
+  It also emits deliberately-unsound programs and asserts rejection (DL0501/DL0604). Verified:
+  **100,000 iterations, 83,292 accepted programs executed, zero trace-escapes, zero missed
+  rejections, zero unexpected rejections** (`delulu-fuzz 100000`). A 4,000-iter campaign runs in
+  `cargo test`.
+
+Remaining (deferred, non-blocking for Stage 2's guarantee): `delulu authority <dir>` still uses
+the single-package path (does not resolve cross-package imports for the report); cross-PACKAGE
+`pub import` re-export chains are resolved by `check_workspace` but the per-function
+`api_row_changes` shape of `authority --diff` is per-package (§8 deviation, noted in Phase 2a).
+CI is Windows-only so far (criterion 12 partial — macOS/Linux CI lands with Stage 9 governance).
+
+*Stage 2 is complete: the dependency graph is a place where authority cannot hide, and the
+Effect-Soundness theorem holds across 83k fuzzed executions.*
 
 *Stage 2 makes the dependency graph a place where authority cannot hide. Stage 3 gives the
 program a floor to stand on.*

@@ -39,6 +39,8 @@ pub struct Module {
 
 #[derive(Clone, Debug)]
 pub struct Import {
+    /// `pub import` re-exports the target module's public items from this module (Stage 2, §2).
+    pub public: bool,
     pub path: Path,
     pub alias: Option<Ident>,
     pub span: Span,

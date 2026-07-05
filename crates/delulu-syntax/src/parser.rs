@@ -214,7 +214,11 @@ impl Parser {
         let mut imports = Vec::new();
         loop {
             while self.eat(&TokenKind::Term) {}
-            if !self.at(&TokenKind::KwImport) {
+            // An import is `import …` or `pub import …`. A bare `pub` followed by anything else
+            // (e.g. `pub fn`) is an item, not an import — that ends the import section.
+            let is_import = self.at(&TokenKind::KwImport)
+                || (self.at(&TokenKind::KwPub) && *self.peek_at(1) == TokenKind::KwImport);
+            if !is_import {
                 break;
             }
             if let Some(im) = self.parse_import() {
@@ -244,6 +248,7 @@ impl Parser {
 
     fn parse_import(&mut self) -> Option<Import> {
         let start = self.span();
+        let public = self.eat(&TokenKind::KwPub); // `pub import` re-exports (§2)
         self.bump(); // import
         let path = self.parse_path();
         let alias = if let TokenKind::Ident(a) = self.peek().clone() {
@@ -258,7 +263,7 @@ impl Parser {
         };
         let span = start.to(self.prev_span());
         self.expect_term();
-        Some(Import { path, alias, span })
+        Some(Import { public, path, alias, span })
     }
 
     fn parse_path(&mut self) -> Path {

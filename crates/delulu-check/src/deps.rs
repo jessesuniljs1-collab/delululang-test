@@ -327,6 +327,8 @@ pub fn check_workspace(ws: &Workspace) -> Program {
     let mut facts = HashMap::new();
     let mut fn_types = HashMap::new();
     let mut call_owner: HashMap<String, HashMap<String, String>> = HashMap::new();
+    // Modules that have already had a re-export cycle reported (DL1005), to avoid duplicates.
+    let mut reported_cycles: HashSet<usize> = HashSet::new();
 
     for gi in 0..n {
         let unit = &ws.modules[gi].unit;
@@ -382,29 +384,36 @@ pub fn check_workspace(ws: &Workspace) -> Program {
                 );
             }
             let tgi = candidates[0];
-            let tname = ws.modules[tgi].unit.name.clone();
-            for (name, id, is_pub) in &owned_types[tgi] {
-                if *is_pub {
-                    insert_unique_type(&mut type_ix, name, *id, m, &mut diagnostics, imp);
+            // Bring in the target's EXPORTS: its own pub items plus anything it re-exported via
+            // `pub import` (§2). Re-export cycles are DL1005.
+            let ex = compute_exports_gi(
+                tgi,
+                ws,
+                &owned_types,
+                &owned_fns,
+                &owned_consts,
+                &owned_effects,
+                &gi_by_pkg_name,
+                &mut HashSet::new(),
+                &mut reported_cycles,
+                &mut diagnostics,
+            );
+            for (name, id) in &ex.types {
+                insert_unique_type(&mut type_ix, name, *id, m, &mut diagnostics, imp);
+            }
+            for (sig, owner_mod) in &ex.fns {
+                if fns.contains_key(&sig.name) {
+                    diagnostics.push(dup(m, "imported value", &sig.name, imp.span));
+                } else {
+                    fns.insert(sig.name.clone(), sig.clone());
+                    owner.insert(sig.name.clone(), owner_mod.clone());
                 }
             }
-            for sig in &owned_fns[tgi] {
-                if sig.public {
-                    if fns.contains_key(&sig.name) {
-                        diagnostics.push(dup(m, "imported value", &sig.name, imp.span));
-                    } else {
-                        fns.insert(sig.name.clone(), sig.clone());
-                        owner.insert(sig.name.clone(), tname.clone());
-                    }
-                }
-            }
-            for c in &owned_consts[tgi] {
+            for c in &ex.consts {
                 consts.entry(c.name.clone()).or_insert_with(|| c.clone());
             }
-            for (e, is_pub) in &owned_effects[tgi] {
-                if *is_pub {
-                    user_effects.insert(e.clone());
-                }
+            for e in &ex.effects {
+                user_effects.insert(e.clone());
             }
         }
 
@@ -509,6 +518,106 @@ pub fn check_self_authority(ws: &Workspace, program: &Program) -> Vec<Diagnostic
         }
     }
     diags
+}
+
+// ===== pub import re-export resolution (§2) =====================================================
+
+/// The items a module exports to importers: its own `pub` items plus everything it re-exports via
+/// `pub import` (transitively). `fns` carry their true owner module so cross-module calls resolve
+/// to where the function actually lives.
+struct GiExports {
+    types: Vec<(String, TypeDefId)>,
+    fns: Vec<(FnSig, String)>,
+    consts: Vec<ConstSig>,
+    effects: Vec<String>,
+}
+
+/// Resolve a module name referenced from package `from_pkg` to a global module index:
+/// local module first, then declared dependencies (the same order as the main import loop, but
+/// without re-reporting DL1006 ambiguity — that is the importing site's job).
+fn resolve_target_gi(
+    from_pkg: usize,
+    target: &str,
+    ws: &Workspace,
+    gi_by_pkg_name: &HashMap<(usize, String), usize>,
+) -> Option<usize> {
+    if let Some(&g) = gi_by_pkg_name.get(&(from_pkg, target.to_string())) {
+        return Some(g);
+    }
+    for &dp in &ws.packages[from_pkg].dep_idxs {
+        if let Some(&g) = gi_by_pkg_name.get(&(dp, target.to_string())) {
+            return Some(g);
+        }
+    }
+    None
+}
+
+/// Compute a module's exports, following `pub import` edges with cycle detection (DL1005).
+#[allow(clippy::too_many_arguments)]
+fn compute_exports_gi(
+    gi: usize,
+    ws: &Workspace,
+    owned_types: &[Vec<(String, TypeDefId, bool)>],
+    owned_fns: &[Vec<FnSig>],
+    owned_consts: &[Vec<ConstSig>],
+    owned_effects: &[Vec<(String, bool)>],
+    gi_by_pkg_name: &HashMap<(usize, String), usize>,
+    visiting: &mut HashSet<usize>,
+    reported: &mut HashSet<usize>,
+    diags: &mut Vec<Diagnostic>,
+) -> GiExports {
+    let owner_name = ws.modules[gi].unit.name.clone();
+    let mut ex = GiExports { types: Vec::new(), fns: Vec::new(), consts: Vec::new(), effects: Vec::new() };
+    for (name, id, is_pub) in &owned_types[gi] {
+        if *is_pub {
+            ex.types.push((name.clone(), *id));
+        }
+    }
+    for sig in &owned_fns[gi] {
+        if sig.public {
+            ex.fns.push((sig.clone(), owner_name.clone()));
+        }
+    }
+    for c in &owned_consts[gi] {
+        ex.consts.push(c.clone());
+    }
+    for (e, is_pub) in &owned_effects[gi] {
+        if *is_pub {
+            ex.effects.push(e.clone());
+        }
+    }
+
+    visiting.insert(gi);
+    let p = ws.modules[gi].pkg;
+    for imp in &ws.modules[gi].unit.module.imports {
+        if !imp.public {
+            continue; // only `pub import` re-exports
+        }
+        let target = imp.path.dotted();
+        if let Some(tgi) = resolve_target_gi(p, &target, ws, gi_by_pkg_name) {
+            if visiting.contains(&tgi) {
+                if reported.insert(gi) {
+                    diags.push(
+                        Diagnostic::error(
+                            "DL1005",
+                            format!("re-export cycle: `{owner_name}` re-exports `{target}`, which re-exports back"),
+                        )
+                        .with_span(imp.span, "this `pub import` closes a re-export cycle"),
+                    );
+                }
+                continue;
+            }
+            let child = compute_exports_gi(
+                tgi, ws, owned_types, owned_fns, owned_consts, owned_effects, gi_by_pkg_name, visiting, reported, diags,
+            );
+            ex.types.extend(child.types);
+            ex.fns.extend(child.fns);
+            ex.consts.extend(child.consts);
+            ex.effects.extend(child.effects);
+        }
+    }
+    visiting.remove(&gi);
+    ex
 }
 
 // ===== DL1001: dependency authority pin check ===================================================
@@ -717,4 +826,60 @@ pub fn authority_canonical_json(auth: &PackageAuthority) -> String {
     let effects: Vec<String> = auth.effects.iter().cloned().collect();
     let kinds: Vec<String> = auth.cap_kinds.iter().cloned().collect();
     serde_json::json!({ "effects": effects, "cap_kinds": kinds }).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("delulu_deps_test_{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        dir
+    }
+    fn write(dir: &Path, rel: &str, contents: &str) {
+        let p = dir.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, contents).unwrap();
+    }
+    fn err_codes(prog: &Program) -> Vec<String> {
+        prog.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
+    }
+    const LIB: &str = "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\n";
+
+    #[test]
+    fn pub_import_re_exports_transitively() {
+        // root plain-imports facade; facade `pub import`s inner; so `helper` is visible in root.
+        let dir = scratch("reexport");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/inner.delulu", "module p.inner\npub fn helper(n: Str) -> Str { \"hi \" + n }\n");
+        write(&dir, "src/facade.delulu", "module p.facade\npub import p.inner\n");
+        write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn use_it() -> Str { helper(\"x\") }\n");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        assert!(err_codes(&prog).is_empty(), "re-export should make helper visible: {:?}", prog.diagnostics);
+    }
+
+    #[test]
+    fn re_export_cycle_is_dl1005() {
+        let dir = scratch("recycle");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/a.delulu", "module a\npub import b\npub fn fa() -> Int { 1 }\n");
+        write(&dir, "src/b.delulu", "module b\npub import a\npub fn fb() -> Int { 2 }\n");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        assert!(err_codes(&prog).iter().any(|c| c == "DL1005"), "{:?}", prog.diagnostics);
+    }
+
+    #[test]
+    fn plain_import_does_not_re_export() {
+        // facade plain-imports inner (no re-export); root imports facade and cannot see helper.
+        let dir = scratch("noreexport");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/inner.delulu", "module p.inner\npub fn helper() -> Int { 1 }\n");
+        write(&dir, "src/facade.delulu", "module p.facade\nimport p.inner\npub fn via() -> Int { helper() }\n");
+        write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn bad() -> Int { helper() }\n");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        assert!(err_codes(&prog).iter().any(|c| c == "DL0301"), "helper must NOT leak through a plain import: {:?}", prog.diagnostics);
+    }
 }

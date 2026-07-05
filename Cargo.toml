@@ -6,6 +6,7 @@ members = [
     "crates/delulu-check",
     "crates/delulu-runtime",
     "crates/delulu",
+    "crates/delulu-fuzz",
 ]
 
 [workspace.package]
