@@ -1,0 +1,15 @@
+[package]
+name = "delulu-wasm"
+description = "DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and run them under an embedded, deny-by-default Wasmtime host"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+delulu-diag = { path = "../delulu-diag" }
+delulu-syntax = { path = "../delulu-syntax" }
+delulu-check = { path = "../delulu-check" }
+wasm-encoder = "0.221"
+wasmtime = { version = "27", default-features = false, features = ["cranelift", "runtime"] }
+
+[dev-dependencies]
+delulu-runtime = { path = "../delulu-runtime" }

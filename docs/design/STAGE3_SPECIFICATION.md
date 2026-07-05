@@ -249,6 +249,24 @@ implementation of the *existing* `Secret.map` stdlib ops.
 
 ---
 
+## 8a. Implementation status (2026-07-05)
+
+**Phase 3a — the sandbox floor's foundation — is implemented and green** (137 workspace tests).
+New crate `crates/delulu-wasm` (deps: `wasm-encoder` 0.221, `wasmtime` 27, default-features off,
+`cranelift`+`runtime`). It compiles the **pure-Int/Bool fragment** (arithmetic, comparisons,
+`&&`/`||`, unary `-`/`!`, `if`/`else`, `let`, calls, recursion) to core WASM (`codegen.rs`) and
+runs it under an embedded, **zero-import (deny-by-default)** Wasmtime host (`host.rs`). The
+correctness contract is **two-engine parity**: `compile_and_run_int` vs the interpreter's new
+additive `Interp::call_int_fn` must agree — verified on `fib`, `gcd`, polynomials, nested `if`,
+booleans, and negation. Constructs outside the fragment are `CompileError` (DL1201-class) and
+stay on the interpreter, which remains the reference engine.
+
+Remaining Phase 3 increments (in order): the **`delulu:cap` host interface** (§4 — string values,
+capabilities as host externref handles, all scope checks host-side); the **`.dwx` artifact** (§5,
+embedded authority manifest + `delulu build --target wasm` / `run --engine wasm`); secrets-stay-
+host-side (§4.4); the DL12xx registry + diagnostics; and **full conformance parity** across both
+engines (§9 criteria 1–3), the hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
+
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
 1. The Stage-1 reference program builds to `demo.dwx` and runs from that single file on Windows,

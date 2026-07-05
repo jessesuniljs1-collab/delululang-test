@@ -77,6 +77,20 @@ impl Interp {
         self.call_fn("main", vec![root]).map_err(unwrap_fault)
     }
 
+    /// Call a pure function with Int arguments and return its Int (or Bool-as-Int) result. Used by
+    /// the WASM backend's two-engine parity harness — the interpreter is the reference engine
+    /// (spec §9). Additive; does not change existing entry points.
+    pub fn call_int_fn(&self, name: &str, args: &[i64]) -> Result<i64, Fault> {
+        self.eval_consts().map_err(unwrap_fault)?;
+        let argvals: Vec<Value> = args.iter().map(|&a| Value::Int(a)).collect();
+        match self.call_fn(name, argvals) {
+            Ok(Value::Int(n)) => Ok(n),
+            Ok(Value::Bool(b)) => Ok(if b { 1 } else { 0 }),
+            Ok(other) => Err(Fault::new("DL0907", format!("expected an Int/Bool result, got `{}`", other.display()))),
+            Err(e) => Err(unwrap_fault(e)),
+        }
+    }
+
     /// Evaluate one top-level expression (for the REPL), with an optional root binding.
     pub fn eval_toplevel(&self, e: &Expr, root: Option<Value>) -> Result<Value, Fault> {
         self.eval_consts().map_err(unwrap_fault)?;
