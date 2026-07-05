@@ -1,0 +1,10 @@
+module tier1
+
+fn area(w: Int, h: Int) -> Int {
+  w * h
+}
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println("area = " + str(area(6, 7)))
+}

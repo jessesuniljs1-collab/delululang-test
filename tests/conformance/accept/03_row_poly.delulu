@@ -1,0 +1,14 @@
+module conf
+
+// Row polymorphism: apply's row is exactly f's row.
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+  f(x)
+}
+
+fn twice[T](f: fn(T) -> T, x: T) -> T {
+  f(f(x))
+}
+
+fn use_pure() -> Int {
+  apply(fn(x: Int) -> Int { x + 1 }, 41)
+}

@@ -1,0 +1,20 @@
+module tier2
+
+// Euclid's algorithm — recursion and pure computation.
+fn gcd(a: Int, b: Int) -> Int {
+  if b == 0 { a } else { gcd(b, a % b) }
+}
+
+// Iterative sum with mutable locals, while, and Option handling.
+fn sum_list(xs: List[Int]) -> Int {
+  var total = 0
+  var i = 0
+  while i < xs.len() {
+    match xs.get(i) {
+      Some(v) => { total = total + v },
+      None => { }
+    }
+    i = i + 1
+  }
+  total
+}

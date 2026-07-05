@@ -129,9 +129,9 @@ fn no_effect_without_a_capability_is_structural() {
 
 #[test]
 fn secret_cannot_flow_into_a_sink() {
-    // Secret[Str] is not Str: it cannot be passed where Str is expected (DL0401).
+    // Secret[Str] is not Str: passing it where Str is expected is the secret-non-flow error.
     rejects_with(
         "module m\nfn f(out: Cap[Console], s: Secret[Str]) ! {Write} { out.println(s) }\n",
-        "DL0401",
+        "DL0602",
     );
 }

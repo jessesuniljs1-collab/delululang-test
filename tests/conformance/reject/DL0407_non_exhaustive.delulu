@@ -1,0 +1,10 @@
+module conf
+
+type Color = Red | Green | Blue
+
+fn f(c: Color) -> Int {
+  match c {
+    Red => 0,
+    Green => 1
+  }
+}

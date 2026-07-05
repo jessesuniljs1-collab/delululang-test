@@ -1,0 +1,5 @@
+module conf
+
+fn f(s: Secret[Str]) -> Str {
+  str(s)
+}

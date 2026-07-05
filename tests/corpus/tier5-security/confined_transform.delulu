@@ -1,0 +1,18 @@
+module tier5
+
+// Capability confinement: these transforms take NO capability parameters and have an empty row,
+// so the compiler PROVES they can only compute — no I/O, no network, no clock. This is the
+// Stage-1, compile-time analogue of an authority-bounded plugin (Stage 6 loads such code at
+// runtime and enforces the same bound). `delulu authority` on a program using only these
+// reports zero effects.
+fn transform(input: Str) -> Str {
+  input.trim()
+}
+
+fn scramble(xs: List[Int]) -> List[Int] {
+  xs.map(fn(x: Int) -> Int { x * 3 + 1 })
+}
+
+fn pipeline(input: Str) -> Int {
+  transform(input).len()
+}

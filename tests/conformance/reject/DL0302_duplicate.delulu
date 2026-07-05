@@ -1,0 +1,9 @@
+module conf
+
+fn dup() -> Int {
+  1
+}
+
+fn dup() -> Int {
+  2
+}

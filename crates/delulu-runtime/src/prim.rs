@@ -318,7 +318,7 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
         "push" => {
             if let (Some(Value::List(l)), Some(v)) = (args.first(), args.get(1)) {
                 l.borrow_mut().push(v.clone());
-                Ok(Value::List(l.clone()))
+                Ok(Value::Unit)
             } else {
                 Err(Fault::at("DL0907", "push expects (List, value)", span))
             }

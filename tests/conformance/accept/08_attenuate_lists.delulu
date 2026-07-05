@@ -1,0 +1,19 @@
+module conf
+
+// Attenuation: narrow a filesystem capability to a subdirectory.
+fn read_sub(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let inner = fs.narrow("sub")
+  let t = inner.read_text("x.txt")?
+  Ok(t)
+}
+
+fn doubled(xs: List[Int]) -> List[Int] {
+  xs.map(fn(x: Int) -> Int { x * 2 })
+}
+
+fn first_or(xs: List[Int], d: Int) -> Int {
+  match xs.get(0) {
+    Some(v) => v,
+    None => d
+  }
+}

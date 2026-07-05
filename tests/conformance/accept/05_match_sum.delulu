@@ -1,0 +1,18 @@
+module conf
+
+type Color = Red | Green | Blue
+
+fn code(c: Color) -> Int {
+  match c {
+    Red => 0,
+    Green => 1,
+    Blue => 2
+  }
+}
+
+fn describe(o: Option[Int]) -> Int {
+  match o {
+    Some(n) => n,
+    None => 0
+  }
+}

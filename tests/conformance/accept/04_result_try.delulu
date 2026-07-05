@@ -1,0 +1,13 @@
+module conf
+
+// `?` in a Result-returning function whose error type matches read_text's.
+fn read_first(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let a = fs.read_text("a.txt")?
+  Ok(a)
+}
+
+fn chain(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let a = fs.read_text("a.txt")?
+  let b = fs.read_text("b.txt")?
+  Ok(a + b)
+}

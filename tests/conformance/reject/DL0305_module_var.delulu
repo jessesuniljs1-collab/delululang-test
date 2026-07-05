@@ -1,0 +1,4 @@
+module conf
+
+// Module-level mutable state is forbidden (closes the ambient laundering channel).
+var counter = 0

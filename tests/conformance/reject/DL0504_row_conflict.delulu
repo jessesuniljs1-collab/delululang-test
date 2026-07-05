@@ -1,0 +1,10 @@
+module conf
+
+fn both[e](f: fn() -> Unit ! e, g: fn() -> Unit ! e) -> Unit ! e {
+  f()
+  g()
+}
+
+fn use_it(out: Cap[Console]) ! {Write} {
+  both(fn() -> Unit { }, fn() -> Unit ! {Write} { out.println("x") })
+}

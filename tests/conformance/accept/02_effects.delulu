@@ -1,0 +1,11 @@
+module conf
+
+// Effectful functions declare their row; the capability parameter is the permission.
+fn greet(out: Cap[Console], name: Str) ! {Write} {
+  out.println("hi " + name)
+}
+
+fn log_two(out: Cap[Console]) ! {Write} {
+  out.println("a")
+  out.println("b")
+}

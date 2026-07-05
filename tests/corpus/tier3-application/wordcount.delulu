@@ -1,0 +1,17 @@
+module tier3
+
+// An application-shaped program: read a file (Read), count words, report (Write).
+// Its whole-program authority is exactly {Read, Write} over ./data and the console.
+fn count_words(text: Str) -> Int {
+  let parts = text.split(" ")
+  parts.len()
+}
+
+fn main(root: Root) ! {Write, Read} {
+  let out = root.console()
+  let fs = root.fs_read("./data")
+  match fs.read_text("input.txt") {
+    Ok(text) => { out.println("words: " + str(count_words(text))) },
+    Err(_) => { out.println("no input file") }
+  }
+}

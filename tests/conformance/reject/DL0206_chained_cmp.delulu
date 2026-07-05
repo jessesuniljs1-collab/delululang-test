@@ -1,0 +1,5 @@
+module conf
+
+fn f() -> Bool {
+  1 < 2 < 3
+}

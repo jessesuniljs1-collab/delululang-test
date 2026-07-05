@@ -1,0 +1,4 @@
+module conf
+
+fn f() ! {Bogus} {
+}

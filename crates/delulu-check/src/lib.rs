@@ -83,11 +83,11 @@ mod tests {
     }
 
     #[test]
-    fn secret_cannot_flow_into_println_dl0602_via_type_mismatch() {
-        // println expects Str; a Secret[Str] does not unify with Str → type mismatch (DL0401),
-        // which is the secret-non-flow guarantee at work (Secret[T] is not T).
+    fn secret_cannot_flow_into_println_is_dl0602() {
+        // println expects Str; a Secret[Str] cannot flow there — the dedicated secret-non-flow
+        // diagnostic (Secret[T] is not T).
         let e = errors("module m\nfn f(out: Cap[Console], s: Secret[Str]) ! {Write} { out.println(s) }\n");
-        assert!(e.contains(&"DL0401".to_string()), "{e:?}");
+        assert!(e.contains(&"DL0602".to_string()), "{e:?}");
     }
 
     #[test]

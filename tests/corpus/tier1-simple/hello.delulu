@@ -1,0 +1,6 @@
+module tier1
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println("hello from DeluluLang")
+}

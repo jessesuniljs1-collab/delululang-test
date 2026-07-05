@@ -1,0 +1,5 @@
+module conf
+
+fn f(out: Cap[Console]) ! {Write} {
+  out.bogus()
+}

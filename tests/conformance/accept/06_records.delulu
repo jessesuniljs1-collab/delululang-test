@@ -1,0 +1,15 @@
+module conf
+
+type Point { x: Int, y: Int }
+
+fn origin() -> Point {
+  Point { x: 0, y: 0 }
+}
+
+fn add(p: Point, q: Point) -> Point {
+  Point { x: p.x + q.x, y: p.y + q.y }
+}
+
+fn get_x(p: Point) -> Int {
+  p.x
+}

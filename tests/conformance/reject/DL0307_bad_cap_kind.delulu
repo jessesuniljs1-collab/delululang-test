@@ -1,0 +1,4 @@
+module conf
+
+fn f(c: Cap[Bogus]) {
+}

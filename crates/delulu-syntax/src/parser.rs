@@ -948,7 +948,17 @@ impl Parser {
                     let span = start.to(self.prev_span());
                     Pattern::Variant { path, fields, span }
                 } else if path.segs.len() == 1 {
-                    Pattern::Bind(path.segs.into_iter().next().unwrap())
+                    // Convention (like Rust/Haskell): a capitalized name is a nullary variant
+                    // pattern (`Red`, `None`), a lowercase name is a fresh binding (`n`, `v`).
+                    // This is what makes `match c { Red => .., Green => .. }` see the variants and
+                    // exhaustiveness checking work.
+                    let seg = path.segs.into_iter().next().unwrap();
+                    if seg.name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                        let span = seg.span;
+                        Pattern::Variant { path: Path { segs: vec![seg] }, fields: Vec::new(), span }
+                    } else {
+                        Pattern::Bind(seg)
+                    }
                 } else {
                     let span = path.span();
                     Pattern::Variant { path, fields: Vec::new(), span }

@@ -1,0 +1,6 @@
+module conf
+
+// `secret` is reserved for a future stage; it cannot be a declared name.
+fn secret() -> Int {
+  0
+}

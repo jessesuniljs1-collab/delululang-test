@@ -1,0 +1,9 @@
+module conf
+
+fn g(a: Int, b: Int) -> Int {
+  a + b
+}
+
+fn f() -> Int {
+  g(1)
+}

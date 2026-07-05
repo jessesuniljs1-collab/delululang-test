@@ -1,0 +1,6 @@
+module conf
+
+// Performs Write (println) but declares no row.
+fn f(out: Cap[Console]) {
+  out.println("x")
+}

@@ -615,8 +615,12 @@ impl<'a> Checker<'a> {
             }
             "push" => {
                 let ts = check_args(self, ctx, &mut acc);
-                let out = ts.first().cloned().unwrap_or_else(|| Type::List(Box::new(self.cx.fresh_type())));
-                Some((out, acc))
+                // Unify the element into the list, then yield Unit (push mutates in place).
+                if let (Some(Type::List(elem)), Some(v)) = (ts.first(), ts.get(1)) {
+                    let elem = (**elem).clone();
+                    self.expect_type(&elem, v, span, "pushed element type must match the list");
+                }
+                Some((Type::Unit, acc))
             }
             _ => None,
         }
@@ -751,6 +755,11 @@ impl<'a> Checker<'a> {
                     } else {
                         Some((Type::Secret(inner.clone()), None, None))
                     }
+                }
+                // verify is a constant-time comparison of two secrets — pure, no reveal.
+                "verify" => {
+                    self.expect_arg(args, 0, &Type::Secret(inner.clone()), span);
+                    Some((Type::Bool, None, None))
                 }
                 // expose is the ONLY unwrap; it requires Cap[Declassify] and carries Declassify (R-2).
                 "expose" => {
@@ -1362,12 +1371,25 @@ impl<'a> Checker<'a> {
         match self.cx.unify_type(expected, actual) {
             Ok(()) => {}
             Err(e) => {
+                let ea = self.cx.apply_type(expected);
+                let aa = self.cx.apply_type(actual);
+                // A secret used where its plain type is expected is the "secret cannot flow"
+                // case (§6.4 rule 1) — reported as DL0602, not a generic type mismatch.
+                if secret_mismatch(&ea, &aa) {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0602",
+                            format!("secret value cannot flow here: `Secret[..]` is not `{}` (secrets never coerce)",
+                                if matches!(ea, Type::Secret(_)) { format!("{aa}") } else { format!("{ea}") }),
+                        )
+                        .with_span(span, "a secret cannot be used where a plain value is expected"),
+                    );
+                    return;
+                }
                 let code = match e {
                     UnifyError::RowConflict => "DL0504",
                     _ => "DL0401",
                 };
-                let ea = self.cx.apply_type(expected);
-                let aa = self.cx.apply_type(actual);
                 self.diags.push(
                     Diagnostic::error(code, format!("{msg}: expected `{ea}`, found `{aa}`"))
                         .with_span(span, "type mismatch here"),
@@ -1375,6 +1397,14 @@ impl<'a> Checker<'a> {
             }
         }
     }
+}
+
+/// Exactly one side is a `Secret` and the other is a concrete non-secret type (not a variable) —
+/// i.e. a secret is flowing into, or out of, a plain-typed position.
+fn secret_mismatch(a: &Type, b: &Type) -> bool {
+    let one_secret = matches!(a, Type::Secret(_)) ^ matches!(b, Type::Secret(_));
+    let concrete = |t: &Type| !matches!(t, Type::Var(_));
+    one_secret && concrete(a) && concrete(b)
 }
 
 // Small helper so RowAcc can absorb another accumulator ergonomically.

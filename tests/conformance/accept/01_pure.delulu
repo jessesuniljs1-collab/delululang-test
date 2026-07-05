@@ -1,0 +1,14 @@
+module conf
+
+// Pure functions: omitted row means !{}. The checker proves they perform no effect.
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn square(n: Int) -> Int {
+  n * n
+}
+
+fn max(a: Int, b: Int) -> Int {
+  if a > b { a } else { b }
+}
