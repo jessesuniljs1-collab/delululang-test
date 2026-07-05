@@ -238,6 +238,20 @@ pub fn program_authority(program: &Program, program_name: &str, scopes: &ScopeIn
     })
 }
 
+/// The effect names the program can perform, reachable from `main` (or all functions for a
+/// library). This is the package's computed authority, checked against its manifest (DL1009).
+pub fn program_effects(program: &Program) -> Vec<String> {
+    let mut effects: std::collections::BTreeSet<String> = Default::default();
+    for key in reachable_qualified(program) {
+        if let Some(f) = program.facts.get(&key) {
+            for e in &f.effects {
+                effects.insert(e.name().to_string());
+            }
+        }
+    }
+    effects.into_iter().collect()
+}
+
 fn reachable_qualified(program: &Program) -> HashSet<String> {
     let mut seen = HashSet::new();
     let mut queue: VecDeque<(String, String)> = VecDeque::new();

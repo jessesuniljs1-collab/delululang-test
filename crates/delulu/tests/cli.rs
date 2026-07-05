@@ -100,3 +100,45 @@ fn explain_prints_a_code_title() {
     assert!(stdout(&o).contains("DL0501"));
     assert!(o.status.success());
 }
+
+#[test]
+fn build_multimodule_package_within_manifest_passes() {
+    let o = delulu(&["build", "examples/greeter"]);
+    assert!(o.status.success(), "greeter should build clean: {}", stdout(&o));
+}
+
+#[test]
+fn authority_on_a_package_crosses_modules() {
+    let o = delulu(&["authority", "examples/greeter", "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).expect("authority --json must be valid JSON");
+    let effects: Vec<&str> = v["authority"]["effects"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+    assert_eq!(effects, vec!["Write"]);
+    // Two modules; imported helpers proven pure across the boundary.
+    let modules: Vec<&str> = v["authority"]["modules"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+    assert!(modules.contains(&"greeter") && modules.contains(&"greeter.greetings"), "{modules:?}");
+    let pure: Vec<&str> = v["authority"]["pure_functions"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+    assert!(pure.iter().any(|p| p.contains("salutation")), "{pure:?}");
+}
+
+#[test]
+fn build_package_exceeding_manifest_authority_is_dl1009() {
+    // A package that performs Write but declares only Read must fail to build (DL1009).
+    let dir = std::env::temp_dir().join("delulu_cli_leaky_test");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("delulu.toml"),
+        "[package]\nname = \"leaky\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Read\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("main.delulu"),
+        "module leaky\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(\"x\") }\n",
+    )
+    .unwrap();
+    let o = delulu(&["build", dir.to_str().unwrap(), "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).expect("build --json must be valid JSON");
+    let has = v["diagnostics"].as_array().unwrap().iter().any(|d| d["code"] == "DL1009");
+    assert!(has, "expected DL1009: {}", stdout(&o));
+    assert_eq!(o.status.code(), Some(1));
+}

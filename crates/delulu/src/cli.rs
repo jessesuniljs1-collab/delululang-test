@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use delulu_check::{authority_report, check_program, check_source, load_package, program_authority};
+use delulu_check::{authority_report, check_program, check_source, load_package, program_authority, program_effects};
 use delulu_diag::{envelope_to_string, render_human, Diagnostic, SourceMap};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_runtime::value::RootVal;
@@ -48,6 +48,7 @@ pub fn run(args: &[String]) -> i32 {
     let rest = &args[1..];
     match cmd.as_str() {
         "check" => cmd_check(rest),
+        "build" => cmd_build(rest),
         "run" => cmd_run(rest),
         "authority" => cmd_authority(rest),
         "repl" => repl_cmd(rest),
@@ -71,7 +72,8 @@ fn usage() -> &'static str {
     "delulu — the DeluluLang compiler and runtime\n\
      \n\
      USAGE:\n\
-     \x20 delulu check     <file.delulu> [--json]\n\
+     \x20 delulu check     <file.delulu | package-dir> [--json]\n\
+     \x20 delulu build     <package-dir> [--json]   (resolve + verify authority vs manifest)\n\
      \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20 delulu authority <file.delulu> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
@@ -223,14 +225,53 @@ fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
 
 // ----- package mode (multi-module, Stage 2) --------------------------------
 
+fn cmd_build(rest: &[String]) -> i32 {
+    let (path, opts) = parse_opts(rest);
+    let Some(path) = path else {
+        eprintln!("error: `build` needs a package directory");
+        return 2;
+    };
+    if !std::path::Path::new(&path).is_dir() {
+        eprintln!("error: `build` expects a package directory (with src/ and delulu.toml)");
+        return 2;
+    }
+    check_package(&path, &opts)
+}
+
 fn check_package(dir: &str, opts: &Opts) -> i32 {
-    let pkg = load_package(dir);
+    let mut pkg = load_package(dir);
     let program = check_program(&pkg);
-    let n = errors(&program.diagnostics);
-    print_diagnostics("check", &program.diagnostics, &pkg.source_map, None, opts.json);
+    let mut diags = program.diagnostics.clone();
+
+    // Package-authority self-check (§4.2): the computed authority must be within the manifest's
+    // declared authority. A package that performs an effect it did not declare fails to build —
+    // DL1009. This is the structural defense that makes "a dependency cannot silently gain an
+    // effect" a compile error rather than a hopeful audit.
+    let manifest_path = std::path::Path::new(dir).join("delulu.toml");
+    if let Ok(toml) = std::fs::read_to_string(&manifest_path) {
+        let manifest = parse_manifest(&toml);
+        let declared: std::collections::HashSet<&str> = manifest.effects.iter().map(|s| s.as_str()).collect();
+        let excess: Vec<String> = program_effects(&program).into_iter().filter(|e| !declared.contains(e.as_str())).collect();
+        if !excess.is_empty() {
+            let mid = pkg.source_map.add_file("delulu.toml", toml.clone());
+            let span = effects_line_span(&toml, mid);
+            for e in excess {
+                diags.push(
+                    delulu_diag::Diagnostic::error(
+                        "DL1009",
+                        format!("package `{}` performs effect `{e}` not permitted by its authority manifest", manifest.name.as_deref().unwrap_or(dir)),
+                    )
+                    .with_span(span, format!("add `{e}` to `[authority] effects` in delulu.toml")),
+                );
+            }
+        }
+    }
+
+    let n = errors(&diags);
+    print_diagnostics("check", &diags, &pkg.source_map, None, opts.json);
     if !opts.json {
         if n == 0 {
-            eprintln!("ok: package `{}` checked clean ({} module(s))", dir, pkg.modules.len());
+            eprintln!("ok: package `{}` checked clean ({} module(s), authority within manifest)", dir, pkg.modules.len());
         } else {
             eprintln!("{n} error(s)");
         }
@@ -239,6 +280,17 @@ fn check_package(dir: &str, opts: &Opts) -> i32 {
         0
     } else {
         1
+    }
+}
+
+/// Byte span of the `effects` line in a manifest (for DL1009), or (0,0) if not found.
+fn effects_line_span(toml: &str, file: u32) -> delulu_diag::Span {
+    match toml.find("effects") {
+        Some(off) => {
+            let end = toml[off..].find('\n').map(|n| off + n).unwrap_or(toml.len());
+            delulu_diag::Span::new(file, off as u32, end as u32)
+        }
+        None => delulu_diag::Span::new(file, 0, 0),
     }
 }
 

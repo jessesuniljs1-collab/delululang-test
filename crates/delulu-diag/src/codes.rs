@@ -80,6 +80,22 @@ registry! {
     "DL0802" => "grant exceeds holder's grant (attenuation violation)",
     "DL0803" => "function-typed argument to Contained plugin export",
 
+    // DL10xx — packages / authority versioning (Stage 2)
+    "DL1001" => "dependency authority exceeds its pin",
+    "DL1002" => "locked authority hash mismatch (same version, different authority)",
+    "DL1003" => "semver-authority violation: authority widened without a major version bump",
+    "DL1005" => "package or re-export cycle",
+    "DL1006" => "import is ambiguous between a local module and a dependency",
+    "DL1007" => "git dependency without a pinned rev or tag",
+    "DL1008" => "version conflict for one package name in the graph",
+    "DL1009" => "package performs an effect not permitted by its own authority manifest",
+    "DL1010" => "content hash mismatch (source changed under a locked version)",
+    "DL1011" => "locked build requires resolution not present in delulu.lock",
+
+    // DL11xx — trace / fuzz harness (Stage 2)
+    "DL1101" => "effect-trace assertion violation (a runtime effect not in the static row)",
+    "DL1102" => "repair did not produce an accepting program (fuzz harness)",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",
