@@ -1,0 +1,11 @@
+[package]
+name = "greeter"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects  = ["Read", "Write"]
+fs.read  = ["./config"]
+fs.write = []
+net      = []
+secrets  = []

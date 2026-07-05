@@ -22,7 +22,7 @@ pub struct ScopeInfo {
 }
 
 impl ScopeInfo {
-    fn for_kind(&self, k: ResourceKind) -> Vec<String> {
+    pub fn for_kind(&self, k: ResourceKind) -> Vec<String> {
         match k {
             ResourceKind::FsRead => self.fs_read.clone(),
             ResourceKind::FsWrite => self.fs_write.clone(),

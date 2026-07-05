@@ -1,0 +1,9 @@
+module greeter
+
+import greeter.greetings
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(salutation("world"))
+  out.println(str(shout_count("hello there friends")))
+}

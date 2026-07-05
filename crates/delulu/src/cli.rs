@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use delulu_check::{authority_report, check_source};
+use delulu_check::{authority_report, check_program, check_source, load_package, program_authority};
 use delulu_diag::{envelope_to_string, render_human, Diagnostic, SourceMap};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_runtime::value::RootVal;
@@ -114,9 +114,12 @@ fn errors(diags: &[Diagnostic]) -> usize {
 fn cmd_check(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
     let Some(file) = file else {
-        eprintln!("error: `check` needs a file");
+        eprintln!("error: `check` needs a file or package directory");
         return 2;
     };
+    if std::path::Path::new(&file).is_dir() {
+        return check_package(&file, &opts);
+    }
     let (map, id, src) = match load(&file) {
         Ok(x) => x,
         Err(c) => return c,
@@ -143,9 +146,12 @@ fn cmd_check(rest: &[String]) -> i32 {
 fn cmd_authority(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
     let Some(file) = file else {
-        eprintln!("error: `authority` needs a file");
+        eprintln!("error: `authority` needs a file or package directory");
         return 2;
     };
+    if std::path::Path::new(&file).is_dir() {
+        return authority_package(&file, &opts);
+    }
     let (map, id, src) = match load(&file) {
         Ok(x) => x,
         Err(c) => return c,
@@ -177,6 +183,10 @@ fn render_authority(report: &Json) -> String {
     let mut out = String::new();
     let name = report["program"].as_str().unwrap_or("?");
     let _ = writeln!(out, "Authority of `{name}` — what this program can do to your system:");
+    let modules = strs(&report["modules"]);
+    if !modules.is_empty() {
+        let _ = writeln!(out, "  modules:      {}", modules.join(", "));
+    }
     let effects = strs(&report["effects"]);
     let _ = writeln!(out, "  effects:      {}", if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") });
     let caps = report["capabilities"].as_array().cloned().unwrap_or_default();
@@ -201,11 +211,53 @@ fn render_authority(report: &Json) -> String {
 
 fn manifest_scopes(file: &str) -> delulu_check::ScopeInfo {
     let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
-    let mpath = dir.join("delulu.toml");
-    match std::fs::read_to_string(&mpath) {
+    scopes_in_dir(dir)
+}
+
+fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
+    match std::fs::read_to_string(dir.join("delulu.toml")) {
         Ok(src) => parse_manifest(&src).scope_info(),
         Err(_) => delulu_check::ScopeInfo::default(),
     }
+}
+
+// ----- package mode (multi-module, Stage 2) --------------------------------
+
+fn check_package(dir: &str, opts: &Opts) -> i32 {
+    let pkg = load_package(dir);
+    let program = check_program(&pkg);
+    let n = errors(&program.diagnostics);
+    print_diagnostics("check", &program.diagnostics, &pkg.source_map, None, opts.json);
+    if !opts.json {
+        if n == 0 {
+            eprintln!("ok: package `{}` checked clean ({} module(s))", dir, pkg.modules.len());
+        } else {
+            eprintln!("{n} error(s)");
+        }
+    }
+    if n == 0 {
+        0
+    } else {
+        1
+    }
+}
+
+fn authority_package(dir: &str, opts: &Opts) -> i32 {
+    let pkg = load_package(dir);
+    let program = check_program(&pkg);
+    if errors(&program.diagnostics) > 0 {
+        print_diagnostics("authority", &program.diagnostics, &pkg.source_map, None, opts.json);
+        return 1;
+    }
+    let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
+    let scopes = scopes_in_dir(std::path::Path::new(dir));
+    let report = program_authority(&program, &name, &scopes);
+    if opts.json {
+        println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
+    } else {
+        print!("{}", render_authority(&report));
+    }
+    0
 }
 
 // ----- run -----------------------------------------------------------------
