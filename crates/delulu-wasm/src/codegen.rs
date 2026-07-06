@@ -10,6 +10,9 @@
 //! Phase 3i (`Str` concatenation): `Str + Str` compiles to a synthetic `__concat` helper that
 //! bump-allocates a fresh `[len:u32-le][bytes]` buffer in guest linear memory (a mutable global is
 //! the bump pointer, starting just past the interned literals) and returns its pointer.
+//! Phase 3j (`str(Int)`): the `str` builtin on an `Int` compiles to a synthetic `__int_to_str`
+//! helper that formats the integer as decimal into the bump heap (matching `i64::to_string`,
+//! `i64::MIN` included); `str` on a `Str` is the identity.
 //!
 //! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
@@ -185,6 +188,9 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let concat_type = next_type; // __concat(a_ptr, b_ptr) -> new_ptr
     types.ty().function([ValType::I32, ValType::I32], [ValType::I32]);
     next_type += 1;
+    let int_to_str_type = next_type; // __int_to_str(n) -> ptr
+    types.ty().function([ValType::I64], [ValType::I32]);
+    next_type += 1;
     let mut user_types = Vec::new();
     for f in &fns {
         let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&p.ty).unwrap()).unwrap()).collect();
@@ -200,12 +206,13 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         imports.import("delulu:cap", "console_println", EntityType::Function(1));
     }
 
-    // Functions (in code order): the 4 arithmetic helpers, `__concat`, then the user functions.
+    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
     let mut funcsec = FunctionSection::new();
     for _ in 0..N_ARITH_HELPERS {
         funcsec.function(helper_type);
     }
     funcsec.function(concat_type);
+    funcsec.function(int_to_str_type);
     for t in &user_types {
         funcsec.function(*t);
     }
@@ -238,6 +245,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&ovf_mul_fn());
     code.function(&chk_rem_fn());
     code.function(&concat_fn(HEAP_GLOBAL));
+    code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
         code.function(&compile_fn(f, &index, &str_off, arith_base)?);
     }
@@ -333,8 +341,9 @@ fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
 /// `checked_div`, so it needs no helper.
 const N_ARITH_HELPERS: u32 = 4;
 
-/// Number of synthetic string helpers emitted after the arithmetic helpers: just `__concat`.
-const N_STR_HELPERS: u32 = 1;
+/// Number of synthetic string helpers emitted after the arithmetic helpers: `__concat` then
+/// `__int_to_str` (in that order).
+const N_STR_HELPERS: u32 = 2;
 
 /// Pages (64 KiB each) reserved for the runtime bump-allocation heap, above the interned literals.
 const HEAP_PAGES: u64 = 16; // 1 MiB — no `memory.grow` yet, so this is the fixed heap ceiling
@@ -352,6 +361,8 @@ struct Cx<'a> {
     arith_base: u32,
     /// Function index of the `__concat` helper (`Str + Str`).
     concat_fn: u32,
+    /// Function index of the `__int_to_str` helper (`str(Int)`).
+    int_to_str_fn: u32,
     instrs: Vec<Instruction<'static>>,
 }
 
@@ -383,6 +394,7 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
         nparams: f.params.len() as u32,
         arith_base,
         concat_fn: arith_base + N_ARITH_HELPERS,
+        int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         instrs: Vec::new(),
     };
     let ret = ret_ty(f).unwrap();
@@ -535,6 +547,18 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 Expr::Var { path, .. } if path.segs.len() == 1 => path.segs[0].name.clone(),
                 _ => return Err(CompileError::Unsupported("an indirect or builtin call".into())),
             };
+            // Phase 3j: `str(x)` — Int formats via `__int_to_str`; a Str is already a string (identity).
+            if name == "str" && args.len() == 1 {
+                let at = compile_expr(&args[0], cx)?;
+                return match at {
+                    Ty::I64 => {
+                        cx.emit(Instruction::Call(cx.int_to_str_fn));
+                        Ok(Ty::Str)
+                    }
+                    Ty::Str => Ok(Ty::Str), // str(<Str>) is the identity; the pointer is already on the stack
+                    _ => Err(CompileError::Unsupported("str() of this type (only Int and Str compile so far)".into())),
+                };
+            }
             let (fidx, ret) = *cx
                 .index
                 .get(&name)
@@ -580,6 +604,12 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::Block(b) => block_result_ty(b),
         Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
         Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
+        // `str(...)` always yields a Str — type it precisely so it can tail an `if` branch.
+        Expr::Call { callee, .. }
+            if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") =>
+        {
+            Ok(Ty::Str)
+        }
         // Var/Call are context-dependent; default I64 for typing. A mismatch is caught by the
         // branch-equality check in `compile_expr`.
         Expr::Var { .. } | Expr::Call { .. } => Ok(Ty::I64),
@@ -723,9 +753,14 @@ fn chk_rem_fn() -> Function {
     )
 }
 
-/// A 4-byte, byte-addressed memory access at `[ptr]` (the length header of a `Str`).
+/// A 4-byte memory access (the `u32` length header of a `Str`).
 fn u32_at() -> MemArg {
     MemArg { offset: 0, align: 2, memory_index: 0 }
+}
+
+/// A single-byte memory access (a string's character byte).
+fn byte_at() -> MemArg {
+    MemArg { offset: 0, align: 0, memory_index: 0 }
 }
 
 /// `__concat(a, b)`: bump-allocate `[len_a+len_b : u32-le][a-bytes][b-bytes]` at the heap pointer,
@@ -757,6 +792,82 @@ fn concat_fn(heap_global: u32) -> Function {
             LocalGet(4), I32Const(4), I32Add, LocalGet(5), I32Add,
             GlobalSet(heap_global),
             LocalGet(4), // return result_ptr
+        ],
+    )
+}
+
+/// `__int_to_str(n)`: format a signed i64 as decimal into a fresh `[len:u32-le][ascii]` buffer in
+/// the bump heap and return its pointer. Matches the interpreter's `str(Int)` (`i64::to_string`),
+/// including negatives and `i64::MIN`. The trick for `i64::MIN`: its magnitude overflows i64, so we
+/// take `0 - n` (two's-complement wrap gives the `i64::MIN` bit pattern) and format it with UNSIGNED
+/// division — reading that bit pattern as u64 is exactly the right magnitude (9223372036854775808).
+///
+/// locals: 0 = n (param); 1 = mag, 2 = tmp (i64); 3 = sign, 4 = count, 5 = ptr, 6 = pos, 7 = len (i32).
+fn int_to_str_fn(heap_global: u32) -> Function {
+    use Instruction::*;
+    build(
+        &[(2, ValType::I64), (5, ValType::I32)],
+        &[
+            // sign = n < 0
+            LocalGet(0), I64Const(0), I64LtS, LocalSet(3),
+            // mag = sign ? (0 - n) : n
+            LocalGet(3),
+            If(BlockType::Result(ValType::I64)),
+            I64Const(0), LocalGet(0), I64Sub,
+            Else,
+            LocalGet(0),
+            End,
+            LocalSet(1),
+            // count decimal digits of mag (unsigned); mag == 0 counts as one digit
+            I32Const(0), LocalSet(4),
+            LocalGet(1), LocalSet(2), // tmp = mag
+            LocalGet(1), I64Eqz,
+            If(BlockType::Empty),
+            I32Const(1), LocalSet(4),
+            Else,
+            Block(BlockType::Empty),
+            Loop(BlockType::Empty),
+            LocalGet(2), I64Eqz, BrIf(1), // tmp == 0 -> done
+            LocalGet(2), I64Const(10), I64DivU, LocalSet(2), // tmp /= 10
+            LocalGet(4), I32Const(1), I32Add, LocalSet(4),   // count++
+            Br(0),
+            End,
+            End,
+            End,
+            // total_len = count + sign
+            LocalGet(4), LocalGet(3), I32Add, LocalSet(7),
+            // ptr = heap; store total_len header
+            GlobalGet(heap_global), LocalSet(5),
+            LocalGet(5), LocalGet(7), I32Store(u32_at()),
+            // if sign, write '-' at ptr+4
+            LocalGet(3),
+            If(BlockType::Empty),
+            LocalGet(5), I32Const(4), I32Add, I32Const(45), I32Store8(byte_at()),
+            End,
+            // pos = ptr + 4 + sign + count - 1  (position of the last digit)
+            LocalGet(5), I32Const(4), I32Add, LocalGet(3), I32Add, LocalGet(4), I32Add, I32Const(1), I32Sub, LocalSet(6),
+            // write digits from least-significant at `pos` downward; mag == 0 writes a single '0'
+            LocalGet(1), LocalSet(2), // tmp = mag
+            LocalGet(1), I64Eqz,
+            If(BlockType::Empty),
+            LocalGet(6), I32Const(48), I32Store8(byte_at()),
+            Else,
+            Block(BlockType::Empty),
+            Loop(BlockType::Empty),
+            LocalGet(2), I64Eqz, BrIf(1),
+            // mem[pos] = '0' + (tmp % 10)
+            LocalGet(6),
+            LocalGet(2), I64Const(10), I64RemU, I32WrapI64, I32Const(48), I32Add,
+            I32Store8(byte_at()),
+            LocalGet(6), I32Const(1), I32Sub, LocalSet(6), // pos--
+            LocalGet(2), I64Const(10), I64DivU, LocalSet(2), // tmp /= 10
+            Br(0),
+            End,
+            End,
+            End,
+            // heap = ptr + 4 + total_len ; return ptr
+            LocalGet(5), I32Const(4), I32Add, LocalGet(7), I32Add, GlobalSet(heap_global),
+            LocalGet(5),
         ],
     )
 }

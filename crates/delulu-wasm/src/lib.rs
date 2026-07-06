@@ -249,6 +249,46 @@ mod tests {
         assert_eq!(main_console_parity(src), "ab\nccdd\n");
     }
 
+    // ----- Phase 3j: str(Int) formatting in guest memory ------------------------------------
+
+    #[test]
+    fn int_to_str_matches_the_interpreter() {
+        // Positive, negative, zero, and i64::MAX. (i64::MIN can't be a source literal — the parser
+        // reads the magnitude first and 9223372036854775808 overflows i64 — so it's tested below.)
+        for lit in ["0", "7", "42", "-1", "-9", "1000000", "-1000000", "9223372036854775807"] {
+            let src = format!(
+                "module m\nfn main(root: Root) ! {{Write}} {{ let out = root.console()\n out.println(str({lit})) }}\n"
+            );
+            assert_eq!(main_console_parity(&src), format!("{lit}\n"), "str({lit}) mismatch");
+        }
+    }
+
+    #[test]
+    fn int_to_str_of_i64_min_matches() {
+        // i64::MIN reached by computation (`i64::MIN+1 - 1`), the magnitude-overflow edge: the
+        // formatter's unsigned-magnitude trick must still print it correctly on both engines.
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(str(-9223372036854775807 - 1)) }\n";
+        assert_eq!(main_console_parity(src), "-9223372036854775808\n");
+    }
+
+    #[test]
+    fn int_to_str_of_a_computation_matches() {
+        // The reference program's shape: str(fib(10)) printed on both engines.
+        let src = "module m\n\
+            fn fib(n: Int) -> Int { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(str(fib(10))) }\n";
+        assert_eq!(main_console_parity(src), "55\n");
+    }
+
+    #[test]
+    fn str_composes_with_concatenation() {
+        // "n=" + str(n) — the string helpers compose (both bump-allocate in the same heap).
+        let src = "module m\n\
+            fn label(n: Int) -> Str { \"n=\" + str(n) }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(label(-7) + \"!\") }\n";
+        assert_eq!(main_console_parity(src), "n=-7!\n");
+    }
+
     #[test]
     fn println_of_concatenation_is_compilable_now() {
         // The construct that was DL1201 in Phase 3b (`println` of a `Str + Str`) compiles in 3i.

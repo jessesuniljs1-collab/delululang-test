@@ -373,6 +373,22 @@ now compiles. End-to-end on the terminal, `greet("world") + "!"` prints `hello, 
 identically on `--engine wasm` and the interpreter**. (Observed en route, out of scope here: the
 lexer rejects a leading UTF-8 BOM with DL0101 — a small future robustness fix, not a concat issue.)
 
+**Phase 3j — `str(Int)` formatting in the WASM backend — is implemented and green** (170 tests).
+The `str` builtin on an `Int` now compiles: `codegen.rs` emits a synthetic `__int_to_str(n)` helper
+(a sixth always-present helper) that formats a signed i64 as decimal into a fresh `[len:u32-le][ascii]`
+buffer in the bump heap and returns its pointer — matching the interpreter's `i64::to_string`.
+`i64::MIN` is handled by the standard unsigned-magnitude trick (`0 - n` wraps to the `i64::MIN` bit
+pattern, formatted with unsigned division `i64.div_u`/`i64.rem_u`, which reads it as the correct
+magnitude `9223372036854775808`); `str` on a `Str` is the identity. `str` composes with `__concat`
+(`"n=" + str(n)` shares the same heap). Five new parity tests: a table of literals (0, ±small,
+±large, i64::MAX), i64::MIN reached by computation, `str(fib(10)) == "55"`, and `"n=" + str(-7)`;
+end-to-end `"fib(10) = " + str(fib(10))` prints `fib(10) = 55` identically on both engines.
+
+**Lexer robustness (from the Phase 3i observation):** a leading UTF-8 BOM (U+FEFF) is now skipped as
+trivia in `Lexer::new` rather than rejected with DL0101 — Windows editors and PowerShell's
+`Set-Content -Encoding utf8` prepend one constantly. Only a *leading* BOM is trivia; a U+FEFF
+elsewhere still lexes normally. Verified by a lexer test and end-to-end on a real BOM-prefixed file.
+
 Remaining Phase 3 increments: broader `delulu:cap` ops (fs/clock/rand) with host-side scope checks;
 secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9 criteria 1–3), the rest of
 the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
