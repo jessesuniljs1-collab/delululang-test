@@ -417,9 +417,24 @@ that must agree across engines and land in range, same-seed determinism, and an 
 refused host-side); end-to-end a seeded dice program prints `d1=2 d2=5 d3=6` identically on both
 engines under `--seed 42`. Clock + rand now complete the deterministic-capability pair.
 
+**Phase 3m — two-engine conformance/differential parity harness — is implemented and green** (182
+tests). A new integration file `crates/delulu-wasm/tests/conformance_parity.rs` consolidates
+everything from 3a–3l into one gate, three ways. (1) **Curated programs**: an "everything together"
+program exercising console + a pure helper + `str(Int)` + concat + `Cap[Clock]` + `Cap[Rand]` in a
+single `main` (verified byte-identical, with `fib=55`/fixed-clock spot checks), plus negatives/
+nested-arithmetic and deep-concatenation cases. (2) **Generative fuzzer**: `gen.rs` gained
+`random_console_program`, a fault-free generator that `println`s `str(Int)` of safe arithmetic and
+string concatenations; the harness runs **2000** of them on both engines and asserts byte-identical
+output (>1500 actually compared, zero divergences). (3) **Fallback safety**: fragment-external
+programs (a `match` body, list builtins `range`/`len`, an unsupported `Str` method) are asserted to
+return a `CompileError` (DL1201) so the CLI runs them on the interpreter rather than miscompiling.
+This is the "two-engine parity is the correctness contract" thesis turned into a comprehensive CI
+gate — the automation the §9 criteria call for, over the fragment shipped so far.
+
 Remaining Phase 3 increments: the filesystem `delulu:cap` ops (fs read/write) with host-side
-subtree scope checks; secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9
-criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
+subtree scope checks; secrets-stay-host-side (§4.4, DL1205); the rest of the hostile-guest matrix
+(§9.4 b/d); and the secret-hygiene scan (§9.8). (`Result`/variant codegen is the prerequisite for
+the fs ops and for extending conformance parity to the full corpus.)
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
@@ -428,6 +443,10 @@ criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the secre
 2. **Full conformance parity:** every Stage-1/2 conformance program runs on both engines with
    byte-identical stdout, identical exit codes, and identical effect traces under fixed
    `--seed`/`--clock` (criterion is automated: `delulu-conform --both-engines`).
+   *(Partial — Phase 3m: `conformance_parity.rs` automates two-engine byte-identical output over the
+   compilable fragment — curated console+str+concat+clock+rand programs plus a 2000-program
+   generative fuzzer — and asserts fragment-external programs fall back via DL1201. Extending to the
+   FULL corpus (match/Result/fs/secrets) waits on `Result`/variant codegen.)*
 3. The laundering suite passes under `--engine wasm` (audit rules hold in compiled code).
 4. **Hostile-guest test:** a hand-written WAT module importing `delulu:cap` attempts (a) forging
    cap externrefs from integers, (b) `fs-read-text` outside its granted subtree via `..` and
