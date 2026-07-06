@@ -7,10 +7,14 @@
 //! calls) compiled to core WASM and run under Wasmtime, verified equal to the interpreter.
 //! Capabilities, strings, GC types, and the `delulu:cap` host interface build on this next.
 
+mod artifact;
 mod codegen;
 pub mod gen;
 mod host;
 
+pub use artifact::{
+    embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
+};
 pub use codegen::{compile_module, uses_console, CompileError};
 pub use host::{run_console_fn, run_int_fn, run_main_console, WasmError};
 

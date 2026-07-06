@@ -9,6 +9,11 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
+/// A unique temp path for a `.dwx` built by a test (parallel tests must not collide).
+fn temp_dwx(tag: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("delulu_test_{}_{}.dwx", std::process::id(), tag))
+}
+
 fn delulu(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_delulu"))
         .current_dir(workspace_root())
@@ -50,4 +55,64 @@ fn run_engine_wasm_on_unsupported_program_is_dl1201() {
     let o = delulu(&["run", "examples/demo.delulu", "--engine", "wasm", "--grant", "console", "--json"]);
     assert!(stdout(&o).contains("DL1201"), "expected DL1201: {}", stdout(&o));
     assert_eq!(o.status.code(), Some(1));
+}
+
+// ----- Phase 3g: the .dwx authority-carrying artifact ---------------------------------------
+
+#[test]
+fn build_dwx_then_run_matches_the_interpreter() {
+    // build --target wasm produces a self-describing artifact; running it must be byte-identical to
+    // running the source on the interpreter (the reference engine).
+    let dwx = temp_dwx("roundtrip");
+    let dwx_s = dwx.to_string_lossy().to_string();
+    let b = delulu(&["build", "examples/hello_wasm.delulu", "--target", "wasm", "-o", &dwx_s]);
+    assert!(b.status.success(), "build should succeed: {}", String::from_utf8_lossy(&b.stderr));
+    assert!(dwx.exists(), "the .dwx artifact must be written");
+
+    let run = delulu(&["run", &dwx_s, "--grant", "console"]);
+    assert!(run.status.success(), "running the .dwx should succeed: {}", String::from_utf8_lossy(&run.stderr));
+
+    let interp = delulu(&["run", "examples/hello_wasm.delulu", "--grant", "console"]);
+    assert_eq!(stdout(&run), stdout(&interp), "artifact output must match the interpreter");
+    let _ = std::fs::remove_file(&dwx);
+}
+
+#[test]
+fn dwx_run_without_console_grant_is_refused() {
+    let dwx = temp_dwx("nogrant");
+    let dwx_s = dwx.to_string_lossy().to_string();
+    assert!(delulu(&["build", "examples/hello_wasm.delulu", "--target", "wasm", "-o", &dwx_s]).status.success());
+    let o = delulu(&["run", &dwx_s]);
+    assert!(!o.status.success(), "an ungranted console must be refused when running the artifact");
+    let _ = std::fs::remove_file(&dwx);
+}
+
+#[test]
+fn tampered_dwx_is_rejected_dl1202() {
+    // Alter a byte of the artifact after it's built: re-verification catches the code/manifest
+    // mismatch before the program ever runs.
+    let dwx = temp_dwx("tampered");
+    let dwx_s = dwx.to_string_lossy().to_string();
+    assert!(delulu(&["build", "examples/hello_wasm.delulu", "--target", "wasm", "-o", &dwx_s]).status.success());
+
+    let mut bytes = std::fs::read(&dwx).expect("read dwx");
+    bytes[20] ^= 0xff; // a code-region byte (well before the trailing authority section)
+    std::fs::write(&dwx, &bytes).expect("write tampered dwx");
+
+    let o = delulu(&["run", &dwx_s, "--grant", "console", "--json"]);
+    assert!(stdout(&o).contains("DL1202"), "tampered artifact must be DL1202: {}", stdout(&o));
+    assert_eq!(o.status.code(), Some(1));
+    let _ = std::fs::remove_file(&dwx);
+}
+
+#[test]
+fn non_artifact_dwx_is_rejected_dl1202() {
+    // A .dwx that isn't a Delulu artifact at all (random bytes) is refused, not run.
+    let dwx = temp_dwx("garbage");
+    std::fs::write(&dwx, b"this is not a wasm module").expect("write garbage");
+    let dwx_s = dwx.to_string_lossy().to_string();
+    let o = delulu(&["run", &dwx_s, "--json"]);
+    assert!(stdout(&o).contains("DL1202"), "a non-artifact .dwx must be DL1202: {}", stdout(&o));
+    assert_eq!(o.status.code(), Some(1));
+    let _ = std::fs::remove_file(&dwx);
 }

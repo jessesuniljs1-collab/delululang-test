@@ -195,6 +195,13 @@ A `.dwx` is a WASM module with custom sections:
 | `delulu:spans` | span table: span-id → (file, line, col) for runtime diagnostics |
 | `delulu:lock` | the `delulu.lock` content used at build (provenance for `--diff`) |
 
+> **Implemented (Phase 3g, §8a):** the `delulu:authority` section ships now, carrying
+> `{version, code_blake3, authority}` — the ABI `version` and a blake3 hash **binding the manifest
+> to the exact code** are folded into this one section rather than a separate `delulu:abi`.
+> `read_and_verify` re-hashes the bare module and rejects a mismatch (DL1202); a newer `version` is
+> DL1204. The `delulu:spans` and `delulu:lock` sections, and split-out `delulu:abi`, are not yet
+> emitted. Honesty: the hash is an integrity binding, **not** a signature (see §5.3).
+
 ### 5.2 Runtime grant flow
 
 `delulu run app.dwx --grant …` reads `delulu:authority` and runs the **identical** Stage-1 §7.2
@@ -316,11 +323,28 @@ file `crates/delulu/tests/wasm_cli.rs` (4 tests) assert: the wasm engine prints 
 its output equals the interpreter's, an ungranted console is refused, and an unsupported program
 (`demo.delulu`) yields DL1201.
 
-Remaining Phase 3 increments: the **`.dwx` artifact** (§5, authority JSON as a wasm custom
-section) + `delulu build --target wasm` / `run <file.dwx>` + DL1202/DL1204; string concatenation
-in WASM; broader `delulu:cap` ops (fs/clock/rand) with host-side scope checks;
-secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9 criteria 1–3), the
-hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
+**Phase 3g — the `.dwx` authority-carrying artifact — is implemented and green** (156 tests). New
+module `crates/delulu-wasm/src/artifact.rs` defines the `.dwx` format: a WebAssembly module with a
+`delulu:authority` custom section carrying `{version, code_blake3, authority}`, where `authority`
+is the same JSON `delulu authority` reports and `code_blake3` is a blake3 hash of the bare module —
+**binding the manifest to the exact code it describes**. `embed_authority` appends the section;
+`read_and_verify` re-derives the bare module (all sections except `delulu:authority`, original
+order), re-hashes it, and rejects a mismatch. The CLI wires this in: `delulu build <file.delulu>
+--target wasm [-o out.dwx]` checks the program, compiles `main`, embeds the authority, and writes
+the artifact; `delulu run <file>.dwx` re-verifies before running and announces the declared effects.
+Faults map to the registered codes: a missing/corrupt/tampered section or non-artifact bytes are
+**DL1202**; a manifest from a newer toolchain is **DL1204**. Honesty (Constitution): the hash binds
+the authority claim to *these* bytes — corruption and naive code/authority swaps are caught — but it
+is **not** a cryptographic signature and does not prove *who* built the artifact; publisher signing
+is a later stage. Coverage: 5 artifact unit tests (round-trip, still-runs-under-Wasmtime, tamper
+via section-splice onto different code, missing section, non-wasm) + 4 CLI integration tests in
+`wasm_cli.rs` (build→run matches the interpreter, ungranted console refused, a byte-flipped
+artifact is DL1202, a non-artifact `.dwx` is DL1202).
+
+Remaining Phase 3 increments: string concatenation in WASM; broader `delulu:cap` ops
+(fs/clock/rand) with host-side scope checks; secrets-stay-host-side (§4.4, DL1205); and full
+conformance parity (§9 criteria 1–3), the hostile-guest test (§9.4), and the secret-hygiene scan
+(§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

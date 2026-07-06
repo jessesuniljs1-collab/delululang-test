@@ -12,6 +12,10 @@ wasm-encoder = "0.221"
 # Default features (incl. signals-based traps) so host-function errors unwind cleanly rather than
 # aborting the process — correctness over build size.
 wasmtime = "27"
+# The `.dwx` artifact embeds its authority manifest (serde_json) and binds it to the code with a
+# content hash (blake3) so the manifest and the bytes it describes can't drift apart undetected.
+serde_json = { workspace = true }
+blake3 = "1"
 
 [dev-dependencies]
 delulu-runtime = { path = "../delulu-runtime" }

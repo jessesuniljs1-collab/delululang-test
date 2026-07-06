@@ -40,6 +40,10 @@ struct Opts {
     clock_ms: Option<i64>,
     /// `--engine wasm|interp`: which execution engine `run` uses (default interp).
     engine: Option<String>,
+    /// `--target wasm`: for `build`, emit a `.dwx` WebAssembly artifact from a single source file.
+    target: Option<String>,
+    /// `-o <path>` / `--out <path>`: output path for `build --target wasm`.
+    out: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -58,6 +62,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         seed: None,
         clock_ms: None,
         engine: None,
+        target: None,
+        out: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -109,6 +115,20 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--engine=") => opts.engine = Some(s["--engine=".len()..].to_string()),
+            "--target" => {
+                if i + 1 < rest.len() {
+                    opts.target = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--target=") => opts.target = Some(s["--target=".len()..].to_string()),
+            "-o" | "--out" => {
+                if i + 1 < rest.len() {
+                    opts.out = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--out=") => opts.out = Some(s["--out=".len()..].to_string()),
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -160,8 +180,9 @@ fn usage() -> &'static str {
      USAGE:\n\
      \x20 delulu check     <file.delulu | package-dir> [--json]\n\
      \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
+     \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
-     \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
+     \x20 delulu run       <file.delulu | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
@@ -332,14 +353,76 @@ fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
 fn cmd_build(rest: &[String]) -> i32 {
     let (path, opts) = parse_opts(rest);
     let Some(path) = path else {
-        eprintln!("error: `build` needs a package directory");
+        eprintln!("error: `build` needs a source file (`--target wasm`) or a package directory");
         return 2;
     };
+    // `build --target wasm <file.delulu>` emits a `.dwx` artifact (Stage 3 §5).
+    if opts.target.as_deref() == Some("wasm") {
+        return build_wasm_artifact(&path, &opts);
+    }
+    if let Some(t) = &opts.target {
+        eprintln!("error: unknown --target `{t}` (only `wasm` is supported)");
+        return 2;
+    }
     if !std::path::Path::new(&path).is_dir() {
         eprintln!("error: `build` expects a package directory (with src/ and delulu.toml)");
         return 2;
     }
     build_workspace(&path, &opts, "build", opts.locked)
+}
+
+/// `build --target wasm <file.delulu>`: check the program, compile `main` to WebAssembly, and write
+/// a `.dwx` artifact with the compiler-computed authority embedded as a `delulu:authority` custom
+/// section (hash-bound to the code). This is the single, self-describing, authority-carrying
+/// artifact: `delulu run <file>.dwx` re-verifies it before running.
+fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
+    let (map, id, src) = match load(file) {
+        Ok(x) => x,
+        Err(c) => return c,
+    };
+    let checked = check_source(id, &src);
+    if errors(&checked.diagnostics) > 0 {
+        print_diagnostics("build", &checked.diagnostics, &map, None, opts.json);
+        return 1;
+    }
+    if !checked.result.main_present {
+        let d = Diagnostic::error("DL1201", format!("`{file}` has no `fn main(root: Root)` — a `.dwx` artifact needs an entry point to run"));
+        print_diagnostics("build", &[d], &map, None, opts.json);
+        return 1;
+    }
+    let wasm = match delulu_wasm::compile_module(&checked.module) {
+        Ok(w) => w,
+        Err(e) => {
+            let d = Diagnostic::error("DL1201", format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()));
+            print_diagnostics("build", &[d], &map, None, opts.json);
+            return 1;
+        }
+    };
+    // Embed the same authority answer `delulu authority` reports, so the artifact carries its own
+    // truthful manifest of what it can do.
+    let scopes = manifest_scopes(file);
+    let program = checked.module.name.dotted();
+    let authority = authority_report(&program, &checked.result, &scopes);
+    let dwx = delulu_wasm::embed_authority(&wasm, &authority);
+
+    let out_path = opts.out.clone().unwrap_or_else(|| {
+        std::path::Path::new(file).with_extension("dwx").to_string_lossy().to_string()
+    });
+    if let Err(e) = std::fs::write(&out_path, &dwx) {
+        eprintln!("error: could not write `{out_path}`: {e}");
+        return 2;
+    }
+    if opts.json {
+        let report = json!({ "artifact": out_path, "bytes": dwx.len(), "authority": authority });
+        println!("{}", envelope_to_string("build", &[], Some(report), &map));
+    } else {
+        eprintln!(
+            "ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`",
+            dwx.len(),
+            delulu_wasm::AUTHORITY_SECTION
+        );
+    }
+    0
 }
 
 /// Resolve the workspace (root + path dependencies), check every package under one global type
@@ -886,12 +969,68 @@ fn synth_single_program(checked: &Checked) -> Program {
 
 // ----- run -----------------------------------------------------------------
 
+/// `run <file>.dwx`: re-verify a pre-built artifact's embedded `delulu:authority` manifest against
+/// its code (DL1202 on a missing/tampered section, DL1204 on an incompatible version), announce
+/// what it declares it can do, then run `main` under the deny-by-default Wasmtime host.
+fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
+    let bytes = match std::fs::read(file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let map = SourceMap::new(); // a .dwx carries no source text; diagnostics have no span
+    let artifact = match delulu_wasm::read_and_verify(&bytes) {
+        Ok(a) => a,
+        Err(e) => {
+            let d = Diagnostic::error(e.code(), format!("`{file}`: {}", e.message()));
+            print_diagnostics("run", &[d], &map, None, opts.json);
+            return 1;
+        }
+    };
+
+    let mut grants = Grants::default();
+    for g in &opts.grants {
+        if let Err(e) = grants.add(g) {
+            eprintln!("error: bad --grant: {e}");
+            return 2;
+        }
+    }
+
+    // The thesis made concrete: the artifact travels with its authority. Announce it before running
+    // (human mode only; JSON mode keeps stdout clean for the program's own output).
+    if !opts.json {
+        let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
+        let effects_str = if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") };
+        eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
+    }
+
+    match delulu_wasm::run_main_console(&artifact.wasm, grants.console) {
+        Ok(output) => {
+            print!("{output}");
+            0
+        }
+        Err(e) => {
+            let msg = e.message();
+            let code = if msg.contains("DL0703") { "DL0703" } else { "DL0904" };
+            let d = Diagnostic::error(code, format!("`{file}`: {msg}"));
+            print_diagnostics("run", &[d], &map, None, opts.json);
+            1
+        }
+    }
+}
+
 fn cmd_run(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
     let Some(file) = file else {
         eprintln!("error: `run` needs a file");
         return 2;
     };
+    // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
+    if file.ends_with(".dwx") {
+        return run_dwx_artifact(&file, &opts);
+    }
     let (map, id, src) = match load(&file) {
         Ok(x) => x,
         Err(c) => return c,
