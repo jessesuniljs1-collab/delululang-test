@@ -22,7 +22,8 @@
 //!
 //! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
-//! engine.
+//! engine. Secret-handling constructs (`root.secret(...)`, `Secret.expose(...)`) are refused as
+//! `CompileError::SecretInGuest` (DL1205, Phase 3n) so secret bytes never enter guest linear memory.
 
 use std::collections::HashMap;
 
@@ -35,13 +36,28 @@ use wasm_encoder::{
 
 #[derive(Clone, Debug)]
 pub enum CompileError {
+    /// A construct outside the WASM fragment — DL1201, falls back to the interpreter.
     Unsupported(String),
+    /// A construct that would place SECRET contents in guest linear memory — DL1205. Refused so the
+    /// program runs on the interpreter, where secret bytes never cross into a guest (§4.4, spec §9.8).
+    SecretInGuest(String),
 }
 
 impl CompileError {
     pub fn message(&self) -> String {
         match self {
             CompileError::Unsupported(what) => format!("WASM codegen does not support {what}"),
+            CompileError::SecretInGuest(what) => {
+                format!("secret contents cannot enter WASM guest memory ({what}); it runs on the interpreter")
+            }
+        }
+    }
+
+    /// The diagnostic code the CLI reports for this refusal.
+    pub fn code(&self) -> &'static str {
+        match self {
+            CompileError::Unsupported(_) => "DL1201",
+            CompileError::SecretInGuest(_) => "DL1205",
         }
     }
 }
@@ -666,6 +682,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 }
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
+            }
+            // Phase 3n (secrets stay host-side, §4.4/DL1205): minting a secret (`root.secret(...)`) or
+            // declassifying one (`secret.expose(...)`) would put secret bytes in guest linear memory.
+            // Refuse so the program runs on the interpreter — where secrets never cross into a guest.
+            if name.name == "secret" {
+                return Err(CompileError::SecretInGuest("`root.secret(...)` mints a secret in the guest".into()));
+            }
+            if name.name == "expose" {
+                return Err(CompileError::SecretInGuest("`Secret.expose(...)` reveals secret bytes to the guest".into()));
             }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }

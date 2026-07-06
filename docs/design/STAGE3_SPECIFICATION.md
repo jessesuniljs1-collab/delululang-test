@@ -431,10 +431,24 @@ return a `CompileError` (DL1201) so the CLI runs them on the interpreter rather 
 This is the "two-engine parity is the correctness contract" thesis turned into a comprehensive CI
 gate — the automation the §9 criteria call for, over the fragment shipped so far.
 
-Remaining Phase 3 increments: the filesystem `delulu:cap` ops (fs read/write) with host-side
-subtree scope checks; secrets-stay-host-side (§4.4, DL1205); the rest of the hostile-guest matrix
-(§9.4 b/d); and the secret-hygiene scan (§9.8). (`Result`/variant codegen is the prerequisite for
-the fs ops and for extending conformance parity to the full corpus.)
+**Phase 3n — secrets stay host-side (§4.4, DL1205) — is implemented and green** (186 tests). The
+WASM backend now refuses secret-handling constructs with a dedicated diagnostic instead of the
+generic DL1201: `CompileError` gained a `SecretInGuest` variant (`code()` → **DL1205**), and
+`codegen.rs` returns it for `root.secret(...)` (minting a secret in the guest) and
+`Secret.expose(...)` (revealing secret bytes to the guest). Because such a program does not compile,
+**no guest WASM — and thus no guest linear-memory image — containing the secret is ever built**; it
+runs on the interpreter, where secret bytes never cross into a guest. This is the strongest hygiene
+statement available at this layer (the §9.8 memory-scan is vacuous when the bytes never enter). The
+CLI maps `CompileError::code()` so `run --engine wasm` / `build --target wasm` on a secret program
+reports DL1205 (verified end-to-end); DL1205's registry title was broadened to match. Four new tests
+(a mint+expose program → DL1205, a mint-only program → DL1205, a secret-free positive control, and a
+CLI `run --engine wasm` DL1205 case).
+
+Remaining Phase 3 increments: the filesystem `delulu:cap` ops (fs read/write) with host-side subtree
+scope checks; the rest of the hostile-guest matrix (§9.4 b — fs subtree escape); the secret-hygiene
+scan proper (§9.8, once secrets can be *represented* in the fragment at all); and the ≥50k both-engine
+fuzz gate (§9 criterion 9). (`Result`/variant codegen is the prerequisite for the fs ops and for
+extending conformance parity to the full corpus.)
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
@@ -454,8 +468,9 @@ the fs ops and for extending conformance parity to the full corpus.)
    cap. All refused host-side with correct DL09xx traces; no host panic.
    *(Partial — Phase 3h: (a) forged handle → DL0904, out-of-bounds pointer → DL0903, negative
    pointer doesn't abort the host, and importing an unprovided capability fails to instantiate, are
-   done in `crates/delulu-wasm/tests/hostile_guest.rs`. (b) subtree escape and (d) secret-expose
-   misuse wait on the fs and secret `delulu:cap` ops.)*
+   done in `crates/delulu-wasm/tests/hostile_guest.rs`. (d) is moot in a different way — Phase 3n:
+   secret bytes never reach a guest because secret-handling code doesn't compile to WASM (DL1205), so
+   there is no in-guest `secret-expose` to misuse. (b) subtree escape waits on the fs `delulu:cap` ops.)*
 5. A `.dwx` with a stripped `delulu:authority` section refuses to run (DL1202).
 6. Grant flow on `.dwx` matches source-run behavior exactly (same prompts, same DL0701/DL0702).
 7. `delulu authority app.dwx` reports from the embedded section; grade flips
@@ -463,6 +478,11 @@ the fs ops and for extending conformance parity to the full corpus.)
 8. **Secret-hygiene test:** after running a secret-handling program under wasm, a full scan of
    guest linear memory and GC heap contains no secret bytes; after `expose`, they appear (that is
    the definition working).
+   *(Partial — Phase 3n: at the current fragment, secrets never enter a guest at all — a
+   secret-handling program is refused with DL1205 and runs on the interpreter, so no guest memory
+   image containing the secret is ever built (proven by test). The scan-and-`expose`-then-appears
+   form of this test needs secrets to be *representable* in the compiled fragment, which waits on a
+   host-mediated secret design in a later phase.)*
 9. Fuzz harness (Stage 2 §7.2) extended to run accepted programs on **both** engines and diff
    traces: ≥ 50k programs, zero divergences (DL1206 class).
 10. Interpreter remains the reference: any parity divergence is resolved by fixing an engine to

@@ -101,7 +101,7 @@ registry! {
     "DL1201" => "construct not supported by the WASM backend (runs on the interpreter instead)",
     "DL1202" => "artifact missing or invalid `delulu:authority` section",
     "DL1204" => "delulu:cap interface version unsupported by this toolchain",
-    "DL1205" => "guest closure over secret contents in `--target wasm`",
+    "DL1205" => "secret contents cannot enter the WASM guest (`--target wasm`)",
     "DL1206" => "engine parity self-check failure (compiler-bug class)",
 
     // DL09xx — runtime

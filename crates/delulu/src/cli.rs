@@ -393,7 +393,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     let wasm = match delulu_wasm::compile_module(&checked.module) {
         Ok(w) => w,
         Err(e) => {
-            let d = Diagnostic::error("DL1201", format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()));
+            let d = Diagnostic::error(e.code(), format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()));
             print_diagnostics("build", &[d], &map, None, opts.json);
             return 1;
         }
@@ -1089,7 +1089,7 @@ fn cmd_run(rest: &[String]) -> i32 {
         let wasm = match delulu_wasm::compile_module(&checked.module) {
             Ok(w) => w,
             Err(e) => {
-                let d = Diagnostic::error("DL1201", format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
+                let d = Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 return 1;
             }

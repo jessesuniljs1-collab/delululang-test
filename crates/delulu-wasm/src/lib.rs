@@ -394,6 +394,40 @@ mod tests {
         assert!(run_main(&wasm, &cfg).is_err(), "an ungranted rand must be refused host-side");
     }
 
+    // ----- Phase 3n: secrets stay host-side (DL1205) -----------------------------------------
+
+    #[test]
+    fn secret_handling_program_is_refused_dl1205() {
+        // A compilable-signature function whose body mints and exposes a secret must be refused as
+        // DL1205 — so no guest WASM (and thus no guest memory image) containing the secret is built;
+        // the program runs on the interpreter, where secrets never cross into a guest (§4.4, §9.8).
+        let src = "module m\nfn leak(root: Root) -> Str ! {Declassify} { let key = root.secret(\"TOKEN\")\n let d = root.declassify()\n key.expose(d) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        match compile_module(&checked.module) {
+            Err(e) => assert_eq!(e.code(), "DL1205", "secret handling must be DL1205, got {}", e.message()),
+            Ok(_) => panic!("a secret-handling function must not compile to WASM"),
+        }
+    }
+
+    #[test]
+    fn minting_a_secret_alone_is_refused_dl1205() {
+        // Even minting a secret and never using it is refused: the secret bytes would still be placed
+        // in guest memory at `root.secret(...)`.
+        let src = "module m\nfn f(root: Root) -> Bool { let key = root.secret(\"API_KEY\")\n true }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        assert!(matches!(compile_module(&checked.module), Err(ref e) if e.code() == "DL1205"));
+    }
+
+    #[test]
+    fn a_secret_free_program_still_compiles() {
+        // Positive control: the secret refusal doesn't block ordinary programs.
+        let src = "module m\nfn f(root: Root) ! {Write} { let out = root.console()\n out.println(\"ok\") }\n";
+        let checked = check_source(0, src);
+        assert!(compile_module(&checked.module).is_ok());
+    }
+
     #[test]
     fn println_of_concatenation_is_compilable_now() {
         // The construct that was DL1201 in Phase 3b (`println` of a `Str + Str`) compiles in 3i.

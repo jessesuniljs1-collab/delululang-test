@@ -106,6 +106,23 @@ fn tampered_dwx_is_rejected_dl1202() {
 }
 
 #[test]
+fn run_engine_wasm_on_a_secret_program_is_dl1205() {
+    // A program that mints/exposes a secret must not compile to WASM — the CLI reports DL1205 and
+    // runs nothing, so secret bytes never reach a guest. (Omitting --engine wasm runs it on the interp.)
+    let path = std::env::temp_dir().join(format!("delulu_secret_{}.delulu", std::process::id()));
+    std::fs::write(
+        &path,
+        "module m\nfn main(root: Root) ! {Declassify} { let key = root.secret(\"TOKEN\")\n let d = root.declassify()\n let _r = key.expose(d) }\n",
+    )
+    .expect("write secret program");
+    let p = path.to_string_lossy().to_string();
+    let o = delulu(&["run", &p, "--engine", "wasm", "--json"]);
+    assert!(stdout(&o).contains("DL1205"), "expected DL1205: {}", stdout(&o));
+    assert_eq!(o.status.code(), Some(1));
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn non_artifact_dwx_is_rejected_dl1202() {
     // A .dwx that isn't a Delulu artifact at all (random bytes) is refused, not run.
     let dwx = temp_dwx("garbage");
