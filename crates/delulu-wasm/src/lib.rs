@@ -298,7 +298,7 @@ mod tests {
         assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
 
         let wasm = compile_module(&checked.module).expect("compile");
-        let cfg = HostConfig { console: true, clock: true, fixed_clock_ms: Some(fixed_ms) };
+        let cfg = HostConfig { console: true, clock: true, fixed_clock_ms: Some(fixed_ms), ..HostConfig::default() };
         let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
 
         set_capture(true);
@@ -334,8 +334,64 @@ mod tests {
         let checked = check_source(0, src);
         assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
         let wasm = compile_module(&checked.module).expect("compile");
-        let cfg = HostConfig { console: false, clock: false, fixed_clock_ms: None };
+        let cfg = HostConfig { console: false, ..HostConfig::default() };
         assert!(run_main(&wasm, &cfg).is_err(), "an ungranted clock must be refused host-side");
+    }
+
+    // ----- Phase 3l: Cap[Rand] (host-side xorshift64, seeded to match the interpreter) --------
+
+    /// Run a console+rand `main` on both engines under the same seed; assert equal output.
+    fn main_rand_parity(src: &str, seed: u64) -> String {
+        use delulu_runtime::{set_capture, set_rand_seed, take_capture, Grants, Value};
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let wasm = compile_module(&checked.module).expect("compile");
+        let cfg = HostConfig { console: true, rand: true, rand_seed: Some(seed), ..HostConfig::default() };
+        let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
+
+        set_capture(true);
+        set_rand_seed(seed);
+        let mut g = Grants::default();
+        g.console = true;
+        g.rand = true;
+        let interp = Interp::new(&checked.module);
+        interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
+        let interp_out = take_capture().expect("capture on");
+
+        assert_eq!(wasm_out, interp_out, "wasm/interpreter output must match under seed {seed} for:\n{src}");
+        wasm_out
+    }
+
+    #[test]
+    fn rand_int_sequence_matches_the_interpreter() {
+        // Four draws from the seeded PRNG, printed. The two engines run INDEPENDENT implementations
+        // (interpreter thread-local vs host struct), so identical output means the algorithm matches.
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(0, 100)))\n out.println(str(r.int(0, 100)))\n out.println(str(r.int(0, 100)))\n out.println(str(r.int(-50, 50))) }\n";
+        let out = main_rand_parity(src, 12345);
+        let vals: Vec<i64> = out.lines().map(|l| l.parse().expect("an integer line")).collect();
+        assert_eq!(vals.len(), 4, "expected four draws, got {out:?}");
+        for v in &vals[..3] {
+            assert!((0..100).contains(v), "draw {v} out of [0,100)");
+        }
+        assert!((-50..50).contains(&vals[3]), "draw {} out of [-50,50)", vals[3]);
+    }
+
+    #[test]
+    fn same_seed_reproduces_the_same_sequence_across_engines() {
+        // Determinism: the same seed yields the same output every run (and across both engines).
+        let src = "module m\nfn main(root: Root) ! {Write, Rand} { let out = root.console()\n let r = root.rand()\n out.println(str(r.int(1, 1000000)))\n out.println(str(r.int(1, 1000000))) }\n";
+        assert_eq!(main_rand_parity(src, 999), main_rand_parity(src, 999));
+    }
+
+    #[test]
+    fn rand_is_refused_on_wasm_when_not_granted() {
+        let src = "module m\nfn main(root: Root) ! {Rand} { let r = root.rand()\n let _v = r.int(0, 10) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let cfg = HostConfig::default(); // nothing granted
+        assert!(run_main(&wasm, &cfg).is_err(), "an ungranted rand must be refused host-side");
     }
 
     #[test]

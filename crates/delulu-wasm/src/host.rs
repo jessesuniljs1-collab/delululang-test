@@ -53,6 +53,7 @@ pub enum CapKind {
     Root,
     Console,
     Clock,
+    Rand,
 }
 
 struct HostState {
@@ -61,8 +62,13 @@ struct HostState {
     console_granted: bool,
     /// Whether the clock capability was granted.
     clock_granted: bool,
+    /// Whether the rand capability was granted.
+    rand_granted: bool,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
+    /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
+    /// `rand.int` sequences match byte-for-byte (spec §6.2, two-engine parity).
+    rng: u64,
     output: String,
     /// Set host-side when a capability check fails. We record it and return without trapping (an
     /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
@@ -76,6 +82,28 @@ fn wall_clock_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+/// One xorshift64 step — the EXACT generator the interpreter uses (`prim.rs::next_rand`), so a run
+/// under the same seed produces an identical `rand.int` sequence on both engines.
+fn xorshift64(mut x: u64) -> u64 {
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    x
+}
+
+/// The initial PRNG state, matching the interpreter: `set_rand_seed`'s `(s==0 ? GOLDEN : s) | 1` for a
+/// fixed seed, or a nanosecond wall seed (`| 1`) when no seed is given.
+fn seed_rng(seed: Option<u64>) -> u64 {
+    match seed {
+        Some(s) => (if s == 0 { 0x9E37_79B9 } else { s }) | 1,
+        None => std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0x9E37_79B9)
+            | 1,
+    }
 }
 
 /// Build the `delulu:cap` host import world: `root_console` mints a Console handle from the root
@@ -178,6 +206,49 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             caller.data().fixed_clock_ms.unwrap_or_else(wall_clock_ms)
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:cap", "root_rand", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            if !caller.data().rand_granted {
+                caller.data_mut().refused = Some("DL0703: rand was not granted to this program".into());
+                return -1;
+            }
+            let st = caller.data_mut();
+            st.caps.push(CapKind::Rand);
+            (st.caps.len() - 1) as i32
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:cap", "rand_int", |mut caller: Caller<'_, HostState>, cap: i32, lo: i64, hi: i64| -> i64 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
+            if !ok {
+                caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                return 0;
+            }
+            if hi <= lo {
+                caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
+                return lo;
+            }
+            // Advance the PRNG one step (host-side), then map exactly as the interpreter does:
+            // `lo + (next_rand() % (hi - lo)) as i64`. `wrapping_*` avoids a debug-build host panic on
+            // the full-i64-range span while matching the interpreter's release semantics.
+            let st = caller.data_mut();
+            let x = xorshift64(st.rng);
+            st.rng = x;
+            let span = hi.wrapping_sub(lo) as u64;
+            lo.wrapping_add((x % span) as i64)
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     Ok(linker)
 }
 
@@ -200,7 +271,9 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         caps: vec![CapKind::Console],
         console_granted: true,
         clock_granted: false,
+        rand_granted: false,
         fixed_clock_ms: None,
+        rng: seed_rng(None),
         output: String::new(),
         refused: None,
     };
@@ -213,18 +286,21 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
 }
 
 /// Grants and determinism for running `main` under the host (the run-time authority a `--grant`/
-/// `--clock` flow resolves to).
+/// `--clock`/`--seed` flow resolves to).
 #[derive(Clone, Copy, Default)]
 pub struct HostConfig {
     pub console: bool,
     pub clock: bool,
+    pub rand: bool,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
+    /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.
+    pub rand_seed: Option<u64>,
 }
 
 /// Run `main(root: Root)` under Wasmtime with the given grants/determinism. The root handle (index 0)
-/// is passed in; `root.console()`/`root.clock()` mint their handles host-side iff granted. Returns the
-/// captured console output (or a `WasmError` if a capability was refused).
+/// is passed in; `root.console()`/`root.clock()`/`root.rand()` mint their handles host-side iff granted.
+/// Returns the captured console output (or a `WasmError` if a capability was refused).
 pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
     let engine = Engine::default();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
@@ -232,7 +308,9 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
         caps: vec![CapKind::Root],
         console_granted: cfg.console,
         clock_granted: cfg.clock,
+        rand_granted: cfg.rand,
         fixed_clock_ms: cfg.fixed_clock_ms,
+        rng: seed_rng(cfg.rand_seed),
         output: String::new(),
         refused: None,
     };
@@ -243,7 +321,7 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
     finish(store, func, &[Val::I32(0)]) // root handle
 }
 
-/// Back-compat convenience: run `main` with only the console grant (no clock, wall clock).
+/// Back-compat convenience: run `main` with only the console grant (no clock/rand, wall clock).
 pub fn run_main_console(wasm: &[u8], console_granted: bool) -> Result<String, WasmError> {
-    run_main(wasm, &HostConfig { console: console_granted, clock: false, fixed_clock_ms: None })
+    run_main(wasm, &HostConfig { console: console_granted, ..HostConfig::default() })
 }

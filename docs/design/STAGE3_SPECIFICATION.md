@@ -403,8 +403,22 @@ codegen), and the host runner became `run_main(wasm, &HostConfig{console, clock,
 `"t=" + str(now_ms())` composing clock+str+concat, and an ungranted clock refused host-side);
 end-to-end `"now = " + str(c.now_ms())` prints identically on both engines under `--clock fixed:MS`.
 
-Remaining Phase 3 increments: `Cap[Rand]` and the filesystem `delulu:cap` ops (fs read/write) with
-host-side scope checks; secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9
+**Phase 3l — `Cap[Rand]` in the WASM host — is implemented and green** (176 tests). `root.rand()`
+and `r.int(lo, hi)` now compile to the `delulu:cap` imports `root_rand` (mints a Rand handle iff
+granted — DL0703 if not) and `rand_int(cap, lo, hi)`. The host runs the interpreter's **exact**
+xorshift64 generator (`x ^= x<<13; x ^= x>>7; x ^= x<<17`), seeded identically (`(s==0 ? GOLDEN : s)
+| 1`) via `HostConfig.rand_seed`, and maps each draw the same way (`lo + next % (hi−lo)`, guarded
+`hi > lo` → DL0904, `wrapping_*` so the full-i64 span can't panic the host) — so under `--seed` the
+two independent implementations (interpreter thread-local vs host struct) produce byte-identical
+sequences. `codegen.rs` gained `Ty::Rand` and a `uses_rand` scan (`int` matches only the `Cap[Rand]`
+*method*, not the free `int(float)` builtin, which is a `Call`); the CLI threads `grants.rand` +
+`--seed` into `run --engine wasm` and `run <file>.dwx`. Three new parity tests (a four-draw sequence
+that must agree across engines and land in range, same-seed determinism, and an ungranted rand
+refused host-side); end-to-end a seeded dice program prints `d1=2 d2=5 d3=6` identically on both
+engines under `--seed 42`. Clock + rand now complete the deterministic-capability pair.
+
+Remaining Phase 3 increments: the filesystem `delulu:cap` ops (fs read/write) with host-side
+subtree scope checks; secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9
 criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)

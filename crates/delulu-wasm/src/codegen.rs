@@ -16,6 +16,9 @@
 //! Phase 3k (`Cap[Clock]`): `root.clock()` and `clk.now_ms()` compile to the `delulu:cap` host
 //! imports `root_clock`/`clock_now_ms`; the clock is read host-side (fixed under `--clock fixed:MS`
 //! for deterministic replay, else the wall clock), so a fixed clock gives byte-identical output.
+//! Phase 3l (`Cap[Rand]`): `root.rand()` and `r.int(lo, hi)` compile to `root_rand`/`rand_int`; the
+//! host runs the interpreter's exact xorshift64 PRNG, seeded via `--seed`, so seeded random
+//! sequences match byte-for-byte across engines.
 //!
 //! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
@@ -53,6 +56,7 @@ enum Ty {
     Str,   // i32 pointer into linear memory
     Cap,   // i32 host handle (Console)
     Clock, // i32 host handle (Clock, Phase 3k)
+    Rand,  // i32 host handle (Rand, Phase 3l)
     Root,  // i32 host handle to the root authority (Phase 3e)
     Unit,  // no value
 }
@@ -65,12 +69,14 @@ struct Imports {
     console_println: u32,
     root_clock: u32,
     clock_now_ms: u32,
+    root_rand: u32,
+    rand_int: u32,
 }
 
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Root => Some(ValType::I32),
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -85,6 +91,7 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
                         return match rp.segs[0].name.as_str() {
                             "Console" => Some(Ty::Cap),
                             "Clock" => Some(Ty::Clock),
+                            "Rand" => Some(Ty::Rand),
                             _ => None,
                         };
                     }
@@ -159,6 +166,12 @@ fn uses_clock(module: &Module) -> bool {
     module_calls_method(module, &["clock", "now_ms"])
 }
 
+/// Does the module draw randomness (so it needs the rand host imports)? `int` is the `Cap[Rand]`
+/// method `r.int(lo, hi)` (a `Method`); the free `int(float)` builtin is a `Call`, so it doesn't match.
+fn uses_rand(module: &Module) -> bool {
+    module_calls_method(module, &["rand", "int"])
+}
+
 /// Compile a checked module's compilable functions to a WASM module exporting each by name.
 pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let fns: Vec<&FnDecl> = module
@@ -170,11 +183,19 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 
     let needs_console = uses_console(module);
     let needs_clock = uses_clock(module);
+    let needs_rand = uses_rand(module);
 
-    // Assign imported-function indices in a fixed order (console pair, then clock pair). Only the
-    // present ones consume indices; the rest are left as sentinels codegen never reads.
+    // Assign imported-function indices in a fixed order (console, then clock, then rand pairs). Only
+    // the present ones consume indices; the rest are left as sentinels codegen never reads.
     let mut n_imports = 0u32;
-    let mut imp = Imports { root_console: u32::MAX, console_println: u32::MAX, root_clock: u32::MAX, clock_now_ms: u32::MAX };
+    let mut imp = Imports {
+        root_console: u32::MAX,
+        console_println: u32::MAX,
+        root_clock: u32::MAX,
+        clock_now_ms: u32::MAX,
+        root_rand: u32::MAX,
+        rand_int: u32::MAX,
+    };
     if needs_console {
         imp.root_console = n_imports;
         imp.console_println = n_imports + 1;
@@ -183,6 +204,11 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     if needs_clock {
         imp.root_clock = n_imports;
         imp.clock_now_ms = n_imports + 1;
+        n_imports += 2;
+    }
+    if needs_rand {
+        imp.root_rand = n_imports;
+        imp.rand_int = n_imports + 1;
         n_imports += 2;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -224,6 +250,15 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         types.ty().function([ValType::I32], [ValType::I64]); // clock_now_ms(cap) -> i64
         next_type += 2;
     }
+    let mut rand_root_ty = 0;
+    let mut rand_int_ty = 0;
+    if needs_rand {
+        rand_root_ty = next_type;
+        types.ty().function([ValType::I32], [ValType::I32]); // root_rand(root) -> cap
+        rand_int_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I64, ValType::I64], [ValType::I64]); // rand_int(cap, lo, hi) -> i64
+        next_type += 2;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -250,6 +285,10 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     if needs_clock {
         imports.import("delulu:cap", "root_clock", EntityType::Function(clock_root_ty));
         imports.import("delulu:cap", "clock_now_ms", EntityType::Function(clock_now_ty));
+    }
+    if needs_rand {
+        imports.import("delulu:cap", "root_rand", EntityType::Function(rand_root_ty));
+        imports.import("delulu:cap", "rand_int", EntityType::Function(rand_int_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
@@ -305,7 +344,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock {
+    if needs_console || needs_clock || needs_rand {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -607,6 +646,27 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.clock_now_ms));
                 return Ok(Ty::I64);
             }
+            // Phase 3l: Root.rand() -> host import minting a Rand handle.
+            if name.name == "rand" && args.is_empty() {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Root {
+                    return Err(CompileError::Unsupported("rand() on a non-Root receiver".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.root_rand));
+                return Ok(Ty::Rand);
+            }
+            // Phase 3l: Cap[Rand].int(lo, hi) -> host import returning a seeded random Int in [lo, hi).
+            if name.name == "int" && args.len() == 2 {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Rand {
+                    return Err(CompileError::Unsupported("int(lo, hi) on a non-Rand receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::I64 || compile_expr(&args[1], cx)? != Ty::I64 {
+                    return Err(CompileError::Unsupported("rand.int with non-Int bounds".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.rand_int));
+                return Ok(Ty::I64);
+            }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
@@ -673,6 +733,8 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
         Expr::Method { name, .. } if name.name == "clock" => Ok(Ty::Clock),
         Expr::Method { name, .. } if name.name == "now_ms" => Ok(Ty::I64),
+        Expr::Method { name, .. } if name.name == "rand" => Ok(Ty::Rand),
+        Expr::Method { name, args, .. } if name.name == "int" && args.len() == 2 => Ok(Ty::I64),
         // `str(...)` always yields a Str — type it precisely so it can tail an `if` branch.
         Expr::Call { callee, .. }
             if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") =>
