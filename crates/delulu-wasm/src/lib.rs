@@ -8,6 +8,7 @@
 //! Capabilities, strings, GC types, and the `delulu:cap` host interface build on this next.
 
 mod codegen;
+pub mod gen;
 mod host;
 
 pub use codegen::{compile_module, uses_console, CompileError};
@@ -125,6 +126,41 @@ mod tests {
 
         assert_eq!(wasm_out, interp_out, "console output must match across engines");
         assert_eq!(wasm_out, "hello from wasm\n");
+    }
+
+    #[test]
+    fn wasm_matches_interpreter_on_random_pure_programs() {
+        // Differential parity gate: hundreds of random pure programs must produce identical
+        // results on the WASM backend and the interpreter (the reference engine). Any divergence
+        // is a codegen correctness bug — the production bar for a compiler backend.
+        let mut checked_count = 0u32;
+        let mut mismatches: Vec<String> = Vec::new();
+        for k in 0..800u64 {
+            let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+            let (src, args) = gen::random_pure_program(seed);
+            let checked = check_source(0, &src);
+            if checked.has_errors() {
+                continue; // a generator artifact; skip (should be rare)
+            }
+            checked_count += 1;
+            let interp = Interp::new(&checked.module);
+            let iv = interp.call_int_fn("f", &args);
+            let wv = compile_and_run_int(&checked.module, "f", &args);
+            if let (Ok(a), Ok(b)) = (&iv, &wv) {
+                if a != b {
+                    mismatches.push(format!("seed {seed}: interp={a} wasm={b} args={args:?}\n{src}"));
+                }
+            } else {
+                mismatches.push(format!("seed {seed}: an engine errored (interp={iv:?}, wasm={wv:?})\n{src}"));
+            }
+        }
+        assert!(checked_count > 500, "generator produced too few valid programs: {checked_count}");
+        assert!(mismatches.is_empty(), "WASM/interpreter divergence:\n{}", mismatches.join("\n---\n"));
+    }
+
+    #[test]
+    fn generator_is_deterministic() {
+        assert_eq!(gen::random_pure_program(123), gen::random_pure_program(123));
     }
 
     #[test]

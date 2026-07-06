@@ -274,11 +274,25 @@ output to the interpreter's — **identical output on a Write effect**, not just
 (Implementation note: a capability refusal is recorded in host state and surfaced after the call
 rather than returned from inside the wasm-invoked callback, which aborts on Windows.)
 
-Remaining Phase 3 increments: string concatenation + `Root`/`main` threading in WASM; broader
-`delulu:cap` ops (fs/clock/rand) with host-side scope checks; secrets-stay-host-side (§4.4); the
-**`.dwx` artifact** (§5) + `delulu build --target wasm` / `run --engine wasm` + DL12xx registry;
-and **full conformance parity** across both engines (§9 criteria 1–3), the hostile-guest test
-(§9.4), and the secret-hygiene scan (§9.8).
+**Phase 3c — a generative differential parity gate — is implemented and green** (141 tests).
+`gen.rs` generates random *pure* programs (terminating: `f` may call `g`, `g` calls nothing;
+overflow-free: only `+`/`-` over small bounded operands; trap-free: no division), and the
+`wasm_matches_interpreter_on_random_pure_programs` test compiles + runs 800 of them (>500 valid)
+on BOTH engines and asserts identical `Ok(i64)` results. Zero divergence — the correctness bar for
+a compiler backend, checked continuously in CI.
+
+**Honest divergence to close (§3.3):** the WASM backend currently *wraps* on Int overflow (native
+i64 arithmetic) while the interpreter *faults* (DL0901, checked arithmetic). The parity generator
+deliberately stays within safe magnitudes so this never triggers; closing it means emitting
+explicit overflow checks in codegen (a trap-to-panic-hook per §3.3). Similarly `i64.div_s` traps
+on div-by-zero where the interpreter faults DL0902 — codegen must emit the checks to match.
+Recorded so the parity claim is never overstated.
+
+Remaining Phase 3 increments: overflow/div checks in codegen (close the divergence above); string
+concatenation + `Root`/`main` threading in WASM; broader `delulu:cap` ops (fs/clock/rand) with
+host-side scope checks; secrets-stay-host-side (§4.4); the **`.dwx` artifact** (§5) + `delulu build
+--target wasm` / `run --engine wasm` + DL12xx registry; and full conformance parity (§9 criteria
+1–3), the hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
