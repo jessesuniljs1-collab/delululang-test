@@ -466,6 +466,26 @@ mod tests {
         assert_eq!(main_console_parity(src), "q=5\nerr:odd\nerr:odd\n");
     }
 
+    // ----- Phase 3o Checkpoint 3: constructor passed directly as a call argument -------------
+    // (User-declared enums aren't *constructible* in Stage-1 source — only prelude Ok/Err/Some/None
+    // are — so the generalized N-ctor/multi-field match machinery is exercised end-to-end by the
+    // filesystem capability in Checkpoint 4, where the host produces a `Result[Str, IoErr]`.)
+
+    #[test]
+    fn constructor_as_a_direct_call_argument_matches() {
+        // The new capability: a variant constructor passed straight into a call (param-type-directed),
+        // not only via a `let`/return. Covers Some/None and Ok/Err as arguments.
+        let src = "module m\n\
+            fn unwrap_or(o: Option[Int], d: Int) -> Int { match o { Some(v) => v, None => d } }\n\
+            fn label(r: Result[Int, Str]) -> Str { match r { Ok(v) => \"ok:\" + str(v), Err(e) => \"err:\" + e } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 out.println(str(unwrap_or(Some(7), 0)))\n\
+            \x20 out.println(str(unwrap_or(None, 99)))\n\
+            \x20 out.println(label(Ok(5)))\n\
+            \x20 out.println(label(Err(\"bad\"))) }\n";
+        assert_eq!(main_console_parity(src), "7\n99\nok:5\nerr:bad\n");
+    }
+
     #[test]
     fn match_with_a_wildcard_arm_matches() {
         let src = "module m\n\

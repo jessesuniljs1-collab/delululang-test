@@ -462,8 +462,27 @@ construct+match with `Ok`/`Err` binding; Option with a nested expected-typed `if
 wildcard arm; and `?` propagation through two chained `Result` calls) — all byte-identical across
 engines; end-to-end a `checkdiv → Result[Int,Str]` prints `result = 42` / `error: …` and a
 `?`-chaining `quarter` prints `quarter = 5` / `failed: odd input` identically on both engines.
-**Checkpoints 3–4 remain**: user-defined enums (for `IoErr`), then the filesystem capability that
-composes them.
+
+**Checkpoint 3 (general variant machinery) is done** (191 tests). The 2-ctor `Result`/`Option`
+codegen was generalized to arbitrary sum types via an `EnumEnv` (the prelude `IoErr`/`NetErr` plus any
+module `enum`, resolved to stable ids). `Ty` gained `Enum(id)` and `Scalar` gained `Enum(id)`, so a
+variant payload can itself be an enum — the crucial `Result[Str, IoErr]` shape the filesystem cap
+needs. Cells are now `[tag:i32][field @4][field @12]…` (8-byte slots, size `4 + 8·maxfields`);
+`compile_ctor`/`compile_match`/`compile_arm` handle N constructors, multi-field payloads, nested
+constructors, and a nested `if tag==t` chain. The function index now carries **parameter types**, so a
+constructor can be passed directly as a call argument (`f(Some(x))`, `label(Err("bad"))`) — previously
+only a `let`/return position worked. **Honest scope finding:** Stage-1 source cannot *construct*
+user-declared variants at all — the checker resolves only the prelude `Ok`/`Err`/`Some`/`None`
+(`check_var`/`check_call`), rejecting bare `Green`/`Say(x)`/`NotFound` with DL0301. So the general
+enum *match* path (N>2 ctors, enum-typed payloads) is not exercisable from pure source; it is
+validated end-to-end in **Checkpoint 4**, where `fs.read_text` produces a host-constructed
+`Result[Str, IoErr]` that user code matches. New parity test: a constructor passed directly as a call
+argument (`Some`/`None`/`Ok`/`Err`), byte-identical across engines.
+
+**Checkpoint 4 remains**: the filesystem capability (`fs.read_text(path) → Result[Str, IoErr]`) — the
+host op that constructs the variant in guest memory with a path-subtree scope check, composing caps +
+`Result` + the `IoErr` enum + `match`. (A separate, later gap: teaching the *checker* to construct
+user variants in source, which would then also compile on the backend for free.)
 
 Remaining Phase 3 increments: sum-type Checkpoints 3–4 (user enums, then the filesystem `delulu:cap`
 ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b — fs subtree

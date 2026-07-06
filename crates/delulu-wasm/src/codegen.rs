@@ -79,10 +79,13 @@ enum Ty {
     Rand,  // i32 host handle (Rand, Phase 3l)
     Root,  // i32 host handle to the root authority (Phase 3e)
     Unit,  // no value
-    // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field:i64]` in the heap
-    // (tag 0 = Ok/None, tag 1 = Err/Some). Payloads are restricted to `Scalar` (no nesting yet).
+    // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field…]` in the heap.
+    // `Result`/`Option` carry their payload scalars inline; user/prelude enums (Phase 3o Checkpoint 3)
+    // are `Enum(id)` where `id` indexes the module's `EnumEnv` (so nested enums work — e.g. an
+    // `IoErr` in `Result[Str, IoErr]` is `Scalar::Enum(io_err_id)`).
     Result(Scalar, Scalar), // Ok(T), Err(E)
     Option(Scalar),         // None, Some(T)
+    Enum(u32),              // a named sum type (index into EnumEnv)
 }
 
 /// The payload types a variant field may hold (a `Copy` subset of `Ty`, so `Ty` stays `Copy`).
@@ -92,6 +95,7 @@ enum Scalar {
     I32,
     Str,
     Unit,
+    Enum(u32),
 }
 
 impl Scalar {
@@ -101,18 +105,123 @@ impl Scalar {
             Scalar::I32 => Ty::I32,
             Scalar::Str => Ty::Str,
             Scalar::Unit => Ty::Unit,
+            Scalar::Enum(i) => Ty::Enum(i),
         }
     }
 }
 
-/// A payload-capable `Ty` narrows to a `Scalar`; caps/variants cannot be variant payloads yet.
+/// A payload-capable `Ty` narrows to a `Scalar`; caps and `Result`/`Option` cannot be payloads yet.
 fn ty_to_scalar(t: Ty) -> Option<Scalar> {
     match t {
         Ty::I64 => Some(Scalar::I64),
         Ty::I32 => Some(Scalar::I32),
         Ty::Str => Some(Scalar::Str),
         Ty::Unit => Some(Scalar::Unit),
+        Ty::Enum(i) => Some(Scalar::Enum(i)),
         _ => None,
+    }
+}
+
+/// A named sum type's constructors, in declaration order (the tag is the index).
+#[derive(Clone)]
+struct EnumDesc {
+    ctors: Vec<EnumCtorDesc>,
+}
+
+#[derive(Clone)]
+struct EnumCtorDesc {
+    name: String,
+    payloads: Vec<Scalar>,
+}
+
+/// The module's named sum types (prelude `IoErr`/`NetErr` + user `enum` declarations), resolved to
+/// stable indices so `Ty::Enum(id)`/`Scalar::Enum(id)` can name them.
+struct EnumEnv {
+    descs: Vec<EnumDesc>,
+    by_name: HashMap<String, u32>,
+}
+
+impl EnumEnv {
+    fn id(&self, name: &str) -> Option<u32> {
+        self.by_name.get(name).copied()
+    }
+    fn desc(&self, id: u32) -> &EnumDesc {
+        &self.descs[id as usize]
+    }
+    /// The constructors of a variant type (built-in `Result`/`Option` or a named enum).
+    fn ctors_of(&self, ty: Ty) -> Option<Vec<(String, Vec<Scalar>)>> {
+        match ty {
+            Ty::Result(t, e) => Some(vec![("Ok".into(), vec![t]), ("Err".into(), vec![e])]),
+            Ty::Option(t) => Some(vec![("None".into(), vec![]), ("Some".into(), vec![t])]),
+            Ty::Enum(i) => Some(self.desc(i).ctors.iter().map(|c| (c.name.clone(), c.payloads.clone())).collect()),
+            _ => None,
+        }
+    }
+}
+
+/// Build the enum environment: the fixed prelude sum types plus every monomorphic `enum` declared in
+/// the module. Two passes so ctor payloads can reference other (and their own) enum names.
+fn build_enum_env(module: &Module) -> EnumEnv {
+    let mut by_name: HashMap<String, u32> = HashMap::new();
+    // Names first (prelude, then user), so payload resolution below can see every enum.
+    let prelude: [&str; 2] = ["IoErr", "NetErr"];
+    for name in prelude {
+        let id = by_name.len() as u32;
+        by_name.insert(name.to_string(), id);
+    }
+    for it in &module.items {
+        if let Item::Type(td) = it {
+            if td.generics.is_empty() && matches!(td.kind, TypeDeclKind::Sum(_)) && !by_name.contains_key(&td.name.name) {
+                let id = by_name.len() as u32;
+                by_name.insert(td.name.name.clone(), id);
+            }
+        }
+    }
+
+    let mut env = EnumEnv { descs: vec![EnumDesc { ctors: Vec::new() }; by_name.len()], by_name };
+    // Prelude descriptors.
+    let str_payload = vec![Scalar::Str];
+    set_ctors(&mut env, "IoErr", &[("NotFound", vec![]), ("Denied", vec![]), ("Other", str_payload.clone())]);
+    set_ctors(&mut env, "NetErr", &[("Refused", vec![]), ("Timeout", vec![]), ("Other", str_payload)]);
+    // User enum descriptors (payloads resolved against the now-populated name table).
+    for it in &module.items {
+        if let Item::Type(td) = it {
+            if let TypeDeclKind::Sum(variants) = &td.kind {
+                if td.generics.is_empty() {
+                    if let Some(&id) = env.by_name.get(&td.name.name) {
+                        let mut ctors = Vec::new();
+                        for v in variants {
+                            let mut payloads = Vec::new();
+                            let mut ok = true;
+                            for ft in &v.fields {
+                                match wasm_ty(&env, ft).and_then(ty_to_scalar) {
+                                    Some(s) => payloads.push(s),
+                                    None => { ok = false; break; }
+                                }
+                            }
+                            // A ctor with a non-scalar payload makes the enum non-compilable; leave it
+                            // with no ctors so `ctors_of` yields a shape `match` will reject (DL1201).
+                            if !ok {
+                                ctors.clear();
+                                break;
+                            }
+                            ctors.push(EnumCtorDesc { name: v.name.name.clone(), payloads });
+                        }
+                        env.descs[id as usize].ctors = ctors;
+                    }
+                }
+            }
+        }
+    }
+    env
+}
+
+fn set_ctors(env: &mut EnumEnv, name: &str, ctors: &[(&str, Vec<Scalar>)]) {
+    if let Some(&id) = env.by_name.get(name) {
+        env.descs[id as usize].ctors = ctors
+            .iter()
+            .map(|(n, p)| EnumCtorDesc { name: (*n).to_string(), payloads: p.clone() })
+            .collect();
     }
 }
 
@@ -132,14 +241,14 @@ fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
         // Str/Cap/variant handles are all i32 (a pointer or a host handle).
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root | Ty::Result(..) | Ty::Option(..) => {
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
             Some(ValType::I32)
         }
         Ty::Unit => None,
     }
 }
 
-fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
+fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
     if let TypeExpr::Named { path, args, .. } = t {
         if path.segs.len() == 1 {
             let name = path.segs[0].name.as_str();
@@ -156,18 +265,18 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
                 }
                 return None; // other capability kinds are later phases
             }
-            // Phase 3o: Result[T, E] and Option[T] with scalar payloads.
+            // Phase 3o: Result[T, E] and Option[T] (payloads may be scalars or named enums).
             if name == "Result" {
                 if let [t, e] = &args[..] {
-                    let ts = ty_to_scalar(wasm_ty(t)?)?;
-                    let es = ty_to_scalar(wasm_ty(e)?)?;
+                    let ts = ty_to_scalar(wasm_ty(env, t)?)?;
+                    let es = ty_to_scalar(wasm_ty(env, e)?)?;
                     return Some(Ty::Result(ts, es));
                 }
                 return None;
             }
             if name == "Option" {
                 if let [t] = &args[..] {
-                    return Some(Ty::Option(ty_to_scalar(wasm_ty(t)?)?));
+                    return Some(Ty::Option(ty_to_scalar(wasm_ty(env, t)?)?));
                 }
                 return None;
             }
@@ -178,7 +287,8 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
                     "Str" => Some(Ty::Str),
                     "Root" => Some(Ty::Root),
                     "Unit" => Some(Ty::Unit),
-                    _ => None,
+                    // A named sum type (prelude or user `enum`).
+                    other => env.id(other).map(Ty::Enum),
                 };
             }
         }
@@ -186,22 +296,22 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
     None
 }
 
-fn ret_ty(f: &FnDecl) -> Option<Ty> {
+fn ret_ty(env: &EnumEnv, f: &FnDecl) -> Option<Ty> {
     match &f.ret {
         None => Some(Ty::Unit),
-        Some(t) => wasm_ty(t),
+        Some(t) => wasm_ty(env, t),
     }
 }
 
-fn is_compilable(f: &FnDecl) -> bool {
+fn is_compilable(env: &EnumEnv, f: &FnDecl) -> bool {
     f.generics.is_empty()
-        && f.params.iter().all(|p| matches!(wasm_ty(&p.ty), Some(t) if t != Ty::Unit))
-        && ret_ty(f).is_some()
+        && f.params.iter().all(|p| matches!(wasm_ty(env, &p.ty), Some(t) if t != Ty::Unit))
+        && ret_ty(env, f).is_some()
 }
 
 /// Does any compilable function call a method whose name is in `names`? Used to decide which host
 /// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
-fn module_calls_method(module: &Module, names: &[&str]) -> bool {
+fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
     fn in_block(b: &Block, names: &[&str]) -> bool {
         b.stmts.iter().any(|s| match s {
             Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
@@ -222,41 +332,38 @@ fn module_calls_method(module: &Module, names: &[&str]) -> bool {
             Expr::If { cond, then_, else_, .. } => {
                 in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
             }
+            Expr::Match { scrutinee, arms, .. } => {
+                in_expr(scrutinee, names) || arms.iter().any(|a| in_expr(&a.body, names))
+            }
+            Expr::Try { inner, .. } => in_expr(inner, names),
             Expr::Block(b) => in_block(b, names),
             _ => false,
         }
     }
-    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(f) && in_block(&f.body, names)))
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(env, f) && in_block(&f.body, names)))
 }
 
-/// Does the module perform console output (so it needs the console host imports)?
+/// Does the module perform console output (so it needs the console host imports)? Public helper;
+/// builds its own enum environment for callers that don't have one.
 pub fn uses_console(module: &Module) -> bool {
-    module_calls_method(module, &["console", "println"])
-}
-
-/// Does the module read the clock (so it needs the clock host imports)?
-fn uses_clock(module: &Module) -> bool {
-    module_calls_method(module, &["clock", "now_ms"])
-}
-
-/// Does the module draw randomness (so it needs the rand host imports)? `int` is the `Cap[Rand]`
-/// method `r.int(lo, hi)` (a `Method`); the free `int(float)` builtin is a `Call`, so it doesn't match.
-fn uses_rand(module: &Module) -> bool {
-    module_calls_method(module, &["rand", "int"])
+    module_calls_method(&build_enum_env(module), module, &["console", "println"])
 }
 
 /// Compile a checked module's compilable functions to a WASM module exporting each by name.
 pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
+    // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
+    let env = build_enum_env(module);
+
     let fns: Vec<&FnDecl> = module
         .items
         .iter()
         .filter_map(|it| if let Item::Fn(f) = it { Some(f) } else { None })
-        .filter(|f| is_compilable(f))
+        .filter(|f| is_compilable(&env, f))
         .collect();
 
-    let needs_console = uses_console(module);
-    let needs_clock = uses_clock(module);
-    let needs_rand = uses_rand(module);
+    let needs_console = module_calls_method(&env, module, &["console", "println"]);
+    let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
+    let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
 
     // Assign imported-function indices in a fixed order (console, then clock, then rand pairs). Only
     // the present ones consume indices; the rest are left as sentinels codegen never reads.
@@ -296,9 +403,10 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     }
 
     // Function index map: name -> (absolute wasm function index, return type).
-    let mut index: HashMap<String, (u32, Ty)> = HashMap::new();
+    let mut index: HashMap<String, (u32, Vec<Ty>, Ty)> = HashMap::new();
     for (i, f) in fns.iter().enumerate() {
-        index.insert(f.name.name.clone(), (user_base + i as u32, ret_ty(f).unwrap()));
+        let ptys: Vec<Ty> = f.params.iter().map(|p| wasm_ty(&env, &p.ty).unwrap()).collect();
+        index.insert(f.name.name.clone(), (user_base + i as u32, ptys, ret_ty(&env, f).unwrap()));
     }
 
     // Types: [import types...], the shared helper type (i64,i64)->i64, the string helpers, each user
@@ -343,8 +451,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     next_type += 1;
     let mut user_types = Vec::new();
     for f in &fns {
-        let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&p.ty).unwrap()).unwrap()).collect();
-        let results = result_valtypes(ret_ty(f).unwrap());
+        let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&env, &p.ty).unwrap()).unwrap()).collect();
+        let results = result_valtypes(ret_ty(&env, f).unwrap());
         types.ty().function(params, results);
         user_types.push(next_type);
         next_type += 1;
@@ -405,7 +513,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&concat_fn(HEAP_GLOBAL));
     code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
-        code.function(&compile_fn(f, &index, &str_off, arith_base, imp)?);
+        code.function(&compile_fn(f, &env, &index, &str_off, arith_base, imp)?);
     }
 
     let mut datas = DataSection::new();
@@ -517,8 +625,10 @@ const HEAP_PAGES: u64 = 16; // 1 MiB — no `memory.grow` yet, so this is the fi
 const HEAP_GLOBAL: u32 = 0;
 
 struct Cx<'a> {
-    index: &'a HashMap<String, (u32, Ty)>,
+    index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
     str_off: &'a HashMap<String, u32>,
+    /// The module's named sum types (Phase 3o Checkpoint 3).
+    env: &'a EnumEnv,
     scopes: Vec<HashMap<String, (u32, Ty)>>,
     extra_locals: Vec<ValType>,
     nparams: u32,
@@ -550,15 +660,16 @@ impl<'a> Cx<'a> {
     }
 }
 
-fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
+fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
-        params.insert(p.name.name.clone(), (i as u32, wasm_ty(&p.ty).unwrap()));
+        params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
     }
-    let ret = ret_ty(f).unwrap();
+    let ret = ret_ty(env, f).unwrap();
     let mut cx = Cx {
         index,
         str_off,
+        env,
         scopes: vec![params],
         extra_locals: Vec::new(),
         nparams: f.params.len() as u32,
@@ -652,38 +763,50 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
     }
 }
 
-/// The variant cell layout: `[tag:i32 @0][field:i64 @4]` — 12 bytes (the field slot is always 8 so
-/// the cell size is uniform; the field is loaded/stored at the payload's actual width).
-const VARIANT_CELL: i32 = 12;
-
 fn i64_at() -> MemArg {
     MemArg { offset: 0, align: 3, memory_index: 0 }
 }
 
-/// The constructor name of a `Ctor(args)` call the backend lowers (Ok/Err/Some); None otherwise.
-fn ctor_name(callee: &Expr) -> Option<&str> {
-    if let Expr::Var { path, .. } = callee {
-        if path.segs.len() == 1 {
-            let n = path.segs[0].name.as_str();
-            if matches!(n, "Ok" | "Err" | "Some") {
-                return Some(n);
+/// A variant cell is `[tag:i32 @0][field @4][field @12]…` — each field slot is 8 bytes (loaded/stored
+/// at the payload's actual width), so a whole enum's cells are one uniform size: `4 + 8 * maxfields`.
+fn variant_cell_size(ctors: &[(String, Vec<Scalar>)]) -> i32 {
+    let max_fields = ctors.iter().map(|(_, p)| p.len()).max().unwrap_or(0);
+    4 + 8 * max_fields as i32
+}
+
+fn field_offset(i: usize) -> i32 {
+    4 + 8 * i as i32
+}
+
+/// The name + args of a constructor-shaped expression: `Name(args)` or a bare `Name`.
+fn ctor_shape(e: &Expr) -> Option<(&str, &[Expr])> {
+    match e {
+        Expr::Call { callee, args, .. } => {
+            if let Expr::Var { path, .. } = &**callee {
+                if path.segs.len() == 1 {
+                    return Some((path.segs[0].name.as_str(), args.as_slice()));
+                }
             }
+            None
         }
+        Expr::Var { path, .. } if path.segs.len() == 1 => Some((path.segs[0].name.as_str(), &[])),
+        _ => None,
     }
-    None
 }
 
 /// Expected-type-directed compilation: emit code producing a value of type `expected`. Only the
 /// forms that need the expected type (variant construction, and the control-flow that carries it to
 /// a tail) are special-cased; everything else synthesises and is checked against `expected`.
 fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    // A constructor of the expected variant type (`Ok`/`Some`/`None` or a user enum's ctor).
+    if let Some((name, args)) = ctor_shape(e) {
+        if let Some(ctors) = cx.env.ctors_of(expected) {
+            if ctors.iter().any(|(n, _)| n == name) {
+                return compile_ctor(name, args, cx, expected);
+            }
+        }
+    }
     match e {
-        Expr::Call { callee, args, .. } if ctor_name(callee).is_some() => {
-            compile_ctor(ctor_name(callee).unwrap(), args, cx, expected)
-        }
-        Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "None" => {
-            compile_ctor("None", &[], cx, expected)
-        }
         Expr::If { cond, then_, else_, .. } => {
             if compile_expr(cond, cx)? != Ty::I32 {
                 return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
@@ -712,78 +835,72 @@ fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileErr
     }
 }
 
-/// Compile a variant constructor to a fresh heap `[tag][field]` cell of type `expected`.
+/// Compile a variant constructor to a fresh heap `[tag][field…]` cell of type `expected`.
 fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
-    let (tag, payload): (i32, Option<Scalar>) = match (name, expected) {
-        ("Ok", Ty::Result(t_ok, _)) => (0, Some(t_ok)),
-        ("Err", Ty::Result(_, t_err)) => (1, Some(t_err)),
-        ("None", Ty::Option(_)) => (0, None),
-        ("Some", Ty::Option(t)) => (1, Some(t)),
-        _ => return Err(CompileError::Unsupported(format!("constructor `{name}` where {expected:?} was expected"))),
-    };
-    let want_args = usize::from(payload.is_some());
-    if args.len() != want_args {
-        return Err(CompileError::Unsupported(format!("constructor `{name}` with {} args", args.len())));
+    let ctors = cx
+        .env
+        .ctors_of(expected)
+        .ok_or_else(|| CompileError::Unsupported(format!("constructor `{name}` where {expected:?} was expected")))?;
+    let tag = ctors
+        .iter()
+        .position(|(n, _)| n == name)
+        .ok_or_else(|| CompileError::Unsupported(format!("`{name}` is not a constructor of {expected:?}")))?;
+    let payloads = ctors[tag].1.clone();
+    if args.len() != payloads.len() {
+        return Err(CompileError::Unsupported(format!("constructor `{name}` with {} args (expected {})", args.len(), payloads.len())));
     }
+    let cell = variant_cell_size(&ctors);
 
     let rp = cx.alloc_local(Ty::I32)?;
-    // rp = heap; heap += VARIANT_CELL
     cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
     cx.emit(Instruction::LocalTee(rp));
-    cx.emit(Instruction::I32Const(VARIANT_CELL));
+    cx.emit(Instruction::I32Const(cell));
     cx.emit(Instruction::I32Add);
     cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
-    // mem[rp] = tag
     cx.emit(Instruction::LocalGet(rp));
-    cx.emit(Instruction::I32Const(tag));
+    cx.emit(Instruction::I32Const(tag as i32));
     cx.emit(Instruction::I32Store(u32_at()));
-    // mem[rp+4] = field
-    if let Some(ps) = payload {
-        if ps == Scalar::Unit {
-            // A Unit payload carries no bytes; evaluate the argument for effect only.
-            if compile_expr(&args[0], cx)? != Ty::Unit {
-                return Err(CompileError::Unsupported(format!("constructor `{name}` with a non-Unit argument")));
-            }
-        } else {
-            cx.emit(Instruction::LocalGet(rp));
-            cx.emit(Instruction::I32Const(4));
-            cx.emit(Instruction::I32Add);
-            let got = compile_expr(&args[0], cx)?;
-            if got != ps.to_ty() {
-                return Err(CompileError::Unsupported(format!("constructor `{name}` payload {got:?} where {:?} expected", ps.to_ty())));
-            }
-            match ps {
-                Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
-                Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Store(u32_at())),
-                Scalar::Unit => unreachable!(),
-            }
+    for (i, (arg, ps)) in args.iter().zip(payloads.iter()).enumerate() {
+        if *ps == Scalar::Unit {
+            compile_expr_as(arg, cx, Ty::Unit)?;
+            continue;
+        }
+        cx.emit(Instruction::LocalGet(rp));
+        cx.emit(Instruction::I32Const(field_offset(i)));
+        cx.emit(Instruction::I32Add);
+        // Compile the field at its expected type, so a nested constructor (e.g. `Err(NotFound)`) works.
+        compile_expr_as(arg, cx, ps.to_ty())?;
+        match ps {
+            Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
+            Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Store(u32_at())),
+            Scalar::Unit => unreachable!(),
         }
     }
     cx.emit(Instruction::LocalGet(rp));
     Ok(())
 }
 
-/// Compile a `match` on a `Result`/`Option` scrutinee to a tag test + two arms. `expected` is the
-/// arms' result type (from context); in synthesis mode it is inferred from the first arm's body.
+/// Compile a `match` on a variant scrutinee (`Result`/`Option`/user enum) to a tag test chain with
+/// typed field binding. `expected` is the arms' result type; in synthesis it comes from the 1st arm.
 fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
     let sty = compile_expr(scrutinee, cx)?;
-    let ctors: [(&str, Option<Scalar>); 2] = match sty {
-        Ty::Result(t_ok, t_err) => [("Ok", Some(t_ok)), ("Err", Some(t_err))],
-        Ty::Option(t) => [("None", None), ("Some", Some(t))],
-        _ => return Err(CompileError::Unsupported(format!("`match` on the non-variant type {sty:?}"))),
-    };
+    let ctors = cx
+        .env
+        .ctors_of(sty)
+        .filter(|c| !c.is_empty())
+        .ok_or_else(|| CompileError::Unsupported(format!("`match` on the non-variant type {sty:?}")))?;
+    let ntags = ctors.len();
     let sp = cx.alloc_local(Ty::I32)?;
     cx.emit(Instruction::LocalSet(sp));
 
-    // Map each tag to the arm handling it (a variant pattern by name, or a wildcard/bind catch-all).
-    let mut arm_for_tag: [Option<usize>; 2] = [None, None];
+    // Map each tag to the arm handling it (a variant pattern by name, else a wildcard/bind catch-all).
+    let mut arm_for_tag: Vec<Option<usize>> = vec![None; ntags];
     let mut catch_all: Option<usize> = None;
     for (ai, arm) in arms.iter().enumerate() {
         match &arm.pattern {
             Pattern::Variant { path, .. } if path.segs.len() == 1 => {
-                let pn = path.segs[0].name.as_str();
-                for (t, (cn, _)) in ctors.iter().enumerate() {
-                    if pn == *cn && arm_for_tag[t].is_none() {
+                if let Some(t) = ctors.iter().position(|(n, _)| *n == path.segs[0].name) {
+                    if arm_for_tag[t].is_none() {
                         arm_for_tag[t] = Some(ai);
                     }
                 }
@@ -796,50 +913,64 @@ fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<T
             _ => return Err(CompileError::Unsupported("a `match` pattern the WASM backend can't compile".into())),
         }
     }
-    let a0 = arm_for_tag[0].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()))?;
-    let a1 = arm_for_tag[1].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()))?;
+    let arm_idx = |t: usize| arm_for_tag[t].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()));
 
     let result_ty = match expected {
         Some(t) => t,
-        None => expr_result_ty(&arms[a0].body)?,
+        None => expr_result_ty(&arms[arm_idx(0)?].body)?,
     };
     let bt = match wasm_valtype(result_ty) {
         Some(v) => BlockType::Result(v),
         None => BlockType::Empty,
     };
 
-    // tag == 0 ? arm0 : arm1
+    // Load the tag once, then a nested `if tag==t { arm } else { … }` chain (final tag = last else).
+    let tv = cx.alloc_local(Ty::I32)?;
     cx.emit(Instruction::LocalGet(sp));
     cx.emit(Instruction::I32Load(u32_at()));
-    cx.emit(Instruction::I32Eqz);
-    cx.emit(Instruction::If(bt));
-    compile_arm(&arms[a0], ctors[0].1, sp, cx, result_ty, expected.is_some())?;
-    cx.emit(Instruction::Else);
-    compile_arm(&arms[a1], ctors[1].1, sp, cx, result_ty, expected.is_some())?;
-    cx.emit(Instruction::End);
+    cx.emit(Instruction::LocalSet(tv));
+    for t in 0..ntags - 1 {
+        cx.emit(Instruction::LocalGet(tv));
+        cx.emit(Instruction::I32Const(t as i32));
+        cx.emit(Instruction::I32Eq);
+        cx.emit(Instruction::If(bt));
+        compile_arm(&arms[arm_idx(t)?], &ctors[t].1, sp, sty, cx, result_ty, expected.is_some())?;
+        cx.emit(Instruction::Else);
+    }
+    compile_arm(&arms[arm_idx(ntags - 1)?], &ctors[ntags - 1].1, sp, sty, cx, result_ty, expected.is_some())?;
+    for _ in 0..ntags - 1 {
+        cx.emit(Instruction::End);
+    }
     Ok(result_ty)
 }
 
-fn compile_arm(arm: &Arm, payload: Option<Scalar>, sp: u32, cx: &mut Cx, result_ty: Ty, expected_mode: bool) -> Result<(), CompileError> {
+fn compile_arm(arm: &Arm, payloads: &[Scalar], sp: u32, scrut_ty: Ty, cx: &mut Cx, result_ty: Ty, expected_mode: bool) -> Result<(), CompileError> {
     cx.scopes.push(HashMap::new());
-    // Bind the payload field if the pattern names it (`Ok(v)` / `Some(x)`).
-    if let Pattern::Variant { fields, .. } = &arm.pattern {
-        if let (Some(ps), [Pattern::Bind(name)]) = (payload, &fields[..]) {
-            if ps != Scalar::Unit {
-                let fty = ps.to_ty();
-                let flocal = cx.alloc_local(fty)?;
-                cx.emit(Instruction::LocalGet(sp));
-                cx.emit(Instruction::I32Const(4));
-                cx.emit(Instruction::I32Add);
-                match ps {
-                    Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
-                    Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Load(u32_at())),
-                    Scalar::Unit => unreachable!(),
+    match &arm.pattern {
+        // `Ctor(f0, f1, …)` — bind each field named by a `Bind` pattern at its slot.
+        Pattern::Variant { fields, .. } => {
+            for (i, (fp, ps)) in fields.iter().zip(payloads.iter()).enumerate() {
+                if let (Pattern::Bind(name), false) = (fp, *ps == Scalar::Unit) {
+                    let fty = ps.to_ty();
+                    let flocal = cx.alloc_local(fty)?;
+                    cx.emit(Instruction::LocalGet(sp));
+                    cx.emit(Instruction::I32Const(field_offset(i)));
+                    cx.emit(Instruction::I32Add);
+                    match ps {
+                        Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
+                        Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Load(u32_at())),
+                        Scalar::Unit => unreachable!(),
+                    }
+                    cx.emit(Instruction::LocalSet(flocal));
+                    cx.scopes.last_mut().unwrap().insert(name.name.clone(), (flocal, fty));
                 }
-                cx.emit(Instruction::LocalSet(flocal));
-                cx.scopes.last_mut().unwrap().insert(name.name.clone(), (flocal, fty));
             }
         }
+        // A bare binding catches the whole scrutinee (`other => …`).
+        Pattern::Bind(name) => {
+            cx.scopes.last_mut().unwrap().insert(name.name.clone(), (sp, scrut_ty));
+        }
+        _ => {}
     }
     let r = if expected_mode {
         compile_expr_as(&arm.body, cx, result_ty)
@@ -1008,12 +1139,20 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     _ => Err(CompileError::Unsupported("str() of this type (only Int and Str compile so far)".into())),
                 };
             }
-            let (fidx, ret) = *cx
-                .index
-                .get(&name)
-                .ok_or_else(|| CompileError::Unsupported(format!("a call to `{name}` (not a compilable function)")))?;
-            for a in args {
-                compile_expr(a, cx)?;
+            let (fidx, ptys, ret) = {
+                let e = cx
+                    .index
+                    .get(&name)
+                    .ok_or_else(|| CompileError::Unsupported(format!("a call to `{name}` (not a compilable function)")))?;
+                (e.0, e.1.clone(), e.2)
+            };
+            if args.len() != ptys.len() {
+                return Err(CompileError::Unsupported(format!("`{name}` called with {} args (expected {})", args.len(), ptys.len())));
+            }
+            // Compile each argument at its declared parameter type, so a variant constructor passed
+            // directly (`f(Some(x))`, `f(Say("hi"))`) knows its type.
+            for (a, pty) in args.iter().zip(ptys.iter()) {
+                compile_expr_as(a, cx, *pty)?;
             }
             cx.emit(Instruction::Call(fidx));
             Ok(ret)
@@ -1051,7 +1190,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::I32Add);
                 match t {
                     Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
-                    Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Load(u32_at())),
+                    Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Load(u32_at())),
                     Scalar::Unit => unreachable!(),
                 }
                 Ok(t.to_ty())
