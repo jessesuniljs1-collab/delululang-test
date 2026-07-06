@@ -129,33 +129,37 @@ mod tests {
     }
 
     #[test]
-    fn wasm_matches_interpreter_on_random_pure_programs() {
-        // Differential parity gate: hundreds of random pure programs must produce identical
-        // results on the WASM backend and the interpreter (the reference engine). Any divergence
-        // is a codegen correctness bug — the production bar for a compiler backend.
+    fn wasm_matches_interpreter_on_random_programs_including_faults() {
+        // Differential parity gate (Phase 3d): thousands of random programs — INCLUDING ones that
+        // overflow or divide by zero — must AGREE on both the value (both Ok and equal) and the
+        // fault (both Err). With checked-arithmetic codegen the WASM backend faults exactly where
+        // the interpreter does. Ok-vs-differing-Ok or Ok-vs-Err is a backend bug.
         let mut checked_count = 0u32;
+        let mut agreed_ok = 0u32;
+        let mut both_faulted = 0u32;
         let mut mismatches: Vec<String> = Vec::new();
-        for k in 0..800u64 {
+        for k in 0..5000u64 {
             let seed = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
             let (src, args) = gen::random_pure_program(seed);
             let checked = check_source(0, &src);
             if checked.has_errors() {
-                continue; // a generator artifact; skip (should be rare)
+                continue;
             }
             checked_count += 1;
             let interp = Interp::new(&checked.module);
             let iv = interp.call_int_fn("f", &args);
             let wv = compile_and_run_int(&checked.module, "f", &args);
-            if let (Ok(a), Ok(b)) = (&iv, &wv) {
-                if a != b {
-                    mismatches.push(format!("seed {seed}: interp={a} wasm={b} args={args:?}\n{src}"));
-                }
-            } else {
-                mismatches.push(format!("seed {seed}: an engine errored (interp={iv:?}, wasm={wv:?})\n{src}"));
+            match (&iv, &wv) {
+                (Ok(a), Ok(b)) if a == b => agreed_ok += 1,
+                (Err(_), Err(_)) => both_faulted += 1, // both overflow / div-by-zero — consistent
+                _ => mismatches.push(format!("seed {seed}: interp={iv:?} wasm={wv:?} args={args:?}\n{src}")),
             }
         }
-        assert!(checked_count > 500, "generator produced too few valid programs: {checked_count}");
-        assert!(mismatches.is_empty(), "WASM/interpreter divergence:\n{}", mismatches.join("\n---\n"));
+        assert!(checked_count > 3000, "generator produced too few valid programs: {checked_count}");
+        assert!(mismatches.is_empty(), "WASM/interpreter divergence ({} cases):\n{}", mismatches.len(), mismatches.iter().take(5).cloned().collect::<Vec<_>>().join("\n---\n"));
+        // Prove the fault path was actually exercised (overflow / div-by-zero really occurred).
+        assert!(both_faulted > 50, "the fault-parity path was barely exercised: both_faulted={both_faulted}");
+        assert!(agreed_ok > 1000, "too few agreeing runs: agreed_ok={agreed_ok}");
     }
 
     #[test]

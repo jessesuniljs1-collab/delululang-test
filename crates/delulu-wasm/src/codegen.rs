@@ -144,6 +144,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 
     let needs_console = uses_console(module);
     let n_imports: u32 = if needs_console { 1 } else { 0 };
+    let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
+    let user_base = n_imports + N_ARITH_HELPERS; // user functions start here
 
     // Collect string literals into a length-prefixed linear-memory image.
     let mut str_off: HashMap<String, u32> = HashMap::new();
@@ -155,18 +157,26 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Function index map: name -> (absolute wasm function index, return type).
     let mut index: HashMap<String, (u32, Ty)> = HashMap::new();
     for (i, f) in fns.iter().enumerate() {
-        index.insert(f.name.name.clone(), (n_imports + i as u32, ret_ty(f).unwrap()));
+        index.insert(f.name.name.clone(), (user_base + i as u32, ret_ty(f).unwrap()));
     }
 
+    // Types: [console import type?], the shared helper type (i64,i64)->i64, then each user fn's.
     let mut types = TypeSection::new();
+    let mut next_type = 0u32;
     if needs_console {
-        types.ty().function([ValType::I32, ValType::I32], []); // type 0: console_println(cap, ptr)
+        types.ty().function([ValType::I32, ValType::I32], []);
+        next_type += 1;
     }
-    let type_base = n_imports; // defined function types start after import types
+    let helper_type = next_type;
+    types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
+    next_type += 1;
+    let mut user_types = Vec::new();
     for f in &fns {
         let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&p.ty).unwrap()).unwrap()).collect();
         let results = result_valtypes(ret_ty(f).unwrap());
         types.ty().function(params, results);
+        user_types.push(next_type);
+        next_type += 1;
     }
 
     let mut imports = ImportSection::new();
@@ -174,9 +184,13 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         imports.import("delulu:cap", "console_println", EntityType::Function(0));
     }
 
+    // Functions (in code order): the 4 arithmetic helpers, then the user functions.
     let mut funcsec = FunctionSection::new();
-    for (i, _) in fns.iter().enumerate() {
-        funcsec.function(type_base + i as u32);
+    for _ in 0..N_ARITH_HELPERS {
+        funcsec.function(helper_type);
+    }
+    for t in &user_types {
+        funcsec.function(*t);
     }
 
     let mut mems = MemorySection::new();
@@ -186,12 +200,16 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
     for (i, f) in fns.iter().enumerate() {
-        exports.export(&f.name.name, ExportKind::Func, n_imports + i as u32);
+        exports.export(&f.name.name, ExportKind::Func, user_base + i as u32);
     }
 
     let mut code = CodeSection::new();
+    code.function(&ovf_add_fn());
+    code.function(&ovf_sub_fn());
+    code.function(&ovf_mul_fn());
+    code.function(&chk_rem_fn());
     for f in &fns {
-        code.function(&compile_fn(f, &index, &str_off)?);
+        code.function(&compile_fn(f, &index, &str_off, arith_base)?);
     }
 
     let mut datas = DataSection::new();
@@ -277,12 +295,20 @@ fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
     off.insert(s.to_string(), ptr);
 }
 
+/// Number of synthetic checked-arithmetic helper functions emitted before user functions:
+/// `__ovf_add`, `__ovf_sub`, `__ovf_mul`, `__chk_rem` (in that order). `Div` uses `i64.div_s`
+/// directly, which traps on div-by-zero and `INT_MIN/-1` exactly like the interpreter's
+/// `checked_div`, so it needs no helper.
+const N_ARITH_HELPERS: u32 = 4;
+
 struct Cx<'a> {
     index: &'a HashMap<String, (u32, Ty)>,
     str_off: &'a HashMap<String, u32>,
     scopes: Vec<HashMap<String, (u32, Ty)>>,
     extra_locals: Vec<ValType>,
     nparams: u32,
+    /// Function index of the first arithmetic helper (`__ovf_add`); the others follow.
+    arith_base: u32,
     instrs: Vec<Instruction<'static>>,
 }
 
@@ -301,7 +327,7 @@ impl<'a> Cx<'a> {
     }
 }
 
-fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>) -> Result<Function, CompileError> {
+fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>, arith_base: u32) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(&p.ty).unwrap()));
@@ -312,6 +338,7 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
         scopes: vec![params],
         extra_locals: Vec::new(),
         nparams: f.params.len() as u32,
+        arith_base,
         instrs: Vec::new(),
     };
     let ret = ret_ty(f).unwrap();
@@ -511,12 +538,16 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
     let rt = compile_expr(rhs, cx)?;
     use BinOp::*;
     if lt == Ty::I64 && rt == Ty::I64 {
+        // Checked arithmetic (parity with the interpreter, spec §3.3): +,-,*,% go through the
+        // synthetic helpers that trap on overflow / INT_MIN%-1; / uses i64.div_s (already traps on
+        // div-by-zero and INT_MIN/-1, matching `checked_div`). Comparisons emit directly.
+        let base = cx.arith_base;
         let (ins, ty): (Instruction<'static>, Ty) = match op {
-            Add => (Instruction::I64Add, Ty::I64),
-            Sub => (Instruction::I64Sub, Ty::I64),
-            Mul => (Instruction::I64Mul, Ty::I64),
+            Add => (Instruction::Call(base), Ty::I64),
+            Sub => (Instruction::Call(base + 1), Ty::I64),
+            Mul => (Instruction::Call(base + 2), Ty::I64),
+            Rem => (Instruction::Call(base + 3), Ty::I64),
             Div => (Instruction::I64DivS, Ty::I64),
-            Rem => (Instruction::I64RemS, Ty::I64),
             Lt => (Instruction::I64LtS, Ty::I32),
             Le => (Instruction::I64LeS, Ty::I32),
             Gt => (Instruction::I64GtS, Ty::I32),
@@ -540,4 +571,94 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         return Ok(Ty::I32);
     }
     Err(CompileError::Unsupported("a binary operator on unsupported operand types (e.g. Str `+`)".into()))
+}
+
+// ----- checked-arithmetic helper functions (parity with the interpreter, §3.3) --------------
+//
+// Each takes (a: i64, b: i64) -> i64 and traps (via `unreachable`) exactly where the interpreter's
+// checked arithmetic faults, so the two engines agree on both the value and the fault.
+
+fn build(locals: &[(u32, ValType)], instrs: &[Instruction<'static>]) -> Function {
+    let mut f = Function::new(locals.iter().copied());
+    for i in instrs {
+        f.instruction(i);
+    }
+    f.instruction(&Instruction::End);
+    f
+}
+
+/// `a + b`, trapping on signed overflow: overflow iff `((a^r) & (b^r)) < 0`.
+fn ovf_add_fn() -> Function {
+    use Instruction::*;
+    build(
+        &[(1, ValType::I64)], // local 2 = r
+        &[
+            LocalGet(0), LocalGet(1), I64Add, LocalSet(2),
+            LocalGet(0), LocalGet(2), I64Xor,
+            LocalGet(1), LocalGet(2), I64Xor,
+            I64And, I64Const(0), I64LtS,
+            If(BlockType::Empty), Unreachable, End,
+            LocalGet(2),
+        ],
+    )
+}
+
+/// `a - b`, trapping on signed overflow: overflow iff `((a^b) & (a^r)) < 0`.
+fn ovf_sub_fn() -> Function {
+    use Instruction::*;
+    build(
+        &[(1, ValType::I64)], // local 2 = r
+        &[
+            LocalGet(0), LocalGet(1), I64Sub, LocalSet(2),
+            LocalGet(0), LocalGet(1), I64Xor,
+            LocalGet(0), LocalGet(2), I64Xor,
+            I64And, I64Const(0), I64LtS,
+            If(BlockType::Empty), Unreachable, End,
+            LocalGet(2),
+        ],
+    )
+}
+
+/// `a * b`, trapping on signed overflow. If `a == 0` no overflow. If `a == -1`, overflow iff
+/// `b == INT_MIN`. Otherwise overflow iff `r / a != b` (safe: `a != -1`, so `i64.div_s` cannot
+/// trap on `INT_MIN/-1`).
+fn ovf_mul_fn() -> Function {
+    use Instruction::*;
+    build(
+        &[(1, ValType::I64)], // local 2 = r
+        &[
+            LocalGet(0), LocalGet(1), I64Mul, LocalSet(2),
+            Block(BlockType::Empty),
+            LocalGet(0), I64Eqz, BrIf(0), // a == 0 -> no overflow
+            LocalGet(0), I64Const(-1), I64Eq,
+            If(BlockType::Empty),
+            LocalGet(1), I64Const(i64::MIN), I64Eq,
+            If(BlockType::Empty), Unreachable, End,
+            Else,
+            LocalGet(2), LocalGet(0), I64DivS,
+            LocalGet(1), I64Ne,
+            If(BlockType::Empty), Unreachable, End,
+            End,
+            End, // block
+            LocalGet(2),
+        ],
+    )
+}
+
+/// `a % b`, trapping on `b == 0` and on `INT_MIN % -1` (matching `checked_rem`; core `i64.rem_s`
+/// would return 0 for the latter rather than trap).
+fn chk_rem_fn() -> Function {
+    use Instruction::*;
+    build(
+        &[],
+        &[
+            LocalGet(1), I64Eqz,
+            If(BlockType::Empty), Unreachable, End,
+            LocalGet(0), I64Const(i64::MIN), I64Eq,
+            LocalGet(1), I64Const(-1), I64Eq,
+            I32And,
+            If(BlockType::Empty), Unreachable, End,
+            LocalGet(0), LocalGet(1), I64RemS,
+        ],
+    )
 }

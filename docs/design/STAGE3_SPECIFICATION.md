@@ -281,12 +281,15 @@ overflow-free: only `+`/`-` over small bounded operands; trap-free: no division)
 on BOTH engines and asserts identical `Ok(i64)` results. Zero divergence — the correctness bar for
 a compiler backend, checked continuously in CI.
 
-**Honest divergence to close (§3.3):** the WASM backend currently *wraps* on Int overflow (native
-i64 arithmetic) while the interpreter *faults* (DL0901, checked arithmetic). The parity generator
-deliberately stays within safe magnitudes so this never triggers; closing it means emitting
-explicit overflow checks in codegen (a trap-to-panic-hook per §3.3). Similarly `i64.div_s` traps
-on div-by-zero where the interpreter faults DL0902 — codegen must emit the checks to match.
-Recorded so the parity claim is never overstated.
+**Divergence CLOSED in Phase 3d (§3.3):** the WASM backend now has **identical fault semantics** to
+the interpreter on arithmetic. Codegen emits synthetic checked-arithmetic helper functions
+(`__ovf_add`/`__ovf_sub`/`__ovf_mul` trap on signed overflow; `__chk_rem` traps on `b==0` and
+`INT_MIN%-1`) and routes `+`/`-`/`*`/`%` through them; `/` uses `i64.div_s`, which already traps on
+div-by-zero and `INT_MIN/-1` exactly like `checked_div`. The Phase-3d parity harness generates
+programs that DO overflow and DO divide by zero, and asserts the two engines agree on both the
+value (both `Ok` and equal) and the fault (both `Err`) — verified over **5,000 programs, zero
+divergences, with the fault path proven exercised** (`both_faulted > 50`). The WASM trap and the
+interpreter fault (DL0901/DL0902) are both *errors*; the harness treats both-error as consistent.
 
 Remaining Phase 3 increments: overflow/div checks in codegen (close the divergence above); string
 concatenation + `Root`/`main` threading in WASM; broader `delulu:cap` ops (fs/clock/rand) with
