@@ -43,16 +43,20 @@ enum Ty {
     I32,  // Bool
     Str,  // i32 pointer into linear memory
     Cap,  // i32 host handle (Console only, Phase 3b)
+    Root, // i32 host handle to the root authority (Phase 3e)
     Unit, // no value
 }
 
-/// The single imported host function's index (present only when the module uses the console).
-const CONSOLE_PRINTLN: u32 = 0;
+/// Host import indices when the module uses the console. `root.console()` mints a Console handle;
+/// `console.println(str)` performs the Write.
+const ROOT_CONSOLE: u32 = 0;
+const CONSOLE_PRINTLN: u32 = 1;
+const N_CONSOLE_IMPORTS: u32 = 2;
 
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
-        Ty::I32 | Ty::Str | Ty::Cap => Some(ValType::I32),
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Root => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -74,6 +78,7 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
                     "Int" => Some(Ty::I64),
                     "Bool" => Some(Ty::I32),
                     "Str" => Some(Ty::Str),
+                    "Root" => Some(Ty::Root),
                     "Unit" => Some(Ty::Unit),
                     _ => None,
                 };
@@ -120,7 +125,9 @@ fn block_uses_console(b: &Block) -> bool {
 fn expr_uses_console(e: &Expr) -> bool {
     match e {
         Expr::Method { name, recv, args, .. } => {
-            (name.name == "println") || expr_uses_console(recv) || args.iter().any(expr_uses_console)
+            (name.name == "println" || name.name == "console")
+                || expr_uses_console(recv)
+                || args.iter().any(expr_uses_console)
         }
         Expr::Call { callee, args, .. } => expr_uses_console(callee) || args.iter().any(expr_uses_console),
         Expr::Binary { lhs, rhs, .. } => expr_uses_console(lhs) || expr_uses_console(rhs),
@@ -143,7 +150,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         .collect();
 
     let needs_console = uses_console(module);
-    let n_imports: u32 = if needs_console { 1 } else { 0 };
+    let n_imports: u32 = if needs_console { N_CONSOLE_IMPORTS } else { 0 };
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
     let user_base = n_imports + N_ARITH_HELPERS; // user functions start here
 
@@ -164,8 +171,9 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let mut types = TypeSection::new();
     let mut next_type = 0u32;
     if needs_console {
-        types.ty().function([ValType::I32, ValType::I32], []);
-        next_type += 1;
+        types.ty().function([ValType::I32], [ValType::I32]); // type 0: root_console(root) -> cap
+        types.ty().function([ValType::I32, ValType::I32], []); // type 1: console_println(cap, ptr)
+        next_type += 2;
     }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
@@ -181,7 +189,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 
     let mut imports = ImportSection::new();
     if needs_console {
-        imports.import("delulu:cap", "console_println", EntityType::Function(0));
+        imports.import("delulu:cap", "root_console", EntityType::Function(0));
+        imports.import("delulu:cap", "console_println", EntityType::Function(1));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, then the user functions.
@@ -462,6 +471,15 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             Ok(tt)
         }
         Expr::Method { recv, name, args, .. } => {
+            // Phase 3e: Root.console() -> host import minting a Console handle.
+            if name.name == "console" && args.is_empty() {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Root {
+                    return Err(CompileError::Unsupported("console() on a non-Root receiver".into()));
+                }
+                cx.emit(Instruction::Call(ROOT_CONSOLE));
+                return Ok(Ty::Cap);
+            }
             // Phase 3b: Cap[Console].println(str) -> host import; Unit result.
             if name.name == "println" && args.len() == 1 {
                 let rt = compile_expr(recv, cx)?;
@@ -470,12 +488,12 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 }
                 let at = compile_expr(&args[0], cx)?;
                 if at != Ty::Str {
-                    return Err(CompileError::Unsupported("println of a non-Str argument (concatenation is Phase 3b+)".into()));
+                    return Err(CompileError::Unsupported("println of a non-Str argument (concatenation is Phase 3e+)".into()));
                 }
                 cx.emit(Instruction::Call(CONSOLE_PRINTLN));
                 return Ok(Ty::Unit);
             }
-            Err(CompileError::Unsupported(format!("the method `.{}` (Phase 3b)", name.name)))
+            Err(CompileError::Unsupported(format!("the method `.{}` (Phase 3e)", name.name)))
         }
         Expr::Call { callee, args, .. } => {
             let name = match &**callee {
@@ -526,6 +544,7 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::If { then_, .. } => block_result_ty(then_),
         Expr::Block(b) => block_result_ty(b),
         Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
+        Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
         // Var/Call are context-dependent; default I64 for typing. A mismatch is caught by the
         // branch-equality check in `compile_expr`.
         Expr::Var { .. } | Expr::Call { .. } => Ok(Ty::I64),

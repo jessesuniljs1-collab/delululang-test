@@ -291,7 +291,18 @@ value (both `Ok` and equal) and the fault (both `Err`) — verified over **5,000
 divergences, with the fault path proven exercised** (`both_faulted > 50`). The WASM trap and the
 interpreter fault (DL0901/DL0902) are both *errors*; the harness treats both-error as consistent.
 
-Remaining Phase 3 increments: overflow/div checks in codegen (close the divergence above); string
+**Phase 3e — `Root`/`main` capability threading through WASM — is implemented and green** (143
+tests). Codegen handles the `Root` type (i32 handle) and `root.console()` (a host import
+`delulu:cap.root_console` that mints a Console handle host-side iff the grant allows).
+`host.rs::run_main_console` runs a real `fn main(root: Root)` under Wasmtime: root at handle 0, the
+`delulu:cap` import world (`root_console` + `console_println`, both checked host-side, neither
+trapping from inside the callback), returning the captured output. The milestone test runs a
+`main` that does `root.console()` then `out.println(...)` on WASM and asserts the output equals the
+interpreter's — a full program with capability threading, byte-identical across engines; an
+ungranted console is refused host-side.
+
+Remaining Phase 3 increments: wire `delulu run --engine wasm` + the `.dwx` artifact + `build
+--target wasm` into the CLI + DL12xx (codegen/host ready via `compile_module`/`run_main_console`);
 concatenation + `Root`/`main` threading in WASM; broader `delulu:cap` ops (fs/clock/rand) with
 host-side scope checks; secrets-stay-host-side (§4.4); the **`.dwx` artifact** (§5) + `delulu build
 --target wasm` / `run --engine wasm` + DL12xx registry; and full conformance parity (§9 criteria

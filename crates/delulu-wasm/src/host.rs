@@ -46,78 +46,113 @@ pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmErro
     }
 }
 
-/// The host's capability table (Phase 3b). A handle is an index into `caps`.
+/// The host's capability table. A handle is an index into `caps`; index 0 is conventionally the
+/// root (for `main`) or a directly-granted Console (for a bare cap function).
 #[derive(Clone, Copy, Debug)]
 pub enum CapKind {
+    Root,
     Console,
 }
 
 struct HostState {
     caps: Vec<CapKind>,
+    /// Whether the human/broker granted console output (the run-time authority grant).
+    console_granted: bool,
     output: String,
-    /// Set host-side when a capability check fails. We record it and return `Ok` rather than
-    /// raising a trap from inside the callback (returning an error across the wasm frame aborts on
-    /// some platforms); `run_console_fn` turns a set flag into a clean `WasmError` after the call.
+    /// Set host-side when a capability check fails. We record it and return without trapping (an
+    /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
+    /// into a clean `WasmError` after the call.
     refused: Option<String>,
 }
 
-/// Run an exported effectful function whose parameters are capability handles (i32 indices into a
-/// host cap table), and return everything written to the console. The `delulu:cap.console_println`
-/// import performs the Write effect host-side, checking the capability and reading the string from
-/// the guest's exported memory. Returns the captured output.
-pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<String, WasmError> {
-    let engine = Engine::default();
-    let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
-    let state = HostState { caps: vec![CapKind::Console], output: String::new(), refused: None };
-    let mut store = Store::new(&engine, state);
-
-    let mut linker = Linker::new(&engine);
+/// Build the `delulu:cap` host import world: `root_console` mints a Console handle from the root
+/// (host-side grant check), and `console_println` performs the Write and reads the string from the
+/// guest's exported memory. Neither ever traps from inside the callback.
+fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
+    let mut linker = Linker::new(engine);
     linker
-        .func_wrap(
-            "delulu:cap",
-            "console_println",
-            |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32| {
-                // Host-side scope check: the handle must be a granted Console capability. On failure
-                // we record it and return without performing the effect (no in-callback trap).
-                let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
-                if !ok {
-                    caller.data_mut().refused = Some(format!("DL0904: capability handle {cap} is not a granted Console capability"));
+        .func_wrap("delulu:cap", "root_console", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            if !caller.data().console_granted {
+                caller.data_mut().refused = Some("DL0703: console was not granted to this program".into());
+                return -1;
+            }
+            let st = caller.data_mut();
+            st.caps.push(CapKind::Console);
+            (st.caps.len() - 1) as i32
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:cap", "console_println", |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32| {
+            let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
+            if !ok {
+                caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
+                return;
+            }
+            let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
+                caller.data_mut().refused = Some("guest exports no `memory`".into());
+                return;
+            };
+            let s = {
+                let data = mem.data(&caller);
+                let p = ptr as usize;
+                if p + 4 > data.len() {
+                    caller.data_mut().refused = Some("string header out of bounds".into());
                     return;
                 }
-                // Read the length-prefixed string out of the guest's exported memory.
-                let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
-                    caller.data_mut().refused = Some("guest exports no `memory`".into());
+                let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
+                if p + 4 + len > data.len() {
+                    caller.data_mut().refused = Some("string body out of bounds".into());
                     return;
-                };
-                let s = {
-                    let data = mem.data(&caller);
-                    let p = ptr as usize;
-                    if p + 4 > data.len() {
-                        caller.data_mut().refused = Some("string header out of bounds".into());
-                        return;
-                    }
-                    let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
-                    if p + 4 + len > data.len() {
-                        caller.data_mut().refused = Some("string body out of bounds".into());
-                        return;
-                    }
-                    String::from_utf8_lossy(&data[p + 4..p + 4 + len]).to_string()
-                };
-                let out = &mut caller.data_mut().output;
-                out.push_str(&s);
-                out.push('\n');
-            },
-        )
+                }
+                String::from_utf8_lossy(&data[p + 4..p + 4 + len]).to_string()
+            };
+            let out = &mut caller.data_mut().output;
+            out.push_str(&s);
+            out.push('\n');
+        })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    Ok(linker)
+}
 
-    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
-    let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
-    let params: Vec<Val> = cap_handles.iter().map(|&h| Val::I32(h as i32)).collect();
+fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
     let mut results: [Val; 0] = [];
-    func.call(&mut store, &params, &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
+    func.call(&mut store, params, &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
     let state = store.into_data();
     if let Some(reason) = state.refused {
         return Err(WasmError::Trap(reason));
     }
     Ok(state.output)
+}
+
+/// Run an exported function that takes Console-capability handles directly (index 0 = a granted
+/// Console). Returns the captured console output.
+pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<String, WasmError> {
+    let engine = Engine::default();
+    let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
+    let state = HostState { caps: vec![CapKind::Console], console_granted: true, output: String::new(), refused: None };
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
+    let params: Vec<Val> = cap_handles.iter().map(|&h| Val::I32(h as i32)).collect();
+    finish(store, func, &params)
+}
+
+/// Run `main(root: Root)` under Wasmtime with the given console grant. The root handle (index 0) is
+/// passed in; `root.console()` mints a Console handle host-side iff `console_granted`. Returns the
+/// captured console output (or a `WasmError` if a capability was refused).
+pub fn run_main_console(wasm: &[u8], console_granted: bool) -> Result<String, WasmError> {
+    let engine = Engine::default();
+    let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
+    let state = HostState { caps: vec![CapKind::Root], console_granted, output: String::new(), refused: None };
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let func = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
+    finish(store, func, &[Val::I32(0)]) // root handle
 }

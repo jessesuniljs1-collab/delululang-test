@@ -12,7 +12,7 @@ pub mod gen;
 mod host;
 
 pub use codegen::{compile_module, uses_console, CompileError};
-pub use host::{run_console_fn, run_int_fn, WasmError};
+pub use host::{run_console_fn, run_int_fn, run_main_console, WasmError};
 
 use delulu_syntax::ast::Module;
 
@@ -165,6 +165,39 @@ mod tests {
     #[test]
     fn generator_is_deterministic() {
         assert_eq!(gen::random_pure_program(123), gen::random_pure_program(123));
+    }
+
+    #[test]
+    fn main_with_console_runs_on_wasm_matching_the_interpreter() {
+        // The Phase-3e milestone: a real `main(root)` that does root.console() then out.println()
+        // runs under Wasmtime — the capability is minted and checked host-side (root_console) — and
+        // its output equals the interpreter's.
+        use delulu_runtime::{set_capture, take_capture, Grants, Value};
+
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"hi from main\") }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let wasm = compile_module(&checked.module).expect("compile");
+        let wasm_out = run_main_console(&wasm, true).expect("wasm run");
+
+        set_capture(true);
+        let mut g = Grants::default();
+        g.console = true;
+        let interp = Interp::new(&checked.module);
+        interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
+        let interp_out = take_capture().expect("capture on");
+
+        assert_eq!(wasm_out, interp_out, "main console output must match across engines");
+        assert_eq!(wasm_out, "hi from main\n");
+    }
+
+    #[test]
+    fn main_console_is_refused_on_wasm_when_console_not_granted() {
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"x\") }\n";
+        let checked = check_source(0, src);
+        let wasm = compile_module(&checked.module).expect("compile");
+        assert!(run_main_console(&wasm, false).is_err(), "ungranted console must be refused host-side");
     }
 
     #[test]
