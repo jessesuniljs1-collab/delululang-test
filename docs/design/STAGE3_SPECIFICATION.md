@@ -358,10 +358,24 @@ the callback — a process abort on Windows), and out-of-bounds refusals now car
 `wasm_fault_code` maps DL0703/DL0903/else-DL0904). Not yet covered by §9.4: filesystem-subtree
 escape via `..`/symlink and secret-expose misuse (those `delulu:cap` ops don't exist yet).
 
-Remaining Phase 3 increments: string concatenation in WASM; broader `delulu:cap` ops
-(fs/clock/rand) with host-side scope checks; secrets-stay-host-side (§4.4, DL1205); and full
-conformance parity (§9 criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the
-secret-hygiene scan (§9.8).
+**Phase 3i — `Str` concatenation in the WASM backend — is implemented and green** (165 tests).
+`Str + Str` now compiles instead of being DL1201: `codegen.rs` emits a synthetic `__concat(a, b)`
+helper (a fifth always-present helper, after the four arithmetic ones) that bump-allocates a fresh
+`[len:u32-le][bytes]` buffer in guest linear memory and returns its pointer. The bump pointer is a
+mutable i32 **global** initialised just past the interned string-literal image; the module reserves
+a fixed `HEAP_PAGES` (1 MiB) heap above the literals (no `memory.grow` yet, so a pathological
+concatenation loop would trap on the store — an honest error, not a silent wrong answer). The helper
+copies both operands with `memory.copy` (bulk memory, on by default in Wasmtime 27). Two-engine
+parity is the contract, verified by four new tests: chained literal concat (`"[" + "x" + "]"`),
+concat with a **function parameter** (`greet(name) = "hello, " + name`), repeated concat that
+proves the allocator advances (each result gets its own buffer), and that `println` of a `Str + Str`
+now compiles. End-to-end on the terminal, `greet("world") + "!"` prints `hello, world!` **byte-
+identically on `--engine wasm` and the interpreter**. (Observed en route, out of scope here: the
+lexer rejects a leading UTF-8 BOM with DL0101 — a small future robustness fix, not a concat issue.)
+
+Remaining Phase 3 increments: broader `delulu:cap` ops (fs/clock/rand) with host-side scope checks;
+secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9 criteria 1–3), the rest of
+the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

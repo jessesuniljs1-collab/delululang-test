@@ -204,6 +204,60 @@ mod tests {
         assert!(run_main_console(&wasm, false).is_err(), "ungranted console must be refused host-side");
     }
 
+    // ----- Phase 3i: Str concatenation (runtime bump-allocated in guest memory) --------------
+
+    /// Run a console `main` on both engines and assert byte-identical output; return it.
+    fn main_console_parity(src: &str) -> String {
+        use delulu_runtime::{set_capture, take_capture, Grants, Value};
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let wasm = compile_module(&checked.module).expect("compile");
+        let wasm_out = run_main_console(&wasm, true).expect("wasm run");
+
+        set_capture(true);
+        let mut g = Grants::default();
+        g.console = true;
+        let interp = Interp::new(&checked.module);
+        interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
+        let interp_out = take_capture().expect("capture on");
+
+        assert_eq!(wasm_out, interp_out, "wasm/interpreter output must match for:\n{src}");
+        wasm_out
+    }
+
+    #[test]
+    fn chained_literal_concatenation_matches_the_interpreter() {
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"[\" + \"x\" + \"]\") }\n";
+        assert_eq!(main_console_parity(src), "[x]\n");
+    }
+
+    #[test]
+    fn concatenation_with_a_parameter_matches_the_interpreter() {
+        // greet takes a Str parameter and concatenates it with a literal — the parameter case.
+        let src = "module m\n\
+            fn greet(name: Str) -> Str { \"hello, \" + name }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(greet(\"world\")) }\n";
+        assert_eq!(main_console_parity(src), "hello, world\n");
+    }
+
+    #[test]
+    fn repeated_concatenation_advances_the_heap() {
+        // Two independent concatenations in one run: the bump allocator must give each its own
+        // buffer (the second must not clobber the first).
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"a\" + \"b\")\n out.println(\"cc\" + \"dd\") }\n";
+        assert_eq!(main_console_parity(src), "ab\nccdd\n");
+    }
+
+    #[test]
+    fn println_of_concatenation_is_compilable_now() {
+        // The construct that was DL1201 in Phase 3b (`println` of a `Str + Str`) compiles in 3i.
+        let src = "module m\nfn greet(out: Cap[Console], name: Str) ! {Write} { out.println(\"hi, \" + name) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        assert!(compile_module(&checked.module).is_ok(), "Str + Str must compile in Phase 3i");
+    }
+
     #[test]
     fn ungranted_console_handle_traps_host_side() {
         // Handle 5 is out of the granted cap table → the host refuses the effect (scope check).

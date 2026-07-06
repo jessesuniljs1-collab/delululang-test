@@ -7,18 +7,21 @@
 //! `Cap[Console]` values (i32 handles into a host cap table), `Unit`, and `Cap[Console].println`
 //! compiled to an imported host function `delulu:cap.console_println(cap, str_ptr)`. The host
 //! performs the effect and its scope check (§4); the guest never touches an OS handle.
+//! Phase 3i (`Str` concatenation): `Str + Str` compiles to a synthetic `__concat` helper that
+//! bump-allocates a fresh `[len:u32-le][bytes]` buffer in guest linear memory (a mutable global is
+//! the bump pointer, starting just past the interned literals) and returns its pointer.
 //!
-//! Constructs outside this fragment (string concatenation, other capabilities, `match`, `while`,
-//! foreign, GC types) are `CompileError::Unsupported` (DL1201) and stay on the interpreter, which
-//! remains the reference engine.
+//! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
+//! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
+//! engine.
 
 use std::collections::HashMap;
 
 use delulu_syntax::ast::*;
 use wasm_encoder::{
     BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
-    FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module as WasmModule,
-    TypeSection, ValType,
+    FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection,
+    MemoryType, Module as WasmModule, TypeSection, ValType,
 };
 
 #[derive(Clone, Debug)]
@@ -152,7 +155,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let needs_console = uses_console(module);
     let n_imports: u32 = if needs_console { N_CONSOLE_IMPORTS } else { 0 };
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
-    let user_base = n_imports + N_ARITH_HELPERS; // user functions start here
+    // The `__concat` helper follows the arithmetic helpers; user functions start after it.
+    let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
 
     // Collect string literals into a length-prefixed linear-memory image.
     let mut str_off: HashMap<String, u32> = HashMap::new();
@@ -178,6 +182,9 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
+    let concat_type = next_type; // __concat(a_ptr, b_ptr) -> new_ptr
+    types.ty().function([ValType::I32, ValType::I32], [ValType::I32]);
+    next_type += 1;
     let mut user_types = Vec::new();
     for f in &fns {
         let params: Vec<ValType> = f.params.iter().map(|p| wasm_valtype(wasm_ty(&p.ty).unwrap()).unwrap()).collect();
@@ -193,18 +200,31 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         imports.import("delulu:cap", "console_println", EntityType::Function(1));
     }
 
-    // Functions (in code order): the 4 arithmetic helpers, then the user functions.
+    // Functions (in code order): the 4 arithmetic helpers, `__concat`, then the user functions.
     let mut funcsec = FunctionSection::new();
     for _ in 0..N_ARITH_HELPERS {
         funcsec.function(helper_type);
     }
+    funcsec.function(concat_type);
     for t in &user_types {
         funcsec.function(*t);
     }
 
     let mut mems = MemorySection::new();
-    let min_pages = ((data.len() as u64 + 65535) / 65536).max(1);
+    // Reserve the interned literal image plus a fixed bump-allocation heap for runtime strings.
+    // The heap has no `memory.grow` yet, so a concatenation-heavy run could exhaust it (a trap =
+    // an error, honestly surfaced); HEAP_PAGES keeps everyday programs comfortably within bounds.
+    let data_pages = (data.len() as u64 + 65535) / 65536;
+    let min_pages = data_pages + HEAP_PAGES;
     mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
+
+    // The bump-heap pointer: a mutable i32 global starting just past the interned literals.
+    let heap_start = data.len() as i32;
+    let mut globals = GlobalSection::new();
+    globals.global(
+        GlobalType { val_type: ValType::I32, mutable: true, shared: false },
+        &ConstExpr::i32_const(heap_start),
+    );
 
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
@@ -217,6 +237,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&ovf_sub_fn());
     code.function(&ovf_mul_fn());
     code.function(&chk_rem_fn());
+    code.function(&concat_fn(HEAP_GLOBAL));
     for f in &fns {
         code.function(&compile_fn(f, &index, &str_off, arith_base)?);
     }
@@ -226,7 +247,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         datas.active(0, &ConstExpr::i32_const(0), data.iter().copied());
     }
 
-    // Section order: Type(1), Import(2), Function(3), Memory(5), Export(7), Code(10), Data(11).
+    // Section order: Type(1), Import(2), Function(3), Memory(5), Global(6), Export(7), Code(10),
+    // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
     if needs_console {
@@ -234,6 +256,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     }
     m.section(&funcsec);
     m.section(&mems);
+    m.section(&globals);
     m.section(&exports);
     m.section(&code);
     m.section(&datas);
@@ -310,6 +333,15 @@ fn intern_string(s: &str, off: &mut HashMap<String, u32>, data: &mut Vec<u8>) {
 /// `checked_div`, so it needs no helper.
 const N_ARITH_HELPERS: u32 = 4;
 
+/// Number of synthetic string helpers emitted after the arithmetic helpers: just `__concat`.
+const N_STR_HELPERS: u32 = 1;
+
+/// Pages (64 KiB each) reserved for the runtime bump-allocation heap, above the interned literals.
+const HEAP_PAGES: u64 = 16; // 1 MiB — no `memory.grow` yet, so this is the fixed heap ceiling
+
+/// Index of the bump-heap pointer global (the module emits exactly one global).
+const HEAP_GLOBAL: u32 = 0;
+
 struct Cx<'a> {
     index: &'a HashMap<String, (u32, Ty)>,
     str_off: &'a HashMap<String, u32>,
@@ -318,6 +350,8 @@ struct Cx<'a> {
     nparams: u32,
     /// Function index of the first arithmetic helper (`__ovf_add`); the others follow.
     arith_base: u32,
+    /// Function index of the `__concat` helper (`Str + Str`).
+    concat_fn: u32,
     instrs: Vec<Instruction<'static>>,
 }
 
@@ -348,6 +382,7 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
         extra_locals: Vec::new(),
         nparams: f.params.len() as u32,
         arith_base,
+        concat_fn: arith_base + N_ARITH_HELPERS,
         instrs: Vec::new(),
     };
     let ret = ret_ty(f).unwrap();
@@ -488,7 +523,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 }
                 let at = compile_expr(&args[0], cx)?;
                 if at != Ty::Str {
-                    return Err(CompileError::Unsupported("println of a non-Str argument (concatenation is Phase 3e+)".into()));
+                    return Err(CompileError::Unsupported("println of a non-Str argument".into()));
                 }
                 cx.emit(Instruction::Call(CONSOLE_PRINTLN));
                 return Ok(Ty::Unit);
@@ -589,7 +624,13 @@ fn compile_binary(op: BinOp, lhs: &Expr, rhs: &Expr, cx: &mut Cx) -> Result<Ty, 
         cx.emit(ins);
         return Ok(Ty::I32);
     }
-    Err(CompileError::Unsupported("a binary operator on unsupported operand types (e.g. Str `+`)".into()))
+    // Phase 3i: `Str + Str` concatenates at runtime via the `__concat` bump-allocating helper. Both
+    // operand pointers are already on the stack; the helper allocates and returns the new pointer.
+    if lt == Ty::Str && rt == Ty::Str && op == Add {
+        cx.emit(Instruction::Call(cx.concat_fn));
+        return Ok(Ty::Str);
+    }
+    Err(CompileError::Unsupported("a binary operator on these operand types".into()))
 }
 
 // ----- checked-arithmetic helper functions (parity with the interpreter, §3.3) --------------
@@ -678,6 +719,44 @@ fn chk_rem_fn() -> Function {
             I32And,
             If(BlockType::Empty), Unreachable, End,
             LocalGet(0), LocalGet(1), I64RemS,
+        ],
+    )
+}
+
+/// A 4-byte, byte-addressed memory access at `[ptr]` (the length header of a `Str`).
+fn u32_at() -> MemArg {
+    MemArg { offset: 0, align: 2, memory_index: 0 }
+}
+
+/// `__concat(a, b)`: bump-allocate `[len_a+len_b : u32-le][a-bytes][b-bytes]` at the heap pointer,
+/// advance the pointer, and return the new buffer's pointer. `memory.copy` (bulk memory) moves the
+/// operand bytes. An allocation past the reserved heap traps on the store — an honest error, matched
+/// against the interpreter only for pathological sizes (everyday strings stay well within HEAP_PAGES).
+fn concat_fn(heap_global: u32) -> Function {
+    use Instruction::*;
+    // params: local 0 = a, local 1 = b; extra locals: 2 = len_a, 3 = len_b, 4 = result_ptr, 5 = total.
+    build(
+        &[(4, ValType::I32)],
+        &[
+            LocalGet(0), I32Load(u32_at()), LocalSet(2), // len_a = mem[a]
+            LocalGet(1), I32Load(u32_at()), LocalSet(3), // len_b = mem[b]
+            LocalGet(2), LocalGet(3), I32Add, LocalSet(5), // total = len_a + len_b
+            GlobalGet(heap_global), LocalSet(4),           // result_ptr = heap
+            LocalGet(4), LocalGet(5), I32Store(u32_at()),  // mem[result_ptr] = total
+            // copy a's bytes: dst = result_ptr+4, src = a+4, len = len_a
+            LocalGet(4), I32Const(4), I32Add,
+            LocalGet(0), I32Const(4), I32Add,
+            LocalGet(2),
+            MemoryCopy { src_mem: 0, dst_mem: 0 },
+            // copy b's bytes: dst = result_ptr+4+len_a, src = b+4, len = len_b
+            LocalGet(4), I32Const(4), I32Add, LocalGet(2), I32Add,
+            LocalGet(1), I32Const(4), I32Add,
+            LocalGet(3),
+            MemoryCopy { src_mem: 0, dst_mem: 0 },
+            // heap = result_ptr + 4 + total
+            LocalGet(4), I32Const(4), I32Add, LocalGet(5), I32Add,
+            GlobalSet(heap_global),
+            LocalGet(4), // return result_ptr
         ],
     )
 }
