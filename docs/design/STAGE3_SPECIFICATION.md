@@ -471,18 +471,26 @@ needs. Cells are now `[tag:i32][field @4][field @12]…` (8-byte slots, size `4 
 `compile_ctor`/`compile_match`/`compile_arm` handle N constructors, multi-field payloads, nested
 constructors, and a nested `if tag==t` chain. The function index now carries **parameter types**, so a
 constructor can be passed directly as a call argument (`f(Some(x))`, `label(Err("bad"))`) — previously
-only a `let`/return position worked. **Honest scope finding:** Stage-1 source cannot *construct*
-user-declared variants at all — the checker resolves only the prelude `Ok`/`Err`/`Some`/`None`
-(`check_var`/`check_call`), rejecting bare `Green`/`Say(x)`/`NotFound` with DL0301. So the general
-enum *match* path (N>2 ctors, enum-typed payloads) is not exercisable from pure source; it is
-validated end-to-end in **Checkpoint 4**, where `fs.read_text` produces a host-constructed
-`Result[Str, IoErr]` that user code matches. New parity test: a constructor passed directly as a call
-argument (`Some`/`None`/`Ok`/`Err`), byte-identical across engines.
+only a `let`/return position worked.
+
+**Checkpoint 3+ — user-variant construction gap CLOSED (checker + interpreter)** (194 tests). A
+finding during Checkpoint 3 was that Stage-1 source could not *construct* user-declared variants at
+all — the checker resolved only the prelude `Ok`/`Err`/`Some`/`None` and rejected bare
+`Green`/`Say(x)`/`NotFound` with DL0301. Fixed at the language level: `DeclTable::variant_ctor`
+resolves a bare constructor to the **unique** sum type declaring it (ambiguous names shared across
+enums — e.g. `Other` in both `IoErr` and `NetErr` — are left for expected-type disambiguation, a
+later refinement); `check_var` now types a nullary variant (`Red`, `NotFound`) and `check_call` a
+payload variant (`Say(x)`, `Circle(r)`), checking field types against the declaration. The
+interpreter constructs them symmetrically (a capitalized, otherwise-unbound name → `Value::variant`).
+So the general enum machinery is now exercisable from pure source and validated on **both engines**:
+new parity tests (nullary `Color`, payload `Msg`, and the `Result[Str, IoErr]` with a nested 3-ctor
+`match` on `IoErr` built via `Err(NotFound)`) are byte-identical; a conformance program
+(`07_variant_construct.delulu`) constructs and matches a user `Shape`. End-to-end, `name(Green)` /
+`render(Say("hello"))` print identically on `--engine wasm` and the interpreter.
 
 **Checkpoint 4 remains**: the filesystem capability (`fs.read_text(path) → Result[Str, IoErr]`) — the
 host op that constructs the variant in guest memory with a path-subtree scope check, composing caps +
-`Result` + the `IoErr` enum + `match`. (A separate, later gap: teaching the *checker* to construct
-user variants in source, which would then also compile on the backend for free.)
+`Result` + the `IoErr` enum + `match`.
 
 Remaining Phase 3 increments: sum-type Checkpoints 3–4 (user enums, then the filesystem `delulu:cap`
 ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b — fs subtree

@@ -487,6 +487,35 @@ mod tests {
     }
 
     #[test]
+    fn nullary_user_enum_matches_the_interpreter() {
+        let src = "module m\n\
+            type Color = Red | Green | Blue\n\
+            fn name(c: Color) -> Str { match c { Red => \"red\", Green => \"green\", Blue => \"blue\" } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(name(Green))\n out.println(name(Blue)) }\n";
+        assert_eq!(main_console_parity(src), "green\nblue\n");
+    }
+
+    #[test]
+    fn user_enum_with_payloads_matches_the_interpreter() {
+        let src = "module m\n\
+            type Msg = Ping | Say(Str) | Num(Int)\n\
+            fn render(m: Msg) -> Str { match m { Ping => \"ping\", Say(s) => \"say:\" + s, Num(n) => \"num:\" + str(n) } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(render(Ping))\n out.println(render(Say(\"hi\")))\n out.println(render(Num(42))) }\n";
+        assert_eq!(main_console_parity(src), "ping\nsay:hi\nnum:42\n");
+    }
+
+    #[test]
+    fn result_with_ioerr_payload_and_nested_match_matches() {
+        // The FS shape now expressible in source: Result[Str, IoErr] built with Err(NotFound), matched,
+        // then a nested match on the IoErr — 3-ctor enum with a Str-payload variant.
+        let src = "module m\n\
+            fn lookup(key: Int) -> Result[Str, IoErr] { if key == 1 { Ok(\"found\") } else { Err(NotFound) } }\n\
+            fn describe(key: Int) -> Str { match lookup(key) { Ok(v) => \"ok:\" + v, Err(e) => match e { NotFound => \"missing\", Denied => \"denied\", Other(m) => \"other:\" + m } } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n out.println(describe(1))\n out.println(describe(2)) }\n";
+        assert_eq!(main_console_parity(src), "ok:found\nmissing\n");
+    }
+
+    #[test]
     fn match_with_a_wildcard_arm_matches() {
         let src = "module m\n\
             fn check(n: Int) -> Result[Int, Str] { if n < 0 { Err(\"neg\") } else { Ok(n) } }\n\

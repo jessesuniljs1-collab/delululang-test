@@ -454,6 +454,19 @@ impl<'a> Checker<'a> {
                 "None" => return Type::Option(Box::new(self.cx.fresh_type())),
                 _ => {}
             }
+            // A nullary user/prelude variant constructor used as a value (`Red`, `NotFound`, …).
+            if let Some((id, fields)) = self.table.variant_ctor(name) {
+                if fields.is_empty() {
+                    let def = self.table.type_def(id).clone();
+                    let args: Vec<Type> = def.generics.iter().map(|_| self.cx.fresh_type()).collect();
+                    return Type::Sum(id, args);
+                }
+                self.diags.push(
+                    Diagnostic::error("DL0403", format!("constructor `{name}` needs {} field(s)", fields.len()))
+                        .with_span(span, "missing constructor arguments"),
+                );
+                return self.cx.fresh_type();
+            }
             // A reference to a top-level function value (row carried — invariant 3).
             if let Some(sig) = self.table.fns.get(name).cloned() {
                 ctx.facts.callees.insert(name.clone());
@@ -522,6 +535,34 @@ impl<'a> Checker<'a> {
                 let name = path.segs[0].name.as_str();
                 if let Some(res) = self.check_builtin_call(name, args, span, ctx) {
                     return res;
+                }
+                // A user/prelude variant constructor with fields (`Say(x)`, `Other(m)`, …).
+                if let Some((id, fields)) = self.table.variant_ctor(name) {
+                    let def = self.table.type_def(id).clone();
+                    let mut genv = Genv::default();
+                    let targs: Vec<Type> = def
+                        .generics
+                        .iter()
+                        .map(|g| {
+                            let v = self.cx.fresh_type();
+                            genv.types.insert(g.clone(), v.clone());
+                            v
+                        })
+                        .collect();
+                    let mut acc = RowAcc::default();
+                    if args.len() != fields.len() {
+                        self.diags.push(
+                            Diagnostic::error("DL0403", format!("constructor `{name}` expects {} field(s), found {}", fields.len(), args.len()))
+                                .with_span(span, "wrong number of arguments"),
+                        );
+                    }
+                    for (arg, fty) in args.iter().zip(&fields) {
+                        let (at, ar) = self.check_expr(arg, ctx);
+                        acc.add_row_acc(&ar);
+                        let expected = self.lower_type(&fty.clone(), &genv, &mut ctx.facts);
+                        self.expect_type(&expected, &at, arg.span(), "constructor field type mismatch");
+                    }
+                    return (Type::Sum(id, targs), acc);
                 }
             }
         }

@@ -351,8 +351,10 @@ impl Interp {
         if let Some(v) = env.get(name) {
             return Ok(v);
         }
-        if name == "None" {
-            return Ok(Value::variant("None", vec![]));
+        // A nullary variant constructor as a value (`None`, a user enum's `Red`, prelude `NotFound`).
+        // The checker has already resolved it, so a capitalized unbound name is a nullary variant.
+        if name.chars().next().is_some_and(char::is_uppercase) {
+            return Ok(Value::variant(name, vec![]));
         }
         Err(Escape::Fault(Fault::at("DL0907", format!("unbound name `{name}`"), span)))
     }
@@ -377,6 +379,11 @@ impl Interp {
                 // A user function.
                 if self.funcs.contains_key(name) {
                     return self.call_fn(name, argvals);
+                }
+                // A variant constructor with fields (`Say(x)`, `Other(m)`, …) — capitalized, and not
+                // a builtin/closure/fn. The checker has already validated it.
+                if name.chars().next().is_some_and(char::is_uppercase) {
+                    return Ok(Value::variant(name, argvals));
                 }
             }
         }

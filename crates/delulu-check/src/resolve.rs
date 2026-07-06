@@ -71,6 +71,25 @@ impl DeclTable {
     pub fn net_err(&self) -> TypeDefId {
         self.type_ix["NetErr"]
     }
+
+    /// Resolve a bare constructor name to the UNIQUE sum type that declares it, with the variant's
+    /// declared field types. `None` if no sum type has the constructor, or if more than one does —
+    /// e.g. `Other` is a variant of both `IoErr` and `NetErr`, so bare `Other(..)` is ambiguous and
+    /// must be disambiguated by the expected type (a later refinement), not synthesised here.
+    pub fn variant_ctor(&self, ctor: &str) -> Option<(TypeDefId, Vec<TypeExpr>)> {
+        let mut found: Option<(TypeDefId, Vec<TypeExpr>)> = None;
+        for (i, def) in self.types.iter().enumerate() {
+            if let TypeDefKind::Sum(variants) = &def.kind {
+                if let Some((_, fields)) = variants.iter().find(|(n, _)| n == ctor) {
+                    if found.is_some() {
+                        return None; // ambiguous across sum types
+                    }
+                    found = Some((TypeDefId(i as u32), fields.clone()));
+                }
+            }
+        }
+        found
+    }
 }
 
 /// Build the declaration table (with prelude types) and collect resolution diagnostics.

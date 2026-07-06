@@ -1,0 +1,21 @@
+module conf
+
+// Stage-1 gap closed: user-declared sum-type variants are now constructible in source (not only
+// matchable). Nullary (`Point`) and payload-carrying (`Circle(r)`) constructors both resolve.
+type Shape = Circle(Int) | Square(Int) | Point
+
+fn area(s: Shape) -> Int {
+  match s {
+    Circle(r) => r * r * 3,
+    Square(w) => w * w,
+    Point => 0
+  }
+}
+
+fn make(kind: Int, size: Int) -> Shape {
+  if kind == 0 { Circle(size) } else { if kind == 1 { Square(size) } else { Point } }
+}
+
+fn areas_sum() -> Int {
+  area(make(0, 2)) + area(make(1, 3)) + area(Point)
+}
