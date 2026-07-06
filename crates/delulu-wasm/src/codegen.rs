@@ -13,6 +13,9 @@
 //! Phase 3j (`str(Int)`): the `str` builtin on an `Int` compiles to a synthetic `__int_to_str`
 //! helper that formats the integer as decimal into the bump heap (matching `i64::to_string`,
 //! `i64::MIN` included); `str` on a `Str` is the identity.
+//! Phase 3k (`Cap[Clock]`): `root.clock()` and `clk.now_ms()` compile to the `delulu:cap` host
+//! imports `root_clock`/`clock_now_ms`; the clock is read host-side (fixed under `--clock fixed:MS`
+//! for deterministic replay, else the wall clock), so a fixed clock gives byte-identical output.
 //!
 //! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
@@ -45,24 +48,29 @@ impl CompileError {
 /// or arithmetic on a capability. `Unit` occupies zero stack slots.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
-    I64,  // Int
-    I32,  // Bool
-    Str,  // i32 pointer into linear memory
-    Cap,  // i32 host handle (Console only, Phase 3b)
-    Root, // i32 host handle to the root authority (Phase 3e)
-    Unit, // no value
+    I64,   // Int
+    I32,   // Bool
+    Str,   // i32 pointer into linear memory
+    Cap,   // i32 host handle (Console)
+    Clock, // i32 host handle (Clock, Phase 3k)
+    Root,  // i32 host handle to the root authority (Phase 3e)
+    Unit,  // no value
 }
 
-/// Host import indices when the module uses the console. `root.console()` mints a Console handle;
-/// `console.println(str)` performs the Write.
-const ROOT_CONSOLE: u32 = 0;
-const CONSOLE_PRINTLN: u32 = 1;
-const N_CONSOLE_IMPORTS: u32 = 2;
+/// Host import function indices for the module (only the ones the module actually imports are
+/// meaningful; codegen only reads an index after detecting the corresponding construct).
+#[derive(Clone, Copy)]
+struct Imports {
+    root_console: u32,
+    console_println: u32,
+    root_clock: u32,
+    clock_now_ms: u32,
+}
 
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Root => Some(ValType::I32),
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Root => Some(ValType::I32),
         Ty::Unit => None,
     }
 }
@@ -73,11 +81,15 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
             let name = path.segs[0].name.as_str();
             if name == "Cap" {
                 if let [TypeExpr::Named { path: rp, args: ra, .. }] = &args[..] {
-                    if ra.is_empty() && rp.segs.len() == 1 && rp.segs[0].name == "Console" {
-                        return Some(Ty::Cap);
+                    if ra.is_empty() && rp.segs.len() == 1 {
+                        return match rp.segs[0].name.as_str() {
+                            "Console" => Some(Ty::Cap),
+                            "Clock" => Some(Ty::Clock),
+                            _ => None,
+                        };
                     }
                 }
-                return None; // other capability kinds are Phase 3b+
+                return None; // other capability kinds are later phases
             }
             if args.is_empty() {
                 return match name {
@@ -107,43 +119,44 @@ fn is_compilable(f: &FnDecl) -> bool {
         && ret_ty(f).is_some()
 }
 
-/// Does the module perform console output (so it needs the host import)?
-pub fn uses_console(module: &Module) -> bool {
-    module.items.iter().any(|it| {
-        if let Item::Fn(f) = it {
-            is_compilable(f) && block_uses_console(&f.body)
-        } else {
-            false
-        }
-    })
-}
-
-fn block_uses_console(b: &Block) -> bool {
-    b.stmts.iter().any(|s| match s {
-        Stmt::Let { value, .. } | Stmt::Assign { value, .. } => expr_uses_console(value),
-        Stmt::While { cond, body, .. } => expr_uses_console(cond) || block_uses_console(body),
-        Stmt::Return { value: Some(e), .. } => expr_uses_console(e),
-        Stmt::Return { value: None, .. } => false,
-        Stmt::Expr(e) => expr_uses_console(e),
-    })
-}
-
-fn expr_uses_console(e: &Expr) -> bool {
-    match e {
-        Expr::Method { name, recv, args, .. } => {
-            (name.name == "println" || name.name == "console")
-                || expr_uses_console(recv)
-                || args.iter().any(expr_uses_console)
-        }
-        Expr::Call { callee, args, .. } => expr_uses_console(callee) || args.iter().any(expr_uses_console),
-        Expr::Binary { lhs, rhs, .. } => expr_uses_console(lhs) || expr_uses_console(rhs),
-        Expr::Unary { operand, .. } => expr_uses_console(operand),
-        Expr::If { cond, then_, else_, .. } => {
-            expr_uses_console(cond) || block_uses_console(then_) || else_.as_ref().is_some_and(|e| expr_uses_console(e))
-        }
-        Expr::Block(b) => block_uses_console(b),
-        _ => false,
+/// Does any compilable function call a method whose name is in `names`? Used to decide which host
+/// imports the module needs (`console`/`println` → the console imports; `clock`/`now_ms` → clock).
+fn module_calls_method(module: &Module, names: &[&str]) -> bool {
+    fn in_block(b: &Block, names: &[&str]) -> bool {
+        b.stmts.iter().any(|s| match s {
+            Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
+            Stmt::While { cond, body, .. } => in_expr(cond, names) || in_block(body, names),
+            Stmt::Return { value: Some(e), .. } => in_expr(e, names),
+            Stmt::Return { value: None, .. } => false,
+            Stmt::Expr(e) => in_expr(e, names),
+        })
     }
+    fn in_expr(e: &Expr, names: &[&str]) -> bool {
+        match e {
+            Expr::Method { name, recv, args, .. } => {
+                names.contains(&name.name.as_str()) || in_expr(recv, names) || args.iter().any(|a| in_expr(a, names))
+            }
+            Expr::Call { callee, args, .. } => in_expr(callee, names) || args.iter().any(|a| in_expr(a, names)),
+            Expr::Binary { lhs, rhs, .. } => in_expr(lhs, names) || in_expr(rhs, names),
+            Expr::Unary { operand, .. } => in_expr(operand, names),
+            Expr::If { cond, then_, else_, .. } => {
+                in_expr(cond, names) || in_block(then_, names) || else_.as_ref().is_some_and(|e| in_expr(e, names))
+            }
+            Expr::Block(b) => in_block(b, names),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|it| matches!(it, Item::Fn(f) if is_compilable(f) && in_block(&f.body, names)))
+}
+
+/// Does the module perform console output (so it needs the console host imports)?
+pub fn uses_console(module: &Module) -> bool {
+    module_calls_method(module, &["console", "println"])
+}
+
+/// Does the module read the clock (so it needs the clock host imports)?
+fn uses_clock(module: &Module) -> bool {
+    module_calls_method(module, &["clock", "now_ms"])
 }
 
 /// Compile a checked module's compilable functions to a WASM module exporting each by name.
@@ -156,9 +169,24 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         .collect();
 
     let needs_console = uses_console(module);
-    let n_imports: u32 = if needs_console { N_CONSOLE_IMPORTS } else { 0 };
+    let needs_clock = uses_clock(module);
+
+    // Assign imported-function indices in a fixed order (console pair, then clock pair). Only the
+    // present ones consume indices; the rest are left as sentinels codegen never reads.
+    let mut n_imports = 0u32;
+    let mut imp = Imports { root_console: u32::MAX, console_println: u32::MAX, root_clock: u32::MAX, clock_now_ms: u32::MAX };
+    if needs_console {
+        imp.root_console = n_imports;
+        imp.console_println = n_imports + 1;
+        n_imports += 2;
+    }
+    if needs_clock {
+        imp.root_clock = n_imports;
+        imp.clock_now_ms = n_imports + 1;
+        n_imports += 2;
+    }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
-    // The `__concat` helper follows the arithmetic helpers; user functions start after it.
+    // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
 
     // Collect string literals into a length-prefixed linear-memory image.
@@ -174,12 +202,26 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         index.insert(f.name.name.clone(), (user_base + i as u32, ret_ty(f).unwrap()));
     }
 
-    // Types: [console import type?], the shared helper type (i64,i64)->i64, then each user fn's.
+    // Types: [import types...], the shared helper type (i64,i64)->i64, the string helpers, each user
+    // fn's. Import types are emitted in the same fixed order the indices were assigned above.
     let mut types = TypeSection::new();
     let mut next_type = 0u32;
+    let mut console_root_ty = 0;
+    let mut console_println_ty = 0;
     if needs_console {
-        types.ty().function([ValType::I32], [ValType::I32]); // type 0: root_console(root) -> cap
-        types.ty().function([ValType::I32, ValType::I32], []); // type 1: console_println(cap, ptr)
+        console_root_ty = next_type;
+        types.ty().function([ValType::I32], [ValType::I32]); // root_console(root) -> cap
+        console_println_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I32], []); // console_println(cap, ptr)
+        next_type += 2;
+    }
+    let mut clock_root_ty = 0;
+    let mut clock_now_ty = 0;
+    if needs_clock {
+        clock_root_ty = next_type;
+        types.ty().function([ValType::I32], [ValType::I32]); // root_clock(root) -> cap
+        clock_now_ty = next_type + 1;
+        types.ty().function([ValType::I32], [ValType::I64]); // clock_now_ms(cap) -> i64
         next_type += 2;
     }
     let helper_type = next_type;
@@ -202,8 +244,12 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 
     let mut imports = ImportSection::new();
     if needs_console {
-        imports.import("delulu:cap", "root_console", EntityType::Function(0));
-        imports.import("delulu:cap", "console_println", EntityType::Function(1));
+        imports.import("delulu:cap", "root_console", EntityType::Function(console_root_ty));
+        imports.import("delulu:cap", "console_println", EntityType::Function(console_println_ty));
+    }
+    if needs_clock {
+        imports.import("delulu:cap", "root_clock", EntityType::Function(clock_root_ty));
+        imports.import("delulu:cap", "clock_now_ms", EntityType::Function(clock_now_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
@@ -247,7 +293,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&concat_fn(HEAP_GLOBAL));
     code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
-        code.function(&compile_fn(f, &index, &str_off, arith_base)?);
+        code.function(&compile_fn(f, &index, &str_off, arith_base, imp)?);
     }
 
     let mut datas = DataSection::new();
@@ -259,7 +305,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console {
+    if needs_console || needs_clock {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -363,6 +409,8 @@ struct Cx<'a> {
     concat_fn: u32,
     /// Function index of the `__int_to_str` helper (`str(Int)`).
     int_to_str_fn: u32,
+    /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
+    imp: Imports,
     instrs: Vec<Instruction<'static>>,
 }
 
@@ -381,7 +429,7 @@ impl<'a> Cx<'a> {
     }
 }
 
-fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>, arith_base: u32) -> Result<Function, CompileError> {
+fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(&p.ty).unwrap()));
@@ -395,6 +443,7 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
         arith_base,
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
+        imp,
         instrs: Vec::new(),
     };
     let ret = ret_ty(f).unwrap();
@@ -524,8 +573,17 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 if rt != Ty::Root {
                     return Err(CompileError::Unsupported("console() on a non-Root receiver".into()));
                 }
-                cx.emit(Instruction::Call(ROOT_CONSOLE));
+                cx.emit(Instruction::Call(cx.imp.root_console));
                 return Ok(Ty::Cap);
+            }
+            // Phase 3k: Root.clock() -> host import minting a Clock handle.
+            if name.name == "clock" && args.is_empty() {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Root {
+                    return Err(CompileError::Unsupported("clock() on a non-Root receiver".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.root_clock));
+                return Ok(Ty::Clock);
             }
             // Phase 3b: Cap[Console].println(str) -> host import; Unit result.
             if name.name == "println" && args.len() == 1 {
@@ -537,10 +595,19 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 if at != Ty::Str {
                     return Err(CompileError::Unsupported("println of a non-Str argument".into()));
                 }
-                cx.emit(Instruction::Call(CONSOLE_PRINTLN));
+                cx.emit(Instruction::Call(cx.imp.console_println));
                 return Ok(Ty::Unit);
             }
-            Err(CompileError::Unsupported(format!("the method `.{}` (Phase 3e)", name.name)))
+            // Phase 3k: Cap[Clock].now_ms() -> host import returning the (fixed or wall) clock as Int.
+            if name.name == "now_ms" && args.is_empty() {
+                let rt = compile_expr(recv, cx)?;
+                if rt != Ty::Clock {
+                    return Err(CompileError::Unsupported("now_ms() on a non-Clock receiver".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.clock_now_ms));
+                return Ok(Ty::I64);
+            }
+            Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
         Expr::Call { callee, args, .. } => {
             let name = match &**callee {
@@ -604,6 +671,8 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
         Expr::Block(b) => block_result_ty(b),
         Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
         Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
+        Expr::Method { name, .. } if name.name == "clock" => Ok(Ty::Clock),
+        Expr::Method { name, .. } if name.name == "now_ms" => Ok(Ty::I64),
         // `str(...)` always yields a Str — type it precisely so it can tail an `if` branch.
         Expr::Call { callee, .. }
             if matches!(&**callee, Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "str") =>

@@ -16,7 +16,7 @@ pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
 pub use codegen::{compile_module, uses_console, CompileError};
-pub use host::{run_console_fn, run_int_fn, run_main_console, WasmError};
+pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, HostConfig, WasmError};
 
 use delulu_syntax::ast::Module;
 
@@ -287,6 +287,55 @@ mod tests {
             fn label(n: Int) -> Str { \"n=\" + str(n) }\n\
             fn main(root: Root) ! {Write} { let out = root.console()\n out.println(label(-7) + \"!\") }\n";
         assert_eq!(main_console_parity(src), "n=-7!\n");
+    }
+
+    // ----- Phase 3k: Cap[Clock] (read host-side, deterministic under a fixed clock) ----------
+
+    /// Run a console+clock `main` on both engines under the same fixed clock; assert equal output.
+    fn main_clock_parity(src: &str, fixed_ms: i64) -> String {
+        use delulu_runtime::{set_capture, set_fixed_clock_ms, take_capture, Grants, Value};
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let wasm = compile_module(&checked.module).expect("compile");
+        let cfg = HostConfig { console: true, clock: true, fixed_clock_ms: Some(fixed_ms) };
+        let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
+
+        set_capture(true);
+        set_fixed_clock_ms(Some(fixed_ms));
+        let mut g = Grants::default();
+        g.console = true;
+        g.clock = true;
+        let interp = Interp::new(&checked.module);
+        interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
+        let interp_out = take_capture().expect("capture on");
+        set_fixed_clock_ms(None);
+
+        assert_eq!(wasm_out, interp_out, "wasm/interpreter output must match under a fixed clock for:\n{src}");
+        wasm_out
+    }
+
+    #[test]
+    fn clock_now_ms_matches_the_interpreter_under_fixed_clock() {
+        let src = "module m\nfn main(root: Root) ! {Write, Clock} { let out = root.console()\n let c = root.clock()\n out.println(str(c.now_ms())) }\n";
+        assert_eq!(main_clock_parity(src, 1_700_000_000_123), "1700000000123\n");
+    }
+
+    #[test]
+    fn clock_composes_with_str_and_concat() {
+        let src = "module m\nfn main(root: Root) ! {Write, Clock} { let out = root.console()\n let c = root.clock()\n out.println(\"t=\" + str(c.now_ms())) }\n";
+        assert_eq!(main_clock_parity(src, 42), "t=42\n");
+    }
+
+    #[test]
+    fn clock_is_refused_on_wasm_when_not_granted() {
+        // root.clock() with no clock grant is refused host-side (DL0703), like an ungranted console.
+        let src = "module m\nfn main(root: Root) ! {Clock} { let c = root.clock()\n let _t = c.now_ms() }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let cfg = HostConfig { console: false, clock: false, fixed_clock_ms: None };
+        assert!(run_main(&wasm, &cfg).is_err(), "an ungranted clock must be refused host-side");
     }
 
     #[test]

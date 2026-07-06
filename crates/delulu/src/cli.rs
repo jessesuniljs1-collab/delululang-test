@@ -1019,7 +1019,8 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
     }
 
-    match delulu_wasm::run_main_console(&artifact.wasm, grants.console) {
+    let cfg = delulu_wasm::HostConfig { console: grants.console, clock: grants.clock, fixed_clock_ms: opts.clock_ms };
+    match delulu_wasm::run_main(&artifact.wasm, &cfg) {
         Ok(output) => {
             print!("{output}");
             0
@@ -1093,7 +1094,8 @@ fn cmd_run(rest: &[String]) -> i32 {
                 return 1;
             }
         };
-        return match delulu_wasm::run_main_console(&wasm, grants.console) {
+        let cfg = delulu_wasm::HostConfig { console: grants.console, clock: grants.clock, fixed_clock_ms: opts.clock_ms };
+        return match delulu_wasm::run_main(&wasm, &cfg) {
             Ok(output) => {
                 print!("{output}");
                 0

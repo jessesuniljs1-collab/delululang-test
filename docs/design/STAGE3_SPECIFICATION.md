@@ -389,9 +389,23 @@ trivia in `Lexer::new` rather than rejected with DL0101 — Windows editors and 
 `Set-Content -Encoding utf8` prepend one constantly. Only a *leading* BOM is trivia; a U+FEFF
 elsewhere still lexes normally. Verified by a lexer test and end-to-end on a real BOM-prefixed file.
 
-Remaining Phase 3 increments: broader `delulu:cap` ops (fs/clock/rand) with host-side scope checks;
-secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9 criteria 1–3), the rest of
-the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
+**Phase 3k — `Cap[Clock]` in the WASM host — is implemented and green** (173 tests). `root.clock()`
+and `clk.now_ms()` now compile: `codegen.rs` gained a `Ty::Clock` handle and routes them to two new
+`delulu:cap` host imports, `root_clock` (mints a Clock handle host-side iff granted — DL0703 if not,
+like the console) and `clock_now_ms` (returns the clock as an `Int`). The clock is read **host-side**:
+`HostConfig.fixed_clock_ms` fixes it for deterministic replay (the same value the interpreter's
+`--clock fixed:MS` uses), else the wall clock — so under a fixed clock the two engines are byte-
+identical. The import-index scheme was generalised (a `module_calls_method` scan drives which of the
+console/clock import pairs the module declares; `Imports` carries the resolved indices through
+codegen), and the host runner became `run_main(wasm, &HostConfig{console, clock, fixed_clock_ms})`
+(`run_main_console` is now a thin wrapper). The CLI threads `grants.clock` + `--clock` into both
+`run --engine wasm` and `run <file>.dwx`. Three new parity tests (now_ms under a fixed clock,
+`"t=" + str(now_ms())` composing clock+str+concat, and an ungranted clock refused host-side);
+end-to-end `"now = " + str(c.now_ms())` prints identically on both engines under `--clock fixed:MS`.
+
+Remaining Phase 3 increments: `Cap[Rand]` and the filesystem `delulu:cap` ops (fs read/write) with
+host-side scope checks; secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9
+criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
