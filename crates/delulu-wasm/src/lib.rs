@@ -588,6 +588,35 @@ mod tests {
         assert!(run_main(&wasm, &HostConfig::default()).is_err(), "ungranted fs_read must be refused");
     }
 
+    // ----- Phase 3r: generics + non-capturing lambdas (via inlining) -------------------------
+
+    #[test]
+    fn generics_and_lambdas_match_the_interpreter() {
+        // A first-order generic (`id`), the flagship higher-order generic (`apply` with a lambda),
+        // and a doubly-applied higher-order generic (`twice`) — all reduce to inlined arithmetic.
+        let src = "module m\n\
+            fn id[T](x: T) -> T { x }\n\
+            fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e { f(x) }\n\
+            fn twice[T](f: fn(T) -> T, x: T) -> T { f(f(x)) }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 out.println(str(id(42)))\n\
+            \x20 out.println(str(apply(fn(x: Int) -> Int { x * 2 }, 21)))\n\
+            \x20 out.println(str(twice(fn(n: Int) -> Int { n + 3 }, 10))) }\n";
+        assert_eq!(main_console_parity(src), "42\n42\n16\n");
+    }
+
+    #[test]
+    fn generic_over_str_matches() {
+        // The same generic `id` instantiated at `Str` at one site and `Int` at another (per-site
+        // inlining is per-site monomorphization).
+        let src = "module m\n\
+            fn id[T](x: T) -> T { x }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 out.println(id(\"hello\"))\n\
+            \x20 out.println(str(id(7))) }\n";
+        assert_eq!(main_console_parity(src), "hello\n7\n");
+    }
+
     #[test]
     fn match_with_a_wildcard_arm_matches() {
         let src = "module m\n\

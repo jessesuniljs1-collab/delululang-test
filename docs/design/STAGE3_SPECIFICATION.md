@@ -517,6 +517,22 @@ agreed-Ok, 3592 both-faulted, **zero divergences**. It is `#[ignore]`d (the norm
 slowing everyday `cargo test`. This closes the last automatable Stage-3 acceptance criterion: the
 "two-engine parity is the correctness contract" thesis is now proven at scale.
 
+**Phase 3r — generics + non-capturing lambdas (via inlining) — is implemented and green** (200
+tests). Rather than a monomorphization/function-table pass, the backend **inlines**: a call to a
+generic user function or to a bound function value is compiled by evaluating value arguments into
+fresh locals, binding function-typed arguments as `Callable`s (owned clones of the lambda/AST), and
+compiling the body in a new frame — so `apply(fn(x) { x * 2 }, 21)` reduces to inlined arithmetic
+with no function table or `call_indirect`. Generic functions are kept out of the top-level export set
+and live in a `generics` map; a `callables` scope stack (with an inline-depth guard) holds
+function-value bindings. Per-site inlining is per-site monomorphization, so the same `id[T]`
+instantiates at `Str` and `Int` in one program. Covers the flagship higher-order row-polymorphic
+`apply[T,U,e]`, `twice` (double application), and first-order `id`. **Non-capturing** lambdas only;
+capturing lambdas / recursive generics fall back (DL1201). End-to-end, a program composing
+generics + a lambda + `fs.read_text → Result[Str, IoErr]` + nested `match` + console + `str` **builds
+to a single 1403-byte `.dwx`** and runs (`apply = 42` / the file content), authority re-verified —
+criterion 1 demonstrated for a representative program. (`demo.delulu` itself now compiles all the way
+to its `root.secret(...)` line, correctly stopping there as DL1205.)
+
 Remaining Phase 3 increment: only the scan-and-`expose`-then-appears form of the secret-hygiene test
 (§9.8), which needs secrets to be *representable* in the compiled fragment (a host-mediated secret
 design) — every other §9 criterion an automatable engine can meet is met. Not new language surface.

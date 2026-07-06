@@ -50,10 +50,23 @@ fn run_engine_wasm_ungranted_console_is_refused() {
 
 #[test]
 fn run_engine_wasm_on_unsupported_program_is_dl1201() {
-    // demo.delulu uses str()/string-concat/fs/match/secret — not compilable by the WASM backend,
-    // so it stays on the interpreter and `--engine wasm` reports DL1201 rather than misrunning it.
-    let o = delulu(&["run", "examples/demo.delulu", "--engine", "wasm", "--grant", "console", "--json"]);
+    // A `while` loop is outside the WASM fragment, so `--engine wasm` reports DL1201 and the program
+    // stays on the interpreter rather than being misrun.
+    let path = std::env::temp_dir().join(format!("delulu_while_{}.delulu", std::process::id()));
+    std::fs::write(&path, "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n let x = 0\n while x < 0 { }\n out.println(\"done\") }\n").expect("write");
+    let p = path.to_string_lossy().to_string();
+    let o = delulu(&["run", &p, "--engine", "wasm", "--grant", "console", "--json"]);
     assert!(stdout(&o).contains("DL1201"), "expected DL1201: {}", stdout(&o));
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn run_engine_wasm_on_demo_reports_dl1205_secret() {
+    // With generics/fs/Result/match all compiling now, demo.delulu gets all the way to its
+    // `root.secret("API_KEY")` line — which is DL1205 (secrets never enter a guest), keeping the
+    // program on the interpreter. (Progress marker: everything BEFORE the secret compiles.)
+    let o = delulu(&["run", "examples/demo.delulu", "--engine", "wasm", "--grant", "console", "--json"]);
+    assert!(stdout(&o).contains("DL1205"), "expected DL1205: {}", stdout(&o));
     assert_eq!(o.status.code(), Some(1));
 }
 

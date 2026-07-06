@@ -361,6 +361,17 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
     let env = build_enum_env(module);
 
+    // Generic user functions are not compiled as top-level exports; they are inlined (monomorphised)
+    // at each call site (Phase 3r). Collect them by name for the inliner.
+    let generics: HashMap<String, FnDecl> = module
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Item::Fn(f) if !f.generics.is_empty() => Some((f.name.name.clone(), f.clone())),
+            _ => None,
+        })
+        .collect();
+
     let fns: Vec<&FnDecl> = module
         .items
         .iter()
@@ -544,7 +555,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&concat_fn(HEAP_GLOBAL));
     code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
-        code.function(&compile_fn(f, &env, &index, &str_off, arith_base, imp)?);
+        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp)?);
     }
 
     let mut datas = DataSection::new();
@@ -655,14 +666,29 @@ const HEAP_PAGES: u64 = 16; // 1 MiB — no `memory.grow` yet, so this is the fi
 /// Index of the bump-heap pointer global (the module emits exactly one global).
 const HEAP_GLOBAL: u32 = 0;
 
+/// A function VALUE the backend inlines rather than represents at runtime: a lambda, or a generic
+/// function specialised at a call site. `params`/`body` are owned clones of the AST (Phase 3r).
+#[derive(Clone)]
+struct Callable {
+    params: Vec<Param>,
+    body: Block,
+}
+
 struct Cx<'a> {
     index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
     str_off: &'a HashMap<String, u32>,
     /// The module's named sum types (Phase 3o Checkpoint 3).
     env: &'a EnumEnv,
+    /// Generic user functions, inlined (monomorphised) at each call site (Phase 3r).
+    generics: &'a HashMap<String, FnDecl>,
     scopes: Vec<HashMap<String, (u32, Ty)>>,
+    /// Function-value bindings (lambdas / generic fn params of function type), a stack of frames
+    /// pushed at each inline boundary. A name is a local xor a callable.
+    callables: Vec<HashMap<String, Callable>>,
     extra_locals: Vec<ValType>,
     nparams: u32,
+    /// Recursion/blow-up guard for inlining.
+    inline_depth: u32,
     /// Function index of the first arithmetic helper (`__ovf_add`); the others follow.
     arith_base: u32,
     /// Function index of the `__concat` helper (`Str + Str`).
@@ -680,6 +706,9 @@ impl<'a> Cx<'a> {
     fn lookup(&self, name: &str) -> Option<(u32, Ty)> {
         self.scopes.iter().rev().find_map(|s| s.get(name).copied())
     }
+    fn lookup_callable(&self, name: &str) -> Option<Callable> {
+        self.callables.iter().rev().find_map(|s| s.get(name).cloned())
+    }
     fn alloc_local(&mut self, ty: Ty) -> Result<u32, CompileError> {
         let vt = wasm_valtype(ty).ok_or_else(|| CompileError::Unsupported("a `let` binding of type Unit".into()))?;
         let idx = self.nparams + self.extra_locals.len() as u32;
@@ -691,7 +720,7 @@ impl<'a> Cx<'a> {
     }
 }
 
-fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
+fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -701,9 +730,12 @@ fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, index: &'a HashMap<String, (u32,
         index,
         str_off,
         env,
+        generics,
         scopes: vec![params],
+        callables: vec![HashMap::new()],
         extra_locals: Vec::new(),
         nparams: f.params.len() as u32,
+        inline_depth: 0,
         arith_base,
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
@@ -754,6 +786,12 @@ fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<T
 fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
     match stmt {
         Stmt::Let { name, value, .. } => {
+            // Binding a lambda binds a function VALUE (inlined at its call sites), not a runtime local.
+            if let Expr::Lambda { params, body, .. } = value {
+                let c = Callable { params: params.clone(), body: body.clone() };
+                cx.callables.last_mut().unwrap().insert(name.name.clone(), c);
+                return Ok(Ty::Unit);
+            }
             let ty = compile_expr(value, cx)?;
             let idx = cx.alloc_local(ty)?;
             cx.emit(Instruction::LocalSet(idx));
@@ -1016,6 +1054,57 @@ fn compile_arm(arm: &Arm, payloads: &[Scalar], sp: u32, scrut_ty: Ty, cx: &mut C
     r
 }
 
+fn is_fn_type(t: &TypeExpr) -> bool {
+    matches!(t, TypeExpr::Fn { .. })
+}
+
+/// Resolve a function-typed argument to the `Callable` we will inline: a lambda literal, or a name
+/// already bound to a callable.
+fn resolve_callable(arg: &Expr, cx: &Cx) -> Result<Callable, CompileError> {
+    match arg {
+        Expr::Lambda { params, body, .. } => Ok(Callable { params: params.clone(), body: body.clone() }),
+        Expr::Var { path, .. } if path.segs.len() == 1 => cx
+            .lookup_callable(&path.segs[0].name)
+            .ok_or_else(|| CompileError::Unsupported(format!("`{}` is not a function value", path.dotted()))),
+        _ => Err(CompileError::Unsupported("a function argument that is not a lambda or function value".into())),
+    }
+}
+
+/// Inline (monomorphise) a call to a generic function or a function value: evaluate value arguments
+/// into fresh locals in the current scope, bind function-typed arguments as callables, then compile
+/// the body in a new frame. This is how the backend handles generics and non-capturing lambdas —
+/// `apply(fn(x) { x * 2 }, 21)` reduces to inlined arithmetic, no function table needed (Phase 3r).
+fn inline_call(params: &[Param], body: &Block, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.inline_depth >= 64 {
+        return Err(CompileError::Unsupported("inlining too deep (recursive generic or lambda?)".into()));
+    }
+    if params.len() != args.len() {
+        return Err(CompileError::Unsupported("an inlined call with the wrong number of arguments".into()));
+    }
+    // Evaluate args in the CURRENT scope: value args into fresh locals; function args to callables.
+    let mut local_binds: Vec<(String, u32, Ty)> = Vec::new();
+    let mut fn_binds: Vec<(String, Callable)> = Vec::new();
+    for (p, arg) in params.iter().zip(args) {
+        if is_fn_type(&p.ty) {
+            fn_binds.push((p.name.name.clone(), resolve_callable(arg, cx)?));
+        } else {
+            let ty = compile_expr(arg, cx)?;
+            let l = cx.alloc_local(ty)?;
+            cx.emit(Instruction::LocalSet(l));
+            local_binds.push((p.name.name.clone(), l, ty));
+        }
+    }
+    // Enter the inlined body with the parameters bound.
+    cx.inline_depth += 1;
+    cx.scopes.push(local_binds.into_iter().map(|(n, l, t)| (n, (l, t))).collect());
+    cx.callables.push(fn_binds.into_iter().collect());
+    let r = compile_block(body, cx);
+    cx.scopes.pop();
+    cx.callables.pop();
+    cx.inline_depth -= 1;
+    r
+}
+
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
     match e {
         Expr::Lit { kind, .. } => match kind {
@@ -1195,6 +1284,13 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     Ty::Str => Ok(Ty::Str), // str(<Str>) is the identity; the pointer is already on the stack
                     _ => Err(CompileError::Unsupported("str() of this type (only Int and Str compile so far)".into())),
                 };
+            }
+            // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
+            if let Some(c) = cx.lookup_callable(&name) {
+                return inline_call(&c.params, &c.body, args, cx);
+            }
+            if let Some(g) = cx.generics.get(&name).cloned() {
+                return inline_call(&g.params, &g.body, args, cx);
             }
             let (fidx, ptys, ret) = {
                 let e = cx
