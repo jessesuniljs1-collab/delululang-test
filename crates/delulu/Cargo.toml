@@ -13,4 +13,5 @@ delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
 delulu-runtime = { path = "../delulu-runtime" }
+delulu-wasm = { path = "../delulu-wasm" }
 serde_json = { workspace = true }

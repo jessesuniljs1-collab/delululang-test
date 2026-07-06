@@ -301,12 +301,26 @@ trapping from inside the callback), returning the captured output. The milestone
 interpreter's — a full program with capability threading, byte-identical across engines; an
 ungranted console is refused host-side.
 
-Remaining Phase 3 increments: wire `delulu run --engine wasm` + the `.dwx` artifact + `build
---target wasm` into the CLI + DL12xx (codegen/host ready via `compile_module`/`run_main_console`);
-concatenation + `Root`/`main` threading in WASM; broader `delulu:cap` ops (fs/clock/rand) with
-host-side scope checks; secrets-stay-host-side (§4.4); the **`.dwx` artifact** (§5) + `delulu build
---target wasm` / `run --engine wasm` + DL12xx registry; and full conformance parity (§9 criteria
-1–3), the hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
+**Phase 3f — `delulu run --engine wasm` reachable from the terminal — is implemented and green**
+(147 tests). The CLI (`crates/delulu/src/cli.rs`) gained an `--engine wasm` flag on `run`: after
+the checker passes and grants are resolved, it compiles the module via
+`delulu_wasm::compile_module` and runs `main` under `run_main_console(wasm, grants.console)`,
+printing the guest's captured output to stdout — byte-identical to the interpreter path. The
+DL12xx codes are registered (`crates/delulu-diag/src/codes.rs`): a construct the backend can't
+compile is reported as **DL1201** (with the repair "omit `--engine wasm` to run it on the
+interpreter") rather than silently misrun; a **denied root slice** (`root.console()` with no
+grant) surfaces as **DL0703**, and a use-site capability-scope failure as **DL0904**. The host
+now preserves the *first* refusal as the root cause (a later use-site error can't clobber a prior
+`root_console` denial). New example `examples/hello_wasm.delulu` and a new CLI integration test
+file `crates/delulu/tests/wasm_cli.rs` (4 tests) assert: the wasm engine prints the expected line,
+its output equals the interpreter's, an ungranted console is refused, and an unsupported program
+(`demo.delulu`) yields DL1201.
+
+Remaining Phase 3 increments: the **`.dwx` artifact** (§5, authority JSON as a wasm custom
+section) + `delulu build --target wasm` / `run <file.dwx>` + DL1202/DL1204; string concatenation
+in WASM; broader `delulu:cap` ops (fs/clock/rand) with host-side scope checks;
+secrets-stay-host-side (§4.4, DL1205); and full conformance parity (§9 criteria 1–3), the
+hostile-guest test (§9.4), and the secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

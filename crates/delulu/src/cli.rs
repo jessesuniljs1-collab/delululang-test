@@ -38,6 +38,8 @@ struct Opts {
     seed: Option<u64>,
     /// `--clock fixed:<ms>`: deterministic Cap[Clock] (spec §6.2).
     clock_ms: Option<i64>,
+    /// `--engine wasm|interp`: which execution engine `run` uses (default interp).
+    engine: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -55,6 +57,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         assert_trace: false,
         seed: None,
         clock_ms: None,
+        engine: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -99,6 +102,13 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     i += 1;
                 }
             }
+            "--engine" => {
+                if i + 1 < rest.len() {
+                    opts.engine = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--engine=") => opts.engine = Some(s["--engine=".len()..].to_string()),
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -153,6 +163,7 @@ fn usage() -> &'static str {
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -917,6 +928,33 @@ fn cmd_run(rest: &[String]) -> i32 {
             eprintln!("error: bad --grant: {e}");
             return 2;
         }
+    }
+
+    // WASM engine (spec §5.11 / Stage 3): compile `main` to WebAssembly and run it under the
+    // deny-by-default Wasmtime host, with the console capability minted and checked host-side.
+    // Constructs the backend can't compile are DL1201 — omit `--engine wasm` to use the interpreter.
+    if opts.engine.as_deref() == Some("wasm") {
+        let wasm = match delulu_wasm::compile_module(&checked.module) {
+            Ok(w) => w,
+            Err(e) => {
+                let d = Diagnostic::error("DL1201", format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
+                print_diagnostics("run", &[d], &map, None, opts.json);
+                return 1;
+            }
+        };
+        return match delulu_wasm::run_main_console(&wasm, grants.console) {
+            Ok(output) => {
+                print!("{output}");
+                0
+            }
+            Err(e) => {
+                let msg = e.message();
+                let code = if msg.contains("DL0703") { "DL0703" } else { "DL0904" };
+                let d = Diagnostic::error(code, format!("WASM engine: {msg}"));
+                print_diagnostics("run", &[d], &map, None, opts.json);
+                1
+            }
+        };
     }
 
     // Determinism knobs (spec §6.2).

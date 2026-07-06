@@ -1,0 +1,10 @@
+module hello
+
+// A minimal program the WASM backend can compile end to end: it derives a console capability
+// from root and writes a line. Run it on either engine:
+//   delulu run examples/hello_wasm.delulu --grant console
+//   delulu run examples/hello_wasm.delulu --engine wasm --grant console
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println("hello from the wasm engine")
+}

@@ -97,6 +97,13 @@ registry! {
     "DL1101" => "effect-trace assertion violation (a runtime effect not in the static row)",
     "DL1102" => "repair did not produce an accepting program (fuzz harness)",
 
+    // DL12xx — WASM backend / .dwx artifact (Stage 3)
+    "DL1201" => "construct not supported by the WASM backend (runs on the interpreter instead)",
+    "DL1202" => "artifact missing or invalid `delulu:authority` section",
+    "DL1204" => "delulu:cap interface version unsupported by this toolchain",
+    "DL1205" => "guest closure over secret contents in `--target wasm`",
+    "DL1206" => "engine parity self-check failure (compiler-bug class)",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",

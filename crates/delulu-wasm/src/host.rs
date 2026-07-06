@@ -72,6 +72,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
     let mut linker = Linker::new(engine);
     linker
         .func_wrap("delulu:cap", "root_console", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1; // a prior refusal already poisoned this run; don't overwrite its cause
+            }
             let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
             if !is_root {
                 caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
@@ -88,6 +91,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
         .func_wrap("delulu:cap", "console_println", |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32| {
+            if caller.data().refused.is_some() {
+                return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
+            }
             let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Console)).unwrap_or(false);
             if !ok {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
