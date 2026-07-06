@@ -62,7 +62,7 @@ fn everything_together_matches() {
         \x20 out.println(\"roll=\" + str(r.int(1, 7)))\n\
         \x20 out.println(\"roll=\" + str(r.int(1, 7)))\n\
         }\n";
-    let out = assert_parity(src, HostConfig { console: true, clock: true, rand: true, fixed_clock_ms: Some(1_700_000_000_000), rand_seed: Some(7) });
+    let out = assert_parity(src, HostConfig { console: true, clock: true, rand: true, fixed_clock_ms: Some(1_700_000_000_000), rand_seed: Some(7), ..HostConfig::default() });
     // Spot-check the deterministic parts (clock is fixed; fib(10) = 55).
     assert!(out.contains("fib=55"), "{out}");
     assert!(out.contains("t=1700000000000"), "{out}");

@@ -515,6 +515,79 @@ mod tests {
         assert_eq!(main_console_parity(src), "ok:found\nmissing\n");
     }
 
+    // ----- Phase 3p: the filesystem capability (host constructs Result[Str,IoErr] in guest mem) ---
+
+    #[test]
+    fn fs_read_text_matches_the_interpreter() {
+        use delulu_runtime::{set_capture, take_capture, Grants, Value};
+
+        let dir = std::env::temp_dir().join(format!("delulu_fs_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("greeting.txt"), "hello from fs").unwrap();
+        let dir_src = dir.to_string_lossy().replace('\\', "/"); // forward slashes for the string literal
+
+        let arm = "Err(e) => match e { NotFound => out.println(\"missing\"), Denied => out.println(\"denied\"), Other(m) => out.println(\"other: \" + m) }";
+        let src = format!(
+            "module m\nfn main(root: Root) ! {{Write, Read}} {{ let out = root.console()\n\
+             \x20 let fs = root.fs_read(\"{dir_src}\")\n\
+             \x20 match fs.read_text(\"greeting.txt\") {{ Ok(c) => out.println(\"got: \" + c), {arm} }}\n\
+             \x20 match fs.read_text(\"nope.txt\") {{ Ok(c) => out.println(\"got: \" + c), {arm} }} }}\n"
+        );
+
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+
+        let cfg = HostConfig { console: true, fs_read_roots: vec![dir.clone()], ..HostConfig::default() };
+        let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
+
+        set_capture(true);
+        let mut g = Grants::default();
+        g.console = true;
+        g.fs_read = vec![dir.to_string_lossy().to_string()];
+        let interp = Interp::new(&checked.module);
+        interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
+        let interp_out = take_capture().expect("capture");
+
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(wasm_out, interp_out, "fs read parity");
+        assert_eq!(wasm_out, "got: hello from fs\nmissing\n");
+    }
+
+    #[test]
+    fn fs_read_text_escape_is_refused_host_side() {
+        // A `..` path that leaves the granted subtree is a hard DL0904 refusal (not an Err), on wasm.
+        let dir = std::env::temp_dir().join(format!("delulu_fsesc_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir_src = dir.to_string_lossy().replace('\\', "/");
+        let src = format!(
+            "module m\nfn main(root: Root) ! {{Write, Read}} {{ let out = root.console()\n\
+             \x20 let fs = root.fs_read(\"{dir_src}\")\n\
+             \x20 match fs.read_text(\"../escape.txt\") {{ Ok(c) => out.println(c), Err(e) => match e {{ NotFound => out.println(\"missing\"), Denied => out.println(\"denied\"), Other(m) => out.println(m) }} }} }}\n"
+        );
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        let cfg = HostConfig { console: true, fs_read_roots: vec![dir.clone()], ..HostConfig::default() };
+        let r = run_main(&wasm, &cfg);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(r.is_err(), "a subtree escape must be refused host-side, got {r:?}");
+    }
+
+    #[test]
+    fn fs_read_is_refused_when_not_granted() {
+        let dir = std::env::temp_dir().join(format!("delulu_fsng_{}", std::process::id()));
+        let dir_src = dir.to_string_lossy().replace('\\', "/");
+        let src = format!(
+            "module m\nfn main(root: Root) ! {{Read}} {{ let fs = root.fs_read(\"{dir_src}\")\n let _r = fs.read_text(\"x.txt\") }}\n"
+        );
+        let checked = check_source(0, &src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+        // No fs_read_roots granted → root.fs_read is refused (DL0703).
+        assert!(run_main(&wasm, &HostConfig::default()).is_err(), "ungranted fs_read must be refused");
+    }
+
     #[test]
     fn match_with_a_wildcard_arm_matches() {
         let src = "module m\n\

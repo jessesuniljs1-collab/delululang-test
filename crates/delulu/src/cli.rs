@@ -1019,7 +1019,14 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
     }
 
-    let cfg = delulu_wasm::HostConfig { console: grants.console, clock: grants.clock, rand: grants.rand, fixed_clock_ms: opts.clock_ms, rand_seed: opts.seed };
+    let cfg = delulu_wasm::HostConfig {
+        console: grants.console,
+        clock: grants.clock,
+        rand: grants.rand,
+        fs_read_roots: grants.build_root().fs_read,
+        fixed_clock_ms: opts.clock_ms,
+        rand_seed: opts.seed,
+    };
     match delulu_wasm::run_main(&artifact.wasm, &cfg) {
         Ok(output) => {
             print!("{output}");
@@ -1094,7 +1101,14 @@ fn cmd_run(rest: &[String]) -> i32 {
                 return 1;
             }
         };
-        let cfg = delulu_wasm::HostConfig { console: grants.console, clock: grants.clock, rand: grants.rand, fixed_clock_ms: opts.clock_ms, rand_seed: opts.seed };
+        let cfg = delulu_wasm::HostConfig {
+            console: grants.console,
+            clock: grants.clock,
+            rand: grants.rand,
+            fs_read_roots: grants.build_root().fs_read,
+            fixed_clock_ms: opts.clock_ms,
+            rand_seed: opts.seed,
+        };
         return match delulu_wasm::run_main(&wasm, &cfg) {
             Ok(output) => {
                 print!("{output}");

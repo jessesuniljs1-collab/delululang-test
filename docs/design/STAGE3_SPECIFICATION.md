@@ -488,14 +488,28 @@ new parity tests (nullary `Color`, payload `Msg`, and the `Result[Str, IoErr]` w
 (`07_variant_construct.delulu`) constructs and matches a user `Shape`. End-to-end, `name(Green)` /
 `render(Say("hello"))` print identically on `--engine wasm` and the interpreter.
 
-**Checkpoint 4 remains**: the filesystem capability (`fs.read_text(path) → Result[Str, IoErr]`) — the
-host op that constructs the variant in guest memory with a path-subtree scope check, composing caps +
-`Result` + the `IoErr` enum + `match`.
+**Phase 3p — the filesystem capability (`Checkpoint 4`) — is implemented and green** (197 tests). The
+last big Stage-3 piece: `root.fs_read(path)` and `fs.read_text(rel)` compile to the `delulu:cap` host
+imports `root_fs_read`/`fs_read_text`. This is the first host op that **writes structured data into
+the guest's linear memory**: the guest bump-heap pointer is now an exported `__heap` global, and the
+host reads the file host-side then constructs the `Str` content cell and the `Result[Str, IoErr]`
+(and, on error, the `IoErr`) cells directly in guest memory — matching `codegen.rs`'s exact layout
+(`[tag][field]`, Result Ok=0/Err=1, IoErr NotFound=0/Denied=1/Other=2). Scope is enforced host-side
+with the interpreter's *exact* `normalize` (lexical `.`/`..` resolution): `root.fs_read(p)` mints a
+`Cap[FsRead]` scoped to `normalize(cwd/p)` iff within a granted subtree (else DL0703), and
+`read_text(rel)` resolves `normalize(scope/rel)` and refuses a subtree escape as a hard **DL0904**
+(not an `Err`). The io-error mapping matches the interpreter (`NotFound`/`Denied`/`Other(message)`).
+The CLI threads `--grant fs.read=<path>` (via `grants.build_root().fs_read`) into `run --engine wasm`
+and `run <file>.dwx`. Three tests: read parity (a temp file → `Ok(content)`, a missing file →
+`Err(NotFound)`, byte-identical to the interpreter), a `..` escape refused host-side (**§9.4(b)
+done**), and an ungranted `fs_read` refused (DL0703). End-to-end a `Result[Str, IoErr]`-returning
+`describe(fs.read_text(...))` prints identically on both engines. **Stage 3's compilable fragment now
+spans caps (console/clock/rand/fs) + `Str` + `Result`/`Option`/user enums + `match`/`?` + the `.dwx`
+artifact, all under two-engine parity.**
 
-Remaining Phase 3 increments: sum-type Checkpoints 3–4 (user enums, then the filesystem `delulu:cap`
-ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b — fs subtree
-escape); the secret-hygiene scan proper (§9.8, once secrets can be *represented* in the fragment);
-and the ≥50k both-engine fuzz gate (§9 criterion 9).
+Remaining Phase 3 increments: the secret-hygiene scan proper (§9.8, once secrets can be *represented*
+in the fragment) and the ≥50k both-engine fuzz gate (§9 criterion 9) — both refinements, not new
+language surface.
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
@@ -515,9 +529,10 @@ and the ≥50k both-engine fuzz gate (§9 criterion 9).
    cap. All refused host-side with correct DL09xx traces; no host panic.
    *(Partial — Phase 3h: (a) forged handle → DL0904, out-of-bounds pointer → DL0903, negative
    pointer doesn't abort the host, and importing an unprovided capability fails to instantiate, are
-   done in `crates/delulu-wasm/tests/hostile_guest.rs`. (d) is moot in a different way — Phase 3n:
-   secret bytes never reach a guest because secret-handling code doesn't compile to WASM (DL1205), so
-   there is no in-guest `secret-expose` to misuse. (b) subtree escape waits on the fs `delulu:cap` ops.)*
+   done in `crates/delulu-wasm/tests/hostile_guest.rs`. (b) fs subtree escape via `..` is refused
+   host-side as DL0904 — Phase 3p (`fs_read_text_escape_is_refused_host_side`). (d) is moot in a
+   different way — Phase 3n: secret bytes never reach a guest because secret-handling code doesn't
+   compile to WASM (DL1205), so there is no in-guest `secret-expose` to misuse.)*
 5. A `.dwx` with a stripped `delulu:authority` section refuses to run (DL1202).
 6. Grant flow on `.dwx` matches source-run behavior exactly (same prompts, same DL0701/DL0702).
 7. `delulu authority app.dwx` reports from the embedded section; grade flips

@@ -6,7 +6,25 @@
 //! exported linear memory. The guest never receives an OS handle — capabilities are opaque i32
 //! handles into the host's cap table (§4).
 
+use std::path::{Component, Path, PathBuf};
+
 use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, Val};
+
+/// Lexically normalize a path (resolve `.`/`..` without touching the filesystem) — the EXACT
+/// algorithm the interpreter uses (`prim.rs::normalize`), so scope checks agree across engines.
+fn normalize(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in p.components() {
+        match comp {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
 
 #[derive(Clone, Debug)]
 pub enum WasmError {
@@ -48,12 +66,14 @@ pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmErro
 
 /// The host's capability table. A handle is an index into `caps`; index 0 is conventionally the
 /// root (for `main`) or a directly-granted Console (for a bare cap function).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum CapKind {
     Root,
     Console,
     Clock,
     Rand,
+    /// A filesystem-read capability scoped to an absolute, normalized subtree (§4).
+    FsRead(PathBuf),
 }
 
 struct HostState {
@@ -64,6 +84,9 @@ struct HostState {
     clock_granted: bool,
     /// Whether the rand capability was granted.
     rand_granted: bool,
+    /// Granted filesystem-read subtrees (absolute, normalized). `root.fs_read(p)` succeeds iff `p`
+    /// resolves within one of these.
+    fs_read_roots: Vec<PathBuf>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     fixed_clock_ms: Option<i64>,
     /// The xorshift64 PRNG state for `Cap[Rand]` — seeded identically to the interpreter's so seeded
@@ -104,6 +127,77 @@ fn seed_rng(seed: Option<u64>) -> u64 {
             .unwrap_or(0x9E37_79B9)
             | 1,
     }
+}
+
+// ----- guest-memory helpers (the host reads/writes the guest's linear memory) ----------------
+//
+// For the filesystem cap the host must *write* structured data into guest memory (the file content
+// string, and the `Result[Str, IoErr]` cells that wrap it) and bump the guest's bump-heap pointer —
+// the exported `__heap` global. The cell layout MUST match `codegen.rs` exactly:
+//   Str:    `[len:u32-le][bytes]`
+//   variant `[tag:i32-le @0][field @4]` (8-byte field slot; cell 12 bytes)
+//   Result tags: Ok=0, Err=1.   IoErr tags: NotFound=0, Denied=1, Other=2.
+
+/// Read a length-prefixed guest string at `ptr`; `None` if it is out of bounds.
+fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String> {
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+    let data = mem.data(&caller);
+    let p = ptr as u32 as usize;
+    let hend = p.checked_add(4).filter(|&e| e <= data.len())?;
+    let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
+    let bend = hend.checked_add(len).filter(|&e| e <= data.len())?;
+    Some(String::from_utf8_lossy(&data[hend..bend]).to_string())
+}
+
+/// Bump-allocate `n` bytes in the guest heap (via the `__heap` global); returns the old pointer.
+fn guest_alloc(caller: &mut Caller<'_, HostState>, n: i32) -> Result<i32, ()> {
+    let g = caller.get_export("__heap").and_then(|e| e.into_global()).ok_or(())?;
+    let base = match g.get(&mut *caller) {
+        Val::I32(v) => v,
+        _ => return Err(()),
+    };
+    g.set(&mut *caller, Val::I32(base + n)).map_err(|_| ())?;
+    Ok(base)
+}
+
+fn guest_write(caller: &mut Caller<'_, HostState>, ptr: i32, bytes: &[u8]) -> Result<(), ()> {
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory()).ok_or(())?;
+    mem.write(&mut *caller, ptr as u32 as usize, bytes).map_err(|_| ())
+}
+
+/// Write a `[len][bytes]` string cell; returns its pointer.
+fn write_str_cell(caller: &mut Caller<'_, HostState>, s: &str) -> Result<i32, ()> {
+    let ptr = guest_alloc(caller, 4 + s.len() as i32)?;
+    guest_write(caller, ptr, &(s.len() as u32).to_le_bytes())?;
+    guest_write(caller, ptr + 4, s.as_bytes())?;
+    Ok(ptr)
+}
+
+/// Write a `[tag][field]` variant cell (12 bytes); `field` is an i32 payload pointer, if any.
+fn write_variant_cell(caller: &mut Caller<'_, HostState>, tag: i32, field: Option<i32>) -> Result<i32, ()> {
+    let ptr = guest_alloc(caller, 12)?;
+    guest_write(caller, ptr, &tag.to_le_bytes())?;
+    if let Some(f) = field {
+        guest_write(caller, ptr + 4, &f.to_le_bytes())?;
+    }
+    Ok(ptr)
+}
+
+/// Build an `Ok(content)` : `Result[Str, IoErr]` in guest memory; returns its pointer.
+fn build_ok_str(caller: &mut Caller<'_, HostState>, content: &str) -> Result<i32, ()> {
+    let s = write_str_cell(caller, content)?;
+    write_variant_cell(caller, 0, Some(s)) // Ok
+}
+
+/// Build an `Err(<IoErr>)` : `Result[Str, IoErr]` in guest memory (`io_tag`: NotFound=0/Denied=1/
+/// Other=2; `other_msg` is the `Other(Str)` payload).
+fn build_err_ioerr(caller: &mut Caller<'_, HostState>, io_tag: i32, other_msg: Option<&str>) -> Result<i32, ()> {
+    let field = match other_msg {
+        Some(m) => Some(write_str_cell(caller, m)?),
+        None => None,
+    };
+    let io = write_variant_cell(caller, io_tag, field)?;
+    write_variant_cell(caller, 1, Some(io)) // Err(io)
 }
 
 /// Build the `delulu:cap` host import world: `root_console` mints a Console handle from the root
@@ -249,6 +343,77 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             lo.wrapping_add((x % span) as i64)
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:cap", "root_fs_read", |mut caller: Caller<'_, HostState>, root: i32, path_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            let Some(path) = read_guest_str(&mut caller, path_ptr) else {
+                caller.data_mut().refused = Some("DL0903: fs_read path pointer is out of bounds".into());
+                return -1;
+            };
+            // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
+            // granted subtree (§4 / prim.rs::fs_read).
+            let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
+            let granted = caller.data().fs_read_roots.iter().any(|g| want.starts_with(g));
+            if !granted {
+                caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted"));
+                return -1;
+            }
+            let st = caller.data_mut();
+            st.caps.push(CapKind::FsRead(want));
+            (st.caps.len() - 1) as i32
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap("delulu:cap", "fs_read_text", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let scope = match caller.data().caps.get(cap as usize) {
+                Some(CapKind::FsRead(scope)) => scope.clone(),
+                _ => {
+                    caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted FsRead capability"));
+                    return 0;
+                }
+            };
+            let Some(rel) = read_guest_str(&mut caller, path_ptr) else {
+                caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
+                return 0;
+            };
+            // Resolve within scope; a `..`/symlink escape is a hard DL0904 refusal, not an `Err`.
+            let resolved = normalize(&scope.join(&rel));
+            if !resolved.starts_with(&scope) {
+                caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
+                return 0;
+            }
+            // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
+            // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
+            let built = match std::fs::read_to_string(&resolved) {
+                Ok(content) => build_ok_str(&mut caller, &content),
+                Err(e) => {
+                    use std::io::ErrorKind::*;
+                    match e.kind() {
+                        NotFound => build_err_ioerr(&mut caller, 0, None),
+                        PermissionDenied => build_err_ioerr(&mut caller, 1, None),
+                        _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
+                    }
+                }
+            };
+            match built {
+                Ok(ptr) => ptr,
+                Err(()) => {
+                    caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     Ok(linker)
 }
 
@@ -272,6 +437,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         console_granted: true,
         clock_granted: false,
         rand_granted: false,
+        fs_read_roots: Vec::new(),
         fixed_clock_ms: None,
         rng: seed_rng(None),
         output: String::new(),
@@ -287,11 +453,14 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
 
 /// Grants and determinism for running `main` under the host (the run-time authority a `--grant`/
 /// `--clock`/`--seed` flow resolves to).
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 pub struct HostConfig {
     pub console: bool,
     pub clock: bool,
     pub rand: bool,
+    /// Granted filesystem-read subtrees (absolute, normalized — the same the interpreter's
+    /// `granted_root` produces). `root.fs_read(p)` succeeds iff `p` resolves within one.
+    pub fs_read_roots: Vec<PathBuf>,
     /// `Some(ms)` fixes `Cap[Clock].now_ms()` for deterministic replay (spec §6.2); `None` = wall clock.
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.
@@ -309,6 +478,7 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
         console_granted: cfg.console,
         clock_granted: cfg.clock,
         rand_granted: cfg.rand,
+        fs_read_roots: cfg.fs_read_roots.clone(),
         fixed_clock_ms: cfg.fixed_clock_ms,
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),

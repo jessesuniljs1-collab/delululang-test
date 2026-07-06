@@ -23,6 +23,9 @@
 //! Phase 3o (sum types): `Result[T,E]`/`Option[T]` with scalar payloads compile to heap `[tag][field]`
 //! cells; `Ok`/`Err`/`Some`/`None` construct them (expected-type-directed, since the backend does no
 //! inference), and `match` lowers to a tag test with typed field binding.
+//! Phase 3p (filesystem cap): `root.fs_read(path)` and `fs.read_text(rel)` compile to the `delulu:cap`
+//! imports `root_fs_read`/`fs_read_text`; the host performs the scoped read and CONSTRUCTS the
+//! `Result[Str, IoErr]` cells in guest memory (the guest heap `__heap` global is exported for it).
 //!
 //! Constructs outside this fragment (`while`, foreign, GC types, user enums) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
@@ -74,11 +77,12 @@ enum Ty {
     I64,   // Int
     I32,   // Bool
     Str,   // i32 pointer into linear memory
-    Cap,   // i32 host handle (Console)
-    Clock, // i32 host handle (Clock, Phase 3k)
-    Rand,  // i32 host handle (Rand, Phase 3l)
-    Root,  // i32 host handle to the root authority (Phase 3e)
-    Unit,  // no value
+    Cap,    // i32 host handle (Console)
+    Clock,  // i32 host handle (Clock, Phase 3k)
+    Rand,   // i32 host handle (Rand, Phase 3l)
+    FsRead, // i32 host handle (Cap[FsRead], Phase 3p)
+    Root,   // i32 host handle to the root authority (Phase 3e)
+    Unit,   // no value
     // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field…]` in the heap.
     // `Result`/`Option` carry their payload scalars inline; user/prelude enums (Phase 3o Checkpoint 3)
     // are `Enum(id)` where `id` indexes the module's `EnumEnv` (so nested enums work — e.g. an
@@ -235,13 +239,15 @@ struct Imports {
     clock_now_ms: u32,
     root_rand: u32,
     rand_int: u32,
+    root_fs_read: u32,
+    fs_read_text: u32,
 }
 
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
         // Str/Cap/variant handles are all i32 (a pointer or a host handle).
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::FsRead | Ty::Root | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
             Some(ValType::I32)
         }
         Ty::Unit => None,
@@ -259,6 +265,7 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                             "Console" => Some(Ty::Cap),
                             "Clock" => Some(Ty::Clock),
                             "Rand" => Some(Ty::Rand),
+                            "FsRead" => Some(Ty::FsRead),
                             _ => None,
                         };
                     }
@@ -364,9 +371,10 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
+    let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text"]);
 
-    // Assign imported-function indices in a fixed order (console, then clock, then rand pairs). Only
-    // the present ones consume indices; the rest are left as sentinels codegen never reads.
+    // Assign imported-function indices in a fixed order (console, clock, rand, fs pairs). Only the
+    // present ones consume indices; the rest are left as sentinels codegen never reads.
     let mut n_imports = 0u32;
     let mut imp = Imports {
         root_console: u32::MAX,
@@ -375,6 +383,8 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         clock_now_ms: u32::MAX,
         root_rand: u32::MAX,
         rand_int: u32::MAX,
+        root_fs_read: u32::MAX,
+        fs_read_text: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -389,6 +399,11 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     if needs_rand {
         imp.root_rand = n_imports;
         imp.rand_int = n_imports + 1;
+        n_imports += 2;
+    }
+    if needs_fs {
+        imp.root_fs_read = n_imports;
+        imp.fs_read_text = n_imports + 1;
         n_imports += 2;
     }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
@@ -440,6 +455,15 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         types.ty().function([ValType::I32, ValType::I64, ValType::I64], [ValType::I64]); // rand_int(cap, lo, hi) -> i64
         next_type += 2;
     }
+    let mut fs_root_ty = 0;
+    let mut fs_read_ty = 0;
+    if needs_fs {
+        fs_root_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // root_fs_read(root, path) -> cap
+        fs_read_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // fs_read_text(cap, path) -> result_ptr
+        next_type += 2;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -471,6 +495,10 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         imports.import("delulu:cap", "root_rand", EntityType::Function(rand_root_ty));
         imports.import("delulu:cap", "rand_int", EntityType::Function(rand_int_ty));
     }
+    if needs_fs {
+        imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
+        imports.import("delulu:cap", "fs_read_text", EntityType::Function(fs_read_ty));
+    }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
     let mut funcsec = FunctionSection::new();
@@ -501,6 +529,9 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
 
     let mut exports = ExportSection::new();
     exports.export("memory", ExportKind::Memory, 0);
+    // Export the bump-heap pointer so the host can allocate in guest memory (the filesystem cap
+    // writes the file content + `Result[Str, IoErr]` cells into the guest heap — Phase 3p).
+    exports.export("__heap", ExportKind::Global, HEAP_GLOBAL);
     for (i, f) in fns.iter().enumerate() {
         exports.export(&f.name.name, ExportKind::Func, user_base + i as u32);
     }
@@ -525,7 +556,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand {
+    if needs_console || needs_clock || needs_rand || needs_fs {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -1110,6 +1141,32 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 }
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
+            }
+            // Phase 3p: Root.fs_read(path) -> host import minting a scoped FsRead handle.
+            if name.name == "fs_read" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("fs_read() on a non-Root receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("fs_read with a non-Str path".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.root_fs_read));
+                return Ok(Ty::FsRead);
+            }
+            // Phase 3p: Cap[FsRead].read_text(path) -> host import returning Result[Str, IoErr].
+            if name.name == "read_text" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::FsRead {
+                    return Err(CompileError::Unsupported("read_text() on a non-FsRead receiver".into()));
+                }
+                if compile_expr(&args[0], cx)? != Ty::Str {
+                    return Err(CompileError::Unsupported("read_text with a non-Str path".into()));
+                }
+                let io_err = cx
+                    .env
+                    .id("IoErr")
+                    .ok_or_else(|| CompileError::Unsupported("read_text without the IoErr prelude type".into()))?;
+                cx.emit(Instruction::Call(cx.imp.fs_read_text));
+                return Ok(Ty::Result(Scalar::Str, Scalar::Enum(io_err)));
             }
             // Phase 3n (secrets stay host-side, §4.4/DL1205): minting a secret (`root.secret(...)`) or
             // declassifying one (`secret.expose(...)`) would put secret bytes in guest linear memory.
