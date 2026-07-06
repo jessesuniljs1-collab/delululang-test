@@ -969,6 +969,19 @@ fn synth_single_program(checked: &Checked) -> Program {
 
 // ----- run -----------------------------------------------------------------
 
+/// Map a WASM host refusal message to the diagnostic code it carries. The host tags refusals with
+/// their code inline (DL0703 denied root slice, DL0903 out-of-bounds memory access); anything else
+/// is a capability-scope violation (DL0904).
+fn wasm_fault_code(msg: &str) -> &'static str {
+    if msg.contains("DL0703") {
+        "DL0703"
+    } else if msg.contains("DL0903") {
+        "DL0903"
+    } else {
+        "DL0904"
+    }
+}
+
 /// `run <file>.dwx`: re-verify a pre-built artifact's embedded `delulu:authority` manifest against
 /// its code (DL1202 on a missing/tampered section, DL1204 on an incompatible version), announce
 /// what it declares it can do, then run `main` under the deny-by-default Wasmtime host.
@@ -1013,8 +1026,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         }
         Err(e) => {
             let msg = e.message();
-            let code = if msg.contains("DL0703") { "DL0703" } else { "DL0904" };
-            let d = Diagnostic::error(code, format!("`{file}`: {msg}"));
+            let d = Diagnostic::error(wasm_fault_code(&msg), format!("`{file}`: {msg}"));
             print_diagnostics("run", &[d], &map, None, opts.json);
             1
         }
@@ -1088,8 +1100,7 @@ fn cmd_run(rest: &[String]) -> i32 {
             }
             Err(e) => {
                 let msg = e.message();
-                let code = if msg.contains("DL0703") { "DL0703" } else { "DL0904" };
-                let d = Diagnostic::error(code, format!("WASM engine: {msg}"));
+                let d = Diagnostic::error(wasm_fault_code(&msg), format!("WASM engine: {msg}"));
                 print_diagnostics("run", &[d], &map, None, opts.json);
                 1
             }

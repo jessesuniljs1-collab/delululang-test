@@ -105,17 +105,26 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             };
             let s = {
                 let data = mem.data(&caller);
-                let p = ptr as usize;
-                if p + 4 > data.len() {
-                    caller.data_mut().refused = Some("string header out of bounds".into());
-                    return;
-                }
+                // A wasm pointer is an UNSIGNED 32-bit offset; interpret it that way and use checked
+                // arithmetic so a hostile `ptr` (e.g. -1 / near u32::MAX) can never overflow `usize`
+                // and panic the host — a host panic inside a wasm callback would abort the process.
+                let p = ptr as u32 as usize;
+                let header_end = match p.checked_add(4) {
+                    Some(e) if e <= data.len() => e,
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0903: string header at {p} is out of bounds (memory is {} bytes)", data.len()));
+                        return;
+                    }
+                };
                 let len = u32::from_le_bytes([data[p], data[p + 1], data[p + 2], data[p + 3]]) as usize;
-                if p + 4 + len > data.len() {
-                    caller.data_mut().refused = Some("string body out of bounds".into());
-                    return;
-                }
-                String::from_utf8_lossy(&data[p + 4..p + 4 + len]).to_string()
+                let body_end = match header_end.checked_add(len) {
+                    Some(e) if e <= data.len() => e,
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0903: string of {len} bytes at {header_end} runs past the end of memory ({} bytes)", data.len()));
+                        return;
+                    }
+                };
+                String::from_utf8_lossy(&data[header_end..body_end]).to_string()
             };
             let out = &mut caller.data_mut().output;
             out.push_str(&s);

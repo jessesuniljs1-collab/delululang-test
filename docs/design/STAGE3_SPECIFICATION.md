@@ -341,10 +341,27 @@ via section-splice onto different code, missing section, non-wasm) + 4 CLI integ
 `wasm_cli.rs` (build→run matches the interpreter, ungranted console refused, a byte-flipped
 artifact is DL1202, a non-artifact `.dwx` is DL1202).
 
+**Phase 3h — the hostile-guest test (§9.4, first slice) — is implemented and green** (161 tests).
+New integration file `crates/delulu-wasm/tests/hostile_guest.rs` hand-crafts adversarial WASM the
+compiler never produced (via `wasm-encoder`) and proves the deny-by-default host holds against a
+guest that ignores the rules: (a) a **forged capability handle** (calling `console_println` with
+handle 999, absent from the cap table) is refused host-side as **DL0904** — the Write never
+happens; (b) an **out-of-bounds string pointer** (valid handle, `ptr` past the 64 KiB memory) is
+bounds-checked host-side and refused as **DL0903**, not read; (c) a **hugely negative pointer**
+(`ptr = -1`) is refused cleanly rather than overflowing `usize` and aborting the process; (d) a
+guest that **imports a capability the host does not provide** (`delulu:cap.fs_open`) cannot even
+instantiate (deny-by-default is a strict whitelist). A positive control (a well-formed hand-crafted
+guest) confirms the same runner *does* perform the effect, so the refusals are real. This slice
+hardened the host: `console_println` now treats the wasm pointer as an unsigned offset and uses
+checked arithmetic (a `ptr` near `u32::MAX` previously risked a debug-build overflow panic inside
+the callback — a process abort on Windows), and out-of-bounds refusals now carry DL0903 (the CLI's
+`wasm_fault_code` maps DL0703/DL0903/else-DL0904). Not yet covered by §9.4: filesystem-subtree
+escape via `..`/symlink and secret-expose misuse (those `delulu:cap` ops don't exist yet).
+
 Remaining Phase 3 increments: string concatenation in WASM; broader `delulu:cap` ops
 (fs/clock/rand) with host-side scope checks; secrets-stay-host-side (§4.4, DL1205); and full
-conformance parity (§9 criteria 1–3), the hostile-guest test (§9.4), and the secret-hygiene scan
-(§9.8).
+conformance parity (§9 criteria 1–3), the rest of the hostile-guest matrix (§9.4 b/d), and the
+secret-hygiene scan (§9.8).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
@@ -358,6 +375,10 @@ conformance parity (§9 criteria 1–3), the hostile-guest test (§9.4), and the
    cap externrefs from integers, (b) `fs-read-text` outside its granted subtree via `..` and
    symlink, (c) calling with a revoked grant id, (d) calling `secret-expose` with a non-declassify
    cap. All refused host-side with correct DL09xx traces; no host panic.
+   *(Partial — Phase 3h: (a) forged handle → DL0904, out-of-bounds pointer → DL0903, negative
+   pointer doesn't abort the host, and importing an unprovided capability fails to instantiate, are
+   done in `crates/delulu-wasm/tests/hostile_guest.rs`. (b) subtree escape and (d) secret-expose
+   misuse wait on the fs and secret `delulu:cap` ops.)*
 5. A `.dwx` with a stripped `delulu:authority` section refuses to run (DL1202).
 6. Grant flow on `.dwx` matches source-run behavior exactly (same prompts, same DL0701/DL0702).
 7. `delulu authority app.dwx` reports from the embedded section; grade flips
