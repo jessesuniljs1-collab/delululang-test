@@ -444,11 +444,26 @@ reports DL1205 (verified end-to-end); DL1205's registry title was broadened to m
 (a mint+expose program → DL1205, a mint-only program → DL1205, a secret-free positive control, and a
 CLI `run --engine wasm` DL1205 case).
 
-Remaining Phase 3 increments: the filesystem `delulu:cap` ops (fs read/write) with host-side subtree
-scope checks; the rest of the hostile-guest matrix (§9.4 b — fs subtree escape); the secret-hygiene
-scan proper (§9.8, once secrets can be *represented* in the fragment at all); and the ≥50k both-engine
-fuzz gate (§9 criterion 9). (`Result`/variant codegen is the prerequisite for the fs ops and for
-extending conformance parity to the full corpus.)
+**Phase 3o — sum types in the WASM backend (Checkpoint 1: `Result`/`Option` + `match`) — is
+implemented and green** (189 tests). The backend's thin `Ty` gained `Result(Scalar, Scalar)` and
+`Option(Scalar)` (payloads restricted to scalars — `Int`/`Bool`/`Str`/`Unit`, no nesting yet, keeping
+`Ty` `Copy`). A variant value is an i32 pointer to a heap `[tag:i32][field:i64]` cell (tag 0 =
+Ok/None, 1 = Err/Some). Because the backend does no inference, construction is **expected-type-
+directed**: a new `compile_expr_as`/`compile_block_as` threads the declared type into tail position,
+so `Ok(x)`/`Err(e)`/`Some(x)`/`None` learn their full `Result`/`Option` type from the function's
+return type (or a `match` scrutinee's known type). `match` lowers to a tag test (`i32.eqz`) with two
+arms and typed field binding (`Ok(v)` loads the payload at the arm's width into a fresh local);
+wildcard/`_` arms are supported. `match` on a non-variant (e.g. an `Int`) stays DL1201 (unchanged
+fallback). Three parity tests (Result construct+match with `Ok`/`Err` binding; Option with a nested
+expected-typed `if` and a `None` arm; a wildcard arm) — all byte-identical across engines; end-to-end
+a `checkdiv → Result[Int,Str]` program prints `result = 42` / `error: division by zero` identically on
+both engines. **Checkpoints 2–4 remain**: the `?` operator (early-return propagation), user-defined
+enums (for `IoErr`), then the filesystem capability that composes them.
+
+Remaining Phase 3 increments: sum-type Checkpoints 2–4 (`?`, user enums, then the filesystem
+`delulu:cap` ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b —
+fs subtree escape); the secret-hygiene scan proper (§9.8, once secrets can be *represented* in the
+fragment); and the ≥50k both-engine fuzz gate (§9 criterion 9).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

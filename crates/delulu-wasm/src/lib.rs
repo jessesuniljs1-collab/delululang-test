@@ -428,6 +428,40 @@ mod tests {
         assert!(compile_module(&checked.module).is_ok());
     }
 
+    // ----- Phase 3o: Result/Option construction + match (two-engine parity) ------------------
+
+    #[test]
+    fn result_construction_and_match_match_the_interpreter() {
+        // Result[Int, Str]: construct Ok/Err in a returning fn, match with typed payload binding.
+        let src = "module m\n\
+            fn checkdiv(a: Int, b: Int) -> Result[Int, Str] { if b == 0 { Err(\"div by zero\") } else { Ok(a / b) } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 match checkdiv(10, 2) { Ok(v) => out.println(\"ok: \" + str(v)), Err(e) => out.println(\"err: \" + e) }\n\
+            \x20 match checkdiv(10, 0) { Ok(v) => out.println(\"ok: \" + str(v)), Err(e) => out.println(\"err: \" + e) } }\n";
+        assert_eq!(main_console_parity(src), "ok: 5\nerr: div by zero\n");
+    }
+
+    #[test]
+    fn option_construction_and_match_match_the_interpreter() {
+        // Option[Int]: Some/None (including a nested expected-typed `if`) and a `None` arm.
+        let src = "module m\n\
+            fn first_pos(a: Int, b: Int) -> Option[Int] { if a > 0 { Some(a) } else { if b > 0 { Some(b) } else { None } } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 match first_pos(0, 5) { Some(v) => out.println(\"got \" + str(v)), None => out.println(\"none\") }\n\
+            \x20 match first_pos(0, 0) { Some(v) => out.println(\"got \" + str(v)), None => out.println(\"none\") } }\n";
+        assert_eq!(main_console_parity(src), "got 5\nnone\n");
+    }
+
+    #[test]
+    fn match_with_a_wildcard_arm_matches() {
+        let src = "module m\n\
+            fn check(n: Int) -> Result[Int, Str] { if n < 0 { Err(\"neg\") } else { Ok(n) } }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 match check(7) { Ok(v) => out.println(str(v)), _ => out.println(\"bad\") }\n\
+            \x20 match check(-1) { Ok(v) => out.println(str(v)), _ => out.println(\"bad\") } }\n";
+        assert_eq!(main_console_parity(src), "7\nbad\n");
+    }
+
     #[test]
     fn println_of_concatenation_is_compilable_now() {
         // The construct that was DL1201 in Phase 3b (`println` of a `Str + Str`) compiles in 3i.

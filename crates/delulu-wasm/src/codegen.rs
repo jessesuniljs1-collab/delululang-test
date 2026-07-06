@@ -20,7 +20,11 @@
 //! host runs the interpreter's exact xorshift64 PRNG, seeded via `--seed`, so seeded random
 //! sequences match byte-for-byte across engines.
 //!
-//! Constructs outside this fragment (other capabilities, `match`, `while`, foreign, GC types) are
+//! Phase 3o (sum types): `Result[T,E]`/`Option[T]` with scalar payloads compile to heap `[tag][field]`
+//! cells; `Ok`/`Err`/`Some`/`None` construct them (expected-type-directed, since the backend does no
+//! inference), and `match` lowers to a tag test with typed field binding.
+//!
+//! Constructs outside this fragment (`while`, foreign, GC types, user enums) are
 //! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
 //! engine. Secret-handling constructs (`root.secret(...)`, `Secret.expose(...)`) are refused as
 //! `CompileError::SecretInGuest` (DL1205, Phase 3n) so secret bytes never enter guest linear memory.
@@ -75,6 +79,41 @@ enum Ty {
     Rand,  // i32 host handle (Rand, Phase 3l)
     Root,  // i32 host handle to the root authority (Phase 3e)
     Unit,  // no value
+    // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field:i64]` in the heap
+    // (tag 0 = Ok/None, tag 1 = Err/Some). Payloads are restricted to `Scalar` (no nesting yet).
+    Result(Scalar, Scalar), // Ok(T), Err(E)
+    Option(Scalar),         // None, Some(T)
+}
+
+/// The payload types a variant field may hold (a `Copy` subset of `Ty`, so `Ty` stays `Copy`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Scalar {
+    I64,
+    I32,
+    Str,
+    Unit,
+}
+
+impl Scalar {
+    fn to_ty(self) -> Ty {
+        match self {
+            Scalar::I64 => Ty::I64,
+            Scalar::I32 => Ty::I32,
+            Scalar::Str => Ty::Str,
+            Scalar::Unit => Ty::Unit,
+        }
+    }
+}
+
+/// A payload-capable `Ty` narrows to a `Scalar`; caps/variants cannot be variant payloads yet.
+fn ty_to_scalar(t: Ty) -> Option<Scalar> {
+    match t {
+        Ty::I64 => Some(Scalar::I64),
+        Ty::I32 => Some(Scalar::I32),
+        Ty::Str => Some(Scalar::Str),
+        Ty::Unit => Some(Scalar::Unit),
+        _ => None,
+    }
 }
 
 /// Host import function indices for the module (only the ones the module actually imports are
@@ -92,7 +131,10 @@ struct Imports {
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root => Some(ValType::I32),
+        // Str/Cap/variant handles are all i32 (a pointer or a host handle).
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::Root | Ty::Result(..) | Ty::Option(..) => {
+            Some(ValType::I32)
+        }
         Ty::Unit => None,
     }
 }
@@ -113,6 +155,21 @@ fn wasm_ty(t: &TypeExpr) -> Option<Ty> {
                     }
                 }
                 return None; // other capability kinds are later phases
+            }
+            // Phase 3o: Result[T, E] and Option[T] with scalar payloads.
+            if name == "Result" {
+                if let [t, e] = &args[..] {
+                    let ts = ty_to_scalar(wasm_ty(t)?)?;
+                    let es = ty_to_scalar(wasm_ty(e)?)?;
+                    return Some(Ty::Result(ts, es));
+                }
+                return None;
+            }
+            if name == "Option" {
+                if let [t] = &args[..] {
+                    return Some(Ty::Option(ty_to_scalar(wasm_ty(t)?)?));
+                }
+                return None;
             }
             if args.is_empty() {
                 return match name {
@@ -421,6 +478,12 @@ fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec
                 collect_strings_expr(e, off, data);
             }
         }
+        Expr::Match { scrutinee, arms, .. } => {
+            collect_strings_expr(scrutinee, off, data);
+            for arm in arms {
+                collect_strings_expr(&arm.body, off, data);
+            }
+        }
         Expr::Block(b) => collect_strings_block(b, off, data),
         _ => {}
     }
@@ -466,6 +529,8 @@ struct Cx<'a> {
     int_to_str_fn: u32,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
+    /// The function's declared return type — the expected type for `return`/`?` (Phase 3o).
+    ret: Ty,
     instrs: Vec<Instruction<'static>>,
 }
 
@@ -489,6 +554,7 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(&p.ty).unwrap()));
     }
+    let ret = ret_ty(f).unwrap();
     let mut cx = Cx {
         index,
         str_off,
@@ -499,13 +565,12 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         imp,
+        ret,
         instrs: Vec::new(),
     };
-    let ret = ret_ty(f).unwrap();
-    let body_ty = compile_block(&f.body, &mut cx)?;
-    if body_ty != ret {
-        return Err(CompileError::Unsupported("a body whose value type differs from the return type".into()));
-    }
+    // Compile the body expecting the declared return type (expected-type-directed, so variant
+    // constructions in tail position know their full `Result`/`Option` type — Phase 3o).
+    compile_block_as(&f.body, &mut cx, ret)?;
     let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
     for ins in &cx.instrs {
         func.instruction(ins);
@@ -514,47 +579,278 @@ fn compile_fn(f: &FnDecl, index: &HashMap<String, (u32, Ty)>, str_off: &HashMap<
     Ok(func)
 }
 
+/// Synthesis: compile a block and report its tail value type.
 fn compile_block(b: &Block, cx: &mut Cx) -> Result<Ty, CompileError> {
+    compile_block_inner(b, cx, None)
+}
+
+/// Expected-type-directed: compile a block whose tail must produce `expected`.
+fn compile_block_as(b: &Block, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    compile_block_inner(b, cx, Some(expected)).map(|_| ())
+}
+
+fn compile_block_inner(b: &Block, cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
     cx.scopes.push(HashMap::new());
     let mut result = Ty::Unit;
     let n = b.stmts.len();
     for (i, stmt) in b.stmts.iter().enumerate() {
         let is_last = i + 1 == n;
-        match stmt {
-            Stmt::Let { name, value, .. } => {
-                let ty = compile_expr(value, cx)?;
-                let idx = cx.alloc_local(ty)?;
-                cx.emit(Instruction::LocalSet(idx));
-                cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
-                result = Ty::Unit;
-            }
-            Stmt::Expr(e) => {
-                let ty = compile_expr(e, cx)?;
-                if is_last {
-                    result = ty;
-                } else if ty != Ty::Unit {
-                    cx.emit(Instruction::Drop);
-                }
-            }
-            Stmt::Return { value: Some(e), .. } => {
-                let ty = compile_expr(e, cx)?;
-                cx.emit(Instruction::Return);
-                if is_last {
-                    result = ty;
-                }
-            }
-            Stmt::Return { value: None, .. } => {
-                cx.emit(Instruction::Return);
-                result = Ty::Unit;
-            }
-            Stmt::While { .. } | Stmt::Assign { .. } => {
+        let r = compile_stmt(stmt, cx, is_last, expected);
+        match r {
+            Ok(ty) => result = ty,
+            Err(e) => {
                 cx.scopes.pop();
-                return Err(CompileError::Unsupported("`while`/assignment (Phase 3b)".into()));
+                return Err(e);
             }
         }
     }
     cx.scopes.pop();
     Ok(result)
+}
+
+fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    match stmt {
+        Stmt::Let { name, value, .. } => {
+            let ty = compile_expr(value, cx)?;
+            let idx = cx.alloc_local(ty)?;
+            cx.emit(Instruction::LocalSet(idx));
+            cx.scopes.last_mut().unwrap().insert(name.name.clone(), (idx, ty));
+            Ok(Ty::Unit)
+        }
+        Stmt::Expr(e) => {
+            if is_last {
+                match expected {
+                    Some(exp) => {
+                        compile_expr_as(e, cx, exp)?;
+                        Ok(exp)
+                    }
+                    None => compile_expr(e, cx),
+                }
+            } else {
+                let ty = compile_expr(e, cx)?;
+                if ty != Ty::Unit {
+                    cx.emit(Instruction::Drop);
+                }
+                Ok(Ty::Unit)
+            }
+        }
+        // `return e` always targets the function's declared return type (`cx.ret`).
+        Stmt::Return { value: Some(e), .. } => {
+            let ret = cx.ret;
+            compile_expr_as(e, cx, ret)?;
+            cx.emit(Instruction::Return);
+            Ok(if is_last { ret } else { Ty::Unit })
+        }
+        Stmt::Return { value: None, .. } => {
+            cx.emit(Instruction::Return);
+            Ok(Ty::Unit)
+        }
+        Stmt::While { .. } | Stmt::Assign { .. } => {
+            Err(CompileError::Unsupported("`while`/assignment".into()))
+        }
+    }
+}
+
+/// The variant cell layout: `[tag:i32 @0][field:i64 @4]` — 12 bytes (the field slot is always 8 so
+/// the cell size is uniform; the field is loaded/stored at the payload's actual width).
+const VARIANT_CELL: i32 = 12;
+
+fn i64_at() -> MemArg {
+    MemArg { offset: 0, align: 3, memory_index: 0 }
+}
+
+/// The constructor name of a `Ctor(args)` call the backend lowers (Ok/Err/Some); None otherwise.
+fn ctor_name(callee: &Expr) -> Option<&str> {
+    if let Expr::Var { path, .. } = callee {
+        if path.segs.len() == 1 {
+            let n = path.segs[0].name.as_str();
+            if matches!(n, "Ok" | "Err" | "Some") {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
+/// Expected-type-directed compilation: emit code producing a value of type `expected`. Only the
+/// forms that need the expected type (variant construction, and the control-flow that carries it to
+/// a tail) are special-cased; everything else synthesises and is checked against `expected`.
+fn compile_expr_as(e: &Expr, cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    match e {
+        Expr::Call { callee, args, .. } if ctor_name(callee).is_some() => {
+            compile_ctor(ctor_name(callee).unwrap(), args, cx, expected)
+        }
+        Expr::Var { path, .. } if path.segs.len() == 1 && path.segs[0].name == "None" => {
+            compile_ctor("None", &[], cx, expected)
+        }
+        Expr::If { cond, then_, else_, .. } => {
+            if compile_expr(cond, cx)? != Ty::I32 {
+                return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
+            }
+            let else_ = else_.as_ref().ok_or_else(|| CompileError::Unsupported("an `if` without `else` used as a value".into()))?;
+            let bt = match wasm_valtype(expected) {
+                Some(v) => BlockType::Result(v),
+                None => BlockType::Empty,
+            };
+            cx.emit(Instruction::If(bt));
+            compile_block_as(then_, cx, expected)?;
+            cx.emit(Instruction::Else);
+            compile_expr_as(else_, cx, expected)?;
+            cx.emit(Instruction::End);
+            Ok(())
+        }
+        Expr::Block(b) => compile_block_as(b, cx, expected),
+        Expr::Match { scrutinee, arms, .. } => compile_match(scrutinee, arms, cx, Some(expected)).map(|_| ()),
+        _ => {
+            let got = compile_expr(e, cx)?;
+            if got != expected {
+                return Err(CompileError::Unsupported(format!("a value of type {got:?} where {expected:?} was expected")));
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Compile a variant constructor to a fresh heap `[tag][field]` cell of type `expected`.
+fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<(), CompileError> {
+    let (tag, payload): (i32, Option<Scalar>) = match (name, expected) {
+        ("Ok", Ty::Result(t_ok, _)) => (0, Some(t_ok)),
+        ("Err", Ty::Result(_, t_err)) => (1, Some(t_err)),
+        ("None", Ty::Option(_)) => (0, None),
+        ("Some", Ty::Option(t)) => (1, Some(t)),
+        _ => return Err(CompileError::Unsupported(format!("constructor `{name}` where {expected:?} was expected"))),
+    };
+    let want_args = usize::from(payload.is_some());
+    if args.len() != want_args {
+        return Err(CompileError::Unsupported(format!("constructor `{name}` with {} args", args.len())));
+    }
+
+    let rp = cx.alloc_local(Ty::I32)?;
+    // rp = heap; heap += VARIANT_CELL
+    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
+    cx.emit(Instruction::LocalTee(rp));
+    cx.emit(Instruction::I32Const(VARIANT_CELL));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+    // mem[rp] = tag
+    cx.emit(Instruction::LocalGet(rp));
+    cx.emit(Instruction::I32Const(tag));
+    cx.emit(Instruction::I32Store(u32_at()));
+    // mem[rp+4] = field
+    if let Some(ps) = payload {
+        if ps == Scalar::Unit {
+            // A Unit payload carries no bytes; evaluate the argument for effect only.
+            if compile_expr(&args[0], cx)? != Ty::Unit {
+                return Err(CompileError::Unsupported(format!("constructor `{name}` with a non-Unit argument")));
+            }
+        } else {
+            cx.emit(Instruction::LocalGet(rp));
+            cx.emit(Instruction::I32Const(4));
+            cx.emit(Instruction::I32Add);
+            let got = compile_expr(&args[0], cx)?;
+            if got != ps.to_ty() {
+                return Err(CompileError::Unsupported(format!("constructor `{name}` payload {got:?} where {:?} expected", ps.to_ty())));
+            }
+            match ps {
+                Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
+                Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Store(u32_at())),
+                Scalar::Unit => unreachable!(),
+            }
+        }
+    }
+    cx.emit(Instruction::LocalGet(rp));
+    Ok(())
+}
+
+/// Compile a `match` on a `Result`/`Option` scrutinee to a tag test + two arms. `expected` is the
+/// arms' result type (from context); in synthesis mode it is inferred from the first arm's body.
+fn compile_match(scrutinee: &Expr, arms: &[Arm], cx: &mut Cx, expected: Option<Ty>) -> Result<Ty, CompileError> {
+    let sty = compile_expr(scrutinee, cx)?;
+    let ctors: [(&str, Option<Scalar>); 2] = match sty {
+        Ty::Result(t_ok, t_err) => [("Ok", Some(t_ok)), ("Err", Some(t_err))],
+        Ty::Option(t) => [("None", None), ("Some", Some(t))],
+        _ => return Err(CompileError::Unsupported(format!("`match` on the non-variant type {sty:?}"))),
+    };
+    let sp = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::LocalSet(sp));
+
+    // Map each tag to the arm handling it (a variant pattern by name, or a wildcard/bind catch-all).
+    let mut arm_for_tag: [Option<usize>; 2] = [None, None];
+    let mut catch_all: Option<usize> = None;
+    for (ai, arm) in arms.iter().enumerate() {
+        match &arm.pattern {
+            Pattern::Variant { path, .. } if path.segs.len() == 1 => {
+                let pn = path.segs[0].name.as_str();
+                for (t, (cn, _)) in ctors.iter().enumerate() {
+                    if pn == *cn && arm_for_tag[t].is_none() {
+                        arm_for_tag[t] = Some(ai);
+                    }
+                }
+            }
+            Pattern::Wildcard(_) | Pattern::Bind(_) => {
+                if catch_all.is_none() {
+                    catch_all = Some(ai);
+                }
+            }
+            _ => return Err(CompileError::Unsupported("a `match` pattern the WASM backend can't compile".into())),
+        }
+    }
+    let a0 = arm_for_tag[0].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()))?;
+    let a1 = arm_for_tag[1].or(catch_all).ok_or_else(|| CompileError::Unsupported("a non-exhaustive `match`".into()))?;
+
+    let result_ty = match expected {
+        Some(t) => t,
+        None => expr_result_ty(&arms[a0].body)?,
+    };
+    let bt = match wasm_valtype(result_ty) {
+        Some(v) => BlockType::Result(v),
+        None => BlockType::Empty,
+    };
+
+    // tag == 0 ? arm0 : arm1
+    cx.emit(Instruction::LocalGet(sp));
+    cx.emit(Instruction::I32Load(u32_at()));
+    cx.emit(Instruction::I32Eqz);
+    cx.emit(Instruction::If(bt));
+    compile_arm(&arms[a0], ctors[0].1, sp, cx, result_ty, expected.is_some())?;
+    cx.emit(Instruction::Else);
+    compile_arm(&arms[a1], ctors[1].1, sp, cx, result_ty, expected.is_some())?;
+    cx.emit(Instruction::End);
+    Ok(result_ty)
+}
+
+fn compile_arm(arm: &Arm, payload: Option<Scalar>, sp: u32, cx: &mut Cx, result_ty: Ty, expected_mode: bool) -> Result<(), CompileError> {
+    cx.scopes.push(HashMap::new());
+    // Bind the payload field if the pattern names it (`Ok(v)` / `Some(x)`).
+    if let Pattern::Variant { fields, .. } = &arm.pattern {
+        if let (Some(ps), [Pattern::Bind(name)]) = (payload, &fields[..]) {
+            if ps != Scalar::Unit {
+                let fty = ps.to_ty();
+                let flocal = cx.alloc_local(fty)?;
+                cx.emit(Instruction::LocalGet(sp));
+                cx.emit(Instruction::I32Const(4));
+                cx.emit(Instruction::I32Add);
+                match ps {
+                    Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
+                    Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Load(u32_at())),
+                    Scalar::Unit => unreachable!(),
+                }
+                cx.emit(Instruction::LocalSet(flocal));
+                cx.scopes.last_mut().unwrap().insert(name.name.clone(), (flocal, fty));
+            }
+        }
+    }
+    let r = if expected_mode {
+        compile_expr_as(&arm.body, cx, result_ty)
+    } else {
+        match compile_expr(&arm.body, cx) {
+            Ok(t) if t == result_ty => Ok(()),
+            Ok(t) => Err(CompileError::Unsupported(format!("a match arm of type {t:?} where {result_ty:?} was expected"))),
+            Err(e) => Err(e),
+        }
+    };
+    cx.scopes.pop();
+    r
 }
 
 fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
@@ -721,6 +1017,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             cx.emit(Instruction::Call(fidx));
             Ok(ret)
         }
+        Expr::Match { scrutinee, arms, .. } => compile_match(scrutinee, arms, cx, None),
         Expr::Block(b) => compile_block(b, cx),
         _ => Err(CompileError::Unsupported("this expression form".into())),
     }
@@ -753,6 +1050,7 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
             _ => expr_result_ty(lhs),
         },
         Expr::If { then_, .. } => block_result_ty(then_),
+        Expr::Match { arms, .. } => arms.first().map(|a| expr_result_ty(&a.body)).unwrap_or(Ok(Ty::Unit)),
         Expr::Block(b) => block_result_ty(b),
         Expr::Method { name, .. } if name.name == "println" => Ok(Ty::Unit),
         Expr::Method { name, .. } if name.name == "console" => Ok(Ty::Cap),
