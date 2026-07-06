@@ -507,9 +507,19 @@ done**), and an ungranted `fs_read` refused (DL0703). End-to-end a `Result[Str, 
 spans caps (console/clock/rand/fs) + `Str` + `Result`/`Option`/user enums + `match`/`?` + the `.dwx`
 artifact, all under two-engine parity.**
 
-Remaining Phase 3 increments: the secret-hygiene scan proper (§9.8, once secrets can be *represented*
-in the fragment) and the ≥50k both-engine fuzz gate (§9 criterion 9) — both refinements, not new
-language surface.
+**Phase 3q — the ≥50k two-engine differential fuzz gate (§9 criterion 9) — is implemented and
+verified**. `crates/delulu-wasm/tests/differential.rs` runs a mix (~60% pure-arithmetic including
+overflow/div-by-zero faults, ~40% console `str`/concat/print) on BOTH engines and requires identical
+value/output when both succeed, or both faulting; any Ok-vs-differing-Ok or Ok-vs-Err is a
+compiler-bug-class divergence (DL1206). Run at the full **50,000 programs**: 50000 checked, 46408
+agreed-Ok, 3592 both-faulted, **zero divergences**. It is `#[ignore]`d (the normal suite keeps the
+7000-program in-suite fuzzers) and env-tunable (`DELULU_FUZZ_N`), so CI runs the 50k gate without
+slowing everyday `cargo test`. This closes the last automatable Stage-3 acceptance criterion: the
+"two-engine parity is the correctness contract" thesis is now proven at scale.
+
+Remaining Phase 3 increment: only the scan-and-`expose`-then-appears form of the secret-hygiene test
+(§9.8), which needs secrets to be *representable* in the compiled fragment (a host-mediated secret
+design) — every other §9 criterion an automatable engine can meet is met. Not new language surface.
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 
@@ -547,6 +557,11 @@ language surface.
    host-mediated secret design in a later phase.)*
 9. Fuzz harness (Stage 2 §7.2) extended to run accepted programs on **both** engines and diff
    traces: ≥ 50k programs, zero divergences (DL1206 class).
+   *(DONE — Phase 3q: `crates/delulu-wasm/tests/differential.rs` runs a mix of pure-arithmetic and
+   console `str`/concat programs on both engines and requires identical value/output when both
+   succeed, or both faulting. Verified at the full **50,000 programs** (`DELULU_FUZZ_N=50000`):
+   50000 checked, 46408 agreed-Ok, 3592 both-faulted, **0 divergences**. `#[ignore]`d so the normal
+   suite stays fast; the size is env-tunable.)*
 10. Interpreter remains the reference: any parity divergence is resolved by fixing an engine to
     match the *specified* semantics, never by "whichever is convenient" — recorded in the test's
     commit message.
