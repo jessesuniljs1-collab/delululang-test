@@ -21,7 +21,11 @@ struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     fn new(file: FileId, src: &'a str) -> Self {
-        Lexer { file, src, pos: 0, tokens: Vec::new(), diags: Vec::new() }
+        // Skip a leading UTF-8 byte-order mark (U+FEFF): many editors (and PowerShell's `Set-Content
+        // -Encoding utf8` on Windows) prepend one, and it isn't source text. Only a *leading* BOM is
+        // trivia; a U+FEFF elsewhere still lexes normally (and is rejected as an unexpected char).
+        let pos = if src.starts_with('\u{feff}') { '\u{feff}'.len_utf8() } else { 0 };
+        Lexer { file, src, pos, tokens: Vec::new(), diags: Vec::new() }
     }
 
     fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>) {
@@ -581,6 +585,14 @@ mod tests {
     fn unexpected_char_is_dl0101() {
         let (_, diags) = lex(0, "let x = #");
         assert_eq!(diags[0].code, "DL0101");
+    }
+
+    #[test]
+    fn leading_utf8_bom_is_skipped() {
+        // A BOM-prefixed source lexes exactly like the un-prefixed one — no DL0101.
+        let (_, diags) = lex(0, "\u{feff}module m");
+        assert!(diags.is_empty(), "a leading BOM must be trivia, got {diags:?}");
+        assert_eq!(kinds("\u{feff}module m"), kinds("module m"));
     }
 
     #[test]
