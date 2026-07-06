@@ -454,16 +454,21 @@ so `Ok(x)`/`Err(e)`/`Some(x)`/`None` learn their full `Result`/`Option` type fro
 return type (or a `match` scrutinee's known type). `match` lowers to a tag test (`i32.eqz`) with two
 arms and typed field binding (`Ok(v)` loads the payload at the arm's width into a fresh local);
 wildcard/`_` arms are supported. `match` on a non-variant (e.g. an `Int`) stays DL1201 (unchanged
-fallback). Three parity tests (Result construct+match with `Ok`/`Err` binding; Option with a nested
-expected-typed `if` and a `None` arm; a wildcard arm) — all byte-identical across engines; end-to-end
-a `checkdiv → Result[Int,Str]` program prints `result = 42` / `error: division by zero` identically on
-both engines. **Checkpoints 2–4 remain**: the `?` operator (early-return propagation), user-defined
-enums (for `IoErr`), then the filesystem capability that composes them.
+fallback). **Checkpoint 2 (`?`) is also done** (190 tests): `expr?` compiles to a tag test — on `Ok`
+it unwraps the payload, on `Err` it returns the scrutinee (same `[tag][field]` cell layout) as the
+enclosing function's `Err`, valid because the checker (DL0409) guarantees `?` sits in a
+`Result[_, E]`-returning function with the matching error type. Four parity tests (Result
+construct+match with `Ok`/`Err` binding; Option with a nested expected-typed `if` and a `None` arm; a
+wildcard arm; and `?` propagation through two chained `Result` calls) — all byte-identical across
+engines; end-to-end a `checkdiv → Result[Int,Str]` prints `result = 42` / `error: …` and a
+`?`-chaining `quarter` prints `quarter = 5` / `failed: odd input` identically on both engines.
+**Checkpoints 3–4 remain**: user-defined enums (for `IoErr`), then the filesystem capability that
+composes them.
 
-Remaining Phase 3 increments: sum-type Checkpoints 2–4 (`?`, user enums, then the filesystem
-`delulu:cap` ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b —
-fs subtree escape); the secret-hygiene scan proper (§9.8, once secrets can be *represented* in the
-fragment); and the ≥50k both-engine fuzz gate (§9 criterion 9).
+Remaining Phase 3 increments: sum-type Checkpoints 3–4 (user enums, then the filesystem `delulu:cap`
+ops with host-side subtree scope checks); the rest of the hostile-guest matrix (§9.4 b — fs subtree
+escape); the secret-hygiene scan proper (§9.8, once secrets can be *represented* in the fragment);
+and the ≥50k both-engine fuzz gate (§9 criterion 9).
 
 ## 9. Acceptance criteria (Stage 3 is done when all pass)
 

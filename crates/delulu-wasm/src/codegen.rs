@@ -484,6 +484,7 @@ fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec
                 collect_strings_expr(&arm.body, off, data);
             }
         }
+        Expr::Try { inner, .. } => collect_strings_expr(inner, off, data),
         Expr::Block(b) => collect_strings_block(b, off, data),
         _ => {}
     }
@@ -1018,6 +1019,44 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             Ok(ret)
         }
         Expr::Match { scrutinee, arms, .. } => compile_match(scrutinee, arms, cx, None),
+        // Phase 3o Checkpoint 2: `expr?` — if `expr` is Err, return it (same cell layout) as the
+        // function's Err; otherwise the `?` expression is the unwrapped Ok payload.
+        Expr::Try { inner, .. } => {
+            let (t, e) = match compile_expr(inner, cx)? {
+                Ty::Result(t, e) => (t, e),
+                other => return Err(CompileError::Unsupported(format!("`?` on the non-Result type {other:?}"))),
+            };
+            // The enclosing function must return `Result[_, e]` (checker guarantees this via DL0409).
+            match cx.ret {
+                Ty::Result(_, re) if re == e => {}
+                _ => return Err(CompileError::Unsupported("`?` outside a matching Result-returning function".into())),
+            }
+            let sp = cx.alloc_local(Ty::I32)?;
+            cx.emit(Instruction::LocalSet(sp));
+            // if Ok (tag == 0): fall through; else return the scrutinee as this function's Err.
+            cx.emit(Instruction::LocalGet(sp));
+            cx.emit(Instruction::I32Load(u32_at()));
+            cx.emit(Instruction::I32Eqz);
+            cx.emit(Instruction::If(BlockType::Empty));
+            cx.emit(Instruction::Else);
+            cx.emit(Instruction::LocalGet(sp));
+            cx.emit(Instruction::Return);
+            cx.emit(Instruction::End);
+            // Ok path: the value of `expr?` is the Ok payload at `sp + 4`.
+            if t == Scalar::Unit {
+                Ok(Ty::Unit)
+            } else {
+                cx.emit(Instruction::LocalGet(sp));
+                cx.emit(Instruction::I32Const(4));
+                cx.emit(Instruction::I32Add);
+                match t {
+                    Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
+                    Scalar::I32 | Scalar::Str => cx.emit(Instruction::I32Load(u32_at())),
+                    Scalar::Unit => unreachable!(),
+                }
+                Ok(t.to_ty())
+            }
+        }
         Expr::Block(b) => compile_block(b, cx),
         _ => Err(CompileError::Unsupported("this expression form".into())),
     }

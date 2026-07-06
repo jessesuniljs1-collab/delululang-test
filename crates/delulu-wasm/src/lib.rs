@@ -453,6 +453,20 @@ mod tests {
     }
 
     #[test]
+    fn question_mark_propagation_matches_the_interpreter() {
+        // Checkpoint 2: `?` unwraps Ok and early-returns Err through two chained Result calls.
+        let src = "module m\n\
+            fn half(n: Int) -> Result[Int, Str] { if n % 2 == 0 { Ok(n / 2) } else { Err(\"odd\") } }\n\
+            fn quarter(n: Int) -> Result[Int, Str] { let h = half(n)?\n let q = half(h)?\n Ok(q) }\n\
+            fn main(root: Root) ! {Write} { let out = root.console()\n\
+            \x20 match quarter(20) { Ok(v) => out.println(\"q=\" + str(v)), Err(e) => out.println(\"err:\" + e) }\n\
+            \x20 match quarter(6) { Ok(v) => out.println(\"q=\" + str(v)), Err(e) => out.println(\"err:\" + e) }\n\
+            \x20 match quarter(7) { Ok(v) => out.println(\"q=\" + str(v)), Err(e) => out.println(\"err:\" + e) } }\n";
+        // quarter(20)=Ok(5); quarter(6): half(6)=Ok(3) then half(3)=Err; quarter(7): half(7)=Err.
+        assert_eq!(main_console_parity(src), "q=5\nerr:odd\nerr:odd\n");
+    }
+
+    #[test]
     fn match_with_a_wildcard_arm_matches() {
         let src = "module m\n\
             fn check(n: Int) -> Result[Int, Str] { if n < 0 { Err(\"neg\") } else { Ok(n) } }\n\
