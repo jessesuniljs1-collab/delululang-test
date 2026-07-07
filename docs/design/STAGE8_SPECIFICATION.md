@@ -159,6 +159,15 @@ Per-file override header (first item in a test file):
 
 ## 6. Localization: catalogs, picker, welcome
 
+> **Companion documents (Fable-5 planning pass):** `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (the
+> full authoring/add/remove/edit guide for human-language plugins — treat it as the requirements spec
+> for this section's implementation); `docs/lang/<locale>.md` (per-language packs: en-US and
+> delulu-slang complete, 9 starters with decided terminology); `docs/design/SYNTAX_MORPH_SPEC.md`
+> (the *separate* mechanism for re-skinning the programming language's own keywords — including
+> AI token-minimizing profiles — via bijective morphs; plan a §6.5-style `delulu morph` sibling of
+> `delulu locale` when building); `docs/design/AI_NATIVE_DESIGN.md` (why the machine envelope stays
+> frozen under all of this).
+
 ### 6.1 Catalog format
 
 `catalogs/<locale>.toml`, embedded in the binary for the two shipped locales:

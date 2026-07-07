@@ -56,12 +56,27 @@ DeluluLang/
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
     │   ├── SOUNDNESS_AUDIT.md
+    │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled)
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
+    │   ├── LOCALIZATION_PLUGIN_GUIDE.md # human-language plugins: author/add/remove/edit (Fable 5)
+    │   ├── SYNTAX_MORPH_SPEC.md         # keyword/char syntax skins, human + AI compact profiles
+    │   ├── AI_NATIVE_DESIGN.md          # the machine-facing design + standing commitments
     │   ├── LANGUAGE_SPECIFICATION.md   # superseded early draft — kept for provenance
     │   └── DeluluLang_PROMPT.md        # Jesse's original vision — kept verbatim, never edited
+    ├── playbooks/                  # execution companions per stage spec (Opus 4.8 builds from these)
+    │   ├── README.md                   # how to use a playbook; environment traps; crate/DL map
+    │   └── STAGE4_PLAYBOOK.md … STAGE10_PLAYBOOK.md   # the seven unbuilt stages
+    ├── lang/                       # per-language packs (catalog content sources)
+    │   ├── README.md, en-US.md, delulu-slang.md       # complete (reference base + shipped voice)
+    │   └── zh-CN, ja-JP, ko-KR, hi-IN, ar-SA, fr-FR, de-DE, es-ES, pt-BR (.md)  # starters, decisions locked
     ├── reference/                  # [Stage 9] generated-in-part language reference
-    └── book/                       # [Stage 9] the Delulu Book (learn-by-building tutorial)
+    └── book/                       # the Delulu Book — THE_DELULULANG_BOOK.md (first complete edition)
 ```
+
+**Planning-pass note (Fable 5, 2026-07):** `docs/playbooks/`, the localization/AI-design trio in
+`docs/design/`, `docs/lang/`, and the Book were authored as pure planning artifacts (no code) so the
+implementing model can build Stages 4–10 and the localization system mechanically. Playbooks are *how
+to build*; the stage specs remain the normative *what*.
 
 ## 2. Crate dependency graph (Stage 1)
 
