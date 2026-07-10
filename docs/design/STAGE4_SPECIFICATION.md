@@ -323,11 +323,68 @@ effects and `"foreign_calls": []` — its authority report is unchanged. End-to-
 `delulu why ForeignCall` prints the `main → compute — ForeignCall` chain, and `delulu explain`
 resolves DL1301/DL1302/DL1308.
 
-**Not in this chunk (later phases):** the runtime C FFI (4d), manifest/grants + the
-`foreign_calls` authority array + the "outside the proof" separator (4e), embedded CPython and the
-`std.py` surface (4f), and the WASM `delulu:foreign@0.4` host interface + parity (4g). Two
-compile-time surface details are deferred to those phases rather than guessed here: the **method
-by which `Cap[ForeignLoad]`/`Cap[Python]` are minted from `Root`** (the spec names the parameter
-type but not a `root.foreign_load()`-style constructor; tests thread the cap through a parameter),
-and the runtime DL13xx codes (DL1303–DL1307) which are bind/call-time and register with their
-phases.
+**Phase 4d — C FFI runtime (interpreter engine) — is implemented and green** (with 4e: 249
+workspace tests, +31 over 4c). All native-dependency code (`libloading` 0.8 for binding, `libffi`
+3.x for calls — signatures are runtime data) is isolated in **`crates/delulu-runtime/src/foreign.rs`**;
+nothing outside that module touches a raw pointer or a `Library`, and every `unsafe` block carries a
+`// SAFETY:` comment stating its invariant. The 4a–4c open question is **resolved by head-chef
+ruling**: `Cap[ForeignLoad]` is minted by **`root.foreign_load() -> Cap[ForeignLoad]`** — already
+normative in the Book (ch. 14) — a pure derivation from `Root` following the same broker
+grant-check pattern as every other `root.X()` constructor (`method_sig` Root arm; `prim.rs`
+`call_root_method`; refused with DL0703 when no `foreign.c` lib is granted). Binding
+(`root.foreign(load)`, `interp.rs::bind_foreign`): the checker records which lib each bind site's
+inferred `[M]` resolves to (`CheckResult::foreign_binds`, keyed by the call's `NodeId` — the
+grammar has no method type-argument syntax, so the runtime needs the resolved name); the
+interpreter looks up the grant path and **resolves ALL declared symbols at bind time** — a missing
+symbol is `ForeignErr::SymbolMissing(name)` (DL1304's runtime face, fail-fast, never mid-run), an
+unloadable binary is `Unavailable`, an ungranted lib is `NotGranted` (belt-and-suspenders behind
+the CLI startup refusal) — all `Result` values, never panics. Calls (`interp.rs::call_foreign` →
+`foreign::call`) marshal per §4.2 exactly: `Int`→`int64_t`, `Float`→`double`, `Bool`→`int32_t`
+(0/1), `Str`→borrowed `(const uint8_t*, size_t)` for the call duration, `Str` return→`(ptr,len)`
+copied THEN validated, `ForeignPtr`→opaque `void*` (a `Value::ForeignPtr(usize)` — no raw pointer
+in general evaluation). Return validation (invariant 21, `foreign::validate_c_string`): UTF-8
+checked, length bounded by `--foreign-max-ret` (default 64 MiB); a failure is a defined **DL1306**
+fault carrying `ForeignErr::BadReturn` — never UB, never a panic, never a silent truncation
+(criterion 8; a bare `-> Str` foreign signature has no `Result` channel, so the honest outcome is
+a clean abort). Every foreign call records a **`ForeignCall` trace event** (criterion 1) through
+the shared seq counter (`cap_kind` = the lib name). *Fixture strategy:* a C-ABI cdylib compiled
+once per test run with `rustc --crate-type cdylib` into `CARGO_TARGET_TMPDIR`
+(`crates/delulu-runtime/tests/foreign_ffi.rs`) — `rustc` is guaranteed present wherever `cargo
+test` runs, unlike `cl.exe`/`gcc`, and an `extern "C"` cdylib is a real C-ABI library on all three
+OSes; the validation layer is additionally unit-tested against crafted byte buffers in
+`foreign.rs` (invalid UTF-8, oversized/unterminated, null, empty), independent of any library.
+Nine live-DLL tests cover: `cos` round-trip with `ForeignCall` traced; fail-fast `SymbolMissing`
+with **zero** foreign records in the trace; `NotGranted`; DL0703 with no grant at all;
+`Unavailable`; the full marshalling matrix (Int/Bool/Str-as-(ptr,len)/ForeignPtr round-trips);
+copied-then-validated `Str` returns; and both criterion-8 hostile returns as DL1306 faults.
+
+**Phase 4e — manifest + grants + grant prompt + authority report — is implemented and green**
+(249 workspace tests total with 4d). Manifest: `[authority] foreign.c = ["mathlib"]` (logical
+names) parses in both the checker's manifest and the runtime broker; a program binding a lib not
+listed there is refused **DL1303 at startup**. Grants: `--grant foreign.c=mathlib:PATH` — split on
+the **first** colon only, so Windows drive-letter paths (`mathlib:C:\libs\m.dll`) survive; bare
+names resolve via OS loader rules. **The path is grant data, not program data.** The grant flow
+(`cli.rs::foreign_grant_preflight`) runs before `main`: manifest ceiling → grant lookup →
+(interactive terminals only — never under `--json`, `--no-prompt`, or a non-terminal, so agents
+are never prompted) a prompt showing the **full symbol list** before asking for a binary path →
+otherwise DL1303 with the exact `--grant` invocation to use (criterion 4: at the grant flow, never
+mid-run). `delulu authority`: the `foreign_calls` array per §6 (`abi`, `lib`, `symbols`,
+`granted_path` — `null` in the static report since the path is a runtime human decision —
+`used_at` at block-declaration granularity, the same altitude `delulu why` reports at), and the
+human-mode separator line exactly `-- outside the proof (contained at process level) --`.
+`ForeignLoad`/`Python` capability kinds are deliberately **excluded from the ordinary
+`capabilities` rows** (like `Declassify`/`PluginHost`) — the foreign section under the separator
+is the single place the proof's holes are enumerated. **Criterion 7 is pinned byte-for-byte**: a
+CLI test asserts the human authority report of a no-foreign program equals the Stage-3 output
+verbatim and `"foreign_calls": []` in JSON. DL1303/DL1304/DL1306 are registered in `codes.rs`, and
+`delulu explain` now prints a long-form explanation for every DL13xx code (`codes.rs::code_explain`)
+carrying the §10 honesty caveats verbatim — reachability-not-behavior, the Stage-5 forward link on
+every code, no `expose` suggestion on DL1301 — with a CLI test asserting the word "sandbox" appears
+in none of them. Side task done: the `delulu why` unknown-effect help now lists `ForeignCall` with
+the six pre-Stage-4 core effects. `--foreign-max-ret <bytes>` is a `run` option.
+
+**Not in this chunk (later phases):** embedded CPython and the `std.py` surface (4f — DL1305/DL1307
+register there, and `root.python(load)` follows the same `root.foreign_load()` pattern per the
+head-chef ruling), and the WASM `delulu:foreign@0.4` host interface + parity (4g — until then,
+foreign calls are interpreter-engine only; `--engine wasm` programs cannot reach `foreign` blocks
+because the backend rejects constructs it cannot compile, DL1201).

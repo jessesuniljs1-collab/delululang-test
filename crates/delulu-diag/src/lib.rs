@@ -12,7 +12,7 @@ mod render;
 mod source;
 mod span;
 
-pub use codes::{code_title, is_registered, CodeInfo, REGISTRY};
+pub use codes::{code_explain, code_title, is_registered, CodeInfo, REGISTRY};
 pub use diagnostic::{Confidence, Diagnostic, Edit, LabeledSpan, Repair, Severity};
 pub use json::{envelope, envelope_to_string};
 pub use render::render_human;

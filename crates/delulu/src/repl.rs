@@ -130,6 +130,7 @@ fn full_root(grants: &Grants) -> RootVal {
         rand: true,
         declassify: true,
         secrets: grants.secrets.clone(),
+        foreign_load: !grants.foreign_c.is_empty(),
     }
 }
 

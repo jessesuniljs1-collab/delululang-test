@@ -3,6 +3,7 @@
 //! (invariant 7), independently of the compile-time authority proof.
 
 pub mod broker;
+pub mod foreign;
 pub mod interp;
 pub mod prim;
 pub mod trace;

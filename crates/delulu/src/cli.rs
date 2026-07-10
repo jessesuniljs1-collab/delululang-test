@@ -44,6 +44,9 @@ struct Opts {
     target: Option<String>,
     /// `-o <path>` / `--out <path>`: output path for `build --target wasm`.
     out: Option<String>,
+    /// `--foreign-max-ret <bytes>`: ceiling on a returned foreign string (invariant 21; default
+    /// 64 MiB). A return exceeding it is `ForeignErr::BadReturn`, never a truncated silent success.
+    foreign_max_ret: Option<usize>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -64,6 +67,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         engine: None,
         target: None,
         out: None,
+        foreign_max_ret: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -129,6 +133,15 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--out=") => opts.out = Some(s["--out=".len()..].to_string()),
+            "--foreign-max-ret" => {
+                if i + 1 < rest.len() {
+                    opts.foreign_max_ret = rest[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--foreign-max-ret=") => {
+                opts.foreign_max_ret = s["--foreign-max-ret=".len()..].parse().ok();
+            }
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -288,7 +301,11 @@ fn cmd_authority(rest: &[String]) -> i32 {
         print_diagnostics("authority", &checked.diagnostics, &map, None, opts.json);
         return 1;
     }
-    let scopes = manifest_scopes(&file);
+    let mut scopes = manifest_scopes(&file);
+    // Foreign blocks the program declares → the `foreign_calls` array under the "outside the proof"
+    // separator (spec §6). A program with no `foreign` blocks yields `[]`, keeping the report
+    // byte-identical to Stage 3 (criterion 7).
+    scopes.foreign_calls = foreign_calls_json(&checked.module, &map);
     let program = checked.module.name.dotted();
     let report = authority_report(&program, &checked.result, &scopes);
     if opts.json {
@@ -332,7 +349,22 @@ fn render_authority(report: &Json) -> String {
     let _ = writeln!(out, "  secrets:      {}", if secrets.is_empty() { "(none)".to_string() } else { secrets.join(", ") });
     let pure = strs(&report["pure_functions"]);
     let _ = writeln!(out, "  pure fns:     {}", if pure.is_empty() { "(none)".to_string() } else { pure.join(", ") });
-    let _ = writeln!(out, "  foreign:      (none — no code outside the guarantee)");
+    // Foreign code lives OUTSIDE the effect proof. With none declared, the report is byte-identical
+    // to Stage 3 (criterion 7); with foreign blocks, they list under the mandated separator line.
+    let foreign = report["foreign_calls"].as_array().cloned().unwrap_or_default();
+    if foreign.is_empty() {
+        let _ = writeln!(out, "  foreign:      (none — no code outside the guarantee)");
+    } else {
+        let _ = writeln!(out, "  foreign:");
+        let _ = writeln!(out, "    -- outside the proof (contained at process level) --");
+        for f in &foreign {
+            let abi = f["abi"].as_str().unwrap_or("c");
+            let lib = f["lib"].as_str().unwrap_or("?");
+            let symbols = strs(&f["symbols"]);
+            let binary = f["granted_path"].as_str().unwrap_or("(chosen by the human at grant time)");
+            let _ = writeln!(out, "    - {abi} {lib} [{}]  binary: {binary}", symbols.join(", "));
+        }
+    }
     out
 }
 
@@ -830,7 +862,7 @@ fn cmd_why(rest: &[String]) -> i32 {
         || program.facts.values().any(|f| f.effects.iter().any(|e| e.name() == effect_name));
     if !is_known {
         eprintln!(
-            "error: `{effect_name}` is not a known effect (core effects: Read, Write, Net, Clock, Rand, Declassify; \
+            "error: `{effect_name}` is not a known effect (core effects: Read, Write, Net, Clock, Rand, Declassify, ForeignCall; \
              or a user-declared `effect` visible in this program)"
         );
         return 2;
@@ -1089,6 +1121,14 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // Foreign grant flow (Stage 4, spec §4.1 / criterion 4): every `foreign` lib the program binds
+    // must be permitted by the manifest (if any) and granted a binary at startup. An ungranted lib
+    // is DL1303 HERE — before `main` runs — never mid-run. The path is grant data: the human/broker
+    // decides which binary satisfies the logical name, prompted with the full symbol list.
+    if let Err(code) = foreign_grant_preflight(&checked, &manifest, &mut grants, &opts, &map) {
+        return code;
+    }
+
     // WASM engine (spec §5.11 / Stage 3): compile `main` to WebAssembly and run it under the
     // deny-by-default Wasmtime host, with the console capability minted and checked host-side.
     // Constructs the backend can't compile are DL1201 — omit `--engine wasm` to use the interpreter.
@@ -1139,7 +1179,12 @@ fn cmd_run(rest: &[String]) -> i32 {
     };
 
     let root = Value::Root(Rc::new(build_root(&grants)));
-    let mut interp = Interp::new(&checked.module);
+    let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
+    let mut interp = Interp::new(&checked.module).with_foreign(
+        checked.result.foreign_binds.clone(),
+        grants.foreign_c.clone(),
+        max_ret,
+    );
     if let Some(s) = &sink {
         interp = interp.with_trace(s.clone());
     }
@@ -1197,6 +1242,138 @@ fn build_root(grants: &Grants) -> RootVal {
     grants.build_root()
 }
 
+// ----- foreign grant flow + authority (Stage 4, spec §4.1/§6) --------------
+
+/// One `foreign` block, extracted from the AST for the grant prompt and the authority report.
+struct ForeignBlock {
+    abi: String,
+    lib: String,
+    symbols: Vec<String>,
+    span: delulu_diag::Span,
+}
+
+fn foreign_blocks_of(module: &delulu_syntax::ast::Module) -> Vec<ForeignBlock> {
+    module
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Item::Foreign(fd) => Some(ForeignBlock {
+                abi: fd.abi.clone(),
+                lib: fd.name.name.clone(),
+                symbols: fd.fns.iter().map(|f| f.name.name.clone()).collect(),
+                span: fd.span,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Deny-by-default grant flow for the foreign libs a program binds (spec §4.1 / criterion 4).
+/// Returns `Err(exit_code)` when a bound lib exceeds the manifest ceiling or has no grant; on success
+/// `grants.foreign_c` holds a binary path for every bound lib. An interactive human is prompted with
+/// the full symbol list; agents, `--json`, `--no-prompt`, and non-terminals are never prompted (they
+/// get DL1303 and refuse). Everything happens BEFORE `main` runs — never mid-run.
+fn foreign_grant_preflight(
+    checked: &Checked,
+    manifest: &Option<delulu_runtime::Manifest>,
+    grants: &mut Grants,
+    opts: &Opts,
+    map: &SourceMap,
+) -> Result<(), i32> {
+    use std::io::IsTerminal;
+
+    let bound: BTreeSet<&String> = checked.result.foreign_binds.values().collect();
+    if bound.is_empty() {
+        return Ok(());
+    }
+    let blocks = foreign_blocks_of(&checked.module);
+    let symbols_of = |lib: &str| -> Vec<String> {
+        blocks.iter().find(|b| b.lib == lib).map(|b| b.symbols.clone()).unwrap_or_default()
+    };
+
+    let mut diags: Vec<Diagnostic> = Vec::new();
+    for lib in bound {
+        // Manifest ceiling: a bound lib must be listed in `[authority] foreign.c` when a manifest
+        // exists. Exceeding it is the program reaching for authority it never declared (DL1303).
+        if let Some(m) = manifest {
+            if !m.foreign_c.iter().any(|l| l == lib) {
+                diags.push(Diagnostic::error(
+                    "DL1303",
+                    format!("program uses foreign lib `{lib}` not permitted by the authority manifest (`[authority] foreign.c`)"),
+                ));
+                continue;
+            }
+        }
+        if grants.foreign_c.contains_key(lib) {
+            continue;
+        }
+        let interactive = !opts.json && !opts.no_prompt && std::io::stdin().is_terminal();
+        if interactive {
+            if let Some(path) = prompt_foreign_grant(lib, &symbols_of(lib)) {
+                grants.foreign_c.insert(lib.clone(), path);
+                continue;
+            }
+        }
+        diags.push(Diagnostic::error(
+            "DL1303",
+            format!("foreign lib `{lib}` was not granted — pass `--grant foreign.c={lib}:PATH` (the human chooses which binary)"),
+        ));
+    }
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        print_diagnostics("run", &diags, map, None, opts.json);
+        Err(1)
+    }
+}
+
+/// Prompt an interactive human for a foreign lib's binary path, showing the FULL symbol list first
+/// (spec §4.1). Returns `None` on an empty line (deny) or EOF. Uses stderr so `--json`/piped stdout
+/// stays clean — though this is only ever reached for a real terminal.
+fn prompt_foreign_grant(lib: &str, symbols: &[String]) -> Option<String> {
+    use std::io::Write as _;
+    eprintln!("foreign lib `{lib}` (abi \"c\") requests these symbols:");
+    if symbols.is_empty() {
+        eprintln!("    (no symbols declared)");
+    } else {
+        for s in symbols {
+            eprintln!("    - {s}");
+        }
+    }
+    eprint!("grant a binary path for `{lib}` (empty line to deny): ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).ok()? == 0 {
+        return None;
+    }
+    let p = line.trim().to_string();
+    if p.is_empty() {
+        None
+    } else {
+        Some(p)
+    }
+}
+
+/// Build the `foreign_calls` JSON array (spec §6) from a program's `foreign` blocks. `granted_path`
+/// is null: `delulu authority` is a static command with no grants, and the path is a runtime human
+/// decision, not program data. `used_at` reports each block's declaration site — an honest
+/// approximation at declaration granularity, the same altitude `delulu why` reports at.
+fn foreign_calls_json(module: &delulu_syntax::ast::Module, map: &SourceMap) -> Vec<Json> {
+    foreign_blocks_of(module)
+        .into_iter()
+        .map(|b| {
+            let (line, _col) = map.position(b.span.file, b.span.start);
+            json!({
+                "abi": b.abi,
+                "lib": b.lib,
+                "symbols": b.symbols,
+                "granted_path": Json::Null,
+                "used_at": [ { "file": map.name(b.span.file), "line": line } ],
+            })
+        })
+        .collect()
+}
+
 // ----- explain / repl ------------------------------------------------------
 
 fn cmd_explain(rest: &[String]) -> i32 {
@@ -1208,6 +1385,11 @@ fn cmd_explain(rest: &[String]) -> i32 {
     match delulu_diag::code_title(&code) {
         Some(title) => {
             println!("{code}: {title}");
+            // A longer explanation, where one exists (DL13xx foreign codes carry the spec §10
+            // honesty caveats verbatim — reachability-not-behavior, link forward to Stage 5).
+            if let Some(body) = delulu_diag::code_explain(&code) {
+                println!("\n{body}");
+            }
             0
         }
         None => {

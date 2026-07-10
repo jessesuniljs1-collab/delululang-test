@@ -47,6 +47,12 @@ pub enum Value {
     Cap(Rc<CapVal>),
     Secret(Rc<SecretVal>),
     Root(Rc<RootVal>),
+    /// A bound foreign-library handle, minted only by `root.foreign(load)` (Stage 4, spec §4). Opaque
+    /// (R-5): it never stringifies or compares — the checker's `Type::Foreign` is opaque.
+    Foreign(Rc<crate::foreign::ForeignHandle>),
+    /// An opaque C pointer (`ForeignPtr`, spec §4.2), stored as an integer address so no raw pointer
+    /// leaks into general evaluation. Opaque (R-5): never stringified or compared.
+    ForeignPtr(usize),
 }
 
 impl Value {
@@ -98,6 +104,10 @@ impl Value {
             Value::Cap(c) => format!("<cap {}>", c.kind.name()),
             Value::Secret(_) => "«secret»".to_string(),
             Value::Root(_) => "<root>".to_string(),
+            // Opaque (R-5): the checker rejects `str`/`==`/serialize on these, so a well-typed
+            // program never displays one; the runtime still refuses to reveal anything useful.
+            Value::Foreign(h) => format!("<foreign lib {}>", h.name),
+            Value::ForeignPtr(_) => "<foreign ptr>".to_string(),
         }
     }
 
@@ -147,6 +157,9 @@ pub enum CapScope {
     Clock,
     Rand,
     Declassify { names: Vec<String> },
+    /// Gates binding a foreign C library (`Cap[ForeignLoad]`, spec §3 T-ForeignBind). Carries no
+    /// scope of its own — the per-lib authority decision is the `foreign.c` grant checked at bind.
+    ForeignLoad,
 }
 
 /// An unforgeable capability value: a resource kind plus its scope.
@@ -207,6 +220,9 @@ pub struct RootVal {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: HashMap<String, String>,
+    /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` — true iff any `foreign.c` lib was
+    /// granted (spec §4.1). The per-lib gate is enforced separately when `root.foreign(load)` binds.
+    pub foreign_load: bool,
 }
 
 // ----- environments --------------------------------------------------------

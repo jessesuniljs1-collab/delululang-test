@@ -120,6 +120,13 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted"), span)),
             }
         }
+        "foreign_load" => {
+            if root.foreign_load {
+                Ok(cap(ResourceKind::ForeignLoad, CapScope::ForeignLoad))
+            } else {
+                Err(Fault::at("DL0703", "foreign loading was not granted (grant a `foreign.c` lib)", span))
+            }
+        }
         "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
         _ => Err(Fault::at("DL0907", format!("unknown Root method `{method}` (checker bug)"), span)),
     }

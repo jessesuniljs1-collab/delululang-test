@@ -8,3 +8,7 @@ edition.workspace = true
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
+# Stage 4 C FFI (spec §4). `libloading` binds a shared library; `libffi` assembles the call because
+# a foreign signature is runtime data. Both are isolated behind `src/foreign.rs`.
+libloading = "0.8"
+libffi = "3"

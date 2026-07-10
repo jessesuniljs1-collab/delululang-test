@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use delulu_syntax::ast::*;
 
+use crate::foreign::{self, FKind, FVal, ForeignHandle, ForeignSig};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
 use crate::value::{Closure, Env, Fault, Scope, Value};
@@ -32,18 +33,32 @@ pub struct Interp {
     /// not change `Interp::new`'s signature or behavior.
     trace: Option<TraceSink>,
     trace_seq: Cell<u64>,
+    /// Foreign blocks by lib name (Stage 4): each declared function's marshalling signature, lowered
+    /// from the module. Empty for a program with no `foreign` blocks — so nothing changes for it.
+    foreign_blocks: HashMap<String, Vec<ForeignSig>>,
+    /// Which lib each `root.foreign(load)` call node binds (from the checker's `foreign_binds`), the
+    /// granted binary path per lib (from `--grant`), and the return-size ceiling. All inert unless
+    /// `with_foreign` is called.
+    foreign_binds: HashMap<NodeId, String>,
+    foreign_grants: HashMap<String, String>,
+    foreign_max_ret: usize,
 }
 
 impl Interp {
     pub fn new(module: &Module) -> Interp {
         let mut funcs = HashMap::new();
         let mut consts = Vec::new();
+        let mut foreign_blocks = HashMap::new();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
                     funcs.insert(f.name.name.clone(), f.clone());
                 }
                 Item::Const(c) => consts.push((c.name.name.clone(), c.value.clone())),
+                Item::Foreign(fd) => {
+                    let sigs = fd.fns.iter().map(lower_foreign_sig).collect();
+                    foreign_blocks.insert(fd.name.name.clone(), sigs);
+                }
                 _ => {}
             }
         }
@@ -54,7 +69,26 @@ impl Interp {
             depth: Cell::new(0),
             trace: None,
             trace_seq: Cell::new(0),
+            foreign_blocks,
+            foreign_binds: HashMap::new(),
+            foreign_grants: HashMap::new(),
+            foreign_max_ret: foreign::DEFAULT_MAX_RET,
         }
+    }
+
+    /// Attach the Stage-4 foreign runtime data (builder style): the checker's `root.foreign(load)`
+    /// bind-site → lib map, the `--grant foreign.c=lib:path` binary paths, and the `--foreign-max-ret`
+    /// return-size ceiling. Additive; a program with no foreign blocks is unaffected.
+    pub fn with_foreign(
+        mut self,
+        binds: HashMap<NodeId, String>,
+        grants: HashMap<String, String>,
+        max_ret: usize,
+    ) -> Interp {
+        self.foreign_binds = binds;
+        self.foreign_grants = grants;
+        self.foreign_max_ret = max_ret;
+        self
     }
 
     /// Attach a trace sink (builder style, spec §6.1): every EFFECTFUL primitive operation
@@ -293,7 +327,7 @@ impl Interp {
                 Ok(Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) })
             }
             Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env),
-            Expr::Method { recv, name, args, span, .. } => self.eval_method(recv, name, args, *span, env),
+            Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
             Expr::Field { recv, name, .. } => {
                 let r = self.eval_expr(recv, env)?;
                 self.field(r, &name.name, name.span)
@@ -394,7 +428,7 @@ impl Interp {
         }
     }
 
-    fn eval_method(&self, recv: &Expr, name: &Ident, args: &[Expr], span: delulu_diag::Span, env: &Env) -> R<Value> {
+    fn eval_method(&self, recv: &Expr, name: &Ident, args: &[Expr], span: delulu_diag::Span, node_id: NodeId, env: &Env) -> R<Value> {
         let recvv = self.eval_expr(recv, env)?;
 
         // Closure-taking methods are handled here (they call back into evaluation).
@@ -435,7 +469,12 @@ impl Interp {
         }
         self.trace_dispatch(&recvv, name, &argvals, span);
         let result = match &recvv {
+            // T-ForeignBind (spec §4): binding a lib is handled here, not in `prim`, because it needs
+            // the checker's bind-site → lib map, the grant paths, and the native loader.
+            Value::Root(_) if name.name == "foreign" => self.bind_foreign(node_id, span),
             Value::Root(r) => prim::call_root_method(r, &name.name, &argvals, span),
+            // T-ForeignCall (spec §4): a method on a bound lib handle marshals + calls foreign code.
+            Value::Foreign(h) => self.call_foreign(h, &name.name, &argvals, span),
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
             Value::Secret(s) => prim::call_secret_method(s, &name.name, &argvals, span),
             Value::Str(s) => prim::call_str_method(s, &name.name, &argvals, span),
@@ -467,6 +506,70 @@ impl Interp {
             op: name.name.clone(),
             cap_kind: kind.to_string(),
             detail,
+            span: Some((span.file, span.start, span.end)),
+        });
+    }
+
+    // ----- foreign C FFI (Stage 4, spec §4) -------------------------------
+
+    /// `root.foreign(load)` — bind the lib this call site names (checker-resolved), returning
+    /// `Result[M, ForeignErr]`. All declared symbols resolve now (fail-fast, spec §4.2 / trap 4): a
+    /// missing symbol is `ForeignErr::SymbolMissing` (DL1304), a lib that will not load is
+    /// `ForeignErr::Unavailable`, and — belt-and-suspenders behind the CLI grant pre-flight — an
+    /// ungranted lib is `ForeignErr::NotGranted` (DL1303).
+    fn bind_foreign(&self, node_id: NodeId, span: delulu_diag::Span) -> Result<Value, Fault> {
+        let Some(lib_name) = self.foreign_binds.get(&node_id).cloned() else {
+            return Err(Fault::at("DL0907", "foreign bind site with no resolved lib (checker/wiring bug)", span));
+        };
+        // The path is grant data (spec §4.1). No grant → NotGranted; the CLI normally refuses at
+        // startup (criterion 4) so a program that reaches here has already been granted.
+        let Some(path) = self.foreign_grants.get(&lib_name).cloned() else {
+            return Ok(Value::err(Value::variant("NotGranted", vec![])));
+        };
+        let sigs = self.foreign_blocks.get(&lib_name).cloned().unwrap_or_default();
+        match foreign::load_and_resolve(&path, sigs) {
+            Ok(lib) => Ok(Value::ok(Value::Foreign(Rc::new(ForeignHandle { name: lib_name, lib })))),
+            Err(e) => Ok(Value::err(foreign_err_value(&e))),
+        }
+    }
+
+    /// `m.method(args)` on a bound lib handle — marshal per spec §4.2, call via `libffi`, validate the
+    /// return (invariant 21), and record the `ForeignCall` trace event (criterion 1). A return that
+    /// fails shape validation surfaces as a defined DL1306 fault: a bare `-> Str`/`-> Float` foreign
+    /// signature has no `Result` channel for the program to catch, so the honest outcome is a clean
+    /// abort — never UB, never a panic, never a silent truncation (criterion 8).
+    fn call_foreign(&self, handle: &Rc<ForeignHandle>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let Some(sig) = handle.lib.sig(method).cloned() else {
+            return Err(Fault::at("DL0907", format!("unknown foreign method `{method}` (checker bug)"), span));
+        };
+        let fargs: Vec<FVal> = sig
+            .params
+            .iter()
+            .zip(args)
+            .map(|(k, v)| value_to_fval(*k, v))
+            .collect();
+        self.trace_foreign(&handle.name, method, span);
+        match foreign::call(&handle.lib, method, &fargs, self.foreign_max_ret) {
+            Ok(fv) => Ok(fval_to_value(fv)),
+            Err(foreign::ForeignErr::BadReturn(reason)) => Err(Fault::at(
+                "DL1306",
+                format!("foreign return validation failed: {reason} (ForeignErr::BadReturn)"),
+                span,
+            )),
+            Err(other) => Err(Fault::at("DL1306", format!("foreign call failed: {other:?}"), span)),
+        }
+    }
+
+    /// Append the `ForeignCall` trace record (criterion 1's "with `ForeignCall` in the trace"). Like
+    /// every effect, it goes through the shared seq counter; `cap_kind` names the lib.
+    fn trace_foreign(&self, lib: &str, method: &str, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: "ForeignCall".to_string(),
+            op: method.to_string(),
+            cap_kind: lib.to_string(),
+            detail: Some(format!("{lib}.{method}")),
             span: Some((span.file, span.start, span.end)),
         });
     }
@@ -644,5 +747,66 @@ fn unwrap_fault(e: Escape) -> Fault {
     match e {
         Escape::Fault(f) => f,
         Escape::Return(_) | Escape::Propagate(_) => Fault::new("DL0907", "control-flow escaped the top level (checker bug)"),
+    }
+}
+
+// ----- foreign marshalling helpers (Stage 4, spec §4.2) --------------------
+
+/// Lower one declared `foreign_fn` to its runtime marshalling signature. A parameter/return type
+/// that does not marshal is impossible in a checked program (T-ForeignSig / DL1301); we default it
+/// to `Unit` rather than panic, keeping the interpreter total on unchecked input.
+fn lower_foreign_sig(f: &ForeignFn) -> ForeignSig {
+    let kind_of = |te: &TypeExpr| -> FKind {
+        match te {
+            TypeExpr::Named { path, .. } => {
+                FKind::from_type_name(&path.segs.last().unwrap().name).unwrap_or(FKind::Unit)
+            }
+            TypeExpr::Fn { .. } => FKind::Unit, // fenced by DL1302 at check time
+        }
+    };
+    let params = f.params.iter().map(|p| kind_of(&p.ty)).collect();
+    let ret = f.ret.as_ref().map(kind_of).unwrap_or(FKind::Unit);
+    ForeignSig { name: f.name.name.clone(), params, ret }
+}
+
+/// Map a runtime `Value` to the marshalled `FVal` its foreign parameter expects. In a well-typed
+/// program the pair always matches; a mismatch (only reachable on unchecked input) marshals a benign
+/// default rather than panicking.
+fn value_to_fval(kind: FKind, v: &Value) -> FVal {
+    match (kind, v) {
+        (FKind::Int, Value::Int(i)) => FVal::Int(*i),
+        (FKind::Float, Value::Float(f)) => FVal::Float(*f),
+        (FKind::Bool, Value::Bool(b)) => FVal::Bool(*b),
+        (FKind::Str, Value::Str(s)) => FVal::Str(s.clone()),
+        (FKind::Ptr, Value::ForeignPtr(p)) => FVal::Ptr(*p),
+        (FKind::Unit, _) => FVal::Unit,
+        (FKind::Int, _) => FVal::Int(0),
+        (FKind::Float, _) => FVal::Float(0.0),
+        (FKind::Bool, _) => FVal::Bool(false),
+        (FKind::Str, _) => FVal::Str(std::rc::Rc::from("")),
+        (FKind::Ptr, _) => FVal::Ptr(0),
+    }
+}
+
+/// Map a validated foreign return `FVal` back to a runtime `Value`.
+fn fval_to_value(fv: FVal) -> Value {
+    match fv {
+        FVal::Int(i) => Value::Int(i),
+        FVal::Float(f) => Value::Float(f),
+        FVal::Bool(b) => Value::Bool(b),
+        FVal::Str(s) => Value::Str(s),
+        FVal::Unit => Value::Unit,
+        FVal::Ptr(p) => Value::ForeignPtr(p),
+    }
+}
+
+/// Map a [`foreign::ForeignErr`] to its `std.foreign.ForeignErr` sum value (spec §8).
+fn foreign_err_value(e: &foreign::ForeignErr) -> Value {
+    use foreign::ForeignErr::*;
+    match e {
+        NotGranted => Value::variant("NotGranted", vec![]),
+        SymbolMissing(s) => Value::variant("SymbolMissing", vec![Value::str(s.clone())]),
+        BadReturn(s) => Value::variant("BadReturn", vec![Value::str(s.clone())]),
+        Unavailable(s) => Value::variant("Unavailable", vec![Value::str(s.clone())]),
     }
 }

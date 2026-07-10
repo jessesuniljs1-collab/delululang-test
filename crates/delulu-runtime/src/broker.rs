@@ -21,6 +21,9 @@ pub struct Manifest {
     pub fs_write: Vec<String>,
     pub net: Vec<String>,
     pub secrets: Vec<String>,
+    /// `foreign.c` logical lib names the manifest permits (Stage 4, spec §4.1). The manifest names
+    /// *what* the program may reach for; the human/broker's `--grant` supplies *which binary*.
+    pub foreign_c: Vec<String>,
 }
 
 /// Parse the tiny subset of TOML the Stage-1 manifest uses: `[section]` headers and
@@ -48,6 +51,7 @@ pub fn parse_manifest(src: &str) -> Manifest {
             ("authority", "fs.write") => m.fs_write = values,
             ("authority", "net") => m.net = values,
             ("authority", "secrets") => m.secrets = values,
+            ("authority", "foreign.c") => m.foreign_c = values,
             _ => {}
         }
     }
@@ -71,6 +75,7 @@ impl Manifest {
             fs_read: self.fs_read.clone(),
             fs_write: self.fs_write.clone(),
             net: self.net.clone(),
+            ..Default::default()
         }
     }
 
@@ -101,6 +106,9 @@ pub struct Grants {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: HashMap<String, String>,
+    /// `foreign.c` grants: logical lib name → the concrete binary path/name the human chose
+    /// (Stage 4, spec §4.1). The path is grant data, never program data.
+    pub foreign_c: HashMap<String, String>,
 }
 
 impl Grants {
@@ -121,6 +129,19 @@ impl Grants {
                 "fs.read" => self.fs_read.push(v.trim().to_string()),
                 "fs.write" => self.fs_write.push(v.trim().to_string()),
                 "net" => self.net.push(v.trim().to_string()),
+                // `foreign.c=LOGICAL:PATH` — split on the FIRST colon only, so a Windows path like
+                // `mathlib:C:\lib\libm.dll` keeps its drive-letter colon (spec §4.1). A bare name
+                // (`mathlib:libm.dll`) resolves via the OS loader rules at bind time.
+                "foreign.c" => {
+                    let (name, path) = v.trim().split_once(':').ok_or_else(|| {
+                        format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)")
+                    })?;
+                    let (name, path) = (name.trim(), path.trim());
+                    if name.is_empty() || path.is_empty() {
+                        return Err(format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)"));
+                    }
+                    self.foreign_c.insert(name.to_string(), path.to_string());
+                }
                 other => return Err(format!("unknown grant `{other}`")),
             },
             None => match spec.trim() {
@@ -159,11 +180,19 @@ impl Grants {
             rand: self.rand,
             declassify: self.declassify,
             secrets: self.secrets.clone(),
+            // `Cap[ForeignLoad]` is available to mint iff at least one foreign lib is granted; the
+            // per-lib authority decision is enforced separately at bind time (spec §4.1).
+            foreign_load: !self.foreign_c.is_empty(),
         }
     }
 
     pub fn scope_info(&self) -> ScopeInfo {
-        ScopeInfo { fs_read: self.fs_read.clone(), fs_write: self.fs_write.clone(), net: self.net.clone() }
+        ScopeInfo {
+            fs_read: self.fs_read.clone(),
+            fs_write: self.fs_write.clone(),
+            net: self.net.clone(),
+            ..Default::default()
+        }
     }
 }
 
@@ -180,10 +209,59 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             ResourceKind::Rand => !grants.rand,
             ResourceKind::Declassify => !grants.declassify,
             ResourceKind::PluginHost => true,
-            // Foreign capabilities have no runtime grant yet (their grant flow lands in Stage 4
-            // phases 4e/4f); treat them as always-ungranted for now, like PluginHost.
-            ResourceKind::Python | ResourceKind::ForeignLoad => true,
+            // `Cap[ForeignLoad]` is covered once any `foreign.c` lib is granted (spec §4.1); the
+            // per-lib gate is enforced at bind time. Python's grant flow lands in phase 4f.
+            ResourceKind::ForeignLoad => grants.foreign_c.is_empty(),
+            ResourceKind::Python => true,
         })
         .copied()
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ----- Stage 4 foreign grants (spec §4.1) -------------------------------
+
+    #[test]
+    fn foreign_grant_splits_on_the_first_colon_only() {
+        // A Windows path keeps its drive-letter colon: the grant splits LOGICAL from PATH once.
+        let mut g = Grants::default();
+        g.add(r"foreign.c=mathlib:C:\libs\libm.dll").unwrap();
+        assert_eq!(g.foreign_c["mathlib"], r"C:\libs\libm.dll");
+        // A bare name resolves via OS loader rules at bind time — also legal grant data.
+        g.add("foreign.c=z:libz.so.1").unwrap();
+        assert_eq!(g.foreign_c["z"], "libz.so.1");
+    }
+
+    #[test]
+    fn malformed_foreign_grant_is_an_error_not_a_panic() {
+        let mut g = Grants::default();
+        assert!(g.add("foreign.c=mathlib").is_err(), "missing path must be rejected");
+        assert!(g.add("foreign.c=:only-a-path").is_err(), "missing logical name must be rejected");
+        assert!(g.add("foreign.c=name:").is_err(), "empty path must be rejected");
+    }
+
+    #[test]
+    fn manifest_parses_foreign_c_logical_names() {
+        let m = parse_manifest("[authority]\neffects = [\"ForeignCall\"]\nforeign.c = [\"mathlib\", \"z\"]\n");
+        assert_eq!(m.foreign_c, vec!["mathlib", "z"]);
+        assert_eq!(m.effects, vec!["ForeignCall"]);
+    }
+
+    #[test]
+    fn foreign_load_root_slice_follows_the_grant() {
+        let mut needs = std::collections::BTreeSet::new();
+        needs.insert(ResourceKind::ForeignLoad);
+
+        let ungranted = Grants::default();
+        assert!(!ungranted.build_root().foreign_load, "no grant, no Cap[ForeignLoad]");
+        assert_eq!(missing_kinds(&needs, &ungranted), vec![ResourceKind::ForeignLoad]);
+
+        let mut granted = Grants::default();
+        granted.add("foreign.c=mathlib:libm.dll").unwrap();
+        assert!(granted.build_root().foreign_load);
+        assert!(missing_kinds(&needs, &granted).is_empty());
+    }
 }

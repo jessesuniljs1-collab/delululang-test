@@ -38,6 +38,11 @@ pub struct CheckResult {
     pub main_present: bool,
     /// Type of the last top-level binding checked (for the REPL). Keyed by fn name.
     pub fn_types: HashMap<String, Type>,
+    /// Which `foreign` lib each `root.foreign(load)` call site binds (Stage 4, phase 4d). The
+    /// grammar has no method type-argument syntax, so `[M]` in `root.foreign[M](load)` is inferred
+    /// from context; the interpreter needs that resolved name to know which library to dlopen and
+    /// which symbols to resolve. Keyed by the `Expr::Method` node id of the `root.foreign(..)` call.
+    pub foreign_binds: HashMap<NodeId, String>,
 }
 
 /// Effect-row accumulator: concrete effects plus any polymorphic tails still in play.
@@ -78,6 +83,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         diags: Vec::new(),
         facts: HashMap::new(),
         fn_types: HashMap::new(),
+        pending_foreign_binds: Vec::new(),
     };
     for item in &module.items {
         if let Item::Fn(f) = item {
@@ -90,6 +96,16 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
             checker.check_foreign_decl(fd);
         }
     }
+    // Resolve each `root.foreign(load)` call site's inferred lib type `M` now that the whole
+    // program's substitution is settled (the annotation/use that pins `M` may occur anywhere in the
+    // function body). A call whose handle never resolves to a concrete `Type::Foreign` is skipped —
+    // such a program cannot call a method on the handle either, so the interpreter never needs it.
+    let mut foreign_binds: HashMap<NodeId, String> = HashMap::new();
+    for (id, tv) in &checker.pending_foreign_binds {
+        if let Type::Foreign(name) = checker.cx.apply_type(&Type::Var(*tv)) {
+            foreign_binds.insert(*id, name);
+        }
+    }
     let main_present = table.fns.contains_key("main");
     let main_row = checker.facts.get("main").map(|f| f.effects.clone());
     CheckResult {
@@ -98,6 +114,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         main_row,
         main_present,
         fn_types: checker.fn_types,
+        foreign_binds,
     }
 }
 
@@ -107,6 +124,9 @@ struct Checker<'a> {
     diags: Vec<Diagnostic>,
     facts: HashMap<String, FnFacts>,
     fn_types: HashMap<String, Type>,
+    /// `root.foreign(load)` call sites and the fresh handle var each produced, resolved to a
+    /// concrete lib name after all functions are checked (see `check_module`).
+    pending_foreign_binds: Vec<(NodeId, crate::ty::TypeVar)>,
 }
 
 /// Per-function-body checking context.
@@ -455,7 +475,7 @@ impl<'a> Checker<'a> {
             Expr::List { items, span, .. } => self.check_list(items, *span, ctx),
             Expr::Record { path, fields, span, .. } => self.check_record(path, fields, *span, ctx),
             Expr::Call { callee, args, span, .. } => self.check_call(callee, args, *span, ctx),
-            Expr::Method { recv, name, args, span, .. } => self.check_method(recv, name, args, *span, ctx),
+            Expr::Method { recv, name, args, span, id } => self.check_method(recv, name, args, *span, *id, ctx),
             Expr::Field { recv, name, .. } => {
                 let (rt, rr) = self.check_expr(recv, ctx);
                 (self.field_type(&rt, name, ctx), rr)
@@ -723,7 +743,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_method(&mut self, recv: &Expr, name: &Ident, args: &[Expr], span: Span, ctx: &mut FnCtx) -> (Type, RowAcc) {
+    fn check_method(&mut self, recv: &Expr, name: &Ident, args: &[Expr], span: Span, node_id: NodeId, ctx: &mut FnCtx) -> (Type, RowAcc) {
         let (rt, mut acc) = self.check_expr(recv, ctx);
         let rt = self.cx.apply_type(&rt);
         // Capture literal secret names for the authority report (`root.secret("NAME")`).
@@ -758,6 +778,16 @@ impl<'a> Checker<'a> {
             if let Some(k) = produced_cap {
                 ctx.facts.cap_kinds.insert(k);
             }
+            // T-ForeignBind runtime hook (phase 4d): remember this `root.foreign(load)` call site
+            // and the fresh handle var it produced, so `check_module` can record the resolved lib
+            // name for the interpreter once inference settles. `ret` is `Result[M, ForeignErr]`.
+            if matches!(rt, Type::Root) && name.name == "foreign" {
+                if let Type::Result(inner, _) = &ret {
+                    if let Type::Var(tv) = **inner {
+                        self.pending_foreign_binds.push((node_id, tv));
+                    }
+                }
+            }
             return (ret, acc);
         }
 
@@ -786,6 +816,10 @@ impl<'a> Checker<'a> {
                     "clock" => (Type::Cap(ResourceKind::Clock), ResourceKind::Clock),
                     "rand" => (Type::Cap(ResourceKind::Rand), ResourceKind::Rand),
                     "declassify" => (Type::Cap(ResourceKind::Declassify), ResourceKind::Declassify),
+                    // Mints `Cap[ForeignLoad]`, which gates `root.foreign(load)` (spec §3, head-chef
+                    // ruling): a pure derivation from `Root`, exactly like the other `root.X()`
+                    // constructors — deriving the loader authority is not itself an effect.
+                    "foreign_load" => (Type::Cap(ResourceKind::ForeignLoad), ResourceKind::ForeignLoad),
                     "plugin_host" => (Type::Cap(ResourceKind::PluginHost), ResourceKind::PluginHost),
                     "secret" => {
                         ctx.facts.uses_secret = true;

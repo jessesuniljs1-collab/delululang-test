@@ -246,6 +246,58 @@ mod tests {
         assert!(c.result.facts["get"].pure, "binding a foreign lib must be pure");
     }
 
+    // ----- Stage 4: root.foreign_load() + bind-site resolution (4d/4e) -----
+
+    #[test]
+    fn root_foreign_load_mints_cap_foreignload_and_is_pure() {
+        // Head-chef ruling (normative in the Book ch. 14): `root.foreign_load() ->
+        // Cap[ForeignLoad]` is a pure derivation from Root, like every other root.X() constructor.
+        let c = check("module m\nfn get(root: Root) -> Cap[ForeignLoad] { root.foreign_load() }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["get"].pure, "minting Cap[ForeignLoad] must be pure");
+        assert!(
+            c.result.facts["get"].cap_kinds.contains(&ResourceKind::ForeignLoad),
+            "the report must know the program wields ForeignLoad"
+        );
+    }
+
+    #[test]
+    fn foreign_bind_sites_resolve_their_lib_for_the_runtime() {
+        // The `[M]` of `root.foreign[M](load)` is inferred from context; the interpreter needs the
+        // resolved lib name per bind site to know which library to load (phase 4d).
+        let c = check(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\nfn get(root: Root, load: Cap[ForeignLoad]) -> Result[mathlib, ForeignErr] { root.foreign(load) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert_eq!(c.result.foreign_binds.len(), 1, "{:?}", c.result.foreign_binds);
+        assert_eq!(c.result.foreign_binds.values().next().map(String::as_str), Some("mathlib"));
+    }
+
+    #[test]
+    fn full_bind_chain_with_root_foreign_load_checks_clean() {
+        // The canonical Book ch. 14 shape: mint the load cap, bind with `?`, call the symbol.
+        let c = check(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\n\
+             fn compute(root: Root) -> Result[Float, ForeignErr] ! {ForeignCall} { let load = root.foreign_load()\n \
+             let m: mathlib = root.foreign(load)?\n Ok(m.cos(1.0)) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert_eq!(c.result.foreign_binds.values().next().map(String::as_str), Some("mathlib"));
+        assert!(c.result.facts["compute"].effects.contains(&Effect::ForeignCall));
+    }
+
+    #[test]
+    fn foreignload_is_not_an_ordinary_capability_line_in_the_report() {
+        // ForeignLoad/Python disclose under the "outside the proof" separator (`foreign_calls`),
+        // never as a plain capability row (spec §6) — the foreign section is the single place the
+        // proof's holes are enumerated.
+        let c = check("module m\nfn main(root: Root) { let _l = root.foreign_load() }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let report = authority_report("m", &c.result, &ScopeInfo::default());
+        let caps = report["capabilities"].as_array().unwrap();
+        assert!(caps.iter().all(|cap| cap["kind"] != "ForeignLoad"), "{caps:?}");
+    }
+
     #[test]
     fn a_pure_program_authority_report_is_unchanged_by_stage4() {
         // Activating ForeignCall must not perturb a program that never touches foreign code.

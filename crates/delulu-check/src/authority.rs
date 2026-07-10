@@ -19,6 +19,11 @@ pub struct ScopeInfo {
     pub fs_read: Vec<String>,
     pub fs_write: Vec<String>,
     pub net: Vec<String>,
+    /// Pre-built `foreign_calls` JSON entries (spec §6, Stage 4 phase 4e). The CLI assembles these
+    /// from the program's `foreign` blocks + manifest allowlist, because they mix static declaration
+    /// data with manifest/grant data the checker's `CheckResult` does not carry. Empty when the
+    /// program declares no foreign blocks — so the report stays byte-identical to Stage 3.
+    pub foreign_calls: Vec<Value>,
 }
 
 impl ScopeInfo {
@@ -54,9 +59,15 @@ pub fn authority_report(program: &str, result: &CheckResult, scopes: &ScopeInfo)
     }
 
     // Group capability kinds; Declassify is reported as an effect, not a wielded resource line.
+    // `ForeignLoad`/`Python` are disclosed under the "outside the proof" separator (`foreign_calls`),
+    // not as ordinary capability lines — the foreign section is the single place the proof's holes
+    // are enumerated (spec §6).
     let mut capabilities = Vec::new();
     for k in &cap_kinds {
-        if matches!(k, ResourceKind::Declassify | ResourceKind::PluginHost) {
+        if matches!(
+            k,
+            ResourceKind::Declassify | ResourceKind::PluginHost | ResourceKind::ForeignLoad | ResourceKind::Python
+        ) {
             continue;
         }
         capabilities.push(json!({
@@ -83,7 +94,7 @@ pub fn authority_report(program: &str, result: &CheckResult, scopes: &ScopeInfo)
         "effects": effects_json,
         "capabilities": capabilities,
         "secrets": secrets.into_iter().collect::<Vec<_>>(),
-        "foreign_calls": [],
+        "foreign_calls": scopes.foreign_calls.clone(),
         "contained_plugins": [],
         "pure_functions": pure_functions,
     })

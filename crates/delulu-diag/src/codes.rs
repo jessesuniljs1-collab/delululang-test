@@ -107,6 +107,9 @@ registry! {
     // DL13xx — foreign (C FFI + embedded Python) (Stage 4)
     "DL1301" => "unmarshallable type in a foreign signature (incl. Secret/opaque)",
     "DL1302" => "function-typed value crossing the foreign boundary (no callbacks — rule R-6a)",
+    "DL1303" => "foreign lib used without a manifest entry or runtime grant",
+    "DL1304" => "foreign symbol not found at bind time",
+    "DL1306" => "foreign return failed shape validation (encoding or size)",
     "DL1308" => "unsupported ABI string in a `foreign` block",
 
     // DL09xx — runtime
@@ -125,6 +128,58 @@ pub fn is_registered(code: &str) -> bool {
 
 pub fn code_title(code: &str) -> Option<&'static str> {
     REGISTRY.iter().find(|c| c.code == code).map(|c| c.title)
+}
+
+/// The reachability-not-behavior honesty caveat carried, verbatim from spec §10, by EVERY DL13xx
+/// explain text (Stage 4 trap 1). The word "sandbox" is deliberately absent: Stage 4 bounds
+/// reachability, not behavior, and every foreign diagnostic links forward to Stage 5 for actual
+/// containment.
+const FOREIGN_CAVEAT: &str =
+    "Honesty (spec §10): Foreign code is outside the effect guarantee; the language bounds \
+     reachability (grant + capability + ForeignCall in every row), not behavior. Containment of \
+     behavior is process-level until Stage 5's foreign workers, and microVM-level after.";
+
+/// A longer, human-facing explanation for a diagnostic code, printed by `delulu explain <code>`
+/// beneath the title. Only codes whose behavior carries a normative caveat define one; the rest
+/// return `None` and `explain` prints the title alone. Every DL13xx (foreign) explanation appends
+/// [`FOREIGN_CAVEAT`] verbatim (README honesty clause 4 / Stage-4 trap 1).
+pub fn code_explain(code: &str) -> Option<String> {
+    let body = match code {
+        "DL1301" => "A `foreign` signature may only marshal `Int`, `Float`, `Bool`, `Str`, `Unit`, \
+             and `ForeignPtr`. `Secret[T]`, `Cap[R]`, `Root`, `Plugin[_]`, `PyObj`, and every other \
+             opaque type are refused: a secret must never cross to foreign code (invariant 20), and \
+             the repair list never suggests `expose` — laundering a secret across the FFI is exactly \
+             what the language exists to prevent.",
+        "DL1302" => "A function-typed value cannot cross the foreign boundary in either direction — \
+             no callbacks, by rule R-6a (soundness audit F-6): unverifiable code holding a re-entry \
+             point into verified code cannot be bounded by any effect row. This is a permanent rule, \
+             not a deferred feature. The escape valve is inverted control: DeluluLang drives the \
+             loop and passes data, not code.",
+        "DL1303" => "This program reaches a `foreign` lib with no matching `[authority] foreign.c` \
+             manifest entry or no `--grant foreign.c=LOGICAL:PATH`. The program names *what* it \
+             wants (a logical lib and its symbols); the human/broker decides *which binary* — the \
+             path is grant data, never program data. Deny-by-default: an ungranted lib is refused at \
+             the grant flow, before the program runs, never mid-run.",
+        "DL1304" => "A symbol the `foreign` block declares was not found in the granted library at \
+             bind time. All declared symbols resolve up front, fail-fast — a program that binds \
+             successfully never surprises you with a missing symbol during a later call. Check the \
+             symbol name and that the granted binary actually exports it.",
+        "DL1306" => "A value returned from foreign code failed shape validation at the boundary: a \
+             returned string was not valid UTF-8, or exceeded `--foreign-max-ret` (default 64 MiB) \
+             with no terminator. Returned foreign data is validated for *shape*, not *meaning* — it \
+             is untrusted input and programs should treat it accordingly. A C library can corrupt or \
+             crash the process; memory safety across the FFI is not claimed — validation covers \
+             returned data, not the callee's memory safety.",
+        "DL1308" => "The only ABI string supported in v0.4 is `\"c\"`. Other ABIs (C++, structs by \
+             value, varargs) are post-1.0 RFCs.",
+        _ => return None,
+    };
+    // Every foreign (DL13xx) explanation carries the reachability-not-behavior caveat verbatim.
+    if code.starts_with("DL13") {
+        Some(format!("{body}\n\n{FOREIGN_CAVEAT}"))
+    } else {
+        Some(body.to_string())
+    }
 }
 
 #[cfg(test)]
