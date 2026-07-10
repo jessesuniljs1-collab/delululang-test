@@ -52,6 +52,34 @@ pub enum Item {
     Type(TypeDecl),
     Effect(EffectDecl),
     Const(ConstDecl),
+    /// A `foreign "c" lib M { … }` block (Stage 4, spec §2).
+    Foreign(ForeignDecl),
+}
+
+/// A `foreign <abi> lib <name> { … }` block. `name` is BOTH the nominal opaque lib-handle type
+/// and the logical grant name; the block introduces no effect-row syntax — every foreign function
+/// has the implicit row `!{ForeignCall}` (spec §2, §3 T-ForeignCall).
+#[derive(Clone, Debug)]
+pub struct ForeignDecl {
+    pub public: bool,
+    /// The ABI string; `"c"` is the only value in v0.4 (others → DL1308).
+    pub abi: String,
+    /// Span of the ABI string literal (for DL1308).
+    pub abi_span: Span,
+    pub name: Ident,
+    pub fns: Vec<ForeignFn>,
+    pub id: NodeId,
+    pub span: Span,
+}
+
+/// A single `fn name(params) -> ret` inside a foreign block. There is deliberately no effect-row:
+/// the row is implicitly `!{ForeignCall}`, always (spec §2 EBNF).
+#[derive(Clone, Debug)]
+pub struct ForeignFn {
+    pub name: Ident,
+    pub params: Vec<Param>,
+    pub ret: Option<TypeExpr>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]

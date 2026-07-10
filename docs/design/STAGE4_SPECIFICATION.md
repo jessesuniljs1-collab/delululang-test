@@ -258,3 +258,23 @@ Unavailable(Str)`. `std.py`: `PyObj`, `PyErr`, the §5.2 surface. Nothing else.
 
 *Stage 4 opens the door and paints a bright line around it. Stage 5 moves the keys out of the
 house.*
+
+---
+
+## 11. Implementation status (2026-07-10)
+
+**Phase 4a — grammar + AST for `foreign` blocks (parse only) — is implemented and green** (205
+workspace tests, +5). `foreign` moves from reserved to an **active contextual keyword**: it is
+still lexed as an identifier (so `root.foreign(…)` stays a legal member access and `lib`/the ABI
+string need no new tokens — spec §2's "no other token changes"), and the parser recognizes
+`foreign STRING lib IDENT { … }` at item position (`crates/delulu-syntax/src/parser.rs`,
+`parse_foreign_decl`/`parse_foreign_fn`). New AST nodes `ForeignDecl`/`ForeignFn` and the
+`Item::Foreign` variant (`ast.rs`) carry the ABI string (with its span, for DL1308), the lib name
+(the nominal handle type *and* the logical grant name), and each function's params/return. A
+foreign function has **no effect-row syntax** — its row is implicitly `!{ForeignCall}`, always; a
+written `!` row there is a parse error (DL0201, "a foreign function has no effect row"). A
+non-`"c"` ABI is **DL1308** (registered in `crates/delulu-diag/src/codes.rs`, the first DL13xx),
+reported on the ABI-string span at parse time. Tests (`parser.rs`): round-trip of a two-function
+block, `pub foreign … { }`, non-`"c"` ABI → DL1308, an effect row on a foreign fn → parse error,
+and the regression that `root.foreign(…)` still parses as a method. No type-checking of the block
+yet (that is 4b/4c) — this phase is purely lexer/parser/AST + the DL1308 diagnostic.

@@ -104,6 +104,9 @@ registry! {
     "DL1205" => "secret contents cannot enter the WASM guest (`--target wasm`)",
     "DL1206" => "engine parity self-check failure (compiler-bug class)",
 
+    // DL13xx — foreign (C FFI + embedded Python) (Stage 4)
+    "DL1308" => "unsupported ABI string in a `foreign` block",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",

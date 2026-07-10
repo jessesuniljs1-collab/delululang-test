@@ -66,6 +66,13 @@ impl Parser {
         matches!(self.peek(), TokenKind::Eof)
     }
 
+    /// True when the cursor is on an identifier token equal to `word` — the test for a
+    /// *contextual* keyword (`foreign`, `lib`, `as`), which stays lexed as an identifier so it
+    /// remains usable as a member name (`root.foreign`, `x.lib`).
+    fn at_kw_ident(&self, word: &str) -> bool {
+        matches!(self.peek(), TokenKind::Ident(n) if n == word)
+    }
+
     fn bump(&mut self) -> Token {
         let t = self.tokens[self.pos].clone();
         if !self.at_eof() {
@@ -182,6 +189,9 @@ impl Parser {
 
     fn recover_item(&mut self) {
         while !self.at_eof() {
+            if self.at_kw_ident("foreign") {
+                return;
+            }
             if matches!(
                 self.peek(),
                 TokenKind::KwFn
@@ -285,6 +295,11 @@ impl Parser {
 
     fn parse_item(&mut self) -> Option<Item> {
         let public = self.eat(&TokenKind::KwPub);
+        // `foreign` is an active *contextual* keyword (spec §2): still lexed as an identifier so
+        // `root.foreign(…)` stays legal, but recognized here as `foreign STRING lib IDENT { … }`.
+        if self.at_kw_ident("foreign") {
+            return Some(Item::Foreign(self.parse_foreign_decl(public)));
+        }
         match self.peek() {
             TokenKind::KwFn => Some(Item::Fn(self.parse_fn(public))),
             TokenKind::KwType => Some(Item::Type(self.parse_type_decl(public))),
@@ -309,6 +324,114 @@ impl Parser {
                 None
             }
         }
+    }
+
+    /// `foreign_decl = "foreign" STRING "lib" IDENT "{" { foreign_fn } "}"` (spec §2).
+    fn parse_foreign_decl(&mut self, public: bool) -> ForeignDecl {
+        let start = self.span();
+        self.bump(); // `foreign` (identifier token used as a contextual keyword)
+
+        // The ABI string.
+        let mut abi = String::new();
+        let mut abi_present = false;
+        let abi_span;
+        match self.peek().clone() {
+            TokenKind::Str(s) => {
+                abi_span = self.span();
+                self.bump();
+                self.panicking = false;
+                abi = s;
+                abi_present = true;
+            }
+            other => {
+                abi_span = self.span();
+                self.error(
+                    "DL0201",
+                    format!("expected an ABI string after `foreign`, found {}", other.describe()),
+                    abi_span,
+                    "expected a string like `\"c\"`",
+                );
+            }
+        }
+
+        // The `lib` contextual keyword.
+        if self.at_kw_ident("lib") {
+            self.bump();
+            self.panicking = false;
+        } else {
+            self.error(
+                "DL0201",
+                format!("expected `lib` after the ABI string, found {}", self.peek().describe()),
+                self.span(),
+                "expected `lib` here",
+            );
+        }
+
+        let name = self.expect_decl_name();
+
+        // DL1308: `"c"` is the only ABI supported in v0.4.
+        if abi_present && abi != "c" {
+            self.diags.push(
+                Diagnostic::error("DL1308", format!("unsupported ABI `\"{abi}\"` — v0.4 supports only the C ABI (`\"c\"`)"))
+                    .with_span(abi_span, "only `\"c\"` is supported here"),
+            );
+        }
+
+        // The block body: zero or more foreign functions.
+        self.expect(TokenKind::LBrace);
+        let mut fns = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            if self.eat(&TokenKind::Term) {
+                continue;
+            }
+            let before = self.pos;
+            if let Some(ff) = self.parse_foreign_fn() {
+                fns.push(ff);
+            }
+            if self.pos == before {
+                // No progress — force one to avoid an infinite loop.
+                self.bump();
+            }
+        }
+        self.expect(TokenKind::RBrace);
+        let span = start.to(self.prev_span());
+        self.expect_term();
+        ForeignDecl { public, abi, abi_span, name, fns, id: self.node_id(), span }
+    }
+
+    /// `foreign_fn = "fn" IDENT "(" [params] ")" [ "->" type ]` — deliberately no effect row:
+    /// a foreign function's row is implicitly `!{ForeignCall}`, always (spec §2). A `!` row here
+    /// is a parse error.
+    fn parse_foreign_fn(&mut self) -> Option<ForeignFn> {
+        if !self.at(&TokenKind::KwFn) {
+            self.error(
+                "DL0201",
+                format!("expected a foreign `fn` declaration, found {}", self.peek().describe()),
+                self.span(),
+                "expected `fn` or `}` here",
+            );
+            self.recover_stmt();
+            return None;
+        }
+        let start = self.span();
+        self.bump(); // fn
+        let name = self.expect_decl_name();
+        let params = self.parse_params();
+        let ret = if self.eat(&TokenKind::Arrow) { Some(self.parse_type()) } else { None };
+        // No effect-row syntax: the row is always `!{ForeignCall}` (spec §2, invariant 19).
+        if self.at(&TokenKind::Bang) {
+            let bang = self.span();
+            self.error(
+                "DL0201",
+                "a foreign function has no effect row — its row is always `! {ForeignCall}`",
+                bang,
+                "remove this effect row",
+            );
+            let _ = self.parse_opt_row(); // consume it so parsing recovers
+        }
+        let span = start.to(self.prev_span());
+        self.expect_term();
+        Some(ForeignFn { name, params, ret, span })
     }
 
     fn parse_generics(&mut self) -> Vec<Ident> {
@@ -1116,5 +1239,62 @@ mod tests {
     fn missing_module_header_is_dl0204() {
         let (_, d) = parse_src("fn f() { }\n");
         assert!(d.iter().any(|x| x.code == "DL0204"), "{d:?}");
+    }
+
+    // ----- Stage 4: foreign blocks -----------------------------------------
+
+    #[test]
+    fn foreign_block_parses_round_trip() {
+        let m = parse_ok(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float\n fn sqrt(x: Float) -> Float }\n",
+        );
+        assert_eq!(m.items.len(), 1);
+        match &m.items[0] {
+            Item::Foreign(fd) => {
+                assert_eq!(fd.abi, "c");
+                assert!(!fd.public);
+                assert_eq!(fd.name.name, "mathlib");
+                assert_eq!(fd.fns.len(), 2);
+                assert_eq!(fd.fns[0].name.name, "cos");
+                assert_eq!(fd.fns[0].params.len(), 1);
+                assert_eq!(fd.fns[0].params[0].name.name, "x");
+                assert!(fd.fns[0].ret.is_some());
+                assert_eq!(fd.fns[1].name.name, "sqrt");
+            }
+            other => panic!("expected a foreign block, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pub_foreign_block_and_empty_body_parse() {
+        let m = parse_ok("module m\npub foreign \"c\" lib libc { }\n");
+        match &m.items[0] {
+            Item::Foreign(fd) => {
+                assert!(fd.public);
+                assert_eq!(fd.name.name, "libc");
+                assert!(fd.fns.is_empty());
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn non_c_abi_is_dl1308() {
+        let (_, d) = parse_src("module m\nforeign \"rust\" lib r { fn f() }\n");
+        assert!(d.iter().any(|x| x.code == "DL1308"), "{d:?}");
+    }
+
+    #[test]
+    fn foreign_fn_with_effect_row_is_a_parse_error() {
+        // A foreign fn's row is implicitly `!{ForeignCall}`; writing one is rejected at parse.
+        let (_, d) = parse_src("module m\nforeign \"c\" lib l { fn f() -> Int ! {Net} }\n");
+        assert!(d.iter().any(|x| x.code == "DL0201"), "{d:?}");
+    }
+
+    #[test]
+    fn foreign_is_still_usable_as_a_member_name() {
+        // `foreign` is a contextual keyword: `root.foreign(...)` must keep parsing as a method.
+        let m = parse_ok("module m\nfn main(root: Root) { let m = root.foreign(load) }\n");
+        assert_eq!(m.items.len(), 1);
     }
 }

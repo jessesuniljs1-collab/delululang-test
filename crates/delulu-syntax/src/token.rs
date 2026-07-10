@@ -173,9 +173,14 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
 /// Words reserved for future stages (§2.3). The lexer emits them as identifiers;
 /// the parser rejects them at declaration sites (DL0106) — member names after `.`
 /// remain legal, which is how `root.secret(…)` coexists with `secret` reserved.
+///
+/// `foreign` (Stage 4) is NOT in this list: it is an active **contextual** keyword. It is still
+/// lexed as an identifier (so `root.foreign(…)` stays a legal member access, and `lib`/the ABI
+/// string need no new tokens), and the parser recognizes `foreign STRING lib IDENT { … }` as a
+/// declaration at item position (spec §2).
 pub const RESERVED: &[&str] = &[
     "actor", "async", "await", "spawn", "iso", "val", "ref", "box", "tag", "trn", "plugin",
-    "foreign", "secret", "cap", "for", "in", "break", "continue", "trait", "impl", "where",
+    "secret", "cap", "for", "in", "break", "continue", "trait", "impl", "where",
     "pure",
 ];
 
