@@ -792,6 +792,18 @@ impl<'a> Checker<'a> {
                         self.expect_arg(args, 0, &Type::Str, span);
                         return Some((Type::Secret(Box::new(Type::Str)), None, None));
                     }
+                    // T-ForeignBind (spec §3): deriving a lib handle is PURE — the effect is in
+                    // *using* the handle, not in binding it. `root.foreign(load: Cap[ForeignLoad])
+                    // -> Result[M, ForeignErr]`. The lib type `M` is a fresh variable resolved from
+                    // the binding's context (its annotation/use), i.e. the `[M]` of the normative
+                    // signature is inferred rather than written — the grammar has no method
+                    // type-argument syntax.
+                    "foreign" => {
+                        self.expect_arg(args, 0, &Type::Cap(ResourceKind::ForeignLoad), span);
+                        let handle = self.cx.fresh_type();
+                        let ferr = Type::Sum(self.table.foreign_err(), vec![]);
+                        return Some((Type::result(handle, ferr), None, None));
+                    }
                     _ => return None,
                 };
                 // Root constructors that take a path/hosts argument.
@@ -890,6 +902,38 @@ impl<'a> Checker<'a> {
                 }
                 _ => None,
             },
+            // T-ForeignCall (spec §3): a method call on a lib handle types per the block's
+            // signature, with row exactly `{ForeignCall}`.
+            Type::Foreign(libname) => {
+                let fdef = self.table.foreigns.get(libname)?.clone();
+                let ffn = fdef.fns.iter().find(|f| f.name == method)?;
+                if ffn.params.len() != args.len() {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0403",
+                            format!(
+                                "foreign function `{}.{}` expects {} argument(s), found {}",
+                                libname,
+                                method,
+                                ffn.params.len(),
+                                args.len()
+                            ),
+                        )
+                        .with_span(span, "wrong number of arguments"),
+                    );
+                }
+                for (i, p) in ffn.params.iter().enumerate() {
+                    let expected = self.lower_type(&p.ty, &Genv::default(), &mut FnFacts::default());
+                    if let Some((at, aspan)) = args.get(i) {
+                        self.expect_type(&expected, at, *aspan, "foreign argument type mismatch");
+                    }
+                }
+                let ret_ty = match &ffn.ret {
+                    Some(t) => self.lower_type(t, &Genv::default(), &mut FnFacts::default()),
+                    None => Type::Unit,
+                };
+                Some((ret_ty, Some(Effect::ForeignCall), None))
+            }
             _ => None,
         }
     }

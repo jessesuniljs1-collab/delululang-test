@@ -193,6 +193,71 @@ mod tests {
         assert!(e.contains(&"DL0604".to_string()), "{e:?}");
     }
 
+    // ----- Stage 4: ForeignCall effect + T-ForeignBind + T-ForeignCall (4c) -----
+
+    #[test]
+    fn calling_a_foreign_method_without_foreigncall_in_row_is_dl0501() {
+        let e = errors(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\nfn bad(m: mathlib) -> Float { m.cos(1.0) }\n",
+        );
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn calling_a_foreign_method_with_foreigncall_declared_checks_clean() {
+        let c = check(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\nfn good(m: mathlib) -> Float ! {ForeignCall} { m.cos(1.0) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        // T-ForeignCall: the method call carries exactly `{ForeignCall}`.
+        assert!(c.result.facts["good"].effects.contains(&Effect::ForeignCall));
+    }
+
+    #[test]
+    fn foreign_method_argument_types_are_checked() {
+        // `cos` wants a Float; passing an Int is a type mismatch (DL0401/DL0402 class).
+        let c = check(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\nfn f(m: mathlib) -> Float ! {ForeignCall} { m.cos(1) }\n",
+        );
+        assert!(c.has_errors(), "an Int arg to a Float foreign param must be rejected");
+    }
+
+    #[test]
+    fn foreigncall_propagates_up_the_call_chain() {
+        // This is exactly the chain `delulu why ForeignCall` walks: main -> mid -> leaf -> m.cos.
+        let c = check(
+            "module m\n\
+             foreign \"c\" lib mathlib { fn cos(x: Float) -> Float }\n\
+             fn leaf(m: mathlib) -> Float ! {ForeignCall} { m.cos(1.0) }\n\
+             fn mid(m: mathlib) -> Float ! {ForeignCall} { leaf(m) }\n\
+             fn main(m: mathlib) -> Float ! {ForeignCall} { mid(m) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["main"].effects.contains(&Effect::ForeignCall));
+    }
+
+    #[test]
+    fn binding_a_foreign_lib_is_pure() {
+        // T-ForeignBind: deriving a handle is not an effect (using it is).
+        let c = check(
+            "module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float }\nfn get(root: Root, load: Cap[ForeignLoad]) -> Result[mathlib, ForeignErr] { root.foreign(load) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["get"].pure, "binding a foreign lib must be pure");
+    }
+
+    #[test]
+    fn a_pure_program_authority_report_is_unchanged_by_stage4() {
+        // Activating ForeignCall must not perturb a program that never touches foreign code.
+        let c = check("module m\nfn f(n: Int) -> Int { n + 1 }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let report = authority_report("m", &c.result, &ScopeInfo::default());
+        let effects: Vec<String> =
+            report["effects"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        assert!(effects.is_empty(), "a pure program must have no effects, got {effects:?}");
+        assert_eq!(report["foreign_calls"].as_array().unwrap().len(), 0);
+    }
+
     #[test]
     fn row_polymorphism_pure_lambda_stays_pure() {
         let c = check(

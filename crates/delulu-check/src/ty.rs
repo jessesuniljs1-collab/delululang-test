@@ -18,6 +18,9 @@ pub enum Effect {
     Clock,
     Rand,
     Declassify,
+    /// Reaching foreign (C/Python) code (Stage 4). An ordinary core effect for every row purpose;
+    /// nothing special-cases it except reporting (spec §3).
+    ForeignCall,
     /// A user-declared effect (`effect Name`), identified by its name.
     User(String),
 }
@@ -31,6 +34,7 @@ impl Effect {
             "Clock" => Effect::Clock,
             "Rand" => Effect::Rand,
             "Declassify" => Effect::Declassify,
+            "ForeignCall" => Effect::ForeignCall,
             _ => return None,
         })
     }
@@ -43,6 +47,7 @@ impl Effect {
             Effect::Clock => "Clock",
             Effect::Rand => "Rand",
             Effect::Declassify => "Declassify",
+            Effect::ForeignCall => "ForeignCall",
             Effect::User(n) => n,
         }
     }

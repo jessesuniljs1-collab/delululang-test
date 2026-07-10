@@ -300,3 +300,34 @@ Tests (`lib.rs`): a fully-marshallable block checks clean; `ForeignPtr` marshals
 does not; `Secret[Str]` → DL1301 with **no `expose`** anywhere in its repairs; `Cap`/lib
 handle/`List[..]`/return-`List` → DL1301; `fn(Int)->Int` param → DL1302 referencing R-6a with no
 repairs; a nested function type → DL1302; and stringifying a lib handle → DL0604.
+
+**Phase 4c — `ForeignCall` effect + T-ForeignBind + T-ForeignCall (checking, no runtime) — is
+implemented and green** (218 workspace tests, +6). `Effect::ForeignCall` is now an **ordinary
+core effect** (added to `Effect::core_from_name`/`name`): it unions, is row-polymorphic, is
+checked against the manifest ceiling, and is reported by `delulu authority`/`delulu why` with no
+special-casing — everything is string/`name()`-driven, so those paths needed no edits. **T-
+ForeignBind** (`check.rs`, the `Type::Root` method arm): `root.foreign(load: Cap[ForeignLoad]) ->
+Result[M, ForeignErr]` is **pure** — deriving a handle carries no effect. The `[M]` of the
+normative signature is realized as inference-from-context (a fresh type variable resolved by the
+binding's annotation/use), because the grammar has no method type-argument syntax; e.g. `let m:
+mathlib = root.foreign(load)?`. **T-ForeignCall** (the new `Type::Foreign(M)` receiver arm in
+`method_sig`): a call `m.cos(x)` looks the method up in the block's `foreign` signatures, checks
+argument arity/types, and returns the declared result type with effect **exactly `ForeignCall`**;
+an unknown method falls through to DL0405 as usual. Because `ForeignCall` is a normal effect, an
+undeclared foreign call is caught by the existing T-Fn boundary check as **DL0501**, and it flows
+through the call graph unchanged. Tests (`lib.rs`): `m.cos` without `ForeignCall` in the row →
+DL0501; with it declared → clean and `ForeignCall` in the function's facts; a mistyped foreign
+argument is rejected; `ForeignCall` propagates `main → mid → leaf → m.cos` (the chain `delulu why`
+walks); `root.foreign(load)` is pure; and a program that never touches foreign code has no
+effects and `"foreign_calls": []` — its authority report is unchanged. End-to-end CLI spot-check:
+`delulu why ForeignCall` prints the `main → compute — ForeignCall` chain, and `delulu explain`
+resolves DL1301/DL1302/DL1308.
+
+**Not in this chunk (later phases):** the runtime C FFI (4d), manifest/grants + the
+`foreign_calls` authority array + the "outside the proof" separator (4e), embedded CPython and the
+`std.py` surface (4f), and the WASM `delulu:foreign@0.4` host interface + parity (4g). Two
+compile-time surface details are deferred to those phases rather than guessed here: the **method
+by which `Cap[ForeignLoad]`/`Cap[Python]` are minted from `Root`** (the spec names the parameter
+type but not a `root.foreign_load()`-style constructor; tests thread the cap through a parameter),
+and the runtime DL13xx codes (DL1303–DL1307) which are bind/call-time and register with their
+phases.
