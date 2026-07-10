@@ -21,7 +21,7 @@ use crate::check::check_module;
 use crate::manifest::{AuthoritySpec, DepSource, Manifest};
 use crate::package::{load_package_into, ModuleUnit};
 use crate::program::{build_kind, dup, insert_unique_type, push_prelude, Program};
-use crate::resolve::{classify_generics, ConstSig, DeclTable, FnSig, TypeDef};
+use crate::resolve::{classify_generics, ConstSig, DeclTable, ForeignDef, ForeignFnDef, FnSig, TypeDef};
 use crate::ty::{ResourceKind, TypeDefId};
 
 /// One resolved package in the workspace.
@@ -417,7 +417,30 @@ pub fn check_workspace(ws: &Workspace) -> Program {
             }
         }
 
-        let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, fn_order };
+        // Foreign blocks (Stage 4): register each module's own `foreign` lib types.
+        let mut foreigns: std::collections::HashMap<String, ForeignDef> = std::collections::HashMap::new();
+        for item in &unit.module.items {
+            if let delulu_syntax::ast::Item::Foreign(fd) = item {
+                let fname = fd.name.name.clone();
+                if type_ix.contains_key(&fname) || foreigns.contains_key(&fname) {
+                    diagnostics.push(dup(m, "type", &fname, fd.span));
+                    continue;
+                }
+                let ffns = fd
+                    .fns
+                    .iter()
+                    .map(|f| ForeignFnDef {
+                        name: f.name.name.clone(),
+                        params: f.params.clone(),
+                        ret: f.ret.clone(),
+                        span: f.span,
+                    })
+                    .collect();
+                foreigns.insert(fname.clone(), ForeignDef { abi: fd.abi.clone(), name: fname, fns: ffns });
+            }
+        }
+
+        let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, fn_order };
         let result = check_module(&unit.module, &table);
         diagnostics.extend(result.diags.iter().cloned());
         for (name, f) in result.facts {

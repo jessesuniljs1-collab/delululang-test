@@ -49,12 +49,33 @@ pub struct ConstSig {
     pub ty: Option<TypeExpr>,
 }
 
+/// One function declared inside a `foreign` block (spec §2). Kept so T-ForeignCall can re-lower
+/// the signature at each `m.method(..)` call site.
+#[derive(Clone, Debug)]
+pub struct ForeignFnDef {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret: Option<TypeExpr>,
+    pub span: delulu_diag::Span,
+}
+
+/// A resolved `foreign <abi> lib <name> { … }` block. `name` is both the nominal opaque handle
+/// type (`Type::Foreign(name)`) and the logical grant name.
+#[derive(Clone, Debug)]
+pub struct ForeignDef {
+    pub abi: String,
+    pub name: String,
+    pub fns: Vec<ForeignFnDef>,
+}
+
 pub struct DeclTable {
     pub types: Vec<TypeDef>,
     pub type_ix: HashMap<String, TypeDefId>,
     pub user_effects: HashSet<String>,
     pub fns: HashMap<String, FnSig>,
     pub consts: HashMap<String, ConstSig>,
+    /// `foreign` blocks by lib name (spec §2). Each name is also an opaque `Type::Foreign`.
+    pub foreigns: HashMap<String, ForeignDef>,
     /// Insertion order of functions, for deterministic checking and reporting.
     pub fn_order: Vec<String>,
 }
@@ -70,6 +91,14 @@ impl DeclTable {
     }
     pub fn net_err(&self) -> TypeDefId {
         self.type_ix["NetErr"]
+    }
+    /// `std.foreign` error sum (Stage 4, spec §8).
+    pub fn foreign_err(&self) -> TypeDefId {
+        self.type_ix["ForeignErr"]
+    }
+    /// `std.py` error record (Stage 4, spec §5.2).
+    pub fn py_err(&self) -> TypeDefId {
+        self.type_ix["PyErr"]
     }
 
     /// Resolve a bare constructor name to the UNIQUE sum type that declares it, with the variant's
@@ -101,12 +130,22 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
         user_effects: HashSet::new(),
         fns: HashMap::new(),
         consts: HashMap::new(),
+        foreigns: HashMap::new(),
         fn_order: Vec::new(),
     };
 
     // Prelude sum types (Stage-1 stdlib surface, §11): IoErr, NetErr.
     register_prelude_type(&mut table, "IoErr", &[("NotFound", &[]), ("Denied", &[]), ("Other", &["Str"])]);
     register_prelude_type(&mut table, "NetErr", &[("Refused", &[]), ("Timeout", &[]), ("Other", &["Str"])]);
+    // Stage-4 foreign stdlib surface (spec §8): `std.foreign.ForeignErr` (sum) and
+    // `std.py.PyErr` (record). `ForeignPtr`/`PyObj` and the per-block lib handle `M` are
+    // opaque `Type` variants, registered by `check.rs`, not TypeDef entries.
+    register_prelude_type(
+        &mut table,
+        "ForeignErr",
+        &[("NotGranted", &[]), ("SymbolMissing", &["Str"]), ("BadReturn", &["Str"]), ("Unavailable", &["Str"])],
+    );
+    register_prelude_record(&mut table, "PyErr", &[("kind", "Str"), ("message", "Str")]);
 
     // First pass: type names (so signatures can forward-reference them).
     for item in &module.items {
@@ -139,6 +178,29 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
             if !table.user_effects.insert(ed.name.name.clone()) {
                 diags.push(dup("effect", &ed.name));
             }
+        }
+    }
+
+    // Foreign blocks (Stage 4, spec §2): each introduces a nominal opaque lib type `M` — sharing
+    // the type namespace — plus the block's foreign functions (for T-ForeignCall).
+    for item in &module.items {
+        if let Item::Foreign(fd) = item {
+            let name = fd.name.name.clone();
+            if table.type_ix.contains_key(&name) || table.foreigns.contains_key(&name) {
+                diags.push(dup("type", &fd.name));
+                continue;
+            }
+            let fns = fd
+                .fns
+                .iter()
+                .map(|f| ForeignFnDef {
+                    name: f.name.name.clone(),
+                    params: f.params.clone(),
+                    ret: f.ret.clone(),
+                    span: f.span,
+                })
+                .collect();
+            table.foreigns.insert(name.clone(), ForeignDef { abi: fd.abi.clone(), name, fns });
         }
     }
 
@@ -198,6 +260,25 @@ fn register_prelude_type(table: &mut DeclTable, name: &str, variants: &[(&str, &
         })
         .collect();
     table.types.push(TypeDef { name: name.to_string(), generics: vec![], kind: TypeDefKind::Sum(vs) });
+    table.type_ix.insert(name.to_string(), id);
+}
+
+fn register_prelude_record(table: &mut DeclTable, name: &str, fields: &[(&str, &str)]) {
+    let id = TypeDefId(table.types.len() as u32);
+    let fs = fields
+        .iter()
+        .map(|(fname, fty)| {
+            (
+                (*fname).to_string(),
+                TypeExpr::Named {
+                    path: Path { segs: vec![Ident { name: (*fty).to_string(), span: dummy_span() }] },
+                    args: vec![],
+                    span: dummy_span(),
+                },
+            )
+        })
+        .collect();
+    table.types.push(TypeDef { name: name.to_string(), generics: vec![], kind: TypeDefKind::Record(fs) });
     table.type_ix.insert(name.to_string(), id);
 }
 

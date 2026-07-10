@@ -105,6 +105,8 @@ registry! {
     "DL1206" => "engine parity self-check failure (compiler-bug class)",
 
     // DL13xx — foreign (C FFI + embedded Python) (Stage 4)
+    "DL1301" => "unmarshallable type in a foreign signature (incl. Secret/opaque)",
+    "DL1302" => "function-typed value crossing the foreign boundary (no callbacks — rule R-6a)",
     "DL1308" => "unsupported ABI string in a `foreign` block",
 
     // DL09xx — runtime

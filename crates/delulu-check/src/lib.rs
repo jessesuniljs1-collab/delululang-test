@@ -118,6 +118,81 @@ mod tests {
         assert!(e.contains(&"DL0605".to_string()), "{e:?}");
     }
 
+    // ----- Stage 4: the foreign marshallability fence (phase 4b) -----------
+
+    #[test]
+    fn marshallable_foreign_block_checks_clean() {
+        let c = check("module m\nforeign \"c\" lib mathlib { fn cos(x: Float) -> Float\n fn puts(s: Str) -> Int }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn foreignptr_marshals_but_pyobj_does_not() {
+        let c = check("module m\nforeign \"c\" lib l { fn f(p: ForeignPtr) -> ForeignPtr }\n");
+        assert!(!c.has_errors(), "ForeignPtr must marshal: {:?}", c.diagnostics);
+        let e = errors("module m\nforeign \"c\" lib l { fn g(o: PyObj) -> Int }\n");
+        assert!(e.contains(&"DL1301".to_string()), "PyObj must not marshal: {e:?}");
+    }
+
+    #[test]
+    fn secret_param_in_foreign_sig_is_dl1301_and_never_suggests_expose() {
+        let c = check("module m\nforeign \"c\" lib l { fn f(s: Secret[Str]) -> Int }\n");
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL1301")
+            .unwrap_or_else(|| panic!("expected DL1301, got {:?}", c.diagnostics));
+        // Criterion 3 (NON-NEGOTIABLE): the fence must NEVER suggest laundering a secret across
+        // the FFI — `expose` may not appear anywhere in the diagnostic's repairs.
+        for r in &d.repairs {
+            assert!(!r.id.contains("expose"), "a repair id must not mention `expose`");
+            for e in &r.edits {
+                assert!(!e.insert.contains("expose"), "no repair may insert `expose`");
+            }
+        }
+    }
+
+    #[test]
+    fn other_unmarshallable_types_in_foreign_sig_are_dl1301() {
+        // Cap, the lib handle itself, List, and user types are all unmarshallable.
+        for sig in [
+            "fn f(c: Cap[FsRead]) -> Int",
+            "fn f(m: l) -> Int",
+            "fn f(xs: List[Int]) -> Int",
+            "fn f(x: Int) -> List[Int]",
+        ] {
+            let src = format!("module m\nforeign \"c\" lib l {{ {sig} }}\n");
+            let e = errors(&src);
+            assert!(e.contains(&"DL1301".to_string()), "expected DL1301 for `{sig}`: {e:?}");
+        }
+    }
+
+    #[test]
+    fn function_typed_param_in_foreign_sig_is_dl1302_with_r6a() {
+        let c = check("module m\nforeign \"c\" lib l { fn f(cb: fn(Int) -> Int) -> Int }\n");
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL1302")
+            .unwrap_or_else(|| panic!("expected DL1302, got {:?}", c.diagnostics));
+        assert!(d.message.contains("R-6a"), "DL1302 must reference rule R-6a: {}", d.message);
+        assert!(d.repairs.is_empty(), "DL1302 is requires_human — no machine repairs");
+    }
+
+    #[test]
+    fn nested_function_type_in_foreign_sig_is_dl1302() {
+        // A function type nested inside a composite still trips the no-callbacks rule.
+        let e = errors("module m\nforeign \"c\" lib l { fn f(xs: List[fn() -> Int]) -> Int }\n");
+        assert!(e.contains(&"DL1302".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn stringifying_a_foreign_handle_is_dl0604() {
+        // A lib handle is R-5 opaque.
+        let e = errors("module m\nforeign \"c\" lib l { }\nfn f(h: l) -> Str { str(h) }\n");
+        assert!(e.contains(&"DL0604".to_string()), "{e:?}");
+    }
+
     #[test]
     fn row_polymorphism_pure_lambda_stays_pure() {
         let c = check(

@@ -84,6 +84,12 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
             checker.check_fn(f);
         }
     }
+    // The compile-time foreign fence (T-ForeignSig): every foreign signature must marshal.
+    for item in &module.items {
+        if let Item::Foreign(fd) = item {
+            checker.check_foreign_decl(fd);
+        }
+    }
     let main_present = table.fns.contains_key("main");
     let main_row = checker.facts.get("main").map(|f| f.effects.clone());
     CheckResult {
@@ -195,6 +201,56 @@ impl<'a> Checker<'a> {
         facts.pure = facts.effects.is_empty();
         facts.declassifies = facts.effects.contains(&Effect::Declassify);
         self.facts.insert(f.name.name.clone(), facts);
+    }
+
+    // ===== the foreign marshallability fence (T-ForeignSig, spec §3) ======
+
+    /// Check every parameter and return type of every function in a `foreign` block. This is the
+    /// actual compile-time security surface of Stage 4 (playbook 4b): it must be bulletproof.
+    fn check_foreign_decl(&mut self, fd: &ForeignDecl) {
+        for f in &fd.fns {
+            for p in &f.params {
+                self.check_marshallable(&p.ty);
+            }
+            if let Some(ret) = &f.ret {
+                self.check_marshallable(ret);
+            }
+        }
+    }
+
+    /// `M(τ)`: only `Int Float Bool Str Unit ForeignPtr` marshal (DL1301 otherwise, span on the
+    /// offending type). A function type *anywhere* (including nested) is the no-callbacks rule
+    /// (DL1302, R-6a) and takes priority over DL1301.
+    ///
+    /// Both diagnostics are emitted with **no repairs** — they are `requires_human` situations
+    /// (spec §7), and DL1301 must NEVER suggest `expose` to launder a secret across the FFI
+    /// (criterion 3). An empty repair list satisfies both, and matches how every other
+    /// `requires_human` code in the compiler is emitted.
+    fn check_marshallable(&mut self, t: &TypeExpr) {
+        // R-6a / invariant 22: no function pointer crosses the boundary, at any depth → DL1302.
+        if let Some(fspan) = first_fn_type(t) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1302",
+                    "a function-typed value cannot cross the foreign boundary — no callbacks, by rule R-6a",
+                )
+                .with_span(fspan, "unverifiable code must never hold a re-entry point into verified code")
+                .with_secondary_span(t.span(), "in this foreign signature type"),
+            );
+            return;
+        }
+        if !is_marshallable_type_expr(t) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1301",
+                    format!(
+                        "type `{}` cannot be marshalled across the foreign boundary",
+                        render_type_expr(t)
+                    ),
+                )
+                .with_span(t.span(), "only Int, Float, Bool, Str, Unit, and ForeignPtr marshal"),
+            );
+        }
     }
 
     fn make_genv(&mut self, sig: &FnSig) -> Genv {
@@ -1216,7 +1272,19 @@ impl<'a> Checker<'a> {
                         }
                         "Secret" => return Type::Secret(Box::new(self.lower_one_arg(args, genv, facts, *span))),
                         "Cap" => return self.lower_cap(args, *span, facts),
+                        "ForeignPtr" => return Type::ForeignPtr,
+                        "PyObj" => return Type::PyObj,
                         _ => {}
+                    }
+                    // A `foreign … lib M` block name is the nominal opaque handle type `M` (§2).
+                    if self.table.foreigns.contains_key(name) {
+                        if !args.is_empty() {
+                            self.diags.push(
+                                Diagnostic::error("DL0406", format!("foreign lib type `{name}` takes no type arguments"))
+                                    .with_span(*span, "unexpected type arguments"),
+                            );
+                        }
+                        return Type::Foreign(name.clone());
                     }
                     if let Some(&id) = self.table.type_ix.get(name) {
                         let def = self.table.type_def(id).clone();
@@ -1356,6 +1424,8 @@ impl<'a> Checker<'a> {
     fn is_opaque(&self, t: &Type, visiting: &mut HashSet<TypeDefId>) -> bool {
         match self.cx.apply_type(t) {
             Type::Secret(_) | Type::Cap(_) | Type::Root => true,
+            // R-5: ForeignPtr, PyObj, and a foreign lib handle are opaque (no str/==/serialize).
+            Type::ForeignPtr | Type::PyObj | Type::Foreign(_) => true,
             Type::List(inner) | Type::Option(inner) => self.is_opaque(&inner, visiting),
             Type::Result(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
@@ -1392,10 +1462,13 @@ impl<'a> Checker<'a> {
                         return self.is_opaque(v, visiting);
                     }
                     match name.as_str() {
-                        "Secret" | "Cap" | "Root" => return true,
+                        "Secret" | "Cap" | "Root" | "ForeignPtr" | "PyObj" => return true,
                         "List" | "Option" => return args.first().map(|a| self.type_expr_opaque(a, genv, visiting)).unwrap_or(false),
                         "Result" => return args.iter().any(|a| self.type_expr_opaque(a, genv, visiting)),
                         _ => {}
+                    }
+                    if self.table.foreigns.contains_key(name) {
+                        return true;
                     }
                     if let Some(&id) = self.table.type_ix.get(name) {
                         let targs: Vec<Type> = args.iter().map(|_| Type::Unit).collect();
@@ -1437,6 +1510,49 @@ impl<'a> Checker<'a> {
                 );
             }
         }
+    }
+}
+
+/// The marshallable allowlist for a foreign signature (T-ForeignSig): exactly
+/// `Int Float Bool Str Unit ForeignPtr`, with no type arguments. Everything else — `Secret[T]`,
+/// `Cap[R]`, `Root`, `Plugin[_]`, `PyObj`, a lib handle, `List[..]`, user types — is DL1301.
+fn is_marshallable_type_expr(t: &TypeExpr) -> bool {
+    match t {
+        TypeExpr::Named { path, args, .. } => {
+            args.is_empty()
+                && path.segs.len() == 1
+                && matches!(
+                    path.segs[0].name.as_str(),
+                    "Int" | "Float" | "Bool" | "Str" | "Unit" | "ForeignPtr"
+                )
+        }
+        TypeExpr::Fn { .. } => false,
+    }
+}
+
+/// The span of the first function type appearing anywhere in `t` (including nested inside type
+/// arguments, e.g. `List[fn(Int) -> Int]`) — the trigger for DL1302 (invariant 22).
+fn first_fn_type(t: &TypeExpr) -> Option<Span> {
+    match t {
+        TypeExpr::Fn { span, .. } => Some(*span),
+        TypeExpr::Named { args, .. } => args.iter().find_map(first_fn_type),
+    }
+}
+
+/// Render a `TypeExpr` compactly for a diagnostic message, without lowering it (lowering an
+/// unmarshallable type could emit unrelated diagnostics).
+fn render_type_expr(t: &TypeExpr) -> String {
+    match t {
+        TypeExpr::Named { path, args, .. } => {
+            let base = path.dotted();
+            if args.is_empty() {
+                base
+            } else {
+                let inner = args.iter().map(render_type_expr).collect::<Vec<_>>().join(", ");
+                format!("{base}[{inner}]")
+            }
+        }
+        TypeExpr::Fn { .. } => "a function type".to_string(),
     }
 }
 

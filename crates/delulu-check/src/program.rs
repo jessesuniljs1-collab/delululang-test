@@ -16,7 +16,9 @@ use delulu_syntax::ast::*;
 use crate::authority::ScopeInfo;
 use crate::check::{check_module, FnFacts};
 use crate::package::Package;
-use crate::resolve::{classify_generics, ConstSig, DeclTable, FnSig, TypeDef, TypeDefKind};
+use crate::resolve::{
+    classify_generics, ConstSig, DeclTable, ForeignDef, ForeignFnDef, FnSig, TypeDef, TypeDefKind,
+};
 use crate::ty::{Effect, ResourceKind, Type, TypeDefId};
 
 /// The checked program: diagnostics plus whole-program facts keyed by qualified name (`mod::fn`).
@@ -42,8 +44,15 @@ pub fn check_program(pkg: &Package) -> Program {
     // ----- 1. global type registry (prelude + every module's types) -------------------------
     let mut gtypes: Vec<TypeDef> = Vec::new();
     push_prelude(&mut gtypes);
-    let prelude_ix: HashMap<String, TypeDefId> =
-        [("IoErr", TypeDefId(0)), ("NetErr", TypeDefId(1))].into_iter().map(|(n, i)| (n.to_string(), i)).collect();
+    let prelude_ix: HashMap<String, TypeDefId> = [
+        ("IoErr", TypeDefId(0)),
+        ("NetErr", TypeDefId(1)),
+        ("ForeignErr", TypeDefId(2)),
+        ("PyErr", TypeDefId(3)),
+    ]
+    .into_iter()
+    .map(|(n, i)| (n.to_string(), i))
+    .collect();
 
     // module name -> its own type declarations (name, global id, is_pub)
     let mut owned_types: HashMap<String, Vec<(String, TypeDefId, bool)>> = HashMap::new();
@@ -174,12 +183,36 @@ pub fn check_program(pkg: &Package) -> Program {
             }
         }
 
+        // Foreign blocks (Stage 4): register each module's own `foreign` lib types.
+        let mut foreigns: HashMap<String, ForeignDef> = HashMap::new();
+        for item in &unit.module.items {
+            if let Item::Foreign(fd) = item {
+                let fname = fd.name.name.clone();
+                if type_ix.contains_key(&fname) || foreigns.contains_key(&fname) {
+                    diagnostics.push(dup(m, "type", &fname, fd.span));
+                    continue;
+                }
+                let ffns = fd
+                    .fns
+                    .iter()
+                    .map(|f| ForeignFnDef {
+                        name: f.name.name.clone(),
+                        params: f.params.clone(),
+                        ret: f.ret.clone(),
+                        span: f.span,
+                    })
+                    .collect();
+                foreigns.insert(fname.clone(), ForeignDef { abi: fd.abi.clone(), name: fname, fns: ffns });
+            }
+        }
+
         let table = DeclTable {
             types: gtypes.clone(),
             type_ix,
             user_effects,
             fns,
             consts,
+            foreigns,
             fn_order,
         };
         let result = check_module(&unit.module, &table);
@@ -315,6 +348,21 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
     };
     gtypes.push(mk("IoErr", &[("NotFound", &[]), ("Denied", &[]), ("Other", &["Str"])]));
     gtypes.push(mk("NetErr", &[("Refused", &[]), ("Timeout", &[]), ("Other", &["Str"])]));
+    // Stage-4 foreign stdlib surface (spec §8): ForeignErr (sum) + PyErr (record).
+    gtypes.push(mk(
+        "ForeignErr",
+        &[("NotGranted", &[]), ("SymbolMissing", &["Str"]), ("BadReturn", &["Str"]), ("Unavailable", &["Str"])],
+    ));
+    let str_ty = || TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: "Str".to_string(), span: dummy() }] },
+        args: vec![],
+        span: dummy(),
+    };
+    gtypes.push(TypeDef {
+        name: "PyErr".to_string(),
+        generics: vec![],
+        kind: TypeDefKind::Record(vec![("kind".to_string(), str_ty()), ("message".to_string(), str_ty())]),
+    });
 }
 
 fn dummy() -> delulu_diag::Span {

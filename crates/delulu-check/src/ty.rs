@@ -141,6 +141,10 @@ pub enum ResourceKind {
     Declassify,
     /// Reserved in Stage 1 so plugin/host signatures are stable (§8.2).
     PluginHost,
+    /// Gates embedding CPython (`Cap[Python]`, Stage 4, spec §5).
+    Python,
+    /// Gates binding a foreign C library (`Cap[ForeignLoad]`, Stage 4, spec §3 T-ForeignBind).
+    ForeignLoad,
 }
 
 impl ResourceKind {
@@ -154,6 +158,8 @@ impl ResourceKind {
             "Rand" => ResourceKind::Rand,
             "Declassify" => ResourceKind::Declassify,
             "PluginHost" => ResourceKind::PluginHost,
+            "Python" => ResourceKind::Python,
+            "ForeignLoad" => ResourceKind::ForeignLoad,
             _ => return None,
         })
     }
@@ -168,6 +174,8 @@ impl ResourceKind {
             ResourceKind::Rand => "Rand",
             ResourceKind::Declassify => "Declassify",
             ResourceKind::PluginHost => "PluginHost",
+            ResourceKind::Python => "Python",
+            ResourceKind::ForeignLoad => "ForeignLoad",
         }
     }
 }
@@ -189,6 +197,15 @@ pub enum Type {
     Cap(ResourceKind),
     Secret(Box<Type>),
     Root,
+    /// An opaque C pointer (`ForeignPtr`, Stage 4). Marshallable across the FFI, but R-5 opaque:
+    /// no `str`/`==`/serialization.
+    ForeignPtr,
+    /// An opaque embedded-Python object (`PyObj`, Stage 4). R-5 opaque and **not** marshallable
+    /// in a `foreign "c"` signature (spec §3 T-Py).
+    PyObj,
+    /// The nominal opaque handle type introduced by a `foreign … lib M` block, named `M`
+    /// (spec §2). R-5 opaque; not marshallable in a foreign signature.
+    Foreign(String),
     Var(TypeVar),
 }
 
@@ -252,6 +269,9 @@ impl fmt::Display for Type {
             Type::Cap(r) => write!(f, "Cap[{}]", r.name()),
             Type::Secret(t) => write!(f, "Secret[{t}]"),
             Type::Root => f.write_str("Root"),
+            Type::ForeignPtr => f.write_str("ForeignPtr"),
+            Type::PyObj => f.write_str("PyObj"),
+            Type::Foreign(name) => f.write_str(name),
             Type::Var(TypeVar(v)) => write!(f, "'t{v}"),
         }
     }

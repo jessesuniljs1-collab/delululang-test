@@ -278,3 +278,25 @@ reported on the ABI-string span at parse time. Tests (`parser.rs`): round-trip o
 block, `pub foreign … { }`, non-`"c"` ABI → DL1308, an effect row on a foreign fn → parse error,
 and the regression that `root.foreign(…)` still parses as a method. No type-checking of the block
 yet (that is 4b/4c) — this phase is purely lexer/parser/AST + the DL1308 diagnostic.
+
+**Phase 4b — the marshallability fence (T-ForeignSig) + the new prelude types — is implemented
+and green** (212 workspace tests, +7). New prelude/opaque types: `ResourceKind::Python` and
+`ResourceKind::ForeignLoad` (so `Cap[Python]`/`Cap[ForeignLoad]` lower through the existing
+`Cap[…]` path); `Type::ForeignPtr` and `Type::PyObj` (R-5 opaque leaf types); `Type::Foreign(M)`,
+the nominal opaque handle introduced by each `foreign … lib M` block (registered in
+`DeclTable.foreigns`, resolvable as the type name `M`); and the stdlib sums/records `ForeignErr`
+(`NotGranted | SymbolMissing(Str) | BadReturn(Str) | Unavailable(Str)`) and `PyErr { kind: Str,
+message: Str }`, appended to the prelude in `resolve.rs`, `program.rs`, and `deps.rs`. `is_opaque`
+now covers `ForeignPtr`/`PyObj`/`Foreign` (so `str`/`==`/serialize on any of them is
+DL0604/DL0605, R-5). The fence itself (`check.rs::check_marshallable`, run over every foreign
+signature in `check_module`): a function type **anywhere** in a parameter/return type — including
+nested inside a composite like `List[fn() -> Int]` — is **DL1302** (invariant 22 / R-6a, message
+names the rule); otherwise the type must be exactly one of `Int Float Bool Str Unit ForeignPtr`
+(no type arguments) or it is **DL1301** (span on the offending type). **Both DL1301 and DL1302 are
+emitted with no repairs** — they are `requires_human` situations (spec §7), and an empty repair
+list is exactly how every other `requires_human` code in the compiler is expressed, which also
+guarantees DL1301 can never suggest `expose` to launder a secret across the FFI (criterion 3).
+Tests (`lib.rs`): a fully-marshallable block checks clean; `ForeignPtr` marshals while `PyObj`
+does not; `Secret[Str]` → DL1301 with **no `expose`** anywhere in its repairs; `Cap`/lib
+handle/`List[..]`/return-`List` → DL1301; `fn(Int)->Int` param → DL1302 referencing R-6a with no
+repairs; a nested function type → DL1302; and stringifying a lib handle → DL0604.

@@ -158,6 +158,8 @@ impl InferCtx {
                 self.unify_type(x2, y2)
             }
             (Type::Secret(x), Type::Secret(y)) => self.unify_type(x, y),
+            (Type::ForeignPtr, Type::ForeignPtr) | (Type::PyObj, Type::PyObj) => Ok(()),
+            (Type::Foreign(x), Type::Foreign(y)) if x == y => Ok(()),
             (Type::Cap(x), Type::Cap(y)) if x == y => Ok(()),
             (Type::Record(id1, a1), Type::Record(id2, a2))
             | (Type::Sum(id1, a1), Type::Sum(id2, a2))

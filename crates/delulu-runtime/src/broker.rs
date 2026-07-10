@@ -180,6 +180,9 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             ResourceKind::Rand => !grants.rand,
             ResourceKind::Declassify => !grants.declassify,
             ResourceKind::PluginHost => true,
+            // Foreign capabilities have no runtime grant yet (their grant flow lands in Stage 4
+            // phases 4e/4f); treat them as always-ungranted for now, like PluginHost.
+            ResourceKind::Python | ResourceKind::ForeignLoad => true,
         })
         .copied()
         .collect()
