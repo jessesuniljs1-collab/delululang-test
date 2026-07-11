@@ -249,5 +249,95 @@ enforcement** — stated in the file header line itself.
   container and it is Linux-first — the fallback matrix is honest about weaker platforms.
 - TTLs bound *duration* of compromise, not its existence.
 
+## 11. Implementation status (2026-07-11)
+
+CHUNK 1 (phases 5a + 5b + 5c) — the transport-free custody core — **is implemented and green**
+(271 → **305 workspace tests, +34**). It lives in a new workspace member, `crates/delulu-broker`,
+which depends ONLY on `delulu-diag` (`Diagnostic`) and `delulu-check` (`Effect`) — no transport, no
+`blake3`/`hmac` (those are chunk 2), no runtime/CLI wiring (chunk 3). The Stage-1 embedded broker
+(`delulu-runtime::broker`) is untouched and remains the embedded/dev path; this crate is the single
+source of truth for tree/lattice logic that chunk 3 will wire in. Language surface delta: **zero**
+(no `delulu-syntax`/`delulu-check`/`delulu-runtime`/`delulu-wasm`/CLI edits — the only shared change
+is registering the DL14xx codes in `delulu-diag`).
+
+**Phase 5a — the `⊑` attenuation lattice — is implemented and green.** `Authority { effects:
+BTreeSet<Effect>, scopes: Scopes }` with `Scopes` carrying seven `BTreeSet<String>` dimensions
+(`fs_read`, `fs_write`, `net`, `secrets`, `declassify`, `foreign_c`, `foreign_python`) so
+serialization is canonical (sorted, deduplicated). `attenuation_check(child, parent) -> Result<(),
+Authority>` implements `⊑` per SOUNDNESS_AUDIT §A.3: effects `⊆`; fs paths descendant-or-equal; net
+/ secrets / declassify / foreign_c / foreign_python exact-string name-set `⊆` (ruling 4 — no pattern
+implication in v0.5; noted as a possible post-1.0 refinement). On failure it returns the **computed
+intersection** (`child ⊓ parent`), which is `⊑` both operands and therefore **never widens** (spec
+§8) — this is DL0802's exact repair. Path descendant semantics are **pure lexical** (ruling 2): no
+filesystem access ever; `\`→`/` normalization, lexical `.`/`..` resolution (an escaping `..` is not
+a descendant), component-wise case-sensitive prefix compare (Windows case-insensitivity caveat
+documented in `src/path.rs`). Files: `src/authority.rs`, `src/path.rs`. Tests (~26): a table-driven
+lattice suite covering every scope dimension incl. `./data` vs `./data/sub` (ok), `./data` vs
+`./database` (the no-naive-string-prefix bug), `..` traversal escapes, and Windows `\` separators;
+plus meet-is-symmetric and never-wider property checks.
+
+**Phase 5b — the in-memory grant tree — is implemented and green.** `Broker { nodes: HashMap<GrantId,
+Node>, epoch, audit_seq, ids, clock }` with `Node` per §3.1 (id, parent, holder, authority, ttl,
+state, created, audit_seq). `GrantId` = `g_` + 32 hex chars from OS randomness (`getrandom`, ruling
+3 — already in the workspace dep tree), behind an `IdSource` trait with a deterministic `SeqIdSource`
+for tests; the TTL clock is behind a `ClockSource` trait with a hand-driven `ManualClock` for tests
+(ruling 3). Ops: `issue` (root node), `attenuate` (child iff `⊑`, else a DL0802 `Denial` carrying the
+intersection; refuses attenuation under a dead parent, fail-closed), `revoke(caller, target)`
+(allowed only if target is the caller or a descendant — §3.2; transitive over the whole subtree;
+idempotent; bumps the epoch and stamps `revoked_by_seq` on every affected node), `inspect`, `tree`.
+`Holder { kind, desc, peer }` is **stored and displayed, never switched on** — zero `match`/`if` on
+`holder.kind` on any decision path (criterion 9). The monotone `audit_seq` counter is consumed by
+every issue/attenuate/revoke/deny so chunk 2's hash-chained log can emit records later without
+renumbering (ruling 5). Files: `src/tree.rs`, `src/ids.rs`, `src/time.rs`, `src/diag.rs`. Tests: a
+3-level tree → revoke the middle → leaf revoked / root live; attenuate-widening rejected with the
+correct intersection; revoke idempotency; revoke of a non-descendant refused; the **criterion-9 unit
+form** (identical op sequence run with `holder.kind` = "human"/"process"/"delegate" yields
+byte-identical serialized custody outcomes, ids injected deterministically); and a **holder-neutrality
+grep test** (`tests/holder_neutrality.rs`) that reads the crate's own `src/*.rs` and asserts every
+`.kind` access is a comment or a `KIND_IS_DATA`-marked display line.
+
+**Phase 5c — the two validation classes + revocation epochs — is implemented and green.** `Op`
+classed per §4.1 — synchronous: `Declassify`, `FsWrite`, `Net`, `ForeignBind` (`PluginLoad`/`Actuate`
+reserved variants, unused); epoch: `FsRead`, `Clock`, `Rand`, `Console`. `Broker::check(node, op,
+arg) -> Decision` validates synchronous ops against **live** tree state (consuming one audit seq per
+use — invariant 26); `Broker::snapshot()` freezes a cheap point-in-time `Snapshot` and
+`Snapshot::check(...)` validates **epoch** ops against it (no seq). Liveness (§4.3): every op checks
+state ≠ Revoked/Expired; a revoked lease is **DL1403** carrying the revoking audit seq (rich payload
+on the `Denial` — "why and when your authority died"); TTL expiry (checked against the pluggable
+clock) is **DL1402**; an out-of-scope argument is **DL0904**. File: `src/validate.rs`. Tests (no
+sleeps — fake clock + manual snapshots): revoke → synchronous op fails on the very next call; epoch
+op still passes against a stale snapshot but fails after a refresh; TTL expiry → DL1402 driven by the
+fake clock; out-of-scope arg → DL0904; epoch-class uses consume no audit seq.
+
+**Diagnostics.** The full DL14xx table from §8 is registered in `crates/delulu-diag/src/codes.rs`
+(DL1401, DL1402, DL1403, DL1405, DL1406, DL1407, DL1408 — with **no DL1404**, deliberately). DL0802's
+registry title was left as-is ("grant exceeds holder's grant (attenuation violation)") — it fits; the
+"exact repair = intersection, never widens" semantics are realized at the construction site in
+`src/diag.rs`, where the DL0802 `Diagnostic` carries a typed `Repair { authority_widening: false,
+confidence: Exact }`.
+
+**Deviations / decisions flagged for head-chef review:**
+1. **Diagnostic payload (ruling 7).** `delulu_diag::Diagnostic` has no structured-payload field and
+   Stage 4 did not add one (its DL13xx runtime refusals are a native `Fault { code, message, span }`
+   with rich detail in the message and *no* structured field). Following that pattern exactly, the
+   broker's structured payloads (the DL0802 intersection `Authority`, the DL1403 revoking seq, the
+   DL1402 ttl/now) live on the broker-native `Denial` enum (the machine-consumable source of truth
+   chunk 3 wires in), and `Denial::to_diagnostic()` renders a rich human message. The shared
+   `Diagnostic` type was **not** extended. If chunk 3's daemon JSON contract wants these as
+   first-class fields, that is a clean future extension.
+2. **DL0904 for topology/scope denials.** Spec §8 defines no code for "revoke refused (non-descendant)"
+   or "unknown lease" or "use outside the node's scope," and DL1404 is deliberately absent. These map
+   to the existing runtime **DL0904** ("capability scope violation") — the caller's authority does not
+   reach the target/arg, which is precisely a scope violation. Flagging in case the head chef wants a
+   dedicated DL14xx code instead.
+3. **Criterion-9 serialization excludes the holder.** `Broker::outcome_json()` (the projection the
+   criterion-9 test compares) deliberately omits `holder`, because the test varies `holder.kind` and
+   the *point* is that the authority outcome is independent of it; including the varied field would
+   trivially differ and prove nothing. The full `tree()` render includes the holder for display.
+4. **Timestamps are epoch-millis integers**, not ISO-8601 strings as the §3.1 example shows — to
+   avoid pulling a datetime crate into a transport-free core. ISO rendering is a CLI/display concern
+   (chunk 3). Node state serialization emits the *stored* state (live/revoked); TTL expiry is
+   time-dependent and evaluated only in the check paths, keeping serialization clock-free/canonical.
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*
