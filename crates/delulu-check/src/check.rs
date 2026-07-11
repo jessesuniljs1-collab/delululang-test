@@ -838,6 +838,20 @@ impl<'a> Checker<'a> {
                         let ferr = Type::Sum(self.table.foreign_err(), vec![]);
                         return Some((Type::result(handle, ferr), None, None));
                     }
+                    // T-Py binding (spec §5.1): `root.python(load: Cap[ForeignLoad]) ->
+                    // Result[Cap[Python], ForeignErr]` — PURE like `root.foreign` (deriving the handle
+                    // is not an effect; the effect is in *using* it). Marks the program as wielding
+                    // Python for the authority report (disclosed under the "outside the proof"
+                    // separator, never as an ordinary capability row).
+                    "python" => {
+                        self.expect_arg(args, 0, &Type::Cap(ResourceKind::ForeignLoad), span);
+                        let ferr = Type::Sum(self.table.foreign_err(), vec![]);
+                        return Some((
+                            Type::result(Type::Cap(ResourceKind::Python), ferr),
+                            None,
+                            Some(ResourceKind::Python),
+                        ));
+                    }
                     _ => return None,
                 };
                 // Root constructors that take a path/hosts argument.
@@ -883,6 +897,74 @@ impl<'a> Checker<'a> {
                 "float" => Some((Type::Float, Some(Effect::Rand), None)),
                 _ => None,
             },
+            // T-Py (spec §5.2): every `Cap[Python]` operation has row exactly `{ForeignCall}`. The
+            // constructors (`of_*`, `list`) return a bare `PyObj`; `import`/`to_*` return a `Result`
+            // over `PyErr` (a record). `PyObj` is opaque throughout (R-5).
+            Type::Cap(ResourceKind::Python) => {
+                let py_err_id = self.table.py_err();
+                let pyerr = || Type::Record(py_err_id, vec![]);
+                match method {
+                    "import" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        Some((Type::result(Type::PyObj, pyerr()), Some(Effect::ForeignCall), None))
+                    }
+                    "of_int" => { self.expect_arg(args, 0, &Type::Int, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
+                    "of_float" => { self.expect_arg(args, 0, &Type::Float, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
+                    "of_str" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
+                    "of_bool" => { self.expect_arg(args, 0, &Type::Bool, span); Some((Type::PyObj, Some(Effect::ForeignCall), None)) }
+                    "list" => {
+                        // A DeluluLang closure can never become a Python value (spec §4.4 / R-6a):
+                        // a function-typed element is DL1302, not a plain type mismatch.
+                        if self.reject_py_callback(args, 0, span) {
+                            return Some((Type::PyObj, Some(Effect::ForeignCall), None));
+                        }
+                        self.expect_arg(args, 0, &Type::List(Box::new(Type::PyObj)), span);
+                        Some((Type::PyObj, Some(Effect::ForeignCall), None))
+                    }
+                    "to_int" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Int, pyerr()), Some(Effect::ForeignCall), None)) }
+                    "to_float" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Float, pyerr()), Some(Effect::ForeignCall), None)) }
+                    "to_str" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Str, pyerr()), Some(Effect::ForeignCall), None)) }
+                    "to_bool" => { self.expect_arg(args, 0, &Type::PyObj, span); Some((Type::result(Type::Bool, pyerr()), Some(Effect::ForeignCall), None)) }
+                    _ => None,
+                }
+            }
+            // T-Py (spec §5.2): `PyObj` operations (`attr`/`call`/`call_method`/`index`), each
+            // `{ForeignCall}`, each `Result[PyObj, PyErr]`. Passing a DeluluLang closure where a
+            // `PyObj` is expected is DL1302 (no callbacks, R-6a) — the R-6a diagnostic, not a plain
+            // type mismatch (spec §4.4).
+            Type::PyObj => {
+                let py_err_id = self.table.py_err();
+                let result_pyobj = || Type::result(Type::PyObj, Type::Record(py_err_id, vec![]));
+                match method {
+                    "attr" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        Some((result_pyobj(), Some(Effect::ForeignCall), None))
+                    }
+                    "call" => {
+                        if self.reject_py_callback(args, 0, span) {
+                            return Some((result_pyobj(), Some(Effect::ForeignCall), None));
+                        }
+                        self.expect_arg(args, 0, &Type::List(Box::new(Type::PyObj)), span);
+                        Some((result_pyobj(), Some(Effect::ForeignCall), None))
+                    }
+                    "call_method" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        if self.reject_py_callback(args, 1, span) {
+                            return Some((result_pyobj(), Some(Effect::ForeignCall), None));
+                        }
+                        self.expect_arg(args, 1, &Type::List(Box::new(Type::PyObj)), span);
+                        Some((result_pyobj(), Some(Effect::ForeignCall), None))
+                    }
+                    "index" => {
+                        if self.reject_py_callback(args, 0, span) {
+                            return Some((result_pyobj(), Some(Effect::ForeignCall), None));
+                        }
+                        self.expect_arg(args, 0, &Type::PyObj, span);
+                        Some((result_pyobj(), Some(Effect::ForeignCall), None))
+                    }
+                    _ => None,
+                }
+            }
             Type::Secret(inner) => match method {
                 // Secret.map requires a PURE function (DL0603); result stays tainted (R-5).
                 "map" => {
@@ -980,6 +1062,29 @@ impl<'a> Checker<'a> {
                     .with_span(call_span, "too few arguments"),
             ),
         }
+    }
+
+    /// Reject a function-typed argument crossing into `PyObj`-land (spec §4.4 / R-6a): a DeluluLang
+    /// closure can never become a Python callable, and no `fn → PyObj` conversion exists anywhere in
+    /// the `std.py` surface. The natural failure of `py.list([closure])` / `obj.call([closure])`
+    /// would be a plain type mismatch (DL0401); the spec wants the R-6a diagnostic (DL1302). Returns
+    /// `true` (and emits DL1302, suppressing the follow-on DL0401) when argument `i` contains a
+    /// function type at any depth.
+    fn reject_py_callback(&mut self, args: &[(Type, Span)], i: usize, span: Span) -> bool {
+        let Some((t, aspan)) = args.get(i) else { return false };
+        let (resolved, aspan) = (self.cx.apply_type(t), *aspan);
+        if type_contains_fn(&resolved) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1302",
+                    "a function-typed value cannot cross the foreign boundary — no callbacks, by rule R-6a",
+                )
+                .with_span(aspan, "unverifiable code must never hold a re-entry point into verified code")
+                .with_secondary_span(span, "in this Python call"),
+            );
+            return true;
+        }
+        false
     }
 
     fn field_type(&mut self, recv: &Type, field: &Ident, _ctx: &mut FnCtx) -> Type {
@@ -1578,6 +1683,20 @@ impl<'a> Checker<'a> {
                     );
                     return;
                 }
+                // A DeluluLang closure can never become a `PyObj` (spec §4.4 / R-6a): a function type
+                // unified against `PyObj` is the no-callbacks rule, not a plain mismatch (DL1302, not
+                // DL0401). This catches a closure element inside a `List[PyObj]` literal, where the
+                // failure surfaces at element-unification time.
+                if fn_pyobj_mismatch(&ea, &aa) {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL1302",
+                            "a function-typed value cannot cross the foreign boundary — no callbacks, by rule R-6a",
+                        )
+                        .with_span(span, "unverifiable code must never hold a re-entry point into verified code"),
+                    );
+                    return;
+                }
                 let code = match e {
                     UnifyError::RowConflict => "DL0504",
                     _ => "DL0401",
@@ -1617,6 +1736,19 @@ fn first_fn_type(t: &TypeExpr) -> Option<Span> {
     }
 }
 
+/// Whether a resolved [`Type`] contains a function type at any depth — the DL1302 trigger for an
+/// argument crossing into `PyObj`-land (spec §4.4 / R-6a). Mirrors [`first_fn_type`] on the lowered
+/// side, used where the offending value is an inferred argument type rather than a written signature.
+fn type_contains_fn(t: &Type) -> bool {
+    match t {
+        Type::Fn { .. } => true,
+        Type::List(e) | Type::Option(e) | Type::Secret(e) => type_contains_fn(e),
+        Type::Result(o, e) => type_contains_fn(o) || type_contains_fn(e),
+        Type::Record(_, args) | Type::Sum(_, args) => args.iter().any(type_contains_fn),
+        _ => false,
+    }
+}
+
 /// Render a `TypeExpr` compactly for a diagnostic message, without lowering it (lowering an
 /// unmarshallable type could emit unrelated diagnostics).
 fn render_type_expr(t: &TypeExpr) -> String {
@@ -1632,6 +1764,13 @@ fn render_type_expr(t: &TypeExpr) -> String {
         }
         TypeExpr::Fn { .. } => "a function type".to_string(),
     }
+}
+
+/// Exactly one side is a function type and the other is `PyObj` — a closure being smuggled into (or
+/// out of) `PyObj`-land, the no-callbacks rule (spec §4.4 / R-6a), reported as DL1302 not DL0401.
+fn fn_pyobj_mismatch(a: &Type, b: &Type) -> bool {
+    let is_fn = |t: &Type| matches!(t, Type::Fn { .. });
+    (is_fn(a) && matches!(b, Type::PyObj)) || (matches!(a, Type::PyObj) && is_fn(b))
 }
 
 /// Exactly one side is a `Secret` and the other is a concrete non-secret type (not a variable) —

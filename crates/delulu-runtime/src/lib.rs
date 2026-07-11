@@ -6,6 +6,7 @@ pub mod broker;
 pub mod foreign;
 pub mod interp;
 pub mod prim;
+pub mod python;
 pub mod trace;
 pub mod value;
 

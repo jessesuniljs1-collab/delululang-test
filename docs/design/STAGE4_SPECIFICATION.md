@@ -383,8 +383,48 @@ every code, no `expose` suggestion on DL1301 — with a CLI test asserting the w
 in none of them. Side task done: the `delulu why` unknown-effect help now lists `ForeignCall` with
 the six pre-Stage-4 core effects. `--foreign-max-ret <bytes>` is a `run` option.
 
-**Not in this chunk (later phases):** embedded CPython and the `std.py` surface (4f — DL1305/DL1307
-register there, and `root.python(load)` follows the same `root.foreign_load()` pattern per the
-head-chef ruling), and the WASM `delulu:foreign@0.4` host interface + parity (4g — until then,
-foreign calls are interpreter-engine only; `--engine wasm` programs cannot reach `foreign` blocks
-because the backend rejects constructs it cannot compile, DL1201).
+**Phase 4f — embedded CPython (`std.py`) — is implemented and green** (263 workspace tests, +14 over
+4e; the three live-interpreter tests skip-with-a-printed-notice where CPython/NumPy are absent but RUN
+for real where present). All PyO3 code is isolated in **`crates/delulu-runtime/src/python.rs`** behind
+a **`python` cargo feature that is ON by default** in the runtime and forwarded on by the `delulu`
+CLI's own default `python` feature; `--no-default-features` builds a Python-less `delulu` where
+`root.python(...)` returns `ForeignErr::Unavailable` (DL1307) — the same user-visible outcome as a
+missing interpreter. PyO3 runs with `auto-initialize` OFF: the embedded interpreter is prepared lazily
+by `python::ensure_available` (`prepare_freethreaded_python`, guarded by `catch_unwind` so a
+non-starting interpreter is a returned `Err`, never a crash) on the first grant-checked `root.python`
+call. **Ownership/GIL model** (documented in `python.rs`): a `PyObj` value is a `Py<PyAny>` —
+GIL-independent, stored/cloned/dropped off the GIL; **every** Python touch is inside
+`Python::with_gil`, and only `Py<T>` or plain scalars ever cross back into the interpreter (no
+`Bound<'py>` escapes), so a `PyObj` between operations holds no lock. **Binding:**
+`root.python(load: Cap[ForeignLoad]) -> Result[Cap[Python], ForeignErr]` is PURE (like `root.foreign`;
+`Cap[ForeignLoad]` is now minted whenever `foreign.c` **or** `foreign.python` is granted); ungranted →
+`Err(NotGranted)` (DL1303's runtime face) behind a CLI grant pre-flight, unavailable → `Err(Unavailable)`
+(DL1307). **Manifest/grant:** `[authority] foreign.python = ["numpy", "numpy.*"]`;
+`--grant foreign.python=numpy --grant "foreign.python=numpy.*"` (patterns are an exact name or a
+`prefix.*` wildcard); the granted allowlist is carried in `CapScope::Python` and checked at
+`py.import`. **The `std.py` surface** (`Cap[Python]`: `import`/`of_int`/`of_float`/`of_str`/`of_bool`/
+`list`/`to_int`/`to_float`/`to_str`/`to_bool`; `PyObj`: `attr`/`call`/`call_method`/`index`) types in
+`check.rs` `method_sig` with row exactly `{ForeignCall}`; each op records a `py.<method>` `ForeignCall`
+trace event, appended BEFORE the call so a **denied** `py.import` (allowlist-checked → DL1305 as a
+runtime `PyErr` value) is still visible in `--trace-effects` (criterion 5). `PyObj` is opaque (R-5:
+DL0604/DL0605) and **not** marshallable in a `foreign "c"` signature (DL1301, tested). A DeluluLang
+closure can never become a `PyObj` (spec §4.4 / R-6a): a function type unified against `PyObj` is
+**DL1302** (the R-6a diagnostic, not a plain mismatch) — enforced both as a Python-argument fence
+(`reject_py_callback`, catching a pure `List[fn]`) and generally in `expect_type` (`fn_pyobj_mismatch`,
+catching a closure element inside a `List[PyObj]` literal). Python exception → `PyErr { kind, message }`
+where `message` is UNTRUSTED foreign data, length-bounded by `--foreign-max-ret` (invariant 21).
+`import` moves from a full keyword to a legal **member name** (`py.import`): `token.rs`'s new
+`keyword_lexeme` lets any reserved word be a member after `.` (member position is never a declaration
+site). DL1305/DL1307 are registered in `codes.rs`; `delulu explain DL1305` carries spec §5.3's allowlist
+honesty note verbatim (the allowlist gates the *interface*, not transitive imports; embedded Python has
+full process authority; real bounds are the reachability gate + Stage 5) and the word "sandbox" appears
+in none of the DL13xx texts. **`delulu authority`** adds the `{abi:"python", allowlist, imports_seen,
+used_at}` entry (spec §6) under the same "outside the proof" separator (`imports_seen` = the
+statically-known `py.import("literal")` names; a program that never reaches `root.python` is unchanged,
+criterion 7 preserved). **Criterion 2** — the NumPy demo (`py.import("numpy")`, build a list, call
+`mean`, convert back, print `2.5`) — is committed as `examples/numpy_mean.delulu` and runs live on this
+machine (**CPython 3.13.5, NumPy 2.2.6**, PyO3 0.25).
+
+**Not in this chunk (later phase):** the WASM `delulu:foreign@0.4` host interface + parity (4g — until
+then, foreign/Python calls are interpreter-engine only; `--engine wasm` programs cannot reach `foreign`
+blocks or `std.py` because the backend rejects constructs it cannot compile, DL1201).

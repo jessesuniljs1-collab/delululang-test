@@ -53,6 +53,12 @@ pub enum Value {
     /// An opaque C pointer (`ForeignPtr`, spec §4.2), stored as an integer address so no raw pointer
     /// leaks into general evaluation. Opaque (R-5): never stringified or compared.
     ForeignPtr(usize),
+    /// An opaque embedded-Python object (`PyObj`, Stage 4 phase 4f, spec §5), minted only by the
+    /// `std.py` surface. Present only with the `python` feature. Opaque (R-5): the checker's
+    /// `Type::PyObj` rejects `str`/`==`/serialize, so a well-typed program never displays or compares
+    /// one. The GIL/ownership discipline lives in `python.rs`.
+    #[cfg(feature = "python")]
+    PyObj(crate::python::PyObjVal),
 }
 
 impl Value {
@@ -108,6 +114,8 @@ impl Value {
             // program never displays one; the runtime still refuses to reveal anything useful.
             Value::Foreign(h) => format!("<foreign lib {}>", h.name),
             Value::ForeignPtr(_) => "<foreign ptr>".to_string(),
+            #[cfg(feature = "python")]
+            Value::PyObj(_) => "<py obj>".to_string(),
         }
     }
 
@@ -160,6 +168,9 @@ pub enum CapScope {
     /// Gates binding a foreign C library (`Cap[ForeignLoad]`, spec §3 T-ForeignBind). Carries no
     /// scope of its own — the per-lib authority decision is the `foreign.c` grant checked at bind.
     ForeignLoad,
+    /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
+    /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
+    Python { allowlist: Vec<String> },
 }
 
 /// An unforgeable capability value: a resource kind plus its scope.
@@ -220,9 +231,14 @@ pub struct RootVal {
     pub rand: bool,
     pub declassify: bool,
     pub secrets: HashMap<String, String>,
-    /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` — true iff any `foreign.c` lib was
-    /// granted (spec §4.1). The per-lib gate is enforced separately when `root.foreign(load)` binds.
+    /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` — true iff any `foreign.c` lib or
+    /// `foreign.python` pattern was granted (spec §4.1/§5.1). The per-lib gate is enforced separately
+    /// when `root.foreign(load)` binds; the per-import gate is the allowlist checked at `py.import`.
     pub foreign_load: bool,
+    /// Granted `foreign.python` import allowlist patterns (spec §5.1). Non-empty iff Python is
+    /// granted; `root.python(load)` mints `Cap[Python]` carrying these, and refuses `NotGranted`
+    /// (DL1303) when empty.
+    pub python_allowlist: Vec<String>,
 }
 
 // ----- environments --------------------------------------------------------

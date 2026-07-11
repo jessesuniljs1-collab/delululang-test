@@ -6,12 +6,13 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use delulu_check::ResourceKind;
 use delulu_syntax::ast::*;
 
 use crate::foreign::{self, FKind, FVal, ForeignHandle, ForeignSig};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
-use crate::value::{Closure, Env, Fault, Scope, Value};
+use crate::value::{CapVal, Closure, Env, Fault, Scope, Value};
 
 const MAX_DEPTH: u32 = 10_000;
 
@@ -475,7 +476,15 @@ impl Interp {
             Value::Root(r) => prim::call_root_method(r, &name.name, &argvals, span),
             // T-ForeignCall (spec §4): a method on a bound lib handle marshals + calls foreign code.
             Value::Foreign(h) => self.call_foreign(h, &name.name, &argvals, span),
+            // T-Py (spec §5): a `Cap[Python]` operation (import/of_*/list/to_*) runs the embedded
+            // interpreter under the GIL; handled here (not `prim`) to trace `ForeignCall` and thread
+            // the `--foreign-max-ret` message bound.
+            Value::Cap(c) if c.kind == ResourceKind::Python => self.call_python(c, &name.name, &argvals, span),
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
+            // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
+            // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
+            #[cfg(feature = "python")]
+            Value::PyObj(o) => self.call_pyobj(o, &name.name, &argvals, span),
             Value::Secret(s) => prim::call_secret_method(s, &name.name, &argvals, span),
             Value::Str(s) => prim::call_str_method(s, &name.name, &argvals, span),
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
@@ -570,6 +579,39 @@ impl Interp {
             op: method.to_string(),
             cap_kind: lib.to_string(),
             detail: Some(format!("{lib}.{method}")),
+            span: Some((span.file, span.start, span.end)),
+        });
+    }
+
+    // ----- embedded CPython (Stage 4 phase 4f, spec §5) -------------------
+
+    /// A `Cap[Python]` operation (`py.import`/`of_*`/`list`/`to_*`). The `ForeignCall` trace record is
+    /// appended BEFORE the call, so a DENIED `py.import` (DL1305) is still visible in the trace
+    /// (criterion 5). The op is recorded as `py.<method>`; `import`/`attr`/`call_method` carry the
+    /// name argument as `detail`.
+    fn call_python(&self, cap: &Rc<CapVal>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        self.trace_python(method, python_detail(method, args), span);
+        crate::python::call_python_cap(cap, method, args, self.foreign_max_ret, span)
+    }
+
+    /// A `PyObj` operation (`attr`/`call`/`call_method`/`index`). Present only with the `python`
+    /// feature (a `PyObj` value can exist only when the feature is on).
+    #[cfg(feature = "python")]
+    fn call_pyobj(&self, obj: &crate::python::PyObjVal, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        self.trace_python(method, python_detail(method, args), span);
+        crate::python::call_pyobj(obj, method, args, self.foreign_max_ret, span)
+    }
+
+    /// Append a `ForeignCall` trace record for a `std.py` op (every §5.2 row is `!{ForeignCall}`).
+    /// `cap_kind` is the literal `"Python"`; `op` is `py.<method>`.
+    fn trace_python(&self, method: &str, detail: Option<String>, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: "ForeignCall".to_string(),
+            op: format!("py.{method}"),
+            cap_kind: "Python".to_string(),
+            detail,
             span: Some((span.file, span.start, span.end)),
         });
     }
@@ -747,6 +789,19 @@ fn unwrap_fault(e: Escape) -> Fault {
     match e {
         Escape::Fault(f) => f,
         Escape::Return(_) | Escape::Propagate(_) => Fault::new("DL0907", "control-flow escaped the top level (checker bug)"),
+    }
+}
+
+/// The human-useful `detail` for a traced `std.py` op: the name argument for `import` (the module
+/// being reached for — the DENIED name too, criterion 5), `attr`, and `call_method`. These arguments
+/// are ordinary `Str` method names, never secrets (a secret cannot cross to PyObj-land).
+fn python_detail(method: &str, args: &[Value]) -> Option<String> {
+    match method {
+        "import" | "attr" | "call_method" => match args.first() {
+            Some(Value::Str(s)) => Some(s.to_string()),
+            _ => None,
+        },
+        _ => None,
     }
 }
 

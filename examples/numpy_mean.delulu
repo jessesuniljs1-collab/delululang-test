@@ -1,0 +1,36 @@
+// Stage 4 phase 4f flagship demo (spec §5, acceptance criterion 2): "inherit the AI ecosystem".
+// DeluluLang imports NumPy, builds a list, calls `mean`, converts the result back to a Float, and
+// prints it — the embedded-CPython claim, running behind the honest capability fence.
+//
+//   delulu run examples/numpy_mean.delulu --grant console \
+//       --grant foreign.python=numpy --grant "foreign.python=numpy.*"
+//
+// The import allowlist gates the INTERFACE (what the program may reach for by name), NOT what NumPy
+// transitively imports or does once running — embedded Python has full process authority. Real
+// containment is Stage 5 (see `delulu explain DL1305`). The word "sandbox" does not apply here.
+
+module numpy_mean
+
+// The Python work lives in one function whose error channel is `PyErr`. `?` propagates a Python
+// exception (or an off-allowlist import, DL1305) as an `Err(PyErr)`. `mean_of` never names `Root`:
+// it holds only the `Cap[Python]` handle it was given — reachability threaded in the types.
+fn mean_of(py: Cap[Python]) -> Result[Float, PyErr] ! {ForeignCall} {
+  let np = py.import("numpy")?
+  let xs = py.list([py.of_float(1.0), py.of_float(2.0), py.of_float(3.0), py.of_float(4.0)])
+  let m = np.call_method("mean", [xs])?
+  py.to_float(m)
+}
+
+fn main(root: Root) ! {ForeignCall, Write} {
+  let c = root.console()
+  let load = root.foreign_load()
+  // `root.python(load)` is pure (deriving the handle is not an effect); a missing interpreter is a
+  // `ForeignErr::Unavailable` value here (DL1307), never a crash.
+  match root.python(load) {
+    Ok(py) => match mean_of(py) {
+      Ok(v) => c.println("mean = " + str(v)),
+      Err(e) => c.println("python error [" + e.kind + "]: " + e.message)
+    },
+    Err(_) => c.println("embedded Python is unavailable")
+  }
+}

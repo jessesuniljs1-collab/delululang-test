@@ -156,10 +156,18 @@ impl Parser {
         }
     }
 
-    /// A member name after `.` — reserved words are fine here.
+    /// A member name after `.` — reserved words are fine here: member position is not a declaration
+    /// site, so a keyword lexeme (`py.import`, spec §5.2) is an unambiguous member name.
     fn expect_member_name(&mut self) -> Ident {
         match self.peek().clone() {
             TokenKind::Ident(name) => {
+                let span = self.span();
+                self.bump();
+                self.panicking = false;
+                Ident { name, span }
+            }
+            ref other if other.keyword_lexeme().is_some() => {
+                let name = other.keyword_lexeme().unwrap().to_string();
                 let span = self.span();
                 self.bump();
                 self.panicking = false;

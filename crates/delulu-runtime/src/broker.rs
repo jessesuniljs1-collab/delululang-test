@@ -24,6 +24,9 @@ pub struct Manifest {
     /// `foreign.c` logical lib names the manifest permits (Stage 4, spec §4.1). The manifest names
     /// *what* the program may reach for; the human/broker's `--grant` supplies *which binary*.
     pub foreign_c: Vec<String>,
+    /// `foreign.python` import allowlist patterns the manifest permits (Stage 4, spec §5.1): exact
+    /// module names (`"numpy"`) or `prefix.*` wildcards (`"numpy.*"`).
+    pub foreign_python: Vec<String>,
 }
 
 /// Parse the tiny subset of TOML the Stage-1 manifest uses: `[section]` headers and
@@ -52,6 +55,7 @@ pub fn parse_manifest(src: &str) -> Manifest {
             ("authority", "net") => m.net = values,
             ("authority", "secrets") => m.secrets = values,
             ("authority", "foreign.c") => m.foreign_c = values,
+            ("authority", "foreign.python") => m.foreign_python = values,
             _ => {}
         }
     }
@@ -109,6 +113,9 @@ pub struct Grants {
     /// `foreign.c` grants: logical lib name → the concrete binary path/name the human chose
     /// (Stage 4, spec §4.1). The path is grant data, never program data.
     pub foreign_c: HashMap<String, String>,
+    /// `foreign.python` grants: the granted import allowlist patterns (Stage 4, spec §5.1). Non-empty
+    /// iff Python is granted; carried into `Cap[Python]`'s scope and checked at `py.import` (DL1305).
+    pub foreign_python: Vec<String>,
 }
 
 impl Grants {
@@ -142,6 +149,15 @@ impl Grants {
                     }
                     self.foreign_c.insert(name.to_string(), path.to_string());
                 }
+                // `foreign.python=PATTERN` — an import allowlist pattern (spec §5.1). Repeat the flag
+                // to grant several: `--grant foreign.python=numpy --grant "foreign.python=numpy.*"`.
+                "foreign.python" => {
+                    let pat = v.trim();
+                    if pat.is_empty() {
+                        return Err(format!("bad python grant `{spec}` (use foreign.python=PATTERN)"));
+                    }
+                    self.foreign_python.push(pat.to_string());
+                }
                 other => return Err(format!("unknown grant `{other}`")),
             },
             None => match spec.trim() {
@@ -162,6 +178,8 @@ impl Grants {
         self.fs_read.extend(m.fs_read.iter().cloned());
         self.fs_write.extend(m.fs_write.iter().cloned());
         self.net.extend(m.net.iter().cloned());
+        // Accept the manifest's declared `foreign.python` allowlist as grants (`--grant-manifest`).
+        self.foreign_python.extend(m.foreign_python.iter().cloned());
         for name in &m.secrets {
             if let Ok(v) = std::env::var(name) {
                 self.secrets.insert(name.clone(), v);
@@ -180,9 +198,11 @@ impl Grants {
             rand: self.rand,
             declassify: self.declassify,
             secrets: self.secrets.clone(),
-            // `Cap[ForeignLoad]` is available to mint iff at least one foreign lib is granted; the
-            // per-lib authority decision is enforced separately at bind time (spec §4.1).
-            foreign_load: !self.foreign_c.is_empty(),
+            // `Cap[ForeignLoad]` is available to mint iff at least one foreign lib OR any Python
+            // allowlist pattern is granted (both `root.foreign` and `root.python` consume it); the
+            // per-lib/per-import authority decision is enforced separately (spec §4.1/§5.1).
+            foreign_load: !self.foreign_c.is_empty() || !self.foreign_python.is_empty(),
+            python_allowlist: self.foreign_python.clone(),
         }
     }
 
@@ -209,10 +229,11 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             ResourceKind::Rand => !grants.rand,
             ResourceKind::Declassify => !grants.declassify,
             ResourceKind::PluginHost => true,
-            // `Cap[ForeignLoad]` is covered once any `foreign.c` lib is granted (spec §4.1); the
-            // per-lib gate is enforced at bind time. Python's grant flow lands in phase 4f.
-            ResourceKind::ForeignLoad => grants.foreign_c.is_empty(),
-            ResourceKind::Python => true,
+            // `Cap[ForeignLoad]` is covered once any `foreign.c` lib OR `foreign.python` pattern is
+            // granted (spec §4.1/§5.1); the per-lib/per-import gate is enforced later.
+            ResourceKind::ForeignLoad => grants.foreign_c.is_empty() && grants.foreign_python.is_empty(),
+            // `Cap[Python]` is covered once any `foreign.python` pattern is granted (spec §5.1).
+            ResourceKind::Python => grants.foreign_python.is_empty(),
         })
         .copied()
         .collect()

@@ -300,7 +300,7 @@ fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
 fn explain_dl13xx_carries_the_honesty_caveats_and_never_says_sandbox() {
     // Spec §10 / trap 1: every foreign explain text states reachability-not-behavior, links forward
     // to Stage 5 for containment, and the word "sandbox" is banned for Stage 4 foreign code.
-    for code in ["DL1301", "DL1302", "DL1303", "DL1304", "DL1306", "DL1308"] {
+    for code in ["DL1301", "DL1302", "DL1303", "DL1304", "DL1305", "DL1306", "DL1307", "DL1308"] {
         let o = delulu(&["explain", code]);
         assert!(o.status.success(), "explain {code} failed");
         let out = stdout(&o);
@@ -312,6 +312,12 @@ fn explain_dl13xx_carries_the_honesty_caveats_and_never_says_sandbox() {
     // DL1301 additionally: the fence never suggests laundering a secret across the FFI.
     let o = delulu(&["explain", "DL1301"]);
     assert!(stdout(&o).contains("never suggests `expose`"), "{}", stdout(&o));
+    // DL1305 additionally: the spec §5.3 allowlist honesty note — the allowlist gates the interface,
+    // not transitive imports; embedded Python has full process authority.
+    let o = delulu(&["explain", "DL1305"]);
+    let out = stdout(&o);
+    assert!(out.contains("gates the interface"), "DL1305 must carry the §5.3 honesty note: {out}");
+    assert!(out.contains("full process authority"), "{out}");
 }
 
 #[test]
@@ -329,4 +335,109 @@ fn why_foreigncall_walks_the_chain_like_any_effect() {
     assert!(o.status.success(), "{}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("main") && out.contains("compute") && out.contains("ForeignCall"), "{out}");
+}
+
+// ----- Stage 4: embedded CPython (phase 4f) ----------------------------------------------------
+
+/// A program that reaches for embedded Python by importing `os` — the shape the Python CLI tests
+/// drive. `attempt` reports whether the import was allowed or denied.
+const PY_IMPORT_OS: &str = "module pyos\n\
+    fn attempt(py: Cap[Python]) -> Str ! {ForeignCall} {\n\
+      match py.import(\"os\") { Ok(_) => \"imported\", Err(e) => \"denied:\" + e.kind } }\n\
+    fn main(root: Root) ! {ForeignCall, Write} { let c = root.console()\n\
+      let load = root.foreign_load()\n\
+      match root.python(load) { Ok(py) => c.println(attempt(py)), Err(_) => c.println(\"unavailable\") } }\n";
+
+fn write_python_program(dir_name: &str, src: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(dir_name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.delulu"), src).unwrap();
+    dir.join("main.delulu")
+}
+
+#[test]
+fn run_numpy_mean_demo_prints_the_mean() {
+    // Criterion 2 at the CLI surface: the committed example imports NumPy, builds a list, calls
+    // `mean`, converts back, and prints it. Skip-with-notice when the interpreter / NumPy is absent
+    // (CI portability); on a host that has both it RUNS and prints `mean = 2.5`.
+    let o = delulu(&[
+        "run",
+        "examples/numpy_mean.delulu",
+        "--grant",
+        "console",
+        "--grant",
+        "foreign.python=numpy",
+        "--grant",
+        "foreign.python=numpy.*",
+    ]);
+    let out = stdout(&o);
+    if out.contains("unavailable") || out.contains("No module") {
+        eprintln!("SKIP (portability): embedded Python or NumPy unavailable on this host");
+        return;
+    }
+    assert!(o.status.success(), "stderr: {}", stderr(&o));
+    assert!(out.contains("mean = 2.5"), "criterion 2 demo output: {out}");
+}
+
+#[test]
+fn run_import_os_off_allowlist_is_dl1305_and_the_denied_attempt_is_traced() {
+    // Criterion 5 at the CLI surface: `py.import("os")` under an allowlist of ["numpy"] is refused
+    // as a runtime PyErr (DL1305), and the denied attempt is a ForeignCall record in the trace.
+    let file = write_python_program("delulu_cli_py_import_os", PY_IMPORT_OS);
+    let o = delulu(&[
+        "run",
+        file.to_str().unwrap(),
+        "--grant",
+        "console",
+        "--grant",
+        "foreign.python=numpy",
+        "--trace-effects",
+        "--assert-trace",
+    ]);
+    let out = stdout(&o);
+    if out.contains("unavailable") {
+        eprintln!("SKIP (portability): no embedded CPython on this host");
+        return;
+    }
+    assert!(o.status.success(), "stderr: {}", stderr(&o));
+    assert!(out.contains("denied:ImportNotAllowed"), "off-allowlist import must be denied: {out}");
+    let err = stderr(&o);
+    assert!(err.contains("\"op\":\"py.import\""), "the denied import must be traced: {err}");
+    assert!(err.contains("\"effect\":\"ForeignCall\""), "{err}");
+    assert!(err.contains("\"detail\":\"os\""), "the trace must name the refused module: {err}");
+}
+
+#[test]
+fn run_python_without_grant_is_dl1303_at_startup() {
+    // Deny-by-default: a program that reaches `root.python` with no `foreign.python` grant is refused
+    // at the grant flow (DL1303), before `main` runs.
+    let file = write_python_program("delulu_cli_py_ungranted", PY_IMPORT_OS);
+    let o = delulu(&["run", file.to_str().unwrap(), "--grant", "console", "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).expect("run --json must be valid JSON");
+    assert_eq!(v["diagnostics"][0]["code"], "DL1303");
+    assert_eq!(o.status.code(), Some(1));
+    assert!(!stdout(&o).contains("denied"), "main must never have run");
+}
+
+#[test]
+fn authority_lists_python_under_the_outside_the_proof_separator() {
+    let o = delulu(&["authority", "examples/numpy_mean.delulu"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let out = stdout(&o);
+    assert!(out.contains("-- outside the proof (contained at process level) --"), "{out}");
+    assert!(out.contains("python"), "{out}");
+    assert!(out.contains("imports seen: [numpy]"), "{out}");
+
+    // The JSON shape (spec §6): abi:"python", allowlist, imports_seen, used_at.
+    let j = delulu(&["authority", "examples/numpy_mean.delulu", "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&j)).unwrap();
+    let entry = v["authority"]["foreign_calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["abi"] == "python")
+        .expect("a python foreign_calls entry");
+    assert_eq!(entry["imports_seen"][0], "numpy");
+    assert!(entry["used_at"][0]["line"].is_number());
 }

@@ -4,6 +4,14 @@ description = "DeluluLang runtime: values, capability table, Stage-1 grant broke
 version.workspace = true
 edition.workspace = true
 
+[features]
+# Embedded CPython (Stage 4 phase 4f, spec §5). ENABLED BY DEFAULT — a normal build of delulu
+# includes Python; `--no-default-features` builds a Python-less runtime where `root.python(...)`
+# returns `ForeignErr::Unavailable` (DL1307), the same user-visible behaviour as no interpreter.
+# All PyO3 code is isolated behind `#[cfg(feature = "python")]` in `src/python.rs`.
+default = ["python"]
+python = ["dep:pyo3"]
+
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
@@ -12,3 +20,7 @@ delulu-check = { path = "../delulu-check" }
 # a foreign signature is runtime data. Both are isolated behind `src/foreign.rs`.
 libloading = "0.8"
 libffi = "3"
+# Stage 4 embedded CPython (spec §5). PyO3 with `auto-initialize` OFF (the interpreter is prepared
+# lazily on the first grant-checked `root.python(...)` call). Isolated behind `src/python.rs` and the
+# `python` feature. Optional so `--no-default-features` builds a Python-less delulu.
+pyo3 = { version = "0.25", optional = true }

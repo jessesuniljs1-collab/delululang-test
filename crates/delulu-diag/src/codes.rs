@@ -109,7 +109,9 @@ registry! {
     "DL1302" => "function-typed value crossing the foreign boundary (no callbacks — rule R-6a)",
     "DL1303" => "foreign lib used without a manifest entry or runtime grant",
     "DL1304" => "foreign symbol not found at bind time",
+    "DL1305" => "python import not in the granted allowlist",
     "DL1306" => "foreign return failed shape validation (encoding or size)",
+    "DL1307" => "python runtime unavailable",
     "DL1308" => "unsupported ABI string in a `foreign` block",
 
     // DL09xx — runtime
@@ -164,6 +166,20 @@ pub fn code_explain(code: &str) -> Option<String> {
              bind time. All declared symbols resolve up front, fail-fast — a program that binds \
              successfully never surprises you with a missing symbol during a later call. Check the \
              symbol name and that the granted binary actually exports it.",
+        "DL1305" => "This program's `py.import(name)` names a module not permitted by the granted \
+             `foreign.python` allowlist. Add the pattern to `[authority] foreign.python` and grant it \
+             (`--grant foreign.python=numpy` or `--grant \"foreign.python=numpy.*\"`; a pattern is an \
+             exact name or a `prefix.*` wildcard). The import allowlist gates the interface — what \
+             the DeluluLang program may reach for by name. It does not bound what Python code \
+             transitively imports or does once running: embedded Python has full process authority at \
+             the OS level. The real bounds are (a) the reachability gate (no Cap[Python], no Python at \
+             all) and (b) the process/worker/microVM layer (Stage 5). This is the Constitution §5.12 \
+             degradation, stated where users will actually read it.",
+        "DL1307" => "The embedded CPython interpreter is unavailable: this build of delulu was made \
+             without the `python` feature, or the interpreter failed to initialize on the host. This \
+             surfaces as a `ForeignErr::Unavailable` value from `root.python(load)` — a `Result` \
+             error, never a crash. Install a compatible CPython (or use a delulu built with the \
+             `python` feature) and try again.",
         "DL1306" => "A value returned from foreign code failed shape validation at the boundary: a \
              returned string was not valid UTF-8, or exceeded `--foreign-max-ret` (default 64 MiB) \
              with no terminator. Returned foreign data is validated for *shape*, not *meaning* — it \

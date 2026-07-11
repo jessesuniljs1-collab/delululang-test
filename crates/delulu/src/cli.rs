@@ -302,10 +302,11 @@ fn cmd_authority(rest: &[String]) -> i32 {
         return 1;
     }
     let mut scopes = manifest_scopes(&file);
-    // Foreign blocks the program declares → the `foreign_calls` array under the "outside the proof"
-    // separator (spec §6). A program with no `foreign` blocks yields `[]`, keeping the report
-    // byte-identical to Stage 3 (criterion 7).
-    scopes.foreign_calls = foreign_calls_json(&checked.module, &map);
+    // Foreign blocks the program declares + its embedded-Python use → the `foreign_calls` array under
+    // the "outside the proof" separator (spec §6). A program with no `foreign` blocks and no Python
+    // use yields `[]`, keeping the report byte-identical to Stage 3 (criterion 7).
+    let python_allowlist = manifest_python_allowlist(&file);
+    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
     let program = checked.module.name.dotted();
     let report = authority_report(&program, &checked.result, &scopes);
     if opts.json {
@@ -359,6 +360,16 @@ fn render_authority(report: &Json) -> String {
         let _ = writeln!(out, "    -- outside the proof (contained at process level) --");
         for f in &foreign {
             let abi = f["abi"].as_str().unwrap_or("c");
+            if abi == "python" {
+                // The embedded-Python entry: the import allowlist (interface gate, §5.3) and the
+                // statically-seen imports — no lib/symbols/binary.
+                let allow = strs(&f["allowlist"]);
+                let seen = strs(&f["imports_seen"]);
+                let allow_str = if allow.is_empty() { "(none granted)".to_string() } else { allow.join(", ") };
+                let seen_str = if seen.is_empty() { "(none seen statically)".to_string() } else { seen.join(", ") };
+                let _ = writeln!(out, "    - python  allowlist: [{allow_str}]  imports seen: [{seen_str}]");
+                continue;
+            }
             let lib = f["lib"].as_str().unwrap_or("?");
             let symbols = strs(&f["symbols"]);
             let binary = f["granted_path"].as_str().unwrap_or("(chosen by the human at grant time)");
@@ -377,6 +388,15 @@ fn scopes_in_dir(dir: &std::path::Path) -> delulu_check::ScopeInfo {
     match std::fs::read_to_string(dir.join("delulu.toml")) {
         Ok(src) => parse_manifest(&src).scope_info(),
         Err(_) => delulu_check::ScopeInfo::default(),
+    }
+}
+
+/// The manifest's declared `foreign.python` import allowlist next to `file` (empty when no manifest).
+fn manifest_python_allowlist(file: &str) -> Vec<String> {
+    let dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    match std::fs::read_to_string(dir.join("delulu.toml")) {
+        Ok(src) => parse_manifest(&src).foreign_python,
+        Err(_) => Vec::new(),
     }
 }
 
@@ -1282,16 +1302,14 @@ fn foreign_grant_preflight(
 ) -> Result<(), i32> {
     use std::io::IsTerminal;
 
+    let mut diags: Vec<Diagnostic> = Vec::new();
+
+    // ----- C libs (spec §4.1) ----------------------------------------------
     let bound: BTreeSet<&String> = checked.result.foreign_binds.values().collect();
-    if bound.is_empty() {
-        return Ok(());
-    }
     let blocks = foreign_blocks_of(&checked.module);
     let symbols_of = |lib: &str| -> Vec<String> {
         blocks.iter().find(|b| b.lib == lib).map(|b| b.symbols.clone()).unwrap_or_default()
     };
-
-    let mut diags: Vec<Diagnostic> = Vec::new();
     for lib in bound {
         // Manifest ceiling: a bound lib must be listed in `[authority] foreign.c` when a manifest
         // exists. Exceeding it is the program reaching for authority it never declared (DL1303).
@@ -1319,6 +1337,38 @@ fn foreign_grant_preflight(
             format!("foreign lib `{lib}` was not granted — pass `--grant foreign.c={lib}:PATH` (the human chooses which binary)"),
         ));
     }
+
+    // ----- embedded Python (spec §5.1) -------------------------------------
+    // A program that reaches `root.python` needs a granted `foreign.python` allowlist. Deny-by-
+    // default at the grant flow (DL1303), before `main` runs — never mid-run. The runtime allowlist
+    // check at `py.import` (DL1305) is a second, per-import gate on top of this.
+    if python_usage(&checked.module).is_some() {
+        if let Some(m) = manifest {
+            if m.foreign_python.is_empty() {
+                diags.push(Diagnostic::error(
+                    "DL1303",
+                    "program uses embedded Python not permitted by the authority manifest (`[authority] foreign.python`)".to_string(),
+                ));
+            } else {
+                // Granted patterns must not exceed the manifest's declared allowlist (attenuation).
+                for p in &grants.foreign_python {
+                    if !m.foreign_python.iter().any(|d| d == p) {
+                        diags.push(Diagnostic::error(
+                            "DL1303",
+                            format!("python import pattern `{p}` exceeds the authority manifest (`[authority] foreign.python`)"),
+                        ));
+                    }
+                }
+            }
+        }
+        if grants.foreign_python.is_empty() {
+            diags.push(Diagnostic::error(
+                "DL1303",
+                "embedded Python was not granted — pass `--grant foreign.python=numpy` (an import allowlist pattern; the human chooses which modules)".to_string(),
+            ));
+        }
+    }
+
     if diags.is_empty() {
         Ok(())
     } else {
@@ -1354,12 +1404,13 @@ fn prompt_foreign_grant(lib: &str, symbols: &[String]) -> Option<String> {
     }
 }
 
-/// Build the `foreign_calls` JSON array (spec §6) from a program's `foreign` blocks. `granted_path`
-/// is null: `delulu authority` is a static command with no grants, and the path is a runtime human
-/// decision, not program data. `used_at` reports each block's declaration site — an honest
-/// approximation at declaration granularity, the same altitude `delulu why` reports at.
-fn foreign_calls_json(module: &delulu_syntax::ast::Module, map: &SourceMap) -> Vec<Json> {
-    foreign_blocks_of(module)
+/// Build the `foreign_calls` JSON array (spec §6) from a program's `foreign` blocks AND its embedded
+/// Python use. `granted_path` is null: `delulu authority` is a static command with no grants, and the
+/// path is a runtime human decision, not program data. `used_at` reports the declaration/use site at
+/// declaration granularity, the same altitude `delulu why` reports at. The `python_allowlist` is the
+/// manifest's declared `foreign.python` (empty when there is no manifest).
+fn foreign_calls_json(module: &delulu_syntax::ast::Module, map: &SourceMap, python_allowlist: &[String]) -> Vec<Json> {
+    let mut out: Vec<Json> = foreign_blocks_of(module)
         .into_iter()
         .map(|b| {
             let (line, _col) = map.position(b.span.file, b.span.start);
@@ -1371,7 +1422,125 @@ fn foreign_calls_json(module: &delulu_syntax::ast::Module, map: &SourceMap) -> V
                 "used_at": [ { "file": map.name(b.span.file), "line": line } ],
             })
         })
-        .collect()
+        .collect();
+    // The embedded-Python entry (spec §6): `{abi:"python", allowlist, imports_seen, used_at}`. Present
+    // only when the program actually reaches for Python (`root.python`), so a non-Python program's
+    // report is unchanged. `imports_seen` is the statically-known set of `py.import("literal")` names.
+    if let Some(usage) = python_usage(module) {
+        let (line, _col) = map.position(usage.used_at.file, usage.used_at.start);
+        out.push(json!({
+            "abi": "python",
+            "allowlist": python_allowlist,
+            "imports_seen": usage.imports_seen,
+            "used_at": [ { "file": map.name(usage.used_at.file), "line": line } ],
+        }));
+    }
+    out
+}
+
+/// A program's embedded-Python use, discovered by an AST walk: where `root.python` is first reached
+/// (`used_at`) and the statically-known `py.import("literal")` module names (`imports_seen`).
+struct PythonUsage {
+    used_at: delulu_diag::Span,
+    imports_seen: Vec<String>,
+}
+
+fn python_usage(module: &delulu_syntax::ast::Module) -> Option<PythonUsage> {
+    let mut w = PyWalk { python_call: None, imports: Vec::new() };
+    for item in &module.items {
+        match item {
+            Item::Fn(f) => w.walk_block(&f.body),
+            Item::Const(c) => w.walk_expr(&c.value),
+            _ => {}
+        }
+    }
+    w.python_call.map(|used_at| PythonUsage { used_at, imports_seen: w.imports })
+}
+
+/// A read-only AST walk collecting embedded-Python use: the first `root.python(...)` method call
+/// (which is what mints a `Cap[Python]`) and every `py.import("literal")` module name.
+struct PyWalk {
+    python_call: Option<delulu_diag::Span>,
+    imports: Vec<String>,
+}
+
+impl PyWalk {
+    fn walk_block(&mut self, b: &delulu_syntax::ast::Block) {
+        for s in &b.stmts {
+            self.walk_stmt(s);
+        }
+    }
+
+    fn walk_stmt(&mut self, s: &delulu_syntax::ast::Stmt) {
+        use delulu_syntax::ast::Stmt::*;
+        match s {
+            Let { value, .. } => self.walk_expr(value),
+            Assign { value, .. } => self.walk_expr(value),
+            While { cond, body, .. } => {
+                self.walk_expr(cond);
+                self.walk_block(body);
+            }
+            Return { value, .. } => {
+                if let Some(e) = value {
+                    self.walk_expr(e);
+                }
+            }
+            Expr(e) => self.walk_expr(e),
+        }
+    }
+
+    fn walk_expr(&mut self, e: &delulu_syntax::ast::Expr) {
+        use delulu_syntax::ast::{Expr::*, LitKind};
+        match e {
+            Method { recv, name, args, span, .. } => {
+                self.walk_expr(recv);
+                for a in args {
+                    self.walk_expr(a);
+                }
+                if name.name == "python" && self.python_call.is_none() {
+                    self.python_call = Some(*span);
+                }
+                if name.name == "import" {
+                    if let Some(Lit { kind: LitKind::Str(s), .. }) = args.first() {
+                        if !self.imports.contains(s) {
+                            self.imports.push(s.clone());
+                        }
+                    }
+                }
+            }
+            List { items, .. } => items.iter().for_each(|it| self.walk_expr(it)),
+            Record { fields, .. } => fields.iter().for_each(|(_, v)| self.walk_expr(v)),
+            Call { callee, args, .. } => {
+                self.walk_expr(callee);
+                args.iter().for_each(|a| self.walk_expr(a));
+            }
+            Field { recv, .. } => self.walk_expr(recv),
+            Index { recv, index, .. } => {
+                self.walk_expr(recv);
+                self.walk_expr(index);
+            }
+            Unary { operand, .. } => self.walk_expr(operand),
+            Binary { lhs, rhs, .. } => {
+                self.walk_expr(lhs);
+                self.walk_expr(rhs);
+            }
+            If { cond, then_, else_, .. } => {
+                self.walk_expr(cond);
+                self.walk_block(then_);
+                if let Some(e) = else_ {
+                    self.walk_expr(e);
+                }
+            }
+            Match { scrutinee, arms, .. } => {
+                self.walk_expr(scrutinee);
+                arms.iter().for_each(|a| self.walk_expr(&a.body));
+            }
+            Lambda { body, .. } => self.walk_block(body),
+            Try { inner, .. } => self.walk_expr(inner),
+            Block(b) => self.walk_block(b),
+            Lit { .. } | Var { .. } => {}
+        }
+    }
 }
 
 // ----- explain / repl ------------------------------------------------------

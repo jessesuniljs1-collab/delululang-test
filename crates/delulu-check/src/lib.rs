@@ -319,6 +319,86 @@ mod tests {
         assert!(c.result.facts["g"].pure);
     }
 
+    // ----- Stage 4: embedded CPython (phase 4f, spec §5) -------------------
+
+    #[test]
+    fn python_surface_checks_clean_with_foreigncall() {
+        // The criterion-2 shape: import, build a list, call a method, convert back. Every `std.py`
+        // op has row exactly `{ForeignCall}`.
+        let c = check(
+            "module m\n\
+             fn work(py: Cap[Python]) -> Result[Float, PyErr] ! {ForeignCall} {\n\
+               let np = py.import(\"numpy\")?\n\
+               let xs = py.list([py.of_float(1.0), py.of_float(2.0)])\n\
+               let m = np.call_method(\"mean\", [xs])?\n\
+               py.to_float(m) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["work"].effects.contains(&Effect::ForeignCall));
+    }
+
+    #[test]
+    fn root_python_is_pure_and_returns_result_cap_python() {
+        // T-Py binding: `root.python(load) -> Result[Cap[Python], ForeignErr]` is PURE (deriving the
+        // handle is not an effect), and the report knows the program wields Python.
+        let c = check(
+            "module m\nfn get(root: Root, load: Cap[ForeignLoad]) -> Result[Cap[Python], ForeignErr] { root.python(load) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["get"].pure, "minting Cap[Python] must be pure");
+        assert!(c.result.facts["get"].cap_kinds.contains(&ResourceKind::Python));
+    }
+
+    #[test]
+    fn python_cap_is_not_an_ordinary_capability_row_in_the_report() {
+        // Like ForeignLoad, Python discloses under the "outside the proof" separator, never as a
+        // plain capability line (spec §6).
+        let c = check(
+            "module m\nfn main(root: Root) ! {ForeignCall} { let load = root.foreign_load()\n let _p = root.python(load) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let report = authority_report("m", &c.result, &ScopeInfo::default());
+        let caps = report["capabilities"].as_array().unwrap();
+        assert!(caps.iter().all(|cap| cap["kind"] != "Python"), "{caps:?}");
+    }
+
+    #[test]
+    fn closure_into_pyobj_call_is_dl1302_not_a_plain_mismatch() {
+        // Spec §4.4 / R-6a: `obj.call([closure])` is the no-callbacks rule, DL1302 — the spec wants
+        // the R-6a diagnostic, not a bare type mismatch. A pure-closure list (`List[fn]`) is caught
+        // by the Python-arg fence.
+        let e = errors(
+            "module m\nfn f(o: PyObj, g: fn(Int) -> Int) -> Result[PyObj, PyErr] ! {ForeignCall} { o.call([g]) }\n",
+        );
+        assert!(e.contains(&"DL1302".to_string()), "{e:?}");
+        assert!(!e.contains(&"DL0401".to_string()), "the R-6a diagnostic must replace the plain mismatch: {e:?}");
+    }
+
+    #[test]
+    fn closure_mixed_into_pyobj_list_literal_is_dl1302() {
+        // A closure alongside real PyObj elements: the mismatch surfaces at element unification, and
+        // a function-into-PyObj is DL1302 (a closure can never become a Python value).
+        let e = errors(
+            "module m\nfn f(py: Cap[Python], o: PyObj) -> Result[PyObj, PyErr] ! {ForeignCall} { o.call([py.of_int(1), fn(x: Int) -> Int { x }]) }\n",
+        );
+        assert!(e.contains(&"DL1302".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn pyobj_in_a_foreign_c_signature_is_dl1301() {
+        // `PyObj` is opaque and NOT marshallable across the C boundary (spec §3 T-Py): the 4b fence
+        // rejects it via M(τ).
+        let e = errors("module m\nforeign \"c\" lib bad { fn takes(p: PyObj) -> Int }\n");
+        assert!(e.contains(&"DL1301".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn stringifying_a_pyobj_is_dl0604() {
+        // `PyObj` is R-5 opaque: no str/serialize.
+        let e = errors("module m\nfn f(o: PyObj) -> Str { str(o) }\n");
+        assert!(e.contains(&"DL0604".to_string()), "{e:?}");
+    }
+
     #[test]
     fn the_reference_program_checks_clean() {
         let src = include_str!("../../../examples/demo.delulu");

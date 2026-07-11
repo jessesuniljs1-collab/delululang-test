@@ -84,6 +84,30 @@ impl TokenKind {
         )
     }
 
+    /// The source lexeme of a keyword token, if this is one. Used so a reserved word may still be a
+    /// **member name** after `.` (e.g. `py.import(…)` — spec §5.2 — or a future `x.match`): member
+    /// position is not a declaration site, so keywords are unambiguous there.
+    pub fn keyword_lexeme(&self) -> Option<&'static str> {
+        Some(match self {
+            TokenKind::KwFn => "fn",
+            TokenKind::KwLet => "let",
+            TokenKind::KwVar => "var",
+            TokenKind::KwIf => "if",
+            TokenKind::KwElse => "else",
+            TokenKind::KwWhile => "while",
+            TokenKind::KwReturn => "return",
+            TokenKind::KwMatch => "match",
+            TokenKind::KwModule => "module",
+            TokenKind::KwImport => "import",
+            TokenKind::KwPub => "pub",
+            TokenKind::KwType => "type",
+            TokenKind::KwEffect => "effect",
+            TokenKind::KwTrue => "true",
+            TokenKind::KwFalse => "false",
+            _ => return None,
+        })
+    }
+
     /// Human-facing description for "expected X, found Y" diagnostics.
     pub fn describe(&self) -> String {
         match self {

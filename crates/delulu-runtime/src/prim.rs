@@ -124,7 +124,24 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             if root.foreign_load {
                 Ok(cap(ResourceKind::ForeignLoad, CapScope::ForeignLoad))
             } else {
-                Err(Fault::at("DL0703", "foreign loading was not granted (grant a `foreign.c` lib)", span))
+                Err(Fault::at("DL0703", "foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)", span))
+            }
+        }
+        // T-Py binding (spec §5.1): `root.python(load: Cap[ForeignLoad]) -> Result[Cap[Python],
+        // ForeignErr]`, PURE like `root.foreign` — deriving the handle is not an effect; *using* it
+        // is. An ungranted `foreign.python` is `Err(NotGranted)` (DL1303's runtime face, behind the
+        // CLI startup refusal); an interpreter that will not start is `Err(Unavailable)` (DL1307).
+        // The interpreter is prepared lazily HERE, on this first grant-checked call.
+        "python" => {
+            if root.python_allowlist.is_empty() {
+                return Ok(Value::err(Value::variant("NotGranted", vec![])));
+            }
+            match crate::python::ensure_available() {
+                Ok(()) => Ok(Value::ok(cap(
+                    ResourceKind::Python,
+                    CapScope::Python { allowlist: root.python_allowlist.clone() },
+                ))),
+                Err(reason) => Ok(Value::err(Value::variant("Unavailable", vec![Value::str(reason)]))),
             }
         }
         "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
