@@ -114,6 +114,16 @@ registry! {
     "DL1307" => "python runtime unavailable",
     "DL1308" => "unsupported ABI string in a `foreign` block",
 
+    // DL14xx — custody / broker (Stage 5). DL0802 (Stage-1 registry) activates from this stage.
+    // NOTE: there is deliberately NO DL1404 — the range skips it (spec §8). Do not invent one.
+    "DL1401" => "broker unreachable / protocol failure (fail closed)",
+    "DL1402" => "lease expired (TTL)",
+    "DL1403" => "lease revoked (carries the revoking audit seq)",
+    "DL1405" => "audit chain verification failure",
+    "DL1406" => "broker protocol version mismatch",
+    "DL1407" => "delegation token invalid or already redeemed",
+    "DL1408" => "isolation profile unavailable on this platform",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",

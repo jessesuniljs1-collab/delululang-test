@@ -1,0 +1,15 @@
+[package]
+name = "delulu-broker"
+description = "DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory grant tree, and the two validation classes with revocation epochs. Transport-free — no sockets, no daemon, no runtime wiring."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Ruling 1: transport-free; depends ONLY on delulu-diag (Diagnostic) + delulu-check (Effect).
+delulu-diag = { path = "../delulu-diag" }
+delulu-check = { path = "../delulu-check" }
+serde_json = { workspace = true }
+# Ruling 3: OS-backed default GrantId randomness. getrandom 0.3 is already in the workspace dep
+# tree (Cargo.lock), so we reuse it rather than adding `rand`. No blake3/hmac here — those are
+# chunk 2 (the hash-chained audit log + lease-token HMAC).
+getrandom = "0.3"

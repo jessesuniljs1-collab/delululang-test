@@ -8,6 +8,7 @@ members = [
     "crates/delulu",
     "crates/delulu-fuzz",
     "crates/delulu-wasm",
+    "crates/delulu-broker",
 ]
 
 [workspace.package]
