@@ -27,10 +27,19 @@
 //! imports `root_fs_read`/`fs_read_text`; the host performs the scoped read and CONSTRUCTS the
 //! `Result[Str, IoErr]` cells in guest memory (the guest heap `__heap` global is exported for it).
 //!
-//! Constructs outside this fragment (`while`, foreign, GC types, user enums) are
-//! `CompileError::Unsupported` (DL1201) and stay on the interpreter, which remains the reference
-//! engine. Secret-handling constructs (`root.secret(...)`, `Secret.expose(...)`) are refused as
-//! `CompileError::SecretInGuest` (DL1205, Phase 3n) so secret bytes never enter guest linear memory.
+//! Stage 4 phase 4g (foreign C FFI): `root.foreign_load()`, `root.foreign(load)`, and method calls
+//! on a bound lib handle compile to the `delulu:foreign` host imports (`foreign_load`/`foreign_bind`/
+//! `foreign_call`/`float_to_str`); ALL FFI (spec §4.1–4.2 — grants, bind-time symbol resolution,
+//! marshalling, return validation) runs host-side and the guest never touches a raw pointer. Effect
+//! host fns now carry a `(file,start,end)` span so the host records `TraceRecord`s identical to the
+//! interpreter's (criterion 6). `Float` literals, `str(Float)`, and `str(Bool)` compile in support.
+//!
+//! Constructs outside this fragment (`while`, embedded Python (`root.python`/`py.*` — head-chef
+//! ruling: the DL1201 interpreter fallback, since `py.list` needs guest `List` values), GC types,
+//! user enums with non-scalar payloads) are `CompileError::Unsupported` (DL1201) and stay on the
+//! interpreter, which remains the reference engine. Secret-handling constructs (`root.secret(...)`,
+//! `Secret.expose(...)`) are refused as `CompileError::SecretInGuest` (DL1205, Phase 3n) so secret
+//! bytes never enter guest linear memory.
 
 use std::collections::HashMap;
 
@@ -76,12 +85,20 @@ impl CompileError {
 enum Ty {
     I64,   // Int
     I32,   // Bool
+    F64,   // Float (Stage 4 phase 4g — used for `foreign "c"` scalar marshalling)
     Str,   // i32 pointer into linear memory
     Cap,    // i32 host handle (Console)
     Clock,  // i32 host handle (Clock, Phase 3k)
     Rand,   // i32 host handle (Rand, Phase 3l)
     FsRead, // i32 host handle (Cap[FsRead], Phase 3p)
     Root,   // i32 host handle to the root authority (Phase 3e)
+    // Stage 4 phase 4g: `Cap[ForeignLoad]` (i32 host handle) and a bound `foreign` lib handle
+    // `Foreign(lib_id)` (i32 host handle; `lib_id` indexes the module's foreign blocks so a method
+    // call knows its marshalling signature). `ForeignPtr` is the opaque `void*` handle (i32 index
+    // into the host's foreign-pointer table — never a raw address in the guest).
+    ForeignLoad,
+    Foreign(u32),
+    ForeignPtr,
     Unit,   // no value
     // Phase 3o: sum types. A variant value is an i32 pointer to `[tag:i32][field…]` in the heap.
     // `Result`/`Option` carry their payload scalars inline; user/prelude enums (Phase 3o Checkpoint 3)
@@ -97,9 +114,12 @@ enum Ty {
 enum Scalar {
     I64,
     I32,
+    F64,
     Str,
     Unit,
     Enum(u32),
+    Foreign(u32), // a bound `foreign` lib handle payload — e.g. the `Ok(m)` of `Result[M, ForeignErr]`
+    ForeignPtr,
 }
 
 impl Scalar {
@@ -107,9 +127,12 @@ impl Scalar {
         match self {
             Scalar::I64 => Ty::I64,
             Scalar::I32 => Ty::I32,
+            Scalar::F64 => Ty::F64,
             Scalar::Str => Ty::Str,
             Scalar::Unit => Ty::Unit,
             Scalar::Enum(i) => Ty::Enum(i),
+            Scalar::Foreign(i) => Ty::Foreign(i),
+            Scalar::ForeignPtr => Ty::ForeignPtr,
         }
     }
 }
@@ -119,10 +142,37 @@ fn ty_to_scalar(t: Ty) -> Option<Scalar> {
     match t {
         Ty::I64 => Some(Scalar::I64),
         Ty::I32 => Some(Scalar::I32),
+        Ty::F64 => Some(Scalar::F64),
         Ty::Str => Some(Scalar::Str),
         Ty::Unit => Some(Scalar::Unit),
         Ty::Enum(i) => Some(Scalar::Enum(i)),
+        Ty::Foreign(i) => Some(Scalar::Foreign(i)),
+        Ty::ForeignPtr => Some(Scalar::ForeignPtr),
         _ => None,
+    }
+}
+
+/// Emit the store instruction for a variant field slot of the given scalar payload kind.
+fn store_scalar(cx: &mut Cx, s: Scalar) {
+    match s {
+        Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
+        Scalar::F64 => cx.emit(Instruction::F64Store(i64_at())),
+        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr => {
+            cx.emit(Instruction::I32Store(u32_at()))
+        }
+        Scalar::Unit => {}
+    }
+}
+
+/// Emit the load instruction for a variant field slot of the given scalar payload kind.
+fn load_scalar(cx: &mut Cx, s: Scalar) {
+    match s {
+        Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
+        Scalar::F64 => cx.emit(Instruction::F64Load(i64_at())),
+        Scalar::I32 | Scalar::Str | Scalar::Enum(_) | Scalar::Foreign(_) | Scalar::ForeignPtr => {
+            cx.emit(Instruction::I32Load(u32_at()))
+        }
+        Scalar::Unit => {}
     }
 }
 
@@ -138,11 +188,30 @@ struct EnumCtorDesc {
     payloads: Vec<Scalar>,
 }
 
-/// The module's named sum types (prelude `IoErr`/`NetErr` + user `enum` declarations), resolved to
-/// stable indices so `Ty::Enum(id)`/`Scalar::Enum(id)` can name them.
+/// One `foreign "c" lib M { … }` block, lowered for codegen (Stage 4 phase 4g): the logical lib
+/// name and each declared method's marshalling `Ty`s. Kept parallel to (not shared with) the
+/// runtime's `foreign::ForeignSig` — this side drives guest codegen, that side drives the host FFI.
+#[derive(Clone)]
+struct ForeignLibInfo {
+    name: String,
+    methods: Vec<ForeignMethodInfo>,
+}
+
+#[derive(Clone)]
+struct ForeignMethodInfo {
+    name: String,
+    params: Vec<Ty>,
+    ret: Ty,
+}
+
+/// The module's named sum types (prelude `IoErr`/`NetErr`/`ForeignErr` + user `enum` declarations),
+/// resolved to stable indices so `Ty::Enum(id)`/`Scalar::Enum(id)` can name them, plus the `foreign`
+/// lib blocks (`Ty::Foreign(id)` — Stage 4 phase 4g).
 struct EnumEnv {
     descs: Vec<EnumDesc>,
     by_name: HashMap<String, u32>,
+    foreign_libs: Vec<ForeignLibInfo>,
+    foreign_by_name: HashMap<String, u32>,
 }
 
 impl EnumEnv {
@@ -151,6 +220,13 @@ impl EnumEnv {
     }
     fn desc(&self, id: u32) -> &EnumDesc {
         &self.descs[id as usize]
+    }
+    /// The foreign-lib id for a name introduced by a `foreign … lib M` block (Stage 4 phase 4g).
+    fn foreign_id(&self, name: &str) -> Option<u32> {
+        self.foreign_by_name.get(name).copied()
+    }
+    fn foreign_method(&self, id: u32, method: &str) -> Option<&ForeignMethodInfo> {
+        self.foreign_libs[id as usize].methods.iter().find(|m| m.name == method)
     }
     /// The constructors of a variant type (built-in `Result`/`Option` or a named enum).
     fn ctors_of(&self, ty: Ty) -> Option<Vec<(String, Vec<Scalar>)>> {
@@ -167,8 +243,9 @@ impl EnumEnv {
 /// the module. Two passes so ctor payloads can reference other (and their own) enum names.
 fn build_enum_env(module: &Module) -> EnumEnv {
     let mut by_name: HashMap<String, u32> = HashMap::new();
-    // Names first (prelude, then user), so payload resolution below can see every enum.
-    let prelude: [&str; 2] = ["IoErr", "NetErr"];
+    // Names first (prelude, then user), so payload resolution below can see every enum. `ForeignErr`
+    // is a Stage-4 prelude sum (spec §8) so `Result[M, ForeignErr]` binds/matches on the WASM engine.
+    let prelude: [&str; 3] = ["IoErr", "NetErr", "ForeignErr"];
     for name in prelude {
         let id = by_name.len() as u32;
         by_name.insert(name.to_string(), id);
@@ -182,11 +259,63 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         }
     }
 
-    let mut env = EnumEnv { descs: vec![EnumDesc { ctors: Vec::new() }; by_name.len()], by_name };
+    // Foreign-lib blocks introduce nominal opaque handle types (`Ty::Foreign(id)`). Register their
+    // names first so a foreign method's own signature (only ever Int/Float/Bool/Str/Unit/ForeignPtr
+    // per the T-ForeignSig fence) never needs them, but a `Result[M, ForeignErr]` annotation resolves.
+    let mut foreign_by_name: HashMap<String, u32> = HashMap::new();
+    for it in &module.items {
+        if let Item::Foreign(fd) = it {
+            if !foreign_by_name.contains_key(&fd.name.name) {
+                let id = foreign_by_name.len() as u32;
+                foreign_by_name.insert(fd.name.name.clone(), id);
+            }
+        }
+    }
+
+    let mut env = EnumEnv {
+        descs: vec![EnumDesc { ctors: Vec::new() }; by_name.len()],
+        by_name,
+        foreign_libs: Vec::new(),
+        foreign_by_name,
+    };
     // Prelude descriptors.
     let str_payload = vec![Scalar::Str];
     set_ctors(&mut env, "IoErr", &[("NotFound", vec![]), ("Denied", vec![]), ("Other", str_payload.clone())]);
-    set_ctors(&mut env, "NetErr", &[("Refused", vec![]), ("Timeout", vec![]), ("Other", str_payload)]);
+    set_ctors(&mut env, "NetErr", &[("Refused", vec![]), ("Timeout", vec![]), ("Other", str_payload.clone())]);
+    // `ForeignErr = NotGranted | SymbolMissing(Str) | BadReturn(Str) | Unavailable(Str)` (spec §8) —
+    // the tag order MUST match the host's `foreign_bind` cell construction and the interpreter's sum.
+    set_ctors(
+        &mut env,
+        "ForeignErr",
+        &[
+            ("NotGranted", vec![]),
+            ("SymbolMissing", str_payload.clone()),
+            ("BadReturn", str_payload.clone()),
+            ("Unavailable", str_payload),
+        ],
+    );
+    // Foreign lib method signatures (params/return lowered to `Ty`). Ordered to match `foreign_by_name`.
+    let mut foreign_libs: Vec<ForeignLibInfo> = vec![
+        ForeignLibInfo { name: String::new(), methods: Vec::new() };
+        env.foreign_by_name.len()
+    ];
+    for it in &module.items {
+        if let Item::Foreign(fd) = it {
+            if let Some(&id) = env.foreign_by_name.get(&fd.name.name) {
+                let methods = fd
+                    .fns
+                    .iter()
+                    .map(|f| ForeignMethodInfo {
+                        name: f.name.name.clone(),
+                        params: f.params.iter().map(|p| wasm_ty(&env, &p.ty).unwrap_or(Ty::Unit)).collect(),
+                        ret: f.ret.as_ref().and_then(|t| wasm_ty(&env, t)).unwrap_or(Ty::Unit),
+                    })
+                    .collect();
+                foreign_libs[id as usize] = ForeignLibInfo { name: fd.name.name.clone(), methods };
+            }
+        }
+    }
+    env.foreign_libs = foreign_libs;
     // User enum descriptors (payloads resolved against the now-populated name table).
     for it in &module.items {
         if let Item::Type(td) = it {
@@ -241,13 +370,20 @@ struct Imports {
     rand_int: u32,
     root_fs_read: u32,
     fs_read_text: u32,
+    // Stage 4 phase 4g — the `delulu:foreign` host interface.
+    foreign_load: u32,
+    foreign_bind: u32,
+    foreign_call: u32,
+    float_to_str: u32,
 }
 
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
+        Ty::F64 => Some(ValType::F64),
         // Str/Cap/variant handles are all i32 (a pointer or a host handle).
-        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::FsRead | Ty::Root | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
+        Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::FsRead | Ty::Root
+        | Ty::ForeignLoad | Ty::Foreign(_) | Ty::ForeignPtr | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
             Some(ValType::I32)
         }
         Ty::Unit => None,
@@ -266,11 +402,12 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                             "Clock" => Some(Ty::Clock),
                             "Rand" => Some(Ty::Rand),
                             "FsRead" => Some(Ty::FsRead),
+                            "ForeignLoad" => Some(Ty::ForeignLoad),
                             _ => None,
                         };
                     }
                 }
-                return None; // other capability kinds are later phases
+                return None; // other capability kinds (e.g. Python) fall back to the interpreter
             }
             // Phase 3o: Result[T, E] and Option[T] (payloads may be scalars or named enums).
             if name == "Result" {
@@ -291,11 +428,13 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                 return match name {
                     "Int" => Some(Ty::I64),
                     "Bool" => Some(Ty::I32),
+                    "Float" => Some(Ty::F64),
                     "Str" => Some(Ty::Str),
                     "Root" => Some(Ty::Root),
                     "Unit" => Some(Ty::Unit),
-                    // A named sum type (prelude or user `enum`).
-                    other => env.id(other).map(Ty::Enum),
+                    "ForeignPtr" => Some(Ty::ForeignPtr),
+                    // A named sum type (prelude or user `enum`), else a `foreign … lib M` handle type.
+                    other => env.id(other).map(Ty::Enum).or_else(|| env.foreign_id(other).map(Ty::Foreign)),
                 };
             }
         }
@@ -356,8 +495,19 @@ pub fn uses_console(module: &Module) -> bool {
     module_calls_method(&build_enum_env(module), module, &["console", "println"])
 }
 
-/// Compile a checked module's compilable functions to a WASM module exporting each by name.
+/// Compile a checked module's compilable functions to a WASM module exporting each by name. A
+/// program with no `foreign` blocks needs no bind map — this is the Stage-3 entry point unchanged.
 pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
+    compile_module_with(module, &HashMap::new())
+}
+
+/// Compile with the checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g). The
+/// grammar has no method type-argument syntax, so — exactly as the interpreter does — codegen recovers
+/// which lib each bind site resolves to from `foreign_binds` (keyed by the call's `NodeId`).
+pub fn compile_module_with(
+    module: &Module,
+    foreign_binds: &HashMap<NodeId, String>,
+) -> Result<Vec<u8>, CompileError> {
     // Resolve the module's named sum types (prelude + user `enum`s) once, up front (Phase 3o).
     let env = build_enum_env(module);
 
@@ -383,9 +533,12 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
     let needs_fs = module_calls_method(&env, module, &["fs_read", "read_text"]);
+    // Stage 4 phase 4g: a program needs the `delulu:foreign` imports when it binds/loads a foreign lib.
+    let needs_foreign = module_calls_method(&env, module, &["foreign", "foreign_load"]);
 
-    // Assign imported-function indices in a fixed order (console, clock, rand, fs pairs). Only the
-    // present ones consume indices; the rest are left as sentinels codegen never reads.
+    // Assign imported-function indices in a fixed order (console, clock, rand, fs pairs, then the
+    // four foreign fns). Only the present ones consume indices; the rest are left as sentinels
+    // codegen never reads.
     let mut n_imports = 0u32;
     let mut imp = Imports {
         root_console: u32::MAX,
@@ -396,6 +549,10 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         rand_int: u32::MAX,
         root_fs_read: u32::MAX,
         fs_read_text: u32::MAX,
+        foreign_load: u32::MAX,
+        foreign_bind: u32::MAX,
+        foreign_call: u32::MAX,
+        float_to_str: u32::MAX,
     };
     if needs_console {
         imp.root_console = n_imports;
@@ -417,6 +574,13 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         imp.fs_read_text = n_imports + 1;
         n_imports += 2;
     }
+    if needs_foreign {
+        imp.foreign_load = n_imports;
+        imp.foreign_bind = n_imports + 1;
+        imp.foreign_call = n_imports + 2;
+        imp.float_to_str = n_imports + 3;
+        n_imports += 4;
+    }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
     // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
@@ -426,6 +590,19 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     let mut data: Vec<u8> = Vec::new();
     for f in &fns {
         collect_strings_block(&f.body, &mut str_off, &mut data);
+    }
+    // Stage 4 phase 4g: the foreign lib names (for `foreign_bind`) and method names (for
+    // `foreign_call`) cross to the host as interned guest strings — intern every one up front.
+    if needs_foreign {
+        for lib in &env.foreign_libs {
+            intern_string(&lib.name, &mut str_off, &mut data);
+            for m in &lib.methods {
+                intern_string(&m.name, &mut str_off, &mut data);
+            }
+        }
+        // `str(Bool)` (a Bool from a foreign return, spec §4.2 marshalling matrix) selects one of these.
+        intern_string("true", &mut str_off, &mut data);
+        intern_string("false", &mut str_off, &mut data);
     }
 
     // Function index map: name -> (absolute wasm function index, return type).
@@ -439,13 +616,16 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // fn's. Import types are emitted in the same fixed order the indices were assigned above.
     let mut types = TypeSection::new();
     let mut next_type = 0u32;
+    // Effect host fns carry a `(file, start, end)` span triple (Stage 4 phase 4g): the host records
+    // the effect's `TraceRecord` with that span, so `--engine wasm --trace-effects` produces a trace
+    // byte-identical to the interpreter's (criterion 6). The span args are ignored when no sink is set.
     let mut console_root_ty = 0;
     let mut console_println_ty = 0;
     if needs_console {
         console_root_ty = next_type;
         types.ty().function([ValType::I32], [ValType::I32]); // root_console(root) -> cap
         console_println_ty = next_type + 1;
-        types.ty().function([ValType::I32, ValType::I32], []); // console_println(cap, ptr)
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], []); // console_println(cap, ptr, file, start, end)
         next_type += 2;
     }
     let mut clock_root_ty = 0;
@@ -454,7 +634,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         clock_root_ty = next_type;
         types.ty().function([ValType::I32], [ValType::I32]); // root_clock(root) -> cap
         clock_now_ty = next_type + 1;
-        types.ty().function([ValType::I32], [ValType::I64]); // clock_now_ms(cap) -> i64
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // clock_now_ms(cap, file, start, end) -> i64
         next_type += 2;
     }
     let mut rand_root_ty = 0;
@@ -463,7 +643,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         rand_root_ty = next_type;
         types.ty().function([ValType::I32], [ValType::I32]); // root_rand(root) -> cap
         rand_int_ty = next_type + 1;
-        types.ty().function([ValType::I32, ValType::I64, ValType::I64], [ValType::I64]); // rand_int(cap, lo, hi) -> i64
+        types.ty().function([ValType::I32, ValType::I64, ValType::I64, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // rand_int(cap, lo, hi, file, start, end) -> i64
         next_type += 2;
     }
     let mut fs_root_ty = 0;
@@ -472,8 +652,24 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
         fs_root_ty = next_type;
         types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // root_fs_read(root, path) -> cap
         fs_read_ty = next_type + 1;
-        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // fs_read_text(cap, path) -> result_ptr
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I32]); // fs_read_text(cap, path, file, start, end) -> result_ptr
         next_type += 2;
+    }
+    let mut foreign_load_ty = 0;
+    let mut foreign_bind_ty = 0;
+    let mut foreign_call_ty = 0;
+    let mut float_to_str_ty = 0;
+    if needs_foreign {
+        foreign_load_ty = next_type;
+        types.ty().function([ValType::I32], [ValType::I32]); // foreign_load(root) -> Cap[ForeignLoad]
+        foreign_bind_ty = next_type + 1;
+        types.ty().function([ValType::I32, ValType::I32], [ValType::I32]); // foreign_bind(load, name_ptr) -> Result[M,ForeignErr] cell ptr
+        foreign_call_ty = next_type + 2;
+        // foreign_call(lib, method_ptr, args_ptr, argc, file, start, end) -> i64 (marshalled return)
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], [ValType::I64]);
+        float_to_str_ty = next_type + 3;
+        types.ty().function([ValType::F64], [ValType::I32]); // float_to_str(x) -> str ptr (matches Value::Float display)
+        next_type += 4;
     }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
@@ -509,6 +705,12 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     if needs_fs {
         imports.import("delulu:cap", "root_fs_read", EntityType::Function(fs_root_ty));
         imports.import("delulu:cap", "fs_read_text", EntityType::Function(fs_read_ty));
+    }
+    if needs_foreign {
+        imports.import("delulu:foreign", "foreign_load", EntityType::Function(foreign_load_ty));
+        imports.import("delulu:foreign", "foreign_bind", EntityType::Function(foreign_bind_ty));
+        imports.import("delulu:foreign", "foreign_call", EntityType::Function(foreign_call_ty));
+        imports.import("delulu:foreign", "float_to_str", EntityType::Function(float_to_str_ty));
     }
 
     // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
@@ -555,7 +757,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     code.function(&concat_fn(HEAP_GLOBAL));
     code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
-        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp)?);
+        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, foreign_binds)?);
     }
 
     let mut datas = DataSection::new();
@@ -567,7 +769,7 @@ pub fn compile_module(module: &Module) -> Result<Vec<u8>, CompileError> {
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand || needs_fs {
+    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -697,6 +899,9 @@ struct Cx<'a> {
     int_to_str_fn: u32,
     /// Host import function indices (`root.console()`/`println`, `root.clock()`/`now_ms`).
     imp: Imports,
+    /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
+    /// lib a bind site resolves to (the grammar has no method type-argument syntax).
+    foreign_binds: &'a HashMap<NodeId, String>,
     /// The function's declared return type — the expected type for `return`/`?` (Phase 3o).
     ret: Ty,
     instrs: Vec<Instruction<'static>>,
@@ -720,7 +925,8 @@ impl<'a> Cx<'a> {
     }
 }
 
-fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports) -> Result<Function, CompileError> {
+#[allow(clippy::too_many_arguments)]
+fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports, foreign_binds: &'a HashMap<NodeId, String>) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -740,6 +946,7 @@ fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, Fn
         concat_fn: arith_base + N_ARITH_HELPERS,
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         imp,
+        foreign_binds,
         ret,
         instrs: Vec::new(),
     };
@@ -847,6 +1054,129 @@ fn field_offset(i: usize) -> i32 {
     4 + 8 * i as i32
 }
 
+/// Push a `(file, start, end)` span triple for an effect host call (Stage 4 phase 4g) — the host
+/// records the effect's `TraceRecord` with it, matching the interpreter's span byte-for-byte.
+fn emit_span(cx: &mut Cx, span: delulu_diag::Span) {
+    cx.emit(Instruction::I32Const(span.file as i32));
+    cx.emit(Instruction::I32Const(span.start as i32));
+    cx.emit(Instruction::I32Const(span.end as i32));
+}
+
+/// One marshalled foreign-argument cell in the guest args buffer: `[tag:i32 @0][pad @4][payload:8 @8]`
+/// (Stage 4 phase 4g). The host reads `argc` of these to reconstruct the `Vec<FVal>` for
+/// `foreign::call`. 16 bytes keeps the 8-byte payload slot naturally sized for an i64/f64.
+const FVAL_CELL: i32 = 16;
+
+/// The args-buffer tag for a marshalled value of the given foreign parameter `Ty` (must agree with the
+/// host's `foreign_call` decoder).
+fn fval_tag(t: Ty) -> i32 {
+    match t {
+        Ty::I64 => 0,        // Int
+        Ty::F64 => 1,        // Float
+        Ty::I32 => 2,        // Bool
+        Ty::Str => 3,        // Str (payload = guest str ptr)
+        Ty::ForeignPtr => 4, // ForeignPtr (payload = host foreign-ptr table index)
+        _ => 5,              // Unit (no native argument)
+    }
+}
+
+/// Compile a method call on a bound `foreign` lib handle (Stage 4 phase 4g). The receiver handle is
+/// already on the stack. Marshal each argument into a guest args buffer, call `foreign_call` (which
+/// runs `foreign::call` host-side — one code path with the interpreter), and decode the marshalled
+/// i64 return per the declared return type. A `ForeignErr::BadReturn` becomes a host-recorded DL1306
+/// refusal surfaced after the run (never a trap from inside the callback).
+fn compile_foreign_call(lib_id: u32, method: &str, args: &[Expr], span: delulu_diag::Span, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if cx.imp.foreign_call == u32::MAX {
+        return Err(CompileError::Unsupported("a foreign call without the foreign host interface".into()));
+    }
+    let m = cx
+        .env
+        .foreign_method(lib_id, method)
+        .ok_or_else(|| CompileError::Unsupported(format!("unknown foreign method `{method}`")))?
+        .clone();
+    if args.len() != m.params.len() {
+        return Err(CompileError::Unsupported(format!(
+            "foreign method `{method}` called with {} args (expected {})",
+            args.len(),
+            m.params.len()
+        )));
+    }
+    // Stash the receiver handle in a local so building the args buffer (bump-alloc + stores) does not
+    // disturb it.
+    let hloc = cx.alloc_local(Ty::Foreign(lib_id))?;
+    cx.emit(Instruction::LocalSet(hloc));
+
+    // Bump-allocate an `argc * FVAL_CELL` argument buffer and remember its base.
+    let argc = args.len() as i32;
+    let base = cx.alloc_local(Ty::I32)?;
+    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
+    cx.emit(Instruction::LocalTee(base));
+    cx.emit(Instruction::I32Const(argc * FVAL_CELL));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+
+    for (i, (arg, pty)) in args.iter().zip(m.params.iter()).enumerate() {
+        let off = i as i32 * FVAL_CELL;
+        // Tag @ off.
+        cx.emit(Instruction::LocalGet(base));
+        cx.emit(Instruction::I32Const(off));
+        cx.emit(Instruction::I32Add);
+        cx.emit(Instruction::I32Const(fval_tag(*pty)));
+        cx.emit(Instruction::I32Store(u32_at()));
+        if *pty == Ty::Unit {
+            // A `Unit` argument marshals to no native argument; still evaluate it for effect.
+            compile_expr_as(arg, cx, Ty::Unit)?;
+            continue;
+        }
+        // Payload @ off+8.
+        cx.emit(Instruction::LocalGet(base));
+        cx.emit(Instruction::I32Const(off + 8));
+        cx.emit(Instruction::I32Add);
+        compile_expr_as(arg, cx, *pty)?;
+        match pty {
+            Ty::I64 => cx.emit(Instruction::I64Store(i64_at())),
+            Ty::F64 => cx.emit(Instruction::F64Store(i64_at())),
+            Ty::I32 | Ty::Str | Ty::ForeignPtr => cx.emit(Instruction::I32Store(u32_at())),
+            other => return Err(CompileError::Unsupported(format!("a non-marshallable foreign argument of type {other:?}"))),
+        }
+    }
+
+    // foreign_call(lib, method_ptr, args_ptr, argc, file, start, end) -> i64.
+    let method_ptr = *cx.str_off.get(method).expect("foreign method name interned") as i32;
+    cx.emit(Instruction::LocalGet(hloc));
+    cx.emit(Instruction::I32Const(method_ptr));
+    cx.emit(Instruction::LocalGet(base));
+    cx.emit(Instruction::I32Const(argc));
+    emit_span(cx, span);
+    cx.emit(Instruction::Call(cx.imp.foreign_call));
+
+    // Decode the marshalled i64 return into the declared return type.
+    match m.ret {
+        Ty::I64 => Ok(Ty::I64),
+        Ty::F64 => {
+            cx.emit(Instruction::F64ReinterpretI64);
+            Ok(Ty::F64)
+        }
+        Ty::I32 => {
+            cx.emit(Instruction::I32WrapI64);
+            Ok(Ty::I32)
+        }
+        Ty::Str => {
+            cx.emit(Instruction::I32WrapI64);
+            Ok(Ty::Str)
+        }
+        Ty::ForeignPtr => {
+            cx.emit(Instruction::I32WrapI64);
+            Ok(Ty::ForeignPtr)
+        }
+        Ty::Unit => {
+            cx.emit(Instruction::Drop);
+            Ok(Ty::Unit)
+        }
+        other => Err(CompileError::Unsupported(format!("a foreign return of type {other:?}"))),
+    }
+}
+
 /// The name + args of a constructor-shaped expression: `Name(args)` or a bare `Name`.
 fn ctor_shape(e: &Expr) -> Option<(&str, &[Expr])> {
     match e {
@@ -939,11 +1269,7 @@ fn compile_ctor(name: &str, args: &[Expr], cx: &mut Cx, expected: Ty) -> Result<
         cx.emit(Instruction::I32Add);
         // Compile the field at its expected type, so a nested constructor (e.g. `Err(NotFound)`) works.
         compile_expr_as(arg, cx, ps.to_ty())?;
-        match ps {
-            Scalar::I64 => cx.emit(Instruction::I64Store(i64_at())),
-            Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Store(u32_at())),
-            Scalar::Unit => unreachable!(),
-        }
+        store_scalar(cx, *ps);
     }
     cx.emit(Instruction::LocalGet(rp));
     Ok(())
@@ -1025,11 +1351,7 @@ fn compile_arm(arm: &Arm, payloads: &[Scalar], sp: u32, scrut_ty: Ty, cx: &mut C
                     cx.emit(Instruction::LocalGet(sp));
                     cx.emit(Instruction::I32Const(field_offset(i)));
                     cx.emit(Instruction::I32Add);
-                    match ps {
-                        Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
-                        Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Load(u32_at())),
-                        Scalar::Unit => unreachable!(),
-                    }
+                    load_scalar(cx, *ps);
                     cx.emit(Instruction::LocalSet(flocal));
                     cx.scopes.last_mut().unwrap().insert(name.name.clone(), (flocal, fty));
                 }
@@ -1121,7 +1443,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::I32Const(ptr));
                 Ok(Ty::Str)
             }
-            LitKind::Float(_) => Err(CompileError::Unsupported("Float literals".into())),
+            // Stage 4 phase 4g: a `Float` literal is an f64 (used as a `foreign "c"` scalar argument).
+            LitKind::Float(x) => {
+                cx.emit(Instruction::F64Const(*x));
+                Ok(Ty::F64)
+            }
         },
         Expr::Var { path, .. } => {
             if path.segs.len() == 1 {
@@ -1169,7 +1495,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             Ok(tt)
         }
-        Expr::Method { recv, name, args, .. } => {
+        Expr::Method { recv, name, args, span, id } => {
             // Phase 3e: Root.console() -> host import minting a Console handle.
             if name.name == "console" && args.is_empty() {
                 let rt = compile_expr(recv, cx)?;
@@ -1188,7 +1514,8 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::Call(cx.imp.root_clock));
                 return Ok(Ty::Clock);
             }
-            // Phase 3b: Cap[Console].println(str) -> host import; Unit result.
+            // Phase 3b: Cap[Console].println(str) -> host import; Unit result. The `(file,start,end)`
+            // span is passed so the host records the Write `TraceRecord` (phase 4g).
             if name.name == "println" && args.len() == 1 {
                 let rt = compile_expr(recv, cx)?;
                 if rt != Ty::Cap {
@@ -1198,6 +1525,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 if at != Ty::Str {
                     return Err(CompileError::Unsupported("println of a non-Str argument".into()));
                 }
+                emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.console_println));
                 return Ok(Ty::Unit);
             }
@@ -1207,6 +1535,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 if rt != Ty::Clock {
                     return Err(CompileError::Unsupported("now_ms() on a non-Clock receiver".into()));
                 }
+                emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.clock_now_ms));
                 return Ok(Ty::I64);
             }
@@ -1228,6 +1557,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 if compile_expr(&args[0], cx)? != Ty::I64 || compile_expr(&args[1], cx)? != Ty::I64 {
                     return Err(CompileError::Unsupported("rand.int with non-Int bounds".into()));
                 }
+                emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.rand_int));
                 return Ok(Ty::I64);
             }
@@ -1254,8 +1584,55 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     .env
                     .id("IoErr")
                     .ok_or_else(|| CompileError::Unsupported("read_text without the IoErr prelude type".into()))?;
+                emit_span(cx, *span);
                 cx.emit(Instruction::Call(cx.imp.fs_read_text));
                 return Ok(Ty::Result(Scalar::Str, Scalar::Enum(io_err)));
+            }
+            // Stage 4 phase 4g: root.foreign_load() -> Cap[ForeignLoad]. Minted host-side (grant check),
+            // pure like the other root derivations — not traced.
+            if name.name == "foreign_load" && args.is_empty() {
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("foreign_load() on a non-Root receiver".into()));
+                }
+                if cx.imp.foreign_load == u32::MAX {
+                    return Err(CompileError::Unsupported("foreign_load without the foreign host interface".into()));
+                }
+                cx.emit(Instruction::Call(cx.imp.foreign_load));
+                return Ok(Ty::ForeignLoad);
+            }
+            // Stage 4 phase 4g: root.foreign(load) -> Result[M, ForeignErr]. The lib `M` is recovered
+            // from the checker's bind-site map (keyed by this call's NodeId — the grammar has no method
+            // type-argument syntax). The host binds + resolves every symbol (fail-fast) and CONSTRUCTS
+            // the `Result[M, ForeignErr]` cell in guest memory. Binding is pure — not traced.
+            if name.name == "foreign" && args.len() == 1 {
+                if compile_expr(recv, cx)? != Ty::Root {
+                    return Err(CompileError::Unsupported("foreign() on a non-Root receiver".into()));
+                }
+                // `foreign_bind` takes `(load, name_ptr)` — the loader authority is carried by the
+                // `Cap[ForeignLoad]`, not the root — so type-check `root` then drop it off the stack.
+                cx.emit(Instruction::Drop);
+                if compile_expr(&args[0], cx)? != Ty::ForeignLoad {
+                    return Err(CompileError::Unsupported("foreign() with a non-Cap[ForeignLoad] argument".into()));
+                }
+                if cx.imp.foreign_bind == u32::MAX {
+                    return Err(CompileError::Unsupported("foreign() without the foreign host interface".into()));
+                }
+                let lib_name = cx
+                    .foreign_binds
+                    .get(id)
+                    .ok_or_else(|| CompileError::Unsupported("a foreign bind site with no checker-resolved lib".into()))?;
+                let lib_id = cx
+                    .env
+                    .foreign_id(lib_name)
+                    .ok_or_else(|| CompileError::Unsupported("root.foreign() bound a lib with no `foreign` block".into()))?;
+                let foreign_err = cx
+                    .env
+                    .id("ForeignErr")
+                    .ok_or_else(|| CompileError::Unsupported("root.foreign() without the ForeignErr prelude type".into()))?;
+                let name_ptr = *cx.str_off.get(lib_name.as_str()).expect("foreign lib name interned") as i32;
+                cx.emit(Instruction::I32Const(name_ptr)); // stack: [load_handle, name_ptr]
+                cx.emit(Instruction::Call(cx.imp.foreign_bind));
+                return Ok(Ty::Result(Scalar::Foreign(lib_id), Scalar::Enum(foreign_err)));
             }
             // Phase 3n (secrets stay host-side, §4.4/DL1205): minting a secret (`root.secret(...)`) or
             // declassifying one (`secret.expose(...)`) would put secret bytes in guest linear memory.
@@ -1265,6 +1642,13 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             }
             if name.name == "expose" {
                 return Err(CompileError::SecretInGuest("`Secret.expose(...)` reveals secret bytes to the guest".into()));
+            }
+            // Stage 4 phase 4g: a method on a bound `foreign` lib handle marshals + calls host-side
+            // (the ForeignCall is traced). This is last so the built-in/secret dispatch above wins;
+            // the receiver TYPE (`Ty::Foreign(id)`) selects it.
+            let recv_ty = compile_expr(recv, cx)?;
+            if let Ty::Foreign(lib_id) = recv_ty {
+                return compile_foreign_call(lib_id, &name.name, args, *span, cx);
             }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
@@ -1282,7 +1666,25 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                         Ok(Ty::Str)
                     }
                     Ty::Str => Ok(Ty::Str), // str(<Str>) is the identity; the pointer is already on the stack
-                    _ => Err(CompileError::Unsupported("str() of this type (only Int and Str compile so far)".into())),
+                    // Stage 4 phase 4g: `str(Float)` formats host-side (`float_to_str`) with the EXACT
+                    // `Value::Float` display logic, so both engines print a foreign Float identically.
+                    Ty::F64 if cx.imp.float_to_str != u32::MAX => {
+                        cx.emit(Instruction::Call(cx.imp.float_to_str));
+                        Ok(Ty::Str)
+                    }
+                    // Stage 4 phase 4g: `str(Bool)` selects the interned "true"/"false" literal (matches
+                    // `Value::Bool.display()`). Available with the foreign interface (which interns them).
+                    Ty::I32 => {
+                        let t = *cx.str_off.get("true").ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))? as i32;
+                        let f = *cx.str_off.get("false").ok_or_else(|| CompileError::Unsupported("str(Bool) without the foreign interface".into()))? as i32;
+                        cx.emit(Instruction::If(BlockType::Result(ValType::I32)));
+                        cx.emit(Instruction::I32Const(t));
+                        cx.emit(Instruction::Else);
+                        cx.emit(Instruction::I32Const(f));
+                        cx.emit(Instruction::End);
+                        Ok(Ty::Str)
+                    }
+                    _ => Err(CompileError::Unsupported("str() of this type (only Int/Str, and Float/Bool with the foreign interface, compile so far)".into())),
                 };
             }
             // Phase 3r: a call to a function VALUE (a bound lambda) or a generic function → inline it.
@@ -1341,11 +1743,7 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                 cx.emit(Instruction::LocalGet(sp));
                 cx.emit(Instruction::I32Const(4));
                 cx.emit(Instruction::I32Add);
-                match t {
-                    Scalar::I64 => cx.emit(Instruction::I64Load(i64_at())),
-                    Scalar::I32 | Scalar::Str | Scalar::Enum(_) => cx.emit(Instruction::I32Load(u32_at())),
-                    Scalar::Unit => unreachable!(),
-                }
+                load_scalar(cx, t);
                 Ok(t.to_ty())
             }
         }
@@ -1370,7 +1768,7 @@ fn expr_result_ty(e: &Expr) -> Result<Ty, CompileError> {
             LitKind::Int(_) => Ok(Ty::I64),
             LitKind::Bool(_) => Ok(Ty::I32),
             LitKind::Str(_) => Ok(Ty::Str),
-            LitKind::Float(_) => Err(CompileError::Unsupported("Float".into())),
+            LitKind::Float(_) => Ok(Ty::F64),
         },
         Expr::Unary { op, operand, .. } => match op {
             UnOp::Neg => expr_result_ty(operand),

@@ -442,7 +442,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         print_diagnostics("build", &[d], &map, None, opts.json);
         return 1;
     }
-    let wasm = match delulu_wasm::compile_module(&checked.module) {
+    let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
         Ok(w) => w,
         Err(e) => {
             let d = Diagnostic::error(e.code(), format!("{} — this program can't be built to a `.dwx` yet (run it on the interpreter)", e.message()));
@@ -450,9 +450,12 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
             return 1;
         }
     };
-    // Embed the same authority answer `delulu authority` reports, so the artifact carries its own
-    // truthful manifest of what it can do.
-    let scopes = manifest_scopes(file);
+    // Embed the same authority answer `delulu authority` reports (incl. the `foreign_calls` entries),
+    // so the artifact carries its own truthful manifest of what it can do — a foreign-using program's
+    // manifest lists its foreign entries under the "outside the proof" separator (Stage 4 phase 4g).
+    let mut scopes = manifest_scopes(file);
+    let python_allowlist = manifest_python_allowlist(file);
+    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
     let program = checked.module.name.dotted();
     let authority = authority_report(&program, &checked.result, &scopes);
     let dwx = delulu_wasm::embed_authority(&wasm, &authority);
@@ -1029,6 +1032,8 @@ fn wasm_fault_code(msg: &str) -> &'static str {
         "DL0703"
     } else if msg.contains("DL0903") {
         "DL0903"
+    } else if msg.contains("DL1306") {
+        "DL1306"
     } else {
         "DL0904"
     }
@@ -1071,6 +1076,9 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         eprintln!("running `{file}` — authority verified; declared effects: {effects_str}");
     }
 
+    // A `.dwx` carries no source AST, so it has no foreign signatures to bind: a foreign-using `.dwx`
+    // is not executable in phase 4g (its authority manifest DOES record the foreign entries — the
+    // manifest requirement — but running foreign code needs the source's marshalling signatures).
     let cfg = delulu_wasm::HostConfig {
         console: grants.console,
         clock: grants.clock,
@@ -1078,6 +1086,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         fs_read_roots: grants.build_root().fs_read,
         fixed_clock_ms: opts.clock_ms,
         rand_seed: opts.seed,
+        ..delulu_wasm::HostConfig::default()
     };
     match delulu_wasm::run_main(&artifact.wasm, &cfg) {
         Ok(output) => {
@@ -1149,11 +1158,12 @@ fn cmd_run(rest: &[String]) -> i32 {
         return code;
     }
 
-    // WASM engine (spec §5.11 / Stage 3): compile `main` to WebAssembly and run it under the
-    // deny-by-default Wasmtime host, with the console capability minted and checked host-side.
-    // Constructs the backend can't compile are DL1201 — omit `--engine wasm` to use the interpreter.
+    // WASM engine (spec §5.11 / Stage 3; foreign C FFI in Stage 4 phase 4g): compile `main` to
+    // WebAssembly and run it under the deny-by-default Wasmtime host, with capabilities minted and
+    // checked host-side and all foreign FFI performed host-side (§4.3). Constructs the backend can't
+    // compile are DL1201 — omit `--engine wasm` to use the interpreter.
     if opts.engine.as_deref() == Some("wasm") {
-        let wasm = match delulu_wasm::compile_module(&checked.module) {
+        let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
             Ok(w) => w,
             Err(e) => {
                 let d = Diagnostic::error(e.code(), format!("{} — omit `--engine wasm` to run it on the interpreter", e.message()));
@@ -1161,15 +1171,46 @@ fn cmd_run(rest: &[String]) -> i32 {
                 return 1;
             }
         };
+        // Effect tracing on the WASM engine (spec §6.1; criterion 6): the host records the same
+        // `TraceRecord`s the interpreter would, so a foreign program's trace is byte-identical.
+        let sink = if opts.trace_effects || opts.assert_trace {
+            Some(delulu_runtime::TraceSink::new())
+        } else {
+            None
+        };
+        let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
+        let root = grants.build_root();
         let cfg = delulu_wasm::HostConfig {
             console: grants.console,
             clock: grants.clock,
             rand: grants.rand,
-            fs_read_roots: grants.build_root().fs_read,
+            fs_read_roots: root.fs_read.clone(),
             fixed_clock_ms: opts.clock_ms,
             rand_seed: opts.seed,
+            foreign_load: root.foreign_load,
+            foreign_grants: grants.foreign_c.clone(),
+            foreign_sigs: delulu_wasm::foreign_sigs(&checked.module),
+            foreign_max_ret: max_ret,
+            trace: sink.clone(),
         };
-        return match delulu_wasm::run_main(&wasm, &cfg) {
+        let run_result = delulu_wasm::run_main(&wasm, &cfg);
+
+        // Emit the trace before verdicts (the witness is available even on a fault).
+        if let Some(s) = &sink {
+            if opts.trace_effects {
+                let lines = s.to_json_lines();
+                match &opts.trace_out {
+                    Some(path) => {
+                        if let Err(e) = std::fs::write(path, lines + "\n") {
+                            eprintln!("error: cannot write trace to `{path}`: {e}");
+                        }
+                    }
+                    None => eprintln!("{lines}"),
+                }
+            }
+        }
+
+        let code = match run_result {
             Ok(output) => {
                 print!("{output}");
                 0
@@ -1181,6 +1222,24 @@ fn cmd_run(rest: &[String]) -> i32 {
                 1
             }
         };
+
+        // The trace ⊆ row law (spec §6.2, invariant 12): a violation is compiler-bug class (DL1101).
+        if opts.assert_trace {
+            if let Some(s) = &sink {
+                let allowed: std::collections::BTreeSet<String> =
+                    main_row.iter().map(|e| e.name().to_string()).collect();
+                let violations = delulu_runtime::assert_trace(&allowed, &s.records());
+                if !violations.is_empty() {
+                    let diags: Vec<Diagnostic> = violations
+                        .iter()
+                        .map(|v| Diagnostic::error("DL1101", format!("effect-trace assertion violation: {v} — this is a compiler-bug class failure; please report it")))
+                        .collect();
+                    print_diagnostics("run", &diags, &map, None, opts.json);
+                    return 3;
+                }
+            }
+        }
+        return code;
     }
 
     // Determinism knobs (spec §6.2).

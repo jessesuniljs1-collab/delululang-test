@@ -8,6 +8,11 @@ edition.workspace = true
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
+# Stage 4 phase 4g: the WASM host reuses the interpreter's C FFI machinery (`foreign::{ForeignSig,
+# load_and_resolve, call, FVal, ForeignErr}`) and its `TraceSink`/`TraceRecord`, so verify≡run stays
+# one code path. `default-features = false` keeps embedded Python out of the WASM crate (py.* on the
+# WASM backend is the DL1201 interpreter fallback — phase 4g, head-chef ruling).
+delulu-runtime = { path = "../delulu-runtime", default-features = false }
 wasm-encoder = "0.221"
 # Default features (incl. signals-based traps) so host-function errors unwind cleanly rather than
 # aborting the process — correctness over build size.
@@ -16,6 +21,3 @@ wasmtime = "27"
 # content hash (blake3) so the manifest and the bytes it describes can't drift apart undetected.
 serde_json = { workspace = true }
 blake3 = "1"
-
-[dev-dependencies]
-delulu-runtime = { path = "../delulu-runtime" }

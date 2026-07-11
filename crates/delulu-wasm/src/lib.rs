@@ -15,15 +15,32 @@ mod host;
 pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
-pub use codegen::{compile_module, uses_console, CompileError};
+pub use codegen::{compile_module, compile_module_with, uses_console, CompileError};
 pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, HostConfig, WasmError};
 
-use delulu_syntax::ast::Module;
+use std::collections::HashMap;
+
+use delulu_runtime::foreign::ForeignSig;
+use delulu_syntax::ast::{Item, Module};
 
 /// Compile a checked module and run one of its exported pure functions under Wasmtime.
 pub fn compile_and_run_int(module: &Module, name: &str, args: &[i64]) -> Result<i64, String> {
     let wasm = compile_module(module).map_err(|e| e.message())?;
     run_int_fn(&wasm, name, args).map_err(|e| e.message())
+}
+
+/// Lower every `foreign` block in `module` to its per-lib marshalling signatures for [`HostConfig`]
+/// (Stage 4 phase 4g). Uses the interpreter's own `lower_foreign_sig`, so the WASM host resolves
+/// symbols and marshals exactly as the reference engine does (verify≡run, one code path).
+pub fn foreign_sigs(module: &Module) -> HashMap<String, Vec<ForeignSig>> {
+    let mut out = HashMap::new();
+    for it in &module.items {
+        if let Item::Foreign(fd) = it {
+            let sigs = fd.fns.iter().map(delulu_runtime::interp::lower_foreign_sig).collect();
+            out.insert(fd.name.name.clone(), sigs);
+        }
+    }
+    out
 }
 
 #[cfg(test)]

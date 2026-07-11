@@ -19,7 +19,9 @@ fn one_page() -> MemoryType {
 /// (handle, ptr). Optionally seeds a length-prefixed string into linear memory at offset 0.
 fn attacker(handle: i32, ptr: i32, seed_string: Option<&str>) -> Vec<u8> {
     let mut types = TypeSection::new();
-    types.ty().function([ValType::I32, ValType::I32], []); // 0: console_println(cap, ptr)
+    // console_println(cap, ptr, file, start, end) — the effect host fns carry a span triple since
+    // Stage 4 phase 4g (the host records the effect's `TraceRecord` with it).
+    types.ty().function([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32], []); // 0
     types.ty().function::<[ValType; 0], [ValType; 0]>([], []); // 1: attack()
 
     let mut imports = ImportSection::new();
@@ -39,6 +41,9 @@ fn attacker(handle: i32, ptr: i32, seed_string: Option<&str>) -> Vec<u8> {
     let mut f = Function::new([]);
     f.instruction(&Instruction::I32Const(handle));
     f.instruction(&Instruction::I32Const(ptr));
+    f.instruction(&Instruction::I32Const(0)); // span file
+    f.instruction(&Instruction::I32Const(0)); // span start
+    f.instruction(&Instruction::I32Const(0)); // span end
     f.instruction(&Instruction::Call(0)); // console_println (import index 0)
     f.instruction(&Instruction::End);
     code.function(&f);

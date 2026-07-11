@@ -261,7 +261,7 @@ house.*
 
 ---
 
-## 11. Implementation status (2026-07-10)
+## 11. Implementation status (2026-07-11)
 
 **Phase 4a — grammar + AST for `foreign` blocks (parse only) — is implemented and green** (205
 workspace tests, +5). `foreign` moves from reserved to an **active contextual keyword**: it is
@@ -425,6 +425,47 @@ criterion 7 preserved). **Criterion 2** — the NumPy demo (`py.import("numpy")`
 `mean`, convert back, print `2.5`) — is committed as `examples/numpy_mean.delulu` and runs live on this
 machine (**CPython 3.13.5, NumPy 2.2.6**, PyO3 0.25).
 
-**Not in this chunk (later phase):** the WASM `delulu:foreign@0.4` host interface + parity (4g — until
-then, foreign/Python calls are interpreter-engine only; `--engine wasm` programs cannot reach `foreign`
-blocks or `std.py` because the backend rejects constructs it cannot compile, DL1201).
+**Phase 4g — the WASM `delulu:foreign@0.4` host interface + two-engine parity — is implemented and
+green** (271 workspace tests, +8 over 4f). **Stage 4 is code-complete pending head-chef close-out.**
+The guest calls a four-function `delulu:foreign` host interface (`foreign_load`, `foreign_bind`,
+`foreign_call`, `float_to_str`); **all of §4.1–4.2 runs host-side** — grants, bind-time symbol
+resolution (DL1304 fail-fast), marshalling, and return validation (`--foreign-max-ret`, DL1306) — and
+the guest never touches a raw pointer. The host (`crates/delulu-wasm/src/host.rs`) **reuses the
+interpreter's own FFI machinery** (`delulu-runtime::foreign::{load_and_resolve, call}` and its
+`lower_foreign_sig`, now `pub`), so verify≡run stays one code path; `delulu-runtime` is a real
+dependency of `delulu-wasm` with `default-features = false` (no Python in the WASM crate). Lib handles
+and `Cap[ForeignLoad]` are host-table indices like every Stage-3 cap (`CapKind::Foreign`/
+`ForeignLoad`); a returned `ForeignPtr` is an index into a host-side pointer table — a raw `void*`
+never enters guest memory. `foreign_bind` CONSTRUCTS the `Result[M, ForeignErr]` cell in guest memory
+(tag order `NotGranted=0 | SymbolMissing=1 | BadReturn=2 | Unavailable=3` pinned against the
+interpreter's sum); arguments cross in a 16-byte-cell tagged buffer the host decodes with fully
+checked reads (a hostile buffer is a recorded refusal, never a host panic). **Every policy failure
+follows the carried never-Err-from-a-Wasmtime-callback rule** — recorded in `HostState.refused`,
+surfaced after execution by `finish()` (DL0703 ungranted loader, DL0904 forged handle, DL0903
+out-of-bounds, DL1306 bad return). Codegen (`codegen.rs::compile_module_with`) takes the checker's
+`foreign_binds` NodeId→lib map (same recovery the interpreter uses); `Float` literals, `str(Float)`
+(host-formatted with `Value::display`'s exact logic), and `str(Bool)` join the fragment. **Traces are
+recorded host-side** (criterion 6's "identical traces"): every effect host fn now carries the call's
+`(file, start, end)` span, and the host appends `TraceRecord`s — same seq counter, effect, op,
+cap_kind, detail, span as the interpreter — exposed through `HostConfig.trace`; the CLI's
+`--engine wasm` now supports `--trace-effects`/`--trace-out`/`--assert-trace` and threads
+`foreign_grants`/`foreign_sigs`/`--foreign-max-ret` into the host. **Criterion 6 evidence:**
+`crates/delulu-wasm/tests/foreign_parity.rs` (8 tests, same rustc-built cdylib fixture as
+`foreign_ffi.rs`) asserts byte-identical results AND `TraceRecord`-identical traces on both engines
+for: the C `cos` happy path, DL1303 no-grant (`Err(NotGranted)`, zero foreign trace records),
+DL1304 missing-symbol fail-fast, both criterion-8 hostile returns (DL1306 on both engines, the
+attempted call still traced), the full marshalling matrix (Int/Bool/Str/ForeignPtr, six identical
+`ForeignCall` records), and the copied-then-validated `Str` return; verified end-to-end through the
+real CLI (`delulu run … --grant foreign.c=… --trace-effects` vs `--engine wasm …`) with
+`diff`-identical stdout and trace files. **Python on WASM — the sanctioned fallback was taken:**
+`root.python`/`py.*` on the WASM backend is the existing **DL1201** "runs on the interpreter"
+mechanism (tested), NOT a half-port — the deciding constraint is that `py.list(xs: List[PyObj])`,
+required by the criterion-2 NumPy demo, needs guest-side `List` values, which the WASM fragment does
+not have; Python-on-WASM would ship without the flagship demo, which the ruling forbids. Python
+remains pinned **CPython 3.13.5** on this machine (4f). `.dwx`: `build --target wasm` now embeds the
+`foreign_calls` array (spec §6) in the authority section, and a foreign-using `.dwx` compiles+verifies;
+*running* one refuses cleanly at `root.foreign_load()` (DL0703 via the finish() pattern) because a
+`.dwx` carries no marshalling signatures to bind — an honest, documented limitation (signature
+embedding is a natural Stage-6 `.dpx`-adjacent extension). The Stage-3 hostile-guest suite was
+extended for the new span-carrying `console_println` signature and stays green (forged handles,
+out-of-bounds/negative pointers, unprovided imports).

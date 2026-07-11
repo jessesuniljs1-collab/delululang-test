@@ -809,8 +809,9 @@ fn python_detail(method: &str, args: &[Value]) -> Option<String> {
 
 /// Lower one declared `foreign_fn` to its runtime marshalling signature. A parameter/return type
 /// that does not marshal is impossible in a checked program (T-ForeignSig / DL1301); we default it
-/// to `Unit` rather than panic, keeping the interpreter total on unchecked input.
-fn lower_foreign_sig(f: &ForeignFn) -> ForeignSig {
+/// to `Unit` rather than panic, keeping the interpreter total on unchecked input. **Public so the
+/// WASM engine's host (`delulu-wasm`) lowers foreign blocks the SAME way — verify≡run, one path.**
+pub fn lower_foreign_sig(f: &ForeignFn) -> ForeignSig {
     let kind_of = |te: &TypeExpr| -> FKind {
         match te {
             TypeExpr::Named { path, .. } => {

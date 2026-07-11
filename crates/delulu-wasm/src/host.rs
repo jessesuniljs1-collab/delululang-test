@@ -6,9 +6,16 @@
 //! exported linear memory. The guest never receives an OS handle — capabilities are opaque i32
 //! handles into the host's cap table (§4).
 
+use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
+use std::rc::Rc;
 
 use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, Val};
+
+// Stage 4 phase 4g: the WASM host reuses the interpreter's C FFI machinery and its trace types, so
+// verify≡run stays one code path (spec §4.3 — all of §4.1–4.2 runs host-side).
+use delulu_runtime::foreign::{self, FVal, ForeignErr, ForeignHandle, ForeignSig};
+use delulu_runtime::{TraceRecord, TraceSink};
 
 /// Lexically normalize a path (resolve `.`/`..` without touching the filesystem) — the EXACT
 /// algorithm the interpreter uses (`prim.rs::normalize`), so scope checks agree across engines.
@@ -66,7 +73,7 @@ pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmErro
 
 /// The host's capability table. A handle is an index into `caps`; index 0 is conventionally the
 /// root (for `main`) or a directly-granted Console (for a bare cap function).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum CapKind {
     Root,
     Console,
@@ -74,6 +81,12 @@ pub enum CapKind {
     Rand,
     /// A filesystem-read capability scoped to an absolute, normalized subtree (§4).
     FsRead(PathBuf),
+    /// `Cap[ForeignLoad]` — the loader capability minted by `root.foreign_load()` (Stage 4 phase 4g).
+    ForeignLoad,
+    /// A bound `foreign` lib handle (Stage 4 phase 4g): the loaded library + resolved symbols, held
+    /// in the same host-side table as every other capability. `Rc` because `LoadedLib` owns a
+    /// `Library` and is not `Clone`.
+    Foreign(Rc<ForeignHandle>),
 }
 
 struct HostState {
@@ -97,6 +110,85 @@ struct HostState {
     /// error returned across the wasm frame aborts on some platforms); the runner turns a set flag
     /// into a clean `WasmError` after the call.
     refused: Option<String>,
+    // ----- Stage 4 phase 4g: C FFI + effect tracing --------------------------------------------
+    /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` (i.e. some `foreign.c` lib or
+    /// `foreign.python` pattern is granted — mirrors the interpreter's `RootVal.foreign_load`).
+    foreign_load_granted: bool,
+    /// `foreign.c` grants: logical lib name → the binary path the human chose. The path is grant
+    /// data, never program data (spec §4.1).
+    foreign_grants: HashMap<String, String>,
+    /// Each `foreign` lib's declared marshalling signatures (lowered from the block), used at bind
+    /// time to resolve every symbol fail-fast (spec §4.2 / DL1304) and to drive `foreign::call`.
+    foreign_sigs: HashMap<String, Vec<ForeignSig>>,
+    /// Ceiling on a returned foreign string (`--foreign-max-ret`, invariant 21). 0 = the default.
+    foreign_max_ret: usize,
+    /// Opaque `void*` values returned by foreign code — the guest holds an i32 index into this table,
+    /// never a raw host address (the wasm ABI is 32-bit; a real pointer can't cross safely).
+    foreign_ptrs: Vec<usize>,
+    /// `Some` records one `TraceRecord` per effectful op host-side, so `--engine wasm --trace-effects`
+    /// yields a trace byte-identical to the interpreter's (criterion 6). Shared `Rc`; the runner
+    /// reads it after the run.
+    trace: Option<TraceSink>,
+    /// Monotonic trace sequence counter (matches the interpreter's `next_trace_seq`).
+    trace_seq: u64,
+}
+
+impl HostState {
+    /// The effective foreign-return ceiling (0 in config means "use the default").
+    fn max_ret(&self) -> usize {
+        if self.foreign_max_ret == 0 { foreign::DEFAULT_MAX_RET } else { self.foreign_max_ret }
+    }
+
+    /// Append one effect `TraceRecord` (no-op without a sink). `seq`/fields mirror the interpreter's
+    /// so the two engines' traces are identical.
+    fn push_trace(&mut self, effect: &str, op: &str, cap_kind: &str, detail: Option<String>, file: i32, start: i32, end: i32) {
+        let Some(sink) = &self.trace else { return };
+        let seq = self.trace_seq;
+        self.trace_seq += 1;
+        sink.push(TraceRecord {
+            seq,
+            effect: effect.to_string(),
+            op: op.to_string(),
+            cap_kind: cap_kind.to_string(),
+            detail,
+            span: Some((file as u32, start as u32, end as u32)),
+        });
+    }
+}
+
+/// Format an `f64` EXACTLY as `Value::display` does (`{:.1}` for a finite integral value, else
+/// `to_string`) — the guest's `str(Float)` calls this host-side, so both engines print identically.
+fn format_float(x: f64) -> String {
+    if x.fract() == 0.0 && x.is_finite() {
+        format!("{x:.1}")
+    } else {
+        x.to_string()
+    }
+}
+
+/// Encode a validated foreign return `FVal` into the single i64 `foreign_call` yields (the guest
+/// re-derives the declared type: Float via `f64.reinterpret_i64`, Bool/Str/ForeignPtr via `i32.wrap`).
+/// A `Str` return is copied into a guest string cell; a `ForeignPtr` is stashed in the host table and
+/// its index returned (the guest never sees a raw address).
+fn encode_fval_return(caller: &mut Caller<'_, HostState>, fv: FVal) -> i64 {
+    match fv {
+        FVal::Int(i) => i,
+        FVal::Bool(b) => b as i64,
+        FVal::Float(f) => f.to_bits() as i64,
+        FVal::Unit => 0,
+        FVal::Str(s) => match write_str_cell(caller, &s) {
+            Ok(ptr) => ptr as u32 as i64,
+            Err(()) => {
+                caller.data_mut().refused = Some("guest heap exhausted copying a foreign string return".into());
+                0
+            }
+        },
+        FVal::Ptr(p) => {
+            let st = caller.data_mut();
+            st.foreign_ptrs.push(p);
+            (st.foreign_ptrs.len() - 1) as i64
+        }
+    }
 }
 
 /// Wall-clock milliseconds since the Unix epoch (matches the interpreter's `Cap[Clock].now_ms()`).
@@ -200,6 +292,70 @@ fn build_err_ioerr(caller: &mut Caller<'_, HostState>, io_tag: i32, other_msg: O
     write_variant_cell(caller, 1, Some(io)) // Err(io)
 }
 
+/// Build a `ForeignErr` cell (Stage 4 phase 4g). The tag order MUST match the codegen enum env AND
+/// the interpreter's sum: `NotGranted=0 | SymbolMissing=1 | BadReturn=2 | Unavailable=3` (spec §8).
+fn build_foreign_err_cell(caller: &mut Caller<'_, HostState>, e: &ForeignErr) -> Result<i32, ()> {
+    let (tag, msg): (i32, Option<&str>) = match e {
+        ForeignErr::NotGranted => (0, None),
+        ForeignErr::SymbolMissing(s) => (1, Some(s.as_str())),
+        ForeignErr::BadReturn(s) => (2, Some(s.as_str())),
+        ForeignErr::Unavailable(s) => (3, Some(s.as_str())),
+    };
+    let field = match msg {
+        Some(m) => Some(write_str_cell(caller, m)?),
+        None => None,
+    };
+    write_variant_cell(caller, tag, field)
+}
+
+/// Read `argc` marshalled foreign-argument cells (`[tag:i32 @0][pad @4][payload:8 @8]`, 16 bytes each)
+/// from the guest args buffer at `args_ptr` into `FVal`s for `foreign::call`. `None` on any
+/// out-of-bounds pointer (a hostile guest can never fault the host). Str payloads are copied out of
+/// guest memory; `ForeignPtr` payloads resolve through the host's foreign-pointer table.
+fn read_fvals(caller: &mut Caller<'_, HostState>, args_ptr: i32, argc: i32) -> Option<Vec<FVal>> {
+    if argc < 0 {
+        return None;
+    }
+    let n = (argc as usize).checked_mul(16)?;
+    let base = args_ptr as u32 as usize;
+    // Copy the buffer region first so subsequent `read_guest_str` calls (which reborrow memory) are
+    // free of an outstanding borrow.
+    let buf = {
+        let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+        let data = mem.data(&caller);
+        let end = base.checked_add(n)?;
+        if end > data.len() {
+            return None;
+        }
+        data[base..end].to_vec()
+    };
+    let rd_i32 = |b: &[u8]| i32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+    let mut out = Vec::with_capacity(argc as usize);
+    for i in 0..argc as usize {
+        let cell = i * 16;
+        let tag = rd_i32(&buf[cell..cell + 4]);
+        let pay = &buf[cell + 8..cell + 16];
+        let fv = match tag {
+            0 => FVal::Int(i64::from_le_bytes(pay.try_into().ok()?)),
+            1 => FVal::Float(f64::from_le_bytes(pay.try_into().ok()?)),
+            2 => FVal::Bool(rd_i32(pay) != 0),
+            3 => {
+                let sp = rd_i32(pay);
+                let s = read_guest_str(caller, sp)?;
+                FVal::Str(Rc::from(s.as_str()))
+            }
+            4 => {
+                let idx = rd_i32(pay) as u32 as usize;
+                let p = *caller.data().foreign_ptrs.get(idx)?;
+                FVal::Ptr(p)
+            }
+            _ => FVal::Unit,
+        };
+        out.push(fv);
+    }
+    Some(out)
+}
+
 /// Build the `delulu:cap` host import world: `root_console` mints a Console handle from the root
 /// (host-side grant check), and `console_println` performs the Write and reads the string from the
 /// guest's exported memory. Neither ever traps from inside the callback.
@@ -225,7 +381,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "console_println", |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32| {
+        .func_wrap("delulu:cap", "console_println", |mut caller: Caller<'_, HostState>, cap: i32, ptr: i32, file: i32, start: i32, end: i32| {
             if caller.data().refused.is_some() {
                 return; // a prior refusal stands as the root cause; don't clobber it with a use-site error
             }
@@ -261,6 +417,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 };
                 String::from_utf8_lossy(&data[header_end..body_end]).to_string()
             };
+            // Record the Write `TraceRecord` (detail = the printed string, matching the interpreter's
+            // `trace_detail`) before performing the effect.
+            caller.data_mut().push_trace("Write", "println", "Console", Some(s.clone()), file, start, end);
             let out = &mut caller.data_mut().output;
             out.push_str(&s);
             out.push('\n');
@@ -286,7 +445,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "clock_now_ms", |mut caller: Caller<'_, HostState>, cap: i32| -> i64 {
+        .func_wrap("delulu:cap", "clock_now_ms", |mut caller: Caller<'_, HostState>, cap: i32, file: i32, start: i32, end: i32| -> i64 {
             if caller.data().refused.is_some() {
                 return 0;
             }
@@ -295,6 +454,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
                 return 0;
             }
+            caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
             // The clock read happens host-side: fixed for deterministic replay, else the wall clock —
             // the same source the interpreter uses, so a fixed clock gives byte-identical output.
             caller.data().fixed_clock_ms.unwrap_or_else(wall_clock_ms)
@@ -320,7 +480,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "rand_int", |mut caller: Caller<'_, HostState>, cap: i32, lo: i64, hi: i64| -> i64 {
+        .func_wrap("delulu:cap", "rand_int", |mut caller: Caller<'_, HostState>, cap: i32, lo: i64, hi: i64, file: i32, start: i32, end: i32| -> i64 {
             if caller.data().refused.is_some() {
                 return 0;
             }
@@ -329,6 +489,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
                 return 0;
             }
+            caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
             if hi <= lo {
                 caller.data_mut().refused = Some("DL0904: rand.int requires lo < hi".into());
                 return lo;
@@ -371,7 +532,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     linker
-        .func_wrap("delulu:cap", "fs_read_text", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32| -> i32 {
+        .func_wrap("delulu:cap", "fs_read_text", |mut caller: Caller<'_, HostState>, cap: i32, path_ptr: i32, file: i32, start: i32, end: i32| -> i32 {
             if caller.data().refused.is_some() {
                 return 0;
             }
@@ -386,6 +547,8 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
                 return 0;
             };
+            // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
+            caller.data_mut().push_trace("Read", "read_text", "FsRead", Some(rel.clone()), file, start, end);
             // Resolve within scope; a `..`/symlink escape is a hard DL0904 refusal, not an `Err`.
             let resolved = normalize(&scope.join(&rel));
             if !resolved.starts_with(&scope) {
@@ -409,6 +572,148 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 Ok(ptr) => ptr,
                 Err(()) => {
                     caller.data_mut().refused = Some("guest heap exhausted building the fs result".into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- Stage 4 phase 4g: the `delulu:foreign@0.4` host interface -------------------------------
+    // `root.foreign_load()` mints a `Cap[ForeignLoad]` iff foreign loading is granted (a pure Root
+    // derivation — not traced, mirroring `root.console()`).
+    linker
+        .func_wrap("delulu:foreign", "foreign_load", |mut caller: Caller<'_, HostState>, root: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return -1;
+            }
+            let is_root = caller.data().caps.get(root as usize).map(|c| matches!(c, CapKind::Root)).unwrap_or(false);
+            if !is_root {
+                caller.data_mut().refused = Some(format!("root handle {root} is not the root capability"));
+                return -1;
+            }
+            if !caller.data().foreign_load_granted {
+                caller.data_mut().refused = Some("DL0703: foreign loading was not granted (grant a `foreign.c` lib or `foreign.python`)".into());
+                return -1;
+            }
+            let st = caller.data_mut();
+            st.caps.push(CapKind::ForeignLoad);
+            (st.caps.len() - 1) as i32
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `root.foreign(load)` binds the named lib host-side and returns a `Result[M, ForeignErr]` cell.
+    // Binding resolves EVERY declared symbol fail-fast (spec §4.2 / DL1304) — a program that binds
+    // clean never surprises the caller mid-run. Binding is pure (not traced), like the interpreter.
+    linker
+        .func_wrap("delulu:foreign", "foreign_bind", |mut caller: Caller<'_, HostState>, load: i32, name_ptr: i32| -> i32 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let is_load = caller.data().caps.get(load as usize).map(|c| matches!(c, CapKind::ForeignLoad)).unwrap_or(false);
+            if !is_load {
+                caller.data_mut().refused = Some(format!("DL0904: handle {load} is not a Cap[ForeignLoad] capability"));
+                return 0;
+            }
+            let Some(name) = read_guest_str(&mut caller, name_ptr) else {
+                caller.data_mut().refused = Some("DL0903: foreign lib name pointer is out of bounds".into());
+                return 0;
+            };
+            // Mirror the interpreter's `bind_foreign` exactly: no grant → Err(NotGranted) (DL1303's
+            // runtime face, defense-in-depth behind the CLI grant pre-flight); else load + resolve.
+            let path = caller.data().foreign_grants.get(&name).cloned();
+            let built = match path {
+                None => build_foreign_err_cell(&mut caller, &ForeignErr::NotGranted)
+                    .and_then(|fe| write_variant_cell(&mut caller, 1, Some(fe))),
+                Some(path) => {
+                    let sigs = caller.data().foreign_sigs.get(&name).cloned().unwrap_or_default();
+                    match foreign::load_and_resolve(&path, sigs) {
+                        Ok(lib) => {
+                            let handle = Rc::new(ForeignHandle { name: name.clone(), lib });
+                            let idx = {
+                                let st = caller.data_mut();
+                                st.caps.push(CapKind::Foreign(handle));
+                                (st.caps.len() - 1) as i32
+                            };
+                            write_variant_cell(&mut caller, 0, Some(idx)) // Ok(handle)
+                        }
+                        Err(e) => build_foreign_err_cell(&mut caller, &e)
+                            .and_then(|fe| write_variant_cell(&mut caller, 1, Some(fe))),
+                    }
+                }
+            };
+            match built {
+                Ok(ptr) => ptr,
+                Err(()) => {
+                    caller.data_mut().refused = Some("guest heap exhausted building the foreign bind result".into());
+                    0
+                }
+            }
+        })
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `m.method(args)` — marshal the args buffer, run `foreign::call` host-side (one code path with
+    // the interpreter), validate the return (invariant 21), and return the marshalled value as an i64.
+    // A `ForeignErr::BadReturn` is recorded as a DL1306 refusal and surfaced AFTER the run — never an
+    // `Err` returned from inside the callback (the carried Wasmtime trap).
+    linker
+        .func_wrap(
+            "delulu:foreign",
+            "foreign_call",
+            |mut caller: Caller<'_, HostState>, lib: i32, method_ptr: i32, args_ptr: i32, argc: i32, file: i32, start: i32, end: i32| -> i64 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let handle = match caller.data().caps.get(lib as usize) {
+                    Some(CapKind::Foreign(h)) => h.clone(),
+                    _ => {
+                        caller.data_mut().refused = Some(format!("DL0904: handle {lib} is not a bound foreign lib"));
+                        return 0;
+                    }
+                };
+                let Some(method) = read_guest_str(&mut caller, method_ptr) else {
+                    caller.data_mut().refused = Some("DL0903: foreign method name pointer is out of bounds".into());
+                    return 0;
+                };
+                // Defensive: only call a method the bound lib actually resolved (else `foreign::call`
+                // would `expect`-panic — a host panic aborts the process inside a wasm callback).
+                if handle.lib.sig(&method).is_none() {
+                    caller.data_mut().refused = Some(format!("DL0904: `{}` has no bound foreign method `{method}`", handle.name));
+                    return 0;
+                }
+                // Record the ForeignCall trace BEFORE the call (a bad-return still shows the attempt),
+                // exactly as the interpreter's `trace_foreign` does.
+                let detail = format!("{}.{}", handle.name, method);
+                caller.data_mut().push_trace("ForeignCall", &method, &handle.name, Some(detail), file, start, end);
+                let Some(args) = read_fvals(&mut caller, args_ptr, argc) else {
+                    caller.data_mut().refused = Some("DL0903: foreign args buffer is out of bounds".into());
+                    return 0;
+                };
+                let max_ret = caller.data().max_ret();
+                match foreign::call(&handle.lib, &method, &args, max_ret) {
+                    Ok(fv) => encode_fval_return(&mut caller, fv),
+                    Err(ForeignErr::BadReturn(reason)) => {
+                        caller.data_mut().refused =
+                            Some(format!("DL1306: foreign return validation failed: {reason} (ForeignErr::BadReturn)"));
+                        0
+                    }
+                    Err(other) => {
+                        caller.data_mut().refused = Some(format!("DL1306: foreign call failed: {other:?}"));
+                        0
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    // `str(Float)` formats host-side with the EXACT `Value::Float` display logic, so both engines
+    // print a foreign Float identically. Pure (not traced).
+    linker
+        .func_wrap("delulu:foreign", "float_to_str", |mut caller: Caller<'_, HostState>, x: f64| -> i32 {
+            if caller.data().refused.is_some() {
+                return 0;
+            }
+            let s = format_float(x);
+            match write_str_cell(&mut caller, &s) {
+                Ok(ptr) => ptr,
+                Err(()) => {
+                    caller.data_mut().refused = Some("guest heap exhausted formatting a float".into());
                     0
                 }
             }
@@ -442,6 +747,13 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         rng: seed_rng(None),
         output: String::new(),
         refused: None,
+        foreign_load_granted: false,
+        foreign_grants: HashMap::new(),
+        foreign_sigs: HashMap::new(),
+        foreign_max_ret: 0,
+        foreign_ptrs: Vec::new(),
+        trace: None,
+        trace_seq: 0,
     };
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
@@ -465,6 +777,19 @@ pub struct HostConfig {
     pub fixed_clock_ms: Option<i64>,
     /// `Some(seed)` seeds `Cap[Rand]` deterministically (spec §6.2); `None` = a nondeterministic seed.
     pub rand_seed: Option<u64>,
+    // ----- Stage 4 phase 4g: foreign C FFI + effect tracing ------------------------------------
+    /// Whether `root.foreign_load()` may mint a `Cap[ForeignLoad]` (any `foreign.c` lib or
+    /// `foreign.python` pattern granted — mirrors the interpreter's `RootVal.foreign_load`).
+    pub foreign_load: bool,
+    /// `foreign.c` grants: logical lib name → the binary path the human chose (spec §4.1).
+    pub foreign_grants: HashMap<String, String>,
+    /// Each `foreign` lib's declared marshalling signatures (lowered from the block).
+    pub foreign_sigs: HashMap<String, Vec<ForeignSig>>,
+    /// Ceiling on a returned foreign string (`--foreign-max-ret`, invariant 21). 0 = the default.
+    pub foreign_max_ret: usize,
+    /// `Some` records one `TraceRecord` per effectful op host-side (`--engine wasm --trace-effects`),
+    /// so the trace is byte-identical to the interpreter's (criterion 6).
+    pub trace: Option<TraceSink>,
 }
 
 /// Run `main(root: Root)` under Wasmtime with the given grants/determinism. The root handle (index 0)
@@ -483,6 +808,13 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
         rng: seed_rng(cfg.rand_seed),
         output: String::new(),
         refused: None,
+        foreign_load_granted: cfg.foreign_load,
+        foreign_grants: cfg.foreign_grants.clone(),
+        foreign_sigs: cfg.foreign_sigs.clone(),
+        foreign_max_ret: cfg.foreign_max_ret,
+        foreign_ptrs: Vec::new(),
+        trace: cfg.trace.clone(),
+        trace_seq: 0,
     };
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
