@@ -496,3 +496,12 @@ benefit shipped: `--engine wasm` now records traces for all effects, closing a S
 
 *Stage 4 opened the door and painted the bright line around it. Stage 5 moves the keys out of the
 house.*
+
+**Cross-OS addendum (2026-07-11, head chef):** the full workspace suite was run on **real Linux**
+(Docker `rust:1`/Debian, rustc 1.97.0, CPython 3.13.5 — same pinned minor as the Windows machine —
+NumPy 2.2.4, vendored libffi built under gcc): **all green, exit 0**, including the hostile-guest
+suite and the `--no-default-features` Python-less check. Criterion 1/6 OS coverage is now
+**Windows + Linux verified; macOS pending** — the legitimate macOS path is the GitHub Actions
+`macos-latest` runner via the committed `.github/workflows/ci.yml` (3-OS matrix, Python pinned
+3.13), which activates when the repository is pushed to GitHub. No macOS VMs on non-Apple hardware
+(license + reliability), per the honesty rules.

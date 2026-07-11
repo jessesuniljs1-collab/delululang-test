@@ -1,0 +1,41 @@
+# DeluluLang CI — the 3-OS matrix (Stage 4 criteria 1 & 6: identical behavior on
+# Linux/macOS/Windows, both engines, Python pinned to one version per run).
+# Activates automatically once this repository is pushed to GitHub.
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # Criterion 6: Python pinned to ONE version so cross-engine parity is stable.
+      - name: Install Python 3.13 (pinned)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install NumPy (criterion-2 demo)
+        run: python -m pip install numpy
+
+      - name: Full workspace test suite
+        run: cargo test --workspace
+
+      # The Python-less build must stay a first-class citizen (DL1307 path).
+      - name: Python-less build check
+        run: cargo check -p delulu --no-default-features
