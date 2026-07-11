@@ -469,3 +469,30 @@ remains pinned **CPython 3.13.5** on this machine (4f). `.dwx`: `build --target 
 embedding is a natural Stage-6 `.dpx`-adjacent extension). The Stage-3 hostile-guest suite was
 extended for the new span-carrying `console_println` signature and stays green (forged handles,
 out-of-bounds/negative pointers, unprovided imports).
+
+### Head-chef close-out (2026-07-11) — STAGE 4 COMPLETE
+
+All seven phases landed (`c7b043d`→`c4698fe`), 200 → **271 workspace tests, 0 failures**. Every
+acceptance criterion was re-verified by the head chef against the real binary, not the reports:
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | C call, both engines, `ForeignCall` traced | **pass** (Windows; the rustc-built-cdylib fixture design is 3-OS-portable, but the Linux/macOS CI matrix has not run yet — honest caveat, tracked for Stage 8/9 CI work) |
+| 2 | NumPy demo | **pass, live** — `examples/numpy_mean.delulu` → `mean = 2.5` (CPython 3.13.5, NumPy 2.2.6) |
+| 3 | Fence: DL1302 callbacks (incl. nested), DL1301 secrets with **no `expose` repair** | **pass, live** (empty repairs list — structurally no `expose`) |
+| 4 | DL1303 at grant flow / DL1304 at bind, never mid-run | **pass, live** |
+| 5 | `py.import("os")` off-allowlist → DL1305 PyErr, denied attempt traced | **pass, live** |
+| 6 | Engine parity: identical results AND traces | **pass, live** — head chef diffed stdout + trace files across engines: byte-identical; `--assert-trace` green on WASM. Python ops on WASM are DL1201 interpreter-fallback (documented above) |
+| 7 | Authority separator + `"foreign_calls": []` byte-identical no-foreign report | **pass, live** + pinned regression test |
+| 8 | Hostile returns → `ForeignErr::BadReturn`/DL1306, never a crash | **pass** (both engines, crafted-buffer unit tests + live-DLL tests) |
+
+**Rulings on the flagged open questions:** (1) a foreign-using `.dwx` that compiles/verifies but
+*refuses cleanly at run* (no embedded marshalling signatures) is **accepted for Stage 4** — signature
+embedding lands with Stage 6's `.dpx` custom-section machinery, not before. (2) The span-carrying
+host-fn signature change that invalidates pre-Stage-4 `.dwx` artifacts is **accepted pre-1.0**; host
+interface versioning is formalized when Stage 6 versions `delulu:plugin`. (3) `PyErr.kind =
+"ImportNotAllowed"` is the blessed DL1305 runtime spelling; `imports_seen` stays static. Side
+benefit shipped: `--engine wasm` now records traces for all effects, closing a Stage-3 tooling gap.
+
+*Stage 4 opened the door and painted the bright line around it. Stage 5 moves the keys out of the
+house.*
