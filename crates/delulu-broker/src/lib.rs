@@ -11,6 +11,7 @@
 //! - [`tree`] — phase 5b: the in-memory grant tree (issue/attenuate/revoke/inspect/tree).
 //! - [`validate`] — phase 5c: the synchronous/epoch validation classes + revocation epochs.
 //! - [`audit`] — phase 5d: the append-only, hash-chained audit log (blake3) + `verify`/`tail`/`query`.
+//! - [`lease`] — phase 5e: MAC-signed portable lease tokens (delegate/redeem/rotate_key).
 //! - [`diag`] — broker denials and their mapping to `delulu_diag::Diagnostic`.
 //! - [`ids`] / [`time`] — the injectable GrantId source and TTL clock (ruling 3).
 
@@ -20,6 +21,7 @@ pub mod audit;
 pub mod authority;
 pub mod diag;
 pub mod ids;
+pub mod lease;
 pub mod time;
 pub mod tree;
 pub mod validate;
@@ -31,6 +33,7 @@ pub use audit::{
 pub use authority::{attenuation_check, Authority, Scopes};
 pub use diag::Denial;
 pub use ids::{IdSource, OsIdSource, SeqIdSource};
+pub use lease::{load_or_create_key, Token};
 pub use time::{ClockSource, ManualClock, SystemClock};
 pub use tree::{Broker, EffState, GrantId, Holder, Node, RevokeOutcome, State};
 pub use validate::{Decision, Op, OpClass, Snapshot};

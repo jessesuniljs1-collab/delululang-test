@@ -381,5 +381,57 @@ rotation cross-links heads driven by the injected clock (no sleeps; lib + broker
 head recovery on reopen; tail/query filters; broker-with-sink emits exactly one record per op
 including denies, epoch ops emit none, and record seqs are gapless 1..=N.
 
+**Phase 5e — lease tokens (delegate/redeem), MAC-signed — is implemented and green (2026-07-11,
+323 → 333 workspace tests, +10; chunk 2 total +28 over the 305 baseline).** `src/lease.rs`.
+**Broker key (§2):** random 256-bit; `load_or_create_key(path)` takes an INJECTED path (the CLI
+will resolve `~/.delulu/broker.key` when the daemon lands in chunk 3), creating the key at first
+use; `0600` under `#[cfg(unix)]`; on Windows v0.5 relies on the user-profile ACL (documented in a
+comment — full owner-only DACL hardening arrives with the chunk-3 named pipe). The in-memory
+`Broker` takes the key via additive `with_key`/`set_key`; absent injection it lazily self-mints
+(library/test convenience — the CLI always injects from disk). **MAC (head-chef ruling):**
+`blake3::keyed_hash` — no `hmac`/`sha2` crates. Token format is versioned:
+`dlt1_<hex payload>.<hex mac>` where payload is the canonical JSON
+`{ v: 1, node: "g_…", exp_millis, multi, nonce }` (same `canonical_json` as the audit chain) and
+`mac = keyed_hash(broker_key, payload_bytes)`. MAC comparison is constant-time via `blake3::Hash`'s
+constant-time `PartialEq` — `Hash` values are compared, never hex strings. **Operations (§3.2):**
+`delegate(parent, authority, holder, ttl, multi) -> (GrantId, Token)` = the chunk-1 attenuation
+core (`⊑` check, DL0802 carrying the intersection, fail-closed under dead parents) + mint a token
+bound to the new child; exactly ONE `"delegate"` audit record — never an `attenuate` + `delegate`
+double-log. `redeem(token, peer_desc) -> Result<GrantId, Denial>`: envelope/MAC failure (garbled,
+tampered payload, rotated-away key, unknown bound node) → **DL1407** (new
+`Denial::TokenInvalid { detail }`, `requires_human: true` per §8); expiry against the pluggable
+clock → **DL1402**; single-redemption by default — a second redeem of the same token is DL1407
+unless minted `multi`. Redeemed-nonce state lives in the `Broker`. Redemption binds the node to the
+redeeming peer by writing `holder.peer` — storage/display ONLY, never a decision input: the
+holder-neutrality grep test and the criterion-9 behavioral test stay green unmodified. One
+`"redeem"` record per attempt (denied redeems record with `decision: "deny"`). `rotate_key()`
+regenerates the key, which invalidates ALL outstanding tokens (their MACs no longer verify →
+DL1407) — deliberate (§2), audit-logged as its own `"rotate_key"` action. Tests: delegate → redeem
+→ `check()` works on the redeemed node; second redeem → DL1407; expired TTL at redeem → DL1402
+(fake clock, no sleeps); token signed with a rotated-away key → DL1407; tampered payload → DL1407;
+multi-token redeems twice; delegate-widening → DL0802 with the exact intersection; key-file
+round-trip.
+
+**Chunk-2 deviations / decisions flagged for head-chef review:**
+1. **The audit day boundary is UTC** (pure-integer `civil_from_days`, no datetime dep — the same
+   no-new-deps discipline as chunk 1's epoch-millis ruling). A local-time boundary would need a
+   timezone database; UTC is deterministic and standard for audit trails.
+2. **`verify` walks the full chain from genesis and stops at the first break.** Spec §7 sketches
+   `verify [--from N]`; resuming mid-chain requires trusting an unverified `prev_hash` anchor, so
+   it was left to chunk 3 (where the daemon can anchor on a verified head). Flagged, not silently
+   dropped.
+3. **Synchronous-use audit records use action `"use"`** with the scope argument as `target` and no
+   `authority` payload (§7 names the actions for tree ops but not uses; `"use"` + target is the
+   minimal honest shape). The op kind (FsWrite/Net/…) will ride along in chunk 3 when the runtime
+   supplies spans too.
+4. **Denied `redeem`s consume an audit seq** (parity with every other deny — invariant 26's "every
+   deny produces exactly one record"), even though redeem is not itself a §4.1-classed capability
+   use.
+5. **Token `exp_millis` for a no-TTL delegation is `i64::MAX`** ("never expires"), keeping the
+   payload shape fixed rather than making the field optional.
+6. **`load_or_create_key` checks existence before creating** (rather than matching the read error's
+   kind); the same-user TOCTOU window is inside the threat model (§10 — the broker does not defend
+   against the same OS user).
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

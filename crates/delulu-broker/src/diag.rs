@@ -50,6 +50,10 @@ pub enum Denial {
     /// is observability, not enforcement — a break signals possible tampering, never a policy
     /// decision. `detail` states what mismatched (hash vs prev-link).
     AuditChainBroken { seq: u64, detail: String },
+    /// DL1407 — a delegation lease token is invalid or already redeemed: a bad/garbled MAC, a MAC
+    /// signed by a rotated-away key, a malformed token, an unknown bound node, or a second
+    /// redemption of a single-use token. `requires_human: true` (spec §8) — re-mint via `delegate`.
+    TokenInvalid { detail: String },
 }
 
 impl Denial {
@@ -63,15 +67,19 @@ impl Denial {
             | Denial::NotRevocable { .. }
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
+            Denial::TokenInvalid { .. } => "DL1407",
         }
     }
 
-    /// Whether resolving this denial requires a human decision (spec §8: DL1402/DL1403/DL1405 are
-    /// `requires_human: true`; the attenuation and scope denials are mechanically resolvable).
+    /// Whether resolving this denial requires a human decision (spec §8: DL1402/DL1403/DL1405/DL1407
+    /// are `requires_human: true`; the attenuation and scope denials are mechanically resolvable).
     pub fn requires_human(&self) -> bool {
         matches!(
             self,
-            Denial::Expired { .. } | Denial::Revoked { .. } | Denial::AuditChainBroken { .. }
+            Denial::Expired { .. }
+                | Denial::Revoked { .. }
+                | Denial::AuditChainBroken { .. }
+                | Denial::TokenInvalid { .. }
         )
     }
 
@@ -167,6 +175,10 @@ impl Denial {
                      tampered with (observability, not enforcement; this detects, it does not prevent)"
                 ),
             ),
+            Denial::TokenInvalid { detail } => Diagnostic::error(
+                "DL1407",
+                format!("delegation token invalid or already redeemed: {detail} — re-mint via `delegate`"),
+            ),
         }
     }
 }
@@ -230,6 +242,14 @@ mod tests {
         let diag = d.to_diagnostic();
         assert_eq!(diag.code, "DL1405");
         assert!(diag.message.contains('7'), "message states the failing seq");
+    }
+
+    #[test]
+    fn token_invalid_is_dl1407_and_requires_human() {
+        let d = Denial::TokenInvalid { detail: "MAC mismatch".into() };
+        assert_eq!(d.code(), "DL1407");
+        assert!(d.requires_human(), "DL1407 requires a human (spec §8)");
+        assert_eq!(d.to_diagnostic().code, "DL1407");
     }
 
     #[test]

@@ -1,8 +1,8 @@
-//! Phase 5d wiring tests (invariant 26): a broker with an attached sink emits EXACTLY ONE audit
-//! record per issue/attenuate/revoke/deny and per synchronous-class ALLOWED use — reusing the seq
-//! the operation already consumed (chunk-1 ruling 5) — and epoch-class uses emit none. Also: daily
-//! rotation driven by the INJECTED clock (no sleeps), through the whole Broker → AuditLog → verify
-//! stack.
+//! Phase 5d/5e wiring tests (invariant 26): a broker with an attached sink emits EXACTLY ONE audit
+//! record per issue/attenuate/delegate/revoke/redeem/deny and per synchronous-class ALLOWED use —
+//! reusing the seq the operation already consumed (chunk-1 ruling 5) — and epoch-class uses emit
+//! none. Also: daily rotation driven by the INJECTED clock (no sleeps), through the whole
+//! Broker → AuditLog → verify stack.
 
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -28,7 +28,8 @@ fn holder() -> Holder {
 fn broker_with_sink(clock: Rc<ManualClock>) -> (Broker, MemSink) {
     let sink = MemSink::new();
     let b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
-        .with_sink(Box::new(sink.clone()));
+        .with_sink(Box::new(sink.clone()))
+        .with_key([9u8; 32]);
     (b, sink)
 }
 
@@ -68,41 +69,83 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
     let _ = b.attenuate(&root, Authority::new(eff(&["Declassify"]), Scopes::default()), holder(), None);
     assert_eq!(sink.len(), 3);
 
-    // 4. synchronous-class ALLOWED use → one "use" record carrying the SAME seq check() returned.
+    // 4. delegate → EXACTLY one "delegate" record (never attenuate + delegate double-logged).
+    let (_d, token) = b
+        .delegate(
+            &root,
+            Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data/d"]), ..Default::default() }),
+            holder(),
+            None,
+            false,
+        )
+        .unwrap();
+    assert_eq!(sink.len(), 4);
+
+    // 5. redeem → one "redeem" record.
+    b.redeem(&token, "pid:4711").unwrap();
+    assert_eq!(sink.len(), 5);
+
+    // 6. denied redeem (second redemption) → one "redeem" record with decision "deny".
+    let _ = b.redeem(&token, "pid:4712").unwrap_err();
+    assert_eq!(sink.len(), 6);
+
+    // 7. synchronous-class ALLOWED use → one "use" record carrying the SAME seq check() returned.
     let d = b.check(&root, Op::FsWrite, Some("./out/log.txt"));
     let Decision::Allow { audit_seq: Some(use_seq) } = d else {
         panic!("expected a synchronous allow with a seq")
     };
-    assert_eq!(sink.len(), 4);
+    assert_eq!(sink.len(), 7);
 
-    // 5. synchronous-class DENIED use (out of scope) → one record, decision "deny".
+    // 8. synchronous-class DENIED use (out of scope) → one record, decision "deny".
     let _ = b.check(&root, Op::FsWrite, Some("./secret"));
-    assert_eq!(sink.len(), 5);
+    assert_eq!(sink.len(), 8);
 
-    // 6. epoch-class use (live path AND snapshot path) → NO record (chunk-1 semantics).
+    // 9. epoch-class use (live path AND snapshot path) → NO record (chunk-1 semantics).
     assert!(b.check(&root, Op::FsRead, Some("./data/x")).is_allow());
     let snap = b.snapshot();
     assert!(snap.check(&child, Op::FsRead, Some("./data/sub/y")).is_allow());
-    assert_eq!(sink.len(), 5, "epoch-class uses emit no audit record");
+    assert_eq!(sink.len(), 8, "epoch-class uses emit no audit record");
 
-    // 7. revoke → one "revoke" record; denied revoke (lateral) → one deny record.
+    // 10. revoke → one "revoke" record; denied revoke (lateral) → one deny record.
     b.revoke(&root, &child).unwrap();
-    assert_eq!(sink.len(), 6);
+    assert_eq!(sink.len(), 9);
     let _ = b.revoke(&child, &root).unwrap_err();
-    assert_eq!(sink.len(), 7);
+    assert_eq!(sink.len(), 10);
+
+    // 11. rotate_key → one "rotate_key" record.
+    b.rotate_key();
+    assert_eq!(sink.len(), 11);
 
     // The actions, in order, one per op.
     let actions: Vec<String> = sink.records().iter().map(|r| r.action.clone()).collect();
-    assert_eq!(actions, vec!["issue", "attenuate", "attenuate", "use", "use", "revoke", "revoke"]);
+    assert_eq!(
+        actions,
+        vec![
+            "issue",
+            "attenuate",
+            "attenuate",
+            "delegate",
+            "redeem",
+            "redeem",
+            "use",
+            "use",
+            "revoke",
+            "revoke",
+            "rotate_key"
+        ]
+    );
     let decisions: Vec<String> = sink.records().iter().map(|r| r.decision.clone()).collect();
-    assert_eq!(decisions, vec!["allow", "allow", "deny", "allow", "deny", "allow", "deny"]);
+    assert_eq!(
+        decisions,
+        vec!["allow", "allow", "deny", "allow", "allow", "deny", "allow", "deny", "allow", "deny", "allow"]
+    );
 
     // Ruling 5 made visible: the records carry the broker's own monotone seqs with NO renumbering
     // and no gaps — every seq-consuming op logged exactly once.
     let seqs: Vec<u64> = sink.records().iter().map(|r| r.seq).collect();
-    assert_eq!(seqs, (1..=7).collect::<Vec<u64>>());
+    assert_eq!(seqs, (1..=11).collect::<Vec<u64>>());
     // And the "use" record reused the very seq check() handed back.
-    assert_eq!(sink.records()[3].seq, use_seq);
+    assert_eq!(sink.records()[6].seq, use_seq);
 }
 
 #[test]

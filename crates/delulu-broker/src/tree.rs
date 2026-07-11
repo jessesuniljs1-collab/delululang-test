@@ -8,7 +8,7 @@
 //! `match`/`if` on `holder.kind` anywhere on any authority-decision path — the `holder_neutrality`
 //! test in `tests/` greps this crate's own source to enforce it mechanically.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::audit::{AuditEntry, AuditSink};
 use crate::authority::{attenuation_check, Authority};
@@ -26,6 +26,12 @@ impl GrantId {
         &self.0
     }
 
+    /// Reconstruct a `GrantId` from a string already vouched for by an authenticated source (phase
+    /// 5e: a node id read out of a token payload *after* its MAC verified). Not a public parse — the
+    /// broker still checks the node actually exists before trusting it (fail-closed).
+    pub(crate) fn from_trusted(s: String) -> GrantId {
+        GrantId(s)
+    }
 }
 
 impl std::fmt::Display for GrantId {
@@ -96,6 +102,12 @@ pub struct Broker {
     /// every seq-consuming op emits exactly one record (invariant 26). Observability, not enforcement
     /// (playbook trap 6): a sink write failure is logged, never allowed to change a decision.
     sink: Option<Box<dyn AuditSink>>,
+    /// The broker MAC key for lease tokens (phase 5e), 256-bit. Lazily created at first use; the CLI
+    /// injects one loaded from `~/.delulu/broker.key`. `None` until first delegate/redeem/rotate.
+    key: Option<[u8; 32]>,
+    /// Nonces of single-use tokens already redeemed (phase 5e). A second redemption of a single-use
+    /// token whose nonce is here is DL1407. `--multi` tokens are neither checked nor recorded here.
+    redeemed: HashSet<String>,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -124,7 +136,16 @@ impl Broker {
     /// A broker with injected determinism sources (ruling 3): tests supply a counter id source and
     /// a manual clock so outcomes are reproducible with no OS entropy and no sleeps.
     pub fn with_sources(ids: Box<dyn IdSource>, clock: Box<dyn ClockSource>) -> Broker {
-        Broker { nodes: HashMap::new(), epoch: 0, audit_seq: 1, ids, clock, sink: None }
+        Broker {
+            nodes: HashMap::new(),
+            epoch: 0,
+            audit_seq: 1,
+            ids,
+            clock,
+            sink: None,
+            key: None,
+            redeemed: HashSet::new(),
+        }
     }
 
     /// Attach an audit sink (phase 5d). Additive (ruling 4): the default is no sink, so chunk-1 API
@@ -137,6 +158,18 @@ impl Broker {
     /// Attach/replace the audit sink after construction.
     pub fn set_sink(&mut self, sink: Box<dyn AuditSink>) {
         self.sink = Some(sink);
+    }
+
+    /// Inject the broker MAC key (phase 5e). The CLI loads/creates one at `~/.delulu/broker.key`
+    /// (ruling 2 — only the CLI knows the path). Chainable builder form.
+    pub fn with_key(mut self, key: [u8; 32]) -> Broker {
+        self.key = Some(key);
+        self
+    }
+
+    /// Set/replace the broker MAC key after construction.
+    pub fn set_key(&mut self, key: [u8; 32]) {
+        self.key = Some(key);
     }
 
     /// The current revocation epoch.
@@ -174,6 +207,37 @@ impl Broker {
     /// Iterate the tree's nodes (used to build a [`crate::validate::Snapshot`]).
     pub(crate) fn iter_nodes(&self) -> impl Iterator<Item = &Node> {
         self.nodes.values()
+    }
+
+    /// The MAC key, creating a random one on first use if none was injected (phase 5e — "created at
+    /// first use"). Uses OS randomness. In the CLI the key is always injected from disk first, so a
+    /// lazily-created key only ever appears in library/test use.
+    pub(crate) fn ensure_key(&mut self) -> [u8; 32] {
+        if let Some(k) = self.key {
+            return k;
+        }
+        let mut k = [0u8; 32];
+        getrandom::fill(&mut k).expect("OS randomness (getrandom) unavailable");
+        self.key = Some(k);
+        k
+    }
+
+    /// Whether this token nonce has already been redeemed (single-use tracking, phase 5e).
+    pub(crate) fn is_redeemed(&self, nonce: &str) -> bool {
+        self.redeemed.contains(nonce)
+    }
+
+    /// Record a token nonce as redeemed (single-use tracking, phase 5e).
+    pub(crate) fn mark_redeemed(&mut self, nonce: &str) {
+        self.redeemed.insert(nonce.to_string());
+    }
+
+    /// Bind a node's holder `peer` to the redeeming party (phase 5e). Storage/display ONLY — never a
+    /// decision input (criterion 9): this writes `holder.peer`, never reads `holder.kind`.
+    pub(crate) fn set_holder_peer(&mut self, id: &GrantId, peer: impl Into<String>) {
+        if let Some(n) = self.nodes.get_mut(id) {
+            n.holder.peer = peer.into(); // KIND_IS_DATA: peer is descriptive metadata, never switched on
+        }
     }
 
     /// Emit exactly one audit record for a seq-consuming op (invariant 26). No-op when no sink is
