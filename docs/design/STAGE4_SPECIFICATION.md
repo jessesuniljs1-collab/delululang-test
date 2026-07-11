@@ -505,3 +505,83 @@ suite and the `--no-default-features` Python-less check. Criterion 1/6 OS covera
 `macos-latest` runner via the committed `.github/workflows/ci.yml` (3-OS matrix, Python pinned
 3.13), which activates when the repository is pushed to GitHub. No macOS VMs on non-Apple hardware
 (license + reliability), per the honesty rules.
+
+### macOS-readiness audit (2026-07-11, static hardening — no Mac available)
+
+A static pass to make the *first* real macOS run boring. No Mac and no GitHub push were used; every
+claim below is either compile-checked from the Windows host against Apple `std` cross-targets
+(`aarch64-apple-darwin`, `x86_64-apple-darwin`, both added via `rustup target add`) or a source
+audit. The honest split of PROVEN-from-here vs REQUIRES-A-REAL-MAC is the point of this section.
+
+**What is PROVEN from here (static):**
+
+- **Platform-`cfg` audit — every branch verified Darwin-correct.** macOS is `unix`-family, so the
+  Stage-4 code has almost no macOS-specific surface. The only OS `cfg`s were the two test-fixture
+  DLL-extension tables and the one `cfg(windows)` CLI `cos` test; all are addressed below. No
+  `cfg(unix)` branch in shipping code assumes Linux-only behavior (the loader path in
+  `foreign.rs::load_and_resolve` is `libloading::Library::new(path)` — `dlopen` on macOS — and makes
+  no LoadLibrary/`ld.so`-search-order assumption; a bare name like `libm.dylib` resolves via the
+  dyld shared cache, a full granted path opens directly). Path/PATH/temp-dir handling uses
+  `std::path`, `std::env::temp_dir`, and `std::fs::canonicalize` only — no `\`/`;`/`:` literals in
+  path logic. macOS's default case-**insensitive** FS behaves like Windows (already the CI baseline),
+  not like case-sensitive Linux, so nothing that passes on Windows can regress on that axis on mac.
+- **Grant parsing splits on the FIRST colon only** (`broker.rs::Grants::add`, `str::split_once(':')`)
+  — a Windows drive-letter path (`mathlib:C:\libs\libm.dll`), a bare name (`m:libm.dylib`, dyld
+  cache), and a colon-free unix/macOS absolute path (`mathlib:/usr/lib/libm.so.6`) all round-trip.
+  Unit test `foreign_grant_splits_on_the_first_colon_only` now asserts all four shapes.
+- **Test-fixture builders are OS-cfg-free.** `foreign_ffi.rs` and `foreign_parity.rs` now derive the
+  cdylib filename from `std::env::consts::{DLL_PREFIX, DLL_SUFFIX}` (one code path: `dl_fixture.dll`
+  on Windows, `libdl_fixture.so` on Linux, `libdl_fixture.dylib` on macOS), removing the per-OS
+  extension table entirely — there is no longer a Darwin-only line in those files that could rot
+  unseen. Loaded by full path, so the `lib` prefix is immaterial to the loader.
+- **macOS + Linux CLI `cos` mirrors added.** The `cfg(windows)` criterion-1 end-to-end test
+  (`crates/delulu/tests/cli.rs`) is refactored so all assertions live in one **non-`cfg`-gated**
+  helper (`foreign_cos_end_to_end_asserting`, type-checked on every host) with three thin
+  per-OS wrappers differing only in the granted library: Windows `msvcrt.dll`, macOS `libm.dylib`
+  (dyld shared cache), Linux `libm.so.6`. Same value `0.5403023058681398`, same `ForeignCall`/`cos`
+  trace, same `--assert-trace`. The Darwin/Linux wrapper *bodies* cannot be compiled from this host
+  (see below) and rely on review; the shared assertion logic is proven here.
+- **Cross-compile matrix (`cargo check --target …`, Apple `std` only):**
+
+  | Crate | `x86_64-apple-darwin` | `aarch64-apple-darwin` | Blocker when blocked |
+  |---|---|---|---|
+  | `delulu-diag` | **clean** | **clean** | — |
+  | `delulu-syntax` | **clean** | **clean** | — |
+  | `delulu-check` | **clean** | blocked | `blake3` build.rs runs `cc` for aarch64 NEON C intrinsics (x86_64 needs no `cc`, so its Rust is proven Darwin-clean) |
+  | `delulu-runtime` | blocked | blocked | `libffi-sys` build script needs a C toolchain (mandatory dep — `--no-default-features` does not remove it); `pyo3` needs a Darwin Python; `blake3`/aarch64 |
+  | `delulu-wasm` | blocked | blocked | `wasmtime`'s `ittapi-sys` + `zstd-sys` build scripts need `cc`; also `libffi-sys` via `delulu-runtime` |
+  | `delulu` (CLI) | blocked | blocked | `zstd-sys` + `ittapi-sys` + `libffi-sys` (all transitive native build scripts) |
+
+  Every "blocked" cell is a **native C build script with no Darwin cross-compiler on this Windows
+  host** — never a Rust-source error. All are satisfied on the GitHub `macos-latest` runner (Apple
+  clang ships with the image; Python is installed by `actions/setup-python`), so each is **CI-covered,
+  not a code risk**. The Rust we author compiles clean for Darwin everywhere it could be reached
+  (`delulu-diag`/`delulu-syntax` both targets; `delulu-check` on `x86_64-apple-darwin`), and the
+  platform `cfg` logic is arch-independent, so `x86_64-apple-darwin` success proves the macOS
+  branches for `delulu-check` too.
+- **Dependency Darwin-support table** (from crate docs/metadata, both Apple targets are Rust
+  **tier-1** / tier-2-with-host-tools):
+
+  | Dep | Version | Darwin support |
+  |---|---|---|
+  | `libloading` | 0.8 | Yes — thin `dlopen`/`dlsym` wrapper; macOS is a first-class platform |
+  | `libffi` / `libffi-sys` | 3 / 2.3 | Yes — vendored libffi builds with `cc`+clang on macOS (the runner's default toolchain) |
+  | `pyo3` | 0.25 | Yes — macOS is tier-1; embedding links `libpython` + emits the `-rpath` for the framework/lib |
+  | `wasmtime` | 27 | Yes — `aarch64-apple-darwin` and `x86_64-apple-darwin` are supported host tiers; pulls `ittapi-sys`/`zstd-sys` (need `cc`) |
+  | `blake3` | 1 | Yes — x86_64 uses prebuilt paths (no `cc`); aarch64 compiles NEON C via `cc` |
+
+**What still REQUIRES a real Mac (or the `macos-latest` CI runner) — not overclaimed here:**
+
+- Actually *running* the workspace suite on macOS (criterion 1/6 OS coverage; the Darwin/Linux `cos`
+  mirror wrappers execute for the first time there).
+- The runtime dyld-shared-cache resolution of `libm.dylib` with **no file on disk** (Big Sur+): a
+  static audit says `dlopen("libm.dylib")` should serve it from the cache, but only a real run
+  proves the `cos` symbol resolves and returns `0.5403023058681398`.
+- **PyO3 embedding against Apple Python** — the full native build of `delulu-runtime`/`delulu` for
+  Darwin (blocked here by `libffi-sys`/`pyo3`/`wasmtime` C build scripts), plus correct `libpython`
+  linkage and `-rpath` against the `actions/setup-python` interpreter, and the live NumPy demo.
+- The vendored **libffi** and **wasmtime `ittapi-sys`/`zstd-sys`** C builds under Apple clang.
+
+CI needs no macOS-specific amendment: `.github/workflows/ci.yml` already installs clang-by-default
+(the runner image) and pinned CPython 3.13 with `setup-python`, then runs `cargo test --workspace`
+plus the `--no-default-features` check across all three OSes.

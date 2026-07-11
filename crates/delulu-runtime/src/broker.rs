@@ -254,6 +254,13 @@ mod tests {
         // A bare name resolves via OS loader rules at bind time — also legal grant data.
         g.add("foreign.c=z:libz.so.1").unwrap();
         assert_eq!(g.foreign_c["z"], "libz.so.1");
+        // A colon-free absolute unix/macOS path survives intact (spec §4.1's own example, and the
+        // shape the Linux/macOS test mirrors grant): the single split leaves the whole path as PATH.
+        g.add("foreign.c=mathlib:/usr/lib/libm.so.6").unwrap();
+        assert_eq!(g.foreign_c["mathlib"], "/usr/lib/libm.so.6");
+        // A macOS `.dylib` bare name, resolved via the dyld shared cache, is likewise untouched.
+        g.add("foreign.c=m:libm.dylib").unwrap();
+        assert_eq!(g.foreign_c["m"], "libm.dylib");
     }
 
     #[test]

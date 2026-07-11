@@ -273,19 +273,22 @@ fn run_foreign_exceeding_manifest_ceiling_is_dl1303() {
     assert_eq!(o.status.code(), Some(1));
 }
 
-#[cfg(windows)]
-#[test]
-fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
-    // Criterion 1 at the CLI surface (Windows: msvcrt.dll exports `cos`). The value is right and
-    // `ForeignCall` appears in the effect trace; `--assert-trace` proves trace ⊆ row.
+/// Criterion 1 at the CLI surface, shared by the three per-OS entry points below. `lib` is the
+/// concrete C math library the human grants for the logical `mathlib`; the program, grant shape,
+/// value (`cos(1.0) == 0.5403023058681398`), and trace assertions (`ForeignCall` + `op: cos`,
+/// `--assert-trace` proving trace ⊆ row) are IDENTICAL on every OS. This body is not `cfg`-gated,
+/// so it type-checks on every host regardless of which wrapper is active — only the one-line
+/// library name per OS lives behind a `cfg`.
+fn foreign_cos_end_to_end_asserting(lib: &str) {
     let file = write_foreign_program("delulu_cli_foreign_cos", None);
+    let grant = format!("foreign.c=mathlib:{lib}");
     let o = delulu(&[
         "run",
         file.to_str().unwrap(),
         "--grant",
         "console",
         "--grant",
-        "foreign.c=mathlib:msvcrt.dll",
+        grant.as_str(),
         "--trace-effects",
         "--assert-trace",
     ]);
@@ -294,6 +297,28 @@ fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
     let err = stderr(&o);
     assert!(err.contains("\"effect\":\"ForeignCall\""), "trace records: {err}");
     assert!(err.contains("\"op\":\"cos\""), "{err}");
+}
+
+#[cfg(windows)]
+#[test]
+fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
+    // Windows: `msvcrt.dll` exports `cos` and resolves by bare name via the OS loader.
+    foreign_cos_end_to_end_asserting("msvcrt.dll");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
+    // macOS mirror: `libm.dylib` resolves via the dyld shared cache on modern macOS (Big Sur+) even
+    // though no such file exists on disk — dlopen serves it from the cache. Same value, same trace.
+    foreign_cos_end_to_end_asserting("libm.dylib");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn run_foreign_cos_end_to_end_with_foreigncall_traced() {
+    // Linux mirror: `libm.so.6` is the glibc math-library soname, resolved by bare name via ld.so.
+    foreign_cos_end_to_end_asserting("libm.so.6");
 }
 
 #[test]

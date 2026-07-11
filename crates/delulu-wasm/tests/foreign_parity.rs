@@ -37,20 +37,15 @@ const FIXTURE_SRC: &str = r##"
 #[no_mangle] pub extern "C" fn dl_deref(p: *const u8) -> i64 { unsafe { *p as i64 } }
 "##;
 
-#[cfg(windows)]
-const DLL_EXT: &str = "dll";
-#[cfg(target_os = "macos")]
-const DLL_EXT: &str = "dylib";
-#[cfg(all(unix, not(target_os = "macos")))]
-const DLL_EXT: &str = "so";
-
 fn fixture_path() -> &'static str {
     static P: OnceLock<String> = OnceLock::new();
     P.get_or_init(|| {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
         let src = dir.join("dl_fixture_wasm.rs");
         std::fs::write(&src, FIXTURE_SRC).expect("write fixture source");
-        let dll = dir.join(format!("dl_fixture_wasm.{DLL_EXT}"));
+        // Platform dynamic-library filename from `std::env::consts` (see foreign_ffi.rs): one path,
+        // correct on Windows/.dll, Linux/.so, macOS/.dylib, loaded by full path.
+        let dll = dir.join(format!("{}dl_fixture_wasm{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX));
         let out = std::process::Command::new("rustc")
             .args(["--edition", "2021", "--crate-type", "cdylib"])
             .arg(&src)

@@ -35,13 +35,6 @@ const FIXTURE_SRC: &str = r##"
 #[no_mangle] pub extern "C" fn dl_deref(p: *const u8) -> i64 { unsafe { *p as i64 } }
 "##;
 
-#[cfg(windows)]
-const DLL_EXT: &str = "dll";
-#[cfg(target_os = "macos")]
-const DLL_EXT: &str = "dylib";
-#[cfg(all(unix, not(target_os = "macos")))]
-const DLL_EXT: &str = "so";
-
 /// Compile the fixture cdylib once and return its path (as a string usable in a grant).
 fn fixture_path() -> &'static str {
     static P: OnceLock<String> = OnceLock::new();
@@ -49,7 +42,12 @@ fn fixture_path() -> &'static str {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
         let src = dir.join("dl_fixture.rs");
         std::fs::write(&src, FIXTURE_SRC).expect("write fixture source");
-        let dll = dir.join(format!("dl_fixture.{DLL_EXT}"));
+        // Derive the platform's dynamic-library filename from `std::env::consts` rather than a
+        // per-OS `cfg` table: `DLL_PREFIX`/`DLL_SUFFIX` are `""`/`.dll` on Windows, `lib`/`.so` on
+        // Linux, `lib`/`.dylib` on macOS (Darwin). One code path, correct on every target with no
+        // OS-specific branch to keep in sync — and the fixture is loaded by full path, so the
+        // prefix is immaterial to the loader.
+        let dll = dir.join(format!("{}dl_fixture{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX));
         let out = std::process::Command::new("rustc")
             .args(["--edition", "2021", "--crate-type", "cdylib"])
             .arg(&src)
