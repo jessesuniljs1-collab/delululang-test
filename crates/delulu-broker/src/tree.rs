@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use crate::audit::{AuditEntry, AuditSink};
 use crate::authority::{attenuation_check, Authority};
 use crate::diag::Denial;
 use crate::ids::{IdSource, OsIdSource};
@@ -24,6 +25,7 @@ impl GrantId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
 }
 
 impl std::fmt::Display for GrantId {
@@ -90,6 +92,10 @@ pub struct Broker {
     audit_seq: u64,
     ids: Box<dyn IdSource>,
     clock: Box<dyn ClockSource>,
+    /// Optional audit sink (phase 5d). `None` preserves chunk-1 behavior exactly; when attached,
+    /// every seq-consuming op emits exactly one record (invariant 26). Observability, not enforcement
+    /// (playbook trap 6): a sink write failure is logged, never allowed to change a decision.
+    sink: Option<Box<dyn AuditSink>>,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -118,7 +124,19 @@ impl Broker {
     /// A broker with injected determinism sources (ruling 3): tests supply a counter id source and
     /// a manual clock so outcomes are reproducible with no OS entropy and no sleeps.
     pub fn with_sources(ids: Box<dyn IdSource>, clock: Box<dyn ClockSource>) -> Broker {
-        Broker { nodes: HashMap::new(), epoch: 0, audit_seq: 1, ids, clock }
+        Broker { nodes: HashMap::new(), epoch: 0, audit_seq: 1, ids, clock, sink: None }
+    }
+
+    /// Attach an audit sink (phase 5d). Additive (ruling 4): the default is no sink, so chunk-1 API
+    /// and tests are unchanged. Chainable builder form.
+    pub fn with_sink(mut self, sink: Box<dyn AuditSink>) -> Broker {
+        self.sink = Some(sink);
+        self
+    }
+
+    /// Attach/replace the audit sink after construction.
+    pub fn set_sink(&mut self, sink: Box<dyn AuditSink>) {
+        self.sink = Some(sink);
     }
 
     /// The current revocation epoch.
@@ -158,11 +176,50 @@ impl Broker {
         self.nodes.values()
     }
 
+    /// Emit exactly one audit record for a seq-consuming op (invariant 26). No-op when no sink is
+    /// attached (chunk-1 behavior). A sink write failure is logged and swallowed: the audit log is
+    /// observability, not enforcement (playbook trap 6) — it must never change an outcome.
+    ///
+    /// (clippy: the 7 data args mirror the spec §7 record shape one-to-one; bundling them into a
+    /// struct here would just duplicate `AuditEntry` minus `ts`. Internal helper — tradeoff is fine.)
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_op(
+        &mut self,
+        seq: u64,
+        action: &str,
+        actor: Option<String>,
+        target: Option<String>,
+        authority: Option<serde_json::Value>,
+        decision: &str,
+        span: Option<String>,
+    ) {
+        if self.sink.is_none() {
+            return;
+        }
+        let ts = self.now();
+        let entry = AuditEntry {
+            seq,
+            ts,
+            actor_node: actor,
+            action: action.to_string(),
+            target,
+            authority,
+            span,
+            decision: decision.to_string(),
+        };
+        if let Some(sink) = self.sink.as_mut() {
+            if let Err(e) = sink.append(entry) {
+                eprintln!("delulu-broker: audit sink append failed (observability, not enforcement): {e}");
+            }
+        }
+    }
+
     /// Issue a **root** grant (spec §3.2 `issue`, CLI-only human action — nothing programmatic
     /// creates root nodes, Constitution §5.16 law 4). Returns the new node's id.
     pub fn issue(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> GrantId {
         let id = self.ids.next_id();
         let seq = self.take_seq();
+        let auth_json = authority.to_json();
         let node = Node {
             id: id.clone(),
             parent: None,
@@ -174,6 +231,7 @@ impl Broker {
             audit_seq: seq,
         };
         self.nodes.insert(id.clone(), node);
+        self.record_op(seq, "issue", Some(id.as_str().to_string()), None, Some(auth_json), "allow", None);
         id
     }
 
@@ -187,34 +245,73 @@ impl Broker {
         holder: Holder,
         ttl_millis: Option<i64>,
     ) -> Result<GrantId, Denial> {
+        let auth_json = authority.to_json();
+        let (seq, res) = self.attenuate_core(parent, authority, holder, ttl_millis);
+        match &res {
+            Ok(child) => self.record_op(
+                seq,
+                "attenuate",
+                Some(parent.as_str().to_string()),
+                Some(child.as_str().to_string()),
+                Some(auth_json),
+                "allow",
+                None,
+            ),
+            Err(_) => self.record_op(
+                seq,
+                "attenuate",
+                Some(parent.as_str().to_string()),
+                None,
+                Some(auth_json),
+                "deny",
+                None,
+            ),
+        }
+        res
+    }
+
+    /// The record-free attenuation core (phase 5b enforcement). Returns the consumed audit seq and
+    /// the result. `attenuate` wraps it to emit an `"attenuate"` record; `delegate` (phase 5e) wraps
+    /// it to emit a single `"delegate"` record — so a delegation is never double-logged. Consumes
+    /// exactly one audit seq in every branch (ruling 5), identical to chunk-1 accounting.
+    pub(crate) fn attenuate_core(
+        &mut self,
+        parent: &GrantId,
+        authority: Authority,
+        holder: Holder,
+        ttl_millis: Option<i64>,
+    ) -> (u64, Result<GrantId, Denial>) {
         let now = self.now();
         let parent_node = match self.nodes.get(parent) {
             Some(n) => n,
             None => {
-                self.take_seq(); // the deny still consumes a seq
-                return Err(Denial::UnknownNode { node: parent.clone() });
+                let seq = self.take_seq(); // the deny still consumes a seq
+                return (seq, Err(Denial::UnknownNode { node: parent.clone() }));
             }
         };
         // Fail closed: no child may be born under a dead parent.
         match effective_state(parent_node, now) {
             EffState::Revoked { by_seq } => {
-                self.take_seq();
-                return Err(Denial::Revoked { node: parent.clone(), by_seq });
+                let seq = self.take_seq();
+                return (seq, Err(Denial::Revoked { node: parent.clone(), by_seq }));
             }
             EffState::Expired { ttl_millis, now_millis } => {
-                self.take_seq();
-                return Err(Denial::Expired { node: parent.clone(), ttl_millis, now_millis });
+                let seq = self.take_seq();
+                return (seq, Err(Denial::Expired { node: parent.clone(), ttl_millis, now_millis }));
             }
             EffState::Live => {}
         }
         // The ⊑ check — the mathematical heart (phase 5a).
         if let Err(intersection) = attenuation_check(&authority, &parent_node.authority) {
-            self.take_seq();
-            return Err(Denial::Attenuation {
-                holder: parent.clone(),
-                requested: Box::new(authority),
-                intersection: Box::new(intersection),
-            });
+            let seq = self.take_seq();
+            return (
+                seq,
+                Err(Denial::Attenuation {
+                    holder: parent.clone(),
+                    requested: Box::new(authority),
+                    intersection: Box::new(intersection),
+                }),
+            );
         }
         let id = self.ids.next_id();
         let seq = self.take_seq();
@@ -229,7 +326,7 @@ impl Broker {
             audit_seq: seq,
         };
         self.nodes.insert(id.clone(), node);
-        Ok(id)
+        (seq, Ok(id))
     }
 
     /// Revoke `target` on behalf of `caller` (spec §3.2). Allowed only if `target` is the caller's
@@ -237,17 +334,35 @@ impl Broker {
     /// subtree; idempotent; bumps the epoch and consumes one audit seq, stamping `revoked_by_seq`
     /// on every node it transitions.
     pub fn revoke(&mut self, caller: &GrantId, target: &GrantId) -> Result<RevokeOutcome, Denial> {
+        let (seq, res) = self.revoke_core(caller, target);
+        let decision = if res.is_ok() { "allow" } else { "deny" };
+        self.record_op(
+            seq,
+            "revoke",
+            Some(caller.as_str().to_string()),
+            Some(target.as_str().to_string()),
+            None,
+            decision,
+            None,
+        );
+        res
+    }
+
+    /// The record-free revocation core (phase 5b enforcement). Returns the consumed audit seq and the
+    /// outcome; `revoke` wraps it to emit one `"revoke"` record. Consumes exactly one audit seq per
+    /// call in every branch (ruling 5), identical to chunk-1 accounting.
+    fn revoke_core(&mut self, caller: &GrantId, target: &GrantId) -> (u64, Result<RevokeOutcome, Denial>) {
         if !self.nodes.contains_key(caller) {
-            self.take_seq();
-            return Err(Denial::UnknownNode { node: caller.clone() });
+            let seq = self.take_seq();
+            return (seq, Err(Denial::UnknownNode { node: caller.clone() }));
         }
         if !self.nodes.contains_key(target) {
-            self.take_seq();
-            return Err(Denial::UnknownNode { node: target.clone() });
+            let seq = self.take_seq();
+            return (seq, Err(Denial::UnknownNode { node: target.clone() }));
         }
         if !self.is_self_or_descendant(target, caller) {
-            self.take_seq();
-            return Err(Denial::NotRevocable { caller: caller.clone(), target: target.clone() });
+            let seq = self.take_seq();
+            return (seq, Err(Denial::NotRevocable { caller: caller.clone(), target: target.clone() }));
         }
         let seq = self.take_seq();
         self.epoch += 1;
@@ -262,7 +377,7 @@ impl Broker {
             }
         }
         newly_revoked.sort();
-        Ok(RevokeOutcome { by_seq: seq, newly_revoked, epoch: self.epoch })
+        (seq, Ok(RevokeOutcome { by_seq: seq, newly_revoked, epoch: self.epoch }))
     }
 
     /// Inspect a node by id (spec §3.2 `inspect`).

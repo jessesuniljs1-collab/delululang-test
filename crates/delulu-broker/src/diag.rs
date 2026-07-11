@@ -45,6 +45,11 @@ pub enum Denial {
     /// DL0904 — an operation named a grant id that does not exist in the tree (fail-closed: an
     /// unknown lease confers no authority).
     UnknownNode { node: GrantId },
+    /// DL1405 — the append-only audit chain failed verification at `seq` (a recomputed hash or a
+    /// cross-record `prev_hash` linkage did not match). `requires_human: true` (spec §8): the log
+    /// is observability, not enforcement — a break signals possible tampering, never a policy
+    /// decision. `detail` states what mismatched (hash vs prev-link).
+    AuditChainBroken { seq: u64, detail: String },
 }
 
 impl Denial {
@@ -57,13 +62,17 @@ impl Denial {
             Denial::OutOfScope { .. }
             | Denial::NotRevocable { .. }
             | Denial::UnknownNode { .. } => "DL0904",
+            Denial::AuditChainBroken { .. } => "DL1405",
         }
     }
 
-    /// Whether resolving this denial requires a human decision (spec §8: DL1402/DL1403 are
+    /// Whether resolving this denial requires a human decision (spec §8: DL1402/DL1403/DL1405 are
     /// `requires_human: true`; the attenuation and scope denials are mechanically resolvable).
     pub fn requires_human(&self) -> bool {
-        matches!(self, Denial::Expired { .. } | Denial::Revoked { .. })
+        matches!(
+            self,
+            Denial::Expired { .. } | Denial::Revoked { .. } | Denial::AuditChainBroken { .. }
+        )
     }
 
     /// The never-widening repair target for a DL0802 attenuation denial, else `None`.
@@ -78,6 +87,14 @@ impl Denial {
     pub fn revoking_seq(&self) -> Option<u64> {
         match self {
             Denial::Revoked { by_seq, .. } => Some(*by_seq),
+            _ => None,
+        }
+    }
+
+    /// The failing audit seq for a DL1405 audit-chain-break denial, else `None`.
+    pub fn audit_break_seq(&self) -> Option<u64> {
+        match self {
+            Denial::AuditChainBroken { seq, .. } => Some(*seq),
             _ => None,
         }
     }
@@ -143,6 +160,13 @@ impl Denial {
                 "DL0904",
                 format!("no such lease `{}` (fail closed)", node.as_str()),
             ),
+            Denial::AuditChainBroken { seq, detail } => Diagnostic::error(
+                "DL1405",
+                format!(
+                    "audit chain verification failed at seq {seq}: {detail} — the log may have been \
+                     tampered with (observability, not enforcement; this detects, it does not prevent)"
+                ),
+            ),
         }
     }
 }
@@ -195,6 +219,17 @@ mod tests {
         let d = Denial::Expired { node: gid("g_x"), ttl_millis: 5000, now_millis: 6000 };
         assert_eq!(d.code(), "DL1402");
         assert!(d.requires_human());
+    }
+
+    #[test]
+    fn audit_chain_break_is_dl1405_and_requires_human() {
+        let d = Denial::AuditChainBroken { seq: 7, detail: "record hash mismatch".into() };
+        assert_eq!(d.code(), "DL1405");
+        assert_eq!(d.audit_break_seq(), Some(7));
+        assert!(d.requires_human(), "DL1405 requires a human (spec §8)");
+        let diag = d.to_diagnostic();
+        assert_eq!(diag.code, "DL1405");
+        assert!(diag.message.contains('7'), "message states the failing seq");
     }
 
     #[test]

@@ -154,7 +154,18 @@ impl Broker {
             Some(v) => v,
             None => {
                 if op.class() == OpClass::Synchronous {
-                    self.consume_seq();
+                    // A synchronous use still consumes one seq and emits one record, even for an
+                    // unknown lease (invariant 26 — the deny is audited).
+                    let seq = self.consume_seq();
+                    self.record_op(
+                        seq,
+                        "use",
+                        Some(node_id.as_str().to_string()),
+                        arg.map(|a| a.to_string()),
+                        None,
+                        "deny",
+                        None,
+                    );
                 }
                 return Decision::Deny(Denial::UnknownNode { node: node_id.clone() });
             }
@@ -163,6 +174,16 @@ impl Broker {
         match op.class() {
             OpClass::Synchronous => {
                 let seq = self.consume_seq(); // one audit record per synchronous use
+                let decision = if result.is_ok() { "allow" } else { "deny" };
+                self.record_op(
+                    seq,
+                    "use",
+                    Some(node_id.as_str().to_string()),
+                    arg.map(|a| a.to_string()),
+                    None,
+                    decision,
+                    None,
+                );
                 match result {
                     Ok(()) => Decision::Allow { audit_seq: Some(seq) },
                     Err(d) => Decision::Deny(d),

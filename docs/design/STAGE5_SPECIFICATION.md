@@ -339,5 +339,47 @@ confidence: Exact }`.
    (chunk 3). Node state serialization emits the *stored* state (live/revoked); TTL expiry is
    time-dependent and evaluated only in the check paths, keeping serialization clock-free/canonical.
 
+CHUNK 2 (phases 5d + 5e) — the hash-chained audit log and MAC-signed lease tokens — still
+transport-free (no sockets, no daemon — chunk 3). One new dependency total: `blake3` (same `"1"`
+requirement as `delulu-check`/`delulu-wasm`, unified at the workspace's 1.8.x), used for BOTH the
+chain hash and the token MAC (`keyed_hash`) — no `hmac`/`sha2` crates. All file paths stay INJECTED
+into the library; only `cli.rs` resolves `~/.delulu/…`. Chunk-1 API is backward-compatible:
+`Broker::new()`/`with_sources` unchanged; the sink and key are additive builder methods.
+
+**Phase 5d — the append-only hash-chained audit log — is implemented and green (2026-07-11,
+305 → 323 workspace tests, +18).** `src/audit.rs`. Record shape per §7: `{ seq, ts, prev_hash,
+hash, actor_node?, action, target?, authority?, span?, decision }` with
+`hash = blake3(prev_hash ‖ canonical_record)`. Canonicalization is defined precisely in the module
+docs: `canonical_record` is the record's JSON with the `hash` field EXCLUDED, object keys sorted
+lexicographically at every depth (own `canonical_json`, independent of any serde_json
+`preserve_order` feature), absent optionals omitted entirely; `prev_hash` enters the hash as the
+ASCII bytes of its 64-char lowercase-hex string; the first record's `prev_hash` is 64 hex zeros
+(`GENESIS_HASH`). `ts` is epoch millis via the injected `ClockSource` (chunk-1 convention; ISO
+rendering is the display-only `render_ts_utc`). Storage: one `YYYYMMDD.jsonl` per **UTC** day under
+an injected base dir; the FIRST line of every file is a header (no `seq` key, not part of the
+chain) stating **"observability, not enforcement"** verbatim (§7); a new day's first record has
+`prev_hash` = the previous day's last hash (heads cross-linked); reopening recovers the head from
+disk. Wiring: an `AuditSink` trait; `Broker` gains an optional sink (`with_sink`/`set_sink`;
+default none — chunk-1 behavior and tests unchanged). With a sink attached, EXACTLY ONE record per
+issue/attenuate/delegate/revoke/deny and per synchronous-class use — reusing the seq the operation
+already consumed (chunk-1 ruling 5 pays off: records number 1,2,3,… with no renumbering); the
+synchronous-use action is `"use"` with the scope argument as `target`; epoch-class uses emit
+nothing (invariant 26). Two sinks ship: `MemSink` (in-memory, for tests) and the file-backed
+`AuditLog`. Read/verify surface: `verify(dir)` walks day files in order recomputing every hash and
+every cross-record/cross-file `prev_hash` link — any mismatch is **DL1405 at the failing seq**
+(new `Denial::AuditChainBroken { seq, detail }`, `requires_human: true` per §8), and verification
+stops at the FIRST break; `tail(dir, n)`; `query(dir, filter)` with simple filters (node id —
+matches actor or target — action, effect-in-authority). CLI: `delulu audit tail [N] | query
+[--node g_ID] [--action A] [--effect E] | verify`, all taking `[--dir DIR]` (default
+`~/.delulu/audit` via HOME/USERPROFILE — only the CLI knows this path) and `[--json]`; a broken
+chain exits 1 with the DL1405 diagnostic through the standard envelope; I/O problems exit 2 (a
+missing/unreadable dir is never reported as tampering). Sink append failures are logged to stderr
+and swallowed — the log is observability, not enforcement (playbook trap 6): no enforcement logic
+reads it, and a sink failure never changes a decision. Tests: chain + canonicalization units;
+write-N-then-verify; corrupt one byte on disk → DL1405 at the exact seq (lib + CLI forms); daily
+rotation cross-links heads driven by the injected clock (no sleeps; lib + broker-driven forms);
+head recovery on reopen; tail/query filters; broker-with-sink emits exactly one record per op
+including denies, epoch ops emit none, and record seqs are gapless 1..=N.
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

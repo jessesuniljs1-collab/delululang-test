@@ -21,4 +21,7 @@ delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
 delulu-runtime = { path = "../delulu-runtime", default-features = false }
 delulu-wasm = { path = "../delulu-wasm" }
+# Stage 5 chunk 2 (phase 5d): `delulu audit tail|query|verify` reads the hash-chained log files
+# directly — no daemon involved (the daemon is chunk 3).
+delulu-broker = { path = "../delulu-broker" }
 serde_json = { workspace = true }

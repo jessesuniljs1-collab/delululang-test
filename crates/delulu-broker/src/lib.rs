@@ -10,11 +10,13 @@
 //! - [`authority`] — phase 5a: the `⊑` attenuation lattice and the never-widening intersection.
 //! - [`tree`] — phase 5b: the in-memory grant tree (issue/attenuate/revoke/inspect/tree).
 //! - [`validate`] — phase 5c: the synchronous/epoch validation classes + revocation epochs.
+//! - [`audit`] — phase 5d: the append-only, hash-chained audit log (blake3) + `verify`/`tail`/`query`.
 //! - [`diag`] — broker denials and their mapping to `delulu_diag::Diagnostic`.
 //! - [`ids`] / [`time`] — the injectable GrantId source and TTL clock (ruling 3).
 
 mod path;
 
+pub mod audit;
 pub mod authority;
 pub mod diag;
 pub mod ids;
@@ -22,6 +24,10 @@ pub mod time;
 pub mod tree;
 pub mod validate;
 
+pub use audit::{
+    canonical_json, query, render_ts_utc, tail, verify, AuditEntry, AuditError, AuditLog,
+    AuditRecord, AuditSink, MemSink, QueryFilter, VerifiedStats, GENESIS_HASH, OBSERVABILITY_PHRASE,
+};
 pub use authority::{attenuation_check, Authority, Scopes};
 pub use diag::Denial;
 pub use ids::{IdSource, OsIdSource, SeqIdSource};

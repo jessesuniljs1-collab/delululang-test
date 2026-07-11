@@ -1,6 +1,6 @@
 [package]
 name = "delulu-broker"
-description = "DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory grant tree, and the two validation classes with revocation epochs. Transport-free — no sockets, no daemon, no runtime wiring."
+description = "DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory grant tree, the two validation classes with revocation epochs, the hash-chained audit log, and MAC-signed lease tokens. Transport-free — no sockets, no daemon, no runtime wiring."
 version.workspace = true
 edition.workspace = true
 
@@ -10,6 +10,9 @@ delulu-diag = { path = "../delulu-diag" }
 delulu-check = { path = "../delulu-check" }
 serde_json = { workspace = true }
 # Ruling 3: OS-backed default GrantId randomness. getrandom 0.3 is already in the workspace dep
-# tree (Cargo.lock), so we reuse it rather than adding `rand`. No blake3/hmac here — those are
-# chunk 2 (the hash-chained audit log + lease-token HMAC).
+# tree (Cargo.lock), so we reuse it rather than adding `rand`.
 getrandom = "0.3"
+# Chunk 2 (phases 5d/5e): blake3 for BOTH the audit chain hash and the lease-token MAC
+# (blake3::keyed_hash — head-chef ruling 1: no hmac/sha2 crates). Same "1" req as
+# delulu-check/delulu-wasm, so Cargo unifies on the one workspace blake3 (1.8.x).
+blake3 = "1"

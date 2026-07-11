@@ -171,6 +171,7 @@ pub fn run(args: &[String]) -> i32 {
         "authority" => cmd_authority(rest),
         "why" => cmd_why(rest),
         "repl" => repl_cmd(rest),
+        "audit" => cmd_audit(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
@@ -202,12 +203,16 @@ fn usage() -> &'static str {
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
+     \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
      \x20 delulu explain   <DLxxxx>\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
      `delulu why <Effect>` explains, at function granularity, why a program can perform an\n\
      effect — the shortest chain of calls from `main` down to the function that performs it.\n\
+     `delulu audit` reads the broker's hash-chained audit log (observability, not enforcement);\n\
+     `verify` recomputes the whole chain and reports DL1405 at the first broken record.\n\
      `delulu build` resolves path dependencies and verifies each dependency's authority against\n\
      its pin (DL1001); `delulu lock` writes delulu.lock and enforces the semver-authority law\n\
      (DL1003 — authority never widens silently across versions)."
@@ -1598,6 +1603,195 @@ impl PyWalk {
             Try { inner, .. } => self.walk_expr(inner),
             Block(b) => self.walk_block(b),
             Lit { .. } | Var { .. } => {}
+        }
+    }
+}
+
+// ----- audit (Stage 5 phase 5d: the hash-chained log's read surface) --------
+//
+// `delulu audit tail|query|verify` reads the broker's log files DIRECTLY — no daemon involved (the
+// daemon is chunk 3). The log is observability, not enforcement (spec §7): nothing here feeds any
+// authority decision. Revocation latency honesty (spec §4.2): records observe that revocations take
+// effect synchronously before the next use / within one epoch interval — never "immediately".
+
+/// Default log dir: `~/.delulu/audit` (HOME, else USERPROFILE on Windows). Only the CLI knows this
+/// path — the `delulu-broker` library takes injected paths only.
+fn default_audit_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(std::path::PathBuf::from(home).join(".delulu").join("audit"))
+}
+
+/// One human line per record: seq, UTC time (display-only ISO render of the stored epoch millis),
+/// action, decision, then whichever of actor/target the record carries.
+fn render_audit_record(r: &delulu_broker::AuditRecord) -> String {
+    let mut s = format!(
+        "seq {:>5}  {}  {:<10} {:<5}",
+        r.seq,
+        delulu_broker::render_ts_utc(r.ts),
+        r.action,
+        r.decision
+    );
+    if let Some(a) = &r.actor_node {
+        s.push_str(&format!("  actor={a}"));
+    }
+    if let Some(t) = &r.target {
+        s.push_str(&format!("  target={t}"));
+    }
+    s
+}
+
+fn audit_record_json(r: &delulu_broker::AuditRecord) -> Json {
+    let mut m = serde_json::Map::new();
+    m.insert("seq".into(), json!(r.seq));
+    m.insert("ts".into(), json!(r.ts));
+    m.insert("prev_hash".into(), json!(r.prev_hash));
+    m.insert("hash".into(), json!(r.hash));
+    if let Some(a) = &r.actor_node {
+        m.insert("actor_node".into(), json!(a));
+    }
+    m.insert("action".into(), json!(r.action));
+    if let Some(t) = &r.target {
+        m.insert("target".into(), json!(t));
+    }
+    if let Some(a) = &r.authority {
+        m.insert("authority".into(), a.clone());
+    }
+    if let Some(s) = &r.span {
+        m.insert("span".into(), json!(s));
+    }
+    m.insert("decision".into(), json!(r.decision));
+    Json::Object(m)
+}
+
+fn cmd_audit(rest: &[String]) -> i32 {
+    let Some(sub) = rest.first().map(String::as_str) else {
+        eprintln!("error: `audit` needs a subcommand: tail [N] | query [--node g_ID] [--action A] [--effect E] | verify");
+        return 2;
+    };
+    let args = &rest[1..];
+
+    // The audit flag set (own small parser, like `why` peels its own positional).
+    let mut json = false;
+    let mut dir_flag: Option<String> = None;
+    let mut filter = delulu_broker::QueryFilter::default();
+    let mut tail_n: usize = 10;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => json = true,
+            "--dir" => {
+                if i + 1 < args.len() {
+                    dir_flag = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--dir=") => dir_flag = Some(s["--dir=".len()..].to_string()),
+            "--node" => {
+                if i + 1 < args.len() {
+                    filter.node = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--node=") => filter.node = Some(s["--node=".len()..].to_string()),
+            "--action" => {
+                if i + 1 < args.len() {
+                    filter.action = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--action=") => filter.action = Some(s["--action=".len()..].to_string()),
+            "--effect" => {
+                if i + 1 < args.len() {
+                    filter.effect = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--effect=") => filter.effect = Some(s["--effect=".len()..].to_string()),
+            s if !s.starts_with('-') && s.chars().all(|c| c.is_ascii_digit()) => {
+                tail_n = s.parse().unwrap_or(10);
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let dir = match dir_flag.map(std::path::PathBuf::from).or_else(default_audit_dir) {
+        Some(d) => d,
+        None => {
+            eprintln!("error: cannot resolve the audit directory (no HOME/USERPROFILE) — pass --dir DIR");
+            return 2;
+        }
+    };
+    let map = SourceMap::new(); // audit records carry no source text; diagnostics have no span
+
+    match sub {
+        "tail" | "query" => {
+            let result = if sub == "tail" {
+                delulu_broker::tail(&dir, tail_n)
+            } else {
+                delulu_broker::query(&dir, &filter)
+            };
+            let records = match result {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: cannot read audit log at `{}`: {e}", dir.display());
+                    return 2;
+                }
+            };
+            if json {
+                let arr: Vec<Json> = records.iter().map(audit_record_json).collect();
+                let report = json!({ "command": "audit", "subcommand": sub, "records": arr, "count": records.len() });
+                println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
+            } else {
+                if records.is_empty() {
+                    eprintln!("(no matching audit records under `{}`)", dir.display());
+                }
+                for r in &records {
+                    println!("{}", render_audit_record(r));
+                }
+            }
+            0
+        }
+        "verify" => match delulu_broker::verify(&dir) {
+            Ok(stats) => {
+                if json {
+                    let report = json!({
+                        "command": "audit",
+                        "subcommand": "verify",
+                        "ok": true,
+                        "files": stats.files,
+                        "records": stats.records,
+                        "head": stats.head,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
+                } else {
+                    eprintln!(
+                        "ok: audit chain verified — {} record(s) across {} file(s), head {}",
+                        stats.records,
+                        stats.files,
+                        &stats.head[..16.min(stats.head.len())]
+                    );
+                }
+                0
+            }
+            Err(e) => {
+                // A broken chain is DL1405 at the failing seq (requires_human, spec §8); an I/O
+                // problem is a plain CLI error (exit 2), not a tamper verdict.
+                match e.denial() {
+                    Some(d) => {
+                        print_diagnostics("audit", &[d.to_diagnostic()], &map, None, json);
+                        1
+                    }
+                    None => {
+                        eprintln!("error: cannot verify audit log at `{}`: {e}", dir.display());
+                        2
+                    }
+                }
+            }
+        },
+        other => {
+            eprintln!("error: unknown audit subcommand `{other}` (tail | query | verify)");
+            2
         }
     }
 }
