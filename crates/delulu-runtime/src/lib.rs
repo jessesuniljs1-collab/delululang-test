@@ -3,6 +3,7 @@
 //! (invariant 7), independently of the compile-time authority proof.
 
 pub mod broker;
+pub mod custody;
 pub mod foreign;
 pub mod interp;
 pub mod prim;
@@ -11,6 +12,7 @@ pub mod trace;
 pub mod value;
 
 pub use broker::{parse_manifest, Grants, Manifest};
+pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Op};
 pub use interp::Interp;
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};
@@ -166,6 +168,117 @@ mod tests {
         assert_eq!(records[0].op, "int");
         assert_eq!(records[1].effect, "Clock");
         assert_eq!(records[1].op, "now_ms");
+    }
+
+    // ----- Stage 5 phase 5f/5g: the custody seam (daemon mode via a fake custody) ----------------
+
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    /// A fake daemon custody for unit tests: optionally denies every `check`, serves `expose` from
+    /// an in-memory map, and records every expose call (name + span) for assertions. No transport,
+    /// no daemon — this exercises the SEAM, not the wire (the wire is tested in the CLI crate).
+    struct FakeCustody {
+        deny: Option<(&'static str, String)>,
+        secrets: HashMap<String, String>,
+        exposed: Rc<RefCell<Vec<(String, Option<String>)>>>,
+    }
+
+    impl Custody for FakeCustody {
+        fn check(&mut self, _op: Op, _arg: Option<&str>) -> CustodyDecision {
+            match &self.deny {
+                Some((code, msg)) => CustodyDecision::Deny(CustodyDenial::new(code, msg.clone())),
+                None => CustodyDecision::Allow,
+            }
+        }
+        fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial> {
+            self.exposed.borrow_mut().push((name.to_string(), span.map(str::to_string)));
+            self.secrets
+                .get(name)
+                .cloned()
+                .ok_or_else(|| CustodyDenial::new("DL0904", format!("secret `{name}` not held")))
+        }
+        fn refresh_epoch(&mut self) {}
+        fn mode(&self) -> &'static str {
+            "daemon"
+        }
+    }
+
+    /// Criterion 6 (strengthened): a daemon-mode secret HANDLE carries no byte content at all —
+    /// the program-process cap cache holds only the name; `reveal` yields nothing; two handles
+    /// never verify equal (bytes are not here to compare).
+    #[test]
+    fn daemon_secret_handle_holds_no_bytes() {
+        let h = value::SecretVal::handle("API_KEY");
+        assert_eq!(h.handle_name(), Some("API_KEY"));
+        assert_eq!(h.reveal(), "", "a handle has NO in-process bytes pre-expose (invariant 23)");
+        let h2 = value::SecretVal::handle("API_KEY");
+        assert!(!h.verify(&h2), "handles carry no bytes, so verify is false (broker-side verify is post-chunk-3)");
+    }
+
+    /// Phase 5g end-to-end at the seam: `root.secret(name)` under `broker_secrets` yields a handle,
+    /// and `expose` routes through `Custody::expose` — the bytes enter the program process ONLY
+    /// there, and the call carries the source span (audited daemon-side).
+    #[test]
+    fn daemon_mode_expose_routes_through_custody_with_span() {
+        let src = "module m\nfn main(root: Root) ! {Declassify, Write} { let s = root.secret(\"K\")\n let d = root.declassify()\n let v = s.expose(d)\n let c = root.console()\n c.println(v) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let exposed = Rc::new(RefCell::new(Vec::new()));
+        let custody = FakeCustody {
+            deny: None,
+            secrets: [("K".to_string(), "swordfish".to_string())].into_iter().collect(),
+            exposed: Rc::clone(&exposed),
+        };
+
+        let mut g = Grants::default();
+        g.console = true;
+        g.declassify = true;
+        let mut root = g.build_root();
+        root.broker_secrets = vec!["K".to_string()]; // daemon mode: handles, not bytes
+        assert!(root.secrets.is_empty(), "no local secret bytes in daemon mode");
+
+        set_capture(true);
+        let interp = Interp::new(&checked.module).with_custody(Box::new(custody));
+        let out = interp.run_main(Value::Root(Rc::new(root)));
+        let printed = take_capture();
+        assert!(out.is_ok(), "{:?}", out.err());
+        assert_eq!(printed.as_deref(), Some("swordfish\n"), "the exposed bytes reached the program only via custody");
+
+        let calls = exposed.borrow();
+        assert_eq!(calls.len(), 1, "exactly one expose round-trip");
+        assert_eq!(calls[0].0, "K");
+        let span = calls[0].1.as_deref().expect("expose carries the calling span");
+        assert!(span.contains(':'), "span is file:start:end shaped: {span}");
+    }
+
+    /// Phase 5f: a custody denial faults the effectful op with the BROKER'S code (here DL1403 with
+    /// the revoking seq in the message) — the interpreter surfaces it as a clean Fault, and the
+    /// denied effect is never performed.
+    #[test]
+    fn custody_denial_faults_the_op_with_the_brokers_code() {
+        let src = "module m\nfn main(root: Root) ! {Write} { let c = root.console()\n c.println(\"never\") }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+
+        let custody = FakeCustody {
+            deny: Some(("DL1403", "lease `g_x` was revoked by audit seq 42".to_string())),
+            secrets: HashMap::new(),
+            exposed: Rc::new(RefCell::new(Vec::new())),
+        };
+        let mut g = Grants::default();
+        g.console = true;
+
+        set_capture(true);
+        let interp = Interp::new(&checked.module).with_custody(Box::new(custody));
+        let out = interp.run_main(Value::Root(Rc::new(g.build_root())));
+        let printed = take_capture();
+        let fault = out.err().expect("denied custody must fault");
+        assert_eq!(fault.code, "DL1403");
+        assert!(fault.message.contains("42"), "the broker's revoking seq travels to the program: {}", fault.message);
+        assert_eq!(printed.unwrap_or_default(), "", "the denied effect was never performed");
     }
 
     #[test]

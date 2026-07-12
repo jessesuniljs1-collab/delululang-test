@@ -66,6 +66,42 @@ impl Op {
         }
     }
 
+    /// The stable wire name for this op (chunk 3 IPC: the `Check`/`use` request carries it as a
+    /// string so the enum encoding is deterministic and version-stable). Round-trips with
+    /// [`Op::from_wire_name`].
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Op::Declassify => "Declassify",
+            Op::FsWrite => "FsWrite",
+            Op::Net => "Net",
+            Op::ForeignBind => "ForeignBind",
+            Op::PluginLoad => "PluginLoad",
+            Op::Actuate => "Actuate",
+            Op::FsRead => "FsRead",
+            Op::Clock => "Clock",
+            Op::Rand => "Rand",
+            Op::Console => "Console",
+        }
+    }
+
+    /// Parse an [`Op`] from its [`Op::wire_name`] (chunk 3 IPC). `None` for an unknown name
+    /// (fail-closed: an unrecognized op is refused by the caller, never silently allowed).
+    pub fn from_wire_name(s: &str) -> Option<Op> {
+        Some(match s {
+            "Declassify" => Op::Declassify,
+            "FsWrite" => Op::FsWrite,
+            "Net" => Op::Net,
+            "ForeignBind" => Op::ForeignBind,
+            "PluginLoad" => Op::PluginLoad,
+            "Actuate" => Op::Actuate,
+            "FsRead" => Op::FsRead,
+            "Clock" => Op::Clock,
+            "Rand" => Op::Rand,
+            "Console" => Op::Console,
+            _ => return None,
+        })
+    }
+
     /// The scope dimension label this op's argument is checked against (for diagnostics).
     fn scope_dimension(self) -> &'static str {
         match self {
@@ -222,6 +258,19 @@ struct SnapNode {
 }
 
 impl Snapshot {
+    /// Rebuild a snapshot from explicit `(id, effective-state, authority)` entries and an epoch
+    /// (chunk 3 IPC: the client caches its node's authority — known from its own `issue` — and
+    /// refreshes only the effective state + epoch from the daemon every `--epoch-ms`, then validates
+    /// epoch-class ops against THIS reconstructed snapshot). It calls the exact same [`validate`]
+    /// path the live broker uses, so the client duplicates no policy logic (playbook §1).
+    pub fn from_entries(epoch: u64, entries: Vec<(GrantId, EffState, Authority)>) -> Snapshot {
+        let nodes = entries
+            .into_iter()
+            .map(|(id, eff, authority)| (id, SnapNode { eff, authority }))
+            .collect();
+        Snapshot { epoch, nodes }
+    }
+
     /// The revocation epoch this snapshot was taken at (staleness detection).
     pub fn epoch(&self) -> u64 {
         self.epoch

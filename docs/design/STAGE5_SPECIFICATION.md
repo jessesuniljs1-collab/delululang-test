@@ -433,5 +433,77 @@ round-trip.
    kind); the same-user TOCTOU window is inside the threat model (§10 — the broker does not defend
    against the same OS user).
 
+**Phase 5f — the `Custody` trait + IPC daemon/client — is implemented and green (2026-07-12,
+333 → 354 workspace tests over chunk 3; the daemon lifecycle is the ONE integration test allowed to
+spawn a real process, playbook 5f).** `delulu-runtime::custody` defines the seam
+`Custody { check(op, arg) -> CustodyDecision, expose(name, span), refresh_epoch(), mode() }`;
+BOTH the interpreter and the WASM host call it (playbook §1 — no duplicated policy). `EmbeddedCustody`
+is a pass-through: `check` always allows so the Stage 1–4 in-process `prim.rs` scope checks stay the
+enforcement and the entire prior conformance suite passes UNMODIFIED (criterion 11); labelled
+`custody: embedded`. `delulu::broker_client::BrokerClientCustody` is the daemon-mode impl: synchronous
+ops (`FsWrite`/`Net`/`Declassify`/`ForeignBind`) round-trip per use against live tree state; epoch ops
+(`FsRead`/`Clock`/`Rand`/`Console`) validate against a client-cached `Snapshot` rebuilt from a
+`NodeState` round-trip and refreshed at most every `--epoch-ms` (`clamp_epoch_ms`: default 50, floor 1,
+ceiling 250 — §4.1). **Transport** (`broker_transport`): Windows named pipe
+`\\.\pipe\delulu-broker-<hash>` created with an owner-only DACL (`D:P(A;;GA;;;<SID>)`) plus a
+`GetNamedPipeClientProcessId` + `EqualSid` peer-SID check (same-user only, playbook trap 7); Unix
+domain socket in a `0700` dir (`SO_PEERCRED`/`getpeereid` flagged as post-chunk-3 hardening — the dir
+mode already bounds to the same user). **Wire protocol** (`broker_ipc`): length-prefixed (u32-LE)
+canonical CBOR via `ciborium` (fixed-field structs → deterministic encoding), versioned `broker/1`;
+a mismatched version is answered **DL1406** and never acted on. The daemon (`brokerd`) owns one
+`Broker` + `AuditLog` + `SecretStore` for one OS user, single blocking thread, one request per
+connection; `delulu broker start|status|stop|rotate-key`; a synchronous-class op whose audit record
+cannot be appended is REFUSED (fail-stop on inability to record, invariant 26). **FAIL CLOSED
+(invariant 27, the stage's most dangerous possible bug):** `BrokerClientCustody` has NO embedded path
+to fall back to — an unreachable broker makes every effectful op **DL1401** carrying the exact
+`delulu broker start` command, fast (bounded, never a hang), and `mode()` stays `"daemon"`; the
+epoch-class `refresh_cache` discards the stale snapshot *before* the round-trip, so a dead broker
+cannot keep serving allows. The integration test proves it end-to-end through the real binary: a
+daemon-mode run performs a granted write, `broker stop`, then the SAME run fails DL1401 and the
+sentinel file stays absent (executable proof there was no silent embedded fallback), while an embedded
+run still works (criterion 11). WASM host: a broker denial inside a host callback is RECORDED in
+`HostState.refused` and surfaced after the call — **never an `Err` across the wasm frame** (playbook
+trap 5, carried from Stage 3/4).
+
+**Phase 5g — broker-held secrets; `expose` synchronous through the broker — is implemented and green
+(2026-07-12).** `delulu-broker::SecretStore` (`src/secrets.rs`) holds secret bytes broker-side, loaded
+at daemon startup from `<state>/secrets.json` (`delulu secrets set NAME VALUE` writes it — a daemon
+started after the write picks it up on restart, v0.5). `Broker::expose(node, name, store, span)` is a
+synchronous-class declassification: bytes cross into the program process ONLY here, audited with the
+calling span; a node without `Declassify` + the secret in its `secrets` scope is refused (bytes never
+cross for it). `Broker::secret_map(node, name, op, arg, store)` runs the whitelist map ops broker-side
+and returns a handle to the derivative (which then exposes for the authorized node). In daemon mode
+the Stage-3 WASM host secret table becomes a client-side cache of broker HANDLES — so "secrets never
+enter the guest" (DL1205) composes with "bytes cross only on expose": neither the guest nor the
+host-process cap cache holds bytes pre-`expose` (criterion 6, stronger than Stage 3's scan). The
+integration test exposes a broker-resident secret through the daemon, confirms the bytes arrive only
+via `expose`, that the audit record carries the calling span, and that a non-`Declassify` node is
+denied.
+
+**Chunk-3 deviations / decisions flagged for head-chef review (all resolved live by the head chef):**
+1. **Three transport/daemon bugs were found by head-chef live verification and fixed** (the in-process
+   unit tests could not surface them; only the real-binary integration test did): (a) a **named-pipe
+   reconnect race** — the single-instance server re-creates its pipe between requests, so a client
+   reconnecting in that sub-millisecond gap got `ERROR_FILE_NOT_FOUND`; `connect` now retries that
+   error within a short bounded window (a genuinely-down daemon still fails closed fast). (b) The
+   detached daemon **inherited the launching process's stdio pipe handles** (Rust spawns with
+   `bInheritHandles = TRUE`), so a caller capturing output (`Command::output()`, a shell pipe, CI)
+   hung forever waiting for an EOF the long-lived daemon held open; fixed by clearing
+   `HANDLE_FLAG_INHERIT` on the parent's std handles before the detached spawn, and redirecting the
+   daemon's own stdio to `<state>/broker.log`. (c) The detached daemon **inherited and locked the
+   caller's working directory**; fixed by giving the daemon a stable cwd (its state dir). All three
+   are real-world defects, not test artifacts.
+2. **The custody label in the `authority` report** is carried in the JSON always (criterion 11:
+   "custody label present in reports") but the HUMAN render prints it only when custody is non-default
+   (`daemon`), so the default embedded report stays byte-identical to Stages 1–4 — matching how the
+   `run` path gates its human custody line. (Criterion 11's two halves — "no regression" and "label
+   present in reports" — are both honored this way.)
+3. **`--epoch-ms` is clamped to [1, 250] with default 50**; a value above the ceiling would stretch
+   the honest §4.2 revocation-latency window beyond what the spec states, so it is capped rather than
+   trusted.
+4. **`delulu secrets set` writes the store directly and the daemon reads it at startup** (no live
+   reload). Live reload / a richer `secrets list|rm` surface is chunk-5 CLI polish; the minimal
+   set-then-restart path is enough to prove the 5g semantics.
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

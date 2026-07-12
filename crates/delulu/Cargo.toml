@@ -22,6 +22,25 @@ delulu-check = { path = "../delulu-check" }
 delulu-runtime = { path = "../delulu-runtime", default-features = false }
 delulu-wasm = { path = "../delulu-wasm" }
 # Stage 5 chunk 2 (phase 5d): `delulu audit tail|query|verify` reads the hash-chained log files
-# directly — no daemon involved (the daemon is chunk 3).
+# directly. Chunk 3 (phases 5f/5g): the daemon owns a `Broker` + `AuditLog` + secret store; the
+# client speaks IPC to it.
 delulu-broker = { path = "../delulu-broker" }
 serde_json = { workspace = true }
+serde = { workspace = true }
+# Chunk 3 wire protocol (head-chef ruling 2): length-prefixed canonical CBOR frames. ciborium is
+# pure-Rust and serde-based, so the fixed-field request/response structs encode deterministically.
+ciborium = "0.2"
+
+# Windows named-pipe transport + peer identity (phase 5f). windows-sys is already in the workspace
+# dep tree via wasmtime; we reuse it rather than adding winapi.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Pipes",
+    "Win32_System_Console",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+    "Win32_System_IO",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+] }

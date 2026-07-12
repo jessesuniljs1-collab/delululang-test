@@ -203,6 +203,8 @@ impl Grants {
             // per-lib/per-import authority decision is enforced separately (spec §4.1/§5.1).
             foreign_load: !self.foreign_c.is_empty() || !self.foreign_python.is_empty(),
             python_allowlist: self.foreign_python.clone(),
+            // Embedded mode: secrets carry their bytes in `secrets` (above); no broker handles.
+            broker_secrets: Vec::new(),
         }
     }
 

@@ -6,6 +6,7 @@
 //! exported linear memory. The guest never receives an OS handle — capabilities are opaque i32
 //! handles into the host's cap table (§4).
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
@@ -15,7 +16,14 @@ use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, Val};
 // Stage 4 phase 4g: the WASM host reuses the interpreter's C FFI machinery and its trace types, so
 // verify≡run stays one code path (spec §4.3 — all of §4.1–4.2 runs host-side).
 use delulu_runtime::foreign::{self, FVal, ForeignErr, ForeignHandle, ForeignSig};
+// Stage 5 phase 5f: the WASM host calls the SAME `Custody` seam the interpreter does (playbook §1 —
+// "the interpreter and the WASM host both call the trait"). `None` = embedded (Stage 1–4 behavior).
+use delulu_runtime::{Custody, CustodyDecision, Op as CustodyOp};
 use delulu_runtime::{TraceRecord, TraceSink};
+
+/// The custody handle shared between `HostConfig` and `HostState`: interior-mutable because custody
+/// `check` refreshes the epoch cache, `Rc` because the config is `Clone`.
+pub type CustodyHandle = Rc<RefCell<Box<dyn Custody>>>;
 
 /// Lexically normalize a path (resolve `.`/`..` without touching the filesystem) — the EXACT
 /// algorithm the interpreter uses (`prim.rs::normalize`), so scope checks agree across engines.
@@ -131,12 +139,31 @@ struct HostState {
     trace: Option<TraceSink>,
     /// Monotonic trace sequence counter (matches the interpreter's `next_trace_seq`).
     trace_seq: u64,
+    /// Stage 5 phase 5f: where authority lives. `None` = embedded (the in-process checks above stay
+    /// the enforcement, zero behavior change — criterion 11); `Some` routes every gated op through
+    /// the custody seam (daemon mode: broker round-trips / epoch snapshot).
+    custody: Option<CustodyHandle>,
 }
 
 impl HostState {
     /// The effective foreign-return ceiling (0 in config means "use the default").
     fn max_ret(&self) -> usize {
         if self.foreign_max_ret == 0 { foreign::DEFAULT_MAX_RET } else { self.foreign_max_ret }
+    }
+
+    /// Consult custody for one gated op (Stage 5 phase 5f). On `Deny` the refusal is RECORDED in
+    /// `refused` and `false` returned — **never an `Err` across the wasm frame** (playbook trap 5,
+    /// carried from Stage 3/4): the runner surfaces the refusal cleanly after the call, exactly
+    /// like the Stage-3 console/fs refusals. `None` custody (embedded) always allows.
+    fn custody_allows(&mut self, op: CustodyOp, arg: Option<&str>) -> bool {
+        let Some(custody) = &self.custody else { return true };
+        match custody.borrow_mut().check(op, arg) {
+            CustodyDecision::Allow => true,
+            CustodyDecision::Deny(d) => {
+                self.refused = Some(format!("{}: {}", d.code, d.message));
+                false
+            }
+        }
     }
 
     /// Append one effect `TraceRecord` (no-op without a sink). `seq`/fields mirror the interpreter's
@@ -390,6 +417,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Console capability"));
                 return;
             }
+            // Custody gate (Stage 5 phase 5f, epoch class). A denial is recorded, never an Err (trap 5).
+            if !caller.data_mut().custody_allows(CustodyOp::Console, None) {
+                return;
+            }
             let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) else {
                 caller.data_mut().refused = Some("guest exports no `memory`".into());
                 return;
@@ -454,6 +485,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Clock capability"));
                 return 0;
             }
+            // Custody gate (Stage 5 phase 5f, epoch class). Recorded refusal, never an Err (trap 5).
+            if !caller.data_mut().custody_allows(CustodyOp::Clock, None) {
+                return 0;
+            }
             caller.data_mut().push_trace("Clock", "now_ms", "Clock", None, file, start, end);
             // The clock read happens host-side: fixed for deterministic replay, else the wall clock —
             // the same source the interpreter uses, so a fixed clock gives byte-identical output.
@@ -487,6 +522,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             let ok = caller.data().caps.get(cap as usize).map(|c| matches!(c, CapKind::Rand)).unwrap_or(false);
             if !ok {
                 caller.data_mut().refused = Some(format!("DL0904: handle {cap} is not a granted Rand capability"));
+                return 0;
+            }
+            // Custody gate (Stage 5 phase 5f, epoch class). Recorded refusal, never an Err (trap 5).
+            if !caller.data_mut().custody_allows(CustodyOp::Rand, None) {
                 return 0;
             }
             caller.data_mut().push_trace("Rand", "int", "Rand", None, file, start, end);
@@ -555,6 +594,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
                 return 0;
             }
+            // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
+            // the broker node's fs scope was granted against. Recorded refusal, never an Err (trap 5).
+            let resolved_str = resolved.to_string_lossy().to_string();
+            if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
+                return 0;
+            }
             // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
             // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
             let built = match std::fs::read_to_string(&resolved) {
@@ -617,6 +662,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: foreign lib name pointer is out of bounds".into());
                 return 0;
             };
+            // Custody gate (Stage 5 phase 5f, SYNCHRONOUS class): a broker round-trip authorizes the
+            // bind BEFORE any native code loads. The denial is recorded in HostState and surfaced
+            // after the call — NEVER an Err returned from inside this callback (playbook trap 5).
+            if !caller.data_mut().custody_allows(CustodyOp::ForeignBind, Some(&name)) {
+                return 0;
+            }
             // Mirror the interpreter's `bind_foreign` exactly: no grant → Err(NotGranted) (DL1303's
             // runtime face, defense-in-depth behind the CLI grant pre-flight); else load + resolve.
             let path = caller.data().foreign_grants.get(&name).cloned();
@@ -754,6 +805,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         foreign_ptrs: Vec::new(),
         trace: None,
         trace_seq: 0,
+        custody: None, // embedded (Stage 1–4 behavior)
     };
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
@@ -790,6 +842,9 @@ pub struct HostConfig {
     /// `Some` records one `TraceRecord` per effectful op host-side (`--engine wasm --trace-effects`),
     /// so the trace is byte-identical to the interpreter's (criterion 6).
     pub trace: Option<TraceSink>,
+    /// Stage 5 phase 5f: `Some` routes gated ops through the custody seam (daemon mode). `None` =
+    /// embedded, byte-identical Stage 1–4 behavior (criterion 11).
+    pub custody: Option<CustodyHandle>,
 }
 
 /// Run `main(root: Root)` under Wasmtime with the given grants/determinism. The root handle (index 0)
@@ -815,6 +870,7 @@ pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
         foreign_ptrs: Vec::new(),
         trace: cfg.trace.clone(),
         trace_seq: 0,
+        custody: cfg.custody.clone(),
     };
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;

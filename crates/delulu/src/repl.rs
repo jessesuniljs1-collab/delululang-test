@@ -132,6 +132,8 @@ fn full_root(grants: &Grants) -> RootVal {
         secrets: grants.secrets.clone(),
         foreign_load: !grants.foreign_c.is_empty() || !grants.foreign_python.is_empty(),
         python_allowlist: grants.foreign_python.clone(),
+        // The REPL is embedded custody only (no daemon): no broker-held secret handles.
+        broker_secrets: Vec::new(),
     }
 }
 

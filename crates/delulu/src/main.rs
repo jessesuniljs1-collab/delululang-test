@@ -3,6 +3,10 @@
 //! (Constitution §8.4). Exit codes are part of the stable contract: 0 ok / 1 diagnostics /
 //! 2 internal.
 
+mod broker_client;
+mod broker_ipc;
+mod broker_transport;
+mod brokerd;
 mod cli;
 mod repl;
 

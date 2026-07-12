@@ -17,6 +17,13 @@ pub fn granted_root(rel: &str) -> PathBuf {
     normalize(&std::env::current_dir().unwrap_or_default().join(rel))
 }
 
+/// Resolve `rel` inside `root` with the SAME lexical `.`/`..` normalization the interpreter and the
+/// broker use — no filesystem access (Stage 5 phase 5f). Public so the custody gate can present the
+/// broker the exact resolved-path string its node's fs scope was granted against.
+pub fn resolve_norm(root: &Path, rel: &str) -> PathBuf {
+    normalize(&root.join(rel))
+}
+
 /// Lexically normalize a path, resolving `.` and `..` without touching the filesystem.
 fn normalize(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
@@ -115,6 +122,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         }
         "secret" => {
             let name = str_arg(args, 0, span)?;
+            // Daemon mode (Stage 5 phase 5g): a broker-held secret returns an opaque HANDLE — no
+            // bytes cross into this process here (invariant 23); `expose` fetches them later.
+            if root.broker_secrets.iter().any(|n| n == &name) {
+                return Ok(Value::Secret(Rc::new(SecretVal::handle(name))));
+            }
             match root.secrets.get(&name) {
                 Some(v) => Ok(Value::Secret(Rc::new(SecretVal::new(v.clone())))),
                 None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted"), span)),

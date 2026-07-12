@@ -2,17 +2,18 @@
 //! well-typedness and focuses on faithful evaluation and host-side capability enforcement.
 //! Runtime failures are defined faults (DL09xx) that abort cleanly — never UB.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use delulu_check::ResourceKind;
 use delulu_syntax::ast::*;
 
+use crate::custody::{Custody, CustodyDecision, EmbeddedCustody, Op as CustodyOp};
 use crate::foreign::{self, FKind, FVal, ForeignHandle, ForeignSig};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
-use crate::value::{CapVal, Closure, Env, Fault, Scope, Value};
+use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
 
 const MAX_DEPTH: u32 = 10_000;
 
@@ -43,6 +44,11 @@ pub struct Interp {
     foreign_binds: HashMap<NodeId, String>,
     foreign_grants: HashMap<String, String>,
     foreign_max_ret: usize,
+    /// Where authority lives (Stage 5 phase 5f). Default: [`EmbeddedCustody`] — a pass-through, so a
+    /// program built with `Interp::new` behaves EXACTLY as in Stages 1–4 (criterion 11). `--broker
+    /// daemon` swaps in a `BrokerClientCustody` (IPC) via [`Interp::with_custody`]. Interior
+    /// mutability because `eval_*` take `&self` and custody `check`/`expose` mutate the epoch cache.
+    custody: RefCell<Box<dyn Custody>>,
 }
 
 impl Interp {
@@ -74,7 +80,16 @@ impl Interp {
             foreign_binds: HashMap::new(),
             foreign_grants: HashMap::new(),
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
+            custody: RefCell::new(Box::new(EmbeddedCustody::new())),
         }
+    }
+
+    /// Route authority decisions through a custom [`Custody`] (Stage 5 phase 5f). The CLI attaches a
+    /// `BrokerClientCustody` here for `--broker daemon`; the default is [`EmbeddedCustody`], so every
+    /// existing entry point is unchanged (criterion 11). Builder style; additive.
+    pub fn with_custody(mut self, custody: Box<dyn Custody>) -> Interp {
+        self.custody = RefCell::new(custody);
+        self
     }
 
     /// Attach the Stage-4 foreign runtime data (builder style): the checker's `root.foreign(load)`
@@ -469,11 +484,25 @@ impl Interp {
             argvals.push(self.eval_expr(a, env)?);
         }
         self.trace_dispatch(&recvv, name, &argvals, span);
+        // Custody gate (Stage 5 phase 5f): authorize the effectful op through the trait BEFORE
+        // performing it. Embedded custody always allows (the in-process `prim` scope check remains the
+        // enforcement — criterion 11); daemon custody round-trips synchronous ops to the broker and
+        // validates epoch ops against the cached snapshot, so a revoked/expired lease faults here
+        // (DL1403/DL1402) and an unreachable broker faults DL1401 (fail closed, invariant 27).
+        if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals) {
+            if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
+                return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
+            }
+        }
         let result = match &recvv {
             // T-ForeignBind (spec §4): binding a lib is handled here, not in `prim`, because it needs
             // the checker's bind-site → lib map, the grant paths, and the native loader.
             Value::Root(_) if name.name == "foreign" => self.bind_foreign(node_id, span),
             Value::Root(r) => prim::call_root_method(r, &name.name, &argvals, span),
+            // `Secret.expose` (Declassify): in daemon mode the receiver is an opaque broker HANDLE and
+            // the bytes cross for the first time here, via `Custody::expose` (audited with the span).
+            // In embedded mode the secret is local and reveals in-process (Stage 1–4 behavior).
+            Value::Secret(s) if name.name == "expose" => self.expose_secret(s, span),
             // T-ForeignCall (spec §4): a method on a bound lib handle marshals + calls foreign code.
             Value::Foreign(h) => self.call_foreign(h, &name.name, &argvals, span),
             // T-Py (spec §5): a `Cap[Python]` operation (import/of_*/list/to_*) runs the embedded
@@ -530,6 +559,11 @@ impl Interp {
         let Some(lib_name) = self.foreign_binds.get(&node_id).cloned() else {
             return Err(Fault::at("DL0907", "foreign bind site with no resolved lib (checker/wiring bug)", span));
         };
+        // Custody gate (Stage 5 phase 5f): `ForeignBind` is synchronous-class — authorize the bind
+        // through the broker (daemon) before loading any native code. Embedded custody always allows.
+        if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(CustodyOp::ForeignBind, Some(&lib_name)) {
+            return Err(Fault::at(d.code, d.message, span));
+        }
         // The path is grant data (spec §4.1). No grant → NotGranted; the CLI normally refuses at
         // startup (criterion 4) so a program that reaches here has already been granted.
         let Some(path) = self.foreign_grants.get(&lib_name).cloned() else {
@@ -614,6 +648,23 @@ impl Interp {
             detail,
             span: Some((span.file, span.start, span.end)),
         });
+    }
+
+    /// `Secret.expose(Cap[Declassify])`. Embedded: reveal the local bytes (Stage 1–4). Daemon: the
+    /// receiver is an opaque broker handle — fetch the bytes through `Custody::expose` (a synchronous
+    /// broker round-trip, audited with the calling span). This is the ONLY place daemon secret bytes
+    /// enter the program process (invariant 23 / spec §4.4).
+    fn expose_secret(&self, s: &Rc<SecretVal>, span: delulu_diag::Span) -> Result<Value, Fault> {
+        match s.handle_name() {
+            Some(name) => {
+                let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+                match self.custody.borrow_mut().expose(name, Some(&span_str)) {
+                    Ok(bytes) => Ok(Value::str(bytes)),
+                    Err(d) => Err(Fault::at(d.code, d.message, span)),
+                }
+            }
+            None => prim::call_secret_method(s, "expose", &[], span),
+        }
     }
 
     fn eval_match(&self, scrutinee: &Expr, arms: &[Arm], span: delulu_diag::Span, env: &Env) -> R<Value> {
@@ -783,6 +834,52 @@ fn trace_detail(cap_kind: &str, method: &str, args: &[Value]) -> Option<String> 
         ("Http", "get") => args.first().map(|v| v.display()),
         _ => None,
     }
+}
+
+/// Map an effectful `(receiver-cap, method)` dispatch to the broker [`CustodyOp`] + scope argument
+/// the custody trait authorizes (Stage 5 phase 5f). Returns `None` for pure/non-effectful calls
+/// (attenuation like `fs.narrow`, `Str`/`List` methods, `Root` minting) — those never gate. The fs
+/// argument is the resolved absolute path (the exact string the daemon node's fs scope was granted
+/// against); the net argument is the URL host.
+fn custody_op_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<(CustodyOp, Option<String>)> {
+    let Value::Cap(c) = recvv else { return None };
+    match (c.kind, method) {
+        (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
+        (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => {
+            Some((CustodyOp::FsRead, fs_scope_arg(&c.scope, argvals)))
+        }
+        (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
+            Some((CustodyOp::FsWrite, fs_scope_arg(&c.scope, argvals)))
+        }
+        (ResourceKind::Http, "get") => {
+            let host = match argvals.first() {
+                Some(Value::Str(s)) => Some(host_of(s)),
+                _ => None,
+            };
+            Some((CustodyOp::Net, host))
+        }
+        (ResourceKind::Clock, "now_ms") => Some((CustodyOp::Clock, None)),
+        (ResourceKind::Rand, "int") | (ResourceKind::Rand, "float") => Some((CustodyOp::Rand, None)),
+        _ => None,
+    }
+}
+
+/// The resolved absolute path a filesystem op reaches (cap-scope root joined with the relative arg,
+/// lexically normalized the SAME way the interpreter and broker normalize — no filesystem access).
+fn fs_scope_arg(scope: &CapScope, argvals: &[Value]) -> Option<String> {
+    let CapScope::Fs { root, .. } = scope else { return None };
+    let rel = match argvals.first() {
+        Some(Value::Str(s)) => s.to_string(),
+        _ => return None,
+    };
+    Some(prim::resolve_norm(root, &rel).to_string_lossy().to_string())
+}
+
+/// Extract the host from an `https://host[:port][/path]` URL, matching `prim::host_allowed`'s parse
+/// so the broker's exact-set `net` check sees the same host string.
+fn host_of(url: &str) -> String {
+    let host = url.strip_prefix("https://").unwrap_or(url);
+    host.split(['/', ':']).next().unwrap_or(host).to_string()
 }
 
 fn unwrap_fault(e: Escape) -> Fault {

@@ -16,7 +16,7 @@ pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
 pub use codegen::{compile_module, compile_module_with, uses_console, CompileError};
-pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, HostConfig, WasmError};
+pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, CustodyHandle, HostConfig, WasmError};
 
 use std::collections::HashMap;
 
@@ -661,5 +661,68 @@ mod tests {
         let wasm = compile_module(&checked.module).expect("compile");
         let err = run_console_fn(&wasm, "greet", &[5]);
         assert!(err.is_err(), "an ungranted capability handle must be refused host-side");
+    }
+
+    // ----- Stage 5 phase 5f: the custody seam in the WASM host (playbook trap 5) -------------
+
+    /// A fake custody that denies everything with a broker code — no daemon, no transport; this
+    /// exercises the host's refusal path only.
+    struct DenyAll;
+    impl delulu_runtime::Custody for DenyAll {
+        fn check(&mut self, _op: delulu_runtime::Op, _arg: Option<&str>) -> delulu_runtime::CustodyDecision {
+            delulu_runtime::CustodyDecision::Deny(delulu_runtime::CustodyDenial::new(
+                "DL1403",
+                "lease `g_x` was revoked by audit seq 42",
+            ))
+        }
+        fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
+            Err(delulu_runtime::CustodyDenial::new("DL1403", "revoked"))
+        }
+        fn refresh_epoch(&mut self) {}
+        fn mode(&self) -> &'static str {
+            "daemon"
+        }
+    }
+    struct AllowAll;
+    impl delulu_runtime::Custody for AllowAll {
+        fn check(&mut self, _op: delulu_runtime::Op, _arg: Option<&str>) -> delulu_runtime::CustodyDecision {
+            delulu_runtime::CustodyDecision::Allow
+        }
+        fn expose(&mut self, _n: &str, _s: Option<&str>) -> Result<String, delulu_runtime::CustodyDenial> {
+            Err(delulu_runtime::CustodyDenial::new("DL0904", "no secrets in this fake"))
+        }
+        fn refresh_epoch(&mut self) {}
+        fn mode(&self) -> &'static str {
+            "daemon"
+        }
+    }
+
+    fn custody_handle(c: impl delulu_runtime::Custody + 'static) -> CustodyHandle {
+        std::rc::Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>))
+    }
+
+    /// Playbook trap 5: a broker denial inside a synchronous/epoch-class WASM op is RECORDED in
+    /// HostState and surfaced after the call as a clean `WasmError` — never an `Err` returned from
+    /// inside a Wasmtime host callback (which would abort), and never a silent success.
+    #[test]
+    fn custody_denial_in_wasm_host_is_recorded_not_thrown() {
+        let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"never\") }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let wasm = compile_module(&checked.module).expect("compile");
+
+        // Denying custody: the run FAILS CLEANLY with the broker's code in the message and the
+        // denied output was never produced.
+        let cfg = HostConfig { console: true, custody: Some(custody_handle(DenyAll)), ..HostConfig::default() };
+        let err = run_main(&wasm, &cfg).expect_err("denied custody must refuse the run");
+        let msg = err.message();
+        assert!(msg.contains("DL1403") && msg.contains("42"), "the broker's code+seq surface cleanly: {msg}");
+
+        // Allowing custody: byte-identical to embedded (criterion 11 shape).
+        let cfg = HostConfig { console: true, custody: Some(custody_handle(AllowAll)), ..HostConfig::default() };
+        assert_eq!(run_main(&wasm, &cfg).expect("allowed run"), "never\n");
+        // And no custody at all (embedded) is unchanged.
+        let cfg = HostConfig { console: true, ..HostConfig::default() };
+        assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
     }
 }

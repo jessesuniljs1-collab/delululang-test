@@ -48,6 +48,13 @@ impl Token {
     pub fn into_string(self) -> String {
         self.0
     }
+
+    /// Reconstruct a token from its wire/display string (chunk 3 IPC `Redeem`, `--lease <token>`).
+    /// No validation happens here — `redeem` verifies the MAC and rejects garbage with DL1407, so a
+    /// malformed string is safe to wrap (fail closed at the check, not the parse).
+    pub fn from_wire(s: impl Into<String>) -> Token {
+        Token(s.into())
+    }
 }
 
 impl std::fmt::Display for Token {

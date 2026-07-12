@@ -27,10 +27,12 @@ impl GrantId {
     }
 
     /// Reconstruct a `GrantId` from a string already vouched for by an authenticated source (phase
-    /// 5e: a node id read out of a token payload *after* its MAC verified). Not a public parse — the
-    /// broker still checks the node actually exists before trusting it (fail-closed).
-    pub(crate) fn from_trusted(s: String) -> GrantId {
-        GrantId(s)
+    /// 5e: a node id read out of a token payload *after* its MAC verified; chunk 3: a node id the
+    /// IPC client received from its own `issue`/`delegate` round-trip). Not a parse of untrusted
+    /// program data — the broker still checks the node actually exists before trusting it
+    /// (fail-closed, ruling 6). The client uses it only to key its own single-node epoch snapshot.
+    pub fn from_trusted(s: impl Into<String>) -> GrantId {
+        GrantId(s.into())
     }
 }
 

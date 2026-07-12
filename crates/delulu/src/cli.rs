@@ -47,6 +47,13 @@ struct Opts {
     /// `--foreign-max-ret <bytes>`: ceiling on a returned foreign string (invariant 21; default
     /// 64 MiB). A return exceeding it is `ForeignErr::BadReturn`, never a truncated silent success.
     foreign_max_ret: Option<usize>,
+    /// `--broker embedded|daemon` (Stage 5 phase 5f): where authority lives for this run. Default
+    /// embedded (Stage 1–4 behavior, byte-identical — criterion 11); `daemon` routes every effectful
+    /// op through the broker daemon (fail closed DL1401 when unreachable, invariant 27).
+    broker: Option<String>,
+    /// `--epoch-ms <N>` (spec §4.1): the epoch-class snapshot refresh interval in daemon mode.
+    /// Clamped to default 50 / ceiling 250 by `broker_client::clamp_epoch_ms`.
+    epoch_ms: Option<u64>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -68,6 +75,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         target: None,
         out: None,
         foreign_max_ret: None,
+        broker: None,
+        epoch_ms: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -142,6 +151,20 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--foreign-max-ret=") => {
                 opts.foreign_max_ret = s["--foreign-max-ret=".len()..].parse().ok();
             }
+            "--broker" => {
+                if i + 1 < rest.len() {
+                    opts.broker = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--broker=") => opts.broker = Some(s["--broker=".len()..].to_string()),
+            "--epoch-ms" => {
+                if i + 1 < rest.len() {
+                    opts.epoch_ms = rest[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--epoch-ms=") => opts.epoch_ms = s["--epoch-ms=".len()..].parse().ok(),
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -172,6 +195,8 @@ pub fn run(args: &[String]) -> i32 {
         "why" => cmd_why(rest),
         "repl" => repl_cmd(rest),
         "audit" => cmd_audit(rest),
+        "broker" => crate::brokerd::cmd_broker(rest),
+        "secrets" => cmd_secrets(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
@@ -199,12 +224,15 @@ fn usage() -> &'static str {
      \x20 delulu run       <file.delulu | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
+     \x20 delulu broker    start [--foreground] | status | stop | rotate-key [--state-dir DIR]\n\
+     \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
      \x20 delulu explain   <DLxxxx>\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
@@ -313,13 +341,23 @@ fn cmd_authority(rest: &[String]) -> i32 {
     let python_allowlist = manifest_python_allowlist(&file);
     scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
     let program = checked.module.name.dotted();
-    let report = authority_report(&program, &checked.result, &scopes);
+    let mut report = authority_report(&program, &checked.result, &scopes);
+    stamp_custody(&mut report, &opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+/// Stamp the custody label on an authority report (Stage 5, playbook 5j): `embedded` unless the
+/// caller passed `--broker daemon`. Additive JSON key; the human render prints it as a line.
+fn stamp_custody(report: &mut Json, opts: &Opts) {
+    let custody = if opts.broker.as_deref() == Some("daemon") { "daemon" } else { "embedded" };
+    if let Some(obj) = report.as_object_mut() {
+        obj.insert("custody".to_string(), json!(custody));
+    }
 }
 
 fn strs(v: &Json) -> Vec<String> {
@@ -357,6 +395,15 @@ fn render_authority(report: &Json) -> String {
     let _ = writeln!(out, "  pure fns:     {}", if pure.is_empty() { "(none)".to_string() } else { pure.join(", ") });
     // Foreign code lives OUTSIDE the effect proof. With none declared, the report is byte-identical
     // to Stage 3 (criterion 7); with foreign blocks, they list under the mandated separator line.
+    // The custody label (Stage 5): where authority lives when this program runs. The JSON report
+    // always carries it (criterion 11: "custody label present in reports"); the HUMAN render shows
+    // it only when custody is non-default (daemon), so the default embedded report stays
+    // byte-identical to Stages 1–4 (criterion 11's no-regression half, matching the run path).
+    if let Some(custody) = report["custody"].as_str() {
+        if custody != "embedded" {
+            let _ = writeln!(out, "  custody:      {custody}");
+        }
+    }
     let foreign = report["foreign_calls"].as_array().cloned().unwrap_or_default();
     if foreign.is_empty() {
         let _ = writeln!(out, "  foreign:      (none — no code outside the guarantee)");
@@ -667,7 +714,8 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
     }
     let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
     let scopes = scopes_in_dir(std::path::Path::new(dir));
-    let report = program_authority(&program, &name, &scopes);
+    let mut report = program_authority(&program, &name, &scopes);
+    stamp_custody(&mut report, opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
     } else {
@@ -1030,17 +1078,128 @@ fn synth_single_program(checked: &Checked) -> Program {
 // ----- run -----------------------------------------------------------------
 
 /// Map a WASM host refusal message to the diagnostic code it carries. The host tags refusals with
-/// their code inline (DL0703 denied root slice, DL0903 out-of-bounds memory access); anything else
-/// is a capability-scope violation (DL0904).
+/// their code inline (DL0703 denied root slice, DL0903 out-of-bounds memory access, DL140x custody
+/// denials from the Stage-5 broker seam); anything else is a capability-scope violation (DL0904).
 fn wasm_fault_code(msg: &str) -> &'static str {
-    if msg.contains("DL0703") {
-        "DL0703"
-    } else if msg.contains("DL0903") {
-        "DL0903"
-    } else if msg.contains("DL1306") {
-        "DL1306"
-    } else {
-        "DL0904"
+    for code in ["DL0703", "DL0903", "DL1306", "DL1401", "DL1402", "DL1403"] {
+        if msg.contains(code) {
+            // The registry stores codes as &'static str; return the matching literal.
+            return match code {
+                "DL0703" => "DL0703",
+                "DL0903" => "DL0903",
+                "DL1306" => "DL1306",
+                "DL1401" => "DL1401",
+                "DL1402" => "DL1402",
+                _ => "DL1403",
+            };
+        }
+    }
+    "DL0904"
+}
+
+/// Map this run's grants to the root-node authority the daemon issues (Stage 5 phase 5f: the
+/// `--grant` flags in daemon mode are sugar for issue-then-run at the root, spec §3.2). Paths are
+/// the SAME absolute, lexically-normalized strings the embedded `RootVal` carries, so the broker's
+/// path lattice sees exactly what the runtime resolves against.
+fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_ipc::AuthoritySpec {
+    let root = grants.build_root();
+    let mut effects: BTreeSet<&'static str> = BTreeSet::new();
+    if root.console || !root.fs_write.is_empty() {
+        effects.insert("Write");
+    }
+    if !root.fs_read.is_empty() {
+        effects.insert("Read");
+    }
+    if !root.net.is_empty() {
+        effects.insert("Net");
+    }
+    if root.clock {
+        effects.insert("Clock");
+    }
+    if root.rand {
+        effects.insert("Rand");
+    }
+    if root.declassify {
+        effects.insert("Declassify");
+    }
+    if root.foreign_load {
+        effects.insert("ForeignCall");
+    }
+    let mut secret_names: Vec<String> = grants.secrets.keys().cloned().collect();
+    secret_names.sort();
+    crate::broker_ipc::AuthoritySpec {
+        effects: effects.into_iter().map(str::to_string).collect(),
+        fs_read: root.fs_read.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+        fs_write: root.fs_write.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+        net: root.net.clone(),
+        secrets: secret_names,
+        declassify: Vec::new(),
+        foreign_c: {
+            let mut libs: Vec<String> = grants.foreign_c.keys().cloned().collect();
+            libs.sort();
+            libs
+        },
+        foreign_python: grants.foreign_python.clone(),
+        holder_kind: "process".to_string(),
+        holder_desc: program.to_string(),
+        ttl_millis: None,
+    }
+}
+
+/// `delulu secrets set NAME VALUE | list [--state-dir DIR]` (Stage 5 phase 5g, minimal v0.5 form —
+/// full CLI polish is a later chunk). Writes the broker's secret store directly; a daemon started
+/// AFTER the write sees the secret (the daemon loads the store at startup — restart to pick up new
+/// names; flagged as a v0.5 limitation).
+fn cmd_secrets(rest: &[String]) -> i32 {
+    let Some(sub) = rest.first().map(String::as_str) else {
+        eprintln!("error: `secrets` needs a subcommand: set NAME VALUE | list [--state-dir DIR]");
+        return 2;
+    };
+    let state_flag = rest.iter().position(|a| a == "--state-dir").and_then(|i| rest.get(i + 1)).cloned();
+    let Some(state_dir) = crate::brokerd::resolve_state_dir(state_flag.as_deref()) else {
+        eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE) — pass --state-dir DIR");
+        return 2;
+    };
+    let store = delulu_broker::SecretStore::load(state_dir.join("secrets.json"));
+    match sub {
+        "set" => {
+            // Positionals = everything after `set` minus `--state-dir <DIR>` and other flags.
+            let mut positionals: Vec<&String> = Vec::new();
+            let mut i = 1;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "--state-dir" => i += 1, // skip its value too
+                    s if s.starts_with("--") => {}
+                    _ => positionals.push(&rest[i]),
+                }
+                i += 1;
+            }
+            let (Some(name), Some(value)) = (positionals.first(), positionals.get(1)) else {
+                eprintln!("error: `secrets set` needs NAME and VALUE");
+                return 2;
+            };
+            match store.set(name.as_str(), value.as_str()) {
+                Ok(()) => {
+                    eprintln!("ok: secret `{name}` stored (broker-resident; bytes enter a program only on `expose`)");
+                    eprintln!("note: a running broker daemon loads the store at startup — restart it to pick up new names");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("error: cannot write the secret store: {e}");
+                    2
+                }
+            }
+        }
+        "list" => {
+            for name in store.names() {
+                println!("{name}");
+            }
+            0
+        }
+        other => {
+            eprintln!("error: unknown secrets subcommand `{other}` (set | list)");
+            2
+        }
     }
 }
 
@@ -1163,6 +1322,41 @@ fn cmd_run(rest: &[String]) -> i32 {
         return code;
     }
 
+    // ----- custody selection (Stage 5 phase 5f) ------------------------------------------------
+    // Default: embedded — byte-identical Stage 1–4 behavior (criterion 11). `--broker daemon`
+    // routes every effectful op through the broker daemon: the `--grant` flags become sugar for
+    // issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main`
+    // runs (fail closed, invariant 27 — never a silent fallback to embedded).
+    let daemon_mode = match opts.broker.as_deref() {
+        None | Some("embedded") => false,
+        Some("daemon") => true,
+        Some(other) => {
+            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
+            return 2;
+        }
+    };
+    if opts.broker.is_some() && !opts.json {
+        // The custody label (playbook 5j; printed when custody was explicitly chosen so default
+        // embedded output stays byte-identical to prior stages).
+        eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
+    }
+    let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = None;
+    if daemon_mode {
+        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+            return 2;
+        };
+        let spec = authority_spec_from_grants(&grants, &file);
+        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
+            Ok(c) => daemon_custody = Some(c),
+            Err(d) => {
+                let diag = Diagnostic::error(d.code, d.message);
+                print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
+    }
+
     // WASM engine (spec §5.11 / Stage 3; foreign C FFI in Stage 4 phase 4g): compile `main` to
     // WebAssembly and run it under the deny-by-default Wasmtime host, with capabilities minted and
     // checked host-side and all foreign FFI performed host-side (§4.3). Constructs the backend can't
@@ -1185,6 +1379,12 @@ fn cmd_run(rest: &[String]) -> i32 {
         };
         let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
         let root = grants.build_root();
+        // Stage 5 phase 5f: the WASM host calls the SAME custody seam as the interpreter. A broker
+        // denial inside a host callback is recorded in HostState and surfaced after the call —
+        // never an Err across the wasm frame (playbook trap 5).
+        let wasm_custody: Option<delulu_wasm::CustodyHandle> = daemon_custody
+            .take()
+            .map(|c| Rc::new(std::cell::RefCell::new(Box::new(c) as Box<dyn delulu_runtime::Custody>)));
         let cfg = delulu_wasm::HostConfig {
             console: grants.console,
             clock: grants.clock,
@@ -1197,6 +1397,7 @@ fn cmd_run(rest: &[String]) -> i32 {
             foreign_sigs: delulu_wasm::foreign_sigs(&checked.module),
             foreign_max_ret: max_ret,
             trace: sink.clone(),
+            custody: wasm_custody.clone(), // Stage 5 phase 5f: Some(...) in daemon mode, None embedded
         };
         let run_result = delulu_wasm::run_main(&wasm, &cfg);
 
@@ -1262,13 +1463,27 @@ fn cmd_run(rest: &[String]) -> i32 {
         None
     };
 
-    let root = Value::Root(Rc::new(build_root(&grants)));
+    let mut root_val = build_root(&grants);
+    if daemon_mode {
+        // Phase 5g: in daemon mode the program gets opaque broker-secret HANDLES — the byte values
+        // live in the broker's store, never in this process pre-`expose` (invariant 23). The grant
+        // names select which broker secrets are reachable; any locally-supplied values are DROPPED.
+        let mut names: Vec<String> = root_val.secrets.keys().cloned().collect();
+        names.sort();
+        root_val.broker_secrets = names;
+        root_val.secrets.clear();
+    }
+    let root = Value::Root(Rc::new(root_val));
     let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
     let mut interp = Interp::new(&checked.module).with_foreign(
         checked.result.foreign_binds.clone(),
         grants.foreign_c.clone(),
         max_ret,
     );
+    if let Some(c) = daemon_custody.take() {
+        // Stage 5 phase 5f: route every effectful op through the broker daemon.
+        interp = interp.with_custody(Box::new(c));
+    }
     if let Some(s) = &sink {
         interp = interp.with_trace(s.clone());
     }

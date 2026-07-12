@@ -179,23 +179,62 @@ pub struct CapVal {
     pub scope: CapScope,
 }
 
-/// A secret value. Bytes live here and only here until a lawful `expose`.
+/// A secret value. In EMBEDDED mode the bytes live here and only here until a lawful `expose`. In
+/// DAEMON mode (Stage 5 phase 5g) a `Secret` is an opaque **handle** — the bytes live only in the
+/// broker process (invariant 23) and cross into this process for the first time on `expose`, which
+/// routes through `Custody::expose` (a broker round-trip). A handle carries NO secret bytes, so a
+/// program-process memory scan finds nothing pre-`expose` (criterion 6).
 pub struct SecretVal {
-    value: RefCell<String>,
+    inner: SecretInner,
+}
+
+enum SecretInner {
+    /// Embedded: the bytes are in-process (Stage 1–4 behavior).
+    Local(RefCell<String>),
+    /// Daemon: only the broker secret NAME — an opaque reference; the bytes are broker-resident.
+    Handle(String),
 }
 
 impl SecretVal {
+    /// An in-process (embedded-mode) secret carrying its bytes.
     pub fn new(v: String) -> SecretVal {
-        SecretVal { value: RefCell::new(v) }
+        SecretVal { inner: SecretInner::Local(RefCell::new(v)) }
     }
-    /// The only reader — reached solely through `Secret.expose(Cap[Declassify])` (§6.4/R-2).
+
+    /// A daemon-mode handle: an opaque reference to a broker-held secret `name` — NO bytes here.
+    pub fn handle(name: impl Into<String>) -> SecretVal {
+        SecretVal { inner: SecretInner::Handle(name.into()) }
+    }
+
+    /// The broker secret name, if this is a daemon-mode handle (else `None`). Used by the
+    /// interpreter to route `expose` through `Custody::expose`.
+    pub fn handle_name(&self) -> Option<&str> {
+        match &self.inner {
+            SecretInner::Handle(name) => Some(name),
+            SecretInner::Local(_) => None,
+        }
+    }
+
+    /// The only in-process reader — reached solely through `Secret.expose(Cap[Declassify])`
+    /// (§6.4/R-2) in EMBEDDED mode. A daemon handle carries no bytes (they never entered this
+    /// process), so `reveal` yields the empty string for a handle; the interpreter routes a handle's
+    /// `expose` through `Custody::expose` instead of ever calling this.
     pub fn reveal(&self) -> String {
-        self.value.borrow().clone()
+        match &self.inner {
+            SecretInner::Local(v) => v.borrow().clone(),
+            SecretInner::Handle(_) => String::new(),
+        }
     }
-    /// Constant-time-ish comparison for `Secret.verify` (no early return on mismatch).
+
+    /// Constant-time-ish comparison for `Secret.verify` (no early return on mismatch). Two daemon
+    /// handles (no local bytes) never compare equal in v0.5 — broker-side `verify` is post-chunk-3
+    /// (flagged); embedded comparison is unchanged.
     pub fn verify(&self, other: &SecretVal) -> bool {
-        let a = self.value.borrow();
-        let b = other.value.borrow();
+        let (SecretInner::Local(a), SecretInner::Local(b)) = (&self.inner, &other.inner) else {
+            return false;
+        };
+        let a = a.borrow();
+        let b = b.borrow();
         if a.len() != b.len() {
             return false;
         }
@@ -209,11 +248,14 @@ impl SecretVal {
 
 impl Drop for SecretVal {
     fn drop(&mut self) {
-        // Best-effort zeroization (Stage 1; a hardened allocator lands with the broker, Stage 5).
-        let mut v = self.value.borrow_mut();
-        unsafe {
-            for b in v.as_bytes_mut() {
-                *b = 0;
+        // Best-effort zeroization of any in-process bytes. A daemon handle holds none — the broker
+        // owns the bytes (invariant 23).
+        if let SecretInner::Local(v) = &self.inner {
+            let mut v = v.borrow_mut();
+            unsafe {
+                for b in v.as_bytes_mut() {
+                    *b = 0;
+                }
             }
         }
     }
@@ -239,6 +281,10 @@ pub struct RootVal {
     /// granted; `root.python(load)` mints `Cap[Python]` carrying these, and refuses `NotGranted`
     /// (DL1303) when empty.
     pub python_allowlist: Vec<String>,
+    /// DAEMON mode (Stage 5 phase 5g): the NAMES of broker-held secrets available to this program.
+    /// `root.secret(name)` for a name in this set returns an opaque **handle** (no bytes) — the bytes
+    /// stay in the broker until `expose`. Empty in embedded mode, where `secrets` carries the bytes.
+    pub broker_secrets: Vec<String>,
 }
 
 // ----- environments --------------------------------------------------------

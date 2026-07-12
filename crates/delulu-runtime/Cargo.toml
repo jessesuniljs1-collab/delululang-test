@@ -16,6 +16,10 @@ python = ["dep:pyo3"]
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
+# Stage 5 chunk 3 (phase 5f): the `Custody` trait reuses the broker's `Op` classification and its
+# `Snapshot` validator so the embedded and daemon paths share ONE policy core (no duplication).
+# delulu-broker depends only on delulu-diag/delulu-check, so this adds no cycle.
+delulu-broker = { path = "../delulu-broker" }
 # Stage 4 C FFI (spec §4). `libloading` binds a shared library; `libffi` assembles the call because
 # a foreign signature is runtime data. Both are isolated behind `src/foreign.rs`.
 libloading = "0.8"
