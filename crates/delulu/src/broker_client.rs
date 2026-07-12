@@ -37,7 +37,7 @@ fn dl1401(detail: &str) -> CustodyDenial {
 /// Map a wire diagnostic code to its `&'static` registry form (the `Denial` codes the daemon can
 /// answer with). An UNKNOWN code maps to DL1401 (a protocol-level surprise is a broker failure —
 /// fail closed, never invent an allow).
-fn static_code(code: &str) -> &'static str {
+pub(crate) fn static_code(code: &str) -> &'static str {
     match code {
         "DL0802" => "DL0802",
         "DL0904" => "DL0904",
@@ -93,9 +93,9 @@ impl BrokerClientCustody {
     }
 
     /// Bind to an EXISTING node (a redeemed lease / tests). No issue round-trip; the authority is
-    /// the client-side copy used for epoch snapshot reconstruction. Wired to `delulu run --lease
-    /// <token>` in chunk 5 (phase 5j); exercised now by the daemon-mode tests.
-    #[allow(dead_code)]
+    /// the client-side copy used for epoch snapshot reconstruction. This is how `delulu run
+    /// --lease <token>` runs under exactly the delegated node (phase 5j — the orchestration
+    /// payoff, spec §3.3).
     pub fn for_node(
         state_dir: PathBuf,
         node: GrantId,
@@ -105,8 +105,7 @@ impl BrokerClientCustody {
         BrokerClientCustody { state_dir, node, authority, epoch_ms: clamp_epoch_ms(epoch_ms), cache: None }
     }
 
-    /// The node this custody client holds (for `revoke` in tests / display).
-    #[allow(dead_code)]
+    /// The node this custody client holds (displayed by `run --lease`; revoked in tests).
     pub fn node(&self) -> &GrantId {
         &self.node
     }

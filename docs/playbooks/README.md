@@ -51,7 +51,7 @@ Wasmtime host). Diagnostic code ranges: DL01xx–09xx (Stage 1), DL10xx/11xx (St
 | Playbook | Stage | Theme | Build risk |
 |---|---|---|---|
 | `STAGE4_PLAYBOOK.md` | 4 | Foreign — C FFI + embedded Python | **BUILT 2026-07-11** (271 tests; spec §11 close-out; 3-OS CI matrix still pending) |
-| `STAGE5_PLAYBOOK.md` | 5 | Custody — broker daemon, grant tree, microVM | High (IPC, OS sandboxing, daemon lifecycle) |
+| `STAGE5_PLAYBOOK.md` | 5 | Custody — broker daemon, grant tree, microVM | **BUILT 2026-07-13** (372 tests; spec §11 close-out table; criterion 8 microVM egress-deny platform-pending — Linux+KVM CI, gated `cfg(delulu_kvm)`) |
 | `STAGE6_PLAYBOOK.md` | 6 | Live — runtime plugins, DIR, `.dpx` | High (re-verification, resource limits) |
 | `STAGE7_PLAYBOOK.md` | 7 | Concurrent — actors, reference-caps, async | High (scheduler, revocation-under-concurrency) |
 | `STAGE8_PLAYBOOK.md` | 8 | Surface — LSP, fmt, test runner, localization | Medium (breadth, editor protocol) |

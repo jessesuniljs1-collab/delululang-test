@@ -185,6 +185,33 @@ Non-Linux: `--isolation microvm` is DL1408 with the documented fallback (`--isol
 worker-style OS sandboxing of the whole program; explicitly weaker, labeled in output). The
 isolation matrix (none/process/microvm × capabilities) ships as a table in the docs, not prose.
 
+### 6.1 Isolation matrix (normative table, phase 5i)
+
+What each `--isolation` profile actually guarantees, per capability dimension — honest per §10,
+never "equivalent-ish". **v0.5 status** is the shipping truth on this row of history; the microvm
+column is the committed design (Linux-first, platform-pending — see §11 chunk 5).
+
+| Dimension | `none` (default) | `process` | `microvm` (Linux x86_64/aarch64 + KVM) |
+|---|---|---|---|
+| Verified program runs | in the `delulu` process | in the `delulu` process (bounded by the effect system + custody; it is the *proved* part) | inside a Firecracker/cloud-hypervisor guest (WASM engine mandatory) |
+| Foreign / unproved code | in-process (`inproc`) unless `--foreign-isolation process` | **forced into minimum-privilege worker subprocesses** (no inherited handles; Job Object kill-on-close / `PR_SET_PDEATHSIG`; a crash is DL1409, the host survives) | not bindable in the guest in v0.5 (foreign needs host-side binding) |
+| Filesystem bound | language + custody checks only (no OS jail) | language + custody checks; workers get an isolated, broker-less state dir | **virtio-fs mounts exactly the granted `fs.*` scopes**; sibling paths not even mountable-visible |
+| Network egress | language + custody checks only | language + custody checks only | **default-deny** — a host userspace proxy is the only path and enforces the `net` allowlist |
+| Broker reachability | full (same process as the client) | workers: non-disclosure (no address handed over, isolated state dir) — not a kernel block (§10) | vsock to a **broker proxy holding ONE node**, never the socket (invariant 25) |
+| Native-crash blast radius | takes the host process | confined to the worker (DL1409) | confined to the guest |
+| Platforms (v0.5) | all | all (Windows Job Object; Linux PDEATHSIG; seccomp profile is a documented stub) | Linux+KVM only; anywhere else **DL1408**, fallback shown |
+| Output label | none (byte-identical default) | `isolation: process — … weaker than microvm` | n/a until the guest launch lands |
+
+**v0.5 honesty note (binding):** the `process` profile's mechanism is worker containment of the
+code *outside the proof* (foreign libraries) plus honest labeling; the verified program itself
+remains in-process, bounded by the effect system and the custody seam — it is **not** an OS jail
+of the whole program and is never presented as microVM-equivalent. The microVM guest launch is
+platform-pending (§11 chunk 5): even on a Linux+KVM host with a VMM installed, v0.5 refuses with
+an honest DL1408 naming the pending work rather than launching something weaker under the
+`microvm` name. The §10 caveats apply verbatim: foreign workers bound *blast radius*, not foreign
+behavior; the microVM profile is the strong container and it is Linux-first — the fallback matrix
+is honest about weaker platforms.
+
 ## 7. Audit log
 
 `~/.delulu/audit/YYYYMMDD.jsonl`; each record
@@ -602,6 +629,113 @@ caller's, which a child locks on Windows).
 7. **The Unix path is compiled but unverified locally** (this is a Windows dev box). The `pre_exec` +
    `prctl` snippet follows the standard pattern; CI (Linux) is the verification. Flagged so the head
    chef confirms the Linux build on re-verify.
+
+CHUNK 5 (phases 5i + 5j) — **the CLI surface, the microVM platform gate, and the Stage-5
+close-out** — is implemented and green (2026-07-13, 360 → **372 workspace tests, +12 running, +1
+gated-ignored** criterion-8 tracking test; 2 ignored total incl. the pre-existing one).
+
+**Phase 5j — the grant-tree CLI surface (spec §3.2) — is implemented and green.** `delulu grants
+list|tree|inspect <g_ID>|revoke <g_ID>|delegate …` all talk to the running daemon over the
+UNCHANGED `broker/1` wire; two ADDITIVE message pairs were added (`ReqBody::List`/`Response::Listed`
+and `ReqBody::Inspect`/`Response::Inspected` carrying a fixed-field `NodeInfo`) — no version bump
+(both ends are one binary; head-chef ruling 5). Fail closed everywhere (invariant 27): any `grants`
+verb with the daemon down is **DL1401 carrying the exact `delulu broker start` command**, never a
+local fallback. `grants revoke <id>` calls `Revoke{caller: id, target: id}` (self-revocation is
+always permitted, §3.2; transitivity kills the subtree) and prints the §4.2 bound at the point of
+revocation. `grants delegate [--parent g_ID] --effects E,… [--fs-read P]… [--fs-write P]… [--net H]…
+[--secret N]… [--declassify N]… [--foreign-c L]… [--foreign-python P]… [--ttl 1h] [--multi]
+[--holder-desc S]` mints the child and prints the **bare token on stdout** (script-capturable;
+`--json` for the structured form); with no `--parent` it first issues a root holding exactly the
+requested authority — the typed command line IS the human action at the top of the tree
+(Constitution §5.16 law 4; the same footing as the `--grant` issue-then-run sugar). **`delulu run
+app.delulu --lease <token>`** redeems the token (bad/garbled/second-use → DL1407; expired →
+DL1402; daemon down → DL1401 — all BEFORE `main`), inspects its OWN node, derives the run's local
+grants from the node's authority (never widened locally; only `--grant foreign.c=LIB:PATH` — the
+binary path, grant data — may accompany a lease), and binds custody via
+`BrokerClientCustody::for_node` (its `#[allow(dead_code)]` is gone — phase-5f's promissory note
+redeemed). `delulu explain E-REVOKE` states the §4.2 latency bound **verbatim** via a new
+`topic_explain` surface in `delulu-diag`; every DL140x code gained an explain body carrying the §10
+caveats **word-for-word** (playbook 5j), and the §4.2 bound now also rides in **every successful
+revocation's audit record** (§4.2's second mandate — see deviations). The custody label survives:
+`custody: daemon` prints on lease runs and `--broker` runs; JSON reports carry it always.
+
+**Phase 5i — the microVM profile — is PLATFORM-GATED, honestly (spec §6, playbook trap 8).**
+`delulu run --isolation none|process|microvm` shipped. `none` is the byte-identical default (no
+label, criterion 11). `process` forces the code outside the proof into the phase-5h
+minimum-privilege workers and labels itself *explicitly weaker than microvm* in `run` and
+`authority` output. `microvm` is **DL1408 everywhere v0.5 runs**: on non-Linux a platform refusal;
+on Linux a `src/microvm.rs` probe (compiled only on `target_os = "linux"`, pure std — the
+cross-OS blind-typecheck surface) names the first missing prerequisite (`/dev/kvm`, a
+firecracker/cloud-hypervisor binary) or — fully provisioned — the honest "guest launch is
+platform-pending" message. **Nothing weaker ever launches under the `microvm` name.** The
+isolation matrix ships as a normative TABLE in §6.1. Criterion 8's egress-deny test exists as an
+executable contract (`crates/delulu/tests/microvm_criterion8.rs`), gated
+`#[cfg_attr(not(delulu_kvm), ignore = …)]` (a registered check-cfg; enable on a Linux+KVM CI
+runner via `RUSTFLAGS="--cfg delulu_kvm"` once the guest launch lands). Criterion 2 gained a
+measured test: `criterion_2_epoch_revocation_latency_within_one_interval_x3` revokes over the real
+transport at the spec-default 50 ms epoch and asserts the epoch class observes the revocation
+within **150 ms (= one interval × the spec-mandated ×3 CI-jitter tolerance)**, hard-bounded so a
+regression fails rather than hangs; its deterministic no-clock twin is the chunk-1 snapshot test.
+
+**End-to-end orchestration proof** (`crates/delulu/tests/grants_cli.rs`, this chunk's one
+process-spawning test): broker start → `grants delegate` prints a token → `run --lease` performs
+the leased read+write → the second use of the single-use token is DL1407 and performs nothing →
+a widening delegation under the node is DL0802 whose refusal carries the computed intersection →
+`grants tree|list|inspect` show the tree → `grants revoke <node>` transitively kills the delegated
+child → the child-token run fails DL1403 carrying the revoking audit seq and performs nothing →
+`audit verify` passes over the run's real log → daemon stopped → `grants tree` is DL1401 with the
+start command.
+
+### Stage-5 acceptance-criteria close-out (2026-07-13) — for head-chef re-verification
+
+Maps every spec §9 criterion to its status and the test(s) that prove it. Criterion 8 is
+**platform-pending** — stated plainly, not massaged. All test names are real and runnable.
+
+| # | Criterion (§9) | Status | Proof |
+|---|---|---|---|
+| 1 | daemon-mode FsWrite succeeds; revoke from another terminal; next write DL1403 + audit seq | **met** | `brokerd::tests::revoke_mid_run_then_daemon_death_fail_closed` (allow → revoke on a separate connection → very next FsWrite is DL1403 with the seq, over the real pipe); CLI form in `grants_cli.rs` |
+| 2 | epoch class fails ≤ 50 ms after revocation, ×3 CI tolerance | **met, measured** | `brokerd::tests::criterion_2_epoch_revocation_latency_within_one_interval_x3` (≤ 150 ms asserted over the real transport, DL1403 checked); deterministic twin `validate::tests::epoch_op_passes_on_stale_snapshot_then_fails_after_refresh` |
+| 3 | delegation subset runs; widening request → DL0802 with the computed intersection | **met** (see deviation 4: widening is refused at *delegation* time — the token never exists) | `grants_cli.rs` (CLI DL0802 with `effects={Read}` intersection); `lease::tests::delegate_widening_is_dl0802_with_intersection`; `brokerd::tests::delegate_redeem_and_expose_over_the_wire` |
+| 4 | transitive revocation: both children fail next op; `grants tree` shows the subtree revoked | **met** | `grants_cli.rs` (tree shows `revoked@seq` on node + child, root live; child-token run fails DL1403); `tree::tests::three_level_tree_revoke_middle_kills_subtree_root_lives` |
+| 5 | second `--lease` use of a single-use token → DL1407 | **met** | `grants_cli.rs` (second `run --lease` is DL1407, nothing performed); `lease::tests::second_redeem_of_single_use_token_is_dl1407` |
+| 6 | broker-held secrets: expose audited with span; bytes absent pre-`expose` incl. host cap cache | **met (chunk 3)** | `broker_cli.rs::daemon_lifecycle_run_expose_stop_fail_closed`; `brokerd::tests::delegate_redeem_and_expose_over_the_wire` (span in the audit record; non-Declassify node denied — bytes never cross) |
+| 7 | foreign worker: segfault kills only the worker (DL1409); worker cannot reach the broker socket | **met (chunk 4; Linux re-verified live by the head chef at HEAD)** | `foreign_worker.rs` (real segfault → clean exit-1 DL1409, host survives; `--probe-broker` unreachable from the isolated dir, reachable when disclosed — the refusal is meaningful) |
+| 8 | microVM egress-deny (Linux CI): non-allowlisted `http.get` fails in-guest; sibling path invisible | **PLATFORM-PENDING** | executable contract `microvm_criterion8.rs::criterion_8_microvm_egress_deny_and_scope_mounts`, gated `cfg(delulu_kvm)`; the shipping v0.5 behavior is the tested DL1408 refusal (`cli.rs::run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback`) |
+| 9 | holder-neutrality: no branch on holder kind; identical outcomes across orchestrator kinds | **met** | grep-level: `holder_neutrality.rs` (mechanical: every `.kind` access is display-marked); test-level: `tree::tests::criterion_9_holder_kind_does_not_affect_the_outcome` (byte-identical outcomes for human/process/delegate); the CLI-orchestrator role runs live in `grants_cli.rs` — the (b) program / (c) shell-script role-plays are subsumed by the mechanical absence (there is no code path that could read the kind), stated rather than staged |
+| 10 | `audit verify` over the full run log; deliberate corruption → DL1405 at the right seq | **met** | `grants_cli.rs` + `broker_cli.rs` (verify over real daemon logs); `audit::tests::corrupting_one_byte_fails_verify_at_the_correct_seq`; `audit_cli.rs` (CLI form) |
+| 11 | embedded mode passes the full prior conformance suite; custody label present in reports | **met** | the entire pre-Stage-5 suite runs UNMODIFIED inside the 372 (no test edited to pass); `broker_cli.rs` embedded-run-still-works check; custody label always in JSON reports, human render when non-default (chunk-3 ruling 2) |
+
+**Chunk-5 deviations / decisions flagged LOUDLY for head-chef review:**
+1. **`--isolation process` is worker containment + honest labeling, NOT a whole-program OS jail.**
+   §6's fallback sketch says "worker-style OS sandboxing of the whole program"; v0.5 ships the
+   mechanism it actually has (phase-5h workers for the code outside the proof) and says so in the
+   §6.1 matrix, the run label, and `explain DL1408`. The whole-program jail is microVM-lane work.
+2. **The criterion-8 gate is `cfg(delulu_kvm)`, not `cfg(target_os = "linux")`.** A bare Linux
+   runner without KVM/provisioning would run the test red; the playbook §4's own wording is
+   `#[cfg_attr(not(kvm), ignore)]`. The cfg is registered (check-cfg) so the gate is lint-clean.
+3. **The §4.2 bound in revocation audit records** rides in the record's optional JSON payload slot
+   (the `authority` field) under the self-describing key `"revocation_takes_effect"` — the §7
+   record shape has no other free-form slot and was not extended. Additive; chains verify across
+   old and new logs. Deny-decision revoke records carry no bound (nothing was revoked).
+4. **Criterion 3's "at redemption → DL0802" happens at delegation time instead**: a widening
+   `delegate` is refused when minting, so the token for the widened slice never exists —
+   redemption failures are DL1407/DL1402 only. Same guarantee, enforced strictly earlier.
+5. **The DL0802 intersection crosses the wire in the diagnostic message** (`Response::Error` is
+   `{code, message, requires_human}`; the message embeds the computed intersection via
+   `render_compact`). The typed `Denial` with the structural intersection remains broker-side
+   (consistent with chunk-1 deviation 1); a structured wire field is a clean future extension.
+6. **No standalone `delulu grants issue` verb.** §3.2's CLI line lists `list|tree|inspect|revoke|
+   delegate`; root issuance remains the grant prompt / `--grant` sugar / `delegate`'s auto-root —
+   all human-typed actions, never programmatic (Constitution §5.16 law 4 upheld).
+7. **`grants delegate` fs scopes are absolutized + lexically normalized against the minting cwd**
+   (the same frame `--grant fs.*` uses), so the broker's path lattice sees exactly the strings an
+   agent's runtime resolves against. Consequence: mint delegations from the directory the relative
+   paths are anchored to.
+8. **A `--lease` run refuses all non-`foreign.c` local grants** (the lease IS the authority), and
+   a redeemed-then-preflight-failed run burns a single-use token — fail closed, re-delegate.
+9. **Cross-compile note (head chef, 2026-07-13):** Windows→Linux `cargo check --target …` is
+   blocked by a `libffi-sys` host-cfg build-script bug; the Linux verification lane is a native
+   Linux build (the head chef ran the full suite green on real Ubuntu at the chunk-4 HEAD).
 
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

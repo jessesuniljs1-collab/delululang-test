@@ -39,6 +39,54 @@ pub struct AuthoritySpec {
     pub ttl_millis: Option<i64>,
 }
 
+/// One grant-tree node on the wire (spec §3.1), for `delulu grants list|inspect` (phase 5j) and
+/// for a `--lease` run learning its OWN node's authority after redemption. Fixed-field struct →
+/// deterministic CBOR. Additive to `broker/1` (both ends are the same binary).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct NodeInfo {
+    pub id: String,
+    pub parent: Option<String>,
+    /// Holder fields are descriptive metadata — stored and displayed, never switched on
+    /// (criterion 9).
+    pub holder_kind: String,
+    pub holder_desc: String,
+    pub holder_peer: String,
+    /// Effective state: `"live"`, `"revoked"` (with `by_seq`), or `"expired"`.
+    pub state: String,
+    pub by_seq: Option<u64>,
+    pub ttl_millis: Option<i64>,
+    pub created_millis: i64,
+    pub audit_seq: u64,
+    pub effects: Vec<String>,
+    pub fs_read: Vec<String>,
+    pub fs_write: Vec<String>,
+    pub net: Vec<String>,
+    pub secrets: Vec<String>,
+    pub declassify: Vec<String>,
+    pub foreign_c: Vec<String>,
+    pub foreign_python: Vec<String>,
+}
+
+impl NodeInfo {
+    /// This node's authority as an [`AuthoritySpec`] (holder/ttl fields blank — authority only).
+    /// Used by `delulu run --lease` to reconstruct the client-side epoch-snapshot authority.
+    pub fn authority_spec(&self) -> AuthoritySpec {
+        AuthoritySpec {
+            effects: self.effects.clone(),
+            fs_read: self.fs_read.clone(),
+            fs_write: self.fs_write.clone(),
+            net: self.net.clone(),
+            secrets: self.secrets.clone(),
+            declassify: self.declassify.clone(),
+            foreign_c: self.foreign_c.clone(),
+            foreign_python: self.foreign_python.clone(),
+            holder_kind: String::new(),
+            holder_desc: String::new(),
+            ttl_millis: None,
+        }
+    }
+}
+
 /// A request to the broker daemon (spec §3.2 operations + lifecycle).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReqBody {
@@ -69,6 +117,12 @@ pub enum ReqBody {
     SecretMap { node: String, name: String, op: String, arg: Option<String> },
     /// A human-readable tree render.
     Tree,
+    /// All nodes, sorted by id (phase 5j `delulu grants list` — a CLI/human read surface).
+    /// Additive `broker/1` variant (chunk-5; both ends are one binary).
+    List,
+    /// One node's full detail (phase 5j `delulu grants inspect <id>`; also how a `--lease` run
+    /// learns its OWN node's authority after redeeming). Additive `broker/1` variant.
+    Inspect { node: String },
 }
 
 /// The versioned request envelope.
@@ -104,6 +158,11 @@ pub enum Response {
     Mapped { name: String },
     Status { pid: u32, nodes: usize, epoch: u64 },
     Tree { text: String },
+    /// `List` reply: every node, sorted by id (additive `broker/1` variant, chunk 5).
+    Listed { nodes: Vec<NodeInfo> },
+    /// `Inspect` reply (additive `broker/1` variant, chunk 5). Boxed: `NodeInfo` is by far the
+    /// widest payload and would otherwise bloat every `Response` on the stack.
+    Inspected { node: Box<NodeInfo> },
 }
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.
@@ -152,6 +211,32 @@ mod tests {
     #[test]
     fn frame_roundtrips_a_response() {
         let resp = Response::Revoked { by_seq: 7, epoch: 3, newly_revoked: vec!["g_a".into(), "g_b".into()] };
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &resp).unwrap();
+        let got: Response = read_frame(&mut &buf[..]).unwrap();
+        assert_eq!(got, resp);
+    }
+
+    /// The chunk-5 additive variants (List/Inspect/Listed/Inspected) round-trip on the SAME
+    /// `broker/1` wire — additive enum variants, no version bump (head-chef ruling 5).
+    #[test]
+    fn additive_grants_variants_roundtrip_on_broker_1() {
+        let req = Request::new(ReqBody::Inspect { node: "g_abc".into() });
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &req).unwrap();
+        let got: Request = read_frame(&mut &buf[..]).unwrap();
+        assert_eq!(got, req);
+        assert_eq!(got.version, WIRE_VERSION, "still broker/1");
+
+        let resp = Response::Listed {
+            nodes: vec![NodeInfo {
+                id: "g_a".into(),
+                state: "live".into(),
+                effects: vec!["Read".into()],
+                fs_read: vec!["./data".into()],
+                ..Default::default()
+            }],
+        };
         let mut buf = Vec::new();
         write_frame(&mut buf, &resp).unwrap();
         let got: Response = read_frame(&mut &buf[..]).unwrap();

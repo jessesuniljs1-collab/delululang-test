@@ -24,7 +24,9 @@ use delulu_broker::{
 };
 use delulu_check::Effect;
 
-use crate::broker_ipc::{read_frame, write_frame, AuthoritySpec, ReqBody, Request, Response, WIRE_VERSION};
+use crate::broker_ipc::{
+    read_frame, write_frame, AuthoritySpec, NodeInfo, ReqBody, Request, Response, WIRE_VERSION,
+};
 use crate::broker_transport::{self, Listener};
 
 // ----- state-dir + file paths (the only place ~/.delulu is resolved) -----------------------------
@@ -103,6 +105,38 @@ fn spec_holder(spec: &AuthoritySpec) -> Holder {
 fn deny_response(d: &delulu_broker::Denial) -> Response {
     let diag = d.to_diagnostic();
     Response::Error { code: diag.code.to_string(), message: diag.message, requires_human: d.requires_human() }
+}
+
+/// One grant-tree node → its wire form (phase 5j `grants list|inspect`). `eff` is the node's
+/// effective state (revocation + TTL folded against the broker clock). Holder fields are copied as
+/// DATA — displayed by the CLI, never switched on (criterion 9).
+fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo {
+    let (state, by_seq) = match eff {
+        delulu_broker::EffState::Live => ("live", None),
+        delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(by_seq)),
+        delulu_broker::EffState::Expired { .. } => ("expired", None),
+    };
+    let names = |s: &std::collections::BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>();
+    NodeInfo {
+        id: n.id.as_str().to_string(),
+        parent: n.parent.as_ref().map(|p| p.as_str().to_string()),
+        holder_kind: n.holder.kind.clone(), // KIND_IS_DATA: displayed, never switched on
+        holder_desc: n.holder.desc.clone(),
+        holder_peer: n.holder.peer.clone(),
+        state: state.to_string(),
+        by_seq,
+        ttl_millis: n.ttl_millis,
+        created_millis: n.created_millis,
+        audit_seq: n.audit_seq,
+        effects: n.authority.effects.iter().map(|e| e.name().to_string()).collect(),
+        fs_read: names(&n.authority.scopes.fs_read),
+        fs_write: names(&n.authority.scopes.fs_write),
+        net: names(&n.authority.scopes.net),
+        secrets: names(&n.authority.scopes.secrets),
+        declassify: names(&n.authority.scopes.declassify),
+        foreign_c: names(&n.authority.scopes.foreign_c),
+        foreign_python: names(&n.authority.scopes.foreign_python),
+    }
 }
 
 // ----- the request handler -----------------------------------------------------------------------
@@ -256,6 +290,29 @@ fn handle(
             }
         }
         ReqBody::Tree => (Response::Tree { text: broker.tree() }, false),
+        ReqBody::List => {
+            // A CLI/human read surface (phase 5j). Effective states are folded against the clock
+            // so `grants list` shows what `check` would actually see right now.
+            let nodes: Vec<NodeInfo> = broker
+                .nodes()
+                .iter()
+                .map(|n| {
+                    let eff = broker.effective_state(&n.id).unwrap_or(delulu_broker::EffState::Live);
+                    node_info(n, eff)
+                })
+                .collect();
+            (Response::Listed { nodes }, false)
+        }
+        ReqBody::Inspect { node } => {
+            let node = GrantId::from_trusted(node);
+            match (broker.inspect(&node), broker.effective_state(&node)) {
+                (Some(n), Some(eff)) => (Response::Inspected { node: Box::new(node_info(n, eff)) }, false),
+                _ => (
+                    Response::Error { code: "DL0904".to_string(), message: format!("no such lease `{node}` (fail closed)"), requires_human: false },
+                    false,
+                ),
+            }
+        }
     }
 }
 
@@ -756,6 +813,112 @@ mod tests {
             CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1401"),
             CustodyDecision::Allow => panic!("a stale cache with a dead broker must fail closed"),
         }
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **Acceptance criterion 2 (spec §9), measured.** Epoch class at the spec-default 50 ms
+    /// interval: after a revocation, a tight epoch-class check loop observes the denial within one
+    /// epoch interval — asserted with the spec-mandated ×3 CI-jitter tolerance (≤ 150 ms). The
+    /// deterministic mechanism twin (no clocks) is `delulu-broker`'s
+    /// `epoch_op_passes_on_stale_snapshot_then_fails_after_refresh`; this test adds the real-time
+    /// measurement over the real transport. The loop is hard-bounded so a regression is a clean
+    /// failure, never a hang.
+    #[test]
+    fn criterion_2_epoch_revocation_latency_within_one_interval_x3() {
+        let state = temp_state("criterion2");
+        let handle = start_daemon(&state);
+
+        let mut custody = BrokerClientCustody::issue_root(
+            state.clone(),
+            AuthoritySpec {
+                effects: vec!["Read".to_string()],
+                fs_read: vec!["./data".to_string()],
+                holder_kind: "process".to_string(),
+                holder_desc: "criterion2".to_string(),
+                ..Default::default()
+            },
+            None, // the spec DEFAULT epoch interval (50 ms) — the bound under test
+        )
+        .expect("issue against the live daemon");
+
+        // Prime the epoch cache so the worst case (a snapshot taken the instant before the revoke)
+        // is in play — the honest bound is "within one interval," not "immediately."
+        assert!(matches!(custody.check(Op::FsRead, Some("./data/x")), CustodyDecision::Allow));
+
+        // Revoke from "another terminal" (a separate connection), then time the tight loop.
+        let node = custody.node().as_str().to_string();
+        let resp = request(&state, ReqBody::Revoke { caller: node.clone(), target: node }).unwrap();
+        assert!(matches!(resp, Response::Revoked { .. }), "{resp:?}");
+        let revoked_at = std::time::Instant::now();
+
+        let deadline = revoked_at + std::time::Duration::from_secs(5); // hard bound: fail, don't hang
+        let denial = loop {
+            match custody.check(Op::FsRead, Some("./data/x")) {
+                CustodyDecision::Deny(d) => break d,
+                CustodyDecision::Allow => {
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "epoch-class op still allowed 5 s after revocation — the epoch refresh is broken"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            }
+        };
+        let elapsed = revoked_at.elapsed();
+        assert_eq!(denial.code, "DL1403", "the denial is the revocation, not a transport error: {}", denial.message);
+        assert!(
+            elapsed <= std::time::Duration::from_millis(150),
+            "criterion 2: revocation must reach the epoch class within one 50 ms interval (×3 CI \
+             jitter tolerance = 150 ms); took {elapsed:?}"
+        );
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Phase 5j: the `grants list`/`inspect` read surface over the wire — node detail round-trips,
+    /// unknown ids fail closed, and revocation state is folded in.
+    #[test]
+    fn list_and_inspect_over_the_wire() {
+        let state = temp_state("list_inspect");
+        let handle = start_daemon(&state);
+
+        let resp = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap();
+        let Response::Issued { node: root } = resp else { panic!("expected Issued, got {resp:?}") };
+        let child_spec = AuthoritySpec {
+            effects: vec!["Write".to_string()],
+            fs_write: vec!["./out".to_string()],
+            holder_kind: "delegate".to_string(),
+            holder_desc: "agent-7".to_string(),
+            ..Default::default()
+        };
+        let resp = request(&state, ReqBody::Attenuate { parent: root.clone(), authority: child_spec }).unwrap();
+        let Response::Issued { node: child } = resp else { panic!("expected Issued, got {resp:?}") };
+
+        // List: both nodes, sorted by id, with parent linkage.
+        let resp = request(&state, ReqBody::List).unwrap();
+        let Response::Listed { nodes } = resp else { panic!("expected Listed, got {resp:?}") };
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.windows(2).all(|w| w[0].id <= w[1].id), "sorted by id");
+        let c = nodes.iter().find(|n| n.id == child).unwrap();
+        assert_eq!(c.parent.as_deref(), Some(root.as_str()));
+        assert_eq!(c.state, "live");
+        assert_eq!(c.holder_desc, "agent-7");
+        assert_eq!(c.fs_write, vec!["./out".to_string()]);
+
+        // Inspect an unknown id → fail closed (DL0904), never an empty success.
+        let resp = request(&state, ReqBody::Inspect { node: "g_0000000000000000000000000000dead".into() }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL0904"), "{resp:?}");
+
+        // Revoke the child; inspect folds the effective state + the revoking seq.
+        let resp = request(&state, ReqBody::Revoke { caller: child.clone(), target: child.clone() }).unwrap();
+        let Response::Revoked { by_seq, .. } = resp else { panic!("expected Revoked, got {resp:?}") };
+        let resp = request(&state, ReqBody::Inspect { node: child }).unwrap();
+        let Response::Inspected { node } = resp else { panic!("expected Inspected, got {resp:?}") };
+        assert_eq!(node.state, "revoked");
+        assert_eq!(node.by_seq, Some(by_seq), "inspect carries the revoking audit seq (spec §4.3)");
+
+        stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }
 }

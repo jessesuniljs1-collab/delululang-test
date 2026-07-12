@@ -148,6 +148,40 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
     assert_eq!(sink.records()[6].seq, use_seq);
 }
 
+/// Spec §4.2 (normative) / playbook trap 3: the stated revocation latency bound appears — VERBATIM
+/// — in the audit record of every (successful) revocation. Never a stronger claim.
+#[test]
+fn every_revocation_record_states_the_4_2_bound_verbatim() {
+    let clock = Rc::new(ManualClock::new(1_000));
+    let (mut b, sink) = broker_with_sink(clock);
+    let root = b.issue(holder(), Authority::new(eff(&["Read"]), Scopes::default()), None);
+    let child = b.attenuate(&root, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None).unwrap();
+    b.revoke(&root, &child).unwrap();
+    b.revoke(&root, &root).unwrap();
+
+    let revokes: Vec<_> = sink.records().into_iter().filter(|r| r.action == "revoke").collect();
+    assert_eq!(revokes.len(), 2);
+    for r in &revokes {
+        let bound = r
+            .authority
+            .as_ref()
+            .and_then(|a| a.get("revocation_takes_effect"))
+            .and_then(|v| v.as_str())
+            .expect("every revocation record carries the §4.2 bound");
+        assert_eq!(bound, delulu_diag::REVOCATION_BOUND);
+        assert!(
+            bound.contains("before the next use") && bound.contains("one epoch interval"),
+            "the honest bound, never \"immediate\": {bound}"
+        );
+    }
+    // A DENIED revoke (lateral reach) records decision "deny" and carries no bound payload —
+    // nothing was revoked, so no revocation semantics apply.
+    let _ = b.revoke(&child, &root).unwrap_err();
+    let last = sink.records().pop().unwrap();
+    assert_eq!((last.action.as_str(), last.decision.as_str()), ("revoke", "deny"));
+    assert!(last.authority.is_none());
+}
+
 #[test]
 fn no_sink_means_no_records_and_chunk1_behavior() {
     // Default broker (no sink): everything works exactly as chunk 1 — this is the backward-compat

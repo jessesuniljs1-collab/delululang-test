@@ -466,3 +466,104 @@ fn authority_lists_python_under_the_outside_the_proof_separator() {
     assert_eq!(entry["imports_seen"][0], "numpy");
     assert!(entry["used_at"][0]["line"].is_number());
 }
+
+// ===== Stage 5 chunk 5 (phases 5i + 5j): isolation profiles + the explain honesty text ==========
+
+/// A trivial pure program in a temp dir (no grants needed).
+fn write_pure_program(dir_name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(dir_name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.delulu"), "module m\nfn main(root: Root) {}\n").unwrap();
+    dir.join("main.delulu")
+}
+
+/// Playbook trap 3 / spec §4.2: `delulu explain E-REVOKE` states the latency bound VERBATIM —
+/// synchronous = before the next use; epoch = within one interval (≤ 50 ms default) — and never
+/// claims "immediate" (the word appears only inside the §10 quote denying the claim).
+#[test]
+fn explain_e_revoke_states_the_4_2_bound_verbatim() {
+    let o = delulu(&["explain", "E-REVOKE"]);
+    assert!(o.status.success(), "explain E-REVOKE failed: {}", stderr(&o));
+    let out = stdout(&o);
+    assert!(
+        out.contains(
+            "Revocation takes effect: synchronous class — before the next use; epoch class — \
+             within one epoch interval (≤ 50 ms default)."
+        ),
+        "the §4.2 bound must appear verbatim: {out}"
+    );
+    assert!(out.contains("No stronger claim is made anywhere."), "{out}");
+    assert!(out.contains("\"immediate\" is never claimed"), "the §10 caveat word-for-word: {out}");
+}
+
+/// The DL14xx custody codes explain themselves with the spec §10 caveats word-for-word
+/// (playbook 5j: "Copy spec §10 caveats into docs and explain-text word-for-word").
+#[test]
+fn explain_dl14xx_carries_the_spec_10_caveats() {
+    let o = delulu(&["explain", "DL1408"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let out = stdout(&o);
+    assert!(out.contains("--isolation process"), "the fallback command is shown: {out}");
+    assert!(
+        out.contains("Foreign workers bound blast radius, not foreign behavior"),
+        "§10 caveat verbatim: {out}"
+    );
+    assert!(out.contains("Linux-first"), "{out}");
+
+    let o = delulu(&["explain", "E-DL1403"]);
+    assert!(o.status.success());
+    assert!(stdout(&o).contains("\"immediate\" is never claimed"), "{}", stdout(&o));
+
+    let o = delulu(&["explain", "DL1405"]);
+    assert!(stdout(&o).contains("detects tampering after the fact; it does not prevent it"), "{}", stdout(&o));
+}
+
+/// Phase 5i (spec §6): `--isolation microvm` is refused with DL1408 — nothing runs, the fallback
+/// is named and labeled weaker, never silently substituted (trap 8). Truthful on every platform
+/// v0.5 supports: on non-Linux it is a platform refusal, on Linux without a provisioned guest
+/// launch it is a prerequisite/pending refusal — both DL1408 with the same documented fallback.
+/// (The positive criterion-8 test is `tests/microvm_criterion8.rs`, gated on `cfg(delulu_kvm)`.)
+#[test]
+fn run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback() {
+    let file = write_pure_program("delulu_cli_iso_microvm");
+    let o = delulu(&["run", file.to_str().unwrap(), "--isolation", "microvm", "--json"]);
+    assert_eq!(o.status.code(), Some(1), "microvm must refuse, not run: {}", stderr(&o));
+    let v: Value = serde_json::from_str(&stdout(&o)).expect("run --json must be valid JSON");
+    assert_eq!(v["diagnostics"][0]["code"], "DL1408");
+    let msg = v["diagnostics"][0]["message"].as_str().unwrap();
+    assert!(msg.contains("--isolation process"), "the documented fallback command: {msg}");
+    assert!(msg.contains("weaker"), "the fallback is labeled explicitly weaker: {msg}");
+}
+
+/// Phase 5i: `--isolation process` runs and labels itself honestly — foreign code in workers, the
+/// verified program in-process, never sold as microVM-equivalent (trap 8).
+#[test]
+fn run_isolation_process_is_labeled_honestly() {
+    let file = write_pure_program("delulu_cli_iso_process");
+    let o = delulu(&["run", file.to_str().unwrap(), "--isolation", "process"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let err = stderr(&o);
+    assert!(err.contains("isolation: process"), "the run is labeled: {err}");
+    assert!(err.contains("weaker than microvm"), "labeled weaker, honestly: {err}");
+    // And the default run stays byte-identical (criterion 11): no isolation label without the flag.
+    let o = delulu(&["run", file.to_str().unwrap()]);
+    assert!(o.status.success());
+    assert!(!stderr(&o).contains("isolation:"), "no label without --isolation: {}", stderr(&o));
+}
+
+/// Phase 5i: `delulu authority --isolation microvm` reports the profile honestly (unavailable
+/// here), and an unknown profile is a usage error.
+#[test]
+fn authority_isolation_label_is_honest_and_unknown_is_refused() {
+    let o = delulu(&["authority", "examples/demo.delulu", "--isolation", "microvm"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let out = stdout(&o);
+    assert!(out.contains("isolation:"), "{out}");
+    assert!(out.contains("unavailable here"), "an unattainable microvm is never affirmed: {out}");
+
+    let file = write_pure_program("delulu_cli_iso_unknown");
+    let o = delulu(&["run", file.to_str().unwrap(), "--isolation", "container"]);
+    assert_eq!(o.status.code(), Some(2), "unknown profile is a usage error");
+    assert!(stderr(&o).contains("none | process | microvm"), "{}", stderr(&o));
+}

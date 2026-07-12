@@ -402,12 +402,19 @@ impl Broker {
     pub fn revoke(&mut self, caller: &GrantId, target: &GrantId) -> Result<RevokeOutcome, Denial> {
         let (seq, res) = self.revoke_core(caller, target);
         let decision = if res.is_ok() { "allow" } else { "deny" };
+        // Spec §4.2 (normative, playbook trap 3): the stated latency bound appears "in the audit
+        // record of every revocation" — VERBATIM, and never a stronger claim. It rides in the
+        // record's free-form JSON payload slot under a self-describing key (a revocation has no
+        // authority payload of its own; flagged in spec §11 chunk-5 deviations).
+        let payload = res
+            .is_ok()
+            .then(|| serde_json::json!({ "revocation_takes_effect": delulu_diag::REVOCATION_BOUND }));
         self.record_op(
             seq,
             "revoke",
             Some(caller.as_str().to_string()),
             Some(target.as_str().to_string()),
-            None,
+            payload,
             decision,
             None,
         );
@@ -449,6 +456,16 @@ impl Broker {
     /// Inspect a node by id (spec §3.2 `inspect`).
     pub fn inspect(&self, id: &GrantId) -> Option<&Node> {
         self.nodes.get(id)
+    }
+
+    /// All nodes, sorted by id — the `delulu grants list` read surface (spec §3.2, phase 5j).
+    /// Read-only; a HUMAN/CLI operation at the top of the tree (a program's lease client never
+    /// calls this — invariant 25 is about the lease holder's IPC reach, and the holder-facing
+    /// custody client uses only its own node).
+    pub fn nodes(&self) -> Vec<&Node> {
+        let mut v: Vec<&Node> = self.nodes.values().collect();
+        v.sort_by(|a, b| a.id.cmp(&b.id));
+        v
     }
 
     /// The effective state of a node right now, folding revocation and TTL against the clock.

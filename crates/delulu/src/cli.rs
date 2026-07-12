@@ -59,6 +59,17 @@ struct Opts {
     /// an isolated worker subprocess (blast-radius containment; a worker crash is DL1409, host
     /// survives). Default: `process` in `--broker daemon` mode, `inproc` otherwise.
     foreign_isolation: Option<String>,
+    /// `--isolation none|process|microvm` (Stage 5 phase 5i, spec §6): the run's isolation profile.
+    /// `none` (default) = in-process, language + custody enforcement only. `process` = the code
+    /// outside the proof (foreign libs) runs in minimum-privilege worker subprocesses; labeled.
+    /// `microvm` = Firecracker-class guest — Linux+KVM only; anywhere else it is DL1408 with the
+    /// documented, explicitly-weaker fallback (never a silent approximation — playbook trap 8).
+    /// The honest capability matrix is spec §6.1.
+    isolation: Option<String>,
+    /// `--lease <token>` (Stage 5 phase 5j, spec §3.2/§3.3): redeem a delegated lease token and run
+    /// under EXACTLY that node's authority — the orchestration payoff: whoever holds a grant
+    /// delegates a slice, hands the token over, and this run can acquire nothing outside it.
+    lease: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -83,6 +94,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         broker: None,
         epoch_ms: None,
         foreign_isolation: None,
+        isolation: None,
+        lease: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -180,6 +193,22 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--foreign-isolation=") => {
                 opts.foreign_isolation = Some(s["--foreign-isolation=".len()..].to_string())
             }
+            "--isolation" => {
+                if i + 1 < rest.len() {
+                    opts.isolation = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--isolation=") => {
+                opts.isolation = Some(s["--isolation=".len()..].to_string())
+            }
+            "--lease" => {
+                if i + 1 < rest.len() {
+                    opts.lease = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--lease=") => opts.lease = Some(s["--lease=".len()..].to_string()),
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -210,6 +239,7 @@ pub fn run(args: &[String]) -> i32 {
         "why" => cmd_why(rest),
         "repl" => repl_cmd(rest),
         "audit" => cmd_audit(rest),
+        "grants" => cmd_grants(rest),
         "broker" => crate::brokerd::cmd_broker(rest),
         // Hidden: the process-isolation foreign worker (spec §5 phase 5h), spawned by the host, not a
         // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
@@ -243,6 +273,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -250,8 +282,11 @@ fn usage() -> &'static str {
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
      \x20 delulu broker    start [--foreground] | status | stop | rotate-key [--state-dir DIR]\n\
+     \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
+     \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi]  (prints a lease token)\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
-     \x20 delulu explain   <DLxxxx>\n\
+     \x20 delulu explain   <DLxxxx | E-REVOKE>\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
@@ -362,6 +397,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
     let mut report = authority_report(&program, &checked.result, &scopes);
     stamp_custody(&mut report, &opts);
     stamp_foreign_isolation(&mut report, &opts);
+    stamp_isolation(&mut report, &opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
@@ -398,6 +434,38 @@ fn stamp_foreign_isolation(report: &mut Json, opts: &Opts) {
     };
     if let Some(obj) = report.as_object_mut() {
         obj.insert("foreign_isolation".to_string(), json!(mode));
+    }
+}
+
+/// Why `--isolation microvm` is unavailable here (`Err(detail)`), or `Ok(())` once the Linux+KVM
+/// guest launch exists. v0.5: always `Err` — on Linux the probe names the first missing
+/// prerequisite (or the pending launch work); everywhere else it is a platform refusal. Honest by
+/// construction (trap 8): there is no code path that quietly substitutes weaker isolation.
+#[cfg(target_os = "linux")]
+fn microvm_unavailable() -> Result<(), String> {
+    crate::microvm::probe()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn microvm_unavailable() -> Result<(), String> {
+    Err(format!(
+        "`--isolation microvm` requires Linux x86_64/aarch64 with KVM; this platform is `{}`",
+        std::env::consts::OS
+    ))
+}
+
+/// Stamp the requested isolation profile on an authority report (Stage 5 phase 5i, spec §6) —
+/// only when `--isolation` was passed, so a default report stays byte-identical to prior stages
+/// (criterion 11). An unattainable `microvm` request is labeled unavailable, never affirmed.
+fn stamp_isolation(report: &mut Json, opts: &Opts) {
+    let Some(iso) = &opts.isolation else { return };
+    let label = if iso == "microvm" && microvm_unavailable().is_err() {
+        "microvm (unavailable here — a run refuses with DL1408; see spec §6.1)".to_string()
+    } else {
+        iso.clone()
+    };
+    if let Some(obj) = report.as_object_mut() {
+        obj.insert("isolation".to_string(), json!(label));
     }
 }
 
@@ -444,6 +512,11 @@ fn render_authority(report: &Json) -> String {
         if custody != "embedded" {
             let _ = writeln!(out, "  custody:      {custody}");
         }
+    }
+    // The isolation profile (Stage 5 phase 5i): present only when explicitly requested, so the
+    // default report is byte-identical to prior stages (criterion 11).
+    if let Some(iso) = report["isolation"].as_str() {
+        let _ = writeln!(out, "  isolation:    {iso}");
     }
     let foreign = report["foreign_calls"].as_array().cloned().unwrap_or_default();
     if foreign.is_empty() {
@@ -763,6 +836,7 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
     let mut report = program_authority(&program, &name, &scopes);
     stamp_custody(&mut report, opts);
     stamp_foreign_isolation(&mut report, opts);
+    stamp_isolation(&mut report, opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
     } else {
@@ -1193,6 +1267,31 @@ fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_i
     }
 }
 
+/// The inverse of [`authority_spec_from_grants`], for `--lease` runs (phase 5j): derive the run's
+/// local `Grants` from the delegated node's authority, so the in-process Stage 1–4 scope checks see
+/// exactly the leased slice (the broker's per-§4 checks enforce it regardless — this keeps the two
+/// layers agreeing instead of the local layer being wider). `foreign_c` binary PATHS are grant data
+/// a human supplies via `--grant foreign.c=LIB:PATH`; the lease's `foreign.c` scope bounds which
+/// lib NAMES the broker will actually bind.
+fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: HashMap<String, String>) -> Grants {
+    let has = |e: &str| info.effects.iter().any(|x| x == e);
+    Grants {
+        // Console is Write-effect-gated at the broker (spec §4.1: Console requires Write).
+        console: has("Write"),
+        fs_read: info.fs_read.clone(),
+        fs_write: info.fs_write.clone(),
+        net: info.net.clone(),
+        clock: has("Clock"),
+        rand: has("Rand"),
+        declassify: has("Declassify"),
+        // Daemon mode strips local secret VALUES and keeps only broker-handle names (invariant 23);
+        // the names come from the lease's `secrets` scope.
+        secrets: info.secrets.iter().map(|n| (n.clone(), String::new())).collect(),
+        foreign_c,
+        foreign_python: info.foreign_python.clone(),
+    }
+}
+
 /// `delulu secrets set NAME VALUE | list [--state-dir DIR]` (Stage 5 phase 5g, minimal v0.5 form —
 /// full CLI polish is a later chunk). Writes the broker's secret store directly; a daemon started
 /// AFTER the write sees the secret (the daemon loads the store at startup — restart to pick up new
@@ -1247,6 +1346,438 @@ fn cmd_secrets(rest: &[String]) -> i32 {
             eprintln!("error: unknown secrets subcommand `{other}` (set | list)");
             2
         }
+    }
+}
+
+// ----- grants (Stage 5 phase 5j: the grant-tree CLI surface, spec §3.2) --------------------------
+//
+// Every verb talks to the RUNNING daemon over `broker/1` — there is no local fallback: with the
+// daemon down each verb fails DL1401 carrying the exact start command (invariant 27, playbook trap
+// 4). The CLI is the human at the top of the tree (spec §3.1): `delegate` with no `--parent` first
+// issues a root node holding exactly the requested authority — the typed command line IS the human
+// action (the same footing as the `--grant` issue-then-run sugar) — then delegates under it.
+
+/// Parse a TTL duration like `500ms`, `90s`, `30m`, `1h`, `2d` into a millisecond count.
+fn parse_ttl_millis(s: &str) -> Option<i64> {
+    let (num, mult) = if let Some(n) = s.strip_suffix("ms") {
+        (n, 1)
+    } else if let Some(n) = s.strip_suffix('s') {
+        (n, 1_000)
+    } else if let Some(n) = s.strip_suffix('m') {
+        (n, 60_000)
+    } else if let Some(n) = s.strip_suffix('h') {
+        (n, 3_600_000)
+    } else if let Some(n) = s.strip_suffix('d') {
+        (n, 86_400_000)
+    } else {
+        return None;
+    };
+    let v: i64 = num.parse().ok()?;
+    if v <= 0 {
+        return None;
+    }
+    v.checked_mul(mult)
+}
+
+/// Wall-clock "now" in epoch millis — the CLI side of an absolute TTL deadline (the broker's own
+/// clock does the enforcement; spec §4.3).
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// One daemon round-trip for a `grants` verb. Fail closed (invariant 27): an unreachable daemon
+/// prints DL1401 with the exact start command and yields `Err(1)`; a daemon `Error` reply prints
+/// its diagnostic (e.g. a DL0802 whose message carries the computed intersection) and yields
+/// `Err(1)`.
+fn grants_rpc(
+    state_dir: &std::path::Path,
+    body: crate::broker_ipc::ReqBody,
+    json: bool,
+) -> Result<crate::broker_ipc::Response, i32> {
+    let map = SourceMap::new();
+    match crate::brokerd::request(state_dir, body) {
+        Ok(crate::broker_ipc::Response::Error { code, message, .. }) => {
+            let d = Diagnostic::error(crate::broker_client::static_code(&code), message);
+            print_diagnostics("grants", &[d], &map, None, json);
+            Err(1)
+        }
+        Ok(resp) => Ok(resp),
+        Err(e) => {
+            let d = Diagnostic::error(
+                "DL1401",
+                format!(
+                    "broker unreachable: {e} — start it with `delulu broker start` \
+                     (fail closed, invariant 27: `grants` verbs never fall back to local state)"
+                ),
+            );
+            print_diagnostics("grants", &[d], &map, None, json);
+            Err(1)
+        }
+    }
+}
+
+/// One wire node as a compact human line (`grants list`). Holder fields are display DATA — never a
+/// decision input (criterion 9).
+fn render_node_line(n: &crate::broker_ipc::NodeInfo) -> String {
+    let authority = crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact();
+    let state = match (n.state.as_str(), n.by_seq) {
+        ("revoked", Some(seq)) => format!("revoked@{seq}"),
+        (s, _) => s.to_string(),
+    };
+    let parent = n.parent.as_deref().unwrap_or("-");
+    format!("{}  [{}]  parent={}  {}  ({}) {}", n.id, state, parent, authority, n.holder_kind, n.holder_desc)
+}
+
+fn cmd_grants(rest: &[String]) -> i32 {
+    let Some(sub) = rest.first().map(String::as_str) else {
+        eprintln!(
+            "error: `grants` needs a subcommand: list | tree | inspect <g_ID> | revoke <g_ID> | \
+             delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--ttl 1h] [--multi]"
+        );
+        return 2;
+    };
+    let args = &rest[1..];
+    let json = args.iter().any(|a| a == "--json");
+    let state_flag = args
+        .iter()
+        .position(|a| a == "--state-dir")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .or_else(|| args.iter().find_map(|a| a.strip_prefix("--state-dir=").map(str::to_string)));
+    let Some(state_dir) = crate::brokerd::resolve_state_dir(state_flag.as_deref()) else {
+        eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE) — pass --state-dir DIR");
+        return 2;
+    };
+    // The first positional after the subcommand (`inspect`/`revoke` take a node id). `--state-dir`
+    // is the only value-taking flag these verbs accept, so skip it and its value.
+    let node_arg = {
+        let mut found = None;
+        let mut skip = false;
+        for a in args {
+            if skip {
+                skip = false;
+                continue;
+            }
+            if a == "--state-dir" {
+                skip = true;
+                continue;
+            }
+            if a.starts_with("--") {
+                continue;
+            }
+            found = Some(a.clone());
+            break;
+        }
+        found
+    };
+
+    match sub {
+        "list" => {
+            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::List, json) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            let crate::broker_ipc::Response::Listed { nodes } = resp else {
+                eprintln!("error: unexpected list response: {resp:?}");
+                return 2;
+            };
+            if json {
+                let arr: Vec<Json> = nodes.iter().map(|n| serde_json::to_value(n).expect("node serializes")).collect();
+                println!(
+                    "{}",
+                    json!({ "command": "grants", "subcommand": "list", "count": nodes.len(), "nodes": arr })
+                );
+            } else if nodes.is_empty() {
+                println!("(no grants — the tree is empty)");
+            } else {
+                for n in &nodes {
+                    println!("{}", render_node_line(n));
+                }
+            }
+            0
+        }
+        "tree" => {
+            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::Tree, json) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            let crate::broker_ipc::Response::Tree { text } = resp else {
+                eprintln!("error: unexpected tree response: {resp:?}");
+                return 2;
+            };
+            if json {
+                println!("{}", json!({ "command": "grants", "subcommand": "tree", "tree": text }));
+            } else if text.is_empty() {
+                println!("(no grants — the tree is empty)");
+            } else {
+                print!("{text}");
+            }
+            0
+        }
+        "inspect" => {
+            let Some(id) = node_arg else {
+                eprintln!("error: `grants inspect` needs a node id (g_…)");
+                return 2;
+            };
+            let resp = match grants_rpc(&state_dir, crate::broker_ipc::ReqBody::Inspect { node: id }, json) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            let crate::broker_ipc::Response::Inspected { node: n } = resp else {
+                eprintln!("error: unexpected inspect response: {resp:?}");
+                return 2;
+            };
+            if json {
+                println!(
+                    "{}",
+                    json!({ "command": "grants", "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") })
+                );
+            } else {
+                println!("id:        {}", n.id);
+                println!("parent:    {}", n.parent.as_deref().unwrap_or("(root)"));
+                // Display only — the holder is data, never a decision input (criterion 9).
+                println!("holder:    {} — {} [{}]", n.holder_kind, n.holder_desc, n.holder_peer);
+                match (n.state.as_str(), n.by_seq) {
+                    ("revoked", Some(seq)) => println!("state:     revoked (by audit seq {seq})"),
+                    (s, _) => println!("state:     {s}"),
+                }
+                match n.ttl_millis {
+                    Some(ttl) => println!("ttl:       {}", delulu_broker::render_ts_utc(ttl)),
+                    None => println!("ttl:       (none)"),
+                }
+                println!("created:   {}", delulu_broker::render_ts_utc(n.created_millis));
+                println!("audit_seq: {}", n.audit_seq);
+                println!("authority: {}", crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact());
+            }
+            0
+        }
+        "revoke" => {
+            let Some(id) = node_arg else {
+                eprintln!("error: `grants revoke` needs a node id (g_…)");
+                return 2;
+            };
+            // The CLI revokes AS the named node (self-or-descendant is always satisfied by
+            // caller == target, spec §3.2); transitivity kills the whole subtree.
+            let resp = match grants_rpc(
+                &state_dir,
+                crate::broker_ipc::ReqBody::Revoke { caller: id.clone(), target: id },
+                json,
+            ) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            let crate::broker_ipc::Response::Revoked { by_seq, epoch, newly_revoked } = resp else {
+                eprintln!("error: unexpected revoke response: {resp:?}");
+                return 2;
+            };
+            if json {
+                println!(
+                    "{}",
+                    json!({
+                        "command": "grants", "subcommand": "revoke",
+                        "by_seq": by_seq, "epoch": epoch, "newly_revoked": newly_revoked,
+                        "revocation_takes_effect": delulu_diag::REVOCATION_BOUND,
+                    })
+                );
+            } else {
+                if newly_revoked.is_empty() {
+                    eprintln!("ok: already revoked (idempotent; audit seq {by_seq}, epoch {epoch})");
+                } else {
+                    eprintln!(
+                        "ok: revoked {} node(s) (audit seq {by_seq}, epoch {epoch}): {}",
+                        newly_revoked.len(),
+                        newly_revoked.join(", ")
+                    );
+                }
+                // The honest §4.2 bound, stated at the point of revocation (playbook trap 3).
+                eprintln!("takes effect: {}", delulu_diag::REVOCATION_BOUND);
+            }
+            0
+        }
+        "delegate" => cmd_grants_delegate(args, &state_dir, json),
+        other => {
+            eprintln!("error: unknown grants subcommand `{other}` (list | tree | inspect | revoke | delegate)");
+            2
+        }
+    }
+}
+
+/// `delulu grants delegate` (spec §3.2): attenuate + mint a portable lease token, printed to
+/// STDOUT so a script/orchestrator can capture it (`--json` for the structured form). With no
+/// `--parent`, a root node holding exactly the requested authority is issued first — the typed
+/// command line is the human action at the top of the tree (spec §3.1).
+fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{AuthoritySpec, ReqBody, Response};
+
+    /// `--name value` or `--name=value` (both accepted, like the shared `parse_opts`).
+    fn flag_value(args: &[String], i: &mut usize, name: &str) -> Option<String> {
+        let a = &args[*i];
+        if let Some(v) = a.strip_prefix(name) {
+            if let Some(v) = v.strip_prefix('=') {
+                return Some(v.to_string());
+            }
+        }
+        if a == name && *i + 1 < args.len() {
+            *i += 1;
+            return Some(args[*i].clone());
+        }
+        None
+    }
+
+    let mut effects: Vec<String> = Vec::new();
+    let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut secrets, mut declassify) = (Vec::new(), Vec::new());
+    let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
+    let mut ttl: Option<String> = None;
+    let mut parent: Option<String> = None;
+    let mut multi = false;
+    let mut holder_desc = "delegated lease".to_string();
+
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--multi" {
+            multi = true;
+        } else if a == "--json" {
+            // handled by the caller
+        } else if let Some(_v) = flag_value(args, &mut i, "--state-dir") {
+            // handled by the caller
+        } else if let Some(v) = flag_value(args, &mut i, "--effects") {
+            effects.extend(v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+        } else if let Some(v) = flag_value(args, &mut i, "--fs-read") {
+            fs_read.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--fs-write") {
+            fs_write.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net") {
+            net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--secret") {
+            secrets.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
+            declassify.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-c") {
+            foreign_c.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--foreign-python") {
+            foreign_python.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
+            ttl = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--parent") {
+            parent = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--holder-desc") {
+            holder_desc = v;
+        } else {
+            eprintln!("error: unknown `grants delegate` argument `{a}`");
+            return 2;
+        }
+        i += 1;
+    }
+
+    // A typo'd effect name must not silently vanish (it would delegate LESS than asked — safe but
+    // baffling). Validate up front.
+    for e in &effects {
+        if Effect::core_from_name(e).is_none() {
+            eprintln!("error: unknown effect `{e}` (core effects: Read, Write, Net, Clock, Rand, Declassify, ForeignCall)");
+            return 2;
+        }
+    }
+    // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
+    // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
+    // normalized strings the embedded RootVal carries") — so the broker's path lattice sees exactly
+    // what an agent's runtime will resolve its file arguments against. Consequence for holders:
+    // mint the delegation from the directory the paths are relative to.
+    let norm = |v: Vec<String>| -> Vec<String> {
+        v.into_iter()
+            .map(|p| delulu_runtime::prim::granted_root(&p).to_string_lossy().to_string())
+            .collect()
+    };
+    let fs_read = norm(fs_read);
+    let fs_write = norm(fs_write);
+    let ttl_millis = match &ttl {
+        None => None,
+        Some(s) => match parse_ttl_millis(s) {
+            Some(d) => Some(now_millis() + d),
+            None => {
+                eprintln!("error: bad --ttl `{s}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+                return 2;
+            }
+        },
+    };
+
+    let parent = match parent {
+        Some(p) => p,
+        None => {
+            // No parent named: issue a root holding EXACTLY the requested authority (nothing
+            // wider), then delegate under it. Root issuance stays a human action — this typed
+            // command line — never a programmatic path (Constitution §5.16 law 4).
+            let root_spec = AuthoritySpec {
+                effects: effects.clone(),
+                fs_read: fs_read.clone(),
+                fs_write: fs_write.clone(),
+                net: net.clone(),
+                secrets: secrets.clone(),
+                declassify: declassify.clone(),
+                foreign_c: foreign_c.clone(),
+                foreign_python: foreign_python.clone(),
+                holder_kind: "human".to_string(),
+                holder_desc: "delulu grants delegate (root)".to_string(),
+                ttl_millis: None,
+            };
+            match grants_rpc(state_dir, ReqBody::Issue(root_spec), json) {
+                Ok(Response::Issued { node }) => node,
+                Ok(other) => {
+                    eprintln!("error: unexpected issue response: {other:?}");
+                    return 2;
+                }
+                Err(code) => return code,
+            }
+        }
+    };
+
+    let child_spec = AuthoritySpec {
+        effects,
+        fs_read,
+        fs_write,
+        net,
+        secrets,
+        declassify,
+        foreign_c,
+        foreign_python,
+        holder_kind: "delegate".to_string(),
+        holder_desc,
+        ttl_millis,
+    };
+    match grants_rpc(state_dir, ReqBody::Delegate { parent: parent.clone(), authority: child_spec, multi }, json) {
+        Ok(Response::Delegated { node, token }) => {
+            if json {
+                println!(
+                    "{}",
+                    json!({
+                        "command": "grants", "subcommand": "delegate",
+                        "parent": parent, "node": node, "token": token,
+                        "multi": multi, "ttl_millis": ttl_millis,
+                    })
+                );
+            } else {
+                eprintln!(
+                    "ok: delegated `{node}` ⊑ `{parent}`{}{}",
+                    match ttl_millis {
+                        Some(t) => format!(", expires {}", delulu_broker::render_ts_utc(t)),
+                        None => String::new(),
+                    },
+                    if multi { ", multi-redemption" } else { ", single-redemption" }
+                );
+                eprintln!("hand the token to the agent; it runs with: delulu run <file> --lease <token>");
+                println!("{token}");
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected delegate response: {other:?}");
+            2
+        }
+        Err(code) => code,
     }
 }
 
@@ -1314,11 +1845,67 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
 }
 
 fn cmd_run(rest: &[String]) -> i32 {
-    let (file, opts) = parse_opts(rest);
+    let (file, mut opts) = parse_opts(rest);
     let Some(file) = file else {
         eprintln!("error: `run` needs a file");
         return 2;
     };
+
+    // ----- isolation profile gate (Stage 5 phase 5i, spec §6) -----------------------------------
+    // Decided BEFORE anything runs. `microvm` is Linux+KVM-first and refused honestly everywhere
+    // else — DL1408 with the documented fallback, NEVER a silent substitution of weaker isolation
+    // (playbook trap 8). The capability matrix is spec §6.1.
+    match opts.isolation.as_deref() {
+        None | Some("none") | Some("process") => {}
+        Some("microvm") => {
+            match microvm_unavailable() {
+                Err(detail) => {
+                    let d = Diagnostic::error(
+                        "DL1408",
+                        format!(
+                            "isolation profile `microvm` is unavailable: {detail} — fall back to \
+                             `--isolation process` (worker-style OS containment of the code \
+                             outside the proof; explicitly weaker: no guest boundary, no \
+                             virtio-fs scope mounts, no default-deny egress) [a human must choose \
+                             the weaker profile; see `delulu explain DL1408` and spec §6.1]"
+                        ),
+                    );
+                    print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
+                    return 1;
+                }
+                Ok(()) => {
+                    // The Linux+KVM guest-launch path (spec §6) lands with criterion-8 CI work;
+                    // v0.5's probe never returns Ok. Refuse loudly rather than pretend.
+                    eprintln!("error: the microVM guest launch is not wired in this build (v0.5)");
+                    return 2;
+                }
+            }
+        }
+        Some(other) => {
+            eprintln!("error: unknown --isolation `{other}` (none | process | microvm)");
+            return 2;
+        }
+    }
+    if opts.isolation.as_deref() == Some("process") && opts.foreign_isolation.is_none() {
+        // The process profile's v0.5 mechanism: force the code OUTSIDE the proof (foreign libs)
+        // into minimum-privilege worker subprocesses (phase 5h). The verified program itself stays
+        // in-process, bounded by the effect system + custody — stated honestly in the label below
+        // and in the spec §6.1 matrix (never sold as microVM-equivalent).
+        opts.foreign_isolation = Some("process".to_string());
+    }
+    if let Some(iso) = &opts.isolation {
+        if !opts.json {
+            let label = match iso.as_str() {
+                "process" => {
+                    "process — foreign code in minimum-privilege worker subprocesses; the \
+                     verified program remains in-process (weaker than microvm; spec §6.1)"
+                }
+                _ => "none — in-process (language + custody enforcement only)",
+            };
+            eprintln!("isolation: {label}");
+        }
+    }
+
     // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
     if file.ends_with(".dwx") {
         return run_dwx_artifact(&file, &opts);
@@ -1361,6 +1948,91 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // ----- lease redemption (Stage 5 phase 5j, spec §3.2/§3.3) ----------------------------------
+    // `--lease <token>` redeems a delegated lease and runs under EXACTLY that node: the local
+    // grants are DERIVED from the node's authority (never widened locally — the broker enforces per
+    // §4 regardless), and custody binds to the redeemed node via `for_node`. This is the
+    // orchestration payoff: whoever holds a grant delegates a slice, hands the token to an agent,
+    // and the agent runs under exactly that attenuated authority. Fail closed: broker down ⇒
+    // DL1401; a bad/expired/already-redeemed token ⇒ DL1407/DL1402 — before `main` ever runs.
+    let lease_mode = opts.lease.is_some();
+    let mut lease_custody: Option<crate::broker_client::BrokerClientCustody> = None;
+    if let Some(token) = &opts.lease {
+        if opts.broker.as_deref() == Some("embedded") {
+            eprintln!("error: `--lease` runs under the broker daemon; it cannot be combined with `--broker embedded`");
+            return 2;
+        }
+        // The lease IS the authority. Local `--grant` flags may only supply `foreign.c` binary
+        // PATHS (the path is grant data — a human decision; the lease's `foreign.c` scope still
+        // bounds WHICH libs, enforced by the broker's ForeignBind check). Anything else would be a
+        // confusing local widening the broker would deny anyway — refuse it up front.
+        if grants.console
+            || grants.clock
+            || grants.rand
+            || grants.declassify
+            || !grants.fs_read.is_empty()
+            || !grants.fs_write.is_empty()
+            || !grants.net.is_empty()
+            || !grants.secrets.is_empty()
+            || !grants.foreign_python.is_empty()
+            || opts.grant_manifest
+        {
+            eprintln!(
+                "error: a `--lease` run derives its authority from the delegated node — only \
+                 `--grant foreign.c=LIB:PATH` (the binary path, which is grant data) may accompany it"
+            );
+            return 2;
+        }
+        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+            return 2;
+        };
+        let fail = |code: &str, message: String| -> i32 {
+            let d = Diagnostic::error(crate::broker_client::static_code(code), message);
+            print_diagnostics("run", &[d], &map, None, opts.json);
+            1
+        };
+        let unreachable_msg = |e: &dyn std::fmt::Display| {
+            format!(
+                "broker unreachable: {e} — start it with `delulu broker start` \
+                 (fail closed, invariant 27: a lease run never falls back to embedded custody)"
+            )
+        };
+        let peer = format!("pid:{}", std::process::id());
+        let node = match crate::brokerd::request(
+            &state_dir,
+            crate::broker_ipc::ReqBody::Redeem { token: token.clone(), peer },
+        ) {
+            Ok(crate::broker_ipc::Response::Redeemed { node }) => node,
+            Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return fail(&code, message),
+            Ok(other) => return fail("DL1401", format!("unexpected redeem response: {other:?}")),
+            Err(e) => return fail("DL1401", unreachable_msg(&e)),
+        };
+        // Learn this run's OWN node's authority (its slice — never a parent's or a sibling's;
+        // invariant 25 is upheld by what the ops expose, and this asks only about itself).
+        let info = match crate::brokerd::request(
+            &state_dir,
+            crate::broker_ipc::ReqBody::Inspect { node: node.clone() },
+        ) {
+            Ok(crate::broker_ipc::Response::Inspected { node }) => node,
+            Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return fail(&code, message),
+            Ok(other) => return fail("DL1401", format!("unexpected inspect response: {other:?}")),
+            Err(e) => return fail("DL1401", unreachable_msg(&e)),
+        };
+        let authority = crate::brokerd::spec_to_authority(&info.authority_spec());
+        grants = grants_from_lease(&info, std::mem::take(&mut grants.foreign_c));
+        let custody = crate::broker_client::BrokerClientCustody::for_node(
+            state_dir,
+            delulu_broker::GrantId::from_trusted(node),
+            authority,
+            opts.epoch_ms,
+        );
+        if !opts.json {
+            eprintln!("lease: running under delegated node `{}`", custody.node());
+        }
+        lease_custody = Some(custody);
+    }
+
     // Foreign grant flow (Stage 4, spec §4.1 / criterion 4): every `foreign` lib the program binds
     // must be permitted by the manifest (if any) and granted a binary at startup. An ungranted lib
     // is DL1303 HERE — before `main` runs — never mid-run. The path is grant data: the human/broker
@@ -1375,20 +2047,23 @@ fn cmd_run(rest: &[String]) -> i32 {
     // issue-then-run at the root (spec §3.2), and an unreachable broker is DL1401 BEFORE `main`
     // runs (fail closed, invariant 27 — never a silent fallback to embedded).
     let daemon_mode = match opts.broker.as_deref() {
-        None | Some("embedded") => false,
+        // A `--lease` run's custody is the daemon by definition (the node lives there).
+        None | Some("embedded") => lease_mode,
         Some("daemon") => true,
         Some(other) => {
             eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
             return 2;
         }
     };
-    if opts.broker.is_some() && !opts.json {
+    if (opts.broker.is_some() || lease_mode) && !opts.json {
         // The custody label (playbook 5j; printed when custody was explicitly chosen so default
         // embedded output stays byte-identical to prior stages).
         eprintln!("custody: {}", if daemon_mode { "daemon" } else { "embedded" });
     }
-    let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = None;
-    if daemon_mode {
+    // A lease run already bound custody to the redeemed node above; a plain `--broker daemon` run
+    // issues its root here (the `--grant` flags as issue-then-run sugar, spec §3.2).
+    let mut daemon_custody: Option<crate::broker_client::BrokerClientCustody> = lease_custody;
+    if daemon_mode && daemon_custody.is_none() {
         let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
             eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
             return 2;
@@ -2101,6 +2776,13 @@ fn cmd_explain(rest: &[String]) -> i32 {
         eprintln!("error: `explain` needs a code, e.g. `delulu explain DL0501`");
         return 2;
     };
+    // Named topics (Stage 5 phase 5j): `delulu explain E-REVOKE` states the spec §4.2 revocation
+    // latency bound VERBATIM (playbook trap 3 — never "immediate").
+    if let Some((title, body)) = delulu_diag::topic_explain(&code) {
+        println!("E-{code}: {title}");
+        println!("\n{body}");
+        return 0;
+    }
     match delulu_diag::code_title(&code) {
         Some(title) => {
             println!("{code}: {title}");

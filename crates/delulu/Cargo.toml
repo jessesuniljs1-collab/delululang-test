@@ -8,6 +8,12 @@ edition.workspace = true
 name = "delulu"
 path = "src/main.rs"
 
+# Stage 5 phase 5i: `delulu_kvm` gates the criterion-8 microVM egress-deny test — set it only on a
+# Linux CI runner with KVM + a provisioned microVM runtime (`RUSTFLAGS="--cfg delulu_kvm"`).
+# Registered here so the gate is clippy-clean everywhere else.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(delulu_kvm)"] }
+
 [features]
 # Forward the runtime's embedded-Python feature (Stage 4 phase 4f). ON by default so a normal
 # `cargo build`/`cargo test --workspace` produces a Python-capable `delulu`; build the CLI with

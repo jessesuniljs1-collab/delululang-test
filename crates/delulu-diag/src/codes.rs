@@ -152,6 +152,36 @@ const FOREIGN_CAVEAT: &str =
      reachability (grant + capability + ForeignCall in every row), not behavior. Containment of \
      behavior is process-level until Stage 5's foreign workers, and microVM-level after.";
 
+/// The Stage-5 revocation latency bound, VERBATIM from spec §4.2 (normative — playbook trap 3:
+/// never claim "immediate"). This exact wording appears in `delulu explain E-REVOKE` and in the
+/// audit record of every revocation; no stronger claim is made anywhere.
+pub const REVOCATION_BOUND: &str = "synchronous class — before the next use; epoch class — within \
+     one epoch interval (≤ 50 ms default)";
+
+/// A named explanation topic (not a diagnostic code): `delulu explain E-REVOKE`. Returns
+/// `(title, body)`. Topics carry normative honesty text the spec mandates verbatim (Stage 5
+/// playbook 5j); unlike codes they explain a *semantics*, not a single failure.
+pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
+    match topic {
+        "REVOKE" => Some((
+            "revocation semantics and the stated latency bound (spec §4.2, normative)",
+            format!(
+                "Revocation takes effect: {REVOCATION_BOUND}. This bound appears in `delulu \
+                 explain E-REVOKE` and in the audit record of every revocation. No stronger claim \
+                 is made anywhere.\n\n\
+                 Synchronous class — validated by a broker round-trip per use: Declassify \
+                 (expose), FsWrite ops, Net ops, foreign bind, plugin load (Stage 6), and later \
+                 Actuate (Stage 10). Epoch class — validated locally against cached scope data + \
+                 a revocation epoch the runtime refreshes at most every 50 ms (config \
+                 `--epoch-ms`, ceiling 250): Read ops, Clock, Rand, Console.\n\n\
+                 Honesty (spec §10): Revocation bounds are those of §4.2 — \"immediate\" is never \
+                 claimed."
+            ),
+        )),
+        _ => None,
+    }
+}
+
 /// A longer, human-facing explanation for a diagnostic code, printed by `delulu explain <code>`
 /// beneath the title. Only codes whose behavior carries a normative caveat define one; the rest
 /// return `None` and `explain` prints the title alone. Every DL13xx (foreign) explanation appends
@@ -199,6 +229,51 @@ pub fn code_explain(code: &str) -> Option<String> {
              returned data, not the callee's memory safety.",
         "DL1308" => "The only ABI string supported in v0.4 is `\"c\"`. Other ABIs (C++, structs by \
              value, varargs) are post-1.0 RFCs.",
+        // ----- DL14xx custody/broker (Stage 5). The §10 honesty caveats appear word-for-word
+        // in the relevant bodies below (playbook 5j: "Copy spec §10 caveats into docs and
+        // explain-text word-for-word").
+        "DL1401" => "The broker daemon could not be reached (or a broker-protocol failure \
+             occurred) while this run's custody lives in the daemon. Effectful operations FAIL \
+             CLOSED (invariant 27): they never fall back to embedded custody, silently or \
+             otherwise. Start the broker with `delulu broker start` and re-run. Honesty (spec \
+             §10): The broker defends against the program and its delegates, not against the OS \
+             user: any process running as the same user with default OS permissions could read \
+             the broker key. The boundary is process compromise and code-behavior, per the threat \
+             model — not local-user malware, not root, not the kernel, not the hypervisor, not \
+             microarchitectural channels (Constitution §5.14 unchanged).",
+        "DL1402" => "The lease's TTL deadline has passed; the node no longer authorizes anything. \
+             Re-delegate a fresh lease (`delulu grants delegate …`) — a human/orchestrator \
+             decision, never automatic. Honesty (spec §10): TTLs bound duration of compromise, \
+             not its existence.",
+        "DL1403" => "The lease was revoked; the denial carries the revoking operation's audit \
+             sequence number, so the JSON error states why and when your authority died (spec \
+             §4.3 — feedback quality for agents is a feature). Revocation takes effect: \
+             synchronous class — before the next use; epoch class — within one epoch interval \
+             (≤ 50 ms default) — see `delulu explain E-REVOKE`. Honesty (spec §10): Revocation \
+             bounds are those of §4.2 — \"immediate\" is never claimed.",
+        "DL1405" => "The hash-chained audit log failed verification at the reported sequence \
+             number: a recomputed record hash or a cross-record `prev_hash` link did not match. \
+             The log may have been tampered with — a human must inspect it. Honesty (spec §10): \
+             The audit log detects tampering after the fact; it does not prevent it. The log is \
+             observability, not enforcement: no authority decision ever reads it.",
+        "DL1406" => "The client and the broker daemon speak different wire-protocol versions \
+             (`broker/N`). The daemon answers the mismatch and never acts on the request. \
+             Upgrade so both ends are the same `delulu` build, then retry.",
+        "DL1407" => "The delegation lease token failed to redeem: a bad or tampered MAC, a token \
+             signed by a rotated-away broker key, a malformed token, a token bound to an unknown \
+             node, or a second redemption of a single-use token (mint with `--multi` for \
+             multi-redemption). Re-mint via `delulu grants delegate …` — a human/orchestrator \
+             decision. Note that `delulu broker rotate-key` deliberately invalidates ALL \
+             outstanding tokens.",
+        "DL1408" => "The requested isolation profile is not available here. `--isolation microvm` \
+             requires Linux (x86_64/aarch64) with KVM and a provisioned microVM runtime \
+             (Firecracker/cloud-hypervisor); everywhere else it is refused — never silently \
+             approximated. The documented fallback is `--isolation process`: worker-style OS \
+             containment of the code outside the proof; explicitly weaker — no guest boundary, \
+             no virtio-fs scope mounts, no default-deny egress. Honesty (spec §10): Foreign \
+             workers bound blast radius, not foreign behavior; the microVM profile is the strong \
+             container and it is Linux-first — the fallback matrix is honest about weaker \
+             platforms.",
         "DL1409" => "Under `--foreign-isolation process` a granted C library runs in an isolated \
              worker subprocess. This worker died mid-call — a segfault, an abort, a hard crash in the \
              native code. That is exactly the blast-radius containment the process-isolation profile \
@@ -237,5 +312,38 @@ mod tests {
         assert!(is_registered("DL0501"));
         assert!(!is_registered("DL9999"));
         assert_eq!(code_title("DL0305"), Some("module-level mutable state is forbidden"));
+    }
+
+    /// Stage 5 playbook trap 3: `explain E-REVOKE` states the spec §4.2 latency bound VERBATIM —
+    /// and never claims "immediate" (the word appears only inside the §10 quote denying the claim).
+    #[test]
+    fn e_revoke_topic_states_the_4_2_bound_verbatim() {
+        let (title, body) = topic_explain("REVOKE").expect("E-REVOKE topic exists");
+        assert!(title.contains("§4.2"));
+        assert!(
+            body.contains(
+                "Revocation takes effect: synchronous class — before the next use; epoch class — \
+                 within one epoch interval (≤ 50 ms default)."
+            ),
+            "the §4.2 bound must appear verbatim: {body}"
+        );
+        assert!(body.contains("No stronger claim is made anywhere."), "{body}");
+        assert!(body.contains("\"immediate\" is never claimed"), "the §10 caveat, word-for-word: {body}");
+        assert!(topic_explain("NOPE").is_none());
+    }
+
+    /// Every DL14xx custody code has a longer explain body, and the §10 caveats it must carry
+    /// appear word-for-word (playbook 5j).
+    #[test]
+    fn dl14xx_explains_carry_the_spec_10_caveats() {
+        for code in ["DL1401", "DL1402", "DL1403", "DL1405", "DL1406", "DL1407", "DL1408", "DL1409"] {
+            assert!(code_explain(code).is_some(), "{code} needs an explain body");
+        }
+        assert!(code_explain("DL1401").unwrap().contains("not against the OS user"));
+        assert!(code_explain("DL1402").unwrap().contains("TTLs bound duration of compromise, not its existence"));
+        assert!(code_explain("DL1403").unwrap().contains("\"immediate\" is never claimed"));
+        assert!(code_explain("DL1405").unwrap().contains("detects tampering after the fact; it does not prevent it"));
+        assert!(code_explain("DL1408").unwrap().contains("Foreign workers bound blast radius, not foreign behavior"));
+        assert!(code_explain("DL1408").unwrap().contains("--isolation process"), "the fallback command is shown");
     }
 }
