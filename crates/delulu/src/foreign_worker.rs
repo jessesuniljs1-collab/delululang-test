@@ -280,7 +280,7 @@ impl WorkerConn {
         unsafe {
             crate::brokerd::clear_std_handle_inheritance();
         }
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         set_pdeathsig(&mut cmd);
 
         let child = cmd
@@ -528,9 +528,13 @@ pub fn run_worker(args: &[String]) -> i32 {
     0
 }
 
-// ----- Unix: PR_SET_PDEATHSIG (kill the worker if the host dies) ----------------------------------
+// ----- Linux: PR_SET_PDEATHSIG (kill the worker if the host dies) ---------------------------------
+// `prctl`/`PR_SET_PDEATHSIG` are Linux-only (libc does not define them for Apple/BSD — a bare
+// `cfg(unix)` here breaks the macOS build). On macOS there is no PDEATHSIG equivalent; the worker
+// is reaped by `WorkerGuard`'s explicit kill on drop (portable std), and a kqueue
+// `EVFILT_PROC`-based watch is a documented possible hardening if a macOS lane ever goes live.
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn set_pdeathsig(cmd: &mut Command) {
     use std::os::unix::process::CommandExt as _;
     // SAFETY: `pre_exec` runs in the forked child before `exec`, calling only the async-signal-safe

@@ -736,6 +736,20 @@ Maps every spec §9 criterion to its status and the test(s) that prove it. Crite
 9. **Cross-compile note (head chef, 2026-07-13):** Windows→Linux `cargo check --target …` is
    blocked by a `libffi-sys` host-cfg build-script bug; the Linux verification lane is a native
    Linux build (the head chef ran the full suite green on real Ubuntu at the chunk-4 HEAD).
+10. **macOS portability (head chef, 2026-07-13, post-close-out fix):** phase 5h gated
+   `set_pdeathsig` on `cfg(unix)`, but `libc::prctl`/`PR_SET_PDEATHSIG` are **Linux-only** (libc
+   defines them for Linux/Android, not Apple/BSD) — proven by a minimal `x86_64-apple-darwin`
+   typecheck failing with E0425 on exactly that pattern. Fixed: the gate (call site, fn, and the
+   `libc` dependency itself) is now `cfg(target_os = "linux")`; on macOS the worker is reaped by
+   `WorkerGuard`'s explicit kill (portable std) — no PDEATHSIG equivalent exists there (kqueue
+   `EVFILT_PROC` is the documented possible hardening). **macOS verification status, honestly:**
+   `delulu-syntax`/`delulu-diag`/`delulu-check`/`delulu-broker` (the whole custody core) blind-
+   typecheck green for `x86_64-apple-darwin`; `delulu-runtime`/`delulu`/`delulu-wasm` cannot be
+   cross-checked from Windows (`libffi-sys`/C-dep build scripts) though their remaining unix code
+   is pure std (UDS transport, 0600 modes) and macOS-portable by inspection; no live macOS lane
+   exists (no Apple hardware; CI would require pushing, which is barred by standing order). The
+   per-OS test triplets (`msvcrt.dll`/`libm.dylib`/`libm.so.6`) are in place for the day a real
+   Mac runs the suite.
 
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

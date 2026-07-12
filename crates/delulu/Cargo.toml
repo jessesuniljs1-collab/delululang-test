@@ -53,7 +53,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Authorization",
 ] }
 
-# Foreign-worker kill-on-host-death on Unix (phase 5h): prctl(PR_SET_PDEATHSIG). libc is the single
-# most standard Rust FFI crate; a full seccomp profile is a documented post-chunk stub (ruling 4).
-[target.'cfg(unix)'.dependencies]
+# Foreign-worker kill-on-host-death on Linux (phase 5h): prctl(PR_SET_PDEATHSIG) — a Linux-only
+# syscall (libc defines it for Linux/Android, not Apple/BSD; gating this cfg(unix) breaks macOS).
+# libc is the single most standard Rust FFI crate; seccomp is a documented post-chunk stub (ruling 4).
+[target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
