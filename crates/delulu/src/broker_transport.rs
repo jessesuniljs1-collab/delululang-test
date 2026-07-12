@@ -418,4 +418,4 @@ mod imp {
     }
 }
 
-pub use imp::{connect, Listener};
+pub use imp::{connect, Connection, Listener};

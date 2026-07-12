@@ -123,6 +123,7 @@ registry! {
     "DL1406" => "broker protocol version mismatch",
     "DL1407" => "delegation token invalid or already redeemed",
     "DL1408" => "isolation profile unavailable on this platform",
+    "DL1409" => "foreign worker died (process isolation) — the isolated worker crashed; the host survived",
 
     // DL09xx — runtime
     "DL0901" => "integer overflow",
@@ -198,6 +199,14 @@ pub fn code_explain(code: &str) -> Option<String> {
              returned data, not the callee's memory safety.",
         "DL1308" => "The only ABI string supported in v0.4 is `\"c\"`. Other ABIs (C++, structs by \
              value, varargs) are post-1.0 RFCs.",
+        "DL1409" => "Under `--foreign-isolation process` a granted C library runs in an isolated \
+             worker subprocess. This worker died mid-call — a segfault, an abort, a hard crash in the \
+             native code. That is exactly the blast-radius containment the process-isolation profile \
+             exists to provide: the crash was confined to the worker, and the host process survived \
+             and turned the worker's death into this clean fault instead of dying alongside it. Re-run \
+             with `--foreign-isolation inproc` to reproduce the crash in-process for debugging (Stage \
+             4 behaviour — a crash there takes the whole process down). Foreign workers bound blast \
+             radius, not foreign behaviour (spec §10).",
         _ => return None,
     };
     // Every foreign (DL13xx) explanation carries the reachability-not-behavior caveat verbatim.

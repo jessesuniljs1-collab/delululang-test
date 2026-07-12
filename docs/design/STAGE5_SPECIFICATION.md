@@ -505,5 +505,103 @@ denied.
    reload). Live reload / a richer `secrets list|rm` surface is chunk-5 CLI polish; the minimal
    set-then-restart path is enough to prove the 5g semantics.
 
+CHUNK 4 (phase 5h) — **foreign workers (process isolation)** — redeems Stage 4's honesty note with
+real process-level blast-radius containment.
+
+**Phase 5h — foreign workers — is implemented and green (2026-07-12, 354 → 360 workspace tests, +6;
+1 pre-existing ignored test unchanged).** A [`ForeignBinder`]/[`BoundForeign`] seam was added to
+`delulu-runtime` (`src/foreign.rs`), parallel to the phase-5f `Custody` seam: the interpreter holds a
+binder and calls it from `bind_foreign`, so nothing in the evaluator branches on isolation. The
+default `InProcBinder` loads the library in-process **exactly as Stage 4** — a program that never
+opts in is byte-identical (criterion 11). `Interp::with_foreign_binder` injects the CLI's
+worker-spawning binder for `--foreign-isolation process`. `ForeignHandle` now holds a
+`Box<dyn BoundForeign>` (was a concrete `LoadedLib`); the WASM host was updated to box its in-process
+lib through the same seam (its foreign path stays in-process for v0.5 — see the flags below).
+
+**The worker** is the same `delulu` executable re-invoked with a hidden `__foreign-worker` subcommand
+(mirroring how `brokerd` re-invokes `broker start --foreground`). Host-side machinery lives in
+`crates/delulu/src/foreign_worker.rs`: `WorkerBinder` (spawns one worker per bind), `WorkerConn`
+(implements `BoundForeign`, forwards marshalled calls), and `run_worker` (the worker entry). **The
+worker is the server, the host is the client** on a **private channel** — the worker binds a
+`broker_transport::Listener` on a per-worker temp dir and `accept`s one persistent connection; the
+host connects with the bounded `broker_transport::connect`. This choice bounds the *host's* wait (an
+unbounded `accept` on the host would hang if the worker never came up); the worker's `accept` is
+bounded by the kill-on-host-death mechanism. The channel reuses the hardened same-user transport
+(owner-only DACL / `0700` dir, peer-SID check) chunk 3 already ships; the `delulu-broker-` pipe-name
+prefix is cosmetic (each worker's channel is a distinct, broker-unrelated pipe). The **marshalling
+protocol** carries EXACTLY the Stage-4 scalar set (`Int/Float/Bool/Str/Unit/ForeignPtr` — head-chef
+ruling 1: no new type crosses), CBOR-framed by **reusing `broker_ipc::{write_frame, read_frame}`**;
+`delulu-runtime`'s `FVal`/`FKind`/`ForeignSig` are mirrored as small wire types in the CLI crate so
+the runtime needs no serde dependency. A `Bind` handshake (path + sigs + max_ret) precedes `Call`
+frames; the worker resolves all symbols fail-fast at load (spec §4.2).
+
+**The headline guarantee (criterion 7a):** a worker that dies mid-call (a C segfault / hard crash)
+breaks the private pipe; the host's next frame read returns EOF and becomes the Rust-internal
+`ForeignErr::WorkerDied` (a NEW **internal-only** variant — NOT a new variant of the language
+`std.foreign.ForeignErr` sum, so language surface delta stays zero, trap 1). The interpreter surfaces
+it as a clean **DL1409** fault (new code, registered in `delulu-diag`) and **the host process
+survives** — it does not abort alongside the worker. The proof runs end-to-end through the real binary
+(`crates/delulu/tests/foreign_worker.rs`): a `rustc --crate-type cdylib` fixture with a deliberate
+null-deref (`dl_segfault`) is called under `--foreign-isolation process` → the run exits **cleanly
+with code 1** (a diagnostic, never an OS crash code) carrying DL1409; a companion test confirms a
+NORMAL call (`dl_add(20,22) == 42`) round-trips correctly across the same pipe.
+
+**Broker non-disclosure (criterion 7b):** the worker is spawned with **no broker address in argv** and
+`DELULU_STATE_DIR` explicitly pointed at an isolated, **broker-less** directory (never the host's real
+state dir), and no broker handle is inherited (the daemon-mode host holds no persistent broker
+connection at spawn time, and `HANDLE_FLAG_INHERIT` is cleared on the host's std handles just before
+spawn — reusing `brokerd::clear_std_handle_inheritance`). So when the worker resolves "where the
+broker is" it lands on an empty directory and a connection attempt is **refused**. The
+`__foreign-worker --probe-broker` mode (the worker binary attempting exactly that connect) is driven
+from the integration test: given the isolated dir it reports `unreachable` (exit 1); given a REAL
+running broker's dir disclosed, the same probe reports `reachable` (exit 0) — so the refusal is
+meaningful, not a probe that always fails. Per the §10 threat model this is **non-disclosure**, not
+kernel enforcement (a same-user process is explicitly out of scope for hard blocks — §10 states a
+same-user process could reach broker material); this is flagged honestly below.
+
+**Isolation mechanisms per OS.** *Windows:* a **Job Object** with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+(`windows-sys`, `Win32_System_JobObjects` feature added; no new dep) — the host holds the job handle,
+so if the host dies the handle closes and the worker is killed; the worker also sets
+`SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX)` so a segfault is prompt and CI-safe (no
+WerFault dialog); std-handle inheritance cleared + explicit null stdio. Assignment to the job is
+best-effort (a nested-job refusal falls back to the explicit Drop-guard kill). *Unix
+(compiled, CI-verified only — this box is Windows):* `prctl(PR_SET_PDEATHSIG, SIGKILL)` in a
+`pre_exec` hook (via a new `[target.'cfg(unix)'] libc` dep — the single most standard FFI crate).
+Both platforms additionally: a `WorkerGuard` that kills the child + removes the channel dir on drop,
+never panicking (the chunk-3 Drop-guard lesson), and a stable worker cwd (its channel dir — never the
+caller's, which a child locks on Windows).
+
+**Chunk-4 deviations / decisions flagged LOUDLY for head-chef review:**
+1. **The Python worker is NOT process-isolated in this chunk (flagged, like Stage 4 flagged
+   Python-on-WASM).** Embedded CPython stays **in-process** even under `--foreign-isolation process`.
+   Reason: a `PyObj` handle is a live, process-local Python object — it is NOT a marshallable scalar,
+   so it cannot cross a pipe; a Python worker needs an opaque-handle-table protocol that is a much
+   larger design than the scalar C protocol. The C worker is the criterion-7 proof (head-chef ruling
+   5). Python-worker isolation is a documented post-chunk item.
+2. **The WASM engine's foreign path stays in-process.** Worker isolation is wired on the INTERPRETER
+   engine (the criterion-7 reference and where foreign-using programs actually run — a foreign-using
+   `.dwx` is already unsupported per phase 4g). `delulu run --engine wasm --foreign-isolation process`
+   prints a note that foreign runs in-process. Unifying the WASM host onto the `ForeignBinder` seam is
+   a clean follow-up.
+3. **Criterion 7b is non-disclosure, not kernel enforcement.** Consistent with §10 (the broker does
+   not defend against the same OS user), the worker is *not handed* the broker and, when it tries the
+   only address it can resolve, is refused — but a same-user worker that deliberately reconstructed
+   the default `~/.delulu` pipe name could still open it. A hard block would need a restricted / low-
+   integrity token (Windows) or a seccomp/namespace jail (Linux); those are the microVM-class controls
+   of phase 5i, not this chunk. Stated plainly rather than overclaimed.
+4. **The Linux seccomp basic profile is a documented STUB (head-chef ruling 4):** `PR_SET_PDEATHSIG`
+   is shipped (the must-have); a real seccomp filter needs a heavy dep and is deferred. No seccomp
+   crate was pulled in.
+5. **DL1409 is a new DL14xx code** (`delulu-diag/src/codes.rs`) — a diagnostics-registry addition, not
+   a language-surface change (chunk 1 added the DL14xx family the same way). The §8 table lists
+   DL1401–1408; DL1409 (foreign-worker death) is the natural next entry and is documented here.
+6. **One worker is spawned per `root.foreign(load)` bind** (not a pooled worker). Fine for v0.5;
+   pooling is a performance follow-up. The worker's private-channel connect is retried up to 10 s to
+   tolerate a cold-binary startup; a worker that never comes up is a catchable `Unavailable` bind
+   result, never a hang.
+7. **The Unix path is compiled but unverified locally** (this is a Windows dev box). The `pre_exec` +
+   `prctl` snippet follows the standard pattern; CI (Linux) is the verification. Flagged so the head
+   chef confirms the Linux build on re-verify.
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

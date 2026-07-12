@@ -10,7 +10,7 @@ use delulu_check::ResourceKind;
 use delulu_syntax::ast::*;
 
 use crate::custody::{Custody, CustodyDecision, EmbeddedCustody, Op as CustodyOp};
-use crate::foreign::{self, FKind, FVal, ForeignHandle, ForeignSig};
+use crate::foreign::{self, FKind, FVal, ForeignBinder, ForeignHandle, ForeignSig, InProcBinder};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
 use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
@@ -44,6 +44,12 @@ pub struct Interp {
     foreign_binds: HashMap<NodeId, String>,
     foreign_grants: HashMap<String, String>,
     foreign_max_ret: usize,
+    /// How a bound foreign lib executes (Stage 5 phase 5h). Default [`InProcBinder`] — Stage-4
+    /// in-process load, so `--foreign-isolation inproc` (and every program that never opts in) is
+    /// byte-identical to Stage 4. `--foreign-isolation process` injects the CLI's worker-spawning
+    /// binder via [`Interp::with_foreign_binder`], running each granted C lib in an isolated
+    /// subprocess. `Rc` so the binder is shared cheaply (bind may happen at several call sites).
+    foreign_binder: Rc<dyn ForeignBinder>,
     /// Where authority lives (Stage 5 phase 5f). Default: [`EmbeddedCustody`] — a pass-through, so a
     /// program built with `Interp::new` behaves EXACTLY as in Stages 1–4 (criterion 11). `--broker
     /// daemon` swaps in a `BrokerClientCustody` (IPC) via [`Interp::with_custody`]. Interior
@@ -80,8 +86,18 @@ impl Interp {
             foreign_binds: HashMap::new(),
             foreign_grants: HashMap::new(),
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
+            foreign_binder: Rc::new(InProcBinder),
             custody: RefCell::new(Box::new(EmbeddedCustody::new())),
         }
+    }
+
+    /// Route foreign binds through a custom [`ForeignBinder`] (Stage 5 phase 5h). The CLI attaches a
+    /// worker-spawning binder for `--foreign-isolation process`; the default is [`InProcBinder`], so
+    /// every existing entry point loads foreign code in-process exactly as Stage 4 (criterion 11).
+    /// Builder style; additive.
+    pub fn with_foreign_binder(mut self, binder: Rc<dyn ForeignBinder>) -> Interp {
+        self.foreign_binder = binder;
+        self
     }
 
     /// Route authority decisions through a custom [`Custody`] (Stage 5 phase 5f). The CLI attaches a
@@ -570,8 +586,11 @@ impl Interp {
             return Ok(Value::err(Value::variant("NotGranted", vec![])));
         };
         let sigs = self.foreign_blocks.get(&lib_name).cloned().unwrap_or_default();
-        match foreign::load_and_resolve(&path, sigs) {
-            Ok(lib) => Ok(Value::ok(Value::Foreign(Rc::new(ForeignHandle { name: lib_name, lib })))),
+        // Stage 5 phase 5h: the binder decides in-process vs. isolated worker. A worker that fails to
+        // spawn/load surfaces as a catchable `ForeignErr` bind result (e.g. `Unavailable`) — exactly
+        // like an in-process load failure — never a host-process crash.
+        match self.foreign_binder.bind(&lib_name, &path, sigs, self.foreign_max_ret) {
+            Ok(exec) => Ok(Value::ok(Value::Foreign(Rc::new(ForeignHandle { name: lib_name, exec })))),
             Err(e) => Ok(Value::err(foreign_err_value(&e))),
         }
     }
@@ -582,7 +601,7 @@ impl Interp {
     /// signature has no `Result` channel for the program to catch, so the honest outcome is a clean
     /// abort — never UB, never a panic, never a silent truncation (criterion 8).
     fn call_foreign(&self, handle: &Rc<ForeignHandle>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
-        let Some(sig) = handle.lib.sig(method).cloned() else {
+        let Some(sig) = handle.exec.sig(method) else {
             return Err(Fault::at("DL0907", format!("unknown foreign method `{method}` (checker bug)"), span));
         };
         let fargs: Vec<FVal> = sig
@@ -592,11 +611,22 @@ impl Interp {
             .map(|(k, v)| value_to_fval(*k, v))
             .collect();
         self.trace_foreign(&handle.name, method, span);
-        match foreign::call(&handle.lib, method, &fargs, self.foreign_max_ret) {
+        match handle.exec.call(method, &fargs, self.foreign_max_ret) {
             Ok(fv) => Ok(fval_to_value(fv)),
             Err(foreign::ForeignErr::BadReturn(reason)) => Err(Fault::at(
                 "DL1306",
                 format!("foreign return validation failed: {reason} (ForeignErr::BadReturn)"),
+                span,
+            )),
+            // Stage 5 phase 5h headline (spec §5, criterion 7): the isolated worker died mid-call (a C
+            // segfault / hard crash). The host process SURVIVED — it turned the worker's death into a
+            // clean DL1409 fault instead of dying alongside it.
+            Err(foreign::ForeignErr::WorkerDied(reason)) => Err(Fault::at(
+                "DL1409",
+                format!(
+                    "foreign worker died: {reason} (ForeignErr::WorkerDied) — the isolated worker \
+                     process crashed; the host survived and reported this cleanly instead of aborting"
+                ),
                 span,
             )),
             Err(other) => Err(Fault::at("DL1306", format!("foreign call failed: {other:?}"), span)),
@@ -961,5 +991,9 @@ fn foreign_err_value(e: &foreign::ForeignErr) -> Value {
         SymbolMissing(s) => Value::variant("SymbolMissing", vec![Value::str(s.clone())]),
         BadReturn(s) => Value::variant("BadReturn", vec![Value::str(s.clone())]),
         Unavailable(s) => Value::variant("Unavailable", vec![Value::str(s.clone())]),
+        // `WorkerDied` is a call-time failure surfaced as a DL1409 fault, never a bind result — but if
+        // a worker dies during the bind handshake it maps to the language's `Unavailable` variant (a
+        // catchable "the library could not be made available"), keeping the language sum unchanged.
+        WorkerDied(s) => Value::variant("Unavailable", vec![Value::str(format!("foreign worker died: {s}"))]),
     }
 }

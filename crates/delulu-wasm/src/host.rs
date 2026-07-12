@@ -327,6 +327,10 @@ fn build_foreign_err_cell(caller: &mut Caller<'_, HostState>, e: &ForeignErr) ->
         ForeignErr::SymbolMissing(s) => (1, Some(s.as_str())),
         ForeignErr::BadReturn(s) => (2, Some(s.as_str())),
         ForeignErr::Unavailable(s) => (3, Some(s.as_str())),
+        // The WASM host runs foreign code in-process (phase-5h worker isolation is on the interpreter
+        // engine), so `WorkerDied` is unreachable here; map it to the `Unavailable` variant defensively
+        // so the language sum stays the fixed four-variant §8 shape.
+        ForeignErr::WorkerDied(s) => (3, Some(s.as_str())),
     };
     let field = match msg {
         Some(m) => Some(write_str_cell(caller, m)?),
@@ -678,7 +682,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     let sigs = caller.data().foreign_sigs.get(&name).cloned().unwrap_or_default();
                     match foreign::load_and_resolve(&path, sigs) {
                         Ok(lib) => {
-                            let handle = Rc::new(ForeignHandle { name: name.clone(), lib });
+                            // Stage 5 phase 5h: the WASM host's foreign path stays IN-PROCESS for v0.5
+                            // (worker isolation is wired on the interpreter engine — see the phase-5h
+                            // status note). Box the in-process lib through the same `BoundForeign` seam.
+                            let handle = Rc::new(ForeignHandle { name: name.clone(), exec: Box::new(lib) });
                             let idx = {
                                 let st = caller.data_mut();
                                 st.caps.push(CapKind::Foreign(handle));
@@ -725,7 +732,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 };
                 // Defensive: only call a method the bound lib actually resolved (else `foreign::call`
                 // would `expect`-panic — a host panic aborts the process inside a wasm callback).
-                if handle.lib.sig(&method).is_none() {
+                if handle.exec.sig(&method).is_none() {
                     caller.data_mut().refused = Some(format!("DL0904: `{}` has no bound foreign method `{method}`", handle.name));
                     return 0;
                 }
@@ -738,7 +745,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                     return 0;
                 };
                 let max_ret = caller.data().max_ret();
-                match foreign::call(&handle.lib, &method, &args, max_ret) {
+                match handle.exec.call(&method, &args, max_ret) {
                     Ok(fv) => encode_fval_return(&mut caller, fv),
                     Err(ForeignErr::BadReturn(reason)) => {
                         caller.data_mut().refused =

@@ -73,12 +73,20 @@ pub enum FVal {
 
 /// A defined foreign failure (spec §8 `ForeignErr = NotGranted | SymbolMissing(Str) | BadReturn(Str)
 /// | Unavailable(Str)`). Never a panic, never UB.
+///
+/// `WorkerDied` is a Stage-5 phase-5h ADDITION and is **Rust-internal only** — it is NOT a new
+/// variant of the *language* `std.foreign.ForeignErr` sum (language surface delta stays zero, trap 1).
+/// It is produced only by the process-isolation worker path when the isolated worker subprocess dies
+/// mid-call (a C segfault, a hard crash): the host reads EOF/broken-pipe on the private channel and
+/// reports this instead of dying alongside the worker. The interpreter surfaces it as a clean DL1409
+/// fault; the host process continues (spec §5, criterion 7 — the headline guarantee).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ForeignErr {
     NotGranted,
     SymbolMissing(String),
     BadReturn(String),
     Unavailable(String),
+    WorkerDied(String),
 }
 
 /// A bound foreign library: the loaded handle (kept alive for the program), the resolved code
@@ -295,9 +303,74 @@ fn as_str(v: &FVal) -> Rc<str> {
 
 /// A bound foreign library plus the logical name that named it (for the trace and diagnostics). This
 /// is what the interpreter stores in a `Value::Foreign` handle.
+///
+/// The library is held behind the [`BoundForeign`] seam (Stage 5 phase 5h) so the interpreter and
+/// WASM host do not care whether it executes **in-process** (Stage 4, [`LoadedLib`]) or in an
+/// **isolated worker subprocess** (the `delulu` CLI's worker, over a private pipe). Both speak the
+/// exact same marshalling ([`FVal`]).
 pub struct ForeignHandle {
     pub name: String,
-    pub lib: LoadedLib,
+    pub exec: Box<dyn BoundForeign>,
+}
+
+/// A bound foreign library that can execute marshalled calls (Stage 5 phase 5h seam). Two impls:
+/// [`LoadedLib`] runs the call **in this process** (Stage 4 behaviour); the `delulu` CLI's
+/// `WorkerConn` forwards it to an **isolated worker subprocess** over a private pipe. Object-safe and
+/// single-threaded (the interpreter is `!Send`), so `&self` methods with interior mutability suffice.
+pub trait BoundForeign {
+    /// The marshalling signature of `method`, if the library resolved it at bind time. Owned (a
+    /// cheap clone) so the worker impl need not lend a reference into another process's state.
+    fn sig(&self, method: &str) -> Option<ForeignSig>;
+
+    /// Execute `method` with the marshalled `args`, validating the return per invariant 21. A dead
+    /// isolated worker is [`ForeignErr::WorkerDied`] (the host survives — spec §5); an in-process lib
+    /// never returns that variant.
+    fn call(&self, method: &str, args: &[FVal], max_ret: usize) -> Result<FVal, ForeignErr>;
+}
+
+impl BoundForeign for LoadedLib {
+    fn sig(&self, method: &str) -> Option<ForeignSig> {
+        self.sigs.get(method).cloned()
+    }
+
+    fn call(&self, method: &str, args: &[FVal], max_ret: usize) -> Result<FVal, ForeignErr> {
+        call(self, method, args, max_ret)
+    }
+}
+
+/// Binds a granted foreign library to a [`BoundForeign`] executor (Stage 5 phase 5h seam). The
+/// default [`InProcBinder`] loads it in-process (Stage 4, `--foreign-isolation inproc`); the `delulu`
+/// CLI injects a worker-spawning binder for `--foreign-isolation process`. The interpreter holds a
+/// binder and calls it from `bind_foreign`, so the isolation choice is a single injected object and
+/// nothing in the evaluator branches on it.
+pub trait ForeignBinder {
+    /// Bind the granted binary at `path` (for logical `lib_name`) with the given signatures. A
+    /// load/spawn failure is a [`ForeignErr`] the caller turns into a catchable bind result
+    /// (`NotGranted` is handled by the caller before this is reached).
+    fn bind(
+        &self,
+        lib_name: &str,
+        path: &str,
+        sigs: Vec<ForeignSig>,
+        max_ret: usize,
+    ) -> Result<Box<dyn BoundForeign>, ForeignErr>;
+}
+
+/// The default, dev binder: load + resolve the library **in this process** exactly as Stage 4 did
+/// (`--foreign-isolation inproc`). Zero behaviour change for a program that does not opt into worker
+/// isolation (criterion 11).
+pub struct InProcBinder;
+
+impl ForeignBinder for InProcBinder {
+    fn bind(
+        &self,
+        _lib_name: &str,
+        path: &str,
+        sigs: Vec<ForeignSig>,
+        _max_ret: usize,
+    ) -> Result<Box<dyn BoundForeign>, ForeignErr> {
+        load_and_resolve(path, sigs).map(|lib| Box::new(lib) as Box<dyn BoundForeign>)
+    }
 }
 
 #[cfg(test)]

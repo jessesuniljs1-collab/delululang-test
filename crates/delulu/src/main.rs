@@ -8,6 +8,7 @@ mod broker_ipc;
 mod broker_transport;
 mod brokerd;
 mod cli;
+mod foreign_worker;
 mod repl;
 
 use std::process::ExitCode;

@@ -54,6 +54,11 @@ struct Opts {
     /// `--epoch-ms <N>` (spec §4.1): the epoch-class snapshot refresh interval in daemon mode.
     /// Clamped to default 50 / ceiling 250 by `broker_client::clamp_epoch_ms`.
     epoch_ms: Option<u64>,
+    /// `--foreign-isolation inproc|process` (spec §5 phase 5h): where a granted C library executes.
+    /// `inproc` (dev) loads it in the host process (Stage-4 behavior). `process` runs each library in
+    /// an isolated worker subprocess (blast-radius containment; a worker crash is DL1409, host
+    /// survives). Default: `process` in `--broker daemon` mode, `inproc` otherwise.
+    foreign_isolation: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -77,6 +82,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         foreign_max_ret: None,
         broker: None,
         epoch_ms: None,
+        foreign_isolation: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -165,6 +171,15 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--epoch-ms=") => opts.epoch_ms = s["--epoch-ms=".len()..].parse().ok(),
+            "--foreign-isolation" => {
+                if i + 1 < rest.len() {
+                    opts.foreign_isolation = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--foreign-isolation=") => {
+                opts.foreign_isolation = Some(s["--foreign-isolation=".len()..].to_string())
+            }
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -196,6 +211,9 @@ pub fn run(args: &[String]) -> i32 {
         "repl" => repl_cmd(rest),
         "audit" => cmd_audit(rest),
         "broker" => crate::brokerd::cmd_broker(rest),
+        // Hidden: the process-isolation foreign worker (spec §5 phase 5h), spawned by the host, not a
+        // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
+        s if s == crate::foreign_worker::WORKER_SUBCOMMAND => crate::foreign_worker::run_worker(rest),
         "secrets" => cmd_secrets(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
@@ -343,6 +361,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
     let program = checked.module.name.dotted();
     let mut report = authority_report(&program, &checked.result, &scopes);
     stamp_custody(&mut report, &opts);
+    stamp_foreign_isolation(&mut report, &opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
@@ -357,6 +376,28 @@ fn stamp_custody(report: &mut Json, opts: &Opts) {
     let custody = if opts.broker.as_deref() == Some("daemon") { "daemon" } else { "embedded" };
     if let Some(obj) = report.as_object_mut() {
         obj.insert("custody".to_string(), json!(custody));
+    }
+}
+
+/// Stamp the foreign-isolation label on an authority report (Stage 5 phase 5h, spec §5): the mode
+/// that WOULD apply when this program runs — `process` if `--foreign-isolation process` (or daemon
+/// mode's default), else `inproc`. Additive JSON key; the human render prints it only inside a
+/// non-empty foreign section, so a no-foreign report stays byte-identical (criterion 7).
+fn stamp_foreign_isolation(report: &mut Json, opts: &Opts) {
+    let daemon = opts.broker.as_deref() == Some("daemon");
+    let mode = match opts.foreign_isolation.as_deref() {
+        Some("process") => "process",
+        Some("inproc") => "inproc",
+        _ => {
+            if daemon {
+                "process"
+            } else {
+                "inproc"
+            }
+        }
+    };
+    if let Some(obj) = report.as_object_mut() {
+        obj.insert("foreign_isolation".to_string(), json!(mode));
     }
 }
 
@@ -410,6 +451,11 @@ fn render_authority(report: &Json) -> String {
     } else {
         let _ = writeln!(out, "  foreign:");
         let _ = writeln!(out, "    -- outside the proof (contained at process level) --");
+        // Stage 5 phase 5h: which isolation profile bounds these foreign libraries' blast radius when
+        // the program runs (spec §5). `process` = each library in an isolated worker subprocess (a
+        // crash is DL1409, the host survives); `inproc` = Stage-4 in-process (a crash takes the host).
+        let iso = report["foreign_isolation"].as_str().unwrap_or("inproc");
+        let _ = writeln!(out, "    isolation: {iso}");
         for f in &foreign {
             let abi = f["abi"].as_str().unwrap_or("c");
             if abi == "python" {
@@ -716,6 +762,7 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
     let mut report = program_authority(&program, &name, &scopes);
     stamp_custody(&mut report, opts);
+    stamp_foreign_isolation(&mut report, opts);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
     } else {
@@ -1357,11 +1404,34 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // ----- foreign isolation selection (Stage 5 phase 5h) --------------------------------------
+    // `process` runs each granted C library in an isolated worker subprocess (a worker crash is
+    // DL1409, the host survives — spec §5, criterion 7); `inproc` is the Stage-4 in-process path.
+    // Default: `process` in daemon mode, `inproc` otherwise. Labeled below.
+    let foreign_process = match opts.foreign_isolation.as_deref() {
+        Some("process") => true,
+        Some("inproc") => false,
+        Some(other) => {
+            eprintln!("error: unknown --foreign-isolation `{other}` (inproc | process)");
+            return 2;
+        }
+        None => daemon_mode,
+    };
+    let program_binds_foreign = !checked.result.foreign_binds.is_empty();
+    if program_binds_foreign && (opts.foreign_isolation.is_some() || daemon_mode) && !opts.json {
+        eprintln!("foreign-isolation: {}", if foreign_process { "process" } else { "inproc" });
+    }
+
     // WASM engine (spec §5.11 / Stage 3; foreign C FFI in Stage 4 phase 4g): compile `main` to
     // WebAssembly and run it under the deny-by-default Wasmtime host, with capabilities minted and
     // checked host-side and all foreign FFI performed host-side (§4.3). Constructs the backend can't
     // compile are DL1201 — omit `--engine wasm` to use the interpreter.
     if opts.engine.as_deref() == Some("wasm") {
+        // Phase-5h scope note: worker isolation is wired on the INTERPRETER engine (the criterion-7
+        // reference). The WASM host's foreign path stays in-process for v0.5 — flagged in spec §11.
+        if foreign_process && program_binds_foreign && !opts.json {
+            eprintln!("note: --foreign-isolation process is not yet applied on the WASM engine (foreign runs in-process); use the interpreter engine for worker isolation");
+        }
         let wasm = match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
             Ok(w) => w,
             Err(e) => {
@@ -1480,6 +1550,18 @@ fn cmd_run(rest: &[String]) -> i32 {
         grants.foreign_c.clone(),
         max_ret,
     );
+    if foreign_process {
+        // Stage 5 phase 5h: run each granted C library in an isolated worker subprocess. Additive —
+        // a program with no foreign binds never spawns a worker (the binder is only consulted by
+        // `root.foreign(load)`).
+        match crate::foreign_worker::WorkerBinder::new() {
+            Ok(b) => interp = interp.with_foreign_binder(Rc::new(b)),
+            Err(e) => {
+                eprintln!("error: cannot set up foreign process isolation (locating the worker executable): {e}");
+                return 2;
+            }
+        }
+    }
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
         interp = interp.with_custody(Box::new(c));

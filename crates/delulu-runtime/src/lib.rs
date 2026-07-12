@@ -13,6 +13,7 @@ pub mod value;
 
 pub use broker::{parse_manifest, Grants, Manifest};
 pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Op};
+pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
 pub use interp::Interp;
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};

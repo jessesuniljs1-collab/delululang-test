@@ -31,8 +31,9 @@ serde = { workspace = true }
 # pure-Rust and serde-based, so the fixed-field request/response structs encode deterministically.
 ciborium = "0.2"
 
-# Windows named-pipe transport + peer identity (phase 5f). windows-sys is already in the workspace
-# dep tree via wasmtime; we reuse it rather than adding winapi.
+# Windows named-pipe transport + peer identity (phase 5f), plus the foreign-worker Job Object
+# (phase 5h: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). windows-sys is already in the workspace dep tree
+# via wasmtime; we reuse it rather than adding winapi.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
@@ -41,6 +42,12 @@ windows-sys = { version = "0.61", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Threading",
     "Win32_System_IO",
+    "Win32_System_JobObjects",
     "Win32_Security",
     "Win32_Security_Authorization",
 ] }
+
+# Foreign-worker kill-on-host-death on Unix (phase 5h): prctl(PR_SET_PDEATHSIG). libc is the single
+# most standard Rust FFI crate; a full seccomp profile is a documented post-chunk stub (ruling 4).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

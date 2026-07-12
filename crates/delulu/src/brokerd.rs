@@ -510,7 +510,7 @@ fn detach(cmd: &mut std::process::Command) {
 /// detached child cannot inherit them (see [`detach`]). Best-effort: a NUL/redirected/invalid std
 /// handle simply has nothing to clear.
 #[cfg(windows)]
-unsafe fn clear_std_handle_inheritance() {
+pub(crate) unsafe fn clear_std_handle_inheritance() {
     use windows_sys::Win32::Foundation::{
         SetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
     };
