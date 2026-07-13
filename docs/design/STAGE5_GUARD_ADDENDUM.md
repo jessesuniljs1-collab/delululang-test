@@ -1,6 +1,8 @@
 # Stage 5 Addendum — The Guard (chunk 6, phases 5k–5m)
 
-**Status:** SPECIFIED (head chef, 2026-07-13). Implementation: Opus 4.8 chef under this brief.
+**Status:** BUILT 2026-07-14 (head-chef live-verified: all 11 criteria demoed against the real
+binary; full workspace suite green on Windows and Linux/WSL). Specified 2026-07-13 (head chef);
+implemented by the Opus 4.8 chef under this brief (commits 28fa620 → dbbcd46 → 5f4306b).
 **Parent spec:** `docs/design/STAGE5_SPECIFICATION.md` (Custody). This addendum extends Stage 5;
 it does not reopen the chunk-1–5 close-out.
 
