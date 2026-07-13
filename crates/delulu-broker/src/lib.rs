@@ -21,6 +21,7 @@ mod path;
 pub mod audit;
 pub mod authority;
 pub mod diag;
+pub mod guard;
 pub mod ids;
 pub mod lease;
 pub mod secrets;
@@ -34,6 +35,10 @@ pub use audit::{
 };
 pub use authority::{attenuation_check, Authority, Scopes};
 pub use diag::Denial;
+pub use guard::{
+    generate_owner_code, GuardClass, GuardPolicy, GuardRule, GuardState, GuardSubset, GuardTier,
+    GuardVerdict, Permit, ReqStatus, DEFAULT_PERMIT_TTL_MILLIS, REQUEST_TTL_MILLIS,
+};
 pub use ids::{IdSource, OsIdSource, SeqIdSource};
 pub use lease::{load_or_create_key, Token};
 pub use secrets::SecretStore;

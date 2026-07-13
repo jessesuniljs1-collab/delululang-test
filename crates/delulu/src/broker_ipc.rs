@@ -67,6 +67,15 @@ pub struct NodeInfo {
     pub foreign_python: Vec<String>,
 }
 
+/// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
+/// deterministic CBOR. Additive to `broker/1` (both ends are one binary).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuardRuleWire {
+    pub class: String,
+    pub pattern: String,
+    pub tier: String,
+}
+
 impl NodeInfo {
     /// This node's authority as an [`AuthoritySpec`] (holder/ttl fields blank — authority only).
     /// Used by `delulu run --lease` to reconstruct the client-side epoch-snapshot authority.
@@ -98,10 +107,13 @@ pub enum ReqBody {
     RotateKey,
     /// Issue a root node (CLI-only human action at the top of the tree).
     Issue(AuthoritySpec),
-    /// Attenuate `parent` into a child (`⊑`-checked, DL0802 otherwise).
-    Attenuate { parent: String, authority: AuthoritySpec },
-    /// Attenuate + mint a portable lease token.
-    Delegate { parent: String, authority: AuthoritySpec, multi: bool },
+    /// Attenuate `parent` into a child (`⊑`-checked, DL0802 otherwise). `owner` (Stage 5 chunk 6)
+    /// is the guard owner code: minting guarded/sealed authority into the child requires it (or a
+    /// covering permit) — the principal minting directly (addendum §2.4.3).
+    Attenuate { parent: String, authority: AuthoritySpec, owner: Option<String> },
+    /// Attenuate + mint a portable lease token. `owner` gates minting guarded authority (see
+    /// [`ReqBody::Attenuate`]).
+    Delegate { parent: String, authority: AuthoritySpec, multi: bool, owner: Option<String> },
     /// Redeem a token, binding it to `peer`.
     Redeem { token: String, peer: String },
     /// Revoke `target` on behalf of `caller` (transitive).
@@ -123,6 +135,19 @@ pub enum ReqBody {
     /// One node's full detail (phase 5j `delulu grants inspect <id>`; also how a `--lease` run
     /// learns its OWN node's authority after redeeming). Additive `broker/1` variant.
     Inspect { node: String },
+
+    // ----- The Guard (Stage 5 chunk 6, phases 5k–5m). Read verbs carry no owner (awareness is
+    // free, addendum §2.2); admin verbs carry `owner`. All additive `broker/1` variants. ---------
+    /// Guard status: mode, bypass, rule digest, queue sizes (the machine surface, read).
+    GuardStatus,
+    /// Guard policy show (read; same payload as [`ReqBody::GuardStatus`]).
+    GuardPolicyShow,
+    /// Guard policy set `class:pattern → tier` (owner-gated).
+    GuardPolicySet { owner: Option<String>, class: String, pattern: String, tier: String },
+    /// Guard policy unset `class:pattern` (owner-gated).
+    GuardPolicyUnset { owner: Option<String>, class: String, pattern: String },
+    /// Guard bypass on|off (owner-gated, `--dangerously-bypass-guard` at runtime).
+    GuardBypass { owner: Option<String>, on: bool },
 }
 
 /// The versioned request envelope.
@@ -149,9 +174,21 @@ pub enum Response {
     Redeemed { node: String },
     Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
-    Decision { allow: bool, code: Option<String>, message: Option<String>, audit_seq: Option<u64> },
-    /// The node's effective state + the current epoch (client epoch-cache refresh).
-    NodeState { epoch: u64, state: String, by_seq: Option<u64>, ttl_millis: Option<i64>, now_millis: Option<i64> },
+    /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that
+    /// PROCEEDED — the client surfaces it once per rule per run (addendum §2.6/§2.7).
+    Decision { allow: bool, code: Option<String>, message: Option<String>, audit_seq: Option<u64>, warn: Option<String> },
+    /// The node's effective state + the current epoch (client epoch-cache refresh). The guard fields
+    /// `guarded_classes` and `guard_bypass` (Stage 5 chunk 6) let the client route guarded epoch-class
+    /// ops synchronously (addendum §2.4.2 / criterion 11).
+    NodeState {
+        epoch: u64,
+        state: String,
+        by_seq: Option<u64>,
+        ttl_millis: Option<i64>,
+        now_millis: Option<i64>,
+        guarded_classes: Vec<String>,
+        guard_bypass: bool,
+    },
     /// The declassified bytes (phase 5g — the only response that carries secret material).
     Exposed { bytes: String },
     /// A fresh broker-held secret handle name from a broker-side `Secret.map` (phase 5g).
@@ -163,6 +200,16 @@ pub enum Response {
     /// `Inspect` reply (additive `broker/1` variant, chunk 5). Boxed: `NodeInfo` is by far the
     /// widest payload and would otherwise bloat every `Response` on the stack.
     Inspected { node: Box<NodeInfo> },
+
+    // ----- The Guard (Stage 5 chunk 6). Additive `broker/1` variants. --------------------------
+    /// Guard status / policy show reply: mode, bypass, rule digest, queue sizes.
+    GuardStatus {
+        bypass: bool,
+        poisoned: bool,
+        rules: Vec<GuardRuleWire>,
+        pending: usize,
+        permits: usize,
+    },
 }
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.

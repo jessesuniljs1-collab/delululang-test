@@ -124,6 +124,13 @@ registry! {
     "DL1407" => "delegation token invalid or already redeemed",
     "DL1408" => "isolation profile unavailable on this platform",
     "DL1409" => "foreign worker died (process isolation) — the isolated worker crashed; the host survived",
+    // The Guard (Stage 5 chunk 6, phases 5k–5m): a dcg-inspired principal-approval layer in the
+    // custody broker. Contiguous from DL1410 (the no-DL1404 gap above is untouched).
+    "DL1410" => "guard refusal: guarded authority, no permit (names the exact guard request command)",
+    "DL1411" => "guard request pending (carries the request id)",
+    "DL1412" => "guard request denied (carries the principal's comment verbatim)",
+    "DL1413" => "guard sealed refusal — not runtime-approvable; bypass does not lift it",
+    "DL1414" => "guard owner code missing or invalid — admin verb refused",
 
     // DL09xx — runtime
     "DL0901" => "integer overflow",
@@ -157,6 +164,14 @@ const FOREIGN_CAVEAT: &str =
 /// audit record of every revocation; no stronger claim is made anywhere.
 pub const REVOCATION_BOUND: &str = "synchronous class — before the next use; epoch class — within \
      one epoch interval (≤ 50 ms default)";
+
+/// The Stage-5 guard policy-change latency bound (addendum ruling 4 / criterion 11). It reuses the
+/// §4.2 revocation sentence PATTERN **verbatim**: everything after the leading subject is
+/// byte-identical to [`REVOCATION_BOUND`] (the `guard_policy_bound_reuses_the_revocation_pattern`
+/// test enforces it). Emitted at every guard policy edit, exactly as `REVOCATION_BOUND` rides in
+/// every revocation.
+pub const GUARD_POLICY_BOUND: &str = "guard policy changes take effect: synchronous class — before \
+     the next use; epoch class — within one epoch interval (≤ 50 ms default)";
 
 /// A named explanation topic (not a diagnostic code): `delulu explain E-REVOKE`. Returns
 /// `(title, body)`. Topics carry normative honesty text the spec mandates verbatim (Stage 5
@@ -330,6 +345,26 @@ mod tests {
         assert!(body.contains("No stronger claim is made anywhere."), "{body}");
         assert!(body.contains("\"immediate\" is never claimed"), "the §10 caveat, word-for-word: {body}");
         assert!(topic_explain("NOPE").is_none());
+    }
+
+    /// Addendum ruling 4 / criterion 11: the guard policy-change bound reuses the §4.2 revocation
+    /// sentence PATTERN verbatim — the clause after the subject is byte-identical.
+    #[test]
+    fn guard_policy_bound_reuses_the_revocation_pattern() {
+        assert!(
+            GUARD_POLICY_BOUND.ends_with(REVOCATION_BOUND),
+            "the guard bound must reuse the revocation sentence verbatim: {GUARD_POLICY_BOUND}"
+        );
+        assert!(GUARD_POLICY_BOUND.starts_with("guard policy changes take effect: "));
+    }
+
+    /// The five guard codes (DL1410–DL1414) are registered; the no-DL1404 gap is preserved.
+    #[test]
+    fn guard_codes_registered_and_no_dl1404() {
+        for code in ["DL1410", "DL1411", "DL1412", "DL1413", "DL1414"] {
+            assert!(is_registered(code), "{code} must be registered");
+        }
+        assert!(!is_registered("DL1404"), "DL1404 is deliberately absent (spec §8)");
     }
 
     /// Every DL14xx custody code has a longer explain body, and the §10 caveats it must carry

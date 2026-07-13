@@ -12,6 +12,7 @@
 
 use crate::authority::Authority;
 use crate::diag::Denial;
+use crate::guard::GuardVerdict;
 use crate::tree::{effective_state, Broker, EffState, GrantId};
 use delulu_check::Effect;
 
@@ -52,7 +53,7 @@ impl Op {
     }
 
     /// The effect this op requires in the node's authority (`None` for reserved/unused variants).
-    fn required_effect(self) -> Option<Effect> {
+    pub fn required_effect(self) -> Option<Effect> {
         match self {
             Op::Declassify => Some(Effect::Declassify),
             Op::FsWrite => Some(Effect::Write),
@@ -136,6 +137,24 @@ impl Decision {
     }
 }
 
+/// A guard-aware [`Broker::check_use`] result (Stage 5 chunk 6). Carries the normal [`Decision`] plus
+/// an optional agent-side `warn` note — a `warn`-tier use or a bypassed-guarded use proceeds but
+/// carries a one-line note the custody client surfaces once per rule per run (addendum §2.6/§2.7).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuardedDecision {
+    pub decision: Decision,
+    pub warn: Option<String>,
+}
+
+impl GuardedDecision {
+    fn allow(seq: Option<u64>) -> GuardedDecision {
+        GuardedDecision { decision: Decision::Allow { audit_seq: seq }, warn: None }
+    }
+    fn deny(d: Denial) -> GuardedDecision {
+        GuardedDecision { decision: Decision::Deny(d), warn: None }
+    }
+}
+
 /// Validate an op against a node's authority + effective state. Shared by the live path and the
 /// snapshot path; the caller decides the data source (live tree vs frozen snapshot).
 fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg: Option<&str>) -> Result<(), Denial> {
@@ -180,11 +199,12 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
 }
 
 impl Broker {
-    /// Validate an op against LIVE tree state (spec §4.4). Intended for the **synchronous** class
-    /// (re-validated every call); it also accepts epoch-class ops against live state for uniformity.
+    /// Validate an op against LIVE tree state (spec §4.4), then apply the Guard (Stage 5 chunk 6).
     /// A synchronous-class use consumes one audit seq (invariant 26) whether allowed or denied;
-    /// epoch-class uses consume none.
-    pub fn check(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> Decision {
+    /// an ungated epoch-class use consumes none. A GUARDED op always records synchronously (addendum
+    /// §2.4.2 / criterion 11) — a cached snapshot cannot consult permits. Returns the [`Decision`]
+    /// plus an optional agent-side `warn` note.
+    pub fn check_use(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> GuardedDecision {
         let now = self.effective_now();
         let (eff, authority) = match self.node_view(node_id, now) {
             Some(v) => v,
@@ -203,33 +223,65 @@ impl Broker {
                         None,
                     );
                 }
-                return Decision::Deny(Denial::UnknownNode { node: node_id.clone() });
+                return GuardedDecision::deny(Denial::UnknownNode { node: node_id.clone() });
             }
         };
-        let result = validate(node_id, eff, &authority, op, arg);
-        match op.class() {
-            OpClass::Synchronous => {
-                let seq = self.consume_seq(); // one audit record per synchronous use
-                let decision = if result.is_ok() { "allow" } else { "deny" };
+        // 1. Normal authorization: liveness + effect + scope (unchanged — the guard sits ON TOP).
+        if let Err(d) = validate(node_id, eff, &authority, op, arg) {
+            if op.class() == OpClass::Synchronous {
+                let seq = self.consume_seq();
                 self.record_op(
                     seq,
                     "use",
                     Some(node_id.as_str().to_string()),
                     arg.map(|a| a.to_string()),
                     None,
-                    decision,
+                    "deny",
                     None,
                 );
-                match result {
-                    Ok(()) => Decision::Allow { audit_seq: Some(seq) },
-                    Err(d) => Decision::Deny(d),
-                }
             }
-            OpClass::Epoch => match result {
-                Ok(()) => Decision::Allow { audit_seq: None },
-                Err(d) => Decision::Deny(d),
-            },
+            return GuardedDecision::deny(d);
         }
+        // 2. The op is authorized. Apply the Guard for delegated nodes; a guarded verdict records ONE
+        //    guard event synchronously (guarded ops never ride the epoch snapshot — criterion 11).
+        let actor = || Some(node_id.as_str().to_string());
+        let tgt = || arg.map(|a| a.to_string());
+        match self.guard_verdict_use(node_id, op, arg) {
+            GuardVerdict::Ungated => match op.class() {
+                OpClass::Synchronous => {
+                    let seq = self.consume_seq();
+                    self.record_op(seq, "use", actor(), tgt(), None, "allow", None);
+                    GuardedDecision::allow(Some(seq))
+                }
+                OpClass::Epoch => GuardedDecision::allow(None),
+            },
+            GuardVerdict::PermitUse => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_permit_use", actor(), tgt(), None, "allow", None);
+                GuardedDecision::allow(Some(seq))
+            }
+            GuardVerdict::BypassedUse { note } => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_bypassed_use", actor(), tgt(), None, "allow", None);
+                GuardedDecision { decision: Decision::Allow { audit_seq: Some(seq) }, warn: Some(note) }
+            }
+            GuardVerdict::Warn { note } => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_warn", actor(), tgt(), None, "allow", None);
+                GuardedDecision { decision: Decision::Allow { audit_seq: Some(seq) }, warn: Some(note) }
+            }
+            GuardVerdict::Block(d) => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_block", actor(), tgt(), None, "deny", None);
+                GuardedDecision::deny(d)
+            }
+        }
+    }
+
+    /// Validate an op against LIVE tree state (spec §4.4), discarding any guard warn note. The
+    /// guard-aware form is [`Broker::check_use`]; both share one implementation.
+    pub fn check(&mut self, node_id: &GrantId, op: Op, arg: Option<&str>) -> Decision {
+        self.check_use(node_id, op, arg).decision
     }
 
     /// Freeze a cheap point-in-time [`Snapshot`] of node states + authorities + the epoch counter

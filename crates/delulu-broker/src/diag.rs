@@ -54,6 +54,18 @@ pub enum Denial {
     /// signed by a rotated-away key, a malformed token, an unknown bound node, or a second
     /// redemption of a single-use token. `requires_human: true` (spec §8) — re-mint via `delegate`.
     TokenInvalid { detail: String },
+    /// DL1410 — the Guard: a delegated node used guarded authority with no permit. Carries the
+    /// matched rule and (in the message) the exact `delulu guard request …` escalation command.
+    GuardBlocked { node: GrantId, rule: String },
+    /// DL1411 — the Guard: a request for this access is already pending. Carries the request id.
+    GuardPending { node: GrantId, request_id: String },
+    /// DL1412 — the Guard: the principal denied this access. Carries the principal's comment VERBATIM.
+    GuardDenied { node: GrantId, comment: String },
+    /// DL1413 — the Guard: the matched rule is `sealed` — not runtime-approvable; a principal policy
+    /// edit (owner-coded) is the only path, and bypass does not lift it.
+    GuardSealed { node: GrantId, rule: String },
+    /// DL1414 — the Guard: an admin verb was refused because the owner code was missing or invalid.
+    GuardOwner { detail: String },
 }
 
 impl Denial {
@@ -68,6 +80,11 @@ impl Denial {
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
             Denial::TokenInvalid { .. } => "DL1407",
+            Denial::GuardBlocked { .. } => "DL1410",
+            Denial::GuardPending { .. } => "DL1411",
+            Denial::GuardDenied { .. } => "DL1412",
+            Denial::GuardSealed { .. } => "DL1413",
+            Denial::GuardOwner { .. } => "DL1414",
         }
     }
 
@@ -80,6 +97,12 @@ impl Denial {
                 | Denial::Revoked { .. }
                 | Denial::AuditChainBroken { .. }
                 | Denial::TokenInvalid { .. }
+                // Every guard refusal needs a principal action (approve / unseal / provide the code).
+                | Denial::GuardBlocked { .. }
+                | Denial::GuardPending { .. }
+                | Denial::GuardDenied { .. }
+                | Denial::GuardSealed { .. }
+                | Denial::GuardOwner { .. }
         )
     }
 
@@ -178,6 +201,47 @@ impl Denial {
             Denial::TokenInvalid { detail } => Diagnostic::error(
                 "DL1407",
                 format!("delegation token invalid or already redeemed: {detail} — re-mint via `delegate`"),
+            ),
+            // The Guard (addendum §3.3). DL1410's message MUST contain the exact request command
+            // (dcg-style remediation); DL1412's MUST carry the principal's comment verbatim.
+            Denial::GuardBlocked { node, rule } => Diagnostic::error(
+                "DL1410",
+                format!(
+                    "guard: delegated node `{}` needs approval to use `{rule}` (guarded, no permit) — \
+                     request access: delulu guard request {} --use {rule} --why \"<why>\"",
+                    node.as_str(),
+                    node.as_str()
+                ),
+            ),
+            Denial::GuardPending { node, request_id } => Diagnostic::error(
+                "DL1411",
+                format!(
+                    "guard: access for `{}` is pending principal approval (request `{request_id}`) — \
+                     the principal decides with `delulu guard approve {request_id}` / `deny {request_id}`",
+                    node.as_str()
+                ),
+            ),
+            Denial::GuardDenied { node, comment } => Diagnostic::error(
+                "DL1412",
+                // The comment is the PRINCIPAL'S WORDS, carried verbatim (addendum §3.3).
+                format!("guard: the principal denied this access for `{}` — {comment}", node.as_str()),
+            ),
+            Denial::GuardSealed { node, rule } => Diagnostic::error(
+                "DL1413",
+                format!(
+                    "guard: `{rule}` is sealed on `{}` — sealed authority is not runtime-approvable; \
+                     only a principal policy edit can unseal it (`delulu guard policy unset {rule} \
+                     --owner <code>`, or set a weaker tier). Bypass does not lift a seal.",
+                    node.as_str()
+                ),
+            ),
+            Denial::GuardOwner { detail } => Diagnostic::error(
+                "DL1414",
+                format!(
+                    "guard admin verb refused ({detail}): a valid owner code is required — pass \
+                     `--owner <code>` or set DELULU_GUARD_OWNER (the daemon prints it once at `broker \
+                     start`; it rotates each run and is never written to disk)"
+                ),
             ),
         }
     }

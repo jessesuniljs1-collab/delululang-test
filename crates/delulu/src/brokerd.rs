@@ -55,6 +55,79 @@ fn audit_dir(state: &Path) -> PathBuf {
 fn secrets_path(state: &Path) -> PathBuf {
     state.join("secrets.json")
 }
+fn guard_policy_path(state: &Path) -> PathBuf {
+    state.join("guard.json")
+}
+
+/// Load the persisted guard policy (Stage 5 chunk 6). Fail closed (addendum §2.4 / criterion 10):
+/// an absent file uses the DEFAULT policy; a present-but-corrupt file returns the default policy
+/// with `poisoned = true` (guarded classes refuse; permits are not consulted). Returns `(policy,
+/// poisoned)`.
+fn load_guard_policy(state: &Path) -> (delulu_broker::GuardPolicy, bool) {
+    let path = guard_policy_path(state);
+    match std::fs::read_to_string(&path) {
+        Err(_) => (delulu_broker::GuardPolicy::default_policy(), false),
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| delulu_broker::GuardPolicy::from_json(&v))
+        {
+            Some(p) => (p, false),
+            // Present but unreadable/corrupt → poisoned (fail closed).
+            None => (delulu_broker::GuardPolicy::default_policy(), true),
+        },
+    }
+}
+
+/// Persist the guard policy beside the broker state (best-effort; a failure is logged, the in-memory
+/// edit still stands and was audited).
+fn persist_guard_policy(state: &Path, policy: &delulu_broker::GuardPolicy) {
+    let text = serde_json::to_string_pretty(&policy.to_json()).unwrap_or_default();
+    if let Err(e) = std::fs::write(guard_policy_path(state), text) {
+        eprintln!("delulu broker: could not persist guard policy (edit stands in memory, audited): {e}");
+    }
+}
+
+/// A guard rule set as wire structs (for `GuardStatus`/`policy show`).
+fn guard_rules_wire(broker: &Broker) -> Vec<crate::broker_ipc::GuardRuleWire> {
+    broker
+        .guard_rules()
+        .iter()
+        .map(|r| crate::broker_ipc::GuardRuleWire {
+            class: r.class.wire_name().to_string(),
+            pattern: r.pattern.clone(),
+            tier: r.tier.wire_name().to_string(),
+        })
+        .collect()
+}
+
+/// A one-line human digest of the guard mode for the start banner / awareness (Stage 5 chunk 6).
+pub(crate) fn guard_digest(broker: &Broker) -> String {
+    if broker.guard_bypass() {
+        return "BYPASSED (--dangerously-bypass-guard) — guarded uses proceed and are audited".to_string();
+    }
+    let guarded: Vec<String> = broker
+        .guard_rules()
+        .iter()
+        .filter(|r| !matches!(r.tier, delulu_broker::GuardTier::Warn))
+        .map(|r| format!("{}:{}", r.class.wire_name(), r.pattern))
+        .collect();
+    let poisoned = if broker.guard_poisoned() { " [policy store unreadable — fail closed]" } else { "" };
+    if guarded.is_empty() {
+        format!("on — no guarded/sealed classes{poisoned}")
+    } else {
+        format!("on — guarded/sealed: {}{poisoned}", guarded.join(", "))
+    }
+}
+
+fn guard_status_response(broker: &Broker) -> Response {
+    Response::GuardStatus {
+        bypass: broker.guard_bypass(),
+        poisoned: broker.guard_poisoned(),
+        rules: guard_rules_wire(broker),
+        pending: broker.guard_pending_count(),
+        permits: broker.guard_permit_count(),
+    }
+}
 
 // ----- the fail-stop-on-record audit sink --------------------------------------------------------
 
@@ -147,6 +220,7 @@ fn handle(
     secrets: &SecretStore,
     failed: &Rc<Cell<bool>>,
     pid: u32,
+    state_dir: &Path,
     req: Request,
 ) -> (Response, bool) {
     // Version gate (spec §8, DL1406). Any mismatch is answered, never acted on.
@@ -175,16 +249,26 @@ fn handle(
             let id = broker.issue(spec_holder(&spec), spec_to_authority(&spec), spec.ttl_millis);
             (Response::Issued { node: id.to_string() }, false)
         }
-        ReqBody::Attenuate { parent, authority } => {
+        ReqBody::Attenuate { parent, authority, owner } => {
             let parent = GrantId::from_trusted(parent);
-            match broker.attenuate(&parent, spec_to_authority(&authority), spec_holder(&authority), authority.ttl_millis) {
+            let child_auth = spec_to_authority(&authority);
+            // Guard mint gate (addendum §2.4.3): minting guarded/sealed authority needs the owner
+            // code or a covering permit; a refusal records `guard_block` and carries minting context.
+            if let Err(d) = broker.guard_check_mint(&child_auth, &parent, owner.as_deref()) {
+                return (deny_response(&d), false);
+            }
+            match broker.attenuate(&parent, child_auth, spec_holder(&authority), authority.ttl_millis) {
                 Ok(id) => (Response::Issued { node: id.to_string() }, false),
                 Err(d) => (deny_response(&d), false),
             }
         }
-        ReqBody::Delegate { parent, authority, multi } => {
+        ReqBody::Delegate { parent, authority, multi, owner } => {
             let parent = GrantId::from_trusted(parent);
-            match broker.delegate(&parent, spec_to_authority(&authority), spec_holder(&authority), authority.ttl_millis, multi) {
+            let child_auth = spec_to_authority(&authority);
+            if let Err(d) = broker.guard_check_mint(&child_auth, &parent, owner.as_deref()) {
+                return (deny_response(&d), false);
+            }
+            match broker.delegate(&parent, child_auth, spec_holder(&authority), authority.ttl_millis, multi) {
                 Ok((id, token)) => (Response::Delegated { node: id.to_string(), token: token.into_string() }, false),
                 Err(d) => (deny_response(&d), false),
             }
@@ -224,7 +308,9 @@ fn handle(
             };
             let node = GrantId::from_trusted(node);
             failed.set(false);
-            let decision = broker.check(&node, op, arg.as_deref());
+            // Guard-aware check (Stage 5 chunk 6): a guarded op validates synchronously and may carry
+            // an agent-side `warn` note (warn-tier / bypassed-guarded).
+            let guarded = broker.check_use(&node, op, arg.as_deref());
             // Fail-stop on inability to record a synchronous-class use (invariant 26).
             if failed.get() {
                 return (
@@ -236,11 +322,13 @@ fn handle(
                     false,
                 );
             }
-            let resp = match decision {
-                Decision::Allow { audit_seq } => Response::Decision { allow: true, code: None, message: None, audit_seq },
+            let resp = match guarded.decision {
+                Decision::Allow { audit_seq } => {
+                    Response::Decision { allow: true, code: None, message: None, audit_seq, warn: guarded.warn }
+                }
                 Decision::Deny(d) => {
                     let diag = d.to_diagnostic();
-                    Response::Decision { allow: false, code: Some(diag.code.to_string()), message: Some(diag.message), audit_seq: None }
+                    Response::Decision { allow: false, code: Some(diag.code.to_string()), message: Some(diag.message), audit_seq: None, warn: None }
                 }
             };
             (resp, false)
@@ -254,7 +342,18 @@ fn handle(
                         delulu_broker::EffState::Revoked { by_seq } => ("revoked", Some(by_seq), None, None),
                         delulu_broker::EffState::Expired { ttl_millis, now_millis } => ("expired", None, Some(ttl_millis), Some(now_millis)),
                     };
-                    (Response::NodeState { epoch: broker.epoch(), state: state.to_string(), by_seq, ttl_millis, now_millis }, false)
+                    (
+                        Response::NodeState {
+                            epoch: broker.epoch(),
+                            state: state.to_string(),
+                            by_seq,
+                            ttl_millis,
+                            now_millis,
+                            guarded_classes: broker.guard_guarded_classes(),
+                            guard_bypass: broker.guard_bypass(),
+                        },
+                        false,
+                    )
                 }
                 None => (
                     Response::Error { code: "DL0904".to_string(), message: format!("no such lease `{node}` (fail closed)"), requires_human: false },
@@ -265,7 +364,11 @@ fn handle(
         ReqBody::Expose { node, name, span } => {
             let node = GrantId::from_trusted(node);
             failed.set(false);
-            match broker.expose(&node, &name, secrets, span) {
+            // Guard-aware expose (Stage 5 chunk 6): declassify is guarded by default, so a delegated
+            // node's expose is gated (DL1410 without a permit). The agent-side warn note (bypass /
+            // warn tier) rides the `run --lease` status line, not each expose, in v0.5 (deviation §7).
+            let (result, _warn) = broker.expose_guarded(&node, &name, secrets, span);
+            match result {
                 Ok(bytes) => {
                     if failed.get() {
                         return (
@@ -313,14 +416,76 @@ fn handle(
                 ),
             }
         }
+
+        // ----- The Guard (Stage 5 chunk 6). Read verbs answer freely; admin verbs are owner-gated
+        // in the broker (DL1414). A policy edit is persisted after the audited in-memory edit. ----
+        ReqBody::GuardStatus | ReqBody::GuardPolicyShow => (guard_status_response(broker), false),
+        ReqBody::GuardPolicySet { owner, class, pattern, tier } => {
+            let (Some(class), Some(tier)) =
+                (delulu_broker::GuardClass::from_wire(&class), delulu_broker::GuardTier::from_wire(&tier))
+            else {
+                return (
+                    Response::Error { code: "DL0904".to_string(), message: format!("unknown guard class/tier `{class}`/`{tier}` (fail closed)"), requires_human: false },
+                    false,
+                );
+            };
+            match broker.guard_policy_set(owner.as_deref(), class, pattern, tier) {
+                Ok(()) => {
+                    persist_guard_policy(state_dir, &broker.guard_policy_snapshot());
+                    (Response::Ok, false)
+                }
+                Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::GuardPolicyUnset { owner, class, pattern } => {
+            let Some(class) = delulu_broker::GuardClass::from_wire(&class) else {
+                return (
+                    Response::Error { code: "DL0904".to_string(), message: format!("unknown guard class `{class}` (fail closed)"), requires_human: false },
+                    false,
+                );
+            };
+            match broker.guard_policy_unset(owner.as_deref(), class, &pattern) {
+                Ok(_removed) => {
+                    persist_guard_policy(state_dir, &broker.guard_policy_snapshot());
+                    (Response::Ok, false)
+                }
+                Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::GuardBypass { owner, on } => match broker.guard_set_bypass(owner.as_deref(), on) {
+            Ok(()) => (Response::Ok, false),
+            Err(d) => (deny_response(&d), false),
+        },
     }
 }
 
+// ----- the guard owner-code / bypass handoff (parent → detached child, never on disk) ------------
+
+/// The internal env channel by which a detached parent hands the print-once owner code to the child
+/// (in the child's ENVIRONMENT — memory, never disk). The parent prints it to the user's terminal;
+/// the child's serve does NOT reprint it (so `<state>/broker.log` never contains it — criterion 9).
+const OWNER_ENV: &str = "DELULU_BROKER_OWNER_CODE_INTERNAL";
+
 // ----- the serve loop ----------------------------------------------------------------------------
 
-/// Run the broker daemon serve loop until a `Shutdown` request (or a fatal transport error). Owns
-/// the single `Broker` for this OS user. Blocking, single-connection, one request per connection.
-pub fn serve(state_dir: &Path) -> io::Result<()> {
+/// Run the broker daemon serve loop. Resolves the guard owner code (inherited from a detached parent
+/// via [`OWNER_ENV`], or generated + printed here for a foreground/direct start), then serves.
+pub fn serve(state_dir: &Path, bypass: bool) -> io::Result<()> {
+    let (owner, print_owner) = match std::env::var(OWNER_ENV) {
+        Ok(c) => (c, false), // the parent already minted + printed it (detached child)
+        Err(_) => (delulu_broker::generate_owner_code(), true),
+    };
+    serve_inner(state_dir, owner, print_owner, bypass)
+}
+
+/// The serve loop with an explicit owner code (so tests can drive a KNOWN code without racing on a
+/// process-global env var). Owns the single `Broker` for this OS user. Blocking, single-connection.
+pub(crate) fn serve_inner(
+    state_dir: &Path,
+    owner_code: String,
+    print_owner: bool,
+    bypass: bool,
+) -> io::Result<()> {
     std::fs::create_dir_all(state_dir)?;
     let key = load_or_create_key(key_path(state_dir))
         .map_err(|e| io::Error::other(format!("broker key: {e}")))?;
@@ -329,12 +494,27 @@ pub fn serve(state_dir: &Path) -> io::Result<()> {
     let failed = Rc::new(Cell::new(false));
     let sink = TrackingSink { inner: log, failed: Rc::clone(&failed) };
     let secrets = SecretStore::load(secrets_path(state_dir));
-    let mut broker = Broker::new().with_key(key).with_sink(Box::new(sink));
+    // The Guard (Stage 5 chunk 6): load the persisted policy (fail closed → poisoned if corrupt),
+    // and inject the owner code + bypass flag — all daemon-memory only.
+    let (policy, poisoned) = load_guard_policy(state_dir);
+    let mut broker = Broker::new()
+        .with_key(key)
+        .with_sink(Box::new(sink))
+        .with_guard_policy(policy, poisoned)
+        .with_owner_code(owner_code.clone())
+        .with_bypass(bypass);
 
     let listener = Listener::bind(state_dir)?;
     let pid = std::process::id();
     std::fs::write(pid_path(state_dir), pid.to_string())?;
     eprintln!("delulu broker: serving on `{}` (pid {pid}, state `{}`)", listener.address(), state_dir.display());
+    // The guard digest (mode + rules) goes to broker.log always; the owner code prints ONLY when
+    // this process is the one the user is watching (foreground/direct start) — never in the detached
+    // child (the parent printed it; broker.log must not contain it — criterion 9).
+    eprintln!("delulu guard: {}", guard_digest(&broker));
+    if print_owner {
+        eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
+    }
 
     // The serve loop never propagates an error via `?` (transient accept/frame errors `continue`;
     // a `Shutdown` request `break`s), so no IIFE is needed to guarantee the pid-file cleanup below.
@@ -356,7 +536,7 @@ pub fn serve(state_dir: &Path) -> io::Result<()> {
                 continue;
             }
         };
-        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, req);
+        let (resp, stop) = handle(&mut broker, &secrets, &failed, pid, state_dir, req);
         if let Err(e) = write_frame(&mut conn, &resp) {
             eprintln!("delulu broker: response write failed: {e}");
         }
@@ -381,16 +561,53 @@ pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
 }
 
 fn parse_state_dir(rest: &[String]) -> Option<String> {
+    flag_value(rest, "--state-dir")
+}
+
+/// `--name value` or `--name=value` from an argv slice.
+fn flag_value(args: &[String], name: &str) -> Option<String> {
+    let eq = format!("{name}=");
     let mut i = 0;
-    while i < rest.len() {
-        match rest[i].as_str() {
-            "--state-dir" if i + 1 < rest.len() => return Some(rest[i + 1].clone()),
-            s if s.starts_with("--state-dir=") => return Some(s["--state-dir=".len()..].to_string()),
-            _ => {}
+    while i < args.len() {
+        if args[i] == name && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+        if let Some(v) = args[i].strip_prefix(&eq) {
+            return Some(v.to_string());
         }
         i += 1;
     }
     None
+}
+
+/// `broker start --guard-policy <file>`: seed the persisted guard policy from a JSON file. A parse
+/// error refuses (exit 2) rather than silently falling back — the principal asked for a specific
+/// policy. Written to `<state>/guard.json` before the daemon loads it (Stage 5 chunk 6).
+fn seed_guard_policy(state_dir: &Path, file: &str) -> Result<(), i32> {
+    let text = match std::fs::read_to_string(file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: cannot read --guard-policy `{file}`: {e}");
+            return Err(2);
+        }
+    };
+    let policy = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| delulu_broker::GuardPolicy::from_json(&v));
+    match policy {
+        Some(p) => {
+            if let Err(e) = std::fs::create_dir_all(state_dir) {
+                eprintln!("error: cannot create state dir: {e}");
+                return Err(2);
+            }
+            persist_guard_policy(state_dir, &p);
+            Ok(())
+        }
+        None => {
+            eprintln!("error: --guard-policy `{file}` is not a valid guard policy JSON");
+            Err(2)
+        }
+    }
 }
 
 /// `delulu broker start|status|stop|rotate-key` (spec §2). `start --foreground` runs the serve loop
@@ -411,8 +628,17 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
     match sub {
         "start" => {
             let foreground = args.iter().any(|a| a == "--foreground");
+            // The Guard (Stage 5 chunk 6): `--dangerously-bypass-guard` (the name says why) and
+            // `--guard-policy <file>` seed the daemon's guard mode at start.
+            let bypass = args.iter().any(|a| a == "--dangerously-bypass-guard");
+            let guard_policy_file = flag_value(args, "--guard-policy");
+            if let Some(file) = &guard_policy_file {
+                if let Err(code) = seed_guard_policy(&state_dir, file) {
+                    return code;
+                }
+            }
             if foreground {
-                match serve(&state_dir) {
+                match serve(&state_dir, bypass) {
                     Ok(()) => 0,
                     Err(e) => {
                         eprintln!("error: broker serve loop failed: {e}");
@@ -420,7 +646,7 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
                     }
                 }
             } else {
-                start_detached(&state_dir, json)
+                start_detached(&state_dir, json, bypass)
             }
         }
         "status" => match request(&state_dir, ReqBody::Status) {
@@ -481,7 +707,7 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
 }
 
 /// Spawn a detached child running the serve loop, then wait until it answers `Status`.
-fn start_detached(state_dir: &Path, json: bool) -> i32 {
+fn start_detached(state_dir: &Path, json: bool, bypass: bool) -> i32 {
     // If one is already running, do nothing (idempotent).
     if request(state_dir, ReqBody::Status).is_ok() {
         if !json {
@@ -496,8 +722,16 @@ fn start_detached(state_dir: &Path, json: bool) -> i32 {
             return 2;
         }
     };
+    // Mint the guard owner code HERE (the parent) so it prints to the USER'S terminal below and is
+    // handed to the detached child via its environment (memory) — never written to disk, so
+    // `<state>/broker.log` cannot leak it (addendum §2.2 / criterion 9).
+    let owner_code = delulu_broker::generate_owner_code();
     let mut cmd = std::process::Command::new(exe);
     cmd.args(["broker", "start", "--foreground", "--state-dir"]).arg(state_dir);
+    if bypass {
+        cmd.arg("--dangerously-bypass-guard");
+    }
+    cmd.env(OWNER_ENV, &owner_code);
     // Give the long-lived daemon a STABLE working directory (the state dir it owns) rather than
     // inheriting the caller's cwd — a process holds a lock on its working directory on Windows, so
     // inheriting the caller's cwd would prevent that directory from being deleted for as long as the
@@ -534,10 +768,21 @@ fn start_detached(state_dir: &Path, json: bool) -> i32 {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while std::time::Instant::now() < deadline {
         if request(state_dir, ReqBody::Status).is_ok() {
+            // The guard banner — mode + rule digest + the print-once owner code — prints from the
+            // PARENT to the user's terminal (never to broker.log, so the code stays off disk).
+            let digest = parent_guard_digest(state_dir, bypass);
             if json {
-                println!("{}", serde_json::json!({ "running": true, "pid": child.id(), "custody": "daemon" }));
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "running": true, "pid": child.id(), "custody": "daemon",
+                        "guard": digest, "guard_owner_code": owner_code,
+                    })
+                );
             } else {
                 eprintln!("ok: broker started (pid {}, state `{}`)", child.id(), state_dir.display());
+                eprintln!("delulu guard: {digest}");
+                eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
             }
             return 0;
         }
@@ -545,6 +790,27 @@ fn start_detached(state_dir: &Path, json: bool) -> i32 {
     }
     eprintln!("error: broker daemon did not come up within 5s");
     2
+}
+
+/// The parent-side guard digest for the start banner (reads the just-seeded policy from disk +
+/// the bypass flag it forwarded). Mirrors [`guard_digest`] without a running-broker handle.
+fn parent_guard_digest(state_dir: &Path, bypass: bool) -> String {
+    if bypass {
+        return "BYPASSED (--dangerously-bypass-guard) — guarded uses proceed and are audited".to_string();
+    }
+    let (policy, poisoned) = load_guard_policy(state_dir);
+    let guarded: Vec<String> = policy
+        .rules()
+        .iter()
+        .filter(|r| !matches!(r.tier, delulu_broker::GuardTier::Warn))
+        .map(|r| format!("{}:{}", r.class.wire_name(), r.pattern))
+        .collect();
+    let poisoned = if poisoned { " [policy store unreadable — fail closed]" } else { "" };
+    if guarded.is_empty() {
+        format!("on — no guarded/sealed classes{poisoned}")
+    } else {
+        format!("on — guarded/sealed: {}{poisoned}", guarded.join(", "))
+    }
 }
 
 #[cfg(windows)]
@@ -600,7 +866,6 @@ mod tests {
     use crate::broker_transport;
     use delulu_broker::Authority;
     use delulu_runtime::{Custody, CustodyDecision};
-    use std::collections::BTreeSet;
 
     fn temp_state(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("delulu_brokerd_{}_{}", std::process::id(), tag));
@@ -613,7 +878,9 @@ mod tests {
     fn start_daemon(state: &Path) -> std::thread::JoinHandle<()> {
         let dir = state.to_path_buf();
         let handle = std::thread::spawn(move || {
-            let _ = serve(&dir);
+            // A fixed owner code so guard admin tests over the wire know it (no env-var race across
+            // parallel tests). `print_owner=false` keeps the test's stderr quiet.
+            let _ = serve_inner(&dir, "gow1_testowner000".to_string(), false, false);
         });
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while std::time::Instant::now() < deadline {
@@ -743,7 +1010,7 @@ mod tests {
             holder_desc: "agent-1".to_string(),
             ..Default::default()
         };
-        let resp = request(&state, ReqBody::Delegate { parent: orch.clone(), authority: child_spec, multi: false }).unwrap();
+        let resp = request(&state, ReqBody::Delegate { parent: orch.clone(), authority: child_spec, multi: false, owner: None }).unwrap();
         let Response::Delegated { node: child, token } = resp else { panic!("expected Delegated, got {resp:?}") };
         let resp = request(&state, ReqBody::Redeem { token: token.clone(), peer: "pid:9".to_string() }).unwrap();
         assert!(matches!(&resp, Response::Redeemed { node } if node == &child), "redeem binds the delegated node: {resp:?}");
@@ -790,9 +1057,10 @@ mod tests {
 
         let resp = request(&state, ReqBody::Issue(spec(&["Read"]))).unwrap();
         let Response::Issued { node } = resp else { panic!("expected Issued") };
-        let mut authority = Authority::default();
-        authority.effects = ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()).collect::<BTreeSet<_>>();
-        authority.scopes.fs_read = ["./data".to_string()].into_iter().collect();
+        let authority = Authority::new(
+            ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()),
+            delulu_broker::Scopes { fs_read: ["./data".to_string()].into_iter().collect(), ..Default::default() },
+        );
 
         let mut custody = BrokerClientCustody::for_node(
             state.clone(),
@@ -892,7 +1160,7 @@ mod tests {
             holder_desc: "agent-7".to_string(),
             ..Default::default()
         };
-        let resp = request(&state, ReqBody::Attenuate { parent: root.clone(), authority: child_spec }).unwrap();
+        let resp = request(&state, ReqBody::Attenuate { parent: root.clone(), authority: child_spec, owner: None }).unwrap();
         let Response::Issued { node: child } = resp else { panic!("expected Issued, got {resp:?}") };
 
         // List: both nodes, sorted by id, with parent linkage.
@@ -917,6 +1185,184 @@ mod tests {
         let Response::Inspected { node } = resp else { panic!("expected Inspected, got {resp:?}") };
         assert_eq!(node.state, "revoked");
         assert_eq!(node.by_seq, Some(by_seq), "inspect carries the revoking audit seq (spec §4.3)");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    // ============================================================================================
+    // The Guard (Stage 5 chunk 6, phase 5k) — over-the-wire criteria 1, 2, 3, 9, 10, 11. The
+    // in-process daemon uses the fixed test owner code `gow1_testowner000` (see `start_daemon`).
+    // ============================================================================================
+
+    const TEST_OWNER: &str = "gow1_testowner000";
+
+    fn declassify_spec(kind: &str) -> AuthoritySpec {
+        AuthoritySpec {
+            effects: vec!["Declassify".to_string()],
+            declassify: vec!["S".to_string()],
+            holder_kind: kind.to_string(),
+            holder_desc: "guard-test".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Criterion 1: a delegated node using guarded authority (declassify) without a permit is DL1410
+    /// naming the exact request command. Criterion 2: the ROOT using the same authority passes with
+    /// no guard interaction. Criterion 3: the owner code lets the principal mint the guarded slice.
+    #[test]
+    fn guard_c1_c2_c3_delegated_blocks_root_passes_owner_mints() {
+        let state = temp_state("guard_c123");
+        let handle = start_daemon(&state);
+
+        // Root with Declassify over `S` (issued directly — root, never gated).
+        let resp = request(&state, ReqBody::Issue(declassify_spec("process"))).unwrap();
+        let Response::Issued { node: root } = resp else { panic!("issue root: {resp:?}") };
+
+        // Criterion 3 (refusal): delegating the guarded slice WITHOUT the owner code is DL1410.
+        let resp = request(&state, ReqBody::Delegate {
+            parent: root.clone(),
+            authority: declassify_spec("delegate"),
+            multi: false,
+            owner: None,
+        }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1410"), "mint without owner is DL1410: {resp:?}");
+
+        // Criterion 3 (allow): WITH the owner code the principal mints the slice.
+        let resp = request(&state, ReqBody::Delegate {
+            parent: root.clone(),
+            authority: declassify_spec("delegate"),
+            multi: false,
+            owner: Some(TEST_OWNER.to_string()),
+        }).unwrap();
+        let Response::Delegated { node: child, token } = resp else { panic!("owner mint: {resp:?}") };
+        let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
+
+        // Criterion 1: the delegated child using declassify WITHOUT a permit is DL1410 naming the cmd.
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        match resp {
+            Response::Decision { allow: false, code, message, .. } => {
+                assert_eq!(code.as_deref(), Some("DL1410"));
+                let m = message.unwrap();
+                assert!(m.contains("delulu guard request") && m.contains(&child) && m.contains("declassify:*"), "{m}");
+            }
+            other => panic!("criterion 1: delegated guarded use must be DL1410, got {other:?}"),
+        }
+
+        // Criterion 2: the ROOT using the same authority passes with no guard interaction.
+        let resp = request(&state, ReqBody::Check { node: root, op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(matches!(resp, Response::Decision { allow: true, .. }), "root declassify passes ungated: {resp:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Criterion 9 (over the wire): admin verbs without a valid owner code refuse DL1414; a valid
+    /// code succeeds and the edit is reflected in `guard status`.
+    #[test]
+    fn guard_c9_admin_verbs_need_the_owner_code() {
+        let state = temp_state("guard_c9");
+        let handle = start_daemon(&state);
+
+        // Wrong owner → DL1414.
+        let resp = request(&state, ReqBody::GuardPolicySet {
+            owner: Some("wrong".into()), class: "net".into(), pattern: "*".into(), tier: "guarded".into(),
+        }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1414"), "{resp:?}");
+        // Missing owner → DL1414.
+        let resp = request(&state, ReqBody::GuardBypass { owner: None, on: true }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1414"), "{resp:?}");
+
+        // Right owner → Ok, and the rule shows up in status (a read verb, no owner).
+        let resp = request(&state, ReqBody::GuardPolicySet {
+            owner: Some(TEST_OWNER.into()), class: "net".into(), pattern: "*".into(), tier: "guarded".into(),
+        }).unwrap();
+        assert!(matches!(resp, Response::Ok), "{resp:?}");
+        let resp = request(&state, ReqBody::GuardStatus).unwrap();
+        let Response::GuardStatus { rules, .. } = resp else { panic!("status: {resp:?}") };
+        assert!(rules.iter().any(|r| r.class == "net" && r.pattern == "*" && r.tier == "guarded"), "{rules:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Criterion 10 (over the wire): a corrupt guard policy store poisons the guard — guarded classes
+    /// refuse; ungated authority is unaffected.
+    #[test]
+    fn guard_c10_corrupt_store_is_fail_closed() {
+        let state = temp_state("guard_c10");
+        // Corrupt the store BEFORE the daemon loads it (the daemon loads at startup, like secrets).
+        std::fs::write(state.join("guard.json"), "{ not valid json at all ]").unwrap();
+        let handle = start_daemon(&state);
+
+        // A root holding Declassify + Write; delegate a child (owner mints the guarded declassify).
+        let mut spec = declassify_spec("process");
+        spec.effects.push("Write".to_string());
+        spec.fs_write = vec!["./out".to_string()];
+        let resp = request(&state, ReqBody::Issue(spec.clone())).unwrap();
+        let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
+        let mut child_spec = spec.clone();
+        child_spec.holder_kind = "delegate".into();
+        let resp = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap();
+        let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
+        let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
+
+        // Guarded (declassify) refuses even when poisoned; ungated (fs_write) is unaffected.
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")), "poisoned guarded refuses: {resp:?}");
+        let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        assert!(matches!(resp, Response::Decision { allow: true, .. }), "ungated unaffected: {resp:?}");
+        // `guard status` reports the poison.
+        let resp = request(&state, ReqBody::GuardStatus).unwrap();
+        assert!(matches!(resp, Response::GuardStatus { poisoned: true, .. }), "{resp:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Criterion 11 (over the wire, client routing): a GUARDED epoch-class op (fs_read set guarded)
+    /// validates SYNCHRONOUSLY through the client — a refused delegated FsRead is DL1410, proving it
+    /// did not ride the cached snapshot (which cannot consult permits). Ungated fs_read still uses
+    /// the epoch cache (the existing epoch tests are unchanged).
+    #[test]
+    fn guard_c11_guarded_epoch_op_validates_synchronously() {
+        use crate::broker_client::BrokerClientCustody;
+        let state = temp_state("guard_c11");
+        let handle = start_daemon(&state);
+
+        // Guard fs_read (an epoch-class axis) — owner-gated policy edit.
+        let resp = request(&state, ReqBody::GuardPolicySet {
+            owner: Some(TEST_OWNER.into()), class: "fs_read".into(), pattern: "*".into(), tier: "guarded".into(),
+        }).unwrap();
+        assert!(matches!(resp, Response::Ok));
+
+        // Root with Read/fs_read; delegate a child (owner mints the now-guarded fs_read slice).
+        let root_spec = AuthoritySpec {
+            effects: vec!["Read".to_string()],
+            fs_read: vec!["./data".to_string()],
+            holder_kind: "process".into(),
+            holder_desc: "c11".into(),
+            ..Default::default()
+        };
+        let resp = request(&state, ReqBody::Issue(root_spec.clone())).unwrap();
+        let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
+        let mut child_spec = root_spec.clone();
+        child_spec.holder_kind = "delegate".into();
+        let resp = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap();
+        let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
+        let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
+
+        // The client binds to the delegated node; a FsRead (epoch class) is routed synchronously
+        // because fs_read is guarded, so it is refused DL1410 (never a stale snapshot allow).
+        let authority = Authority::new(
+            ["Read"].iter().map(|n| delulu_check::Effect::core_from_name(n).unwrap()),
+            delulu_broker::Scopes { fs_read: ["./data".to_string()].into_iter().collect(), ..Default::default() },
+        );
+        let mut custody = BrokerClientCustody::for_node(state.clone(), delulu_broker::GrantId::from_trusted(child), authority, Some(250));
+        match custody.check(Op::FsRead, Some("./data/x")) {
+            CustodyDecision::Deny(d) => assert_eq!(d.code, "DL1410", "guarded epoch op routed synchronously and blocked: {}", d.message),
+            CustodyDecision::Allow => panic!("criterion 11: a guarded epoch op must not ride the snapshot"),
+        }
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);

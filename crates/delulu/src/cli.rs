@@ -240,6 +240,7 @@ pub fn run(args: &[String]) -> i32 {
         "repl" => repl_cmd(rest),
         "audit" => cmd_audit(rest),
         "grants" => cmd_grants(rest),
+        "guard" => cmd_guard(rest),
         "broker" => crate::brokerd::cmd_broker(rest),
         // Hidden: the process-isolation foreign worker (spec §5 phase 5h), spawned by the host, not a
         // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
@@ -281,12 +282,13 @@ fn usage() -> &'static str {
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
-     \x20 delulu broker    start [--foreground] | status | stop | rotate-key [--state-dir DIR]\n\
+     \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] | status | stop | rotate-key\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi]  (prints a lease token)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi] [--owner CODE]  (prints a lease token)\n\
+     \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] [--owner CODE] [--json]\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
-     \x20 delulu explain   <DLxxxx | E-REVOKE>\n\
+     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD>\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
@@ -1635,6 +1637,9 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     let mut parent: Option<String> = None;
     let mut multi = false;
     let mut holder_desc = "delegated lease".to_string();
+    // The guard owner code (Stage 5 chunk 6): required to delegate GUARDED authority (declassify /
+    // native code by default) — the principal signing off on handing a guarded slice to an agent.
+    let mut owner: Option<String> = std::env::var("DELULU_GUARD_OWNER").ok();
 
     let mut i = 0;
     while i < args.len() {
@@ -1667,6 +1672,8 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             parent = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--holder-desc") {
             holder_desc = v;
+        } else if let Some(v) = flag_value(args, &mut i, "--owner") {
+            owner = Some(v);
         } else {
             eprintln!("error: unknown `grants delegate` argument `{a}`");
             return 2;
@@ -1748,7 +1755,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         holder_desc,
         ttl_millis,
     };
-    match grants_rpc(state_dir, ReqBody::Delegate { parent: parent.clone(), authority: child_spec, multi }, json) {
+    match grants_rpc(state_dir, ReqBody::Delegate { parent: parent.clone(), authority: child_spec, multi, owner }, json) {
         Ok(Response::Delegated { node, token }) => {
             if json {
                 println!(
@@ -1778,6 +1785,221 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             2
         }
         Err(code) => code,
+    }
+}
+
+// ----- guard (Stage 5 chunk 6: the Guard CLI surface, addendum §3.1) -----------------------------
+//
+// Read verbs (`status`, `policy show`) need no owner code — awareness must be free (addendum §2.2).
+// Admin verbs (`policy set|unset`) carry the owner code via `--owner <code>` or DELULU_GUARD_OWNER;
+// a missing/wrong code is DL1414. Every verb fails closed (invariant 27): a daemon-down verb is
+// DL1401 with the exact start command.
+
+/// Resolve the guard owner code: `--owner <code>` (or `--owner=code`), else DELULU_GUARD_OWNER.
+fn guard_owner(args: &[String]) -> Option<String> {
+    args.iter()
+        .position(|a| a == "--owner")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .or_else(|| args.iter().find_map(|a| a.strip_prefix("--owner=").map(str::to_string)))
+        .or_else(|| std::env::var("DELULU_GUARD_OWNER").ok())
+}
+
+/// One daemon round-trip for a `guard` verb (fail closed, invariant 27; command label `guard`).
+fn guard_rpc(
+    state_dir: &std::path::Path,
+    body: crate::broker_ipc::ReqBody,
+    json: bool,
+) -> Result<crate::broker_ipc::Response, i32> {
+    let map = SourceMap::new();
+    match crate::brokerd::request(state_dir, body) {
+        Ok(crate::broker_ipc::Response::Error { code, message, .. }) => {
+            let d = Diagnostic::error(crate::broker_client::static_code(&code), message);
+            print_diagnostics("guard", &[d], &map, None, json);
+            Err(1)
+        }
+        Ok(resp) => Ok(resp),
+        Err(e) => {
+            let d = Diagnostic::error(
+                "DL1401",
+                format!(
+                    "broker unreachable: {e} — start it with `delulu broker start` \
+                     (fail closed, invariant 27: `guard` verbs never fall back to local state)"
+                ),
+            );
+            print_diagnostics("guard", &[d], &map, None, json);
+            Err(1)
+        }
+    }
+}
+
+fn cmd_guard(rest: &[String]) -> i32 {
+    let Some(sub) = rest.first().map(String::as_str) else {
+        eprintln!(
+            "error: `guard` needs a subcommand: status | policy [show | set <class:pattern> <tier> | \
+             unset <class:pattern>]  [--owner CODE] [--json]"
+        );
+        return 2;
+    };
+    let args = &rest[1..];
+    let json = args.iter().any(|a| a == "--json");
+    let state_flag = args
+        .iter()
+        .position(|a| a == "--state-dir")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .or_else(|| args.iter().find_map(|a| a.strip_prefix("--state-dir=").map(str::to_string)));
+    let Some(state_dir) = crate::brokerd::resolve_state_dir(state_flag.as_deref()) else {
+        eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE) — pass --state-dir DIR");
+        return 2;
+    };
+
+    match sub {
+        "status" => {
+            let resp = match guard_rpc(&state_dir, crate::broker_ipc::ReqBody::GuardStatus, json) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            print_guard_status(&resp, "status", json)
+        }
+        "policy" => cmd_guard_policy(args, &state_dir, json),
+        other => {
+            eprintln!("error: unknown guard subcommand `{other}` (status | policy)");
+            2
+        }
+    }
+}
+
+/// Render a `Response::GuardStatus` for `guard status` / `guard policy show`.
+fn print_guard_status(resp: &crate::broker_ipc::Response, subcommand: &str, json: bool) -> i32 {
+    let crate::broker_ipc::Response::GuardStatus { bypass, poisoned, rules, pending, permits } = resp else {
+        eprintln!("error: unexpected guard status response: {resp:?}");
+        return 2;
+    };
+    if json {
+        let rules_json: Vec<Json> = rules
+            .iter()
+            .map(|r| json!({ "class": r.class, "pattern": r.pattern, "tier": r.tier }))
+            .collect();
+        println!(
+            "{}",
+            json!({
+                "command": "guard", "subcommand": subcommand,
+                "mode": if *bypass { "bypassed" } else { "on" },
+                "bypass": bypass, "poisoned": poisoned,
+                "rules": rules_json, "pending": pending, "permits": permits,
+            })
+        );
+    } else {
+        let mode = if *bypass {
+            "BYPASSED (--dangerously-bypass-guard) — guarded uses proceed and are audited".to_string()
+        } else if *poisoned {
+            "on [policy store unreadable — fail closed]".to_string()
+        } else {
+            "on".to_string()
+        };
+        println!("guard: {mode}");
+        if rules.is_empty() {
+            println!("rules: (none)");
+        } else {
+            println!("rules:");
+            for r in rules {
+                println!("  {}:{} \u{2192} {}", r.class, r.pattern, r.tier);
+            }
+        }
+        println!("pending requests: {pending}   permits: {permits}");
+    }
+    0
+}
+
+fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::ReqBody;
+    // Positionals after `policy`: the action, then its operands. `--owner`/`--state-dir` values skip.
+    // `args` here is everything after `guard policy` — args[0] is the action (`show`/`set`/`unset`),
+    // then its operands. Collect positionals (skipping flags + their values).
+    let mut positionals: Vec<&String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--owner" | "--state-dir" => i += 1, // skip the flag value too
+            s if s.starts_with("--") => {}
+            _ => positionals.push(&args[i]),
+        }
+        i += 1;
+    }
+    let action = positionals.first().map(|s| s.as_str()).unwrap_or("show");
+    match action {
+        "show" => {
+            let resp = match guard_rpc(state_dir, ReqBody::GuardPolicyShow, json) {
+                Ok(r) => r,
+                Err(c) => return c,
+            };
+            print_guard_status(&resp, "policy", json)
+        }
+        "set" => {
+            let (Some(rule), Some(tier)) = (positionals.get(1), positionals.get(2)) else {
+                eprintln!("error: `guard policy set` needs <class:pattern> <tier> (e.g. `guard policy set net:* guarded`)");
+                return 2;
+            };
+            let Some((class, pattern)) = rule.split_once(':') else {
+                eprintln!("error: a rule is `class:pattern` (e.g. `declassify:*`, `fs_write:./out`)");
+                return 2;
+            };
+            let owner = guard_owner(args);
+            match guard_rpc(
+                state_dir,
+                ReqBody::GuardPolicySet {
+                    owner,
+                    class: class.to_string(),
+                    pattern: pattern.to_string(),
+                    tier: tier.to_string(),
+                },
+                json,
+            ) {
+                Ok(_) => {
+                    if json {
+                        println!("{}", json!({ "command": "guard", "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                    } else {
+                        eprintln!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
+                        // The honest bound, stated at the point of a policy edit (criterion 11).
+                        eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
+                    }
+                    0
+                }
+                Err(c) => c,
+            }
+        }
+        "unset" => {
+            let Some(rule) = positionals.get(1) else {
+                eprintln!("error: `guard policy unset` needs <class:pattern>");
+                return 2;
+            };
+            let Some((class, pattern)) = rule.split_once(':') else {
+                eprintln!("error: a rule is `class:pattern`");
+                return 2;
+            };
+            let owner = guard_owner(args);
+            match guard_rpc(
+                state_dir,
+                ReqBody::GuardPolicyUnset { owner, class: class.to_string(), pattern: pattern.to_string() },
+                json,
+            ) {
+                Ok(_) => {
+                    if json {
+                        println!("{}", json!({ "command": "guard", "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                    } else {
+                        eprintln!("ok: guard policy unset `{class}:{pattern}`");
+                        eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
+                    }
+                    0
+                }
+                Err(c) => c,
+            }
+        }
+        other => {
+            eprintln!("error: unknown `guard policy` action `{other}` (show | set | unset)");
+            2
+        }
     }
 }
 

@@ -110,6 +110,11 @@ pub struct Broker {
     /// Nonces of single-use tokens already redeemed (phase 5e). A second redemption of a single-use
     /// token whose nonce is here is DL1407. `--multi` tokens are neither checked nor recorded here.
     redeemed: HashSet<String>,
+    /// The Guard (Stage 5 chunk 6): policy, permits, pending requests, bypass flag, owner code —
+    /// all daemon-memory only (the CLI injects a persisted policy + the print-once owner code). A
+    /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
+    /// guarded); guard enforcement applies to delegated (non-root) nodes ONLY (addendum §2.1).
+    pub(crate) guard: crate::guard::GuardState,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -147,6 +152,7 @@ impl Broker {
             sink: None,
             key: None,
             redeemed: HashSet::new(),
+            guard: crate::guard::GuardState::new(),
         }
     }
 
@@ -177,6 +183,12 @@ impl Broker {
     /// The current revocation epoch.
     pub fn epoch(&self) -> u64 {
         self.epoch
+    }
+
+    /// Bump the epoch (a guard policy edit, addendum ruling 4: uses the same staleness mechanism as
+    /// revocation, so a cached client snapshot refreshes within one epoch interval).
+    pub(crate) fn bump_epoch(&mut self) {
+        self.epoch += 1;
     }
 
     /// The next audit seq that will be assigned (for tests / introspection).

@@ -185,6 +185,59 @@ impl Broker {
         result
     }
 
+    /// Guard-aware `expose` (Stage 5 chunk 6): a declassification from a delegated node is guarded by
+    /// the default policy, so it is gated exactly like a synchronous `check` (addendum §2.4.1) — one
+    /// audit event replaces the plain `"expose"` record. Returns the bytes/denial plus an optional
+    /// agent-side warn note (warn-tier / bypassed-guarded). Root nodes are ungated (principal use).
+    pub fn expose_guarded(
+        &mut self,
+        node_id: &GrantId,
+        name: &str,
+        store: &SecretStore,
+        span: Option<String>,
+    ) -> (Result<String, Denial>, Option<String>) {
+        use crate::guard::GuardVerdict;
+        let actor = || Some(node_id.as_str().to_string());
+        let tgt = || Some(name.to_string());
+        // 1. Authorize normally (Declassify effect + secrets scope + liveness) — the guard sits ON
+        //    TOP, exactly like `check_use`, so a node lacking the authority is DL0904, not DL1410.
+        let auth = self.expose_inner(node_id, name, store);
+        if let Err(d) = auth {
+            let seq = self.consume_seq();
+            self.record_op(seq, "expose", actor(), tgt(), None, "deny", span);
+            return (Err(d), None);
+        }
+        // 2. Authorized. Apply the Guard (declassify is guarded by default) — one event, one seq.
+        //    The declassify axis token is the secret name (matched by `declassify:*`).
+        match self.guard_verdict_use(node_id, crate::validate::Op::Declassify, Some(name)) {
+            GuardVerdict::Block(d) => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_block", actor(), tgt(), None, "deny", span);
+                (Err(d), None)
+            }
+            GuardVerdict::Ungated => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "expose", actor(), tgt(), None, "allow", span);
+                (auth, None)
+            }
+            GuardVerdict::PermitUse => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_permit_use", actor(), tgt(), None, "allow", span);
+                (auth, None)
+            }
+            GuardVerdict::BypassedUse { note } => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_bypassed_use", actor(), tgt(), None, "allow", span);
+                (auth, Some(note))
+            }
+            GuardVerdict::Warn { note } => {
+                let seq = self.consume_seq();
+                self.record_op(seq, "guard_warn", actor(), tgt(), None, "allow", span);
+                (auth, Some(note))
+            }
+        }
+    }
+
     fn expose_inner(&self, node_id: &GrantId, name: &str, store: &SecretStore) -> Result<String, Denial> {
         let authority = self.live_authority(node_id)?;
         // The Declassify effect gates byte-crossing (defense in depth; the checker bounds kind).

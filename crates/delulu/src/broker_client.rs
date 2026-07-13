@@ -47,6 +47,12 @@ pub(crate) fn static_code(code: &str) -> &'static str {
         "DL1405" => "DL1405",
         "DL1406" => "DL1406",
         "DL1407" => "DL1407",
+        // The Guard (Stage 5 chunk 6).
+        "DL1410" => "DL1410",
+        "DL1411" => "DL1411",
+        "DL1412" => "DL1412",
+        "DL1413" => "DL1413",
+        "DL1414" => "DL1414",
         _ => "DL1401",
     }
 }
@@ -67,6 +73,12 @@ pub struct BrokerClientCustody {
     epoch_ms: u64,
     /// The cached epoch snapshot + when it was taken. `None` until the first epoch-class check.
     cache: Option<(Instant, Snapshot)>,
+    /// Guard classes with any guarded/sealed rule (Stage 5 chunk 6), refreshed with the epoch. An
+    /// epoch-class op in this set MUST round-trip synchronously — a snapshot cannot consult permits
+    /// (addendum §2.4.2 / criterion 11).
+    guarded_classes: Vec<String>,
+    /// Guard warn notes already surfaced this run (dedup: one line per rule per run, §2.6/§2.7).
+    warned: std::collections::HashSet<String>,
 }
 
 impl BrokerClientCustody {
@@ -86,6 +98,8 @@ impl BrokerClientCustody {
                 authority,
                 epoch_ms: clamp_epoch_ms(epoch_ms),
                 cache: None,
+                guarded_classes: Vec::new(),
+                warned: std::collections::HashSet::new(),
             }),
             Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
             other => Err(dl1401(&format!("unexpected issue response: {other:?}"))),
@@ -102,7 +116,15 @@ impl BrokerClientCustody {
         authority: Authority,
         epoch_ms: Option<u64>,
     ) -> BrokerClientCustody {
-        BrokerClientCustody { state_dir, node, authority, epoch_ms: clamp_epoch_ms(epoch_ms), cache: None }
+        BrokerClientCustody {
+            state_dir,
+            node,
+            authority,
+            epoch_ms: clamp_epoch_ms(epoch_ms),
+            cache: None,
+            guarded_classes: Vec::new(),
+            warned: std::collections::HashSet::new(),
+        }
     }
 
     /// The node this custody client holds (displayed by `run --lease`; revoked in tests).
@@ -117,7 +139,7 @@ impl BrokerClientCustody {
         self.cache = None;
         let resp = rpc(&self.state_dir, ReqBody::NodeState { node: self.node.as_str().to_string() })?;
         match resp {
-            Response::NodeState { epoch, state, by_seq, ttl_millis, now_millis } => {
+            Response::NodeState { epoch, state, by_seq, ttl_millis, now_millis, guarded_classes, guard_bypass: _ } => {
                 let eff = match state.as_str() {
                     "live" => EffState::Live,
                     "revoked" => EffState::Revoked { by_seq: by_seq.unwrap_or(0) },
@@ -131,6 +153,7 @@ impl BrokerClientCustody {
                     epoch,
                     vec![(self.node.clone(), eff, self.authority.clone())],
                 );
+                self.guarded_classes = guarded_classes;
                 self.cache = Some((Instant::now(), snap));
                 Ok(())
             }
@@ -142,6 +165,61 @@ impl BrokerClientCustody {
     fn cache_is_fresh(&self) -> bool {
         matches!(&self.cache, Some((at, _)) if at.elapsed() < Duration::from_millis(self.epoch_ms))
     }
+
+    /// One broker round-trip per use, against LIVE tree state + the Guard (spec §4.1, addendum §2.4).
+    /// A `warn`-tier / bypassed-guarded allow carries an agent-side note, surfaced once per rule per
+    /// run (addendum §2.6/§2.7).
+    fn synchronous_check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
+        let resp = match rpc(
+            &self.state_dir,
+            ReqBody::Check {
+                node: self.node.as_str().to_string(),
+                op: op.wire_name().to_string(),
+                arg: arg.map(str::to_string),
+            },
+        ) {
+            Ok(r) => r,
+            Err(d) => return CustodyDecision::Deny(d),
+        };
+        match resp {
+            Response::Decision { allow: true, warn, .. } => {
+                if let Some(note) = warn {
+                    self.surface_warn(note);
+                }
+                CustodyDecision::Allow
+            }
+            Response::Decision { allow: false, code, message, .. } => CustodyDecision::Deny(CustodyDenial::new(
+                static_code(code.as_deref().unwrap_or("DL1401")),
+                message.unwrap_or_else(|| "broker denied the operation".to_string()),
+            )),
+            Response::Error { code, message, .. } => {
+                CustodyDecision::Deny(CustodyDenial::new(static_code(&code), message))
+            }
+            other => CustodyDecision::Deny(dl1401(&format!("unexpected check response: {other:?}"))),
+        }
+    }
+
+    /// Is this op guarded per the last-refreshed guarded-class set (client epoch-routing, §2.4.2)?
+    fn op_is_guarded(&self, op: Op) -> bool {
+        let axis = match op {
+            Op::FsRead => Some("fs_read"),
+            Op::FsWrite => Some("fs_write"),
+            Op::Net => Some("net"),
+            Op::Declassify => Some("declassify"),
+            Op::ForeignBind => Some("foreign_c"),
+            _ => None,
+        };
+        // An `effect`-class guard gates every op (conservative — route synchronously).
+        self.guarded_classes.iter().any(|c| c == "effect")
+            || axis.map(|n| self.guarded_classes.iter().any(|c| c == n)).unwrap_or(false)
+    }
+
+    /// Print a guard warn note to stderr once per distinct note per run (addendum §2.6/§2.7).
+    fn surface_warn(&mut self, note: String) {
+        if self.warned.insert(note.clone()) {
+            eprintln!("{note}");
+        }
+    }
 }
 
 /// One request/response round-trip; any transport failure is DL1401 (fail closed, invariant 27).
@@ -152,33 +230,7 @@ fn rpc(state_dir: &std::path::Path, body: ReqBody) -> Result<Response, CustodyDe
 impl Custody for BrokerClientCustody {
     fn check(&mut self, op: Op, arg: Option<&str>) -> CustodyDecision {
         match op.class() {
-            OpClass::Synchronous => {
-                // One broker round-trip per use, against LIVE tree state (spec §4.1).
-                let resp = match rpc(
-                    &self.state_dir,
-                    ReqBody::Check {
-                        node: self.node.as_str().to_string(),
-                        op: op.wire_name().to_string(),
-                        arg: arg.map(str::to_string),
-                    },
-                ) {
-                    Ok(r) => r,
-                    Err(d) => return CustodyDecision::Deny(d),
-                };
-                match resp {
-                    Response::Decision { allow: true, .. } => CustodyDecision::Allow,
-                    Response::Decision { allow: false, code, message, .. } => {
-                        CustodyDecision::Deny(CustodyDenial::new(
-                            static_code(code.as_deref().unwrap_or("DL1401")),
-                            message.unwrap_or_else(|| "broker denied the operation".to_string()),
-                        ))
-                    }
-                    Response::Error { code, message, .. } => {
-                        CustodyDecision::Deny(CustodyDenial::new(static_code(&code), message))
-                    }
-                    other => CustodyDecision::Deny(dl1401(&format!("unexpected check response: {other:?}"))),
-                }
-            }
+            OpClass::Synchronous => self.synchronous_check(op, arg),
             OpClass::Epoch => {
                 // Validate against the cached snapshot, refreshed at most every epoch_ms (spec §4.1).
                 // Revocation reaches epoch-class ops within ≤ one interval — the honest §4.2 bound,
@@ -187,6 +239,13 @@ impl Custody for BrokerClientCustody {
                     if let Err(d) = self.refresh_cache() {
                         return CustodyDecision::Deny(d);
                     }
+                }
+                // A GUARDED epoch-class op must round-trip synchronously — a cached snapshot cannot
+                // consult permits (addendum §2.4.2 / criterion 11). The guarded-class set was just
+                // refreshed above, so the routing decision is at most one epoch stale (the stated
+                // policy-change bound). Ungated epoch ops keep local snapshot validation.
+                if self.op_is_guarded(op) {
+                    return self.synchronous_check(op, arg);
                 }
                 let Some((_, snap)) = &self.cache else {
                     return CustodyDecision::Deny(dl1401("epoch snapshot unavailable"));
