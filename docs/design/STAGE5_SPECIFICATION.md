@@ -751,5 +751,12 @@ Maps every spec §9 criterion to its status and the test(s) that prove it. Crite
    per-OS test triplets (`msvcrt.dll`/`libm.dylib`/`libm.so.6`) are in place for the day a real
    Mac runs the suite.
 
+CHUNK 6 (phases 5k + 5l + 5m) — **the Guard** — a dcg-inspired principal-approval layer in the
+custody broker (tiers warn/guarded/sealed, tree-position-not-identity, owner code, broker-held
+permits, request/approve/deny with comments, bypass with banner, DL1410–DL1414, `E-GUARD`) is
+specified, implemented, and closed out in its own addendum: **`STAGE5_GUARD_ADDENDUM.md`**
+(§7 deviations, §8 criterion-by-criterion close-out; 372 → 398 workspace tests, 2026-07-14).
+This chunk does not reopen the chunk-1–5 close-out above.
+
 *Stage 5 puts the keys where code can't reach them. Stage 6 lets code arrive at runtime and still
 not reach them.*

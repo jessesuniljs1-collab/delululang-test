@@ -26,8 +26,14 @@ DeluluLang/
 │   │   └── src/{lib,resolve,types,row,unify,check,authority,secret}.rs
 │   ├── delulu-runtime/             # [Stage 1] values, capability table, interpreter, grant broker
 │   │   └── src/{lib,value,cap,broker,interp,prim,manifest}.rs
+│   ├── delulu-broker/              # [Stage 5] custody core: ⊑ lattice, grant tree, validation
+│   │   │                           #   classes, audit chain, lease tokens, secrets, THE GUARD
+│   │   └── src/{lib,authority,path,tree,ids,time,validate,diag,audit,lease,secrets,guard}.rs
 │   └── delulu/                     # [Stage 1] the `delulu` CLI: check | run | repl | authority
-│       └── src/{main,cli,repl}.rs
+│       ├── src/{main,cli,repl}.rs  # + [Stage 5] broker_ipc, brokerd, broker_client,
+│       │                           #   broker_transport, foreign_worker, microvm (Linux)
+│       └── tests/                  # binary-level integration: broker_cli, grants_cli, audit_cli,
+│                                   #   foreign_worker, microvm_criterion8, guard_cli, guard_e2e, …
 │
 ├── stdlib/                         # [Stage 1+] the DeluluLang standard library, in DeluluLang
 │   └── std/{core,fs,net,io}.delulu # (Stage 1 surface is tiny; §11 of the Stage-1 spec)

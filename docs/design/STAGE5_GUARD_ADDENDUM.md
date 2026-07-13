@@ -298,8 +298,68 @@ Commit per phase, message style matching chunk 5. **NEVER push to GitHub.**
 
 ## 7. Deviations (implementing chef appends; head chef approves)
 
-*(none yet)*
+1. **Guard pattern matching is `*`-or-exact** (`pattern_matches` in `guard.rs`): `*` matches every
+   token on the axis; anything else is exact-string equality. §2.3 says "the same matcher
+   vocabulary the broker already uses for that axis", and the broker's scope lattice is
+   deliberately exact-string (chunk-1 phase-5a ruling 4: no pattern implication in v0.5) with the
+   fs dimensions adding lexical descendant checks. A guard rule gates *classes of use* rather than
+   delegating authority, so `*` (the "all" the brief's own grammar names) plus exact matches
+   covers the shipped need without inventing a new pattern language; fs-descendant-aware guard
+   patterns are a possible refinement, noted, not shipped. **[Head chef: approved 2026-07-13.]**
+2. **Permit matching is subset-COVER, not literal `⊑`** (§2.4.1 sketches "the use must be ⊑ the
+   permit's approved subset"): a permit stores `(class, pattern)` entries and a use is honored iff
+   an entry of the same class matches the use's token. `*` is not representable in the `Authority`
+   lattice, so a literal `⊑` against an `Authority` value cannot express "approve all declassify";
+   the cover check preserves the property that matters — the use is within what was approved, on
+   the permit's node, and a permit for `declassify:foo` never honors `declassify:bar` (witnessed
+   by `guard::tests::a_permit_covers_only_its_own_subset`). **[Head chef: approved 2026-07-13.]**
+3. **Delegating a guarded slice requires the owner code at the CLI** (`grants delegate --owner`,
+   or `DELULU_GUARD_OWNER`): §2.4.3's mint gate means the default-guarded classes (declassify /
+   foreign) cannot be handed to an agent without the principal signing off. Intended behavior,
+   stated here because it changes the chunk-5 `grants delegate` UX for those classes
+   (Read/Write-only delegations are unaffected). **[Head chef: approved 2026-07-13, with the
+   requirement — implemented — that the refusal names both ways forward: `--owner` for the
+   principal, `delulu guard request` for an agent (`Denial::GuardMintBlocked`).]**
+4. **`warn`-tier rules route their class's epoch ops synchronously too** (the wire's
+   `guarded_classes` routing set carries every RULED class, any tier): a cached snapshot can
+   neither emit the mandated `guard_warn` audit event nor surface the agent's one-line warning.
+   §2.4.2 pins synchronous validation down only for guarded/sealed; extending it to `warn` is the
+   only way §2.3's warn semantics can hold on epoch axes. Ungated classes keep epoch caching
+   unchanged (criterion 11 intact).
+5. **The bypass banner and awareness lines print to stderr even under `--json`** — stdout stays
+   the machine surface, decorations ride stderr (the §2.7 dcg robot-mode convention, matching the
+   codebase's existing envelope discipline).
+6. **The detached daemon's owner-code handoff is via the child's environment**
+   (`DELULU_BROKER_OWNER_CODE_INTERNAL`): the parent mints the code, prints it once to the
+   principal's terminal, and hands it to the child in memory — never on disk, and never into
+   `<state>/broker.log` (the child's serve loop does not reprint it). Criterion 9's never-on-disk
+   half is witnessed by a recursive state-dir grep in `guard_cli.rs`.
+7. **Guard events replace the plain `"use"` audit record for gated uses** (one event per use,
+   invariant 26 preserved): a permit-honored use records `guard_permit_use`, a bypassed use
+   `guard_bypassed_use`, a warn-tier use `guard_warn`, a refusal `guard_block`; ungated uses are
+   unchanged. The `expose` path mirrors this (`Broker::expose_guarded`), so a delegated
+   declassification is gated exactly like a synchronous `check`.
+8. **The `secret` and `foreign_python` classes gate at MINT time only in v0.5**: neither has a
+   per-use broker op on this wire (`secret` bytes cross via the already-guarded `declassify`;
+   python import checks are runtime-local), so a rule on them bites when authority is delegated,
+   not per use. The classes stay in the §2.3 vocabulary for completeness and forward
+   compatibility.
 
-## 8. Close-out table
+## 8. Close-out table (2026-07-14) — for head-chef live re-verification
 
-*(filled at chunk close-out: criterion → status → witnessing test, chunk-5 style)*
+Workspace tests 372 (chunk-5 baseline) → **398** (+26; the 2 pre-existing ignored unchanged). All
+test names are real and runnable; the e2e is `crates/delulu/tests/guard_e2e.rs`.
+
+| # | Criterion (§4) | Status | Witnessing test |
+|---|---|---|---|
+| 1 | delegated guarded use, no permit → DL1410 naming the exact request command; nothing executes | **met** | `guard_e2e.rs::guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end` (exact command + no file written); unit `guard::tests::delegated_guarded_use_without_permit_is_dl1410`; wire `brokerd::tests::guard_c1_c2_c3_delegated_blocks_root_passes_owner_mints` |
+| 2 | root use passes with no guard interaction (position, not identity) | **met** | `guard::tests::root_use_of_guarded_authority_passes_without_interaction`; wire form in `guard_c1_c2_c3…`; grep: the chunk-1 `holder_neutrality.rs` mechanical test runs over `guard.rs` too (no `.kind` access in it at all) |
+| 3 | Delegate/Attenuate cannot mint guarded authority without permit/owner code; refusal carries minting context | **met** | `guard::tests::mint_of_guarded_authority_needs_owner_code`; wire `guard_c1_c2_c3…` (`GuardMintBlocked` names both ways forward) |
+| 4 | request → approve → retry succeeds in TTL; one audit chain shows block → request(why) → approve(comment) → permit use; `audit verify` green | **met** | `guard_e2e.rs` (CLI arc + `audit verify` + per-action `audit query`); wire `brokerd::tests::guard_c4_c5_request_approve_deny_and_audit_verifies`; unit `guard::tests::request_approve_and_deny_flow` |
+| 5 | request → deny → retry refuses DL1412 carrying the deny comment verbatim | **met** | `guard_e2e.rs` (comment asserted verbatim on a real lease run); wire `guard_c4_c5…`; unit `request_approve_and_deny_flow` |
+| 6 | `sealed` refuses DL1413 with an approved permit pending/minted, and under bypass | **met** | `guard_e2e.rs` (seal under live bypass); wire `brokerd::tests::guard_c6_sealed_refuses_with_permit_and_under_bypass`; units `sealed_use_is_dl1413_even_under_bypass`, `sealed_refuses_even_with_an_approved_permit` |
+| 7 | bypass (start flag + runtime toggle) prints the exact banner; guarded uses proceed with per-rule agent warnings + `guard_bypassed_use` events; audit verify green | **met** | `guard_e2e.rs` (runtime toggle: banner, per-rule warning, event, verify) + `guard_e2e.rs::broker_start_dangerously_bypass_guard_prints_the_banner` (start flag) |
+| 8 | every `run --lease` prints the guard status line before user output, `on` and `BYPASSED`; `guard status --json` valid machine JSON | **met** | `guard_e2e.rs` (both states asserted on real lease runs); `guard_cli.rs` + `broker_start_dangerously…` (`--json` parsed as JSON) |
+| 9 | admin verbs without a valid owner code → DL1414; the code appears exactly once in start output and never on disk | **met** | `guard_cli.rs::guard_cli_owner_code_once_never_on_disk_and_policy_admin` (exactly-once count + recursive state-dir content grep after stop); wire `brokerd::tests::guard_c9_admin_verbs_need_the_owner_code`; unit `owner_gated_admin_verbs_refuse_dl1414_without_the_code` |
+| 10 | fail closed: corrupt guard policy store refuses guarded classes; ungated unaffected | **met** | `brokerd::tests::guard_c10_corrupt_store_is_fail_closed` (the store is corrupted on purpose before the daemon starts); unit `poisoned_policy_refuses_guarded_but_not_ungated` |
+| 11 | guarded ops validate synchronously under `--epoch-ms`; ungated ops keep epoch caching (existing epoch tests unchanged); the policy-change bound sentence verbatim where revocation's is | **met** | `brokerd::tests::guard_c11_guarded_epoch_op_validates_synchronously`; every chunk-1/3/5 epoch test runs UNMODIFIED; bound: `codes::tests::guard_policy_bound_reuses_the_revocation_pattern` (byte-suffix assertion against `REVOCATION_BOUND`) + stated at every `guard policy set|unset` (asserted in `guard_e2e.rs`) |

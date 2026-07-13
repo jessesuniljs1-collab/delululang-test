@@ -245,14 +245,15 @@ impl GuardPolicy {
         best
     }
 
-    /// Class wire-names that have ANY guarded/sealed rule — the set a client uses to decide which
-    /// epoch-class ops must round-trip synchronously (addendum §2.4.2 / criterion 11). Sorted, deduped.
+    /// Class wire-names that have ANY rule — the set a client uses to decide which epoch-class ops
+    /// must round-trip synchronously (addendum §2.4.2 / criterion 11). Guarded/sealed ops cannot
+    /// consult permits from a cached snapshot; `warn`-tier ops cannot audit `guard_warn` or surface
+    /// the agent note from one either (deviation §7) — so every RULED class routes synchronously;
+    /// ungated classes keep epoch caching unchanged. Sorted, deduped.
     pub fn guarded_classes(&self) -> Vec<String> {
         let mut set: BTreeSet<&'static str> = BTreeSet::new();
         for r in &self.rules {
-            if matches!(r.tier, GuardTier::Guarded | GuardTier::Sealed) {
-                set.insert(r.class.wire_name());
-            }
+            set.insert(r.class.wire_name());
         }
         set.into_iter().map(str::to_string).collect()
     }

@@ -173,11 +173,56 @@ pub const REVOCATION_BOUND: &str = "synchronous class — before the next use; e
 pub const GUARD_POLICY_BOUND: &str = "guard policy changes take effect: synchronous class — before \
      the next use; epoch class — within one epoch interval (≤ 50 ms default)";
 
-/// A named explanation topic (not a diagnostic code): `delulu explain E-REVOKE`. Returns
+/// The Guard honesty caveat (addendum §2.8, spec §10 tradition), carried VERBATIM by every guard
+/// explain body and the `E-GUARD` topic. `warn` tier and bypass are awareness, not enforcement.
+pub const GUARD_CAVEAT: &str =
+    "Honesty (addendum §2.8, spec §10): The guard supervises what DeluluLang programs holding \
+     DELEGATED grants can do. It does not defend against a malicious same-OS-user process that never \
+     speaks Delulu — the same honesty as DL1401's \"not against the OS user\". The owner code raises \
+     the bar only while the principal keeps it out of agent-visible context. The `warn` tier and \
+     bypass mode are awareness mechanisms, not enforcement. This is never claimed otherwise.";
+
+/// The exact banner printed whenever guard bypass is ENABLED (`--dangerously-bypass-guard` or
+/// `delulu guard bypass on`), echoing Claude Code's `--dangerously-skip-permissions` shape
+/// (addendum §2.6, spec-fixed text).
+pub const GUARD_BYPASS_BANNER: &str =
+    "!! GUARD BYPASSED — --dangerously-bypass-guard !!\n\
+     The guard is the approval checkpoint between delegated agents and the classes where a mistake \
+     is catastrophic or the type system's guarantees end: declassification of secrets, and native \
+     (foreign) code. Bypassing it means any agent holding any lease uses those classes WITHOUT YOUR \
+     KNOWLEDGE until you read the audit log. Sealed rules still hold; every bypassed use is still \
+     audited. Turn the guard back on with `delulu guard bypass off`.";
+
+/// A named explanation topic (not a diagnostic code): `delulu explain E-REVOKE` / `E-GUARD`. Returns
 /// `(title, body)`. Topics carry normative honesty text the spec mandates verbatim (Stage 5
 /// playbook 5j); unlike codes they explain a *semantics*, not a single failure.
 pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
     match topic {
+        "GUARD" => Some((
+            "the Guard: a principal-approval layer over delegated custody (Stage 5 addendum)",
+            format!(
+                "The Guard supervises what DELEGATED (non-root) grants may do with the classes where \
+                 the type system's guarantees end or a mistake is catastrophic — declassification of \
+                 secrets, and native (foreign) code. Enforcement keys on TREE POSITION, never holder \
+                 identity: root nodes are principal-held by construction and pass without guard \
+                 interaction; delegated nodes are agent-held and are gated.\n\n\
+                 A policy is a set of rules `class:pattern -> tier`:\n\
+                 - warn    — the use proceeds; the agent is warned and a `guard_warn` event is audited.\n\
+                 - guarded — refused (DL1410) unless a matching PERMIT exists. An agent escalates with \
+                 `delulu guard request <node> --use <class:pattern> --why \"...\"`; the principal \
+                 approves (`delulu guard approve <id>`) or denies (`deny <id> --comment \"...\"`, \
+                 carried back to the agent as DL1412). While a request is pending a retried use is \
+                 DL1411.\n\
+                 - sealed  — refused (DL1413) ALWAYS; not runtime-approvable and bypass does not lift \
+                 it. Only a principal policy edit unseals it.\n\n\
+                 Permits are broker-held, never bearer tokens; daemon-memory only (a restart clears \
+                 them). Guard ADMIN verbs (approve/deny/policy/bypass) need the owner code the daemon \
+                 prints once at `broker start`. Bypass (`--dangerously-bypass-guard` / `guard bypass \
+                 on`) lifts every guarded rule to audited-and-warned; it never touches sealed rules \
+                 and never touches auditing. {GUARD_POLICY_BOUND}.\n\n\
+                 {GUARD_CAVEAT}"
+            ),
+        )),
         "REVOKE" => Some((
             "revocation semantics and the stated latency bound (spec §4.2, normative)",
             format!(
@@ -297,6 +342,61 @@ pub fn code_explain(code: &str) -> Option<String> {
              with `--foreign-isolation inproc` to reproduce the crash in-process for debugging (Stage \
              4 behaviour — a crash there takes the whole process down). Foreign workers bound blast \
              radius, not foreign behaviour (spec §10).",
+        // ----- DL141x — the Guard (Stage 5 addendum). Every body carries GUARD_CAVEAT verbatim
+        // (appended below, like the DL13xx FOREIGN_CAVEAT). DL1410's body carries the request-command
+        // remediation; DL1412's states the comment is the principal's words (addendum §3.3).
+        "DL1410" => {
+            return Some(format!(
+                "A DELEGATED grant tried to use (or mint into a child) authority a guard rule marks \
+                 `guarded`, and no permit covers it. The guard is the approval checkpoint between \
+                 delegated agents and the classes where a mistake is catastrophic or the type \
+                 system's guarantees end — by default: declassification of secrets, and native \
+                 (foreign) code. Escalate with the exact command the refusal names: `delulu guard \
+                 request <node> --use <class:pattern> --why \"<justification>\"` — the `--why` is \
+                 mandatory (the principal reads it in `delulu guard pending`). Once the principal \
+                 approves (`delulu guard approve <id>`), simply retry: the broker holds the permit; \
+                 no token is handed to you. Root (principal-held) grants are never gated — the guard \
+                 keys on tree position, not identity. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
+            ))
+        }
+        "DL1411" => {
+            return Some(format!(
+                "Your guard request for this access is PENDING — the refusal carries the request id. \
+                 The principal sees it (with your `--why`) in `delulu guard pending` and decides with \
+                 `delulu guard approve <id>` or `delulu guard deny <id> --comment \"...\"`. Retry \
+                 after the decision; pending requests expire after 30 minutes. See `delulu explain \
+                 E-GUARD`.\n\n{GUARD_CAVEAT}"
+            ))
+        }
+        "DL1412" => {
+            return Some(format!(
+                "The principal DENIED your guard request; the message carries the principal's \
+                 comment VERBATIM — those are the principal's words, stating why. Do not retry the \
+                 same access expecting a different outcome; adjust your approach per the comment, or \
+                 make a NEW request with a different `--use`/`--why` if the comment invites one. See \
+                 `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
+            ))
+        }
+        "DL1413" => {
+            return Some(format!(
+                "The matched guard rule is `sealed`: this authority is NOT runtime-approvable — no \
+                 request/approve flow can lift it, and bypass mode does not lift it either. Only a \
+                 principal policy edit (owner-coded) can: `delulu guard policy unset <class:pattern> \
+                 --owner <code>`, or set a weaker tier (`guarded`/`warn`). Sealing is the principal's \
+                 opt-in hardening for classes that must never be granted mid-session. See `delulu \
+                 explain E-GUARD`.\n\n{GUARD_CAVEAT}"
+            ))
+        }
+        "DL1414" => {
+            return Some(format!(
+                "A guard ADMIN verb (approve, deny, policy set/unset, bypass, permits revoke) was \
+                 refused: the owner code is missing or wrong. The daemon prints the code exactly \
+                 once at `delulu broker start` (`gow1_…`); it lives only in daemon memory, never on \
+                 disk, and rotates on every daemon restart. Pass it with `--owner <code>` or the \
+                 DELULU_GUARD_OWNER environment variable. If you lost it, restart the broker and \
+                 capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
+            ))
+        }
         _ => return None,
     };
     // Every foreign (DL13xx) explanation carries the reachability-not-behavior caveat verbatim.
@@ -365,6 +465,33 @@ mod tests {
             assert!(is_registered(code), "{code} must be registered");
         }
         assert!(!is_registered("DL1404"), "DL1404 is deliberately absent (spec §8)");
+    }
+
+    /// Phase 5m: the `E-GUARD` topic exists, states the model + the policy-change bound, and every
+    /// guard code has a full explain body carrying the §2.8 honesty caveat verbatim. DL1410's body
+    /// carries the request-command remediation; DL1412's says the comment is the principal's words.
+    #[test]
+    fn e_guard_topic_and_guard_explain_bodies() {
+        let (title, body) = topic_explain("GUARD").expect("E-GUARD topic exists");
+        assert!(title.contains("Guard"));
+        assert!(body.contains(GUARD_POLICY_BOUND), "the policy-change bound, verbatim: {body}");
+        assert!(body.contains(GUARD_CAVEAT), "the honesty caveat, verbatim");
+        assert!(body.contains("TREE POSITION"), "position-not-identity stated");
+        for code in ["DL1410", "DL1411", "DL1412", "DL1413", "DL1414"] {
+            let b = code_explain(code).unwrap_or_else(|| panic!("{code} needs an explain body"));
+            assert!(b.contains(GUARD_CAVEAT), "{code} carries the guard caveat verbatim");
+        }
+        assert!(code_explain("DL1410").unwrap().contains("delulu guard request"), "DL1410 names the request command");
+        assert!(code_explain("DL1412").unwrap().contains("the principal's words"), "DL1412 says whose words the comment is");
+        assert!(code_explain("DL1413").unwrap().contains("bypass mode does not lift it"), "DL1413: bypass never lifts a seal");
+        // The bypass banner states the addendum-mandated content (agent-drafted, spec-fixed).
+        assert!(GUARD_BYPASS_BANNER.contains("approval checkpoint"));
+        assert!(GUARD_BYPASS_BANNER.contains("WITHOUT YOUR KNOWLEDGE until you read the audit log"));
+        assert!(GUARD_BYPASS_BANNER.contains("Sealed rules still hold"));
+        // Never claim "immediate" anywhere in the guard texts.
+        for text in [body.as_str(), GUARD_BYPASS_BANNER, GUARD_CAVEAT] {
+            assert!(!text.to_lowercase().contains("immediate"), "never claim immediate: {text}");
+        }
     }
 
     /// Every DL14xx custody code has a longer explain body, and the §10 caveats it must carry

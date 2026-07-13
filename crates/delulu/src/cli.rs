@@ -286,7 +286,7 @@ fn usage() -> &'static str {
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi] [--owner CODE]  (prints a lease token)\n\
-     \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] [--owner CODE]\n\
+     \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
@@ -1865,6 +1865,7 @@ fn cmd_guard(rest: &[String]) -> i32 {
             print_guard_status(&resp, "status", json)
         }
         "policy" => cmd_guard_policy(args, &state_dir, json),
+        "bypass" => cmd_guard_bypass(args, &state_dir, json),
         "request" => cmd_guard_request(args, &state_dir, json),
         "pending" => cmd_guard_pending(&state_dir, json),
         "approve" => cmd_guard_approve(args, &state_dir, json),
@@ -1872,11 +1873,68 @@ fn cmd_guard(rest: &[String]) -> i32 {
         "permits" => cmd_guard_permits(args, &state_dir, json),
         other => {
             eprintln!(
-                "error: unknown guard subcommand `{other}` (status | policy | request | pending | \
-                 approve | deny | permits)"
+                "error: unknown guard subcommand `{other}` (status | policy | bypass | request | \
+                 pending | approve | deny | permits)"
             );
             2
         }
+    }
+}
+
+/// `guard bypass on|off --owner <code>` (addendum §2.6): the runtime toggle. Enabling ALWAYS prints
+/// the banner (spec-fixed exact text) — the principal must see what they just turned off.
+fn cmd_guard_bypass(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::ReqBody;
+    let (positional, _uses, _vals) = guard_parse(args);
+    let on = match positional.as_deref() {
+        Some("on") => true,
+        Some("off") => false,
+        _ => {
+            eprintln!("error: `guard bypass` needs `on` or `off` (plus --owner CODE)");
+            return 2;
+        }
+    };
+    let owner = guard_owner(args);
+    match guard_rpc(state_dir, ReqBody::GuardBypass { owner, on }, json) {
+        Ok(_) => {
+            if on {
+                // The banner is mandatory on every enable (addendum §2.6) — stderr, so `--json`
+                // stdout stays machine-clean (the dcg robot-mode convention, §2.7).
+                eprintln!("{}", delulu_diag::GUARD_BYPASS_BANNER);
+            }
+            if json {
+                println!("{}", json!({ "command": "guard", "subcommand": "bypass", "bypass": on }));
+            } else if on {
+                eprintln!("ok: guard bypass ENABLED");
+            } else {
+                eprintln!("ok: guard bypass disabled — guarded rules enforce again");
+            }
+            0
+        }
+        Err(c) => c,
+    }
+}
+
+/// The one-line guard status a `run --lease` prints before user output (addendum §2.7, criterion 8).
+/// `BYPASSED` shows prominently; the `on` form lists the guarded/sealed rules and names the request
+/// command, so an agent knows the escalation path BEFORE it hits DL1410.
+fn lease_guard_status_line(bypass: bool, poisoned: bool, rules: &[crate::broker_ipc::GuardRuleWire]) -> String {
+    if bypass {
+        return "guard: BYPASSED by the principal — guarded uses will proceed and be audited".to_string();
+    }
+    let guarded: Vec<String> = rules
+        .iter()
+        .filter(|r| r.tier != "warn")
+        .map(|r| format!("{}:{}", r.class, r.pattern))
+        .collect();
+    let poisoned = if poisoned { " [policy store unreadable — fail closed]" } else { "" };
+    if guarded.is_empty() {
+        format!("guard: on — no guarded/sealed classes{poisoned}")
+    } else {
+        format!(
+            "guard: on — guarded: {}{poisoned} — to request access: delulu guard request",
+            guarded.join(", ")
+        )
     }
 }
 
@@ -2478,6 +2536,18 @@ fn cmd_run(rest: &[String]) -> i32 {
         };
         let authority = crate::brokerd::spec_to_authority(&info.authority_spec());
         grants = grants_from_lease(&info, std::mem::take(&mut grants.foreign_c));
+        // The guard awareness line (addendum §2.7, criterion 8): EVERY `run --lease` prints one
+        // guard status line before user code output — stderr always (in `--json` mode too: stdout
+        // stays the machine surface, decorations ride stderr — the dcg robot-mode convention).
+        // Sourced from a GuardStatus wire call post-redeem; an unreachable broker here would already
+        // have failed the redeem above, but fail closed anyway.
+        match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::GuardStatus) {
+            Ok(crate::broker_ipc::Response::GuardStatus { bypass, poisoned, rules, .. }) => {
+                eprintln!("{}", lease_guard_status_line(bypass, poisoned, &rules));
+            }
+            Ok(other) => return fail("DL1401", format!("unexpected guard status response: {other:?}")),
+            Err(e) => return fail("DL1401", unreachable_msg(&e)),
+        }
         let custody = crate::broker_client::BrokerClientCustody::for_node(
             state_dir,
             delulu_broker::GrantId::from_trusted(node),

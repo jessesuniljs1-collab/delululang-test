@@ -586,6 +586,11 @@ pub(crate) fn serve_inner(
     if print_owner {
         eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
     }
+    // Enabling bypass ALWAYS prints the banner (addendum §2.6). Foreground: the user's terminal.
+    // Detached: this lands in broker.log AND the parent prints it to the terminal (`start_detached`).
+    if bypass {
+        eprintln!("{}", delulu_diag::GUARD_BYPASS_BANNER);
+    }
 
     // The serve loop never propagates an error via `?` (transient accept/frame errors `continue`;
     // a `Shutdown` request `break`s), so no IIFE is needed to guarantee the pid-file cleanup below.
@@ -854,6 +859,11 @@ fn start_detached(state_dir: &Path, json: bool, bypass: bool) -> i32 {
                 eprintln!("ok: broker started (pid {}, state `{}`)", child.id(), state_dir.display());
                 eprintln!("delulu guard: {digest}");
                 eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
+            }
+            // Enabling bypass ALWAYS prints the banner to the principal's terminal (addendum §2.6)
+            // — in `--json` mode too, on stderr (stdout stays machine-clean, §2.7).
+            if bypass {
+                eprintln!("{}", delulu_diag::GUARD_BYPASS_BANNER);
             }
             return 0;
         }
