@@ -133,3 +133,73 @@ fn guard_cli_owner_code_once_never_on_disk_and_policy_admin() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// Phase 5l — the approval-flow CLI verbs (request / pending / approve / deny / permits) through the
+/// real binary: `--why` and deny `--comment` are REQUIRED; approve/deny/revoke are owner-gated.
+#[test]
+fn guard_cli_approval_flow_verbs() {
+    let base = std::env::temp_dir().join(format!("delulu_guard_approve_cli_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("work");
+    let state = base.join("state");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+
+    let o = delulu_in(&cwd, &state, &["broker", "start"]);
+    assert!(o.status.success(), "broker start: {}", stderr(&o));
+    let _guard = DaemonGuard { state: state.clone() };
+    let owner = extract_owner_code(&format!("{}{}", stdout(&o), stderr(&o))).expect("owner code");
+
+    // A delegated node holding guarded (declassify) authority — the principal mints it with --owner.
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"]);
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("delegate --json");
+    let node = v["node"].as_str().unwrap().to_string();
+
+    // `guard request` requires --why.
+    let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", "declassify:*"]);
+    assert_eq!(o.status.code(), Some(2), "request without --why must fail");
+    assert!(stderr(&o).contains("--why"), "{}", stderr(&o));
+
+    // A proper request → an id, and `guard pending` shows the justification.
+    let o = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", "declassify:*", "--why", "call home once", "--json"]);
+    assert!(o.status.success(), "request: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("request --json");
+    let req_id = v["id"].as_str().unwrap().to_string();
+    let o = delulu_in(&cwd, &state, &["guard", "pending"]);
+    assert!(stdout(&o).contains("call home once"), "pending shows the justification: {}", stdout(&o));
+
+    // `guard approve` is owner-gated.
+    let o = delulu_in(&cwd, &state, &["guard", "approve", &req_id]);
+    assert_eq!(o.status.code(), Some(1), "approve without owner must fail");
+    assert!(stderr(&o).contains("DL1414"), "{}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["guard", "approve", &req_id, "--owner", &owner, "--comment", "ok, once", "--json"]);
+    assert!(o.status.success(), "approve: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("approve --json");
+    let permit = v["permit"].as_str().unwrap().to_string();
+
+    // `guard permits` shows the minted permit.
+    let o = delulu_in(&cwd, &state, &["guard", "permits"]);
+    assert!(stdout(&o).contains(&permit), "permits lists the permit: {}", stdout(&o));
+
+    // `guard deny` requires --comment.
+    let o = delulu_in(&cwd, &state, &["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner, "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let node2 = v["node"].as_str().unwrap().to_string();
+    let o = delulu_in(&cwd, &state, &["guard", "request", &node2, "--use", "declassify:*", "--why", "again"]);
+    let req2 = stdout(&o).trim().to_string();
+    let o = delulu_in(&cwd, &state, &["guard", "deny", &req2, "--owner", &owner]);
+    assert_eq!(o.status.code(), Some(2), "deny without --comment must fail");
+    assert!(stderr(&o).contains("--comment"), "{}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["guard", "deny", &req2, "--owner", &owner, "--comment", "too broad"]);
+    assert!(o.status.success(), "deny: {}", stderr(&o));
+
+    // `guard permits revoke` is owner-gated and drops the permit.
+    let o = delulu_in(&cwd, &state, &["guard", "permits", "revoke", &permit, "--owner", &owner]);
+    assert!(o.status.success(), "revoke: {}", stderr(&o));
+    let o = delulu_in(&cwd, &state, &["guard", "permits"]);
+    assert!(!stdout(&o).contains(&permit), "the revoked permit is gone: {}", stdout(&o));
+
+    let _ = delulu_in(&cwd, &state, &["broker", "stop"]);
+    let _ = std::fs::remove_dir_all(&base);
+}

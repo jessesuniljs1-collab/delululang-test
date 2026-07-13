@@ -76,6 +76,28 @@ pub struct GuardRuleWire {
     pub tier: String,
 }
 
+/// One pending/decided guard request on the wire (Stage 5 phase 5l), with its justification.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuardRequestWire {
+    pub id: String,
+    pub node: String,
+    pub uses: Vec<String>,
+    pub why: String,
+    pub created_millis: i64,
+    /// `"pending"`, `"approved"`, or `"denied: <comment>"`.
+    pub status: String,
+}
+
+/// One broker-held permit on the wire (Stage 5 phase 5l).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuardPermitWire {
+    pub id: String,
+    pub node: String,
+    pub uses: Vec<String>,
+    pub remaining_uses: Option<u64>,
+    pub expires_millis: Option<i64>,
+}
+
 impl NodeInfo {
     /// This node's authority as an [`AuthoritySpec`] (holder/ttl fields blank — authority only).
     /// Used by `delulu run --lease` to reconstruct the client-side epoch-snapshot authority.
@@ -148,6 +170,19 @@ pub enum ReqBody {
     GuardPolicyUnset { owner: Option<String>, class: String, pattern: String },
     /// Guard bypass on|off (owner-gated, `--dangerously-bypass-guard` at runtime).
     GuardBypass { owner: Option<String>, on: bool },
+    /// An agent requests guarded access with a mandatory justification (read; no owner — the agent
+    /// explaining itself is free, addendum §2.5). `uses` are `class:pattern` items.
+    GuardRequest { node: String, uses: Vec<String>, why: String },
+    /// The principal lists pending/decided requests with justifications (read).
+    GuardPending,
+    /// The principal approves a request, minting a permit (owner-gated).
+    GuardApprove { owner: Option<String>, id: String, ttl_millis: Option<i64>, uses: Option<u64>, comment: Option<String> },
+    /// The principal denies a request with a mandatory comment (owner-gated).
+    GuardDeny { owner: Option<String>, id: String, comment: String },
+    /// List the broker-held permits (read).
+    GuardPermits,
+    /// Revoke a permit (owner-gated).
+    GuardPermitRevoke { owner: Option<String>, id: String },
 }
 
 /// The versioned request envelope.
@@ -210,6 +245,14 @@ pub enum Response {
         pending: usize,
         permits: usize,
     },
+    /// A guard request was recorded (or an existing one returned — `deduped`). Carries the id.
+    GuardRequested { id: String, deduped: bool },
+    /// A guard request was approved: the minted permit id.
+    GuardApproved { permit_id: String },
+    /// The pending/decided guard request queue (with justifications).
+    GuardPendingList { requests: Vec<GuardRequestWire> },
+    /// The broker-held permits.
+    GuardPermitList { permits: Vec<GuardPermitWire> },
 }
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.

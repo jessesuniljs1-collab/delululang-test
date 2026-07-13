@@ -387,10 +387,8 @@ pub struct GuardState {
     owner_code: Option<String>,
     permits: Vec<Permit>,
     requests: Vec<GuardRequest>,
-    // The id counters are consumed by the approval flow (phase 5l: request/approve mint ids).
-    #[allow(dead_code)]
+    /// Monotone id counters for minted permits / requests (phase 5l).
     next_permit: u64,
-    #[allow(dead_code)]
     next_request: u64,
 }
 
@@ -600,6 +598,7 @@ impl Broker {
             self.record_op(seq, "guard_block", Some(parent.as_str().to_string()), None, None, "deny", None);
             return Err(denial);
         }
+        // A poisoned store extends no trust (criterion 10): mint refuses guarded without owner code.
         // A permit on the parent covering the minted subset authorizes the mint (an approved slice).
         // A poisoned store extends no trust (criterion 10) — skip permits, refuse.
         if !self.guard.poisoned {
@@ -615,7 +614,7 @@ impl Broker {
         }
         let seq = self.consume_seq();
         self.record_op(seq, "guard_block", Some(parent.as_str().to_string()), None, None, "deny", None);
-        Err(Denial::GuardBlocked { node: parent.clone(), rule })
+        Err(Denial::GuardMintBlocked { parent: parent.clone(), rule })
     }
 
     // ----- owner-gated policy administration (addendum §2.3) -------------------------------------
@@ -689,6 +688,157 @@ impl Broker {
     /// The current policy (for persistence after an edit).
     pub fn guard_policy_snapshot(&self) -> GuardPolicy {
         self.guard.policy.clone()
+    }
+
+    // ----- the approval flow (phase 5l, addendum §2.5) ------------------------------------------
+
+    /// An agent requests guarded access with a mandatory justification (no owner — the agent
+    /// explaining itself is free). Records `guard_request` (with the `why`). A repeat request for the
+    /// same (node, subset) that is still pending returns the existing id (dedup). Returns `(id,
+    /// deduped)`.
+    pub fn guard_request(&mut self, node: &GrantId, subset: GuardSubset, why: String) -> (String, bool) {
+        self.guard_gc();
+        if let Some(r) = self
+            .guard
+            .requests
+            .iter()
+            .find(|r| r.node == *node && r.subset == subset && r.status == ReqStatus::Pending)
+        {
+            return (r.id.clone(), true);
+        }
+        let id = format!("gr_{:04}", self.guard.next_request);
+        self.guard.next_request += 1;
+        let now = self.effective_now();
+        self.guard.requests.push(GuardRequest {
+            id: id.clone(),
+            node: node.clone(),
+            subset: subset.clone(),
+            why: why.clone(),
+            created_millis: now,
+            status: ReqStatus::Pending,
+        });
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "guard_request",
+            Some(node.as_str().to_string()),
+            Some(subset.labels().join(",")),
+            Some(serde_json::json!({ "why": why, "request": id })),
+            "allow",
+            None,
+        );
+        (id, false)
+    }
+
+    /// The pending/decided request queue (with justifications), after a GC of expired pendings.
+    pub fn guard_pending(&mut self) -> Vec<GuardRequest> {
+        self.guard_gc();
+        self.guard.requests.clone()
+    }
+
+    /// The broker-held permits, after a GC of expired ones.
+    pub fn guard_permits(&mut self) -> Vec<Permit> {
+        self.guard_gc();
+        self.guard.permits.clone()
+    }
+
+    /// The principal approves a request, minting a permit (owner-gated, addendum §2.5). Default TTL
+    /// 15 min (ruling 3); unlimited uses within scope unless `uses`. Records `guard_approve` (comment,
+    /// ttl, uses). `Ok(None)` = no such pending request; `Ok(Some(permit_id))` = approved.
+    pub fn guard_approve(
+        &mut self,
+        owner: Option<&str>,
+        id: &str,
+        ttl_millis: Option<i64>,
+        uses: Option<u64>,
+        comment: Option<String>,
+    ) -> Result<Option<String>, Denial> {
+        if !self.guard.owner_ok(owner) {
+            return Err(Denial::GuardOwner { detail: "approve".into() });
+        }
+        self.guard_gc();
+        let Some(pos) =
+            self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending)
+        else {
+            return Ok(None);
+        };
+        let subset = self.guard.requests[pos].subset.clone();
+        let node = self.guard.requests[pos].node.clone();
+        self.guard.requests[pos].status = ReqStatus::Approved;
+        let permit_id = format!("gp_{:04}", self.guard.next_permit);
+        self.guard.next_permit += 1;
+        let now = self.effective_now();
+        let expires_millis = Some(now + ttl_millis.unwrap_or(DEFAULT_PERMIT_TTL_MILLIS));
+        self.guard.permits.push(Permit {
+            id: permit_id.clone(),
+            node: node.clone(),
+            subset,
+            expires_millis,
+            remaining_uses: uses,
+        });
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "guard_approve",
+            Some(node.as_str().to_string()),
+            Some(permit_id.clone()),
+            Some(serde_json::json!({ "comment": comment, "ttl_millis": ttl_millis, "uses": uses })),
+            "allow",
+            None,
+        );
+        Ok(Some(permit_id))
+    }
+
+    /// The principal denies a request with a mandatory comment (owner-gated, addendum §2.5). Records
+    /// `guard_deny` (comment). A retried use then refuses DL1412 carrying the comment. `Ok(false)` =
+    /// no such pending request.
+    pub fn guard_deny(&mut self, owner: Option<&str>, id: &str, comment: String) -> Result<bool, Denial> {
+        if !self.guard.owner_ok(owner) {
+            return Err(Denial::GuardOwner { detail: "deny".into() });
+        }
+        self.guard_gc();
+        let Some(pos) =
+            self.guard.requests.iter().position(|r| r.id == id && r.status == ReqStatus::Pending)
+        else {
+            return Ok(false);
+        };
+        let node = self.guard.requests[pos].node.clone();
+        self.guard.requests[pos].status = ReqStatus::Denied { comment: comment.clone() };
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "guard_deny",
+            Some(node.as_str().to_string()),
+            Some(comment),
+            None,
+            "deny",
+            None,
+        );
+        Ok(true)
+    }
+
+    /// Revoke a permit (owner-gated). Records `guard_permit_revoke`. `Ok(false)` = no such permit.
+    pub fn guard_permit_revoke(&mut self, owner: Option<&str>, id: &str) -> Result<bool, Denial> {
+        if !self.guard.owner_ok(owner) {
+            return Err(Denial::GuardOwner { detail: "permits revoke".into() });
+        }
+        let node = self.guard.permits.iter().find(|p| p.id == id).map(|p| p.node.clone());
+        let before = self.guard.permits.len();
+        self.guard.permits.retain(|p| p.id != id);
+        let removed = self.guard.permits.len() != before;
+        if removed {
+            let seq = self.consume_seq();
+            self.record_op(
+                seq,
+                "guard_permit_revoke",
+                node.map(|n| n.as_str().to_string()),
+                Some(id.to_string()),
+                None,
+                "allow",
+                None,
+            );
+        }
+        Ok(removed)
     }
 }
 
@@ -846,6 +996,107 @@ mod tests {
         assert_eq!(d.code(), "DL1410");
         // With the owner code → the principal may mint directly.
         assert!(b.guard_check_mint(&child_auth, &root, Some("gow1_testowner")).is_ok());
+    }
+
+    /// A root holding Declassify over {foo, bar}, and a delegated child minted with the owner code.
+    fn declassify_root_and_child(b: &mut Broker) -> (GrantId, GrantId) {
+        let scopes = || Scopes { declassify: names(&["foo", "bar"]), ..Default::default() };
+        let root = b.issue(holder(), Authority::new(eff(&["Declassify"]), scopes()), None);
+        // Minting the guarded slice needs the owner code (criterion 3).
+        b.guard_check_mint(&Authority::new(eff(&["Declassify"]), scopes()), &root, Some("gow1_testowner")).unwrap();
+        let child = b.attenuate(&root, Authority::new(eff(&["Declassify"]), scopes()), holder(), None).unwrap();
+        (root, child)
+    }
+
+    /// Criterion 4 (unit): request → approve → the retried use succeeds via the permit.
+    /// Criterion 5 (unit): request → deny → the retried use is DL1412 carrying the comment VERBATIM.
+    #[test]
+    fn request_approve_and_deny_flow() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+
+        // Blocked first (no permit).
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::Block(d) if d.code() == "DL1410"));
+
+        // Request (with why) → pending; a retried use is DL1411 carrying the request id.
+        let subset = GuardSubset::parse(&["declassify:foo".to_string()]).unwrap();
+        let (id, deduped) = b.guard_request(&child, subset.clone(), "need the api key to call home".into());
+        assert!(!deduped);
+        match b.guard_verdict_use(&child, Op::Declassify, Some("foo")) {
+            GuardVerdict::Block(d) => {
+                assert_eq!(d.code(), "DL1411");
+                assert!(d.to_diagnostic().message.contains(&id), "DL1411 carries the request id");
+            }
+            _ => panic!("a pending request must yield DL1411"),
+        }
+        // Dedup: a repeat request for the same (node, subset) returns the existing id.
+        let (id2, deduped2) = b.guard_request(&child, subset, "again".into());
+        assert!(deduped2 && id2 == id, "repeat request dedups to the existing id");
+
+        // Approve → the retried use succeeds via the permit.
+        let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, Some("ok, one call".into())).unwrap().unwrap();
+        assert!(pid.starts_with("gp_"));
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
+
+        // Criterion 5: a SECOND request (bar) → deny (comment required) → DL1412 carrying the comment.
+        let (id3, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:bar".to_string()]).unwrap(), "and bar too".into());
+        assert!(b.guard_deny(Some("gow1_testowner"), &id3, "no — bar is out of bounds".into()).unwrap());
+        match b.guard_verdict_use(&child, Op::Declassify, Some("bar")) {
+            GuardVerdict::Block(d) => {
+                assert_eq!(d.code(), "DL1412");
+                assert!(d.to_diagnostic().message.contains("no — bar is out of bounds"), "DL1412 carries the comment verbatim: {}", d.to_diagnostic().message);
+            }
+            _ => panic!("a denied request must yield DL1412"),
+        }
+    }
+
+    /// Head-chef soundness requirement: a permit for `declassify:foo` does NOT cover `declassify:bar`
+    /// (the USE must be covered by the PERMIT, never the reverse).
+    #[test]
+    fn a_permit_covers_only_its_own_subset() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "foo only".into());
+        b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        // foo is covered…
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
+        // …bar is NOT (the permit for foo does not widen to bar) → a fresh DL1410.
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("bar")), GuardVerdict::Block(d) if d.code() == "DL1410"));
+    }
+
+    /// Criterion 6 (unit): a `sealed` rule refuses DL1413 even with an approved request/permit —
+    /// sealed short-circuits before any permit is consulted (and bypass never lifts it, see the 5k
+    /// `sealed_use_is_dl1413_even_under_bypass`).
+    #[test]
+    fn sealed_refuses_even_with_an_approved_permit() {
+        let mut b = broker();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Sealed).unwrap();
+        let root = b.issue(holder(), Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), None);
+        b.guard_check_mint(&Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), &root, Some("gow1_testowner")).unwrap();
+        let child = b.attenuate(&root, Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), holder(), None).unwrap();
+        // Approve a permit for fs_write:* anyway…
+        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["fs_write:*".to_string()]).unwrap(), "want it".into());
+        b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        // …and the sealed rule still refuses DL1413.
+        assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Block(d) if d.code() == "DL1413"));
+    }
+
+    /// Permits and pending requests are daemon-memory only — an owner-gated revoke drops a permit,
+    /// and a fresh `GuardState` (a restart) starts with none (asserted structurally below).
+    #[test]
+    fn permits_are_session_scoped_and_revocable() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "why".into());
+        let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
+        // Revoke (owner-gated) → the use is blocked again.
+        assert!(b.guard_permit_revoke(Some("gow1_testowner"), &pid).unwrap());
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::Block(_)));
+        // A wrong owner cannot revoke.
+        assert_eq!(b.guard_permit_revoke(Some("nope"), "gp_0000").unwrap_err().code(), "DL1414");
+        // A fresh GuardState (the restart shape) holds no permits.
+        assert_eq!(GuardState::new().permits.len(), 0);
     }
 
     #[test]

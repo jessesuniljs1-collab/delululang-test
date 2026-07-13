@@ -57,6 +57,10 @@ pub enum Denial {
     /// DL1410 — the Guard: a delegated node used guarded authority with no permit. Carries the
     /// matched rule and (in the message) the exact `delulu guard request …` escalation command.
     GuardBlocked { node: GrantId, rule: String },
+    /// DL1410 — the Guard at MINT time: a `Delegate`/`Attenuate` would hand guarded authority to a
+    /// child with neither the owner code nor a covering permit. The message names BOTH ways forward
+    /// (owner code for the principal; `delulu guard request` for an agent) — addendum §2.4.3.
+    GuardMintBlocked { parent: GrantId, rule: String },
     /// DL1411 — the Guard: a request for this access is already pending. Carries the request id.
     GuardPending { node: GrantId, request_id: String },
     /// DL1412 — the Guard: the principal denied this access. Carries the principal's comment VERBATIM.
@@ -80,7 +84,7 @@ impl Denial {
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
             Denial::TokenInvalid { .. } => "DL1407",
-            Denial::GuardBlocked { .. } => "DL1410",
+            Denial::GuardBlocked { .. } | Denial::GuardMintBlocked { .. } => "DL1410",
             Denial::GuardPending { .. } => "DL1411",
             Denial::GuardDenied { .. } => "DL1412",
             Denial::GuardSealed { .. } => "DL1413",
@@ -99,6 +103,7 @@ impl Denial {
                 | Denial::TokenInvalid { .. }
                 // Every guard refusal needs a principal action (approve / unseal / provide the code).
                 | Denial::GuardBlocked { .. }
+                | Denial::GuardMintBlocked { .. }
                 | Denial::GuardPending { .. }
                 | Denial::GuardDenied { .. }
                 | Denial::GuardSealed { .. }
@@ -211,6 +216,17 @@ impl Denial {
                      request access: delulu guard request {} --use {rule} --why \"<why>\"",
                     node.as_str(),
                     node.as_str()
+                ),
+            ),
+            Denial::GuardMintBlocked { parent, rule } => Diagnostic::error(
+                "DL1410",
+                format!(
+                    "guard: minting guarded authority `{rule}` into a delegated child under `{}` is \
+                     refused (no owner code, no covering permit) — the principal may mint directly \
+                     with `--owner <code>`, or an agent can request it: delulu guard request {} \
+                     --use {rule} --why \"<why>\"",
+                    parent.as_str(),
+                    parent.as_str()
                 ),
             ),
             Denial::GuardPending { node, request_id } => Diagnostic::error(

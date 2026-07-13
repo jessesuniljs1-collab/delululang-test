@@ -286,7 +286,9 @@ fn usage() -> &'static str {
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi] [--owner CODE]  (prints a lease token)\n\
-     \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] [--owner CODE] [--json]\n\
+     \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] [--owner CODE]\n\
+     \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
+     \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD>\n\
      \n\
@@ -1863,11 +1865,244 @@ fn cmd_guard(rest: &[String]) -> i32 {
             print_guard_status(&resp, "status", json)
         }
         "policy" => cmd_guard_policy(args, &state_dir, json),
+        "request" => cmd_guard_request(args, &state_dir, json),
+        "pending" => cmd_guard_pending(&state_dir, json),
+        "approve" => cmd_guard_approve(args, &state_dir, json),
+        "deny" => cmd_guard_deny(args, &state_dir, json),
+        "permits" => cmd_guard_permits(args, &state_dir, json),
         other => {
-            eprintln!("error: unknown guard subcommand `{other}` (status | policy)");
+            eprintln!(
+                "error: unknown guard subcommand `{other}` (status | policy | request | pending | \
+                 approve | deny | permits)"
+            );
             2
         }
     }
+}
+
+/// A repeatable `--use class:pattern` collector + the first bare positional (node / request / permit
+/// id). `--owner`/`--use`/`--why`/`--ttl`/`--uses`/`--comment`/`--state-dir` take a value.
+fn guard_parse(args: &[String]) -> (Option<String>, Vec<String>, std::collections::HashMap<String, String>) {
+    let value_flags = ["--owner", "--why", "--ttl", "--uses", "--comment", "--state-dir"];
+    let mut positional = None;
+    let mut uses: Vec<String> = Vec::new();
+    let mut vals = std::collections::HashMap::new();
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--use" {
+            if i + 1 < args.len() {
+                uses.push(args[i + 1].clone());
+                i += 1;
+            }
+        } else if let Some(rest) = a.strip_prefix("--use=") {
+            uses.push(rest.to_string());
+        } else if let Some(flag) = value_flags.iter().find(|f| a == **f) {
+            if i + 1 < args.len() {
+                vals.insert((*flag).to_string(), args[i + 1].clone());
+                i += 1;
+            }
+        } else if let Some((flag, v)) = value_flags.iter().find_map(|f| a.strip_prefix(&format!("{f}=")).map(|v| (*f, v))) {
+            vals.insert(flag.to_string(), v.to_string());
+        } else if a == "--json" {
+            // handled by the caller
+        } else if !a.starts_with("--") && positional.is_none() {
+            positional = Some(a.to_string());
+        }
+        i += 1;
+    }
+    (positional, uses, vals)
+}
+
+/// `guard request <node> --use <class:pattern>… --why "<text>"` (addendum §2.5). `--why` is REQUIRED
+/// — the agent must explain why it needs the authority. No owner (awareness/escalation is free).
+fn cmd_guard_request(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{ReqBody, Response};
+    let (node, uses, vals) = guard_parse(args);
+    let Some(node) = node else {
+        eprintln!("error: `guard request` needs a node id (g_…)");
+        return 2;
+    };
+    if uses.is_empty() {
+        eprintln!("error: `guard request` needs at least one `--use <class:pattern>` (e.g. --use declassify:*)");
+        return 2;
+    }
+    let Some(why) = vals.get("--why").cloned() else {
+        eprintln!("error: `guard request` requires `--why \"<justification>\"` — explain why you need the authority");
+        return 2;
+    };
+    match guard_rpc(state_dir, ReqBody::GuardRequest { node, uses, why }, json) {
+        Ok(Response::GuardRequested { id, deduped }) => {
+            if json {
+                println!("{}", json!({ "command": "guard", "subcommand": "request", "id": id, "deduped": deduped }));
+            } else {
+                if deduped {
+                    eprintln!("ok: a matching request was already pending — id {id}");
+                } else {
+                    eprintln!("ok: guard request recorded — id {id}");
+                }
+                eprintln!("the principal decides with `delulu guard approve {id}` / `deny {id}`; retry your op once approved");
+                println!("{id}");
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected guard request response: {other:?}");
+            2
+        }
+        Err(c) => c,
+    }
+}
+
+/// `guard pending` — list pending/decided requests WITH their justifications (addendum §2.5).
+fn cmd_guard_pending(state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{ReqBody, Response};
+    let resp = match guard_rpc(state_dir, ReqBody::GuardPending, json) {
+        Ok(r) => r,
+        Err(c) => return c,
+    };
+    let Response::GuardPendingList { requests } = resp else {
+        eprintln!("error: unexpected guard pending response: {resp:?}");
+        return 2;
+    };
+    if json {
+        let arr: Vec<Json> = requests
+            .iter()
+            .map(|r| json!({ "id": r.id, "node": r.node, "uses": r.uses, "why": r.why, "created_millis": r.created_millis, "status": r.status }))
+            .collect();
+        println!("{}", json!({ "command": "guard", "subcommand": "pending", "count": requests.len(), "requests": arr }));
+    } else if requests.is_empty() {
+        println!("(no guard requests)");
+    } else {
+        for r in &requests {
+            println!("{}  [{}]  {}  use=[{}]  why: {}", r.id, r.status, r.node, r.uses.join(","), r.why);
+        }
+    }
+    0
+}
+
+/// `guard approve <req-id> --owner <code> [--ttl <dur>] [--uses <n>] [--comment "<text>"]` (§2.5).
+fn cmd_guard_approve(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{ReqBody, Response};
+    let (id, _uses, vals) = guard_parse(args);
+    let Some(id) = id else {
+        eprintln!("error: `guard approve` needs a request id (gr_…)");
+        return 2;
+    };
+    let ttl_millis = match vals.get("--ttl") {
+        None => None,
+        Some(s) => match parse_ttl_millis(s) {
+            Some(d) => Some(d), // a permit TTL is a DURATION; the broker adds it to its own clock
+            None => {
+                eprintln!("error: bad --ttl `{s}` (use e.g. 5m, 15m, 1h)");
+                return 2;
+            }
+        },
+    };
+    let uses_n: Option<u64> = match vals.get("--uses") {
+        None => None,
+        Some(s) => match s.parse() {
+            Ok(n) => Some(n),
+            Err(_) => {
+                eprintln!("error: bad --uses `{s}` (a positive integer)");
+                return 2;
+            }
+        },
+    };
+    let comment = vals.get("--comment").cloned();
+    let owner = guard_owner(args);
+    match guard_rpc(state_dir, ReqBody::GuardApprove { owner, id: id.clone(), ttl_millis, uses: uses_n, comment }, json) {
+        Ok(Response::GuardApproved { permit_id }) => {
+            if json {
+                println!("{}", json!({ "command": "guard", "subcommand": "approve", "request": id, "permit": permit_id }));
+            } else {
+                eprintln!("ok: approved request {id} — minted permit {permit_id}");
+                println!("{permit_id}");
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected guard approve response: {other:?}");
+            2
+        }
+        Err(c) => c,
+    }
+}
+
+/// `guard deny <req-id> --owner <code> --comment "<text>"` (addendum §2.5). `--comment` is REQUIRED —
+/// the agent must learn WHY (the comment rides DL1412 verbatim on the retried use).
+fn cmd_guard_deny(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::ReqBody;
+    let (id, _uses, vals) = guard_parse(args);
+    let Some(id) = id else {
+        eprintln!("error: `guard deny` needs a request id (gr_…)");
+        return 2;
+    };
+    let Some(comment) = vals.get("--comment").cloned() else {
+        eprintln!("error: `guard deny` requires `--comment \"<text>\"` — the agent must learn why it was denied");
+        return 2;
+    };
+    let owner = guard_owner(args);
+    match guard_rpc(state_dir, ReqBody::GuardDeny { owner, id: id.clone(), comment }, json) {
+        Ok(_) => {
+            if json {
+                println!("{}", json!({ "command": "guard", "subcommand": "deny", "request": id }));
+            } else {
+                eprintln!("ok: denied request {id} (the agent's retry will carry your comment)");
+            }
+            0
+        }
+        Err(c) => c,
+    }
+}
+
+/// `guard permits [list | revoke <id> --owner <code>]` (addendum §2.5).
+fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    use crate::broker_ipc::{ReqBody, Response};
+    let (positional, _uses, _vals) = guard_parse(args);
+    // `revoke <id>` when the first positional is `revoke`; else (`list`/empty) list the permits.
+    if positional.as_deref() == Some("revoke") {
+        // The permit id is the SECOND positional; guard_parse only keeps the first, so re-scan.
+        let Some(id) = args.iter().filter(|a| !a.starts_with("--")).nth(1).cloned() else {
+            eprintln!("error: `guard permits revoke` needs a permit id (gp_…)");
+            return 2;
+        };
+        let owner = guard_owner(args);
+        return match guard_rpc(state_dir, ReqBody::GuardPermitRevoke { owner, id: id.clone() }, json) {
+            Ok(_) => {
+                if json {
+                    println!("{}", json!({ "command": "guard", "subcommand": "permits revoke", "permit": id }));
+                } else {
+                    eprintln!("ok: revoked permit {id}");
+                }
+                0
+            }
+            Err(c) => c,
+        };
+    }
+    let resp = match guard_rpc(state_dir, ReqBody::GuardPermits, json) {
+        Ok(r) => r,
+        Err(c) => return c,
+    };
+    let Response::GuardPermitList { permits } = resp else {
+        eprintln!("error: unexpected guard permits response: {resp:?}");
+        return 2;
+    };
+    if json {
+        let arr: Vec<Json> = permits
+            .iter()
+            .map(|p| json!({ "id": p.id, "node": p.node, "uses": p.uses, "remaining_uses": p.remaining_uses, "expires_millis": p.expires_millis }))
+            .collect();
+        println!("{}", json!({ "command": "guard", "subcommand": "permits", "count": permits.len(), "permits": arr }));
+    } else if permits.is_empty() {
+        println!("(no permits)");
+    } else {
+        for p in &permits {
+            let uses = p.remaining_uses.map(|n| n.to_string()).unwrap_or_else(|| "unlimited".to_string());
+            println!("{}  {}  use=[{}]  remaining={}", p.id, p.node, p.uses.join(","), uses);
+        }
+    }
+    0
 }
 
 /// Render a `Response::GuardStatus` for `guard status` / `guard policy show`.

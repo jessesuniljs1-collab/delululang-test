@@ -119,6 +119,32 @@ pub(crate) fn guard_digest(broker: &Broker) -> String {
     }
 }
 
+fn guard_request_wire(r: &delulu_broker::GuardRequest) -> crate::broker_ipc::GuardRequestWire {
+    let status = match &r.status {
+        delulu_broker::ReqStatus::Pending => "pending".to_string(),
+        delulu_broker::ReqStatus::Approved => "approved".to_string(),
+        delulu_broker::ReqStatus::Denied { comment } => format!("denied: {comment}"),
+    };
+    crate::broker_ipc::GuardRequestWire {
+        id: r.id.clone(),
+        node: r.node.as_str().to_string(),
+        uses: r.subset.labels(),
+        why: r.why.clone(),
+        created_millis: r.created_millis,
+        status,
+    }
+}
+
+fn guard_permit_wire(p: &delulu_broker::Permit) -> crate::broker_ipc::GuardPermitWire {
+    crate::broker_ipc::GuardPermitWire {
+        id: p.id.clone(),
+        node: p.node.as_str().to_string(),
+        uses: p.subset.labels(),
+        remaining_uses: p.remaining_uses,
+        expires_millis: p.expires_millis,
+    }
+}
+
 fn guard_status_response(broker: &Broker) -> Response {
     Response::GuardStatus {
         bypass: broker.guard_bypass(),
@@ -454,6 +480,51 @@ fn handle(
         }
         ReqBody::GuardBypass { owner, on } => match broker.guard_set_bypass(owner.as_deref(), on) {
             Ok(()) => (Response::Ok, false),
+            Err(d) => (deny_response(&d), false),
+        },
+        ReqBody::GuardRequest { node, uses, why } => {
+            let Some(subset) = delulu_broker::GuardSubset::parse(&uses) else {
+                return (
+                    Response::Error { code: "DL0904".to_string(), message: "a guard request `--use` must be `class:pattern` items".to_string(), requires_human: false },
+                    false,
+                );
+            };
+            let node = GrantId::from_trusted(node);
+            let (id, deduped) = broker.guard_request(&node, subset, why);
+            (Response::GuardRequested { id, deduped }, false)
+        }
+        ReqBody::GuardPending => {
+            let requests = broker.guard_pending().iter().map(guard_request_wire).collect();
+            (Response::GuardPendingList { requests }, false)
+        }
+        ReqBody::GuardApprove { owner, id, ttl_millis, uses, comment } => {
+            match broker.guard_approve(owner.as_deref(), &id, ttl_millis, uses, comment) {
+                Ok(Some(permit_id)) => (Response::GuardApproved { permit_id }, false),
+                Ok(None) => (
+                    Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
+                    false,
+                ),
+                Err(d) => (deny_response(&d), false),
+            }
+        }
+        ReqBody::GuardDeny { owner, id, comment } => match broker.guard_deny(owner.as_deref(), &id, comment) {
+            Ok(true) => (Response::Ok, false),
+            Ok(false) => (
+                Response::Error { code: "DL0904".to_string(), message: format!("no such pending guard request `{id}`"), requires_human: false },
+                false,
+            ),
+            Err(d) => (deny_response(&d), false),
+        },
+        ReqBody::GuardPermits => {
+            let permits = broker.guard_permits().iter().map(guard_permit_wire).collect();
+            (Response::GuardPermitList { permits }, false)
+        }
+        ReqBody::GuardPermitRevoke { owner, id } => match broker.guard_permit_revoke(owner.as_deref(), &id) {
+            Ok(true) => (Response::Ok, false),
+            Ok(false) => (
+                Response::Error { code: "DL0904".to_string(), message: format!("no such permit `{id}`"), requires_human: false },
+                false,
+            ),
             Err(d) => (deny_response(&d), false),
         },
     }
@@ -1365,6 +1436,144 @@ mod tests {
         }
 
         stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    // ============================================================================================
+    // The Guard — phase 5l approvals: criteria 4, 5, 6 over the wire + audit verify + restart.
+    // ============================================================================================
+
+    /// Set up a root with Declassify over `S` and a delegated child minted with the owner code.
+    fn guarded_child(state: &Path) -> (String, String) {
+        let resp = request(state, ReqBody::Issue(declassify_spec("process"))).unwrap();
+        let Response::Issued { node: root } = resp else { panic!("issue: {resp:?}") };
+        let resp = request(state, ReqBody::Delegate {
+            parent: root.clone(),
+            authority: declassify_spec("delegate"),
+            multi: false,
+            owner: Some(TEST_OWNER.to_string()),
+        }).unwrap();
+        let Response::Delegated { node: child, token } = resp else { panic!("delegate: {resp:?}") };
+        let _ = request(state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
+        (root, child)
+    }
+
+    /// Criterion 4: block → request (with why) → approve (with comment) → the retried use succeeds;
+    /// the audit chain shows the whole sequence and `audit verify` stays green. Criterion 5: a second
+    /// request → deny → the retried use is DL1412 carrying the comment VERBATIM.
+    #[test]
+    fn guard_c4_c5_request_approve_deny_and_audit_verifies() {
+        let state = temp_state("guard_c45");
+        let handle = start_daemon(&state);
+        let (_root, child) = guarded_child(&state);
+
+        // Block.
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1410")));
+
+        // Request (with why).
+        let resp = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "call home once".into() }).unwrap();
+        let Response::GuardRequested { id, .. } = resp else { panic!("request: {resp:?}") };
+        // A retried use is DL1411 carrying the id.
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: false, code, message, .. } if code.as_deref() == Some("DL1411") && message.as_ref().unwrap().contains(&id)));
+
+        // Approve (with comment) → the retried use succeeds.
+        let resp = request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id: id.clone(), ttl_millis: None, uses: None, comment: Some("ok, once".into()) }).unwrap();
+        assert!(matches!(resp, Response::GuardApproved { .. }), "{resp:?}");
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        assert!(matches!(resp, Response::Decision { allow: true, .. }), "approved use succeeds: {resp:?}");
+
+        // Criterion 5: deny path — a SECOND request, denied, then the retried use is DL1412 verbatim.
+        // (Use a fresh delegated node so the existing permit does not honor it.)
+        let (_r2, child2) = guarded_child(&state);
+        let resp = request(&state, ReqBody::GuardRequest { node: child2.clone(), uses: vec!["declassify:*".into()], why: "please".into() }).unwrap();
+        let Response::GuardRequested { id: id2, .. } = resp else { panic!("request2: {resp:?}") };
+        let resp = request(&state, ReqBody::GuardDeny { owner: Some(TEST_OWNER.into()), id: id2, comment: "denied: too broad for an agent".into() }).unwrap();
+        assert!(matches!(resp, Response::Ok), "{resp:?}");
+        let resp = request(&state, ReqBody::Check { node: child2, op: "Declassify".into(), arg: Some("S".into()) }).unwrap();
+        match resp {
+            Response::Decision { allow: false, code, message, .. } => {
+                assert_eq!(code.as_deref(), Some("DL1412"));
+                assert!(message.unwrap().contains("denied: too broad for an agent"), "DL1412 carries the comment verbatim");
+            }
+            other => panic!("denied use must be DL1412: {other:?}"),
+        }
+
+        stop_daemon(&state, handle);
+        // The whole daemon-written audit chain verifies, and it shows the guard event kinds.
+        let stats = delulu_broker::verify(state.join("audit")).expect("guard audit chain verifies");
+        assert!(stats.records >= 8, "block+request+approve+use+deny recorded: {stats:?}");
+        let actions: std::collections::BTreeSet<String> = delulu_broker::tail(state.join("audit"), 100)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.action)
+            .collect();
+        for a in ["guard_block", "guard_request", "guard_approve", "guard_permit_use", "guard_deny"] {
+            assert!(actions.contains(a), "audit shows `{a}`: {actions:?}");
+        }
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Criterion 6 (over the wire): a `sealed` rule refuses DL1413 even with an approved permit, and
+    /// under bypass.
+    #[test]
+    fn guard_c6_sealed_refuses_with_permit_and_under_bypass() {
+        let state = temp_state("guard_c6");
+        let handle = start_daemon(&state);
+        // Seal fs_write.
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
+        // Root + delegated child (owner mints the sealed slice directly).
+        let root_spec = AuthoritySpec { effects: vec!["Write".into()], fs_write: vec!["./out".into()], holder_kind: "process".into(), holder_desc: "c6".into(), ..Default::default() };
+        let Response::Issued { node: root } = request(&state, ReqBody::Issue(root_spec.clone())).unwrap() else { panic!() };
+        let mut child_spec = root_spec.clone();
+        child_spec.holder_kind = "delegate".into();
+        let Response::Delegated { node: child, token } = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap() else { panic!() };
+        let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
+
+        // Approve a permit for fs_write:* anyway…
+        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["fs_write:*".into()], why: "want it".into() }).unwrap() else { panic!() };
+        request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        // …sealed still refuses DL1413.
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed with permit: {resp:?}");
+        // …and under bypass.
+        request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true }).unwrap();
+        let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed under bypass: {resp:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// Permits + pending requests are daemon-memory only: a daemon restart clears them (approvals are
+    /// deliberately session-scoped, addendum §2.5 / ruling 3). Tested at the node-independent
+    /// `GuardPermits`/`GuardPending` surface — the grant tree itself is also session-memory, so a
+    /// restart clears everything; here we witness the guard queues specifically.
+    #[test]
+    fn guard_permits_cleared_on_daemon_restart() {
+        let state = temp_state("guard_restart");
+        let handle = start_daemon(&state);
+        let (_root, child) = guarded_child(&state);
+        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "w".into() }).unwrap() else { panic!() };
+        request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        // The permit + request exist in this session.
+        let Response::GuardPermitList { permits } = request(&state, ReqBody::GuardPermits).unwrap() else { panic!() };
+        assert_eq!(permits.len(), 1, "one live permit in-session");
+        let Response::GuardPendingList { requests } = request(&state, ReqBody::GuardPending).unwrap() else { panic!() };
+        assert_eq!(requests.len(), 1, "one request in-session");
+
+        // Restart the daemon on the SAME state dir.
+        stop_daemon(&state, handle);
+        let handle = start_daemon(&state);
+        // The permits + requests are gone (daemon-memory only) — a fresh session starts empty.
+        let Response::GuardPermitList { permits } = request(&state, ReqBody::GuardPermits).unwrap() else { panic!() };
+        assert!(permits.is_empty(), "permits cleared on restart");
+        let Response::GuardPendingList { requests } = request(&state, ReqBody::GuardPending).unwrap() else { panic!() };
+        assert!(requests.is_empty(), "pending requests cleared on restart");
+        // But the persisted audit chain still verifies across the restart.
+        stop_daemon(&state, handle);
+        assert!(delulu_broker::verify(state.join("audit")).is_ok(), "audit verifies across the restart");
         let _ = std::fs::remove_dir_all(&state);
     }
 }
