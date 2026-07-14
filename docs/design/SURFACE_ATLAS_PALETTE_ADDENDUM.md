@@ -11,17 +11,17 @@ build.
 
 ---
 
-## 1. Origin and credit
+## 1. Prior art and verdicts
 
-Inspired by **graphify** (Graphify-Labs, https://github.com/Graphify-Labs/graphify) — a
-tree-sitter + optional-LLM knowledge-graph tool for AI coding agents (~32k lines of Python:
-extraction for ~40 languages, NetworkX graph, Leiden communities, god nodes, HTML viz,
-query/path/explain verbs, MCP server). Nothing is copied; the Atlas is written from scratch in
-Rust from the Delulu compiler's own facts. Credit graphify by name in user-facing docs.
+The current generation of knowledge-graph code-mapping tools for AI coding agents shares one
+architecture: parse source text with tree-sitter (plus an optional LLM semantic pass), build a
+graph, cluster it statistically, and expose HTML viz + query/path/explain verbs. The Atlas is
+written from scratch in Rust from the Delulu compiler's own facts; nothing is copied, and no
+external tool is named in user-facing surfaces (owner's ruling).
 
 ### Adopt / reject table
 
-| graphify concept | Verdict | Why |
+| Prior-art concept | Verdict | Why |
 |---|---|---|
 | Graph as the primary navigation surface (query instead of grep) | **ADOPT** | The core insight is right: agents and humans both waste effort re-deriving structure. |
 | `query` / `path` / `explain`-style verbs against a persistent graph | **ADOPT** (as `atlas node/path/callers/calls/why`) | Agents must be able to ask small questions without loading the whole graph. |
@@ -29,10 +29,10 @@ Rust from the Delulu compiler's own facts. Credit graphify by name in user-facin
 | Honest audit trail; never invent an edge | **ADOPT (strengthened)** | We go further: every atlas edge comes from the checker, so there is nothing to hedge. |
 | Self-contained HTML visualization | **ADOPT (improved)** | Ours embeds data + JS inline (no CDN, works offline), colors by *effect row*, and renders authority edges distinctly. |
 | Deterministic, local, no-LLM code extraction | **ADOPT (trivially)** | The compiler *is* the extractor. Zero heuristics survive. |
-| tree-sitter text extraction + `EXTRACTED/INFERRED/AMBIGUOUS` confidence tags | **REJECT** | Confidence tags exist because graphify must guess from text. Delulu's checker has ground truth (resolved names, typed effect rows, checked authority). An atlas edge either is a checked fact or it does not appear. |
+| tree-sitter text extraction + `EXTRACTED/INFERRED/AMBIGUOUS` confidence tags | **REJECT** | Confidence tags exist because text-extraction tools must guess. Delulu's checker has ground truth (resolved names, typed effect rows, checked authority). An atlas edge either is a checked fact or it does not appear. |
 | LLM semantic pass over docs/media | **REJECT** | Out of scope and nondeterministic; the Atlas maps *programs*. |
 | Leiden community detection + LLM community labels | **REJECT** | Statistical clusters with invented names. Delulu already has real communities — packages and modules — with real names. |
-| Embedding/vector anything | **REJECT** | Same reason graphify rejects it; agreed. |
+| Embedding/vector anything | **REJECT** | A traversable graph answers structural questions; embeddings add nondeterminism for nothing here. |
 | MCP server | **DEFER** | Stage 8 proper (LSP work) is the right home for protocol servers. |
 
 ---
@@ -206,8 +206,8 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
 6. **Refusal honesty** — check errors ⇒ DL1780 + no partial graph; broker down ⇒ DL1781 note +
    graph still emitted without overlay.
 7. **Self-contained HTML** — artifact contains embedded data + inline JS, zero external URLs
-   (test greps the artifact for `http://`/`https://` outside code-comment credit line), and a
-   node-count cap that collapses to module level above 3000 nodes with an explicit notice.
+   (test greps the artifact for `http://`/`https://`), and a node-count cap that collapses to
+   module level above 3000 nodes with an explicit notice.
 8. **Palette precedence** — `--color` flag > `DELULU_COLOR` > `NO_COLOR` > auto, with the single
    exception that `NO_COLOR` beats `DELULU_COLOR=always`; `--json` output never contains SGR
    bytes; piped output (non-TTY) is colorless by default.
@@ -218,7 +218,7 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
     to accommodate color is a defect, not a fix).
 11. **Docs & explain** — E-ATLAS + E-PALETTE registered with bodies; `usage()` updated;
     `docs/REPOSITORY_STRUCTURE.md`, `docs/playbooks/README.md` (Stage 8 row gains the early-drop
-    note), and this addendum's §8 close-out all updated; graphify credited.
+    note), and this addendum's §8 close-out all updated; no external tool named anywhere.
 
 ---
 
