@@ -9,6 +9,7 @@ use delulu_check::{
     program_authority, resolve_workspace, verify_locked, Checked, Effect, Lockfile, Program, Row,
     Workspace,
 };
+use delulu_atlas::{Atlas, BuildInput, ModuleView, PackageView};
 use delulu_check::lockfile::api_row_hash;
 use delulu_diag::{
     color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role,
@@ -430,6 +431,7 @@ pub fn run(args: &[String]) -> i32 {
         "run" => cmd_run(rest),
         "authority" => cmd_authority(rest),
         "why" => cmd_why(rest),
+        "atlas" => cmd_atlas(rest),
         "repl" => repl_cmd(rest),
         "audit" => cmd_audit(rest),
         "grants" => cmd_grants(rest),
@@ -472,6 +474,10 @@ fn usage() -> &'static str {
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
+     \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
+     \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
+     \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
@@ -483,7 +489,8 @@ fn usage() -> &'static str {
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
-     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD>\n\
+     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE>\n\
+     \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
@@ -3496,6 +3503,297 @@ fn cmd_audit(rest: &[String]) -> i32 {
 }
 
 // ----- explain / repl ------------------------------------------------------
+
+// ----- atlas (Surface addendum §2) ---------------------------------------------------------------
+
+/// `delulu atlas` — the typed, deterministic code + authority graph. Either a graph command
+/// (`delulu atlas <file|dir> [--format …]`) or a query verb (`node`/`path`/`callers`/`calls`/`why`).
+fn cmd_atlas(rest: &[String]) -> i32 {
+    match rest.first().map(String::as_str) {
+        Some(v @ ("node" | "callers" | "calls" | "why" | "path")) => atlas_query_cmd(v, &rest[1..]),
+        _ => atlas_graph_cmd(rest),
+    }
+}
+
+/// Build the atlas for a target: a `.delulu` file, a package directory, or a persisted `atlas.json`.
+/// On check errors it prints the diagnostics + DL1780 and refuses (no partial graph); returns the
+/// exit code to propagate. `gods` is the god-node cap.
+fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32> {
+    // A persisted graph: reuse it directly (agents can `atlas <pkg> --out .` then query atlas.json).
+    if target.ends_with(".json") {
+        return match std::fs::read_to_string(target) {
+            Ok(s) => serde_json::from_str::<Atlas>(&s).map_err(|e| {
+                eprintln!("error: `{target}` is not a valid atlas/1 file: {e}");
+                2
+            }),
+            Err(e) => {
+                eprintln!("error: cannot read `{target}`: {e}");
+                Err(2)
+            }
+        };
+    }
+
+    if std::path::Path::new(target).is_dir() {
+        let ws = resolve_workspace(target);
+        let program = check_workspace(&ws);
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        diags.extend(program.diagnostics.iter().cloned());
+        let n = errors(&diags);
+        if n > 0 {
+            diags.push(atlas_refusal(n));
+            print_diagnostics("atlas", &diags, &ws.source_map, None, json);
+            return Err(1);
+        }
+        let root = ws.root_pkg().name.clone();
+        let scopes = scopes_in_dir(std::path::Path::new(target));
+        let authority = program_authority(&program, &root, &scopes);
+        let modules: Vec<ModuleView> = ws
+            .modules
+            .iter()
+            .map(|wm| ModuleView {
+                package: ws.packages[wm.pkg].name.clone(),
+                name: wm.unit.name.clone(),
+                module: &wm.unit.module,
+            })
+            .collect();
+        let packages: Vec<PackageView> = ws
+            .packages
+            .iter()
+            .map(|p| PackageView {
+                name: p.name.clone(),
+                deps: p.dep_idxs.iter().map(|&i| ws.packages[i].name.clone()).collect(),
+                is_root: p.is_root,
+            })
+            .collect();
+        return Ok(Atlas::build(BuildInput {
+            root,
+            packages,
+            modules,
+            program: &program,
+            source_map: &ws.source_map,
+            authority,
+            god_n: gods,
+            custody: None,
+        }));
+    }
+
+    // Single file.
+    let (map, id, src) = load(target)?;
+    let checked = check_source(id, &src);
+    let n = errors(&checked.diagnostics);
+    if n > 0 {
+        let mut diags = checked.diagnostics.clone();
+        diags.push(atlas_refusal(n));
+        print_diagnostics("atlas", &diags, &map, None, json);
+        return Err(1);
+    }
+    let program = synth_single_program(&checked);
+    let root = checked.module.name.dotted();
+    let mut scopes = manifest_scopes(target);
+    let python_allowlist = manifest_python_allowlist(target);
+    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
+    let authority = authority_report(&root, &checked.result, &scopes);
+    let modules = vec![ModuleView { package: root.clone(), name: root.clone(), module: &checked.module }];
+    let packages = vec![PackageView { name: root.clone(), deps: vec![], is_root: true }];
+    Ok(Atlas::build(BuildInput {
+        root,
+        packages,
+        modules,
+        program: &program,
+        source_map: &map,
+        authority,
+        god_n: gods,
+        custody: None,
+    }))
+}
+
+/// DL1780 — the atlas refuses to build from a program with check errors (no partial graph).
+fn atlas_refusal(n: usize) -> Diagnostic {
+    Diagnostic::error(
+        "DL1780",
+        format!("the atlas is built from checked facts — fix the {n} error(s) above first"),
+    )
+}
+
+/// Collect atlas flags shared by the graph + query commands.
+struct AtlasFlags {
+    positionals: Vec<String>,
+    format: Option<String>,
+    out: Option<String>,
+    budget: Option<usize>,
+    gods: usize,
+    json: bool,
+    custody: bool,
+}
+
+fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
+    let mut f = AtlasFlags {
+        positionals: Vec::new(),
+        format: None,
+        out: None,
+        budget: None,
+        gods: 10,
+        json: false,
+        custody: false,
+    };
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        match a {
+            "--json" => f.json = true,
+            "--custody" => f.custody = true,
+            "--format" => {
+                if i + 1 < args.len() {
+                    f.format = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--format=") => f.format = Some(s["--format=".len()..].to_string()),
+            "--out" | "-o" => {
+                if i + 1 < args.len() {
+                    f.out = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--out=") => f.out = Some(s["--out=".len()..].to_string()),
+            "--budget" => {
+                if i + 1 < args.len() {
+                    f.budget = args[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--budget=") => f.budget = s["--budget=".len()..].parse().ok(),
+            "--gods" => {
+                if i + 1 < args.len() {
+                    if let Ok(n) = args[i + 1].parse() {
+                        f.gods = n;
+                    }
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--gods=") => {
+                if let Ok(n) = s["--gods=".len()..].parse() {
+                    f.gods = n;
+                }
+            }
+            s if !s.starts_with('-') => f.positionals.push(s.to_string()),
+            _ => {}
+        }
+        i += 1;
+    }
+    f
+}
+
+/// `delulu atlas <file|dir> [--format tree|digest|json] [--out DIR] [--budget N] [--gods N] [--json]`.
+fn atlas_graph_cmd(args: &[String]) -> i32 {
+    let f = parse_atlas_flags(args);
+    let Some(target) = f.positionals.first().cloned() else {
+        eprintln!("error: `atlas` needs a file or package directory (e.g. `delulu atlas examples/demo.delulu`)");
+        return 2;
+    };
+    let fmt = if f.json { "json".to_string() } else { f.format.clone().unwrap_or_else(|| "tree".to_string()) };
+    let atlas = match atlas_from_target(&target, f.gods, f.json) {
+        Ok(a) => a,
+        Err(c) => return c,
+    };
+    let budget = f.budget.unwrap_or(delulu_atlas::DEFAULT_BUDGET);
+
+    // `--out DIR` writes the agent bundle: ATLAS.md (digest) + atlas.json (the machine channel).
+    if let Some(dir) = &f.out {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("error: cannot create `{dir}`: {e}");
+            return 2;
+        }
+        let md = std::path::Path::new(dir).join("ATLAS.md");
+        let js = std::path::Path::new(dir).join("atlas.json");
+        if let Err(e) = std::fs::write(&md, atlas.render_digest(budget)) {
+            eprintln!("error: cannot write `{}`: {e}", md.display());
+            return 2;
+        }
+        if let Err(e) = std::fs::write(&js, atlas.to_json_string()) {
+            eprintln!("error: cannot write `{}`: {e}", js.display());
+            return 2;
+        }
+        eprintln!("{}", ok(format!("ok: wrote {} and {}", md.display(), js.display())));
+        return 0;
+    }
+
+    match fmt.as_str() {
+        "tree" => {
+            // Colored via the Palette when the stream is a TTY (plain otherwise); A3 layers richer
+            // color. The graph body is a stdout human surface.
+            print!("{}", colorize_atlas_tree(&atlas.render_tree(), &palette_stdout()));
+        }
+        "digest" => print!("{}", atlas.render_digest(budget)),
+        "json" => println!("{}", atlas.to_json_string()),
+        "dot" | "mermaid" | "html" => {
+            eprintln!("error: `--format {fmt}` arrives in phase A3 (renderers); tree, digest and json are available now");
+            return 2;
+        }
+        other => {
+            eprintln!("error: unknown --format `{other}` (tree | digest | json | dot | mermaid | html)");
+            return 2;
+        }
+    }
+    0
+}
+
+/// Query verbs: `node <name>`, `callers <fn>`, `calls <fn>`, `why <x>`, `path <A> <B>`. Each takes
+/// an optional trailing target (file/dir/atlas.json); default is the current directory.
+fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
+    let f = parse_atlas_flags(args);
+    let n_query = if verb == "path" { 2 } else { 1 };
+    if f.positionals.len() < n_query {
+        eprintln!(
+            "error: `atlas {verb}` needs {} argument(s){}",
+            n_query,
+            if verb == "path" { " (<A> <B>)" } else { "" }
+        );
+        return 2;
+    }
+    let target = f.positionals.get(n_query).cloned().unwrap_or_else(|| ".".to_string());
+    let atlas = match atlas_from_target(&target, f.gods, f.json) {
+        Ok(a) => a,
+        Err(c) => return c,
+    };
+    let a = &f.positionals[0];
+    let b = if verb == "path" { Some(f.positionals[1].as_str()) } else { None };
+    if f.json {
+        println!("{}", serde_json::to_string_pretty(&atlas.query_json(verb, a, b)).expect("query json"));
+        return 0;
+    }
+    let text = match verb {
+        "node" => atlas.query_node(a, f.budget),
+        "callers" => atlas.query_callers(a, f.budget),
+        "calls" => atlas.query_calls(a, f.budget),
+        "why" => atlas.query_why(a, f.budget),
+        "path" => atlas.query_path(a, b.unwrap_or(""), f.budget),
+        _ => unreachable!(),
+    };
+    print!("{text}");
+    0
+}
+
+/// Colorize the plain atlas tree via the Palette (A2: node ids + effect rows). A disabled palette
+/// returns the text unchanged, keeping non-TTY output byte-identical (determinism, criterion 1).
+fn colorize_atlas_tree(text: &str, palette: &Palette) -> String {
+    if !palette.is_enabled() {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("package ") || trimmed.starts_with("module ") || trimmed.starts_with("fn ") {
+            out.push_str(&palette.paint(Role::Heading, line));
+        } else if trimmed.starts_with("- ") {
+            out.push_str(&palette.paint(Role::Note, line));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
 
 fn cmd_explain(rest: &[String]) -> i32 {
     let code = rest.iter().find(|a| !a.starts_with('-')).map(|s| s.trim_start_matches("E-").to_string());

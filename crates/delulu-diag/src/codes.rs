@@ -230,6 +230,37 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  {GUARD_CAVEAT}"
             ),
         )),
+        "ATLAS" => Some((
+            "the Atlas: a typed, deterministic code + authority graph (Surface addendum §2)",
+            String::from(
+                "`delulu atlas` builds a typed graph of a CHECKED program from compiler facts only — \
+                 resolved names, typed effect rows, checked authority. There are no confidence tags: \
+                 an edge either is a checked fact (and appears) or it is not (and does not).\n\n\
+                 Node kinds: package, module, function, type, effect, resource (an fs path class, a \
+                 net host, a secret name), foreign (a C symbol or Python module). Edge kinds: \
+                 contains, depends_on, imports, calls, uses_type, performs (function→effect, from \
+                 the checked row), requires (function/package→resource, from the authority report), \
+                 foreign, declassifies, and delegates (the custody overlay only).\n\n\
+                 Formats per consumer: `--format tree` (the default terminal overview), `--format \
+                 digest` (token-budgeted Markdown for an LLM, self-describing, ending in a \
+                 \"Querying further\" footer that teaches the query verbs), `--format json` (the \
+                 versioned `atlas/1` machine channel — additive-only, NEVER colored), and \
+                 `--format dot`/`mermaid`/`html`. Query verbs answer small questions without loading \
+                 the whole graph: `delulu atlas node <name>`, `callers <fn>`, `calls <fn>`, `path \
+                 <A> <B>` (typed hops), and `why <Effect|resource>` (a graph-shaped sibling of \
+                 `delulu why`). `--budget <N>` caps any textual answer at ~N tokens (a chars/4 \
+                 heuristic); truncation is always explicit.\n\n\
+                 Refusals are honest: if `delulu check` reports errors the atlas refuses with DL1780 \
+                 and builds no partial graph; if `--custody` is asked for but the broker daemon is \
+                 unreachable the overlay degrades to a DL1781 note and the atlas is still emitted \
+                 without it.\n\n\
+                 Honesty: the atlas is a static map of checked facts, not a runtime trace; calls \
+                 through function values may be under-approximated. The custody overlay reflects \
+                 broker state at the moment of the query and is awareness, not enforcement (the \
+                 Guard enforces). No claim of a \"complete call graph\" or \"always up to date\" is \
+                 ever made.",
+            ),
+        )),
         "PALETTE" => Some((
             "the Palette: role-based color for human CLI output (Surface addendum §2.5)",
             String::from(
@@ -246,10 +277,11 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  Themes: `default` (colorblind-safe — never distinguishes by red/green alone; the \
                  severity WORD is the primary signal), `bright` (higher contrast), and `mono` \
                  (bold/underline only, zero color SGR). Select with `--theme <name>`, then \
-                 `DELULU_THEME`, then `~/.delulu/theme.toml` (`theme = \"name\"` plus an optional \
-                 `[roles]` table overriding individual roles with named 16-color values). A bad theme \
-                 name or a malformed theme file is DL1790 (a warning) and falls back to `default` — \
-                 never a hard failure.\n\n\
+                 `DELULU_THEME`, then a theme file (`$DELULU_THEME_FILE` if set, else \
+                 `~/.delulu/theme.toml`) whose `theme = \"name\"` key plus an optional `[roles]` \
+                 table overrides individual roles with named 16-color values. A bad theme name, an \
+                 oversized/unreadable/non-UTF-8 file, or a malformed one is DL1790 (a warning) and \
+                 falls back to `default` — never a hard failure.\n\n\
                  Machine channels are NEVER colored: `--json` output and the `atlas/1` graph carry \
                  zero SGR bytes regardless of any of the above, so an agent parsing them never has to \
                  strip escapes. Full syntax highlighting of source snippets is deferred to Stage 8 \
@@ -552,9 +584,22 @@ mod tests {
     /// The Atlas codes (DL1780 = refuse on check errors, DL1781 = broker down note) are registered
     /// in the Surface range.
     #[test]
-    fn atlas_codes_registered() {
+    fn atlas_codes_and_e_atlas_topic() {
         assert!(is_registered("DL1780"), "DL1780 (atlas refused) must be registered");
         assert!(is_registered("DL1781"), "DL1781 (custody overlay unavailable) must be registered");
+        let (title, body) = topic_explain("ATLAS").expect("E-ATLAS topic exists");
+        assert!(title.contains("Atlas"));
+        // The verbatim static caveat (addendum §2.6) ships in the explain body.
+        assert!(
+            body.contains("static map of checked facts, not a runtime trace; calls through function \
+                 values may be under-approximated"),
+            "the verbatim caveat must appear: {body}"
+        );
+        assert!(body.contains("DL1780") && body.contains("DL1781"), "refusal codes documented");
+        assert!(body.contains("Querying further"), "the digest footer is named");
+        assert!(body.contains("atlas/1"), "the JSON schema is named");
+        // Honesty: never claim a complete/always-current graph.
+        assert!(body.contains("not a runtime trace"));
     }
 
     /// Every DL14xx custody code has a longer explain body, and the §10 caveats it must carry

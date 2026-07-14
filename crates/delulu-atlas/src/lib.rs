@@ -1,0 +1,172 @@
+//! The Atlas — a typed, deterministic graph of a checked Delulu program, derived ONLY from
+//! compiler (and optionally broker) facts (Surface addendum §2).
+//!
+//! Consumers and their native formats:
+//! - human, terminal → `render_tree` (the default overview)
+//! - AI agent / LLM  → `render_digest` (token-budgeted Markdown) + the query verbs + `to_json`
+//! - other tools     → `dot` / `mermaid` (phase A3)
+//! - human, browser  → self-contained `html` (phase A3)
+//!
+//! Determinism is structural: [`Atlas::build`] sorts every collection by stable id, so with color
+//! off two runs produce byte-identical output in every format. The `atlas/1` JSON is a versioned
+//! machine channel and is never colored.
+
+mod build;
+mod model;
+mod query;
+mod render;
+
+pub use build::{BuildInput, ModuleView, PackageView};
+pub use model::{
+    effect_id, fn_id, foreign_c_id, foreign_py_id, grant_id, mod_id, pkg_id, resource_id, type_id,
+    Atlas, Edge, EdgeKind, God, Node, NodeKind, SpanLoc, CAVEAT_STATIC, SCHEMA,
+};
+pub use query::Resolved;
+pub use render::{tokens, DEFAULT_BUDGET, QUERYING_FOOTER};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use delulu_check::authority::ScopeInfo;
+    use delulu_check::{authority_report, check_source};
+
+    /// Build an atlas for a single checked source file (the same shape the CLI's file path uses).
+    fn atlas_of(src: &str) -> Atlas {
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "test source must check clean: {:?}", checked.diagnostics);
+        let root = checked.module.name.dotted();
+        // Synthesize a single-module Program (Program fields are all pub).
+        let mut facts = std::collections::HashMap::new();
+        for (name, f) in &checked.result.facts {
+            facts.insert(format!("{root}::{name}"), f.clone());
+        }
+        let mut owner = std::collections::HashMap::new();
+        for name in checked.table.fns.keys() {
+            owner.insert(name.clone(), root.clone());
+        }
+        let mut call_owner = std::collections::HashMap::new();
+        call_owner.insert(root.clone(), owner);
+        let entry_module = if checked.result.main_present { Some(root.clone()) } else { None };
+        let program = delulu_check::program::Program {
+            diagnostics: vec![],
+            facts,
+            fn_types: std::collections::HashMap::new(),
+            call_owner,
+            entry_module,
+        };
+        let scopes = ScopeInfo::default();
+        let authority = authority_report(&root, &checked.result, &scopes);
+        let map = &{
+            let mut m = delulu_diag::SourceMap::new();
+            m.add_file("test.delulu", src.to_string());
+            m
+        };
+        Atlas::build(BuildInput {
+            root: root.clone(),
+            packages: vec![PackageView { name: root.clone(), deps: vec![], is_root: true }],
+            modules: vec![ModuleView { package: root.clone(), name: root.clone(), module: &checked.module }],
+            program: &program,
+            source_map: map,
+            authority,
+            god_n: 10,
+            custody: None,
+        })
+    }
+
+    const SAMPLE: &str = "module app\n\
+        fn helper(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\n\
+        fn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n\
+        fn main(root: Root) ! {Write} { let out = root.console()\n helper(out, \"hi\") }\n";
+
+    #[test]
+    fn build_is_deterministic() {
+        let a = atlas_of(SAMPLE);
+        let b = atlas_of(SAMPLE);
+        assert_eq!(a.to_json_string(), b.to_json_string(), "json is byte-identical across runs");
+        assert_eq!(a.render_tree(), b.render_tree(), "tree is byte-identical across runs");
+        assert_eq!(a.render_digest(DEFAULT_BUDGET), b.render_digest(DEFAULT_BUDGET), "digest byte-identical");
+    }
+
+    #[test]
+    fn functions_effects_and_calls_are_edges() {
+        let a = atlas_of(SAMPLE);
+        // main calls helper (calls edge).
+        let main = fn_id("app", "app", "main");
+        let helper = fn_id("app", "app", "helper");
+        assert!(a.edges.iter().any(|e| e.from == main && e.to == helper && e.kind == EdgeKind::Calls));
+        // helper performs Write.
+        assert!(a
+            .edges
+            .iter()
+            .any(|e| e.from == helper && e.to == effect_id("Write") && e.kind == EdgeKind::Performs));
+        // fib is pure.
+        let fib = a.node(&fn_id("app", "app", "fib")).unwrap();
+        assert_eq!(fib.pure, Some(true));
+    }
+
+    #[test]
+    fn authority_parity_effects_match_delulu_authority() {
+        // Criterion 5: the union of `performs` over reachable functions equals `delulu authority`.
+        let a = atlas_of(SAMPLE);
+        let auth_effects: std::collections::BTreeSet<String> = a.authority["effects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        // Reachable functions from main via calls edges.
+        let main = fn_id("app", "app", "main");
+        let mut reach = std::collections::BTreeSet::new();
+        let mut stack = vec![main.clone()];
+        while let Some(f) = stack.pop() {
+            if !reach.insert(f.clone()) {
+                continue;
+            }
+            for e in a.out_edges(&f).filter(|e| e.kind == EdgeKind::Calls) {
+                stack.push(e.to.clone());
+            }
+        }
+        let mut performs: std::collections::BTreeSet<String> = Default::default();
+        for e in a.edges.iter().filter(|e| e.kind == EdgeKind::Performs) {
+            if reach.contains(&e.from) {
+                if let Some(n) = a.node(&e.to) {
+                    performs.insert(n.name.clone());
+                }
+            }
+        }
+        assert_eq!(performs, auth_effects, "performs edges must agree with delulu authority");
+    }
+
+    #[test]
+    fn digest_has_footer_gods_authority_and_caveat() {
+        let a = atlas_of(SAMPLE);
+        let d = a.render_digest(DEFAULT_BUDGET);
+        assert!(d.contains("## Querying further"), "footer present");
+        assert!(d.contains("delulu atlas node"), "footer teaches the verbs");
+        assert!(d.contains("## God nodes"), "gods present");
+        assert!(d.contains("Authority (mirrors `delulu authority`)"), "authority table present");
+        assert!(d.contains(CAVEAT_STATIC), "the verbatim static caveat ships");
+        assert!(tokens(&d) <= DEFAULT_BUDGET, "digest respects the default budget");
+    }
+
+    #[test]
+    fn query_verbs_answer_from_the_graph() {
+        let a = atlas_of(SAMPLE);
+        assert!(a.query_callers("helper", None).contains("main"), "callers of helper include main");
+        assert!(a.query_calls("main", None).contains("helper"), "main calls helper");
+        let path = a.query_path("main", "Write", None);
+        assert!(path.contains("--calls-->") || path.contains("--performs-->"), "typed hops: {path}");
+        let why = a.query_why("Write", None);
+        assert!(why.contains("helper") || why.contains("main"), "why Write names a performer: {why}");
+        let node = a.query_node("fib", None);
+        assert!(node.contains("pure:      true"), "node view shows purity: {node}");
+    }
+
+    #[test]
+    fn budget_truncation_is_explicit() {
+        let a = atlas_of(SAMPLE);
+        // A tiny budget forces truncation on a verb with several lines.
+        let capped = a.query_node("main", Some(1));
+        assert!(capped.contains("truncated at budget"), "truncation is explicit: {capped}");
+    }
+}

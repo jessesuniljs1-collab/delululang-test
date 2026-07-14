@@ -25,6 +25,7 @@ python = ["delulu-runtime/python"]
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
+delulu-atlas = { path = "../delulu-atlas" }
 delulu-runtime = { path = "../delulu-runtime", default-features = false }
 delulu-wasm = { path = "../delulu-wasm" }
 # Stage 5 chunk 2 (phase 5d): `delulu audit tail|query|verify` reads the hash-chained log files

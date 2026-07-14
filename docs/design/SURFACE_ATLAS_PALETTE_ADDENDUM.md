@@ -261,22 +261,39 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
    explicit path) ahead of that default. Unset ⇒ behavior is exactly as specified. It is the
    hermetic test lever for `[roles]` overrides and malformed-file fallback (the same role
    `DELULU_STATE_DIR` plays for the broker), plus a power-user convenience. Minor and superset-only.
+   Documented in the `E-PALETTE` explain body (head-chef requirement) and in A3 docs. The theme file
+   is read through a bounded reader (64 KiB cap, UTF-8 checked): an oversized/hostile file can never
+   exhaust memory — it degrades to DL1790 + the default theme (`palette::tests::oversized_theme_file_is_rejected_gracefully`).
+3. **No new call-edge side table was added — the checker already records reusable call edges.**
+   §2.1 said "if the checker does not already record function→function call edges in a reusable side
+   table, add one to `CheckResult`". It DOES: `FnFacts.callees` (per-function callee names) plus
+   `Program.call_owner` (per-module name→owner resolution) are exactly the reusable, resolved call
+   edges — the same pair `delulu why`, `authority_report`, and `program_authority` already walk. The
+   Atlas reuses them and re-lexes nothing (build.rs `EdgeKind::Calls`). No `CheckResult` change was
+   needed, so none was made.
+4. **A2 phase boundary (not a departure): renderers + custody are A3.** The `foreign` and `delegates`
+   edge kinds and the `foreign`/`grant` node kinds are defined in the `atlas/1` model but populated
+   in A3 (foreign per-call-site edges need an expression walk; the custody overlay needs the broker);
+   A2 surfaces the foreign boundary in the digest from the authority report's `foreign_calls`.
+   `--format dot|mermaid|html` return a clean "arrives in phase A3" message in A2; `--custody` is
+   accepted but the overlay (and its DL1781 broker-down note) lands in A3. `atlas/1` evolution to add
+   them is additive, as the schema requires.
 
 ## 8. Close-out (criterion → witnessing test → status)
 
-Workspace tests **398 (Guard baseline) → 425** after phase A1 (+27; the 2 pre-existing ignored are
-untouched — criterion 10). Phases A2/A3 fill the remaining rows.
+Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2)**. The 2 pre-existing ignored are
+untouched — criterion 10. Phase A3 fills the remaining rows.
 
 | # | Criterion (§4) | Status | Witnessing test |
 |---|---|---|---|
-| 1 | Determinism — byte-identical across runs, every format | pending A2 | — |
-| 2 | `atlas/1` JSON — versioned, stable ids, serde round-trip, zero ANSI under `--color always` | pending A2 | — |
-| 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | pending A2 | — |
-| 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | pending A2 | — |
-| 5 | Authority parity — `performs`/`requires` == `delulu authority` (machine-checked) | pending A2 | — |
-| 6 | Refusal honesty — DL1780 (no partial graph) / DL1781 (broker down, graph still emitted) | pending A2 | — |
+| 1 | Determinism — byte-identical across runs, every format | **met (A2)** | `atlas_cli.rs::output_is_byte_identical_across_runs_every_format` (tree/digest/json through the binary); unit `delulu_atlas::tests::build_is_deterministic` |
+| 2 | `atlas/1` JSON — versioned, stable ids, serde round-trip, zero ANSI under `--color always` | **met (A2)** | `atlas_cli.rs::{atlas_json_is_a_versioned_envelope_with_stable_ids, json_carries_zero_ansi_even_under_color_always}`; units `model::tests::{atlas_round_trips_through_serde, json_carries_zero_ansi_bytes}` |
+| 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | **met (A2)** | `atlas_cli.rs::{digest_has_budget_ordering_authority_gods_caveats_and_footer, digest_is_never_colored_even_under_color_always}`; unit `delulu_atlas::tests::digest_has_footer_gods_authority_and_caveat` |
+| 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | **met (A2)** | `atlas_cli.rs::{query_verbs_answer_without_the_whole_graph, query_json_is_structured_and_uncolored, budget_truncation_is_explicit_never_silent}`; units `delulu_atlas::tests::{query_verbs_answer_from_the_graph, budget_truncation_is_explicit}` |
+| 5 | Authority parity — `performs`/`requires` == `delulu authority` (machine-checked) | **met (A2)** | `atlas_cli.rs::atlas_authority_matches_delulu_authority_exactly` (compares effects/capabilities/secrets/foreign_calls/pure_functions + performs edges); unit `delulu_atlas::tests::authority_parity_effects_match_delulu_authority` |
+| 6 | Refusal honesty — DL1780 (no partial graph); DL1781 (broker down, graph still emitted) A3 | **met (A2, DL1780)** | `atlas_cli.rs::{check_errors_refuse_with_dl1780_and_no_partial_graph, refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph}` (exit 1, no `atlas/1` on refusal). DL1781 witness lands with `--custody` in A3 |
 | 7 | Self-contained HTML — embedded data + inline JS, zero external URLs, 3000-node collapse | pending A3 | — |
 | 8 | **Palette precedence** — flag > DELULU_COLOR > NO_COLOR > auto (NO_COLOR beats DELULU_COLOR=always); `--json` never SGR; piped colorless | **met (A1)** | `palette_cli.rs::{piped_output_is_colorless_by_default, color_always_flag_paints_the_diagnostic, json_is_never_colored_even_under_color_always, delulu_color_env_forces_color_when_piped, no_color_beats_delulu_color_always, color_always_flag_beats_no_color, color_never_flag_disables_even_with_delulu_color_always, ok_success_line_is_painted}`; unit `palette::tests::color_precedence_lattice` |
 | 9 | **Themes** — three built-ins; `mono` no color SGR; `theme.toml` role override; invalid ⇒ DL1790 + fallback | **met (A1)** | `palette_cli.rs::{mono_theme_emits_no_color_sgr, bright_theme_uses_bright_colors, theme_toml_role_override_is_honored, invalid_theme_is_dl1790_warning_and_falls_back, malformed_theme_file_is_dl1790_and_still_runs}`; units `palette::tests::{mono_emits_no_color_sgr, theme_toml_role_override_is_honored, bad_theme_name_falls_back_with_warning, malformed_theme_file_falls_back_with_warning, theme_precedence_flag_over_env_over_file}` |
 | 10 | **Zero regression** — pre-existing suite passes unchanged | **met (A1)** | the full 398-test suite runs UNMODIFIED (425 total, 0 fail); `render::tests::disabled_palette_matches_render_human_byte_for_byte` proves color-off is byte-identical |
-| 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | partial (A1) | E-PALETTE + DL1790 registered with bodies (`codes::tests::palette_code_and_e_palette_topic`); E-ATLAS + `usage()`/docs land in A2/A3 |
+| 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | partial (A1+A2) | E-PALETTE (`codes::tests::palette_code_and_e_palette_topic`) + E-ATLAS (`codes::tests::atlas_codes_and_e_atlas_topic`, `atlas_cli.rs::explain_e_atlas_describes_the_model`) registered with bodies; `usage()` updated for `atlas` + globals. REPOSITORY_STRUCTURE/README + final close-out land in A3 |

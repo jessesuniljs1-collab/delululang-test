@@ -335,19 +335,22 @@ pub fn resolve_theme(
     env_theme: Option<&str>,
     config_path: Option<&Path>,
 ) -> (Theme, Option<String>) {
-    // Read the config file, if any. A read error means "no file"; a parse error is a DL1790.
+    // Read the config file, if any. A missing/unreadable file means "no config" (no warning); an
+    // oversized, non-UTF-8, or structurally broken file is a DL1790 (never a hard failure).
     let mut cfg_theme_name: Option<String> = None;
     let mut cfg_roles: Vec<(String, String)> = Vec::new();
     let mut file_bad = false;
     if let Some(path) = config_path {
-        if let Ok(text) = std::fs::read_to_string(path) {
-            match parse_theme_toml(&text) {
+        match read_capped(path, THEME_FILE_MAX) {
+            Ok(Some(text)) => match parse_theme_toml(&text) {
                 Ok((name, roles)) => {
                     cfg_theme_name = name;
                     cfg_roles = roles;
                 }
                 Err(()) => file_bad = true,
-            }
+            },
+            Ok(None) => {}       // no file / unreadable → simply no config
+            Err(()) => file_bad = true, // too large or not UTF-8 → malformed, fall back
         }
     }
 
@@ -388,6 +391,29 @@ pub fn resolve_theme(
         None
     };
     (theme, warning)
+}
+
+/// The theme file is user-controlled input; cap how much of it we will read so a hostile or
+/// accidentally-huge file can never exhaust memory. A real `theme.toml` is a handful of lines; 64
+/// KiB is astronomically generous. Anything larger is treated as malformed (→ DL1790, default theme).
+const THEME_FILE_MAX: u64 = 64 * 1024;
+
+/// Read at most `cap` bytes of a file as UTF-8. `Ok(None)` = missing/unreadable (no config, no
+/// warning). `Err(())` = larger than `cap` or not valid UTF-8 (→ caller emits DL1790). Bounds
+/// memory to `cap + 1` bytes regardless of the file's real size.
+fn read_capped(path: &Path, cap: u64) -> Result<Option<String>, ()> {
+    use std::io::Read;
+    let Ok(file) = std::fs::File::open(path) else {
+        return Ok(None);
+    };
+    let mut buf = Vec::new();
+    if file.take(cap + 1).read_to_end(&mut buf).is_err() {
+        return Ok(None);
+    }
+    if buf.len() as u64 > cap {
+        return Err(()); // oversized — refuse to grow further
+    }
+    String::from_utf8(buf).map(Some).map_err(|_| ())
 }
 
 /// Parsed contents of a `theme.toml`: the optional `theme = "…"` name and the `[roles]` overrides.
@@ -545,6 +571,23 @@ mod tests {
         let (theme, warn) = resolve_theme(None, None, Some(&path));
         assert_eq!(theme.name(), "default");
         assert!(warn.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn oversized_theme_file_is_rejected_gracefully() {
+        // A hostile/huge theme file must never be read into memory whole — it falls back to default
+        // with a DL1790 warning, no panic, no OOM.
+        let dir = std::env::temp_dir().join(format!("delulu_theme_huge_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("theme.toml");
+        let big = "x = 1\n".repeat(20_000); // ~120 KiB, well over THEME_FILE_MAX
+        std::fs::write(&path, &big).unwrap();
+        let (theme, warn) = resolve_theme(None, None, Some(&path));
+        assert_eq!(theme.name(), "default", "oversized file falls back to default");
+        assert!(warn.is_some(), "oversized file warns (DL1790)");
+        // Bounded read: we never materialize the whole file.
+        assert!(read_capped(&path, THEME_FILE_MAX).is_err(), "read is refused past the cap");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
