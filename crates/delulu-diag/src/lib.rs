@@ -8,6 +8,7 @@
 mod codes;
 mod diagnostic;
 mod json;
+mod palette;
 mod render;
 mod source;
 mod span;
@@ -18,6 +19,9 @@ pub use codes::{
 };
 pub use diagnostic::{Confidence, Diagnostic, Edit, LabeledSpan, Repair, Severity};
 pub use json::{envelope, envelope_to_string};
-pub use render::render_human;
+pub use palette::{
+    color_enabled, named_color_sgr, resolve_theme, ColorChoice, Palette, Role, Theme, RESET,
+};
+pub use render::{render_human, render_human_with};
 pub use source::{SourceFile, SourceMap};
 pub use span::{FileId, Span};

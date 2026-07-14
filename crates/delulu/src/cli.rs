@@ -10,11 +10,191 @@ use delulu_check::{
     Workspace,
 };
 use delulu_check::lockfile::api_row_hash;
-use delulu_diag::{envelope_to_string, render_human, Diagnostic, SourceMap};
+use delulu_diag::{
+    color_enabled, envelope_to_string, render_human_with, ColorChoice, Diagnostic, Palette, Role,
+    SourceMap, Theme,
+};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
 use delulu_runtime::value::RootVal;
 use delulu_syntax::ast::Item;
 use serde_json::{json, Value as Json};
+
+// ----- the Palette (Surface addendum §2.5) --------------------------------------------------------
+//
+// Global `--color`/`--theme` and the `DELULU_COLOR`/`DELULU_THEME`/`NO_COLOR` envs are resolved ONCE
+// per process into `SURFACE`; each human-facing surface then asks for a `Palette` scoped to the
+// stream it writes to (auto-detection is per-stream TTY). Every `delulu` invocation is a fresh
+// process, so a process-global is exactly right here. Color is OFF for non-TTY by default, which is
+// why every pre-existing test — all piped — stays byte-identical (criterion 10).
+
+use std::io::IsTerminal;
+use std::sync::OnceLock;
+
+struct Surface {
+    color_flag: Option<ColorChoice>,
+    delulu_color: Option<String>,
+    no_color: bool,
+    theme: Theme,
+}
+
+static SURFACE: OnceLock<Surface> = OnceLock::new();
+
+fn surface() -> &'static Surface {
+    // If `init_surface` was never called (e.g. a unit test calling a helper directly), default to
+    // "no forced color, default theme" — auto/TTY decides, so tests stay colorless.
+    SURFACE.get_or_init(|| Surface {
+        color_flag: None,
+        delulu_color: None,
+        no_color: false,
+        theme: Theme::default_theme(),
+    })
+}
+
+fn palette_for(is_tty: bool) -> Palette {
+    let s = surface();
+    let on = color_enabled(s.color_flag, s.delulu_color.as_deref(), s.no_color, is_tty);
+    Palette::new(on, s.theme.clone())
+}
+
+/// The palette for diagnostics / `ok:` lines / banners (all of which write to stderr).
+fn palette_stderr() -> Palette {
+    palette_for(std::io::stderr().is_terminal())
+}
+
+/// The palette for human report bodies written to stdout (grants tree/list, atlas tree).
+fn palette_stdout() -> Palette {
+    palette_for(std::io::stdout().is_terminal())
+}
+
+/// Paint an `ok:`/success line for stderr. A disabled palette returns the text unchanged.
+fn ok(msg: impl Into<String>) -> String {
+    palette_stderr().paint(Role::Success, &msg.into())
+}
+
+/// `ok_line!(fmt, args…)` — an `eprintln!` of a success line painted in the Palette `success` role.
+/// Same format arguments as `eprintln!`; with color off it is byte-identical to the original
+/// `eprintln!("ok: …")` (criterion 10). Defined before its first use (textual macro scoping).
+macro_rules! ok_line {
+    ($($arg:tt)*) => {
+        eprintln!("{}", ok(format!($($arg)*)))
+    };
+}
+
+/// Colorize the `g_…` node ids inside broker-rendered grants text (list/tree). Only the ids are
+/// wrapped, so a disabled palette leaves the text byte-identical. Safe on any text.
+fn colorize_node_ids(text: &str, palette: &Palette) -> String {
+    if !palette.is_enabled() {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'g' && i + 1 < bytes.len() && bytes[i + 1] == b'_' {
+            // Only at a token boundary (start, or preceded by non-identifier char).
+            let boundary = i == 0 || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_';
+            if boundary {
+                let mut j = i + 2;
+                while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                    j += 1;
+                }
+                out.push_str(&palette.paint(Role::Authority, &text[i..j]));
+                i = j;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Parse and strip the global `--color`/`--theme` flags, resolve the theme, and store `SURFACE`.
+/// Returns the cleaned argv (globals removed so the per-command parsers never see them) plus any
+/// DL1790 theme warnings to print. Envs (`DELULU_COLOR`/`DELULU_THEME`/`NO_COLOR`) are read here too.
+fn init_surface(args: &[String]) -> (Vec<String>, Vec<Diagnostic>) {
+    let mut color_flag: Option<ColorChoice> = None;
+    let mut theme_flag: Option<String> = None;
+    let mut cleaned: Vec<String> = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--color" {
+            if i + 1 < args.len() {
+                color_flag = ColorChoice::parse(&args[i + 1]);
+                i += 1;
+            }
+        } else if let Some(v) = a.strip_prefix("--color=") {
+            color_flag = ColorChoice::parse(v);
+        } else if a == "--theme" {
+            if i + 1 < args.len() {
+                theme_flag = Some(args[i + 1].clone());
+                i += 1;
+            }
+        } else if let Some(v) = a.strip_prefix("--theme=") {
+            theme_flag = Some(v.to_string());
+        } else {
+            cleaned.push(args[i].clone());
+        }
+        i += 1;
+    }
+
+    let delulu_color = std::env::var("DELULU_COLOR").ok();
+    // NO_COLOR: present & non-empty ⇒ off (https://no-color.org).
+    let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let env_theme = std::env::var("DELULU_THEME").ok();
+    let config_path = theme_config_path();
+    let (theme, warn) = delulu_diag::resolve_theme(
+        theme_flag.as_deref(),
+        env_theme.as_deref(),
+        config_path.as_deref(),
+    );
+
+    let _ = SURFACE.set(Surface { color_flag, delulu_color, no_color, theme });
+
+    let warnings = warn
+        .into_iter()
+        .map(|m| Diagnostic::warning("DL1790", m))
+        .collect();
+    (cleaned, warnings)
+}
+
+/// The theme file path: `$DELULU_THEME_FILE` if set (used by tests and power users), else
+/// `~/.delulu/theme.toml` (HOME, then USERPROFILE on Windows — the same home resolution the broker
+/// state dir uses).
+fn theme_config_path() -> Option<std::path::PathBuf> {
+    if let Some(explicit) = std::env::var_os("DELULU_THEME_FILE") {
+        return Some(std::path::PathBuf::from(explicit));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(std::path::PathBuf::from(home).join(".delulu").join("theme.toml"))
+}
+
+/// Enable Windows console VT processing so ANSI SGR renders instead of printing literally. Uses the
+/// `windows-sys` already in this crate's tree (addendum §2.5 — no new dependency). No-op elsewhere
+/// and harmless when the handle is a pipe.
+#[cfg(windows)]
+fn enable_vt() {
+    use windows_sys::Win32::System::Console::{
+        GetConsoleMode, GetStdHandle, SetConsoleMode, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+        STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    for which in [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        unsafe {
+            let handle = GetStdHandle(which);
+            if handle.is_null() {
+                continue;
+            }
+            let mut mode = 0u32;
+            if GetConsoleMode(handle, &mut mode) != 0 {
+                let _ = SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn enable_vt() {}
 
 /// Parsed common options.
 struct Opts {
@@ -225,6 +405,19 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
 }
 
 pub fn run(args: &[String]) -> i32 {
+    // Resolve the global color/theme surface once, and strip `--color`/`--theme` so the per-command
+    // parsers never mistake their values for a positional. A malformed theme is a DL1790 warning
+    // (never a hard failure — addendum §2.5).
+    let (args, surface_warnings) = init_surface(args);
+    enable_vt();
+    if !surface_warnings.is_empty() {
+        let map = SourceMap::new();
+        let palette = palette_stderr();
+        for w in &surface_warnings {
+            eprint!("{}", render_human_with(w, &map, &palette));
+        }
+    }
+    let args = &args[..];
     let Some(cmd) = args.first() else {
         eprintln!("{}", usage());
         return 2;
@@ -319,10 +512,12 @@ fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
 
 fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
     if json {
+        // Machine channel: never colored (addendum §2.5 / criterion 8).
         println!("{}", envelope_to_string(command, diags, authority, map));
     } else {
+        let palette = palette_stderr();
         for d in diags {
-            eprint!("{}", render_human(d, map));
+            eprint!("{}", render_human_with(d, map, &palette));
             eprintln!();
         }
     }
@@ -352,7 +547,7 @@ fn cmd_check(rest: &[String]) -> i32 {
     print_diagnostics("check", &checked.diagnostics, &map, None, opts.json);
     if !opts.json {
         if n == 0 {
-            eprintln!("ok: {} checked clean", file);
+            ok_line!("ok: {} checked clean", file);
         } else {
             eprintln!("{n} error(s)");
         }
@@ -646,7 +841,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         let report = json!({ "artifact": out_path, "bytes": dwx.len(), "authority": authority });
         println!("{}", envelope_to_string("build", &[], Some(report), &map));
     } else {
-        eprintln!(
+        ok_line!(
             "ok: wrote `{out_path}` ({} bytes) with authority embedded as `{}`",
             dwx.len(),
             delulu_wasm::AUTHORITY_SECTION
@@ -705,7 +900,7 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     }
     if !opts.json {
         if !failed {
-            eprintln!(
+            ok_line!(
                 "ok: `{}` built clean ({} package(s), {} module(s); authority within manifest and pins)",
                 ws.root_pkg().name,
                 ws.packages.len(),
@@ -823,7 +1018,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
     if opts.json {
         println!("{}", envelope_to_string("lock", &[], None, &ws.source_map));
     } else {
-        eprintln!("ok: wrote {} ({} package(s))", lock_path.display(), newlock.packages.len());
+        ok_line!("ok: wrote {} ({} package(s))", lock_path.display(), newlock.packages.len());
     }
     0
 }
@@ -1330,7 +1525,7 @@ fn cmd_secrets(rest: &[String]) -> i32 {
             };
             match store.set(name.as_str(), value.as_str()) {
                 Ok(()) => {
-                    eprintln!("ok: secret `{name}` stored (broker-resident; bytes enter a program only on `expose`)");
+                    ok_line!("ok: secret `{name}` stored (broker-resident; bytes enter a program only on `expose`)");
                     eprintln!("note: a running broker daemon loads the store at startup — restart it to pick up new names");
                     0
                 }
@@ -1497,8 +1692,9 @@ fn cmd_grants(rest: &[String]) -> i32 {
             } else if nodes.is_empty() {
                 println!("(no grants — the tree is empty)");
             } else {
+                let palette = palette_stdout();
                 for n in &nodes {
-                    println!("{}", render_node_line(n));
+                    println!("{}", colorize_node_ids(&render_node_line(n), &palette));
                 }
             }
             0
@@ -1517,7 +1713,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
             } else if text.is_empty() {
                 println!("(no grants — the tree is empty)");
             } else {
-                print!("{text}");
+                print!("{}", colorize_node_ids(&text, &palette_stdout()));
             }
             0
         }
@@ -1588,9 +1784,9 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 );
             } else {
                 if newly_revoked.is_empty() {
-                    eprintln!("ok: already revoked (idempotent; audit seq {by_seq}, epoch {epoch})");
+                    ok_line!("ok: already revoked (idempotent; audit seq {by_seq}, epoch {epoch})");
                 } else {
-                    eprintln!(
+                    ok_line!(
                         "ok: revoked {} node(s) (audit seq {by_seq}, epoch {epoch}): {}",
                         newly_revoked.len(),
                         newly_revoked.join(", ")
@@ -1769,7 +1965,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                     })
                 );
             } else {
-                eprintln!(
+                ok_line!(
                     "ok: delegated `{node}` ⊑ `{parent}`{}{}",
                     match ttl_millis {
                         Some(t) => format!(", expires {}", delulu_broker::render_ts_utc(t)),
@@ -1899,15 +2095,19 @@ fn cmd_guard_bypass(args: &[String], state_dir: &std::path::Path, json: bool) ->
         Ok(_) => {
             if on {
                 // The banner is mandatory on every enable (addendum §2.6) — stderr, so `--json`
-                // stdout stays machine-clean (the dcg robot-mode convention, §2.7).
-                eprintln!("{}", delulu_diag::GUARD_BYPASS_BANNER);
+                // stdout stays machine-clean (the dcg robot-mode convention, §2.7). Painted in the
+                // strongest error style (Palette `guard_banner` role) when color is on.
+                eprintln!(
+                    "{}",
+                    palette_stderr().paint(Role::GuardBanner, delulu_diag::GUARD_BYPASS_BANNER)
+                );
             }
             if json {
                 println!("{}", json!({ "command": "guard", "subcommand": "bypass", "bypass": on }));
             } else if on {
-                eprintln!("ok: guard bypass ENABLED");
+                ok_line!("ok: guard bypass ENABLED");
             } else {
-                eprintln!("ok: guard bypass disabled — guarded rules enforce again");
+                ok_line!("ok: guard bypass disabled — guarded rules enforce again");
             }
             0
         }
@@ -1995,9 +2195,9 @@ fn cmd_guard_request(args: &[String], state_dir: &std::path::Path, json: bool) -
                 println!("{}", json!({ "command": "guard", "subcommand": "request", "id": id, "deduped": deduped }));
             } else {
                 if deduped {
-                    eprintln!("ok: a matching request was already pending — id {id}");
+                    ok_line!("ok: a matching request was already pending — id {id}");
                 } else {
-                    eprintln!("ok: guard request recorded — id {id}");
+                    ok_line!("ok: guard request recorded — id {id}");
                 }
                 eprintln!("the principal decides with `delulu guard approve {id}` / `deny {id}`; retry your op once approved");
                 println!("{id}");
@@ -2074,7 +2274,7 @@ fn cmd_guard_approve(args: &[String], state_dir: &std::path::Path, json: bool) -
             if json {
                 println!("{}", json!({ "command": "guard", "subcommand": "approve", "request": id, "permit": permit_id }));
             } else {
-                eprintln!("ok: approved request {id} — minted permit {permit_id}");
+                ok_line!("ok: approved request {id} — minted permit {permit_id}");
                 println!("{permit_id}");
             }
             0
@@ -2106,7 +2306,7 @@ fn cmd_guard_deny(args: &[String], state_dir: &std::path::Path, json: bool) -> i
             if json {
                 println!("{}", json!({ "command": "guard", "subcommand": "deny", "request": id }));
             } else {
-                eprintln!("ok: denied request {id} (the agent's retry will carry your comment)");
+                ok_line!("ok: denied request {id} (the agent's retry will carry your comment)");
             }
             0
         }
@@ -2131,7 +2331,7 @@ fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -
                 if json {
                     println!("{}", json!({ "command": "guard", "subcommand": "permits revoke", "permit": id }));
                 } else {
-                    eprintln!("ok: revoked permit {id}");
+                    ok_line!("ok: revoked permit {id}");
                 }
                 0
             }
@@ -2253,7 +2453,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
                     if json {
                         println!("{}", json!({ "command": "guard", "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
-                        eprintln!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
+                        ok_line!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
                         // The honest bound, stated at the point of a policy edit (criterion 11).
                         eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
                     }
@@ -2281,7 +2481,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
                     if json {
                         println!("{}", json!({ "command": "guard", "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
-                        eprintln!("ok: guard policy unset `{class}:{pattern}`");
+                        ok_line!("ok: guard policy unset `{class}:{pattern}`");
                         eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
                     }
                     0
@@ -3264,7 +3464,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                     });
                     println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
                 } else {
-                    eprintln!(
+                    ok_line!(
                         "ok: audit chain verified — {} record(s) across {} file(s), head {}",
                         stats.records,
                         stats.files,

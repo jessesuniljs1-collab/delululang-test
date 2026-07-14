@@ -248,8 +248,35 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
 
 ## 7. Deviations (implementing model appends; head chef rules)
 
-*(none yet)*
+1. **The Palette adds ZERO dependencies — hand-rolled ANSI + reuse of the existing `windows-sys`**
+   (§2.5's Windows rule; "smallest total footprint wins"). SGR sequences are emitted directly
+   (`\x1b[…m`) and `theme.toml` is read by a ~30-line line-parser, so `delulu-diag` gains no
+   dependency at all. Windows VT processing is enabled once at CLI startup (`cli::enable_vt`) via the
+   `windows-sys` `Win32_System_Console` API **already in the `delulu` crate's tree** (added for the
+   broker's named-pipe transport in chunk 3) — nothing new enters the lockfile. `anstyle`/`anstream`
+   were therefore not needed, and this is not the "new third-party dependency" escalation case.
+   Recorded here per §2.5's instruction to record the choice.
+2. **`DELULU_THEME_FILE` env override for the theme-file path (additive).** The documented theme
+   file stays `~/.delulu/theme.toml`; the implementation also honors `$DELULU_THEME_FILE` (an
+   explicit path) ahead of that default. Unset ⇒ behavior is exactly as specified. It is the
+   hermetic test lever for `[roles]` overrides and malformed-file fallback (the same role
+   `DELULU_STATE_DIR` plays for the broker), plus a power-user convenience. Minor and superset-only.
 
-## 8. Close-out (fill when built: criterion → witnessing test → status)
+## 8. Close-out (criterion → witnessing test → status)
 
-*(pending)*
+Workspace tests **398 (Guard baseline) → 425** after phase A1 (+27; the 2 pre-existing ignored are
+untouched — criterion 10). Phases A2/A3 fill the remaining rows.
+
+| # | Criterion (§4) | Status | Witnessing test |
+|---|---|---|---|
+| 1 | Determinism — byte-identical across runs, every format | pending A2 | — |
+| 2 | `atlas/1` JSON — versioned, stable ids, serde round-trip, zero ANSI under `--color always` | pending A2 | — |
+| 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | pending A2 | — |
+| 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | pending A2 | — |
+| 5 | Authority parity — `performs`/`requires` == `delulu authority` (machine-checked) | pending A2 | — |
+| 6 | Refusal honesty — DL1780 (no partial graph) / DL1781 (broker down, graph still emitted) | pending A2 | — |
+| 7 | Self-contained HTML — embedded data + inline JS, zero external URLs, 3000-node collapse | pending A3 | — |
+| 8 | **Palette precedence** — flag > DELULU_COLOR > NO_COLOR > auto (NO_COLOR beats DELULU_COLOR=always); `--json` never SGR; piped colorless | **met (A1)** | `palette_cli.rs::{piped_output_is_colorless_by_default, color_always_flag_paints_the_diagnostic, json_is_never_colored_even_under_color_always, delulu_color_env_forces_color_when_piped, no_color_beats_delulu_color_always, color_always_flag_beats_no_color, color_never_flag_disables_even_with_delulu_color_always, ok_success_line_is_painted}`; unit `palette::tests::color_precedence_lattice` |
+| 9 | **Themes** — three built-ins; `mono` no color SGR; `theme.toml` role override; invalid ⇒ DL1790 + fallback | **met (A1)** | `palette_cli.rs::{mono_theme_emits_no_color_sgr, bright_theme_uses_bright_colors, theme_toml_role_override_is_honored, invalid_theme_is_dl1790_warning_and_falls_back, malformed_theme_file_is_dl1790_and_still_runs}`; units `palette::tests::{mono_emits_no_color_sgr, theme_toml_role_override_is_honored, bad_theme_name_falls_back_with_warning, malformed_theme_file_falls_back_with_warning, theme_precedence_flag_over_env_over_file}` |
+| 10 | **Zero regression** — pre-existing suite passes unchanged | **met (A1)** | the full 398-test suite runs UNMODIFIED (425 total, 0 fail); `render::tests::disabled_palette_matches_render_human_byte_for_byte` proves color-off is byte-identical |
+| 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | partial (A1) | E-PALETTE + DL1790 registered with bodies (`codes::tests::palette_code_and_e_palette_topic`); E-ATLAS + `usage()`/docs land in A2/A3 |

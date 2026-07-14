@@ -132,6 +132,13 @@ registry! {
     "DL1413" => "guard sealed refusal — not runtime-approvable; bypass does not lift it",
     "DL1414" => "guard owner code missing or invalid — admin verb refused",
 
+    // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
+    // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule
+    // mirroring DL1404).
+    "DL1780" => "atlas refused: the program has check errors — fix them first (no partial graph)",
+    "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
+    "DL1790" => "invalid theme name or malformed theme.toml — using the `default` theme",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",
@@ -221,6 +228,32 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  on`) lifts every guarded rule to audited-and-warned; it never touches sealed rules \
                  and never touches auditing. {GUARD_POLICY_BOUND}.\n\n\
                  {GUARD_CAVEAT}"
+            ),
+        )),
+        "PALETTE" => Some((
+            "the Palette: role-based color for human CLI output (Surface addendum §2.5)",
+            String::from(
+                "The Palette gives every human-facing surface one color vocabulary. Renderers name a \
+                 semantic ROLE — error, warning, note, code, span_primary, span_secondary, effect, \
+                 authority, guard_banner, success, path, repair, heading — and the active THEME maps \
+                 the role to a color. Renderers never hardcode a color, so themes and accessibility \
+                 stay in one place.\n\n\
+                 Whether color is emitted (first match wins): the `--color never|always|auto` flag, \
+                 then `DELULU_COLOR`, then `NO_COLOR` (any value ⇒ off; https://no-color.org), then \
+                 auto (on iff the stream is a TTY). `NO_COLOR` beats `DELULU_COLOR=always`, but the \
+                 explicit `--color always` flag beats `NO_COLOR` — a per-invocation flag is the user \
+                 speaking now. Piped (non-TTY) output is colorless by default.\n\n\
+                 Themes: `default` (colorblind-safe — never distinguishes by red/green alone; the \
+                 severity WORD is the primary signal), `bright` (higher contrast), and `mono` \
+                 (bold/underline only, zero color SGR). Select with `--theme <name>`, then \
+                 `DELULU_THEME`, then `~/.delulu/theme.toml` (`theme = \"name\"` plus an optional \
+                 `[roles]` table overriding individual roles with named 16-color values). A bad theme \
+                 name or a malformed theme file is DL1790 (a warning) and falls back to `default` — \
+                 never a hard failure.\n\n\
+                 Machine channels are NEVER colored: `--json` output and the `atlas/1` graph carry \
+                 zero SGR bytes regardless of any of the above, so an agent parsing them never has to \
+                 strip escapes. Full syntax highlighting of source snippets is deferred to Stage 8 \
+                 proper."
             ),
         )),
         "REVOKE" => Some((
@@ -397,6 +430,12 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1790" => "The requested color theme could not be used: either the theme NAME (from \
+             `--theme`, `DELULU_THEME`, or `~/.delulu/theme.toml`) is not a built-in \
+             (`default`/`bright`/`mono`), or the `theme.toml` file was malformed, or a `[roles]` \
+             override named an unknown role or color. This is only a warning — the `default` theme \
+             is used and the command runs normally. Fix the name or the file, or run with \
+             `--color never` to sidestep theming entirely. See `delulu explain E-PALETTE`.",
         _ => return None,
     };
     // Every foreign (DL13xx) explanation carries the reachability-not-behavior caveat verbatim.
@@ -492,6 +531,30 @@ mod tests {
         for text in [body.as_str(), GUARD_BYPASS_BANNER, GUARD_CAVEAT] {
             assert!(!text.to_lowercase().contains("immediate"), "never claim immediate: {text}");
         }
+    }
+
+    /// Surface addendum §3.2: the Palette code DL1790 is registered, the `E-PALETTE` topic exists
+    /// and states the resolution order + NO_COLOR compliance + why JSON is never colored, and the
+    /// never-DL1784 house rule holds.
+    #[test]
+    fn palette_code_and_e_palette_topic() {
+        assert!(is_registered("DL1790"), "DL1790 (invalid theme) must be registered");
+        assert!(!is_registered("DL1784"), "DL1784 is deliberately never allocated (house rule)");
+        let (title, body) = topic_explain("PALETTE").expect("E-PALETTE topic exists");
+        assert!(title.contains("Palette"));
+        assert!(body.contains("NO_COLOR"), "NO_COLOR compliance stated");
+        assert!(body.contains("--color always` flag beats `NO_COLOR"), "the flag exception stated");
+        assert!(body.contains("NEVER colored"), "machine channels never colored");
+        assert!(body.contains("mono"), "the mono theme is named");
+        assert!(code_explain("DL1790").unwrap().contains("E-PALETTE"), "DL1790 links to E-PALETTE");
+    }
+
+    /// The Atlas codes (DL1780 = refuse on check errors, DL1781 = broker down note) are registered
+    /// in the Surface range.
+    #[test]
+    fn atlas_codes_registered() {
+        assert!(is_registered("DL1780"), "DL1780 (atlas refused) must be registered");
+        assert!(is_registered("DL1781"), "DL1781 (custody overlay unavailable) must be registered");
     }
 
     /// Every DL14xx custody code has a longer explain body, and the §10 caveats it must carry

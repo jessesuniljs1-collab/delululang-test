@@ -4,10 +4,11 @@
 
 use std::fmt::Write as _;
 
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{Diagnostic, Severity};
+use crate::palette::{Palette, Role};
 use crate::source::SourceMap;
 
-/// Render one diagnostic in a compact rustc-like layout:
+/// Render one diagnostic in a compact rustc-like layout, with no color:
 ///
 /// ```text
 /// error[DL0501]: function `fetch` performs effect `Net` not declared in its row
@@ -16,9 +17,30 @@ use crate::source::SourceMap;
 /// 14 |   out.println("hi")
 ///    |   ^^^^^^^^^^^^^^^^^ this call performs `Net`
 /// ```
+///
+/// This is exactly [`render_human_with`] under a disabled palette — the two are byte-identical,
+/// which is why every pre-existing (non-TTY) test keeps passing (criterion 10).
 pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
+    render_human_with(d, map, &Palette::none())
+}
+
+/// The color-aware renderer. With `palette` disabled the output is byte-for-byte identical to
+/// [`render_human`]; when enabled it paints the severity/code, span carets + labels, and repairs
+/// via semantic [`Role`]s so the theme decides the colors.
+pub fn render_human_with(d: &Diagnostic, map: &SourceMap, palette: &Palette) -> String {
+    let sev_role = match d.severity {
+        Severity::Error => Role::Error,
+        Severity::Warning => Role::Warning,
+        Severity::Note => Role::Note,
+    };
     let mut out = String::new();
-    let _ = writeln!(out, "{}[{}]: {}", d.severity.as_str(), d.code, d.message);
+    let _ = writeln!(
+        out,
+        "{}[{}]: {}",
+        palette.paint(sev_role, d.severity.as_str()),
+        palette.paint(Role::Code, d.code),
+        d.message
+    );
 
     for ls in &d.spans {
         let span = ls.span;
@@ -40,6 +62,7 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
             (text.chars().count().saturating_sub(line_start_col)).max(1)
         };
         let marker = if ls.secondary { "-" } else { "^" };
+        let span_role = if ls.secondary { Role::SpanSecondary } else { Role::SpanPrimary };
         let mut underline = String::new();
         for _ in 0..line_start_col {
             underline.push(' ');
@@ -47,8 +70,10 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
         for _ in 0..underline_len.max(1) {
             underline.push_str(marker);
         }
+        let underline = palette.paint(span_role, &underline);
         match &ls.label {
             Some(label) => {
+                let label = palette.paint(span_role, label);
                 let _ = writeln!(out, "{:w$} | {} {}", "", underline, label, w = gutter_w);
             }
             None => {
@@ -66,7 +91,13 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
             flags.push("requires human decision");
         }
         let flag_text = if flags.is_empty() { String::new() } else { format!("  [{}]", flags.join("; ")) };
-        let _ = writeln!(out, "  repair: {} ({}){}", r.id, r.confidence.as_str(), flag_text);
+        let _ = writeln!(
+            out,
+            "  repair: {} ({}){}",
+            palette.paint(Role::Repair, r.id),
+            r.confidence.as_str(),
+            flag_text
+        );
     }
 
     let _ = writeln!(out, "  explain: delulu explain {}", d.explanation_id());
@@ -76,19 +107,46 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::palette::{Palette, Theme};
     use crate::span::Span;
 
-    #[test]
-    fn renders_with_caret_line() {
+    fn sample() -> (SourceMap, Diagnostic) {
         let mut map = SourceMap::new();
         let f = map.add_file("src/main.delulu", "fn main() {\n  boom()\n}\n");
         let d = Diagnostic::error("DL0301", "unknown name `boom`")
             .with_span(Span::new(f, 14, 18), "not found in this scope");
+        (map, d)
+    }
+
+    #[test]
+    fn renders_with_caret_line() {
+        let (map, d) = sample();
         let text = render_human(&d, &map);
         assert!(text.contains("error[DL0301]"));
         assert!(text.contains("src/main.delulu:2:3"));
         assert!(text.contains("boom()"));
         assert!(text.contains("^^^^"));
         assert!(text.contains("not found in this scope"));
+    }
+
+    /// A disabled palette renders byte-for-byte identically to `render_human` — the guarantee that
+    /// keeps every pre-existing non-TTY test green (criterion 10).
+    #[test]
+    fn disabled_palette_matches_render_human_byte_for_byte() {
+        let (map, d) = sample();
+        assert_eq!(render_human(&d, &map), render_human_with(&d, &map, &Palette::none()));
+    }
+
+    /// An enabled palette paints the severity, the code, and the caret — and never colors the
+    /// machine text elsewhere (criterion 8: color is presentation only).
+    #[test]
+    fn enabled_palette_colors_severity_code_and_caret() {
+        let (map, d) = sample();
+        let text = render_human_with(&d, &map, &Palette::new(true, Theme::default_theme()));
+        assert!(text.contains("\x1b[1;31merror\x1b[0m"), "severity painted: {text}");
+        assert!(text.contains("\x1b[1mDL0301\x1b[0m"), "code painted: {text}");
+        assert!(text.contains("\x1b["), "carets painted");
+        // The underlying message text survives intact for a human to read.
+        assert!(text.contains("unknown name `boom`"));
     }
 }
