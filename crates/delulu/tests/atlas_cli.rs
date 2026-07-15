@@ -185,6 +185,38 @@ fn refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph() {
     assert!(v.get("atlas").is_none(), "no atlas schema on refusal");
 }
 
+// ----- A3: renderers + colored tree ---------------------------------------------------------------
+
+#[test]
+fn tree_is_colored_only_when_asked_and_plain_when_piped() {
+    // Piped (non-TTY): plain — the deterministic byte-identical form (criterion 1).
+    let plain = stdout(&delulu(&["atlas", DEMO]));
+    assert!(!plain.contains(ESC), "piped tree is colorless");
+    // --color always: painted via the Palette roles.
+    let colored = stdout(&delulu(&["atlas", DEMO, "--color", "always"]));
+    assert!(colored.contains(ESC), "the tree is colored under --color always");
+}
+
+#[test]
+fn dot_and_mermaid_render_through_the_binary() {
+    let dot = stdout(&delulu(&["atlas", DEMO, "--format", "dot"]));
+    assert!(dot.starts_with("digraph atlas {"), "{dot}");
+    assert!(dot.contains("performs"), "typed edges in dot");
+    let mermaid = stdout(&delulu(&["atlas", DEMO, "--format", "mermaid"]));
+    assert!(mermaid.starts_with("graph LR"), "{mermaid}");
+    assert!(mermaid.contains("package demo"), "module-level mermaid");
+}
+
+#[test]
+fn html_is_self_contained_through_the_binary() {
+    let html = stdout(&delulu(&["atlas", DEMO, "--format", "html"]));
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("const ATLAS="), "data embedded inline");
+    // Criterion 7: zero external URLs.
+    assert!(!html.contains("http://"), "no http URLs in the artifact");
+    assert!(!html.contains("https://"), "no https URLs in the artifact");
+}
+
 // ----- explain surface ----------------------------------------------------------------------------
 
 #[test]

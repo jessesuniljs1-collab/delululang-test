@@ -1,7 +1,9 @@
 # Surface early-drop addendum — the Atlas & the Palette
 
-**Status:** SPECIFIED 2026-07-14 (head chef). Stage 8 "Surface" material, built early by the
-project owner's order. Implemented by the Opus 4.8 chef under this brief.
+**Status:** BUILT 2026-07-15 (implementing chef; all 11 §4 criteria witnessed in §8 — head-chef
+live re-verification pending). Specified 2026-07-14 (head chef). Stage 8 "Surface" material, built
+early by the project owner's order. Implemented by the Opus 4.8 chef under this brief in three
+phases: A1 the Palette, A2 the Atlas core, A3 renderers + custody overlay + close-out.
 
 This addendum is **binding** the same way `STAGE5_GUARD_ADDENDUM.md` was: the implementing model
 works phase by phase, appends deviations to §7 instead of silently departing, and fills the §8
@@ -281,8 +283,8 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
 
 ## 8. Close-out (criterion → witnessing test → status)
 
-Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2)**. The 2 pre-existing ignored are
-untouched — criterion 10. Phase A3 fills the remaining rows.
+Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2) → 456 (A3)**. The 2 pre-existing
+ignored are untouched — criterion 10 held at every phase. All 11 criteria are **met**.
 
 | # | Criterion (§4) | Status | Witnessing test |
 |---|---|---|---|
@@ -291,9 +293,19 @@ untouched — criterion 10. Phase A3 fills the remaining rows.
 | 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | **met (A2)** | `atlas_cli.rs::{digest_has_budget_ordering_authority_gods_caveats_and_footer, digest_is_never_colored_even_under_color_always}`; unit `delulu_atlas::tests::digest_has_footer_gods_authority_and_caveat` |
 | 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | **met (A2)** | `atlas_cli.rs::{query_verbs_answer_without_the_whole_graph, query_json_is_structured_and_uncolored, budget_truncation_is_explicit_never_silent}`; units `delulu_atlas::tests::{query_verbs_answer_from_the_graph, budget_truncation_is_explicit}` |
 | 5 | Authority parity — `performs`/`requires` == `delulu authority` (machine-checked) | **met (A2)** | `atlas_cli.rs::atlas_authority_matches_delulu_authority_exactly` (compares effects/capabilities/secrets/foreign_calls/pure_functions + performs edges); unit `delulu_atlas::tests::authority_parity_effects_match_delulu_authority` |
-| 6 | Refusal honesty — DL1780 (no partial graph); DL1781 (broker down, graph still emitted) A3 | **met (A2, DL1780)** | `atlas_cli.rs::{check_errors_refuse_with_dl1780_and_no_partial_graph, refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph}` (exit 1, no `atlas/1` on refusal). DL1781 witness lands with `--custody` in A3 |
-| 7 | Self-contained HTML — embedded data + inline JS, zero external URLs, 3000-node collapse | pending A3 | — |
+| 6 | Refusal honesty — DL1780 (no partial graph); DL1781 (broker down, graph still emitted) | **met (A2+A3)** | DL1780: `atlas_cli.rs::{check_errors_refuse_with_dl1780_and_no_partial_graph, refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph}` (exit 1, no `atlas/1` on refusal). DL1781: `atlas_e2e.rs::atlas_custody_overlay_live_then_degraded_end_to_end` step 3 (real broker stopped ⇒ DL1781 note on stderr, atlas still emitted, `custody: null`, exit 0) |
+| 7 | Self-contained HTML — embedded data + inline JS, zero external URLs, 3000-node collapse | **met (A3)** | `atlas_cli.rs::html_is_self_contained_through_the_binary` + `atlas_e2e.rs` step 4 (both grep the artifact for `http://`/`https://`); units `formats::tests::{html_is_self_contained_with_zero_external_urls, html_collapses_above_the_node_cap}` (the collapse test builds a >3000-node graph and asserts the explicit notice + module-level data) |
 | 8 | **Palette precedence** — flag > DELULU_COLOR > NO_COLOR > auto (NO_COLOR beats DELULU_COLOR=always); `--json` never SGR; piped colorless | **met (A1)** | `palette_cli.rs::{piped_output_is_colorless_by_default, color_always_flag_paints_the_diagnostic, json_is_never_colored_even_under_color_always, delulu_color_env_forces_color_when_piped, no_color_beats_delulu_color_always, color_always_flag_beats_no_color, color_never_flag_disables_even_with_delulu_color_always, ok_success_line_is_painted}`; unit `palette::tests::color_precedence_lattice` |
 | 9 | **Themes** — three built-ins; `mono` no color SGR; `theme.toml` role override; invalid ⇒ DL1790 + fallback | **met (A1)** | `palette_cli.rs::{mono_theme_emits_no_color_sgr, bright_theme_uses_bright_colors, theme_toml_role_override_is_honored, invalid_theme_is_dl1790_warning_and_falls_back, malformed_theme_file_is_dl1790_and_still_runs}`; units `palette::tests::{mono_emits_no_color_sgr, theme_toml_role_override_is_honored, bad_theme_name_falls_back_with_warning, malformed_theme_file_falls_back_with_warning, theme_precedence_flag_over_env_over_file}` |
-| 10 | **Zero regression** — pre-existing suite passes unchanged | **met (A1)** | the full 398-test suite runs UNMODIFIED (425 total, 0 fail); `render::tests::disabled_palette_matches_render_human_byte_for_byte` proves color-off is byte-identical |
-| 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | partial (A1+A2) | E-PALETTE (`codes::tests::palette_code_and_e_palette_topic`) + E-ATLAS (`codes::tests::atlas_codes_and_e_atlas_topic`, `atlas_cli.rs::explain_e_atlas_describes_the_model`) registered with bodies; `usage()` updated for `atlas` + globals. REPOSITORY_STRUCTURE/README + final close-out land in A3 |
+| 10 | **Zero regression** — pre-existing suite passes unchanged | **met (A1–A3)** | the full 398-test Guard-baseline suite runs UNMODIFIED at every phase (456 total, 0 fail); `render::tests::disabled_palette_matches_render_human_byte_for_byte` proves color-off is byte-identical |
+| 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | **met (A3)** | E-PALETTE (`codes::tests::palette_code_and_e_palette_topic`) + E-ATLAS (`codes::tests::atlas_codes_and_e_atlas_topic`, `atlas_cli.rs::explain_e_atlas_describes_the_model`) registered with bodies; `usage()` covers `atlas` + the global `--color`/`--theme`; `docs/REPOSITORY_STRUCTURE.md` (palette.rs + delulu-atlas + new test files) and `docs/playbooks/README.md` (Stage 8 early-drop row) updated; this close-out complete; no external tool named anywhere (repo-wide grep clean, §1 owner's ruling) |
+
+Additional A3 surfaces beyond the criteria: the custody overlay (`--custody`) attaches `grant:` nodes
++ `delegates` edges from the broker's read-only `List` verb (no new wire verbs, no owner code —
+ruling 7), ships the §2.6 custody caveat verbatim, and never blocks the atlas
+(`atlas_e2e.rs::atlas_custody_overlay_live_then_degraded_end_to_end` steps 2–3, unit
+`delulu_atlas::tests::attach_custody_adds_grants_delegates_and_caveat`); `dot`/`mermaid` render
+deterministically (`atlas_cli.rs::dot_and_mermaid_render_through_the_binary`, e2e step 1 covers all
+six formats byte-identical twice); the tree view is Palette-colored only on request/TTY
+(`atlas_cli.rs::tree_is_colored_only_when_asked_and_plain_when_piped`); `--out DIR` writes
+`ATLAS.md` + `atlas.json` (+ `atlas.html` under `--format html`).

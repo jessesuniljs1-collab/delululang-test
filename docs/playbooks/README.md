@@ -54,6 +54,6 @@ Wasmtime host). Diagnostic code ranges: DL01xx–09xx (Stage 1), DL10xx/11xx (St
 | `STAGE5_PLAYBOOK.md` | 5 | Custody — broker daemon, grant tree, microVM | **BUILT 2026-07-13** (372 tests; spec §11 close-out table; criterion 8 microVM egress-deny platform-pending — Linux+KVM CI, gated `cfg(delulu_kvm)`). **Chunk 6 "the Guard" BUILT 2026-07-14** (398 tests; the dcg-inspired principal-approval layer — `docs/design/STAGE5_GUARD_ADDENDUM.md`, §7 deviations + §8 close-out) |
 | `STAGE6_PLAYBOOK.md` | 6 | Live — runtime plugins, DIR, `.dpx` | High (re-verification, resource limits) |
 | `STAGE7_PLAYBOOK.md` | 7 | Concurrent — actors, reference-caps, async | High (scheduler, revocation-under-concurrency) |
-| `STAGE8_PLAYBOOK.md` | 8 | Surface — LSP, fmt, test runner, localization | Medium (breadth, editor protocol) |
+| `STAGE8_PLAYBOOK.md` | 8 | Surface — LSP, fmt, test runner, localization | Medium (breadth, editor protocol). **Early drop BUILT 2026-07-15** (owner's order): the Palette (role-based CLI color, `delulu-diag/palette.rs`) + the Atlas (`delulu-atlas` crate, `delulu atlas` — typed deterministic code+authority graph, atlas/1, digest + query verbs, dot/mermaid/self-contained html, custody overlay) — `docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md` §7 deviations + §8 close-out; DL1780/DL1781/DL1790 |
 | `STAGE9_PLAYBOOK.md` | 9 | Delulu — v1.0 freeze, coverage law, governance | Medium (process + measurement rigor) |
 | `STAGE10_PLAYBOOK.md` | 10 | Industrial — JIT policy, robotics Actuate, LTS | High (real-time, safety envelope) |

@@ -3684,7 +3684,47 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
     f
 }
 
-/// `delulu atlas <file|dir> [--format tree|digest|json] [--out DIR] [--budget N] [--gods N] [--json]`.
+/// Fetch the custody overlay from the broker (read-only `List` verb via the existing wire — no new
+/// verbs, no owner code). Broker down ⇒ `Err(DL1781 note)`: the atlas is still emitted without the
+/// overlay (graceful, never blocking — addendum §2.1 / criterion 6).
+fn atlas_custody_overlay() -> Result<Json, Diagnostic> {
+    let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+        return Err(Diagnostic::warning(
+            "DL1781",
+            "custody overlay unavailable — cannot resolve the broker state directory; atlas emitted without it",
+        ));
+    };
+    match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::List) {
+        Ok(crate::broker_ipc::Response::Listed { nodes }) => {
+            let grants: Vec<Json> = nodes
+                .iter()
+                .map(|n| {
+                    json!({
+                        "id": n.id,
+                        "parent": n.parent,
+                        "state": n.state,
+                        "authority": crate::brokerd::spec_to_authority(&n.authority_spec()).render_compact(),
+                    })
+                })
+                .collect();
+            Ok(json!({ "grants": grants }))
+        }
+        Ok(other) => Err(Diagnostic::warning(
+            "DL1781",
+            format!("custody overlay unavailable — unexpected broker response {other:?}; atlas emitted without it"),
+        )),
+        Err(e) => Err(Diagnostic::warning(
+            "DL1781",
+            format!(
+                "custody overlay unavailable — broker daemon not reachable ({e}); atlas emitted \
+                 without it (start it with `delulu broker start`)"
+            ),
+        )),
+    }
+}
+
+/// `delulu atlas <file|dir> [--format tree|digest|json|dot|mermaid|html] [--out DIR] [--budget N]
+/// [--gods N] [--custody] [--json]`.
 fn atlas_graph_cmd(args: &[String]) -> i32 {
     let f = parse_atlas_flags(args);
     let Some(target) = f.positionals.first().cloned() else {
@@ -3692,13 +3732,27 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
         return 2;
     };
     let fmt = if f.json { "json".to_string() } else { f.format.clone().unwrap_or_else(|| "tree".to_string()) };
-    let atlas = match atlas_from_target(&target, f.gods, f.json) {
+    let mut atlas = match atlas_from_target(&target, f.gods, f.json) {
         Ok(a) => a,
         Err(c) => return c,
     };
     let budget = f.budget.unwrap_or(delulu_atlas::DEFAULT_BUDGET);
 
-    // `--out DIR` writes the agent bundle: ATLAS.md (digest) + atlas.json (the machine channel).
+    // `--custody`: overlay broker grant state (read-only awareness). Broker down degrades to a
+    // DL1781 note on stderr — the atlas is still emitted without the overlay, never blocked.
+    if f.custody {
+        match atlas_custody_overlay() {
+            Ok(overlay) => atlas.attach_custody(overlay, f.gods),
+            Err(note) => {
+                let map = SourceMap::new();
+                // The note rides stderr even under --json: stdout stays the machine surface.
+                eprint!("{}", render_human_with(&note, &map, &palette_stderr()));
+            }
+        }
+    }
+
+    // `--out DIR` writes the agent bundle: ATLAS.md (digest) + atlas.json (+ atlas.html for
+    // `--format html`).
     if let Some(dir) = &f.out {
         if let Err(e) = std::fs::create_dir_all(dir) {
             eprintln!("error: cannot create `{dir}`: {e}");
@@ -3714,22 +3768,30 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
             eprintln!("error: cannot write `{}`: {e}", js.display());
             return 2;
         }
-        eprintln!("{}", ok(format!("ok: wrote {} and {}", md.display(), js.display())));
+        let mut wrote = format!("ok: wrote {} and {}", md.display(), js.display());
+        if fmt == "html" {
+            let ht = std::path::Path::new(dir).join("atlas.html");
+            if let Err(e) = std::fs::write(&ht, atlas.render_html()) {
+                eprintln!("error: cannot write `{}`: {e}", ht.display());
+                return 2;
+            }
+            wrote = format!("{wrote} and {}", ht.display());
+        }
+        eprintln!("{}", ok(wrote));
         return 0;
     }
 
     match fmt.as_str() {
         "tree" => {
-            // Colored via the Palette when the stream is a TTY (plain otherwise); A3 layers richer
-            // color. The graph body is a stdout human surface.
+            // Colored via the Palette when the stream is a TTY (plain otherwise). The graph body is
+            // a stdout human surface.
             print!("{}", colorize_atlas_tree(&atlas.render_tree(), &palette_stdout()));
         }
         "digest" => print!("{}", atlas.render_digest(budget)),
         "json" => println!("{}", atlas.to_json_string()),
-        "dot" | "mermaid" | "html" => {
-            eprintln!("error: `--format {fmt}` arrives in phase A3 (renderers); tree, digest and json are available now");
-            return 2;
-        }
+        "dot" => print!("{}", atlas.render_dot()),
+        "mermaid" => print!("{}", atlas.render_mermaid()),
+        "html" => print!("{}", atlas.render_html()),
         other => {
             eprintln!("error: unknown --format `{other}` (tree | digest | json | dot | mermaid | html)");
             return 2;
@@ -3737,6 +3799,7 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
     }
     0
 }
+
 
 /// Query verbs: `node <name>`, `callers <fn>`, `calls <fn>`, `why <x>`, `path <A> <B>`. Each takes
 /// an optional trailing target (file/dir/atlas.json); default is the current directory.

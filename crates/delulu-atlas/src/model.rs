@@ -14,6 +14,12 @@ pub const CAVEAT_STATIC: &str =
     "the atlas is a static map of checked facts, not a runtime trace; calls through function values \
      may be under-approximated";
 
+/// The verbatim custody-overlay caveat (addendum §2.6), added to `caveats` only when `--custody`
+/// succeeded. The overlay is awareness, not enforcement.
+pub const CAVEAT_CUSTODY: &str =
+    "the custody overlay reflects broker state at the moment of the query and requires the daemon; \
+     it is awareness, not enforcement (the Guard enforces)";
+
 /// The kinds of node the atlas contains (addendum §2.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +33,8 @@ pub enum NodeKind {
     Resource,
     /// A foreign boundary: a C symbol or a Python module.
     Foreign,
+    /// A broker custody grant node (the custody overlay only, phase A3).
+    Grant,
 }
 
 impl NodeKind {
@@ -39,6 +47,7 @@ impl NodeKind {
             NodeKind::Effect => "effect",
             NodeKind::Resource => "resource",
             NodeKind::Foreign => "foreign",
+            NodeKind::Grant => "grant",
         }
     }
 }

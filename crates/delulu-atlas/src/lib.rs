@@ -12,14 +12,16 @@
 //! machine channel and is never colored.
 
 mod build;
+mod formats;
 mod model;
 mod query;
 mod render;
 
-pub use build::{BuildInput, ModuleView, PackageView};
+pub use build::{recompute_gods, BuildInput, ModuleView, PackageView};
+pub use formats::HTML_NODE_CAP;
 pub use model::{
     effect_id, fn_id, foreign_c_id, foreign_py_id, grant_id, mod_id, pkg_id, resource_id, type_id,
-    Atlas, Edge, EdgeKind, God, Node, NodeKind, SpanLoc, CAVEAT_STATIC, SCHEMA,
+    Atlas, Edge, EdgeKind, God, Node, NodeKind, SpanLoc, CAVEAT_CUSTODY, CAVEAT_STATIC, SCHEMA,
 };
 pub use query::Resolved;
 pub use render::{tokens, DEFAULT_BUDGET, QUERYING_FOOTER};
@@ -168,5 +170,28 @@ mod tests {
         // A tiny budget forces truncation on a verb with several lines.
         let capped = a.query_node("main", Some(1));
         assert!(capped.contains("truncated at budget"), "truncation is explicit: {capped}");
+    }
+
+    #[test]
+    fn attach_custody_adds_grants_delegates_and_caveat() {
+        let mut a = atlas_of(SAMPLE);
+        assert_eq!(a.custody, None, "no overlay unless attached");
+        let overlay = serde_json::json!({ "grants": [
+            { "id": "g_root", "parent": null, "state": "active", "authority": "Read+Write" },
+            { "id": "g_agent", "parent": "g_root", "state": "active", "authority": "Read" },
+        ]});
+        a.attach_custody(overlay, 10);
+        assert!(a.node("grant:g_root").is_some(), "grant nodes added");
+        assert!(a
+            .edges
+            .iter()
+            .any(|e| e.from == "grant:g_root" && e.to == "grant:g_agent" && e.kind == EdgeKind::Delegates));
+        assert!(a.caveats.iter().any(|c| c == CAVEAT_CUSTODY), "the custody caveat ships verbatim");
+        assert!(a.custody.is_some());
+        // Determinism preserved: nodes still id-sorted.
+        let ids: Vec<&str> = a.nodes.iter().map(|n| n.id.as_str()).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(ids, sorted, "nodes remain id-sorted after the overlay");
     }
 }

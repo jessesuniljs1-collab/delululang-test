@@ -293,17 +293,56 @@ impl Atlas {
             edges,
             gods: Vec::new(),
             authority: input.authority,
-            custody: input.custody,
+            custody: None,
             caveats: vec![CAVEAT_STATIC.to_string()],
         };
         atlas.gods = compute_gods(&atlas, input.god_n.max(1));
+        // The custody overlay (phase A3): read-only awareness, attached last so the graft path and
+        // the build path share one implementation.
+        if let Some(overlay) = input.custody {
+            atlas.attach_custody(overlay, input.god_n.max(1));
+        }
         atlas
+    }
+
+    /// Attach a custody overlay to a finished atlas: one `grant:` node per broker grant, a
+    /// `delegates` edge per parent→child link, the verbatim custody caveat, and re-ranked god
+    /// nodes. Sorted-id determinism is preserved (grant ids sort into place). Read-only awareness —
+    /// the overlay never changes any compiler-derived node or edge.
+    pub fn attach_custody(&mut self, overlay: Value, god_n: usize) {
+        if let Some(grants) = overlay.get("grants").and_then(|g| g.as_array()) {
+            for g in grants {
+                let Some(gid) = g.get("id").and_then(|i| i.as_str()) else { continue };
+                let nid = grant_id(gid);
+                let mut node = Node::new(&nid, NodeKind::Grant, gid);
+                node.pattern = g.get("state").and_then(|s| s.as_str()).map(str::to_string);
+                self.nodes.push(node);
+                if let Some(parent) = g.get("parent").and_then(|p| p.as_str()).filter(|p| !p.is_empty()) {
+                    self.edges.push(Edge { from: grant_id(parent), to: nid, kind: EdgeKind::Delegates });
+                }
+            }
+        }
+        self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
+        self.nodes.dedup_by(|a, b| a.id == b.id);
+        self.edges.sort();
+        self.edges.dedup();
+        self.custody = Some(overlay);
+        if !self.caveats.iter().any(|c| c == CAVEAT_CUSTODY) {
+            self.caveats.push(CAVEAT_CUSTODY.to_string());
+        }
+        self.gods = compute_gods(self, god_n.max(1));
     }
 }
 
 fn span_loc(map: &SourceMap, span: delulu_diag::Span) -> SpanLoc {
     let (line, _col) = map.position(span.file, span.start);
     SpanLoc { file: map.name(span.file).to_string(), line }
+}
+
+/// Recompute god nodes after a caller mutates the graph (e.g. attaching the custody overlay).
+/// Identical ranking to the builder's: top-N by degree, ties by id.
+pub fn recompute_gods(atlas: &Atlas, n: usize) -> Vec<God> {
+    compute_gods(atlas, n)
 }
 
 /// Top-N nodes by degree (in + out), ties broken by id for determinism.
