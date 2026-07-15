@@ -17,9 +17,9 @@ pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Op};
 pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
 pub use interp::Interp;
 pub use plugin::{
-    load_prepare, load_verified, r_get_contained, r_get_verified, step5_verified, Grant, Limits,
-    LoadRefusal, LoadedPlugin, PluginArtifact, PluginClass, PluginEngine, PluginErr, PreparedLoad,
-    VerifiedPlugin, PLUGIN_API_SUPPORTED,
+    load_prepare, load_verified, r_get_contained, r_get_verified, step5_verified, Grant,
+    HandleTable, Limits, LoadRefusal, LoadedPlugin, PluginArtifact, PluginClass, PluginEngine,
+    PluginErr, PreparedLoad, VerifiedPlugin, PLUGIN_API_SUPPORTED,
 };
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};

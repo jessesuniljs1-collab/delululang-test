@@ -544,6 +544,82 @@ fn is_contained_marshallable(t: &Type) -> bool {
     matches!(t, Type::Int | Type::Float | Type::Bool | Type::Str | Type::Unit | Type::Cap(_))
 }
 
+// ===== R-6b — host values die when the export call returns ===================================
+
+/// The call-scoped handle table (R-6b, audit F-6).
+///
+/// A host value passed into a plugin export lives **only for the synchronous duration of that
+/// call**. The plugin never receives the value itself — it receives an opaque `u64` handle, and
+/// every use is resolved through this table. `enter` opens a call scope; `leave` invalidates every
+/// handle minted in it. A plugin that squirrels a handle away and uses it on a later call finds it
+/// **dead**, which is the whole point: no persistent host references across calls.
+///
+/// **Ids are monotonic and NEVER reused.** That is load-bearing, not tidiness: if ids restarted per
+/// call, a handle retained from call *N* would silently alias a *different* value in call *N+1* —
+/// an authority-confusion bug strictly worse than a dangling reference, because it would succeed.
+/// `handles_are_never_reused_across_calls` witnesses it.
+///
+/// **"Couldn't tell" is a refusal.** An id that was never minted, one minted in an earlier scope,
+/// and any id at all when no call is in flight are all refused. The table never guesses that an
+/// unknown id might be host-owned.
+#[derive(Debug, Default)]
+pub struct HandleTable {
+    /// Monotonic; never reset, never reused for the lifetime of the table.
+    next_id: u64,
+    /// Ids valid in the CURRENT call scope only.
+    live: std::collections::BTreeSet<u64>,
+    /// Whether a call is in flight. Outside a call, every id is dead.
+    in_call: bool,
+}
+
+impl HandleTable {
+    pub fn new() -> HandleTable {
+        HandleTable::default()
+    }
+
+    /// Open a call scope. Any handle from a previous call is already dead (`leave` cleared it).
+    pub fn enter(&mut self) {
+        self.live.clear();
+        self.in_call = true;
+    }
+
+    /// Mint a handle for a host value crossing into the plugin for this call.
+    pub fn mint(&mut self) -> u64 {
+        let id = self.next_id;
+        // Monotonic: an id is never handed out twice, so a stale handle can never alias a live one.
+        self.next_id += 1;
+        self.live.insert(id);
+        id
+    }
+
+    /// Resolve a handle the plugin presented. Fail-closed: the three "couldn't tell" cases —
+    /// no call in flight, an id never minted, an id from an earlier call — all refuse.
+    pub fn resolve(&self, id: u64) -> Result<(), PluginErr> {
+        if !self.in_call {
+            return Err(PluginErr::Revoked(0));
+        }
+        if !self.live.contains(&id) {
+            // Either forged, or retained across the call boundary. Both are R-6b violations, and
+            // we deliberately do NOT distinguish them to the plugin: it learns only "dead".
+            return Err(PluginErr::Revoked(0));
+        }
+        Ok(())
+    }
+
+    /// Close the call scope — **invalidate every host value passed into this call** (R-6b). Called
+    /// on return, including on a faulting/trapping return: a plugin must never keep a live host
+    /// handle by failing.
+    pub fn leave(&mut self) {
+        self.live.clear();
+        self.in_call = false;
+    }
+
+    /// How many handles are live right now (host-side introspection/tests).
+    pub fn live_count(&self) -> usize {
+        self.live.len()
+    }
+}
+
 /// The result of a completed load: the plugin's node and its class-specific content.
 #[derive(Debug)]
 pub enum LoadedPlugin {
@@ -960,6 +1036,69 @@ mod tests {
                 "{bad} must not cross into an opaque module"
             );
         }
+    }
+
+    // ----- R-6b: host values die on return, and "couldn't tell" refuses -----------------------
+
+    #[test]
+    fn r6b_a_handle_retained_across_the_call_boundary_is_dead() {
+        // THE R-6b PROPERTY (audit F-6): a host value passed into an export lives only for the
+        // synchronous duration of that call.
+        let mut t = HandleTable::new();
+        t.enter();
+        let h = t.mint();
+        assert!(t.resolve(h).is_ok(), "live during its own call");
+        t.leave();
+        assert!(t.resolve(h).is_err(), "dead the instant the export returns");
+        // And still dead inside a LATER call — the plugin cannot revive it by calling again.
+        t.enter();
+        assert!(t.resolve(h).is_err(), "a retained handle stays dead in a later call");
+    }
+
+    #[test]
+    fn r6b_couldnt_tell_cases_all_refuse() {
+        // The head-chef question: what if the table cannot tell a value is host-owned?
+        let mut t = HandleTable::new();
+        // (1) No call in flight — every id is dead, including plausible ones.
+        assert!(t.resolve(0).is_err(), "outside a call, nothing resolves");
+        t.enter();
+        // (2) An id that was NEVER minted (forged out of thin air) — refused, never guessed.
+        assert!(t.resolve(9_999).is_err(), "a forged id is never assumed host-owned");
+        // (3) A plausible-looking id adjacent to a live one — still refused.
+        let h = t.mint();
+        assert!(t.resolve(h + 1).is_err(), "adjacency confers nothing");
+        assert!(t.resolve(h).is_ok());
+    }
+
+    #[test]
+    fn handles_are_never_reused_across_calls() {
+        // Load-bearing, not tidiness: if ids restarted per call, a handle retained from call N
+        // would ALIAS a different value in call N+1 — an authority confusion that would SUCCEED,
+        // which is strictly worse than a dangling reference that fails.
+        let mut t = HandleTable::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..5 {
+            t.enter();
+            for _ in 0..3 {
+                let h = t.mint();
+                assert!(seen.insert(h), "handle {h} was reused across calls — R-6b aliasing hole");
+            }
+            t.leave();
+        }
+        assert_eq!(seen.len(), 15);
+    }
+
+    #[test]
+    fn r6b_leave_invalidates_every_handle_even_on_a_faulting_return() {
+        // A plugin must never keep a live host handle by failing mid-call.
+        let mut t = HandleTable::new();
+        t.enter();
+        let a = t.mint();
+        let b = t.mint();
+        assert_eq!(t.live_count(), 2);
+        t.leave(); // as on a fault/trap return
+        assert_eq!(t.live_count(), 0, "a faulting return still invalidates every host value");
+        assert!(t.resolve(a).is_err() && t.resolve(b).is_err());
     }
 
     #[test]
