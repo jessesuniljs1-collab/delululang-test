@@ -1,68 +1,35 @@
 # Stage 6 "Live" — Build Order
 
 **Status:** COOKING — opened 2026-07-15 by the head chef.
-**Binding spec:** `STAGE6_SPECIFICATION.md` (v0.6, Committed). This document adds nothing to the
-spec's semantics; it fixes the build sequence, house rules, crate placement, and the close-out
-discipline. Where this document and the spec disagree, **the spec wins** — record the conflict as
-a deviation below instead of silently choosing.
+**Binding spec:** `STAGE6_SPECIFICATION.md` (v0.6, Committed). **Binding how-to:**
+`docs/playbooks/STAGE6_PLAYBOOK.md` — its phase plan (6a–6i), crate topology (§1), and traps (§3)
+govern the build. This document adds nothing to either; it fixes the reporting gates, house
+rules, and the close-out discipline. Precedence: **spec > playbook > this order** — record any
+conflict as a deviation below instead of silently choosing.
 
 ---
 
-## 1. Phases
+## 1. Phases and reporting gates
 
-Build in this order; each phase ends in its own commit with the full suite green.
+The **playbook's phase plan is the build sequence**: 6a (DIR round-trip) → 6b (DIR
+re-verification) → 6c (`.dpx` + manifest + `plugin build`/`inspect`) → 6d (load steps 1–4) →
+6e (Verified verification + interpreter instantiation + `p.get`/calls) → 6f (Contained
+verification + WASM instantiation + limits) → 6g (unload/reload R-6c) → 6h (Verified-on-WASM +
+isolation + signatures) → 6i (`std.plugin` + `plugin verify` + authority report + `why`).
 
-### B1 — DIR: the Delulu typed IR (spec §2.3)
+Each playbook phase ends in its own commit with the full suite green and the spec's
+`## Implementation status` log updated (Stage-3 §8a pattern). The head chef's **reporting
+gates** group them into four blocks — report and pause at each gate:
 
-- Canonical serialization of the post-check typed AST (items, bodies, resolved `DefId`s, types,
-  rows, interface metadata, primitive-table version). Versioned CBOR.
-- The **replay-checker**: types and rows are asserted then *verified* (never inferred), O(nodes),
-  no name resolution. This is the load-time trust anchor for `Plugin[Verified]` — build it as if
-  every DIR file is hostile.
-- Round-trip property: check → serialize → replay-check must accept byte-identically re-encoded
-  DIR and refuse any single-byte body tamper (this becomes the §9.6 witness).
-- DL1503 (version mismatch) activates here.
+| Gate | Playbook phases | Ships |
+|---|---|---|
+| B1 | 6a, 6b | DIR: lossless round-trip + the replay-checker (hostile-input hardened; DL1503/DL1504) |
+| B2 | 6c | `.dpx` container, `kind = "plugin"`, manifests (DL1501), `plugin build`/`inspect` |
+| B3 | 6d–6g | the load pipeline, both classes, `p.get`/calls (R-Get, DL0803), limits (DL1506), unload (DL0801) |
+| B4 | 6h, 6i + docs | signatures, Verified-on-WASM, `plugin verify` ≡ load, authority report, `why`, E-PLUGIN, §10 caveats verbatim, flagship example, close-out |
 
-### B2 — The artifact and CLI (spec §2.1, §2.2, §3.3-sig, §6)
-
-- `kind = "plugin"` packages (must expose no `fn main`); `[plugin]` / `[plugin.authority]` /
-  `[plugin.exports]` manifest tables; export signature strings parsed with the **ordinary type
-  grammar** — DL1501 when the manifest disagrees with the code (the manifest never overrides).
-- `.dpx` container: reuse the `.dwx` custom-section technique from `crates/delulu-wasm`
-  (sections per spec §2.2 table; blake3 content binding as in `.dwx`).
-- `delulu plugin build [--sign keyfile] [-o out.dpx]`, `delulu plugin inspect <f> [--json]`,
-  `delulu plugin verify <f> [--json]` — verify runs load steps 1, 2, 5 without instantiating and
-  must give **identical verdicts to real loads** (§9.9; build the shared path once, not twice).
-- ed25519 signatures over (plugin ‖ dir) / (plugin ‖ wasm). DL1507 activates here.
-
-### B3 — The loader and runtime surface (spec §3, §4, §5.1–§5.3)
-
-- The 7-step load sequence, in the normative order — ceiling check (DL1502, intersection as
-  exact narrowing repair), holder check via broker `attenuate` (DL0802, child node, fresh
-  `GrantId`), class verification (Verified replay → DL1504 with node revoked and nothing
-  instantiated; Contained import-slice validation → DL1505), signature policy
-  (`require_signed`), instantiation.
-- `std.plugin` (`Grant`, `Limits`, `PluginErr` as ordinary records/sum), `root.plugin_host()` in
-  the primitive table, manifest `plugins = true` + `--grant plugins`.
-- `p.get[F]` per class (R-Get; **DL0803 at compile time** for function-typed parameters anywhere
-  in `F` on a Contained plugin), calls threading capability attenuations under the plugin's node
-  with R-6b invalidate-on-return, `p.unload()` (R-6c: DL0801 with the revoking audit seq;
-  reload = new node/`GrantId`/values, old references dead forever).
-- Invariant 31: plugins never see lease tokens or the IPC path — the operations must not exist
-  in the plugin's world, not merely be refused.
-
-### B4 — Limits, surface, docs, close-out (spec §5.1, §5.4, §6-report, §7, §9, §10)
-
-- Wasmtime store fuel / memory cap / wall-clock watchdog → trap → DL1506 as `LimitExceeded`,
-  instance dropped, node revoked. Interpreter-engine best-effort limits, honestly labeled per
-  §5.4.
-- Authority report gains `"plugins"` (spec §6 JSON shape); `delulu why` traverses Verified DIR
-  to the primitive op and labels Contained boundaries
-  (`→ [contained plugin <name>] — <Effect>`).
-- Explain topic `E-PLUGIN`; docs updated (README/ARCHITECTURE as needed); spec §10 honesty
-  caveats carried into user docs **verbatim**.
-- The acceptance corpus: all 11 §9 criteria, each with a named witnessing test in the close-out
-  table (§4 below). The flagship demo (§9.1) ships as a runnable example under `examples/`.
+The playbook's §3 traps are binding review items: the close-out (§4 below) states, per trap,
+which test proves it did not happen.
 
 ---
 
@@ -80,10 +47,12 @@ Build in this order; each phase ends in its own commit with the full suite green
    `minicbor`) for DIR, and `ed25519-dalek` (v2) for signatures — cryptography is **never**
    hand-rolled. Wasmtime 27 / blake3 / serde_json are already in the workspace — reuse them.
    Any other new dependency: stop and escalate before adding.
-6. **Crate placement.** DIR serialization + replay-check live in `delulu-check` (they replay the
-   checking pass and need its internals). The `.dpx` container, manifest, signatures, and loader
-   live in a new crate `delulu-plugin`. CLI wiring in `delulu`. If the internals argue for a
-   different split, record a deviation and say why.
+6. **Crate placement — per playbook §1.** DIR in `delulu-check` (or a thin `delulu-dir` beside
+   it); `dir::verify` **reuses the exact rule code** of `check_source` (playbook trap 3). The
+   loader in `delulu-runtime`, reaching the WASM engine without creating a dependency cycle
+   (trait/injection wired in the `delulu` crate if needed — record how). `.dpx` reuses the
+   `.dwx` custom-section machinery in `delulu-wasm`. CLI wiring in `delulu`. *(The head chef's
+   original ruling of a new `delulu-plugin` crate is withdrawn — the playbook's topology wins.)*
 7. **Deviations ledger.** Any departure from the spec or this order is appended to §3 below,
    numbered, with what/why — and awaits a head-chef ruling. If blocked, in doubt, or the same
    error repeats more than twice: stop and report instead of thrashing.
