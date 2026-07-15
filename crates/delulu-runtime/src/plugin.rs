@@ -32,7 +32,11 @@
 use std::collections::BTreeMap;
 
 use delulu_broker::{attenuation_check, Authority, GrantId, Holder, Scopes};
+use delulu_check::check::lower_export_signature;
+use delulu_check::resolve::{resolve, DeclTable};
+use delulu_check::ty::Type;
 use delulu_check::Effect;
+use delulu_syntax::parse_type_string;
 
 use crate::custody::{Custody, CustodyDenial};
 
@@ -358,6 +362,129 @@ pub fn load_prepare(
     Ok(PreparedLoad { class: declared, grant_id, authority })
 }
 
+// ===== step 5 — class-specific verification ==================================================
+
+/// A Verified plugin's re-proved content: the replayed DIR plus the declaration table its exports
+/// were lowered against. Produced only when the **whole** §5-Verified check passed.
+#[derive(Debug)]
+pub struct VerifiedPlugin {
+    pub dir: delulu_check::Dir,
+    pub table: DeclTable,
+}
+
+/// **Step 5 (Verified)** — replay-check the DIR in full, then check every export's verified row
+/// against its manifest string (spec §3.1). Any failure is **DL1504**: the node is revoked and
+/// nothing is instantiated, and — invariant 29 — it **never** falls back to Contained.
+///
+/// The replay is `delulu_check::dir::verify`: the *same* `resolve` + `check_module` the compiler
+/// ran (the Deviation-1-approved construction), so a plugin whose code is unsound, stale, or lies
+/// about its authority is refuted by the checker itself, not by a second implementation.
+///
+/// The export check is `verified_row ⊆ manifest_row` with **exact** parameter/return types. It is
+/// deliberately *weaker* than the build-time fence (which demands equality, DL1501): at build the
+/// author is held to an exact manifest; at load, soundness only requires that the code cannot
+/// exceed what the manifest advertises to the host. Code narrower than its manifest is safe.
+pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusal> {
+    let Some(dir_bytes) = art.dir.as_deref() else {
+        return Err(LoadRefusal {
+            code: "DL1504",
+            message: format!("plugin `{}` declares class `verified` but carries no DIR", art.name()),
+            intersection: None,
+            requires_human: true,
+        });
+    };
+
+    // The full replay — types, rows, R-rules, opacity: the whole Stage-1 §6 judgment, re-run.
+    let dir = delulu_check::dir::verify(dir_bytes).map_err(|e| LoadRefusal {
+        code: e.code(),
+        message: format!("plugin `{}`: {}", art.name(), e.message()),
+        intersection: None,
+        requires_human: e.requires_human(),
+    })?;
+
+    // `dir::verify` already proved this module resolves and checks clean, so re-deriving its table
+    // is deterministic and diagnostic-free; it is what the manifest signatures lower against.
+    let (table, _diags) = resolve(&dir.module);
+
+    for (name, sig_str) in art.exports() {
+        let refuse = |msg: String| LoadRefusal {
+            code: "DL1504",
+            message: format!("plugin `{}` export `{name}`: {msg}", art.name()),
+            intersection: None,
+            requires_human: true,
+        };
+        let Some(code_ty) = dir.fn_types.get(&name) else {
+            return Err(refuse("the manifest advertises it, but the verified code declares no such function".into()));
+        };
+        let (te, pdiags) = parse_type_string(u32::MAX, &sig_str);
+        if pdiags.iter().any(|d| d.is_error()) {
+            return Err(refuse(format!("the manifest signature `{sig_str}` does not parse")));
+        }
+        let manifest_ty = lower_export_signature(&te, &table)
+            .map_err(|e| refuse(format!("the manifest signature `{sig_str}` does not lower: {e}")))?;
+        check_export_row(code_ty, &manifest_ty).map_err(refuse)?;
+    }
+
+    Ok(VerifiedPlugin { dir, table })
+}
+
+/// `verified ⊆ manifest`: identical parameter/return types, and the verified row's effects a
+/// **subset** of the manifest's declared row. A code row that exceeds its manifest is the lie this
+/// check exists to catch.
+fn check_export_row(code: &Type, manifest: &Type) -> Result<(), String> {
+    let (Type::Fn { params: cp, ret: cr, row: crow }, Type::Fn { params: mp, ret: mr, row: mrow }) =
+        (code, manifest)
+    else {
+        return Err("the manifest signature is not a function type".into());
+    };
+    if cp != mp || cr != mr {
+        return Err(format!("the verified type `{code}` does not match the manifest signature `{manifest}`"));
+    }
+    if !crow.effects.is_subset(&mrow.effects) {
+        let extra: Vec<&str> =
+            crow.effects.difference(&mrow.effects).map(|e| e.name()).collect();
+        return Err(format!(
+            "the verified code performs `{}`, which its manifest row `{mrow}` does not declare — the code exceeds what the manifest advertises",
+            extra.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+/// The result of a completed load: the plugin's node and its class-specific content.
+#[derive(Debug)]
+pub enum LoadedPlugin {
+    Verified { grant_id: GrantId, authority: Authority, verified: Box<VerifiedPlugin> },
+}
+
+/// Steps 1–5 for a **Verified** plugin, in the normative order, with the refusal discipline the
+/// spec demands: if step 5 fails, the plugin's node is **revoked** and nothing is instantiated.
+///
+/// A step-5 failure never degrades the request to Contained (invariant 29) — the only outcomes are
+/// a fully re-proved Verified plugin or a DL1504-class refusal.
+pub fn load_verified(
+    art: &PluginArtifact,
+    grant: &Grant,
+    custody: &mut dyn Custody,
+) -> Result<LoadedPlugin, LoadRefusal> {
+    let prepared = load_prepare(art, PluginClass::Verified, grant, custody)?;
+    match step5_verified(art) {
+        Ok(verified) => Ok(LoadedPlugin::Verified {
+            grant_id: prepared.grant_id,
+            authority: prepared.authority,
+            verified: Box::new(verified),
+        }),
+        Err(e) => {
+            // The node was minted at step 4; a failed verification must not leave it alive. The
+            // revoke is best-effort in the sense that its own failure cannot rescue the load — the
+            // refusal stands either way, and it is the refusal the caller sees.
+            let _ = custody.revoke_node(&prepared.grant_id);
+            Err(e)
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,6 +636,129 @@ mod tests {
     fn effect_names_are_the_contained_export_row_r1() {
         // R-1: `effects(grant)` is the row every Contained export types at.
         assert_eq!(grant(&["Net", "Read"]).effect_names(), vec!["Read", "Net"], "sorted, canonical");
+    }
+
+    // ----- step 5 (Verified): the replay + the export row check ------------------------------
+
+    /// A Verified artifact carrying real DIR built from `code`, with `exports` in its manifest.
+    fn verified_artifact(code: &str, exports: serde_json::Value, ceiling: &[&str]) -> PluginArtifact {
+        let c = delulu_check::check_source(0, code);
+        assert!(!c.has_errors(), "test plugin code must check clean: {:?}", c.diagnostics);
+        let dir = delulu_check::dir_serialize(&c.module, &c.result);
+        PluginArtifact {
+            manifest: json!({
+                "name": "p", "version": "0.1.0", "api": 1, "class": "verified",
+                "authority": { "effects": ceiling, "requires": [] },
+                "exports": exports,
+            }),
+            class: "verified".into(),
+            api: 1,
+            dir: Some(dir),
+            wasm: None,
+            sig: None,
+            lock: None,
+            wasm_cache_valid: true,
+        }
+    }
+
+    const PURE_CODE: &str = "module p\npub fn shout(s: Str) -> Str { s }\n";
+
+    #[test]
+    fn step5_verified_accepts_an_honest_plugin() {
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let v = step5_verified(&art).expect("an honest Verified plugin re-checks");
+        assert!(v.dir.fn_types.contains_key("shout"));
+    }
+
+    #[test]
+    fn step5_verified_refuses_a_tampered_dir_as_dl1504_requires_human() {
+        // The DIR replay is the trust anchor: corrupt bytes cannot be re-checked → DL1504.
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        art.dir = Some(b"not a dir at all".to_vec());
+        let e = step5_verified(&art).expect_err("must refuse");
+        assert_eq!(e.code, "DL1504");
+        assert!(e.requires_human, "DL1504 is requires_human and never falls back to Contained");
+    }
+
+    #[test]
+    fn step5_verified_refuses_code_whose_row_exceeds_its_manifest() {
+        // The export check's whole purpose: the code Writes but the manifest advertises purity.
+        let code = "module p\npub fn shout(out: Cap[Console], s: Str) ! {Write} { out.println(s) }\n";
+        let art = verified_artifact(code, json!({ "shout": "fn(Cap[Console], Str)" }), &["Write"]);
+        let e = step5_verified(&art).expect_err("the code exceeds its manifest row");
+        assert_eq!(e.code, "DL1504");
+        assert!(e.message.contains("Write"), "{}", e.message);
+        assert!(e.message.contains("exceeds what the manifest advertises"), "{}", e.message);
+    }
+
+    #[test]
+    fn step5_verified_allows_code_narrower_than_its_manifest() {
+        // `verified ⊆ manifest`: a plugin that advertises Write but is actually pure is SAFE.
+        // (The build-time fence demands equality — DL1501 — but load-time soundness needs only ⊆.)
+        let code = "module p\npub fn shout(out: Cap[Console], s: Str) { }\n";
+        let art = verified_artifact(code, json!({ "shout": "fn(Cap[Console], Str) ! {Write}" }), &["Write"]);
+        assert!(step5_verified(&art).is_ok(), "code narrower than its manifest is safe");
+    }
+
+    #[test]
+    fn step5_verified_refuses_a_manifest_export_the_code_lacks() {
+        let art = verified_artifact(PURE_CODE, json!({ "ghost": "fn(Str) -> Str" }), &[]);
+        let e = step5_verified(&art).expect_err("must refuse");
+        assert_eq!(e.code, "DL1504");
+        assert!(e.message.contains("no such function"), "{}", e.message);
+    }
+
+    #[test]
+    fn step5_verified_refuses_a_type_mismatched_export() {
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Int) -> Int" }), &[]);
+        let e = step5_verified(&art).expect_err("must refuse");
+        assert_eq!(e.code, "DL1504");
+        assert!(e.message.contains("does not match the manifest signature"), "{}", e.message);
+    }
+
+    #[test]
+    fn a_verified_class_never_falls_back_when_step5_fails_and_the_node_is_revoked() {
+        // Trap 1 / invariant 29 + the spec's "node revoked, nothing instantiated".
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        art.dir = Some(b"garbage".to_vec());
+        let mut c = host_custody(&["Read"]);
+        let e = load_verified(&art, &grant(&[]), &mut c).expect_err("must refuse");
+        assert_eq!(e.code, "DL1504");
+        // The node minted at step 4 must be dead — a failed verification leaves nothing alive.
+        let tree = c.broker().expect("tree");
+        let live: Vec<_> = tree
+            .nodes()
+            .iter()
+            .filter(|n| n.holder.kind == "plugin" && matches!(tree.effective_state(&n.id), Some(delulu_broker::EffState::Live)))
+            .map(|n| n.id.clone())
+            .collect();
+        assert!(live.is_empty(), "a DL1504 refusal must revoke the plugin's node: {live:?}");
+    }
+
+    #[test]
+    fn load_verified_happy_path_keeps_the_node_live() {
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&["Read"]);
+        let loaded = load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let LoadedPlugin::Verified { grant_id, .. } = loaded;
+        assert_eq!(
+            c.broker().expect("tree").effective_state(&grant_id),
+            Some(delulu_broker::EffState::Live),
+            "a successful load leaves the plugin's node live"
+        );
+    }
+
+    #[test]
+    fn a_zero_authority_plugin_loads_and_its_node_confers_nothing() {
+        // The flagship's load-side shape (criterion 1): Grant { effects: [] } → a live node that
+        // confers no effect at all.
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&["Read", "Net"]);
+        let loaded = load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let LoadedPlugin::Verified { grant_id, authority, .. } = loaded;
+        assert!(authority.effects.is_empty(), "a zero-authority grant confers nothing");
+        let node = c.broker().expect("tree").inspect(&grant_id).expect("node exists");
+        assert!(node.authority.effects.is_empty(), "and the broker node agrees");
     }
 
     #[test]

@@ -68,6 +68,7 @@ pub struct ForeignDef {
     pub fns: Vec<ForeignFnDef>,
 }
 
+#[derive(Debug)]
 pub struct DeclTable {
     pub types: Vec<TypeDef>,
     pub type_ix: HashMap<String, TypeDefId>,
