@@ -321,3 +321,23 @@ yet (that is 6b onward); this phase proves a checked module round-trips through 
 byte-stably. Serde derives were added additively to the AST (`delulu-syntax`), `Span`
 (`delulu-diag`), and the type-system types (`delulu-check::ty`) — behaviour-preserving; the full
 prior suite stays green.
+
+**Phase 6b — DIR re-verification (the Verified guarantee) — is implemented and green** (474 tests,
++6). `dir::verify(bytes)` replays the checking pass by **reusing the exact rule code of
+`check_source`**: it reconstructs the module from DIR and re-runs the very same single-module
+`resolve` + `check_module` the compiler ran — never a second, drift-prone implementation (playbook
+trap 3; this is what makes `plugin verify` ≡ a real load, criterion 9). A DIR is accepted only when
+**both** (1) re-checking the code raises no error — so a declared row narrower than the body needs is
+caught by the checker's own T-Fn boundary rule (DL0501) — **and** (2) the DIR's stored
+facts/types/node-rows equal what re-checking produces — so a validly re-encoded DIR that *lies*
+about its authority (a forged narrower row, a forged export type) is refuted by comparison. Every
+failure is **DL1504** (`requires_human`), and per invariant 29 it **never** falls back to Contained
+(a malformed/truncated DIR verifies as DL1504 too — there is no fallback path to take). Witnessed by:
+a narrowed-row program refused via the boundary rule; forged stored facts and a forged export type
+each refused via comparison; and a soundness fuzz that flips every single bit of a valid DIR and
+proves no flip ever *verifies* with altered authority while running the checker over thousands of
+mutated modules without a panic. Because deserialized ids are only compared (never used to index) and
+the module is structurally validated at decode, `verify` runs the real checker over hostile input
+with a zero panic surface. *(Build-order Deviation 1 records the spec §2.3 "no name resolution / not
+inferred" wording vs. this reuse-the-checker choice, resolved in favour of the head-chef reuse
+mandate; awaiting ruling.)*

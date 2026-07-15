@@ -63,6 +63,23 @@ which test proves it did not happen.
 
 *(appended during the build; numbered; each awaits a head-chef ruling)*
 
+**Deviation 1 (Phase 6b) — `dir::verify` reuses the real checker (resolve + check_module) rather
+than a bespoke "no name resolution / not inferred" assert-only pass.**
+*What:* Spec §2.3 describes DIR re-verification as replaying the checking pass with "types and rows
+asserted, then verified — **not inferred** … O(nodes) and requires **no name resolution**." The
+implementation instead reconstructs the module from DIR and re-runs the *exact same* pipeline
+`check_source` uses (single-module `resolve` + `check_module`), then refuses (DL1504) unless the
+recomputed facts/types/rows equal the DIR's stored ones and re-checking raises no error. This does
+perform single-module name resolution and the checker's ordinary local inference.
+*Why:* The playbook (trap 3) and the head-chef amendment mandate that `dir::verify` **reuse the
+exact rule code of `check_source`, never a second implementation** — criterion 9 (verify ≡ load)
+depends on zero drift. A hand-written assert-only re-derivation *is* the drift-prone second
+implementation the mandate forbids. The spec's efficiency properties are met in spirit (single-module
+resolve + check is linear and deterministic), and the soundness is strictly *stronger*: the load-time
+check is byte-for-byte the same code path as the original compile-time check. Where spec and playbook
+disagree (precedence: spec > playbook > this order), this records the conflict for a head-chef ruling
+rather than silently choosing. *Status: awaiting ruling.*
+
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals

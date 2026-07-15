@@ -175,6 +175,78 @@ pub fn deserialize(bytes: &[u8]) -> Result<Dir, DirError> {
     Dir::decode(bytes)
 }
 
+/// Re-verify DIR bytes — the Verified guarantee (Phase 6b, spec §3.1 step 5-Verified).
+///
+/// This **replays the checking pass by reusing the exact rule code of `check_source`**: it
+/// reconstructs the module from DIR and re-runs the very same `resolve` + `check_module` the
+/// compiler ran originally — never a second, drifting implementation (playbook trap 3; this is
+/// what makes `plugin verify` and a real load provably identical, criterion 9). A DIR is accepted
+/// only when **both**:
+///
+/// 1. Re-checking the code raises **no error** — so a body that performs an effect its declared row
+///    omits (a narrowed row) is caught by the checker's own boundary rule (DL0501 → DL1504), and
+/// 2. The DIR's **stored** facts/types/rows equal what re-checking produces — so a DIR that was
+///    validly re-encoded but *lies* about its authority (a forged narrower row, a forged export
+///    type) is refuted by the comparison.
+///
+/// Any failure is **DL1504** (`requires_human`), and per invariant 29 it **never** falls back to
+/// Contained. Deserialized ids are only compared here, never used to index, and the module was
+/// structurally validated at decode — so this runs the checker over hostile input without a panic
+/// surface.
+pub fn verify(bytes: &[u8]) -> Result<Dir, DirError> {
+    let dir = deserialize(bytes)?;
+
+    // Reuse `check_source`'s exact pipeline, minus the parse step (the AST is replayed, not
+    // re-parsed): single-module resolve, then the T-* judgment. See build-order Deviation 1.
+    let (table, rdiags) = crate::resolve::resolve(&dir.module);
+    let result = crate::check::check_module(&dir.module, &table);
+
+    // (1) Re-checking must be clean. Any error from resolve or check refutes the DIR — including the
+    // row-subset boundary check (DL0501) that catches a row narrower than the code actually needs.
+    if let Some(d) = rdiags.iter().chain(result.diags.iter()).find(|d| d.is_error()) {
+        return Err(DirError::VerifyFailed(format!(
+            "re-checking the code raised {}: {}",
+            d.code, d.message
+        )));
+    }
+
+    // (2) The stored facts/types/rows must be exactly what honest re-checking produces. Comparing
+    // the whole recomputed projection catches any forged authority claim.
+    let recomputed = Dir::from_checked(&dir.module, &result);
+    if recomputed.facts != dir.facts {
+        return Err(DirError::VerifyFailed(
+            "stored authority facts disagree with the re-checked code".into(),
+        ));
+    }
+    if recomputed.fn_types != dir.fn_types {
+        return Err(DirError::VerifyFailed(
+            "stored function types disagree with the re-checked code".into(),
+        ));
+    }
+    if recomputed.node_types != dir.node_types {
+        return Err(DirError::VerifyFailed(
+            "a stored node type disagrees with the re-checked code".into(),
+        ));
+    }
+    if recomputed.node_rows != dir.node_rows {
+        return Err(DirError::VerifyFailed(
+            "a stored node effect row disagrees with the re-checked code".into(),
+        ));
+    }
+    if recomputed.main_present != dir.main_present || recomputed.main_row != dir.main_row {
+        return Err(DirError::VerifyFailed(
+            "stored `main` facts disagree with the re-checked code".into(),
+        ));
+    }
+    if recomputed.foreign_binds != dir.foreign_binds {
+        return Err(DirError::VerifyFailed(
+            "stored foreign bind sites disagree with the re-checked code".into(),
+        ));
+    }
+
+    Ok(dir)
+}
+
 // ===== structural validation (panic-proofing the reconstructed AST) =========================
 
 /// Reject a reconstructed module that violates an AST invariant the checker assumes. Today the one
@@ -534,6 +606,124 @@ mod tests {
                 t[i] ^= 1 << bit;
                 // Must return (Ok or Err) without panicking; correctness of Ok cases is 6b's job.
                 let _ = deserialize(&t);
+            }
+        }
+    }
+
+    // ===== Phase 6b — DIR re-verification (the Verified guarantee) ===========================
+
+    #[test]
+    fn valid_dir_verifies_and_agrees_with_check_source() {
+        // The reuse guarantee (playbook trap 3 / criterion 9 in miniature): `verify` reproduces
+        // exactly what `check_source` computed, for every corpus program.
+        for src in corpus() {
+            let c = check_source(0, src);
+            assert!(!c.has_errors(), "{src}");
+            let bytes = serialize(&c.module, &c.result);
+            let verified = verify(&bytes).unwrap_or_else(|e| panic!("verify `{src}`: {}", e.message()));
+
+            let want_facts: BTreeMap<String, FnFacts> =
+                c.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            assert_eq!(verified.facts, want_facts, "verify must agree with check_source: {src}");
+        }
+    }
+
+    #[test]
+    fn narrowed_declared_row_is_dl1504_via_the_boundary_rule() {
+        // Tamper the code itself: drop the declared row from an effectful function. Re-checking the
+        // body then performs Write with no declared effect — the checker's own T-Fn boundary rule
+        // (DL0501) refutes it, surfaced as DL1504. This is the re-check catching a narrowed row.
+        let c = check_source(0, "module m\nfn f(out: Cap[Console]) ! {Write} { out.println(\"x\") }\n");
+        let mut dir = Dir::from_checked(&c.module, &c.result);
+        for item in &mut dir.module.items {
+            if let Item::Fn(f) = item {
+                f.row = None; // now declares purity while the body still writes
+            }
+        }
+        // Even a self-consistent forgery (also zero the stored facts) is caught, because the *body*
+        // genuinely performs Write.
+        if let Some(facts) = dir.facts.get_mut("f") {
+            facts.effects.clear();
+            facts.pure = true;
+        }
+        let bytes = dir.encode();
+        match verify(&bytes) {
+            Err(e @ DirError::VerifyFailed(_)) => {
+                assert_eq!(e.code(), "DL1504");
+                assert!(e.requires_human(), "DL1504 is requires_human and never falls back to Contained");
+            }
+            other => panic!("a narrowed row must be DL1504, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forged_narrower_stored_facts_is_dl1504_via_comparison() {
+        // Leave the code honest (so re-checking is clean) but forge the *stored* authority to claim
+        // purity. The re-check recomputes {Write}; the comparison against the forged {} refutes it.
+        let c = check_source(0, "module m\nfn f(out: Cap[Console]) ! {Write} { out.println(\"x\") }\n");
+        let mut dir = Dir::from_checked(&c.module, &c.result);
+        if let Some(facts) = dir.facts.get_mut("f") {
+            facts.effects.clear();
+            facts.pure = true;
+        }
+        let bytes = dir.encode();
+        match verify(&bytes) {
+            Err(DirError::VerifyFailed(_)) => {}
+            other => panic!("forged narrower stored facts must be DL1504, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn forged_export_type_is_dl1504() {
+        // Forge a function's stored static type. Re-checking recomputes the true type; the mismatch
+        // is DL1504 — the foundation of the Verified per-function export check.
+        let c = check_source(0, "module m\nfn f(n: Int) -> Int { n + 1 }\n");
+        let mut dir = Dir::from_checked(&c.module, &c.result);
+        if let Some(t) = dir.fn_types.get_mut("f") {
+            *t = Type::Fn { params: vec![Type::Str], ret: Box::new(Type::Str), row: Row::pure() };
+        }
+        let bytes = dir.encode();
+        assert!(matches!(verify(&bytes), Err(DirError::VerifyFailed(_))), "forged export type must be DL1504");
+    }
+
+    #[test]
+    fn no_byte_flip_ever_verifies_with_altered_authority() {
+        // The soundness fuzz witness for Phase 6b: over every single-byte, single-bit flip of a
+        // valid DIR, `verify` either refuses or accepts — but an accepted flip's authority (facts,
+        // types, node rows) is byte-identical to the original. A tamper can never escalate or alter
+        // a *verifying* plugin's authority, and running the checker over thousands of mutated
+        // modules never panics.
+        let c = check_source(
+            0,
+            "module m\nfn f(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\nfn g(x: Int) -> Int { x + 1 }\n",
+        );
+        let bytes = serialize(&c.module, &c.result);
+        let orig = verify(&bytes).expect("the untampered DIR verifies");
+        let (of, oft, ont, onr) =
+            (orig.facts.clone(), orig.fn_types.clone(), orig.node_types.clone(), orig.node_rows.clone());
+
+        for i in 0..bytes.len() {
+            for bit in 0..8u32 {
+                let mut t = bytes.clone();
+                t[i] ^= 1 << bit;
+                if let Ok(v) = verify(&t) {
+                    assert_eq!(v.facts, of, "flip @{i}.{bit} verified with altered facts");
+                    assert_eq!(v.fn_types, oft, "flip @{i}.{bit} verified with altered fn_types");
+                    assert_eq!(v.node_types, ont, "flip @{i}.{bit} verified with altered node_types");
+                    assert_eq!(v.node_rows, onr, "flip @{i}.{bit} verified with altered node_rows");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_malformed_dir_verifies_as_dl1504_never_falls_back() {
+        // Truncated/garbage bytes are unverifiable Verified code: DL1504, requires_human, and by
+        // invariant 29 there is no Contained fallback path to take.
+        for bad in [&b""[..], &b"garbage"[..], &[0x9f, 0x9f, 0x00][..]] {
+            match verify(bad) {
+                Err(e) => assert_eq!(e.code(), "DL1504", "malformed DIR must verify as DL1504"),
+                Ok(_) => panic!("malformed bytes must never verify"),
             }
         }
     }
