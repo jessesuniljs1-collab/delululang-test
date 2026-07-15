@@ -92,7 +92,9 @@ but CLI diagnostics must carry a registered code (the conformance meta-test enfo
 *Why:* Stage 3 hit the identical gap for `.dwx` and allocated DL1202 for exactly this class; DL1508
 follows that precedent inside the fresh DL15xx range. Scope guard: DL1507 stays strictly "plugin API
 version mismatch"; a tampered **DIR** body inside an otherwise-valid container is DL1504 (a failed
-Verified re-check precondition — criterion 6 wording), never DL1508. *Status: awaiting ruling.*
+Verified re-check precondition — criterion 6 wording), never DL1508. *Status: **ruled: approved** —
+condition: at B4, DL1508 joins the spec's diagnostics story via the Implementation status log and
+`E-PLUGIN` explains it.*
 
 **Deviation 3 (Phase 6c) — plugin packages are single-module in v0.6.**
 *What:* `delulu plugin build` requires the plugin package to contain exactly one module; a
@@ -102,7 +104,12 @@ partially.
 (the Deviation-1-approved construction). Multi-module DIR would need a whole-program replay path
 (`check_program`) with cross-module interface metadata — real work with no acceptance-criterion
 coverage: every §9 criterion and the flagship demo use single-module plugins. Deferred, honestly
-refused, and recorded rather than silently half-supported. *Status: awaiting ruling.*
+refused, and recorded rather than silently half-supported. *Status: **ruled: approved** as
+honest-refusal-and-defer — conditions: (a) the B3/B4 report names the refusal's diagnostic, which
+must say plainly that multi-module plugin packages are unsupported in v0.6 with no fake repair (it
+is DL1004: "plugin packages are single-module in v0.6 — found N module file(s) under `src/`", zero
+repairs); (b) the limitation lands in the spec's Implementation status, `E-PLUGIN`, and the
+honesty-caveats list at B4; (c) it joins the post-v0.6 RFC ledger beside declared-effect plugins.*
 
 ## 4. Close-out
 
