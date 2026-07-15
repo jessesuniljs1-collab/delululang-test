@@ -1,9 +1,11 @@
 # Surface early-drop addendum — the Atlas & the Palette
 
-**Status:** BUILT 2026-07-15 (implementing chef; all 11 §4 criteria witnessed in §8 — head-chef
-live re-verification pending). Specified 2026-07-14 (head chef). Stage 8 "Surface" material, built
-early by the project owner's order. Implemented by the Opus 4.8 chef under this brief in three
-phases: A1 the Palette, A2 the Atlas core, A3 renderers + custody overlay + close-out.
+**Status:** BUILT 2026-07-15 (head-chef live-verified: all 11 §4 criteria demoed against the
+real binary, 53/53 live checks; full workspace suite 461 passed / 0 failed / 2 ignored,
+byte-identical on Windows and Linux/WSL; new code clippy-clean). Specified 2026-07-14 (head
+chef). Stage 8 "Surface" material, built early by the project owner's order. Implemented by the
+Opus 4.8 chef under this brief (commits 5c364dc → 13fa61a → 863f824 → cd5ff20 → 07de40a; the
+last two closed gaps found in head-chef verification — §7 deviations 4–5).
 
 This addendum is **binding** the same way `STAGE5_GUARD_ADDENDUM.md` was: the implementing model
 works phase by phase, appends deviations to §7 instead of silently departing, and fills the §8
