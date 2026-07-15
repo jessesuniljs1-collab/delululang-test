@@ -451,6 +451,99 @@ fn check_export_row(code: &Type, manifest: &Type) -> Result<(), String> {
     Ok(())
 }
 
+// ===== R-Get — the per-class export check at `p.get` (spec §3.3, runtime) ====================
+//
+// The compile-time half of `get` is already done and needs no rule: `F`'s row flows into the
+// caller's row through T-Call, and DL0803/DL1509 fence R-6a at the call site. What remains is the
+// runtime half, here — and it is written FAIL-CLOSED throughout: every "the loader could not tell"
+// case refuses, because R-Get is a security rule and an undecidable answer is not an allow.
+
+/// Verified R-Get: `row(export) ⊆ row(F)` with **exact** parameter/return types (spec §3.3).
+///
+/// The export type comes from the re-proved DIR, so it is real. The three "couldn't tell" cases —
+/// the export is absent, the export's stored type is not a function, or `F` is not a function —
+/// all **refuse**; none of them is a shrug.
+pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(), PluginErr> {
+    let Some(export) = export else {
+        // Couldn't tell: the plugin exports no such name. Refuse — never synthesize a stub.
+        return Err(PluginErr::NotGranted(format!(
+            "plugin exports no `{name}` — the verified code declares no such function"
+        )));
+    };
+    let Type::Fn { params: ep, ret: er, row: erow } = export else {
+        // Couldn't tell: the stored export type is malformed (not a function). A DIR that reaches
+        // here has been re-verified, so this is a can't-happen — which is exactly why it refuses
+        // rather than assumes.
+        return Err(PluginErr::VerifyFailed(format!(
+            "export `{name}` has a non-function type `{export}` — exports are functions only"
+        )));
+    };
+    let Type::Fn { params: fp, ret: fr, row: frow } = f else {
+        return Err(PluginErr::VerifyFailed(format!(
+            "`get` requires a function type; `{f}` is not one"
+        )));
+    };
+    if ep != fp || er != fr {
+        return Err(PluginErr::VerifyFailed(format!(
+            "export `{name}` has type `{export}`, which does not match the requested `{f}`"
+        )));
+    }
+    // R-Get: the export's row must fit inside the row the caller declared for it. An export that
+    // performs MORE than `F` admits would perform effects no caller row accounts for.
+    if !erow.effects.is_subset(&frow.effects) {
+        let extra: Vec<&str> = erow.effects.difference(&frow.effects).map(|e| e.name()).collect();
+        return Err(PluginErr::VerifyFailed(format!(
+            "export `{name}` performs `{}`, which the requested type `{f}` does not admit — its row must cover the export's",
+            extra.join(", ")
+        )));
+    }
+    Ok(())
+}
+
+/// Contained R-Get: **R-1** — every export is typed at `effects(grant)`, whatever the manifest
+/// claims (audit F-1). So `effects(grant) ⊆ row(F)`, plus a scalar/`Str`/`Cap`-parameter signature
+/// match (spec §3.3).
+///
+/// This is the honesty keystone: a Contained plugin's "read-only" export **types as everything its
+/// module was granted**, because containment is module-granular — the WASI import set derives from
+/// the grant, not from which export you call. A manifest's per-export row is documentation and
+/// never enters the type system.
+pub fn r_get_contained(grant: &Grant, f: &Type, name: &str) -> Result<(), PluginErr> {
+    let Type::Fn { params, row: frow, .. } = f else {
+        return Err(PluginErr::VerifyFailed(format!(
+            "`get` requires a function type; `{f}` is not one"
+        )));
+    };
+    // R-1: the row the caller asks for must cover the WHOLE grant, not the advertised export row.
+    let granted = grant.to_authority().effects;
+    if !granted.is_subset(&frow.effects) {
+        let missing: Vec<&str> = granted.difference(&frow.effects).map(|e| e.name()).collect();
+        return Err(PluginErr::VerifyFailed(format!(
+            "contained export `{name}` is typed at its module's FULL grant (rule R-1): the requested type `{f}` must admit `{}`. \
+             Containment is module-granular — an opaque module's exports are not bounded per-export, so a \"read-only\" export types as everything the module was granted",
+            missing.join(", ")
+        )));
+    }
+    // The marshalling fence: only scalars, Str, and capabilities cross into an opaque module.
+    // R-6a's compile-time fence (DL0803/DL1509) already rejects function-typed parameters; this
+    // refuses everything else that cannot cross, fail-closed rather than by omission.
+    for (i, p) in params.iter().enumerate() {
+        if !is_contained_marshallable(p) {
+            return Err(PluginErr::VerifyFailed(format!(
+                "contained export `{name}` parameter {} has type `{p}`, which cannot cross into an opaque module (only Int, Float, Bool, Str, Unit, and Cap[_] may)",
+                i + 1
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// What may cross into a Contained (opaque WASM) export. Deliberately a whitelist: an unknown or
+/// composite type is refused, never assumed marshallable.
+fn is_contained_marshallable(t: &Type) -> bool {
+    matches!(t, Type::Int | Type::Float | Type::Bool | Type::Str | Type::Unit | Type::Cap(_))
+}
+
 /// The result of a completed load: the plugin's node and its class-specific content.
 #[derive(Debug)]
 pub enum LoadedPlugin {
@@ -759,6 +852,114 @@ mod tests {
         assert!(authority.effects.is_empty(), "a zero-authority grant confers nothing");
         let node = c.broker().expect("tree").inspect(&grant_id).expect("node exists");
         assert!(node.authority.effects.is_empty(), "and the broker node agrees");
+    }
+
+    // ----- R-Get (runtime), and its "couldn't tell" cases -------------------------------------
+    //
+    // Kitchen rule: the "what if the checker couldn't tell" case is written FIRST. The skip branch
+    // is where security rules go to die.
+
+    fn fnty(params: Vec<Type>, ret: Type, effects: &[&str]) -> Type {
+        Type::Fn {
+            params,
+            ret: Box::new(ret),
+            row: delulu_check::ty::Row::closed(effects.iter().map(|e| effect_from_name(e)).collect()),
+        }
+    }
+
+    #[test]
+    fn r_get_verified_couldnt_tell_cases_all_refuse() {
+        let f = fnty(vec![Type::Str], Type::Str, &[]);
+        // (1) the export is ABSENT — refuse, never synthesize a stub.
+        let e = r_get_verified(None, &f, "shout").expect_err("absent export must refuse");
+        assert_eq!(e.variant(), "NotGranted");
+        // (2) the export's stored type is MALFORMED (not a function) — refuse, never assume.
+        let e = r_get_verified(Some(&Type::Int), &f, "shout").expect_err("non-fn export must refuse");
+        assert_eq!(e.variant(), "VerifyFailed");
+        // (3) `F` itself is not a function — refuse.
+        let export = fnty(vec![Type::Str], Type::Str, &[]);
+        let e = r_get_verified(Some(&export), &Type::Int, "shout").expect_err("non-fn F must refuse");
+        assert_eq!(e.variant(), "VerifyFailed");
+    }
+
+    #[test]
+    fn r_get_verified_enforces_row_subset_and_exact_types() {
+        // Exact types + row(export) ⊆ row(F).
+        let export = fnty(vec![Type::Str], Type::Str, &["Read"]);
+        // The requested row admits Read: OK.
+        assert!(r_get_verified(Some(&export), &fnty(vec![Type::Str], Type::Str, &["Read"]), "s").is_ok());
+        // A WIDER requested row is fine — the export's row still fits inside it.
+        assert!(r_get_verified(Some(&export), &fnty(vec![Type::Str], Type::Str, &["Read", "Net"]), "s").is_ok());
+        // A NARROWER requested row is the refusal: the export would perform Read that no caller
+        // row accounts for.
+        let e = r_get_verified(Some(&export), &fnty(vec![Type::Str], Type::Str, &[]), "s")
+            .expect_err("a pure F cannot receive a Read export");
+        assert!(e.variant() == "VerifyFailed");
+        // Type mismatch refuses regardless of rows.
+        assert!(r_get_verified(Some(&export), &fnty(vec![Type::Int], Type::Str, &["Read"]), "s").is_err());
+    }
+
+    #[test]
+    fn r_get_contained_couldnt_tell_cases_all_refuse() {
+        let g = grant(&[]);
+        // `F` is not a function — refuse rather than shrug.
+        let e = r_get_contained(&g, &Type::Int, "scan").expect_err("non-fn F must refuse");
+        assert_eq!(e.variant(), "VerifyFailed");
+        // A parameter that cannot cross the boundary — refused by whitelist, not by omission.
+        let e = r_get_contained(&g, &fnty(vec![Type::List(Box::new(Type::Int))], Type::Str, &[]), "scan")
+            .expect_err("List cannot cross into an opaque module");
+        assert_eq!(e.variant(), "VerifyFailed");
+    }
+
+    #[test]
+    fn r_get_contained_types_every_export_at_the_full_grant_r1() {
+        // THE AUDIT F-1 SCENARIO, at the R-Get gate (criterion 2). The manifest advertises
+        // `scan : fn() -> Str ! {Read}` — an advisory lie. Under a {Read, Net} grant, R-1 types the
+        // export at the module's FULL grant, so asking for `!{Read}` is REFUSED.
+        let g = grant(&["Read", "Net"]);
+        let e = r_get_contained(&g, &fnty(vec![], Type::Str, &["Read"]), "scan")
+            .expect_err("R-1: a {Read,Net}-granted module's export is not `!{Read}`");
+        assert_eq!(e.variant(), "VerifyFailed");
+        assert!(e.variant() == "VerifyFailed");
+        let PluginErr::VerifyFailed(msg) = &e else { unreachable!() };
+        assert!(msg.contains("Net"), "the refusal names the effect the request omits: {msg}");
+        assert!(msg.contains("R-1"), "and cites the rule: {msg}");
+
+        // The HONEST annotation — covering the whole grant — succeeds. The program then only
+        // compiles if the caller's row includes Net (that half is compile-time, T-Call).
+        assert!(
+            r_get_contained(&g, &fnty(vec![], Type::Str, &["Read", "Net"]), "scan").is_ok(),
+            "the honest annotation covering the full grant is accepted"
+        );
+    }
+
+    #[test]
+    fn r_get_contained_on_a_zero_authority_grant_admits_a_pure_export() {
+        // The flagship's Contained mirror: nothing granted ⇒ `effects(grant)` is empty ⇒ a pure `F`
+        // covers it. The plugin still cannot read, clock, or net — it was granted nothing.
+        assert!(r_get_contained(&grant(&[]), &fnty(vec![Type::Str], Type::Str, &[]), "shout").is_ok());
+    }
+
+    #[test]
+    fn r_get_contained_allows_only_scalars_str_and_caps_across_the_boundary() {
+        let g = grant(&[]);
+        for ok in [Type::Int, Type::Float, Type::Bool, Type::Str, Type::Unit, Type::Cap(delulu_check::ResourceKind::FsRead)] {
+            assert!(
+                r_get_contained(&g, &fnty(vec![ok.clone()], Type::Str, &[]), "f").is_ok(),
+                "{ok} must be allowed to cross"
+            );
+        }
+        for bad in [
+            Type::List(Box::new(Type::Int)),
+            Type::Option(Box::new(Type::Int)),
+            Type::Secret(Box::new(Type::Str)),
+            Type::Root,
+        ] {
+            assert!(
+                r_get_contained(&g, &fnty(vec![bad.clone()], Type::Str, &[]), "f").is_err(),
+                "{bad} must not cross into an opaque module"
+            );
+        }
     }
 
     #[test]
