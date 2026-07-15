@@ -172,6 +172,32 @@ mod tests {
         assert!(capped.contains("truncated at budget"), "truncation is explicit: {capped}");
     }
 
+    /// A3.2: the digest honors `--budget` — the floor (title + notice + footer) is always kept,
+    /// body lines are packed into what remains, and truncation is explicit, never silent.
+    #[test]
+    fn digest_honors_the_budget_with_floor_and_explicit_notice() {
+        let a = atlas_of(SAMPLE);
+        let full = a.render_digest(DEFAULT_BUDGET);
+        assert!(!full.contains("truncated at budget"), "under budget ⇒ no notice");
+
+        // A tiny budget (below the floor): the floor is STILL emitted and the notice says so.
+        let tiny = a.render_digest(10);
+        assert!(tiny.starts_with("# Atlas of `app`"), "title survives: {tiny}");
+        assert!(tiny.contains("truncated at budget"), "explicit: {tiny}");
+        assert!(tiny.contains("below the digest floor"), "the floor case is named: {tiny}");
+        assert!(tiny.contains("## Querying further"), "the footer (the remedy pointer) survives");
+        assert!(tiny.len() < full.len(), "smaller than the full digest");
+        assert_eq!(tiny, a.render_digest(10), "deterministic");
+
+        // A mid budget (floor fits): partial body + notice, and the cap actually binds.
+        let mid = a.render_digest(300);
+        assert!(mid.contains("truncated at budget"), "explicit: {mid}");
+        assert!(mid.contains("body line(s) omitted"), "counts what was dropped: {mid}");
+        assert!(mid.contains("## Querying further"));
+        assert!(tokens(&mid) <= 300, "the cap binds: {} tokens", tokens(&mid));
+        assert!(mid.len() > tiny.len(), "a larger budget keeps more body");
+    }
+
     #[test]
     fn foreign_c_symbols_get_nodes_and_gated_edges() {
         // A declared C symbol always gets a node; the edge appears only for a function whose

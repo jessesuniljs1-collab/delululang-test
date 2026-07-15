@@ -294,17 +294,31 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
    (through the binary on `examples/numpy_mean.delulu`, incl. byte-identical re-run + a typed
    `--foreign-->` path hop).
 
+5. **A3.2 correction (head-chef live-verification gap): the digest now honors `--budget`.** The A3
+   digest only ever dropped its structure-map section, so on small programs a tiny `--budget` was
+   silently ignored (§2.2 requires capping ANY textual output, truncation always explicit). Fixed
+   semantics: an irreducible FLOOR is always kept — the title line, the explicit truncation notice,
+   and the fixed "Querying further" footer (the footer is the remedy pointer; losing it would
+   strand the agent) — and body lines are packed in document order into the remaining ~N tokens
+   (chars/4, stated as heuristic). If the floor alone exceeds a tiny budget, the floor is still
+   emitted and the notice says exactly that — explicit over silent, always. Witnesses:
+   `delulu_atlas::tests::digest_honors_the_budget_with_floor_and_explicit_notice` (unit: tiny +
+   mid budgets, cap binds, determinism) and `atlas_cli.rs::digest_honors_budget_through_the_binary`
+   (a generated 41-module package: truncation sentence, surviving footer, budgeted < ½ unbudgeted,
+   byte-identical rerun).
+
 ## 8. Close-out (criterion → witnessing test → status)
 
-Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2) → 456 (A3) → 459 (A3.1)**. The 2
-pre-existing ignored are untouched — criterion 10 held at every phase. All 11 criteria are **met**.
+Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2) → 456 (A3) → 459 (A3.1) → 461
+(A3.2)**. The 2 pre-existing ignored are untouched — criterion 10 held at every phase. All 11
+criteria are **met**.
 
 | # | Criterion (§4) | Status | Witnessing test |
 |---|---|---|---|
 | 1 | Determinism — byte-identical across runs, every format | **met (A2)** | `atlas_cli.rs::output_is_byte_identical_across_runs_every_format` (tree/digest/json through the binary); unit `delulu_atlas::tests::build_is_deterministic` |
 | 2 | `atlas/1` JSON — versioned, stable ids, serde round-trip, zero ANSI under `--color always` | **met (A2)** | `atlas_cli.rs::{atlas_json_is_a_versioned_envelope_with_stable_ids, json_carries_zero_ansi_even_under_color_always}`; units `model::tests::{atlas_round_trips_through_serde, json_carries_zero_ansi_bytes}` |
-| 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | **met (A2)** | `atlas_cli.rs::{digest_has_budget_ordering_authority_gods_caveats_and_footer, digest_is_never_colored_even_under_color_always}`; unit `delulu_atlas::tests::digest_has_footer_gods_authority_and_caveat` |
-| 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | **met (A2)** | `atlas_cli.rs::{query_verbs_answer_without_the_whole_graph, query_json_is_structured_and_uncolored, budget_truncation_is_explicit_never_silent}`; units `delulu_atlas::tests::{query_verbs_answer_from_the_graph, budget_truncation_is_explicit}` |
+| 3 | Digest discipline — ≤2000-token budget, ordering, authority/gods/caveats + "Querying further" footer | **met (A2+A3.2)** | `atlas_cli.rs::{digest_has_budget_ordering_authority_gods_caveats_and_footer, digest_is_never_colored_even_under_color_always, digest_honors_budget_through_the_binary}`; units `delulu_atlas::tests::{digest_has_footer_gods_authority_and_caveat, digest_honors_the_budget_with_floor_and_explicit_notice}` (§7 deviation 5: A3.2 made a non-default `--budget` actually bind on the digest — floor kept, explicit notice, footer survives) |
+| 4 | Query verbs — node/path/callers/calls/why, typed hops, explicit `--budget` truncation | **met (A2+A3.2)** | `atlas_cli.rs::{query_verbs_answer_without_the_whole_graph, query_json_is_structured_and_uncolored, budget_truncation_is_explicit_never_silent, digest_honors_budget_through_the_binary}`; units `delulu_atlas::tests::{query_verbs_answer_from_the_graph, budget_truncation_is_explicit, digest_honors_the_budget_with_floor_and_explicit_notice}` |
 | 5 | Authority parity — `performs`/`requires` == `delulu authority` (machine-checked) | **met (A2)** | `atlas_cli.rs::atlas_authority_matches_delulu_authority_exactly` (compares effects/capabilities/secrets/foreign_calls/pure_functions + performs edges); unit `delulu_atlas::tests::authority_parity_effects_match_delulu_authority` |
 | 6 | Refusal honesty — DL1780 (no partial graph); DL1781 (broker down, graph still emitted) | **met (A2+A3)** | DL1780: `atlas_cli.rs::{check_errors_refuse_with_dl1780_and_no_partial_graph, refusal_in_json_mode_is_a_diagnostics_envelope_not_a_graph}` (exit 1, no `atlas/1` on refusal). DL1781: `atlas_e2e.rs::atlas_custody_overlay_live_then_degraded_end_to_end` step 3 (real broker stopped ⇒ DL1781 note on stderr, atlas still emitted, `custody: null`, exit 0) |
 | 7 | Self-contained HTML — embedded data + inline JS, zero external URLs, 3000-node collapse | **met (A3)** | `atlas_cli.rs::html_is_self_contained_through_the_binary` + `atlas_e2e.rs` step 4 (both grep the artifact for `http://`/`https://`); units `formats::tests::{html_is_self_contained_with_zero_external_urls, html_collapses_above_the_node_cap}` (the collapse test builds a >3000-node graph and asserts the explicit notice + module-level data) |

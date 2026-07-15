@@ -155,18 +155,22 @@ impl Atlas {
         lines
     }
 
-    /// The token-budgeted Markdown digest (addendum §2.3). Always ends with the querying footer;
-    /// truncation (when over budget) is explicit, never silent (criterion 3 & 4).
+    /// The token-budgeted Markdown digest (addendum §2.3). `--budget` caps the WHOLE output at
+    /// ~`budget` tokens (chars/4, stated as heuristic). An irreducible floor is always kept — the
+    /// title line, the explicit truncation notice, and the fixed "Querying further" footer (the
+    /// footer IS the remedy pointer: a truncated digest that lost it would strand the agent). Body
+    /// lines are packed in document order into what remains; anything dropped is announced —
+    /// explicit over silent, always (criteria 3 & 4; A3.2).
     pub fn render_digest(&self, budget: usize) -> String {
         let packages: Vec<&crate::model::Node> =
             self.nodes.iter().filter(|n| n.kind == NodeKind::Package).collect();
         let modules: Vec<&crate::model::Node> =
             self.nodes.iter().filter(|n| n.kind == NodeKind::Module).collect();
 
-        // ----- fixed sections (always present) --------------------------------------------------
+        // ----- the floor: title + footer (notice joins them only when truncating) ---------------
+        let title = format!("# Atlas of `{}`\n\n", self.root);
+
         let mut head = String::new();
-        let _ = writeln!(head, "# Atlas of `{}`", self.root);
-        let _ = writeln!(head);
         let _ = writeln!(
             head,
             "{} packages, {} modules, {} functions, {} nodes, {} edges.",
@@ -243,21 +247,49 @@ impl Atlas {
         let _ = writeln!(map);
 
         // ----- assemble under the budget --------------------------------------------------------
-        let fixed = format!("{head}{gods}{auth}{foreign}");
+        let body = format!("{head}{gods}{auth}{foreign}{map}");
         let footer = format!("{QUERYING_FOOTER}\n");
-        let with_map = format!("{fixed}{map}{footer}");
-        if tokens(&with_map) <= budget {
-            return with_map;
+        let full = format!("{title}{body}{footer}");
+        if tokens(&full) <= budget {
+            return full;
         }
-        // Over budget: drop the structure map (the largest, most reconstruct-able section), and say
-        // so explicitly so the reader knows to query for it.
-        let notice = format!(
-            "## Structure\n\n… {} module(s) omitted — over the {} token budget; \
-             query with `delulu atlas node <id>` or raise `--budget`.\n\n",
-            modules.len(),
-            budget
-        );
-        format!("{fixed}{notice}{footer}")
+
+        // Over budget: keep the floor (title + notice + footer), pack whole body LINES in document
+        // order into what remains. The notice length is reserved up front so the final assembly
+        // respects the cap as far as the floor allows.
+        const NOTICE_RESERVE: usize = 260;
+        let char_budget = budget.saturating_mul(4);
+        let remaining =
+            char_budget.saturating_sub(title.chars().count() + footer.chars().count() + NOTICE_RESERVE);
+        let mut kept = String::new();
+        let mut kept_lines = 0usize;
+        let total_lines = body.split_inclusive('\n').count();
+        for line in body.split_inclusive('\n') {
+            if kept.chars().count() + line.chars().count() > remaining {
+                break;
+            }
+            kept.push_str(line);
+            kept_lines += 1;
+        }
+        // Explicit, never silent (§2.2): the notice names the budget, states the heuristic, counts
+        // what was dropped, and points at the remedies. When even the floor exceeds the budget the
+        // floor is STILL emitted — and the notice says exactly that.
+        let dropped = total_lines - kept_lines;
+        let notice = if kept_lines == 0 {
+            format!(
+                "… truncated at budget (~{budget} tokens, chars/4 heuristic): the budget is below \
+                 the digest floor (title + this notice + the querying footer), so the floor is \
+                 emitted anyway — explicit over silent. All {total_lines} body line(s) omitted; \
+                 narrow with `atlas node <id>` or raise `--budget`.\n\n"
+            )
+        } else {
+            format!(
+                "… truncated at budget (~{budget} tokens, chars/4 heuristic): {dropped} of \
+                 {total_lines} body line(s) omitted; narrow with `atlas node <id>` or raise \
+                 `--budget`.\n\n"
+            )
+        };
+        format!("{title}{kept}{notice}{footer}")
     }
 }
 

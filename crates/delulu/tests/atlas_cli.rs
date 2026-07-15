@@ -127,6 +127,58 @@ fn budget_truncation_is_explicit_never_silent() {
     assert!(capped.contains("truncated at budget"), "truncation is explicit: {capped}");
 }
 
+/// A3.2 (head-chef live-verification gap): the DIGEST honors `--budget` too — §2.2 caps ANY
+/// textual output. A multi-module fixture big enough to truncate; the floor (title + explicit
+/// notice + the "Querying further" footer) always survives.
+#[test]
+fn digest_honors_budget_through_the_binary() {
+    // Generate a package with enough modules that the unbudgeted digest is large.
+    let dir = std::env::temp_dir().join(format!("delulu_digest_budget_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("delulu.toml"),
+        "[package]\nname = \"big\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n\
+         [authority]\neffects  = [\"Write\"]\nfs.read  = []\nfs.write = []\nnet      = []\nsecrets  = []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("main.delulu"),
+        "module big\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"hi\") }\n",
+    )
+    .unwrap();
+    for i in 0..40 {
+        std::fs::write(
+            dir.join("src").join(format!("m{i:02}.delulu")),
+            format!("module big.m{i:02}\npub fn f{i:02}(n: Int) -> Int {{ n + {i} }}\n"),
+        )
+        .unwrap();
+    }
+    let target = dir.to_str().unwrap();
+
+    let unbudgeted = stdout(&delulu(&["atlas", target, "--format", "digest"]));
+    assert!(unbudgeted.len() > 2000, "the fixture digest is large enough to truncate: {} chars", unbudgeted.len());
+
+    let budgeted = stdout(&delulu(&["atlas", target, "--format", "digest", "--budget", "100"]));
+    // (a) the truncation sentence is present — explicit, never silent.
+    assert!(budgeted.contains("truncated at budget"), "explicit truncation: {budgeted}");
+    // (b) the footer (the remedy pointer) is still present.
+    assert!(budgeted.contains("## Querying further"), "footer survives truncation");
+    assert!(budgeted.contains("delulu atlas node <name-or-id>"), "the verbs are still taught");
+    // (c) dramatically smaller than unbudgeted.
+    assert!(
+        budgeted.len() < unbudgeted.len() / 2,
+        "dramatically smaller: {} vs {} chars",
+        budgeted.len(),
+        unbudgeted.len()
+    );
+    // (d) deterministic: byte-identical rerun.
+    let again = stdout(&delulu(&["atlas", target, "--format", "digest", "--budget", "100"]));
+    assert_eq!(budgeted, again, "byte-identical across runs");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ----- criterion 5: authority parity --------------------------------------------------------------
 
 #[test]
