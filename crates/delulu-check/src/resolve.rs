@@ -147,6 +147,11 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
         &[("NotGranted", &[]), ("SymbolMissing", &["Str"]), ("BadReturn", &["Str"]), ("Unavailable", &["Str"])],
     );
     register_prelude_record(&mut table, "PyErr", &[("kind", "Str"), ("message", "Str")]);
+    // Stage-6 `std.plugin` surface (spec §4). `Grant`/`Limits` are ORDINARY records and
+    // `PluginErr` an ordinary sum: they *describe* authority, they do not confer it — conferral
+    // happens only at `load`, under the holder check. Being ordinary is the point: a program can
+    // build, inspect, and narrow a Grant with no special powers at all.
+    register_plugin_prelude(&mut table);
 
     // First pass: type names (so signatures can forward-reference them).
     for item in &module.items {
@@ -262,6 +267,62 @@ fn register_prelude_type(table: &mut DeclTable, name: &str, variants: &[(&str, &
         .collect();
     table.types.push(TypeDef { name: name.to_string(), generics: vec![], kind: TypeDefKind::Sum(vs) });
     table.type_ix.insert(name.to_string(), id);
+}
+
+/// Register the `std.plugin` prelude (spec §4): `Limits`, `Grant`, `PluginErr`. Shared by the
+/// single-module (`resolve`) and whole-program (`program::push_prelude`) paths so a `TypeDefId`
+/// means the same thing on both.
+pub(crate) fn register_plugin_prelude(table: &mut DeclTable) {
+    register_prelude_record(
+        table,
+        "Limits",
+        &[("fuel", "Int"), ("mem_mb", "Int"), ("wall_ms", "Int")],
+    );
+    // `Grant` carries List[Str] scope dimensions plus a nested `Limits` and `require_signed`.
+    let id = TypeDefId(table.types.len() as u32);
+    table.types.push(TypeDef {
+        name: "Grant".to_string(),
+        generics: vec![],
+        kind: TypeDefKind::Record(vec![
+            ("effects".to_string(), list_of_str()),
+            ("fs_read".to_string(), list_of_str()),
+            ("fs_write".to_string(), list_of_str()),
+            ("net".to_string(), list_of_str()),
+            ("secrets".to_string(), list_of_str()),
+            ("declassify".to_string(), list_of_str()),
+            ("limits".to_string(), named("Limits")),
+            ("require_signed".to_string(), named("Bool")),
+        ]),
+    });
+    table.type_ix.insert("Grant".to_string(), id);
+    register_prelude_type(
+        table,
+        "PluginErr",
+        &[
+            ("NotGranted", &["Str"]),
+            ("VerifyFailed", &["Str"]),
+            ("BadArtifact", &["Str"]),
+            ("Revoked", &["Int"]),
+            ("LimitExceeded", &["Str"]),
+            ("ApiMismatch", &["Str"]),
+        ],
+    );
+}
+
+pub(crate) fn named(name: &str) -> TypeExpr {
+    TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: name.to_string(), span: dummy_span() }] },
+        args: vec![],
+        span: dummy_span(),
+    }
+}
+
+pub(crate) fn list_of_str() -> TypeExpr {
+    TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: "List".to_string(), span: dummy_span() }] },
+        args: vec![named("Str")],
+        span: dummy_span(),
+    }
 }
 
 fn register_prelude_record(table: &mut DeclTable, name: &str, fields: &[(&str, &str)]) {

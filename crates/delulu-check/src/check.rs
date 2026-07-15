@@ -95,6 +95,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         facts: HashMap::new(),
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
+        pending_gets: Vec::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
@@ -119,6 +120,33 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
             foreign_binds.insert(*id, name);
         }
     }
+    // R-6a / DL0803 (Stage 6, audit F-6): a function-typed parameter ANYWHERE in `F` — including
+    // nested inside a composite — at a `get` on a **Contained** plugin is a compile error. An
+    // opaque module holding a funcref could invoke it at moments no caller's row accounts for, so
+    // the rule is permanent, not a deferred feature. Decided here because the class and `F` are
+    // only known once the whole module's substitution has settled.
+    //
+    // Verified plugins accept callbacks (rows composed per R-4) — their code is re-proved at load,
+    // so the callback's row is real. The asymmetry IS the Verified/Contained split, in the types.
+    let pending_gets = std::mem::take(&mut checker.pending_gets);
+    for (span, f_var, class_ty) in pending_gets {
+        if !matches!(checker.cx.apply_type(&class_ty), Type::Contained) {
+            continue;
+        }
+        let f = checker.cx.apply_type(&Type::Var(f_var));
+        let Type::Fn { params, .. } = &f else { continue };
+        if params.iter().any(type_contains_fn) {
+            checker.diags.push(
+                Diagnostic::error(
+                    "DL0803",
+                    "a function-typed value cannot be passed to a Contained plugin export — no callbacks, by rule R-6a",
+                )
+                .with_span(span, "this `get` types an export of an opaque module")
+                .with_secondary_span(span, "an opaque module holding a re-entry point into verified code could invoke it at times no caller's row accounts for"),
+            );
+        }
+    }
+
     let main_present = table.fns.contains_key("main");
     let main_row = checker.facts.get("main").map(|f| f.effects.clone());
 
@@ -160,6 +188,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         facts: HashMap::new(),
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
+        pending_gets: Vec::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
@@ -179,6 +208,10 @@ struct Checker<'a> {
     /// `root.foreign(load)` call sites and the fresh handle var each produced, resolved to a
     /// concrete lib name after all functions are checked (see `check_module`).
     pending_foreign_binds: Vec<(NodeId, crate::ty::TypeVar)>,
+    /// `p.get(name)` call sites (Stage 6): the site's span, the fresh `F` variable the annotation
+    /// will pin, and the receiver's class marker. R-6a/DL0803 is decided once inference settles
+    /// (see `check_module`), because neither `F` nor the class is known when the method is checked.
+    pending_gets: Vec<(Span, crate::ty::TypeVar, Type)>,
     /// DIR §2.3 side tables, recorded raw (pre-substitution) during checking and resolved once at
     /// the end of `check_module`. `node_types_raw` holds each node's assigned type (possibly with
     /// inference variables); `node_row_accs` holds each node's raw effect accumulator.
@@ -779,6 +812,31 @@ impl<'a> Checker<'a> {
                 let inner = ts.into_iter().next().unwrap_or(Type::Unit);
                 Some((Type::Option(Box::new(inner)), acc))
             }
+            // T-Load (Stage 6, spec §3.1 / Stage-1 §8.2):
+            //   load(host: Cap[PluginHost], path: Str, grant: Grant)
+            //       -> Result[Plugin[C], PluginErr] ! {Load, Read}
+            // `C` is a fresh variable pinned by the binding's annotation (deviation 4). The row is
+            // `{Load, Read}` — bringing in code after compile time is itself an effect the host's
+            // row must declare, and reading the artifact is a Read.
+            "load" => {
+                let ts = check_args(self, ctx, &mut acc);
+                self.expect_named_arg(&ts, 0, &Type::Cap(ResourceKind::PluginHost), span, "load");
+                self.expect_named_arg(&ts, 1, &Type::Str, span, "load");
+                let grant_ty = Type::Record(self.table.type_ix["Grant"], vec![]);
+                self.expect_named_arg(&ts, 2, &grant_ty, span, "load");
+                if ts.len() != 3 {
+                    self.diags.push(
+                        Diagnostic::error("DL0403", format!("`load` expects 3 argument(s), found {}", ts.len()))
+                            .with_span(span, "wrong number of arguments"),
+                    );
+                }
+                acc.add_effect(Effect::Load);
+                acc.add_effect(Effect::Read);
+                ctx.facts.cap_kinds.insert(ResourceKind::PluginHost);
+                let class = self.cx.fresh_type();
+                let err = Type::Sum(self.table.type_ix["PluginErr"], vec![]);
+                Some((Type::result(Type::Plugin(Box::new(class)), err), acc))
+            }
             "str" => {
                 let ts = check_args(self, ctx, &mut acc);
                 if let Some(t) = ts.first() {
@@ -975,6 +1033,35 @@ impl<'a> Checker<'a> {
                 "now_ms" => Some((Type::Int, Some(Effect::Clock), None)),
                 _ => None,
             },
+            // T-Get / T-Unload (Stage 6, spec §3.3). `p.get[F](name) -> Result[F, PluginErr]`:
+            // `F` is a fresh variable pinned by the binding's annotation (deviation 4), so the
+            // R-Get row check is recorded here and settled once inference finishes (see
+            // `check_module`) — exactly the `root.foreign` pattern.
+            //
+            // What is compile-time vs. runtime, precisely:
+            // - **DL0803** (a function-typed parameter anywhere in `F` on a **Contained** plugin) is
+            //   COMPILE-TIME, at this call site — R-6a: an opaque module must never hold a re-entry
+            //   point into verified code.
+            // - The row check itself (`effects(grant) ⊆ row(F)` for Contained, R-1;
+            //   `row(export) ⊆ row(F)` for Verified) is RUNTIME, because the grant and the loaded
+            //   export type are runtime values. The compile-time half is automatic and needs no
+            //   rule: `F`'s row flows into the caller's row through T-Call, so a host calling a
+            //   `!{Read, Net}` export must already declare `Net` — the design paying off.
+            Type::Plugin(class) => match method {
+                "get" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    let f = self.cx.fresh_type();
+                    if let Type::Var(tv) = f {
+                        self.pending_gets.push((span, tv, (**class).clone()));
+                    }
+                    let err = Type::Sum(self.table.type_ix["PluginErr"], vec![]);
+                    Some((Type::result(f, err), None, None))
+                }
+                // `p.unload() -> Unit` (spec §3.3). Revocation is a custody act, not an effect the
+                // row tracks: the spec's signature carries no row.
+                "unload" => Some((Type::Unit, None, None)),
+                _ => None,
+            },
             Type::Cap(ResourceKind::Rand) => match method {
                 "int" => { self.expect_arg(args, 0, &Type::Int, span); self.expect_arg(args, 1, &Type::Int, span); Some((Type::Int, Some(Effect::Rand), None)) }
                 "float" => Some((Type::Float, Some(Effect::Rand), None)),
@@ -1134,6 +1221,15 @@ impl<'a> Checker<'a> {
                 Some((ret_ty, Some(Effect::ForeignCall), None))
             }
             _ => None,
+        }
+    }
+
+    /// `expect_arg` for a builtin free function whose arguments were already checked into a plain
+    /// `Vec<Type>` (the `check_builtin_call` shape). A missing argument is reported by the caller's
+    /// arity check, so this only unifies what is present.
+    fn expect_named_arg(&mut self, args: &[Type], i: usize, expected: &Type, span: Span, what: &str) {
+        if let Some(t) = args.get(i) {
+            self.expect_type(expected, t, span, &format!("`{what}` argument {} type mismatch", i + 1));
         }
     }
 
@@ -1540,6 +1636,13 @@ impl<'a> Checker<'a> {
                         "Cap" => return self.lower_cap(args, *span, facts),
                         "ForeignPtr" => return Type::ForeignPtr,
                         "PyObj" => return Type::PyObj,
+                        // `Plugin[C]` (Stage 6 §3). `C` is an ordinary inference position holding a
+                        // class marker, so `let p: Plugin[Contained] = load(…)` pins the `C` that
+                        // `load` returned fresh (build-order deviation 4 — the grammar has no
+                        // turbofish, per Stage-1 §6).
+                        "Plugin" => return Type::Plugin(Box::new(self.lower_one_arg(args, genv, facts, *span))),
+                        "Verified" => return Type::Verified,
+                        "Contained" => return Type::Contained,
                         _ => {}
                     }
                     // A `foreign … lib M` block name is the nominal opaque handle type `M` (§2).
@@ -1692,6 +1795,9 @@ impl<'a> Checker<'a> {
             Type::Secret(_) | Type::Cap(_) | Type::Root => true,
             // R-5: ForeignPtr, PyObj, and a foreign lib handle are opaque (no str/==/serialize).
             Type::ForeignPtr | Type::PyObj | Type::Foreign(_) => true,
+            // R-5 (Stage 6): a plugin handle is opaque. It binds a live broker node; stringifying
+            // or comparing one would leak/forge authority identity, and it must never serialize.
+            Type::Plugin(_) => true,
             Type::List(inner) | Type::Option(inner) => self.is_opaque(&inner, visiting),
             Type::Result(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {

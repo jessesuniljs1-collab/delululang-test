@@ -33,12 +33,11 @@ pub use lockfile::{
 pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
 pub use package::{load_package, load_package_into, LoadedModules, ModuleUnit, Package};
 pub use plugin::{
-    check_plugin_module, render_type, PluginAuthority, PluginClass, PluginManifest,
-    PLUGIN_API_SUPPORTED,
+    check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED,
 };
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{DeclTable, FnSig, GKind};
-pub use ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};
+pub use ty::{Effect, PluginClass, ResourceKind, Row, RowVar, Type, TypeDefId};
 
 use delulu_diag::{Diagnostic, FileId};
 use delulu_syntax::ast::Module;
@@ -406,6 +405,138 @@ mod tests {
         // `PyObj` is R-5 opaque: no str/serialize.
         let e = errors("module m\nfn f(o: PyObj) -> Str { str(o) }\n");
         assert!(e.contains(&"DL0604".to_string()), "{e:?}");
+    }
+
+    // ----- Stage 6: the plugin type surface (Plugin[C], load, get, unload) ----------------
+
+    /// The Stage-1 §8.2 host API shape. `[C]`/`[F]` are inference-from-context (build-order
+    /// deviation 4 — Stage-1 §6: "no turbofish"), so the class comes from the annotation.
+    #[test]
+    fn load_types_as_result_plugin_with_load_and_read_in_the_row() {
+        let c = check(
+            "module m\nfn go(root: Root, g: Grant) -> Result[Plugin[Verified], PluginErr] ! {Load, Read} {\n\
+             let host = root.plugin_host()\n Ok(load(host, \"p.dpx\", g)?) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        // `load` carries {Load, Read}: bringing in code after compile time is itself in the row.
+        let f = &c.result.facts["go"];
+        assert!(f.effects.contains(&Effect::Load) && f.effects.contains(&Effect::Read), "{f:?}");
+        assert!(f.cap_kinds.contains(&ResourceKind::PluginHost));
+    }
+
+    #[test]
+    fn load_without_load_in_the_row_is_dl0501() {
+        // A program that can bring in runtime code MUST say so in its row.
+        let e = errors(
+            "module m\nfn go(root: Root, g: Grant) -> Result[Plugin[Verified], PluginErr] ! {Read} {\n\
+             let host = root.plugin_host()\n Ok(load(host, \"p.dpx\", g)?) }\n",
+        );
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn the_class_annotation_pins_c_and_the_two_classes_never_unify() {
+        // Invariant 29 in the types: Verified and Contained are nominal and never coerce.
+        let c = check(
+            "module m\nfn go(root: Root, g: Grant) -> Result[Plugin[Contained], PluginErr] ! {Load, Read} {\n\
+             let host = root.plugin_host()\n Ok(load(host, \"p.dpx\", g)?) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        // Annotating the same load as the OTHER class in one function is a type error.
+        let e = errors(
+            "module m\nfn go(root: Root, g: Grant) ! {Load, Read} {\n\
+             let host = root.plugin_host()\n\
+             let p: Plugin[Verified] = load(host, \"p.dpx\", g)?\n\
+             let q: Plugin[Contained] = p\n }\n",
+        );
+        assert!(!e.is_empty(), "Verified must never unify with Contained");
+    }
+
+    #[test]
+    fn get_on_a_verified_plugin_yields_the_annotated_type_and_its_row_flows_to_the_caller() {
+        // The flagship's typing shape (criterion 1): a zero-authority export types pure, and the
+        // host's row is unchanged by calling it.
+        let c = check(
+            "module m\nfn use_it(p: Plugin[Verified]) -> Result[Str, PluginErr] {\n\
+             let shout: fn(Str) -> Str ! {} = p.get(\"shout\")?\n Ok(shout(\"hi\")) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["use_it"].pure, "a pure export leaves the host's row pure");
+    }
+
+    #[test]
+    fn an_effectful_export_forces_the_caller_to_declare_the_effect() {
+        // Audit F-1's compile-time half (criterion 2): F's row flows into the caller via T-Call, so
+        // the honest annotation only compiles when the caller's row admits it. No new rule needed.
+        let e = errors(
+            "module m\nfn use_it(p: Plugin[Verified]) -> Result[Str, PluginErr] {\n\
+             let f: fn() -> Str ! {Net} = p.get(\"scan\")?\n Ok(f()) }\n",
+        );
+        assert!(e.contains(&"DL0501".to_string()), "calling a !{{Net}} export needs Net in the row: {e:?}");
+
+        let c = check(
+            "module m\nfn use_it(p: Plugin[Verified]) -> Result[Str, PluginErr] ! {Net} {\n\
+             let f: fn() -> Str ! {Net} = p.get(\"scan\")?\n Ok(f()) }\n",
+        );
+        assert!(!c.has_errors(), "with Net declared it checks: {:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_function_typed_param_to_a_contained_export_is_dl0803_at_compile_time() {
+        // R-6a / audit F-6a (criterion 7): DL0803, at the `get` call site, at COMPILE time.
+        let e = errors(
+            "module m\nfn use_it(p: Plugin[Contained]) -> Result[Int, PluginErr] {\n\
+             let f: fn(fn(Int) -> Int) -> Int = p.get(\"apply\")?\n Ok(f(fn(x: Int) -> Int { x })) }\n",
+        );
+        assert!(e.contains(&"DL0803".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_nested_function_typed_param_to_a_contained_export_is_also_dl0803() {
+        // "anywhere in F, including nested" — a funcref inside a composite is still a funcref.
+        let e = errors(
+            "module m\nfn use_it(p: Plugin[Contained]) -> Result[Int, PluginErr] {\n\
+             let f: fn(List[fn() -> Int]) -> Int = p.get(\"apply_all\")?\n Ok(f([])) }\n",
+        );
+        assert!(e.contains(&"DL0803".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_function_typed_param_to_a_verified_export_is_allowed() {
+        // The asymmetry IS the Verified/Contained split: Verified code is re-proved at load, so the
+        // callback's row is real and R-4 composes it. Only Contained refuses (R-6a).
+        let c = check(
+            "module m\nfn use_it(p: Plugin[Verified]) -> Result[Int, PluginErr] {\n\
+             let f: fn(fn(Int) -> Int) -> Int = p.get(\"apply\")?\n Ok(f(fn(x: Int) -> Int { x })) }\n",
+        );
+        assert!(!c.has_errors(), "Verified plugins accept callbacks: {:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_plugin_handle_is_r5_opaque() {
+        // A plugin handle binds a live broker node: stringifying or comparing one would leak or
+        // forge authority identity.
+        assert!(errors("module m\nfn f(p: Plugin[Verified]) -> Str { str(p) }\n").contains(&"DL0604".to_string()));
+        assert!(errors("module m\nfn f(a: Plugin[Verified], b: Plugin[Verified]) -> Bool { a == b }\n")
+            .contains(&"DL0605".to_string()));
+    }
+
+    #[test]
+    fn unload_types_as_unit() {
+        let c = check("module m\nfn drop_it(p: Plugin[Verified]) { p.unload() }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn grant_and_limits_are_ordinary_records_that_confer_nothing() {
+        // spec §4: they DESCRIBE authority; building one is pure and needs no capability at all.
+        let c = check(
+            "module m\nfn mk() -> Grant {\n\
+             Grant { effects: [\"Read\"], fs_read: [\"./docs\"], fs_write: [], net: [], secrets: [],\n\
+             declassify: [], limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 }, require_signed: false } }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["mk"].pure, "constructing a Grant confers nothing and is pure");
     }
 
     #[test]

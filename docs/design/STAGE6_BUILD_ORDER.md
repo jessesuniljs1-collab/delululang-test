@@ -111,6 +111,25 @@ is DL1004: "plugin packages are single-module in v0.6 — found N module file(s)
 repairs); (b) the limitation lands in the spec's Implementation status, `E-PLUGIN`, and the
 honesty-caveats list at B4; (c) it joins the post-v0.6 RFC ledger beside declared-effect plugins.*
 
+**Deviation 4 (Phase 6e) — `load[C]` / `p.get[F]` are realized as inference-from-context, not
+literal bracket syntax.**
+*What:* The spec writes `load[C](host, path, grant)` (§3.1), `p.get[F](name)` (§3.3), and
+`p.get[fn(Str) -> Str ! {}]` (§9.1). The Stage-1 grammar cannot parse those: in expression position
+`[` is unambiguously `Index` (it parses an *expression*), so `p.get[F]("x")` would read as
+`Index(Field(p, get), Var(F))` and `F` as an unknown name. The `[C]`/`[F]` are therefore implemented
+as **inference-from-context** — a fresh variable pinned by the binding's annotation, e.g.
+`let shout: fn(Str) -> Str ! {} = p.get("shout")?` and `let p: Plugin[Contained] = load(host, …)?`.
+*Why:* This is settled by two normative precedents, not a free choice. (1) Stage-1 spec §6 states the
+language rule outright: *"Generics are checked per call site by unification (**no turbofish, no
+explicit instantiation** in v0.1)."* (2) Stage 4 hit the identical notation and resolved it the same
+way, recording it as normative in the Stage-4 spec §3: *"The `[M]` of the normative signature is
+realized as inference-from-context … because the grammar has no method type-argument syntax."* The
+spec's brackets are notation for the normative signature, exactly as `root.foreign[M](load)` was.
+R-Get and **DL0803 are unaffected**: `F` is fully known at the `get` call site (from the annotation),
+so the compile-time checks fire exactly where the spec requires.
+*Consequence to note at B4:* the flagship demo (§9.1) and the criterion-2/7 programs ship in the
+annotation form; their spec text keeps the bracket notation. *Status: awaiting ruling.*
+
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals

@@ -86,6 +86,7 @@ impl InferCtx {
                 row: self.apply_row(&row),
             },
             Type::Secret(inner) => Type::Secret(Box::new(self.apply_type(&inner))),
+            Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_type(&inner))),
             other => other,
         }
     }
@@ -160,6 +161,12 @@ impl InferCtx {
             (Type::Secret(x), Type::Secret(y)) => self.unify_type(x, y),
             (Type::ForeignPtr, Type::ForeignPtr) | (Type::PyObj, Type::PyObj) => Ok(()),
             (Type::Foreign(x), Type::Foreign(y)) if x == y => Ok(()),
+            // `Plugin[C]` unifies structurally, so the class marker inside is an ordinary
+            // inference position: `let p: Plugin[Contained] = load(…)` pins the `C` that `load`
+            // returned as a fresh variable (deviation 4). `Verified`/`Contained` are nominal and
+            // NEVER unify with each other — the class is exact, never coerced (invariant 29).
+            (Type::Plugin(x), Type::Plugin(y)) => self.unify_type(x, y),
+            (Type::Verified, Type::Verified) | (Type::Contained, Type::Contained) => Ok(()),
             (Type::Cap(x), Type::Cap(y)) if x == y => Ok(()),
             (Type::Record(id1, a1), Type::Record(id2, a2))
             | (Type::Sum(id1, a1), Type::Sum(id2, a2))
@@ -239,7 +246,7 @@ impl InferCtx {
     fn occurs_type(&self, v: u32, t: &Type) -> bool {
         match self.resolve_type_shallow(t) {
             Type::Var(TypeVar(w)) => w == v,
-            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) => {
+            Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => {
                 self.occurs_type(v, &inner)
             }
             Type::Result(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),

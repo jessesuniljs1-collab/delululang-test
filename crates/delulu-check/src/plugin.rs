@@ -28,29 +28,9 @@ use crate::ty::{ResourceKind, Row, Type};
 pub const PLUGIN_API_SUPPORTED: u32 = 1;
 
 /// The declared plugin class (spec §2.1). **Never inferred** (invariant 29): the artifact declares
-/// it, the loader verifies the declaration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PluginClass {
-    Verified,
-    Contained,
-}
-
-impl PluginClass {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            PluginClass::Verified => "verified",
-            PluginClass::Contained => "contained",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<PluginClass> {
-        match s {
-            "verified" => Some(PluginClass::Verified),
-            "contained" => Some(PluginClass::Contained),
-            _ => None,
-        }
-    }
-}
+/// it, the loader verifies the declaration. Defined in [`crate::ty`] because it is also a *type*
+/// (`Plugin[Verified]`); re-exported here so manifest code reads naturally.
+pub use crate::ty::PluginClass;
 
 /// The `[plugin.authority]` hard ceiling (Stage-1 §8.1): the most a *host* may ever grant this
 /// plugin — `grant ⊑ authority` is load step 3 (DL1502). Effects plus required capability kinds,
@@ -374,6 +354,9 @@ pub fn render_type(t: &Type, table: &DeclTable) -> String {
             }
             s
         }
+        Type::Plugin(c) => format!("Plugin[{}]", render_type(c, table)),
+        Type::Verified => "Verified".into(),
+        Type::Contained => "Contained".into(),
         // Defensive: inference variables never appear in a monomorphic export type; render
         // something inert rather than panicking on a hostile/degenerate input.
         Type::Var(_) => "?".into(),

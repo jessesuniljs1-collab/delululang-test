@@ -20,6 +20,9 @@ pub enum Effect {
     Clock,
     Rand,
     Declassify,
+    /// Loading a plugin at runtime (Stage 6). Reserved in Stage 1 §2, active here: `load` carries
+    /// `{Load, Read}`, so a program that can bring in code after compile time says so in its row.
+    Load,
     /// Reaching foreign (C/Python) code (Stage 4). An ordinary core effect for every row purpose;
     /// nothing special-cases it except reporting (spec §3).
     ForeignCall,
@@ -37,6 +40,7 @@ impl Effect {
             "Rand" => Effect::Rand,
             "Declassify" => Effect::Declassify,
             "ForeignCall" => Effect::ForeignCall,
+            "Load" => Effect::Load,
             _ => return None,
         })
     }
@@ -50,6 +54,7 @@ impl Effect {
             Effect::Rand => "Rand",
             Effect::Declassify => "Declassify",
             Effect::ForeignCall => "ForeignCall",
+            Effect::Load => "Load",
             Effect::User(n) => n,
         }
     }
@@ -187,6 +192,53 @@ impl ResourceKind {
     }
 }
 
+/// The trust class of a loaded plugin (Stage 6, spec §2.1). Written as the type argument of
+/// `Plugin[C]`, where `Verified` and `Contained` are nullary **marker types** ([`Type::Verified`] /
+/// [`Type::Contained`]) — that is what lets `C` be an ordinary inference variable pinned by the
+/// binding's annotation (build-order deviation 4), exactly as Stage 4 handles `root.foreign[M]`.
+///
+/// **The class is never inferred from the artifact** (invariant 29): this is what the *host asked
+/// for*, and the loader verifies the artifact's declaration against it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum PluginClass {
+    Verified,
+    Contained,
+}
+
+impl PluginClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PluginClass::Verified => "verified",
+            PluginClass::Contained => "contained",
+        }
+    }
+
+    /// From the artifact/manifest spelling (`"verified"` / `"contained"`).
+    pub fn from_str(s: &str) -> Option<PluginClass> {
+        match s {
+            "verified" => Some(PluginClass::Verified),
+            "contained" => Some(PluginClass::Contained),
+            _ => None,
+        }
+    }
+
+    /// From the source-level marker type name (`Verified` / `Contained`).
+    pub fn from_type_name(s: &str) -> Option<PluginClass> {
+        match s {
+            "Verified" => Some(PluginClass::Verified),
+            "Contained" => Some(PluginClass::Contained),
+            _ => None,
+        }
+    }
+
+    pub fn type_name(self) -> &'static str {
+        match self {
+            PluginClass::Verified => "Verified",
+            PluginClass::Contained => "Contained",
+        }
+    }
+}
+
 /// A DeluluLang type (§6.1). Function types carry their row — rows never erase (invariant 3).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Type {
@@ -213,6 +265,14 @@ pub enum Type {
     /// The nominal opaque handle type introduced by a `foreign … lib M` block, named `M`
     /// (spec §2). R-5 opaque; not marshallable in a foreign signature.
     Foreign(String),
+    /// A loaded plugin handle, `Plugin[C]` (Stage 6, spec §3). The argument is the class marker —
+    /// [`Type::Verified`], [`Type::Contained`], or (before the annotation pins it) a `Var`.
+    /// R-5 opaque: no `str`, no `==`, no serialization, and never marshallable across a boundary.
+    Plugin(Box<Type>),
+    /// The `Verified` class marker (only meaningful as `Plugin`'s argument).
+    Verified,
+    /// The `Contained` class marker (only meaningful as `Plugin`'s argument).
+    Contained,
     Var(TypeVar),
 }
 
@@ -279,6 +339,9 @@ impl fmt::Display for Type {
             Type::ForeignPtr => f.write_str("ForeignPtr"),
             Type::PyObj => f.write_str("PyObj"),
             Type::Foreign(name) => f.write_str(name),
+            Type::Plugin(c) => write!(f, "Plugin[{c}]"),
+            Type::Verified => f.write_str("Verified"),
+            Type::Contained => f.write_str("Contained"),
             Type::Var(TypeVar(v)) => write!(f, "'t{v}"),
         }
     }

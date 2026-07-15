@@ -49,6 +49,10 @@ pub fn check_program(pkg: &Package) -> Program {
         ("NetErr", TypeDefId(1)),
         ("ForeignErr", TypeDefId(2)),
         ("PyErr", TypeDefId(3)),
+        // Stage-6 `std.plugin` (spec §4), in `push_prelude` order.
+        ("Limits", TypeDefId(4)),
+        ("Grant", TypeDefId(5)),
+        ("PluginErr", TypeDefId(6)),
     ]
     .into_iter()
     .map(|(n, i)| (n.to_string(), i))
@@ -368,6 +372,59 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
         generics: vec![],
         kind: TypeDefKind::Record(vec![("kind".to_string(), str_ty()), ("message".to_string(), str_ty())]),
     });
+    // Stage-6 `std.plugin` (spec §4). Must stay byte-for-byte the same shape and ORDER as
+    // `resolve::register_plugin_prelude`, so a `TypeDefId` means the same thing in the
+    // single-module and whole-program paths (asserted by
+    // `the_two_prelude_paths_agree_on_every_type_id`).
+    let int_ty = || TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: "Int".to_string(), span: dummy() }] },
+        args: vec![],
+        span: dummy(),
+    };
+    gtypes.push(TypeDef {
+        name: "Limits".to_string(),
+        generics: vec![],
+        kind: TypeDefKind::Record(vec![
+            ("fuel".to_string(), int_ty()),
+            ("mem_mb".to_string(), int_ty()),
+            ("wall_ms".to_string(), int_ty()),
+        ]),
+    });
+    let list_str = || TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: "List".to_string(), span: dummy() }] },
+        args: vec![str_ty()],
+        span: dummy(),
+    };
+    let named = |n: &str| TypeExpr::Named {
+        path: Path { segs: vec![Ident { name: n.to_string(), span: dummy() }] },
+        args: vec![],
+        span: dummy(),
+    };
+    gtypes.push(TypeDef {
+        name: "Grant".to_string(),
+        generics: vec![],
+        kind: TypeDefKind::Record(vec![
+            ("effects".to_string(), list_str()),
+            ("fs_read".to_string(), list_str()),
+            ("fs_write".to_string(), list_str()),
+            ("net".to_string(), list_str()),
+            ("secrets".to_string(), list_str()),
+            ("declassify".to_string(), list_str()),
+            ("limits".to_string(), named("Limits")),
+            ("require_signed".to_string(), named("Bool")),
+        ]),
+    });
+    gtypes.push(mk(
+        "PluginErr",
+        &[
+            ("NotGranted", &["Str"]),
+            ("VerifyFailed", &["Str"]),
+            ("BadArtifact", &["Str"]),
+            ("Revoked", &["Int"]),
+            ("LimitExceeded", &["Str"]),
+            ("ApiMismatch", &["Str"]),
+        ],
+    ));
 }
 
 fn dummy() -> delulu_diag::Span {
@@ -444,6 +501,37 @@ mod tests {
         let program = check_program(&pkg);
         // private_helper is not `pub`, so it is not visible in `app` → unknown name (DL0301).
         assert!(program.diagnostics.iter().any(|d| d.code == "DL0301"), "{:?}", program.diagnostics);
+    }
+
+    /// The single-module (`resolve`) and whole-program (`push_prelude`) paths build the prelude
+    /// independently. A `TypeDefId` must mean the SAME type in both, or a `Type::Record(id)` checked
+    /// in one path would silently denote a different type in the other — and DIR, which stores those
+    /// ids, would be re-verified against the wrong table. This guards that invariant by name.
+    #[test]
+    fn the_two_prelude_paths_agree_on_every_type_id() {
+        let (single, diags) = crate::resolve::resolve(&delulu_syntax::parse_file(0, "module m\n").0);
+        assert!(diags.is_empty(), "{diags:?}");
+        let mut whole: Vec<TypeDef> = Vec::new();
+        push_prelude(&mut whole);
+        assert_eq!(
+            single.types.len(),
+            whole.len(),
+            "the two prelude paths must register the same number of types"
+        );
+        for (i, w) in whole.iter().enumerate() {
+            let s = &single.types[i];
+            assert_eq!(s.name, w.name, "prelude TypeDefId({i}) disagrees between the two paths");
+            assert_eq!(
+                single.type_ix.get(&w.name).copied(),
+                Some(TypeDefId(i as u32)),
+                "`{}` must resolve to TypeDefId({i}) in the single-module path",
+                w.name
+            );
+        }
+        // The Stage-6 std.plugin surface is present in both.
+        for n in ["Limits", "Grant", "PluginErr"] {
+            assert!(single.type_ix.contains_key(n), "`{n}` must be in the prelude");
+        }
     }
 
     #[test]
