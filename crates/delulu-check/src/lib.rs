@@ -512,6 +512,62 @@ mod tests {
         assert!(!c.has_errors(), "Verified plugins accept callbacks: {:?}", c.diagnostics);
     }
 
+    // ----- R-6a is FAIL-CLOSED at a Contained `get` (DL1509) ------------------------------------
+    //
+    // These two were found FAILING OPEN in review and are permanent witnesses. R-6a is a security
+    // rule: "inference could not tell" must refuse, never skip.
+
+    /// (a) `F` never pinned — no annotation, no unifying use. R-6a is undecidable, so it refuses.
+    #[test]
+    fn an_unpinned_get_on_a_contained_plugin_is_dl1509_not_a_silent_skip() {
+        let e = errors(
+            "module m\nfn use_it(p: Plugin[Contained]) -> Result[Int, PluginErr] {\n\
+             let f = p.get(\"x\")?\n Ok(1) }\n",
+        );
+        assert!(e.contains(&"DL1509".to_string()), "an unresolved F must refuse, never skip: {e:?}");
+    }
+
+    /// (b) GENERIC LAUNDERING — the regression that matters. A generic's variables are instantiated
+    /// FRESH per call site, so the body's `T` is never unified with the closure the caller passes:
+    /// `F` reads as `fn('t0) -> Str`, `type_contains_fn` says false, and R-6a would never fire while
+    /// a closure reaches an opaque module at runtime. DL1509 closes it at the `get` site.
+    #[test]
+    fn generic_laundering_of_a_closure_into_a_contained_export_is_dl1509() {
+        let e = errors(
+            "module m\n\
+             fn helper[T](p: Plugin[Contained], x: T) -> Result[Str, PluginErr] {\n\
+               let f: fn(T) -> Str ! {} = p.get(\"g\")?\n Ok(f(x)) }\n\
+             fn caller(p: Plugin[Contained]) -> Result[Str, PluginErr] {\n\
+               helper(p, fn(n: Int) -> Int { n }) }\n",
+        );
+        assert!(
+            e.contains(&"DL1509".to_string()),
+            "a generic parameter could be instantiated with a function type — R-6a must refuse, not skip: {e:?}"
+        );
+    }
+
+    /// The fail-closed rule is scoped: a concrete, function-free Contained signature still checks.
+    #[test]
+    fn a_concrete_function_free_contained_get_still_checks_clean() {
+        let c = check(
+            "module m\nfn use_it(p: Plugin[Contained]) -> Result[Str, PluginErr] ! {Read} {\n\
+             let f: fn(Str) -> Str ! {Read} = p.get(\"scan\")?\n Ok(f(\"x\")) }\n",
+        );
+        assert!(!c.has_errors(), "a concrete Contained signature is fine: {:?}", c.diagnostics);
+    }
+
+    /// And it does not touch Verified: generics there are safe, because Verified code is re-proved
+    /// at load and a callback's row is real (R-4).
+    #[test]
+    fn a_generic_get_on_a_verified_plugin_is_not_refused() {
+        let c = check(
+            "module m\n\
+             fn helper[T](p: Plugin[Verified], x: T) -> Result[Str, PluginErr] {\n\
+               let f: fn(T) -> Str ! {} = p.get(\"g\")?\n Ok(f(x)) }\n",
+        );
+        assert!(!c.has_errors(), "Verified plugins are unaffected by the R-6a fence: {:?}", c.diagnostics);
+    }
+
     #[test]
     fn a_plugin_handle_is_r5_opaque() {
         // A plugin handle binds a live broker node: stringifying or comparing one would leak or

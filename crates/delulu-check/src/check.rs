@@ -128,22 +128,50 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     //
     // Verified plugins accept callbacks (rows composed per R-4) — their code is re-proved at load,
     // so the callback's row is real. The asymmetry IS the Verified/Contained split, in the types.
+    // The rule is FAIL-CLOSED. R-6a is a security rule, so "we could not tell" must refuse, never
+    // skip: an unresolved variable anywhere in `F` can be instantiated with a function type at some
+    // call site — and because a generic's variables are instantiated FRESH per call site, the
+    // body's own variable is never unified with the caller's argument. Without this, a closure
+    // launders into an opaque module through a generic helper and R-6a never fires (DL1509).
     let pending_gets = std::mem::take(&mut checker.pending_gets);
     for (span, f_var, class_ty) in pending_gets {
         if !matches!(checker.cx.apply_type(&class_ty), Type::Contained) {
             continue;
         }
         let f = checker.cx.apply_type(&Type::Var(f_var));
-        let Type::Fn { params, .. } = &f else { continue };
-        if params.iter().any(type_contains_fn) {
-            checker.diags.push(
-                Diagnostic::error(
-                    "DL0803",
-                    "a function-typed value cannot be passed to a Contained plugin export — no callbacks, by rule R-6a",
-                )
-                .with_span(span, "this `get` types an export of an opaque module")
-                .with_secondary_span(span, "an opaque module holding a re-entry point into verified code could invoke it at times no caller's row accounts for"),
-            );
+        match &f {
+            // A function-typed parameter that is CONCRETELY present: the R-6a refusal proper.
+            Type::Fn { params, .. } if params.iter().any(type_contains_fn) => {
+                checker.diags.push(
+                    Diagnostic::error(
+                        "DL0803",
+                        "a function-typed value cannot be passed to a Contained plugin export — no callbacks, by rule R-6a",
+                    )
+                    .with_span(span, "this `get` types an export of an opaque module")
+                    .with_secondary_span(
+                        span,
+                        "an opaque module holding a re-entry point into verified code could invoke it at times no caller's row accounts for",
+                    ),
+                );
+            }
+            // Concrete and function-free: the only accepting case.
+            Type::Fn { .. } if !type_contains_var(&f) => {}
+            // Everything else is underdetermined — refuse and demand a concrete signature.
+            _ => {
+                checker.diags.push(
+                    Diagnostic::error(
+                        "DL1509",
+                        format!(
+                            "a Contained plugin export's signature must be concrete at the `get` site — `{f}` still contains an unresolved type, so rule R-6a cannot be decided here"
+                        ),
+                    )
+                    .with_span(span, "annotate this `get` with a concrete function signature")
+                    .with_secondary_span(
+                        span,
+                        "an unresolved type could be instantiated with a function type at some call site, which R-6a forbids for an opaque module — this refusal is fail-closed, never a guess",
+                    ),
+                );
+            }
         }
     }
 
@@ -1934,6 +1962,30 @@ fn type_contains_fn(t: &Type) -> bool {
         Type::List(e) | Type::Option(e) | Type::Secret(e) => type_contains_fn(e),
         Type::Result(o, e) => type_contains_fn(o) || type_contains_fn(e),
         Type::Record(_, args) | Type::Sum(_, args) => args.iter().any(type_contains_fn),
+        _ => false,
+    }
+}
+
+/// Whether a substituted [`Type`] still contains an inference variable at any depth — including
+/// inside a function type's parameters and return, which [`type_contains_fn`] deliberately does not
+/// recurse into.
+///
+/// This is the **fail-closed** test behind DL1509 (build-order deviation 5). At a Contained `get`
+/// site an unresolved variable is not "unknown but probably fine": a generic's variables are
+/// instantiated *fresh per call site* (see `instantiate_fn`), so the variable standing in a generic
+/// helper's body is never unified with what the caller actually passes. A closure can therefore
+/// reach an opaque module while the body's `F` still reads as `fn('t0) -> Str` — exactly the
+/// re-entry point R-6a exists to forbid. Refusing here keeps R-6a decidable at the one site the
+/// spec requires it (the `get` call site, compile-time).
+fn type_contains_var(t: &Type) -> bool {
+    match t {
+        Type::Var(_) => true,
+        Type::List(e) | Type::Option(e) | Type::Secret(e) | Type::Plugin(e) => type_contains_var(e),
+        Type::Result(o, e) => type_contains_var(o) || type_contains_var(e),
+        Type::Record(_, args) | Type::Sum(_, args) => args.iter().any(type_contains_var),
+        Type::Fn { params, ret, .. } => {
+            params.iter().any(type_contains_var) || type_contains_var(ret)
+        }
         _ => false,
     }
 }

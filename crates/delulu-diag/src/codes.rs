@@ -144,6 +144,11 @@ registry! {
     "DL1506" => "plugin resource limit exceeded (plugin terminated and its grant node revoked)",
     "DL1507" => "plugin API version mismatch (rebuild the plugin)",
     "DL1508" => "malformed or tampered `.dpx` container (not a valid plugin artifact)",
+    // The fail-closed side of R-6a (deviation 5). DL0803 refuses a function-typed argument that is
+    // CONCRETELY present; this refuses the case where the signature is underdetermined, so R-6a
+    // cannot be decided at all. A security rule must never be skippable because inference was
+    // underdetermined — the two codes have different remedies, so they are different codes.
+    "DL1509" => "a Contained plugin export's signature must be concrete at the `get` site (R-6a is otherwise undecidable)",
 
     // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
     // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule

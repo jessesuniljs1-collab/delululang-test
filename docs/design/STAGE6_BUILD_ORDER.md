@@ -128,7 +128,37 @@ spec's brackets are notation for the normative signature, exactly as `root.forei
 R-Get and **DL0803 are unaffected**: `F` is fully known at the `get` call site (from the annotation),
 so the compile-time checks fire exactly where the spec requires.
 *Consequence to note at B4:* the flagship demo (§9.1) and the criterion-2/7 programs ship in the
-annotation form; their spec text keeps the bracket notation. *Status: awaiting ruling.*
+annotation form; their spec text keeps the bracket notation. *Status: **ruled: approved** — no
+rework; a turbofish would contradict a stated Stage-1 language rule to satisfy a notation. Condition
+(B4): the spec's Implementation status names this explicitly, and `E-PLUGIN` shows the annotation
+form so no user copies unparseable bracket syntax out of the spec.*
+
+**Deviation 5 (Phase 6e) — DL1509 allocated: R-6a is fail-closed at a Contained `get` site.**
+*What:* Head-chef review found DL0803 **failing open**, confirmed by probe: R-6a was decided by
+`type_contains_fn(F)`, which silently **skipped** whenever `F` was underdetermined. Two programs
+escaped with **zero diagnostics**:
+(a) an unpinned `let f = p.get("x")?` — `F` stays a variable;
+(b) **generic laundering** — `fn helper[T](p: Plugin[Contained], x: T) { let f: fn(T) -> Str ! {} =
+p.get("g")?; f(x) }` called as `helper(p, some_closure)`. Because a generic's variables are
+instantiated **fresh per call site**, the body's `T` is never unified with the caller's closure:
+`F` reads as `fn('t0) -> Str`, `type_contains_fn` says false, and a closure reaches an opaque module
+while R-6a never fires — exactly the re-entry point R-6a exists to forbid.
+*Fix:* At a Contained `get` site, after substitution, the only accepting case is an `F` that is a
+concrete `Type::Fn` containing **no inference variable at any depth** (new `type_contains_var`,
+which — unlike `type_contains_fn` — recurses into function parameters and returns). A concretely
+present function-typed parameter stays **DL0803**; an underdetermined `F` is the new **DL1509**,
+refusing and demanding a concrete annotation. Note the hole was *not* "`F` is not a `Fn`" — in (b)
+`F` *is* a `Fn`; it is the type **variable inside** it that could later be instantiated with a
+function type. A rule that only demanded Fn-ness would still have let (b) through.
+*Why a new code, not DL0803:* different fault, different remedy. DL0803 says "you passed a
+function"; at the (b) `get` site no function is visible and that message would be a lie. DL1509 says
+"this signature is underdetermined, so R-6a cannot be decided here — annotate it". Honest
+diagnostics beat a reused code. Scope is tight: Contained `get` sites only; concrete function-free
+Contained signatures and all Verified generics are unaffected (both witnessed).
+*Witnesses (permanent, both were escapes):* `an_unpinned_get_on_a_contained_plugin_is_dl1509_not_a_silent_skip`,
+`generic_laundering_of_a_closure_into_a_contained_export_is_dl1509`, plus the two scope guards
+`a_concrete_function_free_contained_get_still_checks_clean` and
+`a_generic_get_on_a_verified_plugin_is_not_refused`. *Status: awaiting ruling.*
 
 ## 4. Close-out
 
