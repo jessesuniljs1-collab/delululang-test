@@ -401,3 +401,48 @@ daemon's live tree). The loader is therefore written **once** and works in **bot
 (`PluginArtifact`) and the engine as a trait (`PluginEngine`), both declared in `delulu-runtime`,
 implemented by `delulu-wasm::WasmPluginEngine`, and injected by the `delulu` crate — no cycle, and
 `plugin verify` and a real load share one code path by construction (§9.9).
+
+**Phase 6e — Verified verification, the plugin type surface, R-Get and R-6b — is implemented and
+green** (563 tests). Step 5-Verified replays the DIR via `dir::verify` (the same `resolve` +
+`check_module` the compiler ran) and checks each export as `verified_row ⊆ manifest_row` with exact
+types — deliberately weaker than the build-time DL1501 equality fence, because load-time soundness
+only needs "the code cannot exceed what its manifest advertises". Any failure is **DL1504** with the
+node **revoked** and nothing instantiated; it never falls back to Contained (invariant 29). The
+language surface landed: `Effect::Load` activates (`load` carries `{Load, Read}`), `Type::Plugin[C]`
+with nominal `Verified`/`Contained` markers that **never unify** with each other (invariant 29 in the
+type system), a plugin handle is **R-5 opaque** (no `str`/`==` — it binds a live broker node), and
+`std.plugin`'s `Grant`/`Limits`/`PluginErr` are **ordinary** records/sum (constructing a `Grant` is
+pure and confers nothing). Per build-order **deviation 4** (ruled approved), the spec's `load[C]` /
+`p.get[F]` brackets are **notation**: the grammar has no turbofish (Stage-1 §6 states the rule
+outright), so `[C]`/`[F]` are inference-from-context pinned by the binding's annotation —
+`let shout: fn(Str) -> Str ! {} = p.get("shout")?`. R-Get's runtime half is fail-closed throughout,
+and **R-1** is enforced as "every Contained export types at `effects(grant)`, whatever the manifest
+claims" — the audit F-1 scenario is witnessed at the gate. **R-6b**: a call-scoped handle table
+invalidates every host value on return (including on a faulting return); handle ids are **monotonic
+and never reused**, because id recycling would let a retained handle *alias* a later value and
+**succeed**.
+
+**Security fix (deviation 5, ruled approved): R-6a was failing open; DL1509 closes it.** DL0803 was
+decided by `type_contains_fn(F)`, which silently **skipped** when `F` was underdetermined. Two
+programs escaped with zero diagnostics — an unpinned `get`, and **generic laundering**
+(`fn helper[T](p: Plugin[Contained], x: T) { let f: fn(T) -> Str ! {} = p.get("g")?; f(x) }` called
+with a closure): because a generic's variables are instantiated *fresh per call site*, the body's
+`T` is never unified with the caller's closure, so a closure reached an opaque module while R-6a
+never fired. The fault was **not** "`F` is not a `Fn`" — in the laundering case `F` *is* a `Fn`; it
+is the type **variable inside it**. At a Contained `get`, the only accepting case is now a concrete
+`Fn` containing no inference variable at any depth; an underdetermined `F` is **DL1509**.
+
+**Phases 6f/6g — Contained import slice, limits, unload/reload — are implemented and green** (576
+tests). **DL1505**: a Contained module's imports are validated against the slice *derived from its
+grant* — a **whitelist**, never a blacklist. Two properties are invariants: no `root_*` constructor
+is in any slice at any grant (a plugin holds no `Root`, so it can never mint a capability —
+invariant 31's shape), and **signatures are part of the slice** (matching on name alone would leave
+the engine's instantiation type-check as the only gate — refused: step 5 decides it). WASI by the
+back door (`wasi_snapshot_preview1.fd_write`) is DL1505 at every grant; zero imports fits every
+slice (a module importing nothing reaches nothing — the flagship's shape). **DL1506 (trap 5)**: a
+limit-killed plugin is **gone, not wounded** — `kill_on_limit` takes the instance by value, drops
+it, and revokes its node in the *same act*; no live node survives it. **R-6c**: `unload` returns the
+revoking audit seq that **DL0801** carries; `PluginRef` binds the load-time `GrantId`, so a reload
+mints a fresh node and an old reference stays dead **forever**. **Criterion 4** (R-7 composition) is
+witnessed through the real loader across three levels: a sub-plugin exceeding its parent is DL0802,
+a conforming one loads, and host revocation kills all three transitively.
