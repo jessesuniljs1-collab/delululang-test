@@ -11,6 +11,7 @@ pub mod dir;
 pub mod lockfile;
 pub mod manifest;
 pub mod package;
+pub mod plugin;
 pub mod program;
 pub mod resolve;
 pub mod ty;
@@ -31,6 +32,10 @@ pub use lockfile::{
 };
 pub use manifest::{AuthoritySpec, DepSource, Dependency, Manifest, PackageKind};
 pub use package::{load_package, load_package_into, LoadedModules, ModuleUnit, Package};
+pub use plugin::{
+    check_plugin_module, render_type, PluginAuthority, PluginClass, PluginManifest,
+    PLUGIN_API_SUPPORTED,
+};
 pub use program::{check_program, program_authority, program_effects, Program};
 pub use resolve::{DeclTable, FnSig, GKind};
 pub use ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};

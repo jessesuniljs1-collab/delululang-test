@@ -147,6 +147,29 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     }
 }
 
+/// Lower a **concrete** type expression (no generics in scope) against a module's declaration
+/// table — the Stage-6 entry point for plugin-manifest export signature strings (spec §2.1). This
+/// reuses the checker's own `lower_type` rule code, so a manifest signature means *exactly* what
+/// the same text means in source. Any lowering error (unknown type, bad arity, unknown effect,
+/// row variable — signatures are monomorphic) is returned as `Err`; the caller maps it to DL1501.
+pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTable) -> Result<Type, String> {
+    let mut checker = Checker {
+        table,
+        cx: InferCtx::new(),
+        diags: Vec::new(),
+        facts: HashMap::new(),
+        fn_types: HashMap::new(),
+        pending_foreign_binds: Vec::new(),
+        node_types_raw: HashMap::new(),
+        node_row_accs: HashMap::new(),
+    };
+    let ty = checker.lower_type(t, &Genv::default(), &mut FnFacts::default());
+    if let Some(d) = checker.diags.iter().find(|d| d.is_error()) {
+        return Err(format!("{}: {}", d.code, d.message));
+    }
+    Ok(ty)
+}
+
 struct Checker<'a> {
     table: &'a DeclTable,
     cx: InferCtx,

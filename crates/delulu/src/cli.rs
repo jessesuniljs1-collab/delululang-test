@@ -429,6 +429,7 @@ pub fn run(args: &[String]) -> i32 {
         "build" => cmd_build(rest),
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
+        "plugin" => cmd_plugin(rest),
         "authority" => cmd_authority(rest),
         "why" => cmd_why(rest),
         "atlas" => cmd_atlas(rest),
@@ -478,6 +479,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
      \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
      \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\
+     \x20 delulu plugin    build <package-dir> [-o out.dpx] [--json]   (a `kind = \"plugin\"` package → .dpx)\n\
+     \x20 delulu plugin    inspect <file.dpx> [--json]   (manifest, class, exports, section hashes)\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
@@ -855,6 +858,300 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
         );
     }
     0
+}
+
+// ----- plugin (Stage 6 "Live": build | inspect) --------------------------------------------------
+
+fn cmd_plugin(rest: &[String]) -> i32 {
+    let Some(sub) = rest.first() else {
+        eprintln!("error: `plugin` needs a subcommand: build <package-dir> | inspect <file.dpx>");
+        return 2;
+    };
+    match sub.as_str() {
+        "build" => cmd_plugin_build(&rest[1..]),
+        "inspect" => cmd_plugin_inspect(&rest[1..]),
+        other => {
+            eprintln!("error: unknown `plugin` subcommand `{other}` (expected build | inspect)");
+            2
+        }
+    }
+}
+
+/// `delulu plugin build <package-dir> [-o out.dpx] [--json]` — build a `kind = "plugin"` package
+/// into a `.dpx` (spec §2). Refusal honesty (house rule 4): every check runs BEFORE any byte is
+/// written — a refused build leaves no partial artifact and never touches an existing output file.
+fn cmd_plugin_build(rest: &[String]) -> i32 {
+    let (dir, opts) = parse_opts(rest);
+    let Some(dir) = dir else {
+        eprintln!("error: `plugin build` needs a package directory (with delulu.toml and src/)");
+        return 2;
+    };
+    let root = std::path::Path::new(&dir);
+    let manifest_path = root.join("delulu.toml");
+    let manifest_src = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{}`: {e}", manifest_path.display());
+            return 2;
+        }
+    };
+    let mut map = SourceMap::new();
+    let mfile = map.add_file(manifest_path.to_string_lossy(), manifest_src.clone());
+
+    // [package] — must be kind = "plugin".
+    let mut diags: Vec<Diagnostic> = Vec::new();
+    let (manifest, mdiags) = delulu_check::Manifest::parse(&manifest_src, mfile);
+    diags.extend(mdiags);
+    let kind_ok = manifest.as_ref().map(|m| m.kind == delulu_check::PackageKind::Plugin).unwrap_or(false);
+    if manifest.is_some() && !kind_ok {
+        diags.push(
+            Diagnostic::error(
+                "DL1004",
+                "`plugin build` needs a `kind = \"plugin\"` package (set `kind` under `[package]`)",
+            )
+            .with_bare_span(delulu_diag::Span::new(mfile, 0, 0)),
+        );
+    }
+
+    // [plugin] / [plugin.authority] / [plugin.exports].
+    let (pm, pdiags) = delulu_check::PluginManifest::parse(&manifest_src, mfile);
+    diags.extend(pdiags);
+    if errors(&diags) > 0 || pm.is_none() || manifest.is_none() {
+        print_diagnostics("plugin", &diags, &map, None, opts.json);
+        return 1;
+    }
+    let pm = pm.expect("checked above");
+
+    // The plugin's source: exactly one module in v0.6 (build-order deviation 3 — refused cleanly,
+    // never built partially).
+    let mut sources = Vec::new();
+    collect_delulu_sources(&root.join("src"), &mut sources);
+    sources.sort();
+    if sources.len() != 1 {
+        diags.push(Diagnostic::error(
+            "DL1004",
+            format!(
+                "plugin packages are single-module in v0.6 — found {} module file(s) under `src/`",
+                sources.len()
+            ),
+        ));
+        print_diagnostics("plugin", &diags, &map, None, opts.json);
+        return 1;
+    }
+    let src_path = &sources[0];
+    let src = match std::fs::read_to_string(src_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{}`: {e}", src_path.display());
+            return 2;
+        }
+    };
+    let sfile = map.add_file(src_path.to_string_lossy(), src.clone());
+
+    // Check the code, then run the manifest-vs-code fence (DL1501 — the manifest never overrides
+    // the code). The fence only runs on a clean check: its comparisons need trustworthy fn_types.
+    let checked = check_source(sfile, &src);
+    diags.extend(checked.diagnostics.iter().cloned());
+    if errors(&diags) == 0 {
+        diags.extend(delulu_check::check_plugin_module(&pm, &checked.table, &checked.result, &manifest_src, mfile));
+    }
+    if errors(&diags) > 0 {
+        print_diagnostics("plugin", &diags, &map, None, opts.json);
+        return 1;
+    }
+
+    // Class-specific payload (spec §2.2 table). DIR for Verified; the compiled module for Contained.
+    let (dir_bytes, wasm_bytes): (Option<Vec<u8>>, Option<Vec<u8>>) = match pm.class {
+        delulu_check::PluginClass::Verified => {
+            (Some(delulu_check::dir_serialize(&checked.module, &checked.result)), None)
+        }
+        delulu_check::PluginClass::Contained => {
+            match delulu_wasm::compile_module_with(&checked.module, &checked.result.foreign_binds) {
+                Ok(w) => (None, Some(w)),
+                Err(e) => {
+                    let d = Diagnostic::error(
+                        e.code(),
+                        format!("{} — this program can't be built into a contained plugin", e.message()),
+                    );
+                    print_diagnostics("plugin", &[d], &map, None, opts.json);
+                    return 1;
+                }
+            }
+        }
+    };
+    let lock_bytes = std::fs::read(root.join("delulu.lock")).ok();
+
+    let manifest_json = plugin_manifest_json(&pm);
+    let dpx = delulu_wasm::write_dpx(
+        &manifest_json,
+        dir_bytes.as_deref(),
+        wasm_bytes.as_deref(),
+        None,
+        lock_bytes.as_deref(),
+    );
+
+    let out_path = opts
+        .out
+        .clone()
+        .unwrap_or_else(|| root.join(format!("{}.dpx", pm.name)).to_string_lossy().to_string());
+    if let Err(e) = std::fs::write(&out_path, &dpx) {
+        eprintln!("error: could not write `{out_path}`: {e}");
+        return 2;
+    }
+    if opts.json {
+        // Machine channel: never styled; deterministic (BTreeMap-ordered exports, sorted keys).
+        println!(
+            "{}",
+            json!({
+                "command": "plugin", "subcommand": "build",
+                "artifact": out_path, "bytes": dpx.len(),
+                "name": pm.name, "version": pm.version,
+                "api": pm.api, "class": pm.class.as_str(),
+                "exports": pm.exports.keys().cloned().collect::<Vec<_>>(),
+            })
+        );
+    } else {
+        ok_line!(
+            "ok: wrote `{out_path}` ({} bytes) — {} plugin `{}` v{}, {} export(s)",
+            dpx.len(),
+            pm.class.as_str(),
+            pm.name,
+            pm.version,
+            pm.exports.len()
+        );
+    }
+    0
+}
+
+/// Build the `delulu:plugin` section JSON from the parsed manifest (spec §2.2). Fixed shape,
+/// every key always present, exports BTreeMap-ordered — so identical inputs give byte-identical
+/// artifacts (house rule 8). `write_dpx` adds `container` + the section hash bindings.
+fn plugin_manifest_json(pm: &delulu_check::PluginManifest) -> Json {
+    json!({
+        "name": pm.name,
+        "version": pm.version,
+        "api": pm.api,
+        "class": pm.class.as_str(),
+        "authority": {
+            "effects": pm.authority.effects,
+            "requires": pm.authority.requires,
+            "fs_read": pm.authority.fs_read,
+            "fs_write": pm.authority.fs_write,
+            "net": pm.authority.net,
+            "secrets": pm.authority.secrets,
+            "declassify": pm.authority.declassify,
+        },
+        "exports": pm.exports,
+    })
+}
+
+/// `delulu plugin inspect <file.dpx> [--json]` — describe an artifact: manifest, class, exports,
+/// section hashes, signature identity. Runs the same container read path as `verify`/`load`
+/// (spec §9.9 — one code path), so a corrupt artifact refuses here exactly as it would at load.
+fn cmd_plugin_inspect(rest: &[String]) -> i32 {
+    let (file, opts) = parse_opts(rest);
+    let Some(file) = file else {
+        eprintln!("error: `plugin inspect` needs a `.dpx` file");
+        return 2;
+    };
+    let bytes = match std::fs::read(&file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let map = SourceMap::new();
+    let dpx = match delulu_wasm::read_dpx(&bytes) {
+        Ok(d) => d,
+        Err(e) => {
+            let d = Diagnostic::error(e.code(), e.message());
+            print_diagnostics("plugin", &[d], &map, None, opts.json);
+            return 1;
+        }
+    };
+
+    // The hashes shown are the manifest's content bindings — already verified against the actual
+    // section bytes by `read_dpx` (class-aware; a Verified cache may be flagged invalid instead).
+    let null = Json::Null;
+    let get = |k: &str| dpx.manifest.get(k).unwrap_or(&null).clone();
+    if opts.json {
+        println!(
+            "{}",
+            json!({
+                "command": "plugin", "subcommand": "inspect",
+                "artifact": file,
+                "name": get("name"), "version": get("version"),
+                "api": dpx.api, "class": dpx.class,
+                "container": get("container"),
+                "authority": get("authority"),
+                "exports": get("exports"),
+                "sections": {
+                    "dir": get("dir_blake3"),
+                    "wasm": get("wasm_blake3"),
+                    "sig": dpx.sig.is_some(),
+                    "lock": get("lock_blake3"),
+                },
+                "signed_by": null,
+                "wasm_cache_valid": dpx.wasm_cache_valid,
+            })
+        );
+    } else {
+        let name = get("name");
+        let version = get("version");
+        println!(
+            "plugin `{}` v{} — class {}, api {}",
+            name.as_str().unwrap_or("?"),
+            version.as_str().unwrap_or("?"),
+            dpx.class,
+            dpx.api
+        );
+        if let Some(a) = dpx.manifest.get("authority") {
+            let effects: Vec<&str> =
+                a.get("effects").and_then(|v| v.as_array()).map(|xs| xs.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+            let requires: Vec<&str> =
+                a.get("requires").and_then(|v| v.as_array()).map(|xs| xs.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+            println!("  authority ceiling: effects [{}]; requires [{}]", effects.join(", "), requires.join(", "));
+        }
+        if let Some(exports) = dpx.manifest.get("exports").and_then(|v| v.as_object()) {
+            println!("  exports:");
+            for (k, v) in exports {
+                println!("    {k}: {}", v.as_str().unwrap_or("?"));
+            }
+        }
+        let hash8 = |v: Json| v.as_str().map(|s| s[..s.len().min(12)].to_string());
+        println!("  sections:");
+        println!("    delulu:plugin  present");
+        if let Some(h) = hash8(get("dir_blake3")) {
+            println!("    delulu:dir     blake3 {h}…");
+        }
+        if let Some(h) = hash8(get("wasm_blake3")) {
+            let note = if dpx.wasm_cache_valid { "" } else { "  (cache INVALID — would be recompiled from DIR)" };
+            println!("    delulu:wasm    blake3 {h}…{note}");
+        }
+        if dpx.sig.is_some() {
+            println!("    delulu:sig     present");
+        }
+        if let Some(h) = hash8(get("lock_blake3")) {
+            println!("    delulu:lock    blake3 {h}…");
+        }
+        println!("  signature: none");
+    }
+    0
+}
+
+/// Recursively collect `.delulu` files under `dir` (the plugin-build module walk).
+fn collect_delulu_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                collect_delulu_sources(&p, out);
+            } else if p.extension().and_then(|s| s.to_str()) == Some("delulu") {
+                out.push(p);
+            }
+        }
+    }
 }
 
 /// Resolve the workspace (root + path dependencies), check every package under one global type

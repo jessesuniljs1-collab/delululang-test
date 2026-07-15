@@ -22,3 +22,13 @@ pub fn parse_file(file: FileId, src: &str) -> (ast::Module, Vec<Diagnostic>) {
     diags.extend(parse_diags);
     (module, diags)
 }
+
+/// Lex + parse one standalone type expression with the **ordinary type grammar** (Stage 6:
+/// plugin-manifest export signature strings, spec §2.1). Always returns a `TypeExpr` (possibly
+/// partial) plus diagnostics; the input must be exactly one type — trailing input is an error.
+pub fn parse_type_string(file: FileId, src: &str) -> (ast::TypeExpr, Vec<Diagnostic>) {
+    let (tokens, mut diags) = lexer::lex(file, src);
+    let (ty, parse_diags) = parser::parse_type_expr(file, tokens);
+    diags.extend(parse_diags);
+    (ty, diags)
+}

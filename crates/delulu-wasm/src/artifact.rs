@@ -162,7 +162,9 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
     Ok(Artifact { version, authority, wasm: wasm.to_vec() })
 }
 
-fn write_uleb(mut v: u32, out: &mut Vec<u8>) {
+/// ULEB128 writer for wasm section sizes — shared with the `.dpx` plugin container (`dpx.rs`),
+/// which reuses this exact custom-section machinery (Stage 6 house rule: reuse, don't fork).
+pub(crate) fn write_uleb(mut v: u32, out: &mut Vec<u8>) {
     loop {
         let mut byte = (v & 0x7f) as u8;
         v >>= 7;
@@ -176,7 +178,8 @@ fn write_uleb(mut v: u32, out: &mut Vec<u8>) {
     }
 }
 
-fn read_uleb(bytes: &[u8]) -> Option<(u32, usize)> {
+/// ULEB128 reader, shared with `dpx.rs` (see [`write_uleb`]).
+pub(crate) fn read_uleb(bytes: &[u8]) -> Option<(u32, usize)> {
     let mut result: u32 = 0;
     let mut shift = 0u32;
     let mut i = 0usize;

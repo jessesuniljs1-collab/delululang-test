@@ -17,6 +17,27 @@ pub fn parse(file: FileId, tokens: Vec<Token>) -> (Module, Vec<Diagnostic>) {
     (module, p.diags)
 }
 
+/// Parse a standalone type expression — **the ordinary type grammar**, nothing more (Stage 6:
+/// plugin-manifest export signature strings are parsed with exactly this, spec §2.1). The whole
+/// token stream must be one type: trailing input is an error. Errors are ordinary parse
+/// diagnostics; the caller (the plugin manifest checker) maps them to DL1501.
+pub fn parse_type_expr(file: FileId, tokens: Vec<Token>) -> (TypeExpr, Vec<Diagnostic>) {
+    let mut p = Parser::new(file, tokens);
+    let ty = p.parse_type();
+    // Statement terminators the lexer may have inserted at end-of-input are not "trailing input".
+    while p.eat(&TokenKind::Term) {}
+    if !p.at_eof() {
+        let span = p.span();
+        p.error(
+            "DL0201",
+            format!("unexpected input after the type: found {}", p.peek().describe()),
+            span,
+            "a signature string must be a single type",
+        );
+    }
+    (ty, p.diags)
+}
+
 struct Parser {
     #[allow(dead_code)]
     file: FileId,

@@ -339,5 +339,33 @@ proves no flip ever *verifies* with altered authority while running the checker 
 mutated modules without a panic. Because deserialized ids are only compared (never used to index) and
 the module is structurally validated at decode, `verify` runs the real checker over hostile input
 with a zero panic surface. *(Build-order Deviation 1 records the spec §2.3 "no name resolution / not
-inferred" wording vs. this reuse-the-checker choice, resolved in favour of the head-chef reuse
-mandate; awaiting ruling.)*
+inferred" wording vs. this reuse-the-checker choice — **ruled: approved**, conditions (a) docs
+honesty and (b) a timing witness attach at the B4 close-out.)*
+
+**Phase 6c — the `.dpx` container, `kind = "plugin"`, and `plugin build`/`inspect` — is implemented
+and green** (513 tests, +39). `kind = "plugin"` joins `PackageKind`; `delulu-check/src/plugin.rs`
+parses the `[plugin]`/`[plugin.authority]`/`[plugin.exports]` tables (§2.1) and enforces the
+manifest-vs-code fence: export signature strings are parsed with the **ordinary type grammar** (new
+`delulu_syntax::parse_type_string`, a thin public entry over the existing `parse_type`), lowered
+with the checker's **own `lower_type` rule code** (new `check::lower_export_signature`), and
+compared for exact equality against the checked function type — any disagreement, in *either*
+direction (an undersold row is still a lie), is **DL1501** with the regenerated code-derived
+signature as the exact repair (§7), proven round-trip-stable (render → parse → lower ≡ identity).
+`fn main` in a plugin package is DL1501; a generic export is DL1501 (exports are monomorphic
+functions in v1.0); an unsupported `[plugin] api` is **DL1507**. The `.dpx` container
+(`delulu-wasm/src/dpx.rs`) reuses the `.dwx` custom-section machinery (shared ULEB helpers, same
+encoding): a wasm-format container carrying `delulu:plugin`/`delulu:dir`/`delulu:wasm`/`delulu:sig`/
+`delulu:lock` as custom sections, with **blake3 content bindings** embedded in the manifest JSON.
+Binding semantics are class-aware per criterion 6: a tampered `delulu:dir` is **DL1504** (a failed
+Verified re-check precondition — never a fallback); a tampered *Contained* module is **DL1508** (a
+corrupt artifact — deviation 2 allocates the code, mirroring Stage 3's DL1202); a tampered
+*Verified* `delulu:wasm` is **not an error** — it is a cache, flagged `wasm_cache_valid: false` and
+recompiled from DIR (§3.2). A Contained artifact smuggling a DIR section, an unknown class, and
+duplicate sections are all refused (class is never inferred and never defaulted — invariant 29);
+reading survives every truncation and every single-byte corruption without a panic. CLI: `delulu
+plugin build <dir> [-o out] [--json]` (all checks run before any byte is written — a refused build
+leaves **no partial artifact**) and `delulu plugin inspect <f.dpx> [--json]` (manifest, class,
+exports, section hashes, signature identity — through the **same** container read path the loader
+will use, §9.9). `plugin build` and `plugin inspect --json` are byte-identical across runs (house
+rule 8, proven by test). Plugin packages are single-module in v0.6 (deviation 3 — refused cleanly,
+never half-built). The DL15xx range is registered in the code registry.

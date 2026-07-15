@@ -8,11 +8,13 @@
 
 use delulu_diag::{Diagnostic, FileId, Span};
 
-/// A package is either an executable (`bin`, has `fn main`) or a library (`lib`).
+/// A package is an executable (`bin`, has `fn main`), a library (`lib`), or — Stage 6 — a
+/// runtime-loadable plugin (`plugin`, must expose **no** `fn main`; spec §2.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackageKind {
     Bin,
     Lib,
+    Plugin,
 }
 
 impl PackageKind {
@@ -20,6 +22,7 @@ impl PackageKind {
         match self {
             PackageKind::Bin => "bin",
             PackageKind::Lib => "lib",
+            PackageKind::Plugin => "plugin",
         }
     }
 }
@@ -102,10 +105,11 @@ impl Manifest {
         // Stage-1 manifests that predate the field) rather than failing the build.
         let kind = match kind_str {
             Some("lib") => PackageKind::Lib,
+            Some("plugin") => PackageKind::Plugin,
             Some("bin") | None => PackageKind::Bin,
             Some(other) => {
                 diags.push(
-                    Diagnostic::error("DL1004", format!("unknown package kind `{other}` (expected `bin` or `lib`)"))
+                    Diagnostic::error("DL1004", format!("unknown package kind `{other}` (expected `bin`, `lib`, or `plugin`)"))
                         .with_span(key_span(src, file, "kind"), "here"),
                 );
                 PackageKind::Bin

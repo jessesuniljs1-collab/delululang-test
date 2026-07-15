@@ -132,6 +132,19 @@ registry! {
     "DL1413" => "guard sealed refusal — not runtime-approvable; bypass does not lift it",
     "DL1414" => "guard owner code missing or invalid — admin verb refused",
 
+    // DL15xx — runtime plugins (Stage 6 "Live", spec §7). DL0801/DL0803 (reserved in Stage 1)
+    // activate alongside these. DL1508 is a build-order-recorded addition (deviation 2): the spec
+    // table has no container-corruption code, but a corrupt `.dpx` needs one, exactly as Stage 3
+    // allocated DL1202 for the `.dwx`.
+    "DL1501" => "manifest export signature does not match the plugin code (the manifest never overrides the code)",
+    "DL1502" => "requested grant exceeds the plugin's declared ceiling",
+    "DL1503" => "DIR version unsupported (rebuild the plugin)",
+    "DL1504" => "Verified re-check failed (plugin code unsound or stale) — never falls back to Contained",
+    "DL1505" => "Contained module imports outside its grant slice",
+    "DL1506" => "plugin resource limit exceeded (plugin terminated and its grant node revoked)",
+    "DL1507" => "plugin API version mismatch (rebuild the plugin)",
+    "DL1508" => "malformed or tampered `.dpx` container (not a valid plugin artifact)",
+
     // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
     // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule
     // mirroring DL1404).

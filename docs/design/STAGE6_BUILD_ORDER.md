@@ -78,7 +78,31 @@ implementation the mandate forbids. The spec's efficiency properties are met in 
 resolve + check is linear and deterministic), and the soundness is strictly *stronger*: the load-time
 check is byte-for-byte the same code path as the original compile-time check. Where spec and playbook
 disagree (precedence: spec > playbook > this order), this records the conflict for a head-chef ruling
-rather than silently choosing. *Status: awaiting ruling.*
+rather than silently choosing. *Status: **ruled: approved (conditions a, b)** — (a) docs honesty at
+B4 close-out: the Implementation status log and user docs must state plainly that re-verification is
+a full same-code-path re-check plus stored-truth comparison (strictly stronger than the §2.3
+assert-replay description), never claiming the assert-only mechanism; (b) B4 close-out includes one
+rough timing witness that `verify` of a realistic plugin is comfortably fast for per-load use.*
+
+**Deviation 2 (Phase 6c) — DL1508 allocated for a malformed/tampered `.dpx` container.**
+*What:* The spec §7 table allocates DL1501–DL1507 but has no code for a `.dpx` that is structurally
+corrupt (bad magic, truncated sections, missing/unreadable `delulu:plugin` manifest, a Contained
+module that fails its blake3 content binding). The runtime shape exists (`PluginErr::BadArtifact`)
+but CLI diagnostics must carry a registered code (the conformance meta-test enforces it).
+*Why:* Stage 3 hit the identical gap for `.dwx` and allocated DL1202 for exactly this class; DL1508
+follows that precedent inside the fresh DL15xx range. Scope guard: DL1507 stays strictly "plugin API
+version mismatch"; a tampered **DIR** body inside an otherwise-valid container is DL1504 (a failed
+Verified re-check precondition — criterion 6 wording), never DL1508. *Status: awaiting ruling.*
+
+**Deviation 3 (Phase 6c) — plugin packages are single-module in v0.6.**
+*What:* `delulu plugin build` requires the plugin package to contain exactly one module; a
+multi-module plugin package is refused cleanly at build (DL1004-class, clear message), never built
+partially.
+*Why:* DIR serializes one module and `dir::verify` replays the single-module `check_source` pipeline
+(the Deviation-1-approved construction). Multi-module DIR would need a whole-program replay path
+(`check_program`) with cross-module interface metadata — real work with no acceptance-criterion
+coverage: every §9 criterion and the flagship demo use single-module plugins. Deferred, honestly
+refused, and recorded rather than silently half-supported. *Status: awaiting ruling.*
 
 ## 4. Close-out
 
