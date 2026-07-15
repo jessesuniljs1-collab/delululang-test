@@ -329,6 +329,7 @@ pub fn require_api(dpx: &Dpx, supported: u32) -> Result<(), DpxError> {
 // what lets the container format live beside the `.dwx` machinery it reuses while the load sequence
 // lives with the interpreter, without a dependency cycle.
 
+use delulu_runtime::plugin::{dl1505, ImportSlice, WasmVal};
 use delulu_runtime::{LoadRefusal, PluginArtifact, PluginEngine};
 
 /// The Wasmtime-backed plugin engine: reads `.dpx` containers and (from phase 6f) instantiates
@@ -365,6 +366,71 @@ impl PluginEngine for WasmPluginEngine {
             wasm_cache_valid: dpx.wasm_cache_valid,
         })
     }
+
+    /// Step 5-Contained (DL1505). Wasmtime *validates and parses* the module for us — that part is
+    /// its job and we should not hand-roll a wasm parser — but the **verdict is ours**: we decide
+    /// name and type against the grant-derived slice here, before anything is instantiated. Letting
+    /// instantiation be the gate would be "probably refused downstream", which is not the standard
+    /// for a security rule.
+    fn validate_imports(&self, wasm: &[u8], slice: &ImportSlice) -> Result<(), LoadRefusal> {
+        let engine = wasmtime::Engine::default();
+        // A module that does not validate cannot be reasoned about at all — refuse it.
+        let module = wasmtime::Module::new(&engine, wasm)
+            .map_err(|e| dl1505(format!("the module does not validate ({e})")))?;
+
+        // A module importing NOTHING trivially fits every slice: it can reach nothing. That is the
+        // flagship's shape — a pure text transform under `Grant { effects: [] }`.
+        for imp in module.imports() {
+            let key = (imp.module().to_string(), imp.name().to_string());
+            let Some(expected) = slice.get(&key) else {
+                // Covers the ungranted name, the unknown name, and — the one that matters — a
+                // foreign namespace: `wasi_snapshot_preview1.fd_write` and friends are simply not in
+                // any slice, so a Contained module can never reach WASI by the back door.
+                return Err(dl1505(format!(
+                    "`{}::{}` is not derivable from this grant",
+                    imp.module(),
+                    imp.name()
+                )));
+            };
+            // Only functions cross. A memory/global/table import is refused rather than ignored.
+            let wasmtime::ExternType::Func(ft) = imp.ty() else {
+                return Err(dl1505(format!(
+                    "`{}::{}` is not a function import — an opaque module may import only functions",
+                    imp.module(),
+                    imp.name()
+                )));
+            };
+            // NAME IS NOT ENOUGH. A module can declare a granted name with a signature that suits
+            // it; if we matched on name alone, only the engine's instantiation type-check would
+            // stand between that and reality. We decide it here.
+            let actual_params: Vec<WasmVal> = ft.params().map(val_of).collect::<Result<_, _>>().map_err(|t| {
+                dl1505(format!("`{}::{}` uses unsupported parameter type `{t}`", imp.module(), imp.name()))
+            })?;
+            let actual_results: Vec<WasmVal> = ft.results().map(val_of).collect::<Result<_, _>>().map_err(|t| {
+                dl1505(format!("`{}::{}` uses unsupported result type `{t}`", imp.module(), imp.name()))
+            })?;
+            if actual_params != expected.params || actual_results != expected.results {
+                return Err(dl1505(format!(
+                    "`{}::{}` is granted, but its declared signature does not match the host's — the name being in the slice is not enough",
+                    imp.module(),
+                    imp.name()
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Map a Wasmtime value type onto the loader's. An exotic type (v128, refs) is not something the
+/// host surface ever uses, so it can never match a slice entry — reported as unsupported.
+fn val_of(t: wasmtime::ValType) -> Result<WasmVal, String> {
+    Ok(match t {
+        wasmtime::ValType::I32 => WasmVal::I32,
+        wasmtime::ValType::I64 => WasmVal::I64,
+        wasmtime::ValType::F32 => WasmVal::F32,
+        wasmtime::ValType::F64 => WasmVal::F64,
+        other => return Err(format!("{other:?}")),
+    })
 }
 
 #[cfg(test)]
@@ -535,6 +601,186 @@ mod tests {
         let e = WasmPluginEngine::new().read_artifact(&t).expect_err("tampered");
         assert_eq!(e.code, "DL1504");
         assert!(e.requires_human, "a tampered DIR is never machine-repaired, never downgraded");
+    }
+
+    // ----- DL1505: the Contained import slice, and its "couldn't tell" cases -----------------
+    //
+    // Kitchen rule: the "what if we couldn't tell" cases are written FIRST and refuse.
+
+    fn grant_with(effects: &[&str]) -> delulu_runtime::Grant {
+        delulu_runtime::Grant { effects: effects.iter().map(|s| s.to_string()).collect(), ..Default::default() }
+    }
+
+    /// Build a tiny module importing `(ns, name)` with the given signature. Uses `wasm-encoder`,
+    /// already a dependency of this crate — no new dep for a test fixture.
+    fn module_importing(
+        ns: &str,
+        name: &str,
+        params: Vec<wasm_encoder::ValType>,
+        results: Vec<wasm_encoder::ValType>,
+    ) -> Vec<u8> {
+        use wasm_encoder::*;
+        let mut m = Module::new();
+        let mut types = TypeSection::new();
+        types.ty().function(params, results);
+        m.section(&types);
+        let mut imports = ImportSection::new();
+        imports.import(ns, name, EntityType::Function(0));
+        m.section(&imports);
+        m.finish()
+    }
+
+    /// A module that imports a MEMORY under a granted name (only functions may cross).
+    fn module_importing_memory(ns: &str, name: &str) -> Vec<u8> {
+        use wasm_encoder::*;
+        let mut m = Module::new();
+        let mut imports = ImportSection::new();
+        imports.import(
+            ns,
+            name,
+            EntityType::Memory(MemoryType { minimum: 1, maximum: None, memory64: false, shared: false, page_size_log2: None }),
+        );
+        m.section(&imports);
+        m.finish()
+    }
+
+    /// A module that imports nothing at all.
+    fn module_importing_nothing() -> Vec<u8> {
+        use wasm_encoder::*;
+        let mut m = Module::new();
+        let mut types = TypeSection::new();
+        types.ty().function([ValType::I32], [ValType::I32]);
+        m.section(&types);
+        let mut funcs = FunctionSection::new();
+        funcs.function(0);
+        m.section(&funcs);
+        let mut exports = ExportSection::new();
+        exports.export("shout", ExportKind::Func, 0);
+        m.section(&exports);
+        let mut code = CodeSection::new();
+        let mut f = Function::new([]);
+        f.instruction(&Instruction::LocalGet(0));
+        f.instruction(&Instruction::End);
+        code.function(&f);
+        m.section(&code);
+        m.finish()
+    }
+
+    #[test]
+    fn dl1505_zero_imports_fits_every_slice() {
+        // A module that imports nothing can reach nothing — trivially within any slice. This is the
+        // flagship's shape: a pure text transform under Grant { effects: [] }.
+        let wasm = module_importing_nothing();
+        let e = WasmPluginEngine::new();
+        assert!(e.validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&[]))).is_ok());
+        assert!(e.validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Read", "Net"]))).is_ok());
+    }
+
+    #[test]
+    fn dl1505_an_import_resolving_to_nothing_is_refused() {
+        // A name derivable from NO grant: refused by whitelist, never "unknown ⇒ harmless".
+        let wasm =
+            module_importing("delulu:cap", "definitely_not_a_host_fn", vec![wasm_encoder::ValType::I32], vec![]);
+        let e = WasmPluginEngine::new()
+            .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Read", "Write"])))
+            .expect_err("an unknown import must refuse");
+        assert_eq!(e.code, "DL1505");
+    }
+
+    #[test]
+    fn dl1505_an_ungranted_but_real_host_import_is_refused() {
+        // `console_println` is real, but this grant has no Write — so it is not in the slice.
+        let wasm =
+            module_importing("delulu:cap", "console_println", vec![wasm_encoder::ValType::I32; 5], vec![]);
+        let e = WasmPluginEngine::new()
+            .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Read"])))
+            .expect_err("Write is not granted");
+        assert_eq!(e.code, "DL1505");
+        // With Write granted, the same module fits.
+        assert!(WasmPluginEngine::new()
+            .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Write"])))
+            .is_ok());
+    }
+
+    #[test]
+    fn dl1505_wasi_by_the_back_door_is_refused() {
+        // A Contained module must not reach WASI. The namespace is in no slice at any grant.
+        let wasm = module_importing(
+            "wasi_snapshot_preview1",
+            "fd_write",
+            vec![wasm_encoder::ValType::I32; 4],
+            vec![wasm_encoder::ValType::I32],
+        );
+        for g in [grant_with(&[]), grant_with(&["Read", "Write", "Clock", "Rand"])] {
+            let e = WasmPluginEngine::new()
+                .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&g))
+                .expect_err("WASI must never be reachable");
+            assert_eq!(e.code, "DL1505");
+        }
+    }
+
+    /// THE HEAD-CHEF CASE — the DL1505 analogue of the DL1509 bug. The name IS in the slice; the
+    /// TYPE is not what the host provides. Matching on name alone would leave the engine's
+    /// instantiation type-check as the only gate — "probably refused downstream", which is exactly
+    /// the standard rejected on R-6a. Step 5 decides it.
+    #[test]
+    fn dl1505_a_granted_name_with_the_wrong_type_is_refused_instantiation_is_not_the_gate() {
+        // `console_println` is granted under Write, but declared here with a different signature.
+        let wasm = module_importing(
+            "delulu:cap",
+            "console_println",
+            vec![wasm_encoder::ValType::I64],
+            vec![wasm_encoder::ValType::I64],
+        );
+        let e = WasmPluginEngine::new()
+            .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Write"])))
+            .expect_err("a granted name with a forged signature must refuse at step 5");
+        assert_eq!(e.code, "DL1505");
+        assert!(
+            e.message.contains("the name being in the slice is not enough"),
+            "the refusal says WHY name-matching is insufficient: {}",
+            e.message
+        );
+    }
+
+    #[test]
+    fn dl1505_a_root_constructor_is_never_in_any_slice() {
+        // Invariant 31's shape: a plugin receives capability VALUES from its host and never holds a
+        // Root, so it can never mint a capability. `root_console` is in no slice at any grant —
+        // the operation does not exist in the plugin's world.
+        let wasm = module_importing(
+            "delulu:cap",
+            "root_console",
+            vec![wasm_encoder::ValType::I32],
+            vec![wasm_encoder::ValType::I32],
+        );
+        for g in [grant_with(&["Write"]), grant_with(&["Read", "Write", "Clock", "Rand"])] {
+            let e = WasmPluginEngine::new()
+                .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&g))
+                .expect_err("a plugin can never mint a capability");
+            assert_eq!(e.code, "DL1505");
+        }
+    }
+
+    #[test]
+    fn dl1505_a_malformed_module_is_refused_not_assumed_harmless() {
+        let e = WasmPluginEngine::new()
+            .validate_imports(b"\0asm\x01\0\0\0garbage-tail", &delulu_runtime::plugin::cap_slice(&grant_with(&[])))
+            .expect_err("a module that does not validate must refuse");
+        assert_eq!(e.code, "DL1505");
+        assert!(WasmPluginEngine::new()
+            .validate_imports(b"not wasm", &delulu_runtime::plugin::cap_slice(&grant_with(&[])))
+            .is_err());
+    }
+
+    #[test]
+    fn dl1505_a_non_function_import_is_refused() {
+        // Only functions cross. A memory import is refused rather than ignored.
+        let wasm = module_importing_memory("delulu:cap", "console_println");
+        let e = WasmPluginEngine::new()
+            .validate_imports(&wasm, &delulu_runtime::plugin::cap_slice(&grant_with(&["Write"])))
+            .expect_err("a non-function import must refuse");
+        assert_eq!(e.code, "DL1505");
     }
 
     #[test]

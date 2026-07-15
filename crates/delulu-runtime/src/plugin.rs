@@ -244,14 +244,91 @@ impl LoadRefusal {
     }
 }
 
+// ===== the Contained import slice (DL1505, spec §3.1 step 5-Contained) =======================
+
+/// A wasm value type — enough to match an import's signature exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WasmVal {
+    I32,
+    I64,
+    F32,
+    F64,
+}
+
+/// One host import's exact signature. Name matching alone is **not** sufficient (see
+/// [`cap_slice`]), so the slice carries types and step 5 checks them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportSig {
+    pub params: Vec<WasmVal>,
+    pub results: Vec<WasmVal>,
+}
+
+/// The set of imports a Contained module may declare: `(namespace, name) → exact signature`.
+pub type ImportSlice = BTreeMap<(String, String), ImportSig>;
+
+/// Derive the `delulu:cap` slice from a grant (spec §3.1 step 5-Contained). **A whitelist**: only
+/// names derivable from the grant are permitted; everything else is DL1505. Never a blacklist, and
+/// never "an unknown namespace defaults to harmless" — that is how WASI walks in the back door.
+///
+/// Two properties worth stating, because both are invariants rather than conveniences:
+///
+/// - **No `root_*` constructors, ever.** A plugin receives capability *values* from its host; it
+///   never holds a `Root`, so it can never mint a capability. The cap-minting imports
+///   (`root_console`, `root_fs_read`, …) are therefore absent from every slice at every grant —
+///   invariant 31's shape again: the operation does not exist in the plugin's world.
+/// - **Signatures are part of the slice.** A module may declare a granted *name* with a signature
+///   that suits it; if step 5 matched on name alone, the only thing standing between that and
+///   reality would be the engine's instantiation type-check. That is "probably refused downstream",
+///   and this stage does not accept that standard for a security rule.
+pub fn cap_slice(grant: &Grant) -> ImportSlice {
+    use WasmVal::{I32, I64};
+    let mut slice = ImportSlice::new();
+    let effects = grant.to_authority().effects;
+    let mut add = |name: &str, params: Vec<WasmVal>, results: Vec<WasmVal>| {
+        slice.insert(("delulu:cap".to_string(), name.to_string()), ImportSig { params, results });
+    };
+    // Each arm mirrors the host function `delulu-wasm::host` actually provides for that effect —
+    // the cap OPERATION only, never the Root constructor that mints the capability.
+    for e in &effects {
+        match e {
+            Effect::Write => add("console_println", vec![I32, I32, I32, I32, I32], vec![]),
+            Effect::Read => add("fs_read_text", vec![I32, I32, I32, I32, I32], vec![I32]),
+            Effect::Clock => add("clock_now_ms", vec![I32, I32, I32, I32], vec![I64]),
+            Effect::Rand => add("rand_int", vec![I32, I64, I64, I32, I32, I32], vec![I64]),
+            // Net/Declassify/Load/ForeignCall/user effects have no Contained host import in v0.6: a
+            // module granted them still imports nothing for them, so it can reach nothing by them.
+            // Silence here is fail-closed — an unlisted effect grants no import.
+            _ => {}
+        }
+    }
+    slice
+}
+
 /// The engine seam (playbook §1 / head-chef amendment): everything the loader needs that lives
 /// above it in the crate graph. `delulu-wasm` implements this; the `delulu` crate injects it.
-/// Phase 6d needs only the container reader; instantiation arrives in 6e/6f.
 pub trait PluginEngine {
     /// Read `.dpx` bytes into a [`PluginArtifact`]. The implementation owns the container format
     /// (and its blake3 content bindings); a corrupt artifact refuses here, identically for
     /// `plugin verify` and a real load.
     fn read_artifact(&self, bytes: &[u8]) -> Result<PluginArtifact, LoadRefusal>;
+
+    /// **Step 5 (Contained)** — validate the module's imports against the grant-derived slice
+    /// (DL1505). Decides name **and** type; a module whose imports do not fit its slice is refused
+    /// here, before any instantiation. The engine's own instantiation type-check is *not* the gate.
+    fn validate_imports(&self, wasm: &[u8], slice: &ImportSlice) -> Result<(), LoadRefusal>;
+}
+
+/// The DL1505 refusal, in one place so every path words it identically.
+pub fn dl1505(detail: impl Into<String>) -> LoadRefusal {
+    LoadRefusal {
+        code: "DL1505",
+        message: format!(
+            "contained module imports outside its grant slice: {} — an opaque module may import only what its grant derives",
+            detail.into()
+        ),
+        intersection: None,
+        requires_human: true,
+    }
 }
 
 /// The product of steps 1–4: everything decided *before* any code is verified or instantiated.
@@ -584,6 +661,12 @@ impl HandleTable {
     }
 
     /// Mint a handle for a host value crossing into the plugin for this call.
+    ///
+    /// **DO NOT "recycle" ids for tidiness — `next_id` must never decrease or wrap.** Reusing an id
+    /// is not a space optimization, it is an authority-confusion hole: a handle retained from an
+    /// earlier call would then resolve to a *different* live value and the call would **succeed**.
+    /// A security bug that succeeds is worse than one that fails. `handles_are_never_reused_across_calls`
+    /// exists to fail the moment anyone tries.
     pub fn mint(&mut self) -> u64 {
         let id = self.next_id;
         // Monotonic: an id is never handed out twice, so a stale handle can never alias a live one.
