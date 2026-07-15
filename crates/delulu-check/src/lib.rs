@@ -7,6 +7,7 @@
 pub mod authority;
 pub mod check;
 pub mod deps;
+pub mod dir;
 pub mod lockfile;
 pub mod manifest;
 pub mod package;
@@ -21,6 +22,7 @@ pub use deps::{
     check_pins, check_self_authority, check_workspace, package_authority, resolve_workspace,
     PackageAuthority, ResolvedPackage, Workspace,
 };
+pub use dir::{deserialize as dir_deserialize, serialize as dir_serialize, Dir, DirError};
 pub use lockfile::{
     authority_widened, compute_entry, compute_lockfile, content_hash, enforce_semver_law,
     verify_locked, LockEntry, Lockfile,

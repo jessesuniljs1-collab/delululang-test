@@ -3,17 +3,18 @@
 //! types and rows in side tables — the AST itself is never mutated after parse.
 
 use delulu_diag::Span;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ident {
     pub name: String,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Path {
     pub segs: Vec<Ident>,
 }
@@ -30,14 +31,14 @@ impl Path {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Module {
     pub name: Path,
     pub imports: Vec<Import>,
     pub items: Vec<Item>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Import {
     /// `pub import` re-exports the target module's public items from this module (Stage 2, §2).
     pub public: bool,
@@ -46,7 +47,7 @@ pub struct Import {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Item {
     Fn(FnDecl),
     Type(TypeDecl),
@@ -59,7 +60,7 @@ pub enum Item {
 /// A `foreign <abi> lib <name> { … }` block. `name` is BOTH the nominal opaque lib-handle type
 /// and the logical grant name; the block introduces no effect-row syntax — every foreign function
 /// has the implicit row `!{ForeignCall}` (spec §2, §3 T-ForeignCall).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ForeignDecl {
     pub public: bool,
     /// The ABI string; `"c"` is the only value in v0.4 (others → DL1308).
@@ -74,7 +75,7 @@ pub struct ForeignDecl {
 
 /// A single `fn name(params) -> ret` inside a foreign block. There is deliberately no effect-row:
 /// the row is implicitly `!{ForeignCall}`, always (spec §2 EBNF).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ForeignFn {
     pub name: Ident,
     pub params: Vec<Param>,
@@ -82,7 +83,7 @@ pub struct ForeignFn {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FnDecl {
     pub public: bool,
     pub name: Ident,
@@ -98,13 +99,13 @@ pub struct FnDecl {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Param {
     pub name: Ident,
     pub ty: TypeExpr,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypeExpr {
     /// `Int`, `List[T]`, `Cap[FsRead]`, `Secret[Str]`, `demo.util.Point`
     Named { path: Path, args: Vec<TypeExpr>, span: Span },
@@ -122,14 +123,14 @@ impl TypeExpr {
 
 /// `! {Read, Net | e}` or `! e`. `effects` may be empty (`!{}` explicit purity;
 /// tail-only rows are written `! e`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RowExpr {
     pub effects: Vec<Path>,
     pub tail: Option<Ident>,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TypeDecl {
     pub public: bool,
     pub name: Ident,
@@ -139,26 +140,26 @@ pub struct TypeDecl {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypeDeclKind {
     Record(Vec<FieldDef>),
     Sum(Vec<VariantDef>),
     Alias(TypeExpr),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FieldDef {
     pub name: Ident,
     pub ty: TypeExpr,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VariantDef {
     pub name: Ident,
     pub fields: Vec<TypeExpr>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EffectDecl {
     pub public: bool,
     pub name: Ident,
@@ -166,7 +167,7 @@ pub struct EffectDecl {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConstDecl {
     pub public: bool,
     pub name: Ident,
@@ -176,14 +177,14 @@ pub struct ConstDecl {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub id: NodeId,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Stmt {
     Let { name: Ident, ty: Option<TypeExpr>, value: Expr, mutable: bool, span: Span },
     Assign { target: LValue, value: Expr, span: Span },
@@ -192,7 +193,7 @@ pub enum Stmt {
     Expr(Expr),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LValue {
     Var(Ident),
     Field(Box<LValue>, Ident),
@@ -209,7 +210,7 @@ impl LValue {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LitKind {
     Int(i64),
     Float(f64),
@@ -217,13 +218,13 @@ pub enum LitKind {
     Bool(bool),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnOp {
     Neg,
     Not,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BinOp {
     Add,
     Sub,
@@ -240,7 +241,7 @@ pub enum BinOp {
     Or,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Expr {
     Lit { kind: LitKind, id: NodeId, span: Span },
     /// A variable reference. The parser produces single-segment paths here;
@@ -314,14 +315,14 @@ impl Expr {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Arm {
     pub pattern: Pattern,
     pub body: Expr,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Pattern {
     Wildcard(Span),
     Lit(LitKind, Span),

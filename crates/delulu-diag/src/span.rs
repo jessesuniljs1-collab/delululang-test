@@ -3,7 +3,7 @@ pub type FileId = u32;
 
 /// A byte-offset region of one source file. Byte offsets are the machine truth
 /// (Stage-1 spec §10.2); line/column are derived at render time.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     pub file: FileId,
     pub start: u32,

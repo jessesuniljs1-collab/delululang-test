@@ -8,9 +8,11 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// A primitive or user-declared effect label. Primitive effects arise only from capability
 /// operations (§6.2 T-CapOp); `Declassify` is carried by `Secret.expose` (audit R-2).
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Effect {
     Read,
     Write,
@@ -60,12 +62,12 @@ impl fmt::Display for Effect {
 }
 
 /// A row variable (`e` in `fn(T) -> U ! e`), resolved through the inference substitution.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RowVar(pub u32);
 
 /// An effect row: a set of concrete effects plus an optional polymorphic tail.
 /// `{Read, Net}` is closed; `{Read | e}` is open with tail `e`; `{}` is provably pure.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
     pub effects: BTreeSet<Effect>,
     pub tail: Option<RowVar>,
@@ -126,16 +128,16 @@ impl fmt::Display for Row {
 }
 
 /// A type variable, resolved through the inference substitution.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TypeVar(pub u32);
 
 /// Index of a user-declared record or sum type in the program's type table.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TypeDefId(pub u32);
 
 /// The resource a capability designates (§7.3). Capabilities are unforgeable: `Cap[R]` has no
 /// literal and no constructor; values originate only from `Root` or by attenuation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ResourceKind {
     FsRead,
     FsWrite,
@@ -186,7 +188,7 @@ impl ResourceKind {
 }
 
 /// A DeluluLang type (§6.1). Function types carry their row — rows never erase (invariant 3).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     Int,
     Float,

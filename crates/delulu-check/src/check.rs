@@ -19,7 +19,7 @@ use crate::ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};
 use crate::unify::{InferCtx, UnifyError};
 
 /// What the checker learned about one function, for the authority report and reachability.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FnFacts {
     pub effects: BTreeSet<Effect>,
     pub cap_kinds: BTreeSet<ResourceKind>,
@@ -43,6 +43,17 @@ pub struct CheckResult {
     /// from context; the interpreter needs that resolved name to know which library to dlopen and
     /// which symbols to resolve. Keyed by the `Expr::Method` node id of the `root.foreign(..)` call.
     pub foreign_binds: HashMap<NodeId, String>,
+    /// The post-check typed AST's per-node resolved type (Stage 6 / DIR §2.3). Every expression
+    /// and block node carries the fully-substituted type the checker assigned it — the side table
+    /// the AST comment always promised. Populated after the substitution is settled; keyed by
+    /// `NodeId`. This is what DIR serializes so a Verified plugin can be re-checked without
+    /// re-inferring.
+    pub node_types: HashMap<NodeId, Type>,
+    /// The per-node resolved effect row, companion to `node_types` (DIR §2.3). The row is the
+    /// resolved effect set the node performs; polymorphic tails that never bound to concrete
+    /// effects are dropped (they contribute nothing observable — the boundary subset check in
+    /// `check_fn` is the authoritative gate, and DIR re-verification replays it).
+    pub node_rows: HashMap<NodeId, Row>,
 }
 
 /// Effect-row accumulator: concrete effects plus any polymorphic tails still in play.
@@ -84,6 +95,8 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         facts: HashMap::new(),
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
+        node_types_raw: HashMap::new(),
+        node_row_accs: HashMap::new(),
     };
     for item in &module.items {
         if let Item::Fn(f) = item {
@@ -108,6 +121,20 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     }
     let main_present = table.fns.contains_key("main");
     let main_row = checker.facts.get("main").map(|f| f.effects.clone());
+
+    // Settle the DIR side tables now that the whole substitution is fixed: resolve every recorded
+    // node type through the final substitution, and collapse each node's raw effect accumulator to
+    // its resolved effect set (DIR §2.3). This runs after all functions are checked so that later
+    // unifications are reflected in earlier nodes' types.
+    let mut node_types: HashMap<NodeId, Type> = HashMap::with_capacity(checker.node_types_raw.len());
+    for (id, raw) in &checker.node_types_raw {
+        node_types.insert(*id, checker.cx.apply_type(raw));
+    }
+    let mut node_rows: HashMap<NodeId, Row> = HashMap::with_capacity(checker.node_row_accs.len());
+    for (id, acc) in &checker.node_row_accs {
+        node_rows.insert(*id, checker.resolve_row_acc(acc));
+    }
+
     CheckResult {
         diags: checker.diags,
         facts: checker.facts,
@@ -115,6 +142,8 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         main_present,
         fn_types: checker.fn_types,
         foreign_binds,
+        node_types,
+        node_rows,
     }
 }
 
@@ -127,6 +156,11 @@ struct Checker<'a> {
     /// `root.foreign(load)` call sites and the fresh handle var each produced, resolved to a
     /// concrete lib name after all functions are checked (see `check_module`).
     pending_foreign_binds: Vec<(NodeId, crate::ty::TypeVar)>,
+    /// DIR §2.3 side tables, recorded raw (pre-substitution) during checking and resolved once at
+    /// the end of `check_module`. `node_types_raw` holds each node's assigned type (possibly with
+    /// inference variables); `node_row_accs` holds each node's raw effect accumulator.
+    node_types_raw: HashMap<NodeId, Type>,
+    node_row_accs: HashMap<NodeId, RowAcc>,
 }
 
 /// Per-function-body checking context.
@@ -437,6 +471,9 @@ impl<'a> Checker<'a> {
             }
         }
         ctx.pop_scope();
+        // Record the block node in the DIR side tables (§2.3): its value type and accumulated row.
+        self.node_types_raw.insert(block.id, value_ty.clone());
+        self.node_row_accs.insert(block.id, acc.clone());
         (value_ty, acc)
     }
 
@@ -468,7 +505,30 @@ impl<'a> Checker<'a> {
 
     // ===== expressions ====================================================
 
+    /// Record the DIR side tables for one node (the raw type and raw effect accumulator), then
+    /// return them unchanged. The single choke point every `check_expr` call flows through, so the
+    /// typed AST is captured without perturbing any typing rule (invariant: recording is a pure
+    /// side effect — it never changes what the checker computes or reports).
     fn check_expr(&mut self, e: &Expr, ctx: &mut FnCtx) -> (Type, RowAcc) {
+        let (ty, acc) = self.check_expr_inner(e, ctx);
+        self.node_types_raw.insert(e.id(), ty.clone());
+        self.node_row_accs.insert(e.id(), acc.clone());
+        (ty, acc)
+    }
+
+    /// Resolve a raw effect accumulator to the node's concrete effect row: expand every bound tail
+    /// through the substitution and union its effects; drop tails that never bound (they add no
+    /// observable effect). Used only to settle the DIR side tables (§2.3).
+    fn resolve_row_acc(&self, acc: &RowAcc) -> Row {
+        let mut effects = acc.effects.clone();
+        for t in &acc.tails {
+            let r = self.cx.apply_row(&Row { effects: BTreeSet::new(), tail: Some(*t) });
+            effects.extend(r.effects.into_iter());
+        }
+        Row { effects, tail: None }
+    }
+
+    fn check_expr_inner(&mut self, e: &Expr, ctx: &mut FnCtx) -> (Type, RowAcc) {
         match e {
             Expr::Lit { kind, .. } => (self.lit_type(kind), RowAcc::default()),
             Expr::Var { path, span, .. } => (self.check_var(path, *span, ctx), RowAcc::default()),

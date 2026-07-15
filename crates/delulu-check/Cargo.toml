@@ -7,6 +7,8 @@ edition.workspace = true
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }
+serde = { workspace = true }
 serde_json = { workspace = true }
+ciborium = { workspace = true }
 toml = "0.8"
 blake3 = "1"

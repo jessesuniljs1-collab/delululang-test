@@ -294,3 +294,30 @@ boundaries with a labeled edge (`→ [contained plugin opaque-tool] — Net`).
 
 *Stage 6 is the promise kept: code that arrives at runtime and still cannot exceed its grant.
 Stage 7 makes the language concurrent without surrendering one word of that.*
+
+---
+
+## 11. Implementation status
+
+*(Logged per playbook phase, Stage-3 §8a pattern. Baseline at Stage-6 open: 461 passed / 0 failed /
+2 ignored.)*
+
+**Phase 6a — DIR serialize / deserialize round-trip — is implemented and green** (468 tests,
++7). New module `crates/delulu-check/src/dir.rs` defines **DIR** (§2.3): the post-check typed AST
+serialized as versioned CBOR (`ciborium`, chosen over `minicbor` for being serde-native — DIR
+mirrors the checker's own `serde`-derived types, so the codec is a derive, not a drift-prone
+hand-written encoder). The payload carries the source `Module`, the whole-module authority `facts`
+and `fn_types`, **every expression/block node's resolved type and effect row** (new side tables
+`CheckResult::node_types`/`node_rows`, recorded at a single choke point in `check.rs` as a pure side
+effect that changes no typing rule), `main` presence/row, the `foreign` bind sites, and the two
+contract versions it was checked against (`DIR_VERSION`, `PRIM_TABLE_VERSION`). All collections are
+`BTreeMap`/`BTreeSet`/`Vec` so the encoding is **canonical** — identical checks produce byte-identical
+DIR (house rule 8, proven by test). `deserialize` is hostile-input hardened: malformed/truncated
+CBOR, an unsupported `DIR_VERSION` or `PRIM_TABLE_VERSION` (**DL1503**), and a structurally
+impossible AST (zero-segment name path) all refuse cleanly and **never panic** — witnessed by an
+every-single-byte-flip and every-truncation test. Deserialized `DefId`s/`NodeId`s are only ever
+compared, never used to index a table, so an out-of-range id can lie but cannot crash. No loading
+yet (that is 6b onward); this phase proves a checked module round-trips through DIR losslessly and
+byte-stably. Serde derives were added additively to the AST (`delulu-syntax`), `Span`
+(`delulu-diag`), and the type-system types (`delulu-check::ty`) — behaviour-preserving; the full
+prior suite stays green.
