@@ -38,7 +38,7 @@ use delulu_check::ty::Type;
 use delulu_check::Effect;
 use delulu_syntax::parse_type_string;
 
-use crate::custody::{Custody, CustodyDenial};
+use crate::custody::{Custody, CustodyDenial, Liveness};
 
 /// The plugin ABI version this runtime loads. Kept in lockstep with
 /// `delulu_check::plugin::PLUGIN_API_SUPPORTED`; a mismatch is DL1507.
@@ -703,6 +703,78 @@ impl HandleTable {
     }
 }
 
+// ===== DL1506 (trap 5) and R-6c: a plugin can die, and dead is forever =======================
+
+/// **Trap 5 / DL1506** — terminate a plugin that exceeded its granted limits.
+///
+/// A limit-killed plugin is **gone, not wounded**. This is one act: the instance is dropped *here*
+/// (it is taken by value, so it cannot outlive the call) **and** its grant node is revoked in the
+/// same breath. The host's next observation is therefore deterministic — the plugin does not
+/// exist, its authority does not exist, and nothing can be resumed. Do not try to "recover" a
+/// fuel-exhausted plugin: there is nothing left to recover.
+pub fn kill_on_limit<I>(
+    custody: &mut dyn Custody,
+    grant_id: &GrantId,
+    instance: I,
+    limit: &str,
+) -> PluginErr {
+    // The instance dies first and unconditionally — taking it by value means the caller cannot
+    // keep a copy, and dropping it here means no engine state survives the refusal.
+    drop(instance);
+    // ...and its authority dies with it, in the same act. A revoke failure cannot resurrect the
+    // plugin: the refusal stands either way, which is exactly why the result is discarded.
+    let _ = custody.revoke_node(grant_id);
+    PluginErr::LimitExceeded(format!(
+        "plugin exceeded its granted {limit} — the instance was dropped and its grant node revoked; a limit-killed plugin is gone, not wounded"
+    ))
+}
+
+/// **R-6c** — `p.unload()`: revoke the plugin's node (transitively, if it loaded sub-plugins) and
+/// return the **revoking audit seq**, which every later call through a retained reference reports.
+pub fn unload(custody: &mut dyn Custody, grant_id: &GrantId) -> Result<u64, PluginErr> {
+    custody.revoke_node(grant_id).map_err(|d| PluginErr::BadArtifact(d.message))
+}
+
+/// A retained reference to a plugin export. **It binds the load-time `GrantId`** (R-6c) — not the
+/// plugin's name, not its path — which is what makes an unload/reload authority swap impossible: a
+/// reload mints a *fresh* node, so an old reference can never be silently re-bound to a plugin with
+/// different authority. It stays dead forever.
+#[derive(Clone, Debug)]
+pub struct PluginRef {
+    pub grant_id: GrantId,
+    pub export: String,
+}
+
+impl PluginRef {
+    pub fn new(grant_id: GrantId, export: impl Into<String>) -> PluginRef {
+        PluginRef { grant_id, export: Into::into(export) }
+    }
+
+    /// The per-call re-check (R-6c). **DL0801** carries the revoking audit seq, so the error says
+    /// why and when this reference's authority died. Fail-closed: a custody that cannot answer is
+    /// treated exactly as revoked — an unknown node confers nothing.
+    pub fn check_call(&self, custody: &dyn Custody) -> Result<(), PluginErr> {
+        match custody.liveness(&self.grant_id) {
+            Liveness::Live => Ok(()),
+            Liveness::Revoked(seq) => Err(PluginErr::Revoked(seq as i64)),
+            Liveness::Unknown => Err(PluginErr::Revoked(0)),
+        }
+    }
+}
+
+/// The diagnostic code a [`PluginErr`] surfaces as. `Revoked` is **DL0801** — a call through a
+/// revoked plugin reference — and it is `requires_human` (spec §7: no machine repair).
+pub fn plugin_err_code(e: &PluginErr) -> &'static str {
+    match e {
+        PluginErr::Revoked(_) => "DL0801",
+        PluginErr::LimitExceeded(_) => "DL1506",
+        PluginErr::ApiMismatch(_) => "DL1507",
+        PluginErr::NotGranted(_) => "DL1502",
+        PluginErr::VerifyFailed(_) => "DL1504",
+        PluginErr::BadArtifact(_) => "DL1508",
+    }
+}
+
 /// The result of a completed load: the plugin's node and its class-specific content.
 #[derive(Debug)]
 pub enum LoadedPlugin {
@@ -1182,6 +1254,108 @@ mod tests {
         t.leave(); // as on a fault/trap return
         assert_eq!(t.live_count(), 0, "a faulting return still invalidates every host value");
         assert!(t.resolve(a).is_err() && t.resolve(b).is_err());
+    }
+
+    // ----- trap 5 (DL1506) and R-6c (DL0801) ---------------------------------------------------
+
+    #[test]
+    fn trap5_a_limit_killed_plugin_is_gone_not_wounded() {
+        // DL1506 drops the instance AND revokes the node in ONE act.
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&["Read"]);
+        let loaded = load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let LoadedPlugin::Verified { grant_id, .. } = loaded;
+        assert_eq!(c.liveness(&grant_id), Liveness::Live);
+
+        let fake_instance = vec![0u8; 8]; // stands in for the engine instance
+        let e = kill_on_limit(&mut c, &grant_id, fake_instance, "fuel");
+        assert_eq!(e.variant(), "LimitExceeded");
+        assert_eq!(plugin_err_code(&e), "DL1506");
+        // NO LIVE NODE SURVIVES IT. The plugin does not exist; nothing can be resumed.
+        assert!(
+            matches!(c.liveness(&grant_id), Liveness::Revoked(_)),
+            "a limit-killed plugin's node must be revoked in the same act"
+        );
+        // And a retained reference through it is dead — the host's view is deterministic.
+        let r = PluginRef::new(grant_id, "shout");
+        assert_eq!(plugin_err_code(&r.check_call(&c).expect_err("dead")), "DL0801");
+    }
+
+    #[test]
+    fn r6c_unload_then_a_retained_reference_is_dl0801_with_the_revoking_seq() {
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&["Read"]);
+        let LoadedPlugin::Verified { grant_id, .. } = load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let retained = PluginRef::new(grant_id.clone(), "shout");
+        assert!(retained.check_call(&c).is_ok(), "live before unload");
+
+        let seq = unload(&mut c, &grant_id).expect("unload revokes");
+        let e = retained.check_call(&c).expect_err("dead after unload");
+        assert_eq!(plugin_err_code(&e), "DL0801");
+        // The error carries the REVOKING AUDIT SEQ — why and when this authority died.
+        assert_eq!(e, PluginErr::Revoked(seq as i64), "DL0801 carries the revoking audit seq");
+        assert!(seq > 0, "a real audit seq, not a placeholder");
+    }
+
+    #[test]
+    fn r6c_reload_mints_a_fresh_node_and_the_old_reference_stays_dead_forever() {
+        // THE AUTHORITY-SWAP CLOSER (criterion 3). A reload is a NEW node with a NEW GrantId; the
+        // old reference is never silently re-bound to it.
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&["Read"]);
+        let LoadedPlugin::Verified { grant_id: first, .. } =
+            load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        let old_ref = PluginRef::new(first.clone(), "shout");
+        unload(&mut c, &first).expect("unload");
+
+        let LoadedPlugin::Verified { grant_id: second, .. } =
+            load_verified(&art, &grant(&[]), &mut c).expect("reloads");
+        assert_ne!(first, second, "a reload mints a FRESH GrantId");
+        // The new handle works...
+        assert!(PluginRef::new(second, "shout").check_call(&c).is_ok(), "the new handle is live");
+        // ...and the old reference is STILL dead. Dead is forever.
+        assert_eq!(plugin_err_code(&old_ref.check_call(&c).expect_err("still dead")), "DL0801");
+    }
+
+    #[test]
+    fn r6c_check_call_is_fail_closed_when_custody_cannot_answer() {
+        // "Couldn't tell" is dead, never alive: a custody with no tree answers Unknown, and an
+        // unknown node confers nothing.
+        let c = EmbeddedCustody::new(); // no grant tree at all
+        let r = PluginRef::new(delulu_broker::GrantId::from_trusted("g_nonexistent"), "shout");
+        assert_eq!(plugin_err_code(&r.check_call(&c).expect_err("unknown ⇒ dead")), "DL0801");
+    }
+
+    /// CRITERION 4 — R-7 composition across three levels.
+    #[test]
+    fn criterion4_r7_composition_a_sub_plugin_can_never_exceed_its_parent() {
+        let art_read = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &["Read", "Net"]);
+        // Host holds {Read, Net}; it grants plugin A only {Read}.
+        let mut c = host_custody(&["Read", "Net"]);
+        let LoadedPlugin::Verified { grant_id: node_a, .. } =
+            load_verified(&art_read, &grant(&["Read"]), &mut c).expect("A loads under the host");
+
+        // Now A is the holder: a sub-plugin loads under A's OWN node (R-7 composition).
+        c.set_holder(node_a.clone());
+
+        // A granted {Read} tries to hand its child {Read, Net} — MORE than A holds. DL0802.
+        let e = load_verified(&art_read, &grant(&["Read", "Net"]), &mut c)
+            .expect_err("a sub-plugin may not exceed its parent");
+        assert_eq!(e.code, "DL0802", "R-7: no grantee exceeds its grantor, at any depth");
+
+        // A conforming sub-plugin ({Read} ⊑ {Read}) loads.
+        let LoadedPlugin::Verified { grant_id: node_b, .. } =
+            load_verified(&art_read, &grant(&["Read"]), &mut c).expect("B loads under A");
+        assert_eq!(c.liveness(&node_a), Liveness::Live);
+        assert_eq!(c.liveness(&node_b), Liveness::Live);
+
+        // Host revocation kills all three levels TRANSITIVELY. Revoking is done from the host's own
+        // node (a caller may only revoke its own node or a descendant — §3.2, no upward reach).
+        let host_node = c.broker().unwrap().nodes().iter().find(|n| n.parent.is_none()).unwrap().id.clone();
+        c.set_holder(host_node.clone());
+        unload(&mut c, &host_node).expect("the host revokes its own subtree");
+        assert!(matches!(c.liveness(&node_a), Liveness::Revoked(_)), "A dies with the host");
+        assert!(matches!(c.liveness(&node_b), Liveness::Revoked(_)), "and so does B, transitively");
     }
 
     #[test]

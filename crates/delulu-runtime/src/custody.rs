@@ -93,6 +93,26 @@ pub trait Custody {
             "this run has no grant tree — nothing to revoke (fail closed)",
         ))
     }
+
+    /// Is a node still live, and if not, which audit seq killed it? (R-6c.) **Fail-closed**: the
+    /// default — and any custody that cannot answer — reports [`Liveness::Unknown`], which every
+    /// caller must treat as dead. An unknown node confers nothing.
+    fn liveness(&self, target: &GrantId) -> Liveness {
+        let _ = target;
+        Liveness::Unknown
+    }
+}
+
+/// A node's liveness for the R-6c per-call re-check. `Unknown` is not "maybe fine" — callers treat
+/// it exactly as dead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Liveness {
+    Live,
+    /// Revoked, carrying the revoking operation's audit seq — the number DL0801 reports, so an
+    /// agent's error says *why and when* its authority died.
+    Revoked(u64),
+    /// The custody cannot answer. Treated as dead, always.
+    Unknown,
 }
 
 /// Embedded/dev custody: a pure pass-through for effect checks. Every `check` allows (the
@@ -131,6 +151,16 @@ impl EmbeddedCustody {
     /// The in-process tree, for host-side inspection (`delulu grants tree` in embedded mode, tests).
     pub fn broker(&self) -> Option<&Broker> {
         self.tree.as_ref()
+    }
+
+    /// Re-root the holder: subsequent [`Custody::attenuate`] calls are checked against `node`'s
+    /// authority instead of the run's own.
+    ///
+    /// This is how **R-7 composition** works: a plugin that loads a sub-plugin is itself the holder,
+    /// so the sub-grant is checked against the *plugin's* node — never the host's. A plugin can
+    /// therefore never hand its child more than it holds, at any depth (criterion 4).
+    pub fn set_holder(&mut self, node: GrantId) {
+        self.node = Some(node);
     }
 
     pub fn broker_mut(&mut self) -> Option<&mut Broker> {
@@ -179,6 +209,16 @@ impl Custody for EmbeddedCustody {
             return Err(CustodyDenial::new("DL1401", "this embedded run has no grant tree (fail closed)"));
         };
         tree.revoke(&node, target).map(|o| o.by_seq).map_err(denial_to_custody)
+    }
+
+    fn liveness(&self, target: &GrantId) -> Liveness {
+        let Some(tree) = self.tree.as_ref() else { return Liveness::Unknown };
+        match tree.effective_state(target) {
+            Some(delulu_broker::EffState::Live) => Liveness::Live,
+            Some(delulu_broker::EffState::Revoked { by_seq }) => Liveness::Revoked(by_seq),
+            // An expired lease and an unknown node both confer nothing — dead, fail-closed.
+            Some(delulu_broker::EffState::Expired { .. }) | None => Liveness::Unknown,
+        }
     }
 }
 
