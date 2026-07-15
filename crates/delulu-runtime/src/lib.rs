@@ -6,6 +6,7 @@ pub mod broker;
 pub mod custody;
 pub mod foreign;
 pub mod interp;
+pub mod plugin;
 pub mod prim;
 pub mod python;
 pub mod trace;
@@ -15,6 +16,10 @@ pub use broker::{parse_manifest, Grants, Manifest};
 pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Op};
 pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
 pub use interp::Interp;
+pub use plugin::{
+    load_prepare, Grant, Limits, LoadRefusal, PluginArtifact, PluginClass, PluginEngine, PluginErr,
+    PreparedLoad, PLUGIN_API_SUPPORTED,
+};
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};
 pub use trace::{assert_trace, TraceRecord, TraceSink};

@@ -20,6 +20,9 @@ delulu-check = { path = "../delulu-check" }
 # `Snapshot` validator so the embedded and daemon paths share ONE policy core (no duplication).
 # delulu-broker depends only on delulu-diag/delulu-check, so this adds no cycle.
 delulu-broker = { path = "../delulu-broker" }
+# Stage 6 (Live): the `.dpx` plugin manifest is JSON, so the loader reads its ceiling/exports out of
+# a `serde_json::Value` (the container itself is parsed above this crate — see `plugin.rs` topology).
+serde_json = { workspace = true }
 # Stage 4 C FFI (spec §4). `libloading` binds a shared library; `libffi` assembles the call because
 # a foreign signature is runtime data. Both are isolated behind `src/foreign.rs`.
 libloading = "0.8"

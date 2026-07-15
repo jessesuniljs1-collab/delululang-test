@@ -286,6 +286,77 @@ impl Custody for BrokerClientCustody {
     fn mode(&self) -> &'static str {
         "daemon"
     }
+
+    // ----- the grant tree (Stage 6): a plugin's node is born and dies in the DAEMON's tree ------
+    //
+    // The loader (`delulu_runtime::plugin`) is written once against the `Custody` seam, so the same
+    // step-4 code path serves embedded and daemon custody. Here it is an IPC round-trip against the
+    // daemon's live tree: `⊑` (R-7) is enforced daemon-side by the same broker core, and revocation
+    // is transitive there too. Unreachable broker → DL1401, fail closed (invariant 27).
+
+    fn holder_node(&self) -> Option<GrantId> {
+        Some(self.node.clone())
+    }
+
+    fn attenuate(
+        &mut self,
+        authority: Authority,
+        holder: delulu_broker::Holder,
+    ) -> Result<GrantId, CustodyDenial> {
+        let mut spec = authority_to_spec(&authority);
+        spec.holder_kind = holder.kind.clone();
+        spec.holder_desc = holder.desc.clone();
+        // `owner: None` — a plugin grant is minted from THIS run's node, under the ordinary
+        // attenuation law. If the grant reaches guarded authority the daemon's guard answers
+        // (DL1410/DL1413) exactly as it does for any other mint; the loader never bypasses it.
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::Attenuate {
+                parent: self.node.as_str().to_string(),
+                authority: spec,
+                owner: None,
+            },
+        )?;
+        match resp {
+            Response::Issued { node } => Ok(GrantId::from_trusted(node)),
+            Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
+            other => Err(dl1401(&format!("unexpected attenuate response: {other:?}"))),
+        }
+    }
+
+    fn revoke_node(&mut self, target: &GrantId) -> Result<u64, CustodyDenial> {
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::Revoke {
+                caller: self.node.as_str().to_string(),
+                target: target.as_str().to_string(),
+            },
+        )?;
+        match resp {
+            Response::Revoked { by_seq, .. } => Ok(by_seq),
+            Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
+            other => Err(dl1401(&format!("unexpected revoke response: {other:?}"))),
+        }
+    }
+}
+
+/// Project a broker `Authority` onto the wire `AuthoritySpec` (holder fields filled by the caller).
+fn authority_to_spec(a: &Authority) -> AuthoritySpec {
+    let s = &a.scopes;
+    let v = |set: &std::collections::BTreeSet<String>| -> Vec<String> { set.iter().cloned().collect() };
+    AuthoritySpec {
+        effects: a.effects.iter().map(|e| e.name().to_string()).collect(),
+        fs_read: v(&s.fs_read),
+        fs_write: v(&s.fs_write),
+        net: v(&s.net),
+        secrets: v(&s.secrets),
+        declassify: v(&s.declassify),
+        foreign_c: v(&s.foreign_c),
+        foreign_python: v(&s.foreign_python),
+        holder_kind: String::new(),
+        holder_desc: String::new(),
+        ttl_millis: None,
+    }
 }
 
 #[cfg(test)]

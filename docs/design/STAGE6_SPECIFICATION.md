@@ -369,3 +369,35 @@ exports, section hashes, signature identity — through the **same** container r
 will use, §9.9). `plugin build` and `plugin inspect --json` are byte-identical across runs (house
 rule 8, proven by test). Plugin packages are single-module in v0.6 (deviation 3 — refused cleanly,
 never half-built). The DL15xx range is registered in the code registry.
+
+**Phase 6d — the load sequence, steps 1–4 (container → class → ceiling → holder node) — is
+implemented and green** (528 tests, +15). New `crates/delulu-runtime/src/plugin.rs` implements the
+load sequence as an **ordered pipeline of individually testable steps**: (1) container + `plugin.api`
+(**DL1507**); (2) class check against the requested `C` — refused, never substituted, never inferred
+(invariant 29); (3) manifest ceiling `grant ⊑ plugin.authority` (**DL1502**) — reusing the broker's
+own `⊑` lattice (`attenuation_check`), so the refusal carries the **intersection** as the exact,
+narrowing repair (`authority_widening: false`, never wider than either side by construction); (4)
+holder check via broker `attenuate(host's node, grant)` (**DL0802**) → **child node + fresh
+`GrantId`** (invariant 28, the R-6c binding). The order is normative and **observable**: a grant
+violating *both* the ceiling and the holder reports DL1502 because step 3 precedes step 4 — witnessed
+by `ceiling_is_checked_before_the_holder_step_order_matters` (and a second ordering witness proves
+step 1 precedes step 2). A refused prepare mints **no node**; an unreadable `[plugin.authority]`
+ceiling reads as *empty* — fail closed, never permissive. `std.plugin`'s `Grant`/`Limits`/`PluginErr`
+land as runtime data here (the in-language records arrive in 6i).
+
+**Invariant 31 is guaranteed by absence, not refusal.** The `GrantId` minted at step 4 lives
+host-side in `PreparedLoad`; it is never a value in the plugin's world. The plugin's vocabulary
+holds only `Grant`/`Limits`/`PluginErr` — ordinary records that *describe* authority — plus
+capability values the host passes explicitly. No `attenuate`, no `revoke`, no lease token, no IPC
+path exists for it, so there is nothing to refuse.
+
+**Custody topology.** The grant tree reached the `Custody` seam: `holder_node`/`attenuate`/
+`revoke_node` join the trait with **fail-closed defaults**, implemented by `EmbeddedCustody`
+(gaining an optional in-process `delulu_broker::Broker` via `with_root` — Stage 1–5 behaviour is
+byte-identical when absent) and by `BrokerClientCustody` (IPC `Attenuate`/`Revoke` against the
+daemon's live tree). The loader is therefore written **once** and works in **both custody modes**.
+**Crate wiring (playbook §1 + head-chef amendment):** `delulu-wasm` already depends on
+`delulu-runtime`, so the loader cannot reach it; instead the container is reified as plain data
+(`PluginArtifact`) and the engine as a trait (`PluginEngine`), both declared in `delulu-runtime`,
+implemented by `delulu-wasm::WasmPluginEngine`, and injected by the `delulu` crate — no cycle, and
+`plugin verify` and a real load share one code path by construction (§9.9).

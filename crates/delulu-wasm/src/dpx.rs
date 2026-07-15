@@ -321,6 +321,52 @@ pub fn require_api(dpx: &Dpx, supported: u32) -> Result<(), DpxError> {
     Ok(())
 }
 
+// ===== the engine seam (playbook §1 / head-chef amendment) ===================================
+//
+// `delulu-wasm` depends on `delulu-runtime`, so the loader (which lives in `delulu-runtime`) cannot
+// call this crate directly. The loader instead declares `PluginEngine` + the plain-data
+// `PluginArtifact`, and THIS side implements them — the `delulu` crate injects the impl. That is
+// what lets the container format live beside the `.dwx` machinery it reuses while the load sequence
+// lives with the interpreter, without a dependency cycle.
+
+use delulu_runtime::{LoadRefusal, PluginArtifact, PluginEngine};
+
+/// The Wasmtime-backed plugin engine: reads `.dpx` containers and (from phase 6f) instantiates
+/// Contained modules. One instance is injected per run by the `delulu` crate.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct WasmPluginEngine;
+
+impl WasmPluginEngine {
+    pub fn new() -> WasmPluginEngine {
+        WasmPluginEngine
+    }
+}
+
+impl PluginEngine for WasmPluginEngine {
+    /// Load-sequence step 1's container read. `plugin verify` and a real load both arrive here, so
+    /// a corrupt artifact refuses identically for both (spec §9.9 — one code path, not two).
+    fn read_artifact(&self, bytes: &[u8]) -> Result<PluginArtifact, LoadRefusal> {
+        let dpx = read_dpx(bytes).map_err(|e| LoadRefusal {
+            code: e.code(),
+            message: e.message(),
+            intersection: None,
+            // A tampered DIR (DL1504) is unverifiable Verified code — never machine-repairable and
+            // never downgraded to Contained (invariant 29).
+            requires_human: matches!(e, DpxError::DirTampered),
+        })?;
+        Ok(PluginArtifact {
+            manifest: dpx.manifest,
+            class: dpx.class,
+            api: dpx.api,
+            dir: dpx.dir,
+            wasm: dpx.wasm,
+            sig: dpx.sig,
+            lock: dpx.lock,
+            wasm_cache_valid: dpx.wasm_cache_valid,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,6 +508,33 @@ mod tests {
             t[i] ^= 0xff;
             let _ = read_dpx(&t); // must never panic
         }
+    }
+
+    #[test]
+    fn the_engine_reads_an_artifact_into_the_loader_s_plain_data() {
+        // The seam: delulu-wasm parses the container; delulu-runtime's loader consumes plain data.
+        let dir = b"dir payload".to_vec();
+        let dpx = write_dpx(&manifest("verified"), Some(&dir), None, None, None);
+        let art = WasmPluginEngine::new().read_artifact(&dpx).expect("reads");
+        assert_eq!(art.class, "verified");
+        assert_eq!(art.api, 1);
+        assert_eq!(art.name(), "summarize");
+        assert_eq!(art.dir.as_deref(), Some(&dir[..]));
+        // The ceiling projects out of the manifest for load step 3.
+        assert!(art.ceiling().effects.contains(&delulu_check::Effect::Read));
+        assert_eq!(art.exports().len(), 1);
+    }
+
+    #[test]
+    fn the_engine_maps_a_tampered_dir_to_dl1504_requires_human() {
+        let dir = b"the dir payload".to_vec();
+        let dpx = write_dpx(&manifest("verified"), Some(&dir), None, None, None);
+        let pos = dpx.windows(dir.len()).position(|w| w == &dir[..]).expect("dir present");
+        let mut t = dpx.clone();
+        t[pos] ^= 0x01;
+        let e = WasmPluginEngine::new().read_artifact(&t).expect_err("tampered");
+        assert_eq!(e.code, "DL1504");
+        assert!(e.requires_human, "a tampered DIR is never machine-repaired, never downgraded");
     }
 
     #[test]
