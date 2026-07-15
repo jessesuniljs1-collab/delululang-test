@@ -173,6 +173,61 @@ mod tests {
     }
 
     #[test]
+    fn foreign_c_symbols_get_nodes_and_gated_edges() {
+        // A declared C symbol always gets a node; the edge appears only for a function whose
+        // CHECKED row carries ForeignCall and whose body calls the symbol (A3.1).
+        let a = atlas_of(
+            "module m\n\
+             foreign \"c\" lib mathlib { fn cos(x: Float) -> Float\n fn sin(x: Float) -> Float }\n\
+             fn compute(h: mathlib) -> Float ! {ForeignCall} { h.cos(1.0) }\n\
+             fn pure_math(n: Int) -> Int { n + 1 }\n",
+        );
+        // Both declared symbols have nodes (checked declarations), even the uncalled `sin`.
+        let cos = a.node(&foreign_c_id("cos")).expect("cos node");
+        assert_eq!(cos.kind, NodeKind::Foreign);
+        assert_eq!(cos.pattern.as_deref(), Some("c lib mathlib"), "the declaring lib is named");
+        assert!(a.node(&foreign_c_id("sin")).is_some(), "declared-but-uncalled symbol still a node");
+        // compute → cos edge, kind foreign.
+        let compute = fn_id("m", "m", "compute");
+        assert!(a
+            .edges
+            .iter()
+            .any(|e| e.from == compute && e.to == foreign_c_id("cos") && e.kind == EdgeKind::Foreign));
+        // No edge to the uncalled symbol, and none from the pure function.
+        assert!(!a.edges.iter().any(|e| e.to == foreign_c_id("sin") && e.kind == EdgeKind::Foreign));
+        let pure = fn_id("m", "m", "pure_math");
+        assert!(!a.edges.iter().any(|e| e.from == pure && e.kind == EdgeKind::Foreign));
+        // Query verbs see the boundary: a typed path routes through it.
+        let path = a.query_path("compute", "cos", None);
+        assert!(path.contains("--foreign-->"), "typed foreign hop: {path}");
+    }
+
+    #[test]
+    fn python_imports_get_nodes_and_edges() {
+        let a = atlas_of(
+            "module m\n\
+             fn work(py: Cap[Python]) -> Result[Float, PyErr] ! {ForeignCall} {\n\
+               let np = py.import(\"numpy\")?\n\
+               py.to_float(np.call_method(\"mean\", [py.list([py.of_float(1.0)])])?) }\n",
+        );
+        let numpy = a.node(&foreign_py_id("numpy")).expect("foreign:py:numpy node");
+        assert_eq!(numpy.kind, NodeKind::Foreign);
+        assert_eq!(numpy.name, "numpy");
+        let work = fn_id("m", "m", "work");
+        assert!(a
+            .edges
+            .iter()
+            .any(|e| e.from == work && e.to == foreign_py_id("numpy") && e.kind == EdgeKind::Foreign));
+        // `call_method("mean", …)` is a PyObj call, not an import — no `foreign:py:mean` node.
+        assert!(a.node(&foreign_py_id("mean")).is_none(), "only literal imports mint py nodes");
+        // Determinism: nodes remain id-sorted with the foreign nodes in place.
+        let ids: Vec<&str> = a.nodes.iter().map(|n| n.id.as_str()).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(ids, sorted);
+    }
+
+    #[test]
     fn attach_custody_adds_grants_delegates_and_caveat() {
         let mut a = atlas_of(SAMPLE);
         assert_eq!(a.custody, None, "no overlay unless attached");

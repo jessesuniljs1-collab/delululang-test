@@ -217,6 +217,41 @@ fn html_is_self_contained_through_the_binary() {
     assert!(!html.contains("https://"), "no https URLs in the artifact");
 }
 
+// ----- A3.1: the foreign boundary in the graph ----------------------------------------------------
+
+#[test]
+fn foreign_boundary_appears_in_atlas_json_with_nodes_and_edges() {
+    // The head-chef acceptance gate: a real foreign program's atlas carries a `foreign:py:` node
+    // and a `foreign` edge — the boundary is IN the graph, not only in the digest's authority text.
+    const NUMPY: &str = "examples/numpy_mean.delulu";
+    let o = delulu(&["atlas", NUMPY, "--json"]);
+    assert!(o.status.success(), "atlas on the numpy example: {}", stderr(&o));
+    let s = stdout(&o);
+    let v: Value = serde_json::from_str(&s).expect("valid atlas/1 JSON");
+    // The Python module node.
+    let numpy = v["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["id"] == "foreign:py:numpy")
+        .expect("a foreign:py:numpy node in the graph");
+    assert_eq!(numpy["kind"], "foreign");
+    assert_eq!(numpy["name"], "numpy");
+    // The function→foreign edge, from the ForeignCall-rowed function that imports it.
+    assert!(
+        v["edges"].as_array().unwrap().iter().any(|e| e["kind"] == "foreign"
+            && e["from"] == "fn:numpy_mean/numpy_mean.mean_of"
+            && e["to"] == "foreign:py:numpy"),
+        "mean_of --foreign--> numpy edge present"
+    );
+    // Query verbs route through the boundary.
+    let path = stdout(&delulu(&["atlas", "path", "mean_of", "numpy", NUMPY]));
+    assert!(path.contains("--foreign-->"), "typed foreign hop: {path}");
+    // Determinism holds with foreign nodes in place (criterion 1 re-verified).
+    let again = stdout(&delulu(&["atlas", NUMPY, "--json"]));
+    assert_eq!(s, again, "byte-identical across runs with the foreign boundary populated");
+}
+
 // ----- explain surface ----------------------------------------------------------------------------
 
 #[test]

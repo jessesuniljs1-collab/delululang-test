@@ -280,11 +280,24 @@ runtime/broker semantics; the custody overlay uses existing read-only wire verbs
    `--format dot|mermaid|html` return a clean "arrives in phase A3" message in A2; `--custody` is
    accepted but the overlay (and its DL1781 broker-down note) lands in A3. `atlas/1` evolution to add
    them is additive, as the schema requires.
+   **[A3.1 correction, head-chef verification gap]:** the A3 commit populated `delegates`/`grant`
+   but NOT `foreign` — the model/ids/renderer support existed with no builder path constructing a
+   Foreign node or edge. Landed in the A3.1 finishing commit: declared C symbols
+   (`foreign:c:<symbol>`, from the module's checked `foreign` blocks — a declared symbol always
+   gets a node, naming its lib) and literal Python imports (`foreign:py:<module>`, the same
+   `py.import("literal")` rule as the authority report's `imports_seen`); a function→foreign
+   `foreign` edge is added only where the function's CHECKED row carries `ForeignCall` AND its
+   already-parsed body reaches the boundary (a read-only AST walk — never re-lexed; non-literal
+   import names are skipped, covered by the §2.6 under-approximation caveat). Witnesses:
+   `delulu_atlas::tests::{foreign_c_symbols_get_nodes_and_gated_edges, python_imports_get_nodes_and_edges}`
+   (unit) and `atlas_cli.rs::foreign_boundary_appears_in_atlas_json_with_nodes_and_edges`
+   (through the binary on `examples/numpy_mean.delulu`, incl. byte-identical re-run + a typed
+   `--foreign-->` path hop).
 
 ## 8. Close-out (criterion → witnessing test → status)
 
-Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2) → 456 (A3)**. The 2 pre-existing
-ignored are untouched — criterion 10 held at every phase. All 11 criteria are **met**.
+Workspace tests **398 (Guard baseline) → 425 (A1) → 447 (A2) → 456 (A3) → 459 (A3.1)**. The 2
+pre-existing ignored are untouched — criterion 10 held at every phase. All 11 criteria are **met**.
 
 | # | Criterion (§4) | Status | Witnessing test |
 |---|---|---|---|
@@ -300,7 +313,10 @@ ignored are untouched — criterion 10 held at every phase. All 11 criteria are 
 | 10 | **Zero regression** — pre-existing suite passes unchanged | **met (A1–A3)** | the full 398-test Guard-baseline suite runs UNMODIFIED at every phase (456 total, 0 fail); `render::tests::disabled_palette_matches_render_human_byte_for_byte` proves color-off is byte-identical |
 | 11 | Docs & explain — E-ATLAS + E-PALETTE bodies, `usage()`, REPOSITORY_STRUCTURE/README, this close-out | **met (A3)** | E-PALETTE (`codes::tests::palette_code_and_e_palette_topic`) + E-ATLAS (`codes::tests::atlas_codes_and_e_atlas_topic`, `atlas_cli.rs::explain_e_atlas_describes_the_model`) registered with bodies; `usage()` covers `atlas` + the global `--color`/`--theme`; `docs/REPOSITORY_STRUCTURE.md` (palette.rs + delulu-atlas + new test files) and `docs/playbooks/README.md` (Stage 8 early-drop row) updated; this close-out complete; no external tool named anywhere (repo-wide grep clean, §1 owner's ruling) |
 
-Additional A3 surfaces beyond the criteria: the custody overlay (`--custody`) attaches `grant:` nodes
+Additional A3/A3.1 surfaces beyond the criteria: the FOREIGN BOUNDARY is in the graph (§7
+deviation 4's A3.1 correction — `foreign:c:`/`foreign:py:` nodes + `ForeignCall`-gated `foreign`
+edges; `atlas path` routes through the boundary with a typed `--foreign-->` hop, witnessed on
+`examples/numpy_mean.delulu` through the binary); the custody overlay (`--custody`) attaches `grant:` nodes
 + `delegates` edges from the broker's read-only `List` verb (no new wire verbs, no owner code —
 ruling 7), ships the §2.6 custody caveat verbatim, and never blocks the atlas
 (`atlas_e2e.rs::atlas_custody_overlay_live_then_degraded_end_to_end` steps 2–3, unit

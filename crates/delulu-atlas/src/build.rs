@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use delulu_check::program::Program;
 use delulu_diag::SourceMap;
-use delulu_syntax::ast::{Item, Module, TypeExpr};
+use delulu_syntax::ast::{Block, Expr, Item, LitKind, Module, Stmt, TypeExpr};
 use serde_json::Value;
 
 use crate::model::*;
@@ -281,6 +281,57 @@ impl Atlas {
             }
         }
 
+        // ----- 5b. foreign boundary: nodes + function→foreign edges ---------------------------
+        // C symbols come from the module's own checked `foreign` blocks (a declared symbol is a
+        // checked fact and always gets a node); Python modules come from `py.import("literal")`
+        // call sites. A `foreign` EDGE is added only where BOTH hold: the function's CHECKED row
+        // carries `ForeignCall` (the checker's fact) and its body syntactically reaches the
+        // boundary (a call of a declared foreign symbol / a literal `import`). Non-literal import
+        // names are statically unknowable and are skipped — the §2.6 under-approximation caveat
+        // covers exactly this.
+        let mut module_c_syms: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+        for mv in &input.modules {
+            let mut syms = BTreeSet::new();
+            for item in &mv.module.items {
+                if let Item::Foreign(fd) = item {
+                    for f in &fd.fns {
+                        let fid = foreign_c_id(&f.name.name);
+                        let mut node = Node::new(&fid, NodeKind::Foreign, &f.name.name);
+                        node.module = Some(mv.name.clone());
+                        // The declaring lib, for orientation (`pattern` doubles as detail text).
+                        node.pattern = Some(format!("c lib {}", fd.name.name));
+                        node.span = Some(span_loc(input.source_map, f.name.span));
+                        nodes.insert(fid, node);
+                        syms.insert(f.name.name.clone());
+                    }
+                }
+            }
+            module_c_syms.insert(mv.name.as_str(), syms);
+        }
+        for (qual, facts) in &input.program.facts {
+            if !facts.effects.iter().any(|e| e.name() == "ForeignCall") {
+                continue; // no checked ForeignCall row ⇒ no foreign edge, ever
+            }
+            let Some((modname, fname)) = qual.split_once("::") else { continue };
+            let Some(pkg) = module_pkg.get(modname) else { continue };
+            let Some((_, f)) = fn_ast.get(qual) else { continue };
+            let empty = BTreeSet::new();
+            let c_syms = module_c_syms.get(modname).unwrap_or(&empty);
+            let mut reach = ForeignReach::default();
+            walk_block_for_foreign(&f.body, c_syms, &mut reach);
+            let fid = fn_id(pkg, modname, fname);
+            for sym in reach.c_symbols {
+                edges.insert(Edge { from: fid.clone(), to: foreign_c_id(&sym), kind: EdgeKind::Foreign });
+            }
+            for module in reach.py_imports {
+                let pid = foreign_py_id(&module);
+                let mut node = Node::new(&pid, NodeKind::Foreign, &module);
+                node.pattern = Some("python module".to_string());
+                nodes.entry(pid.clone()).or_insert(node);
+                edges.insert(Edge { from: fid.clone(), to: pid, kind: EdgeKind::Foreign });
+            }
+        }
+
         // ----- 6. finalize: sort, god nodes ---------------------------------------------------
         let nodes: Vec<Node> = nodes.into_values().collect(); // BTreeMap → already id-sorted
         let mut edges: Vec<Edge> = edges.into_iter().collect(); // BTreeSet → sorted
@@ -331,6 +382,96 @@ impl Atlas {
             self.caveats.push(CAVEAT_CUSTODY.to_string());
         }
         self.gods = compute_gods(self, god_n.max(1));
+    }
+}
+
+/// What a function body reaches at the foreign boundary: declared-C-symbol calls and literal
+/// Python imports. Collected by a read-only walk of the ALREADY-CHECKED AST (never re-lexed).
+#[derive(Default)]
+struct ForeignReach {
+    c_symbols: BTreeSet<String>,
+    py_imports: BTreeSet<String>,
+}
+
+fn walk_block_for_foreign(b: &Block, c_syms: &BTreeSet<String>, out: &mut ForeignReach) {
+    for s in &b.stmts {
+        match s {
+            Stmt::Let { value, .. } => walk_expr_for_foreign(value, c_syms, out),
+            Stmt::Assign { value, .. } => walk_expr_for_foreign(value, c_syms, out),
+            Stmt::While { cond, body, .. } => {
+                walk_expr_for_foreign(cond, c_syms, out);
+                walk_block_for_foreign(body, c_syms, out);
+            }
+            Stmt::Return { value: Some(v), .. } => walk_expr_for_foreign(v, c_syms, out),
+            Stmt::Return { value: None, .. } => {}
+            Stmt::Expr(e) => walk_expr_for_foreign(e, c_syms, out),
+        }
+    }
+}
+
+fn walk_expr_for_foreign(e: &Expr, c_syms: &BTreeSet<String>, out: &mut ForeignReach) {
+    match e {
+        Expr::Method { recv, name, args, .. } => {
+            // A call of a symbol this module's `foreign` block declares (the checker verified the
+            // receiver is the lib handle — method resolution on foreign types is by symbol name).
+            if c_syms.contains(&name.name) {
+                out.c_symbols.insert(name.name.clone());
+            }
+            // `py.import("literal")` — the statically-known Python boundary (same rule as the
+            // authority report's `imports_seen`).
+            if name.name == "import" {
+                if let Some(Expr::Lit { kind: LitKind::Str(s), .. }) = args.first() {
+                    out.py_imports.insert(s.clone());
+                }
+            }
+            walk_expr_for_foreign(recv, c_syms, out);
+            for a in args {
+                walk_expr_for_foreign(a, c_syms, out);
+            }
+        }
+        Expr::Call { callee, args, .. } => {
+            walk_expr_for_foreign(callee, c_syms, out);
+            for a in args {
+                walk_expr_for_foreign(a, c_syms, out);
+            }
+        }
+        Expr::List { items, .. } => {
+            for i in items {
+                walk_expr_for_foreign(i, c_syms, out);
+            }
+        }
+        Expr::Record { fields, .. } => {
+            for (_, v) in fields {
+                walk_expr_for_foreign(v, c_syms, out);
+            }
+        }
+        Expr::Field { recv, .. } => walk_expr_for_foreign(recv, c_syms, out),
+        Expr::Index { recv, index, .. } => {
+            walk_expr_for_foreign(recv, c_syms, out);
+            walk_expr_for_foreign(index, c_syms, out);
+        }
+        Expr::Unary { operand, .. } => walk_expr_for_foreign(operand, c_syms, out),
+        Expr::Binary { lhs, rhs, .. } => {
+            walk_expr_for_foreign(lhs, c_syms, out);
+            walk_expr_for_foreign(rhs, c_syms, out);
+        }
+        Expr::If { cond, then_, else_, .. } => {
+            walk_expr_for_foreign(cond, c_syms, out);
+            walk_block_for_foreign(then_, c_syms, out);
+            if let Some(e2) = else_ {
+                walk_expr_for_foreign(e2, c_syms, out);
+            }
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            walk_expr_for_foreign(scrutinee, c_syms, out);
+            for arm in arms {
+                walk_expr_for_foreign(&arm.body, c_syms, out);
+            }
+        }
+        Expr::Lambda { body, .. } => walk_block_for_foreign(body, c_syms, out),
+        Expr::Try { inner, .. } => walk_expr_for_foreign(inner, c_syms, out),
+        Expr::Block(b) => walk_block_for_foreign(b, c_syms, out),
+        Expr::Lit { .. } | Expr::Var { .. } => {}
     }
 }
 
