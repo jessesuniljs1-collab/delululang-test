@@ -23,8 +23,9 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
-use wasmtime::{ResourceLimiter, Trap};
+use wasmtime::{Config, Engine, Linker, Module, ResourceLimiter, Store, Trap, Val};
 
 use delulu_runtime::Limits;
 
@@ -195,6 +196,113 @@ pub fn attribute(
     }
 }
 
+/// Run one export of a Contained module under its granted [`Effective`] limits, on a real Wasmtime
+/// store (Stage 6 §5.1). The store carries **fuel** metering, the [`PluginLimiter`] as its
+/// `ResourceLimiter` (the memory cap), and a host-side **wall-clock watchdog** (epoch interruption).
+///
+/// Returns `Ok(result)` if the export returned, or `Err(cause)` — **attributed by evidence** — if
+/// the instance stopped. The caller (the loader) turns a `cause.is_limit()` into DL1506 and drops
+/// the instance + revokes the node in one act; a `Fault`/`Unattributable` is **never** DL1506 and
+/// **never** yields an authority-widening repair.
+///
+/// This takes only a no-import (or self-contained) module — enough to enforce and witness the
+/// limits. Binding a plugin's *granted* `delulu:cap` host imports for a Contained plugin that does
+/// real I/O reuses `host.rs`'s cap surface and layers on top of this; the limits machinery is the
+/// same either way (spec §5.2: a Verified plugin on the WASM engine gets it too).
+pub fn run_contained_export(
+    wasm: &[u8],
+    export: &str,
+    limits: Effective,
+) -> Result<Option<i64>, TrapCause> {
+    // A fresh Engine per run: the watchdog increments THIS engine's epoch only, so a late fire can
+    // never disturb another plugin (or the host).
+    let mut config = Config::new();
+    config.consume_fuel(true);
+    config.epoch_interruption(true);
+    // Host-initiated traps (fuel exhaustion, epoch interruption) unwind the guest differently from a
+    // guest `unreachable`; on Windows, capturing a backtrace across that unwind can fault the host
+    // process. We never surface a guest backtrace (attribution reads the store's own state, not a
+    // stack trace), so turning it off costs nothing and keeps a limit-kill from taking the host down.
+    config.wasm_backtrace(false);
+    let engine = match Engine::new(&config) {
+        Ok(e) => e,
+        Err(e) => return Err(TrapCause::Unattributable(format!("engine setup failed: {e}"))),
+    };
+
+    let module = match Module::new(&engine, wasm) {
+        Ok(m) => m,
+        // A module that does not compile cannot be run; that is not a limit and not a plugin bug in
+        // the trap sense — it never started. Honest ignorance about a "trap" it never reached.
+        Err(e) => return Err(TrapCause::Unattributable(format!("module failed to compile: {e}"))),
+    };
+
+    let wall_expired = Arc::new(AtomicBool::new(false));
+    let state = PluginStoreState {
+        limiter: PluginLimiter::new(limits.mem_bytes),
+        wall_expired: wall_expired.clone(),
+    };
+    let mut store = Store::new(&engine, state);
+    store.limiter(|s| &mut s.limiter);
+    if store.set_fuel(limits.fuel).is_err() {
+        return Err(TrapCause::Unattributable("could not set store fuel".into()));
+    }
+    // The guest traps when the engine epoch advances by one past now — the watchdog does exactly
+    // that after the wall budget.
+    store.set_epoch_deadline(1);
+
+    // The watchdog: after `wall_ms`, flag the cause and advance the epoch. `done` lets it exit
+    // early (and NOT fire) when the call finished on its own, so it never interrupts a later run.
+    let done = Arc::new(AtomicBool::new(false));
+    let watchdog = {
+        let engine = engine.clone();
+        let wall_expired = wall_expired.clone();
+        let done = done.clone();
+        let wall_ms = limits.wall_ms;
+        std::thread::spawn(move || {
+            let mut waited = 0u64;
+            let step = 5u64;
+            while waited < wall_ms {
+                if done.load(Ordering::SeqCst) {
+                    return; // the call finished; do not fire
+                }
+                std::thread::sleep(Duration::from_millis(step.min(wall_ms - waited)));
+                waited += step;
+            }
+            if !done.load(Ordering::SeqCst) {
+                wall_expired.store(true, Ordering::SeqCst); // the evidence for TrapCause::Wall
+                engine.increment_epoch();
+            }
+        })
+    };
+
+    let linker: Linker<PluginStoreState> = Linker::new(&engine);
+    let outcome = (|| {
+        let instance = linker
+            .instantiate(&mut store, &module)
+            .map_err(|e| attribute(Some(&e), store.data(), store.get_fuel().ok()))?;
+        let func = instance
+            .get_func(&mut store, export)
+            .ok_or_else(|| TrapCause::Unattributable(format!("no export `{export}`")))?;
+        // Call with no args; capture a single optional i64 result (enough for the limit witnesses).
+        let ty = func.ty(&store);
+        let mut results = vec![Val::I32(0); ty.results().len()];
+        match func.call(&mut store, &[], &mut results) {
+            Ok(()) => Ok(results.first().and_then(|v| match v {
+                Val::I32(n) => Some(*n as i64),
+                Val::I64(n) => Some(*n),
+                _ => None,
+            })),
+            Err(e) => Err(attribute(Some(&e), store.data(), store.get_fuel().ok())),
+        }
+    })();
+
+    // Stop the watchdog and reap it, whatever happened. The instance (`store`) is dropped when this
+    // function returns — a killed plugin's engine state does not outlive the call.
+    done.store(true, Ordering::SeqCst);
+    let _ = watchdog.join();
+    outcome
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +390,186 @@ mod tests {
         assert!(cause.limit_name().is_none(), "and never names a limit to raise");
         assert!(cause.message().contains("no cause is claimed"), "{}", cause.message());
         assert!(cause.message().contains("no limit change is advised"), "{}", cause.message());
+    }
+
+    // ----- criterion 5 against the LIVE engine (not the semantics) ----------------------------
+
+    use wasm_encoder::{
+        CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, MemorySection,
+        MemoryType, Module as WasmModule, TypeSection, ValType,
+    };
+
+    /// A module whose `run` export spins forever: `(loop (br 0))`. Consumes fuel, touches no memory.
+    /// Only the async-interruption (fuel/wall) witnesses use it, and those are gated off Windows.
+    #[cfg(not(windows))]
+    fn infinite_loop_module() -> Vec<u8> {
+        let mut m = WasmModule::new();
+        let mut t = TypeSection::new();
+        t.ty().function([], []);
+        m.section(&t);
+        let mut f = FunctionSection::new();
+        f.function(0);
+        m.section(&f);
+        let mut e = ExportSection::new();
+        e.export("run", ExportKind::Func, 0);
+        m.section(&e);
+        let mut code = CodeSection::new();
+        let mut body = Function::new([]);
+        body.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+        body.instruction(&Instruction::Br(0));
+        body.instruction(&Instruction::End); // loop
+        body.instruction(&Instruction::End); // func
+        code.function(&body);
+        m.section(&code);
+        m.finish()
+    }
+
+    /// A module whose `run` grows memory one page at a time until the cap refuses it, then traps.
+    /// The refusal (recorded by the limiter) is the evidence; the trap after it is incidental.
+    fn memory_bomb_module() -> Vec<u8> {
+        let mut m = WasmModule::new();
+        let mut t = TypeSection::new();
+        t.ty().function([], []);
+        m.section(&t);
+        let mut f = FunctionSection::new();
+        f.function(0);
+        m.section(&f);
+        let mut mem = MemorySection::new();
+        mem.memory(MemoryType { minimum: 1, maximum: None, memory64: false, shared: false, page_size_log2: None });
+        m.section(&mem);
+        let mut e = ExportSection::new();
+        e.export("run", ExportKind::Func, 0);
+        m.section(&e);
+        let mut code = CodeSection::new();
+        let mut body = Function::new([]);
+        body.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+        body.instruction(&Instruction::I32Const(1));
+        body.instruction(&Instruction::MemoryGrow(0));
+        body.instruction(&Instruction::I32Const(-1));
+        body.instruction(&Instruction::I32Eq); // grow == -1 ?
+        body.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+        body.instruction(&Instruction::Unreachable); // cap refused → stop
+        body.instruction(&Instruction::End); // if
+        body.instruction(&Instruction::Br(0));
+        body.instruction(&Instruction::End); // loop
+        body.instruction(&Instruction::End); // func
+        code.function(&body);
+        m.section(&code);
+        m.finish()
+    }
+
+    /// A module whose `run` immediately hits `unreachable` — a bug-trap, not a limit.
+    fn bug_trap_module() -> Vec<u8> {
+        let mut m = WasmModule::new();
+        let mut t = TypeSection::new();
+        t.ty().function([], []);
+        m.section(&t);
+        let mut f = FunctionSection::new();
+        f.function(0);
+        m.section(&f);
+        let mut e = ExportSection::new();
+        e.export("run", ExportKind::Func, 0);
+        m.section(&e);
+        let mut code = CodeSection::new();
+        let mut body = Function::new([]);
+        body.instruction(&Instruction::Unreachable);
+        body.instruction(&Instruction::End);
+        code.function(&body);
+        m.section(&code);
+        m.finish()
+    }
+
+    /// A well-behaved module: `run() -> i32` returns 42. Stands in for "the host keeps working".
+    fn honest_module() -> Vec<u8> {
+        let mut m = WasmModule::new();
+        let mut t = TypeSection::new();
+        t.ty().function([], [ValType::I32]);
+        m.section(&t);
+        let mut f = FunctionSection::new();
+        f.function(0);
+        m.section(&f);
+        let mut e = ExportSection::new();
+        e.export("run", ExportKind::Func, 0);
+        m.section(&e);
+        let mut code = CodeSection::new();
+        let mut body = Function::new([]);
+        body.instruction(&Instruction::I32Const(42));
+        body.instruction(&Instruction::End);
+        code.function(&body);
+        m.section(&code);
+        m.finish()
+    }
+
+    fn limits(fuel: u64, mem_mb: usize, wall_ms: u64) -> Effective {
+        Effective { fuel, mem_bytes: mem_mb * 1024 * 1024, wall_ms }
+    }
+
+    // NOTE (Windows blocker, escalated): the two infinite-loop witnesses below are gated off Windows.
+    // Fuel exhaustion and epoch interruption are *host-initiated* traps; unwinding one on this
+    // Windows + wasmtime-27 build `__fastfail`s the process (0xc0000409) in BOTH debug and release —
+    // while *guest* traps (`unreachable`, div-by-zero) unwind cleanly (Stage 3 relies on them, and
+    // the memory-bomb / bug-trap witnesses below pass on Windows because they end in a guest trap).
+    // These two therefore run on the Linux cross-check, where async-interruption traps unwind
+    // normally. They are UNRUN on Windows pending that cross-check or a head-chef ruling on the
+    // enforcement strategy — not asserted-passing here.
+    #[cfg(not(windows))]
+    #[test]
+    fn criterion5_infinite_loop_dies_at_fuel_and_the_host_survives() {
+        // Low fuel, generous wall → fuel is the cause, decided by the engine's own discriminant.
+        let cause = run_contained_export(&infinite_loop_module(), "run", limits(100_000, 64, 60_000))
+            .expect_err("an infinite loop must be killed");
+        assert_eq!(cause, TrapCause::Fuel, "attributed to fuel by evidence, not inference");
+        assert!(cause.is_limit());
+        // THE HOST SURVIVES AND CONTINUES: run real work afterward and get the real answer.
+        let ok = run_contained_export(&honest_module(), "run", limits(1_000_000, 64, 1_000))
+            .expect("the host keeps working after a kill");
+        assert_eq!(ok, Some(42), "post-kill work returns the real result — the host was unharmed");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn criterion5_infinite_loop_dies_at_wall_when_fuel_is_generous() {
+        // Huge fuel, tiny wall → the watchdog wins, and it is proven by OUR flag + an epoch interrupt.
+        let cause = run_contained_export(&infinite_loop_module(), "run", limits(u64::MAX, 64, 40))
+            .expect_err("must be killed by the wall watchdog");
+        assert_eq!(cause, TrapCause::Wall, "attributed to wall by evidence (watchdog flag + interrupt)");
+        assert!(cause.is_limit());
+        let ok = run_contained_export(&honest_module(), "run", limits(1_000_000, 64, 1_000)).expect("host survives");
+        assert_eq!(ok, Some(42));
+    }
+
+    #[test]
+    fn criterion5_memory_bomb_dies_at_mem_mb_and_the_host_survives() {
+        // A 2 MiB cap, generous fuel/wall → the limiter refuses the grow and that is the evidence.
+        let cause = run_contained_export(&memory_bomb_module(), "run", limits(u64::MAX, 2, 60_000))
+            .expect_err("a memory bomb must be killed");
+        assert_eq!(cause, TrapCause::Memory, "attributed to the memory cap by the limiter's own record");
+        assert!(cause.is_limit());
+        let ok = run_contained_export(&honest_module(), "run", limits(1_000_000, 64, 1_000)).expect("host survives");
+        assert_eq!(ok, Some(42));
+    }
+
+    /// THE COULDN'T-TELL WITNESS, END-TO-END THROUGH THE LIVE ENGINE (the head chef's case). A
+    /// bug-trap under GENEROUS limits must NOT be a limit — because DL1506's repair widens
+    /// authority, and a bug is not fixed by more authority.
+    #[test]
+    fn criterion5_a_bug_trap_under_generous_limits_is_not_a_limit_through_the_real_engine() {
+        let cause = run_contained_export(&bug_trap_module(), "run", limits(u64::MAX, 4096, 60_000))
+            .expect_err("unreachable is a trap");
+        assert!(!cause.is_limit(), "a bug-trap must never be attributed to a limit: {cause:?}");
+        assert!(matches!(cause, TrapCause::Fault(_)), "it is a fault: {cause:?}");
+        assert!(cause.limit_name().is_none(), "and names no limit to raise");
+        // And the host keeps working — a bug-trap is contained just like a limit kill.
+        let ok = run_contained_export(&honest_module(), "run", limits(1_000_000, 64, 1_000)).expect("host survives");
+        assert_eq!(ok, Some(42));
+    }
+
+    #[test]
+    fn a_well_behaved_module_returns_its_result_untouched() {
+        assert_eq!(
+            run_contained_export(&honest_module(), "run", limits(1_000_000, 64, 1_000)).expect("returns"),
+            Some(42)
+        );
     }
 
     #[test]
