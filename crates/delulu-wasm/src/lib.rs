@@ -12,6 +12,7 @@ mod codegen;
 mod dpx;
 pub mod gen;
 mod host;
+pub mod limits;
 
 pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,

@@ -14,6 +14,10 @@ delulu-check = { path = "../delulu-check" }
 # WASM backend is the DL1201 interpreter fallback — phase 4g, head-chef ruling).
 delulu-runtime = { path = "../delulu-runtime", default-features = false }
 wasm-encoder = "0.221"
+# Stage 6 (Live) 6f.2: the trap-attribution core downcasts Wasmtime's boxed error to `Trap` and
+# builds honest `Unattributable` messages. `anyhow` is already compiled in-tree (a transitive dep of
+# wasmtime), so making it a DIRECT dep adds no new build — recorded as build-order deviation 6.
+anyhow = "1"
 # Default features (incl. signals-based traps) so host-function errors unwind cleanly rather than
 # aborting the process — correctness over build size.
 wasmtime = "27"

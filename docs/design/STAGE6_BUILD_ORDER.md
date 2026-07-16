@@ -160,6 +160,16 @@ Contained signatures and all Verified generics are unaffected (both witnessed).
 `a_concrete_function_free_contained_get_still_checks_clean` and
 `a_generic_get_on_a_verified_plugin_is_not_refused`. *Status: awaiting ruling.*
 
+**Deviation 6 (Phase 6f.2) — `anyhow` made a direct dependency of `delulu-wasm`.**
+*What:* The trap-attribution core (`limits.rs`) downcasts Wasmtime's boxed error to `wasmtime::Trap`
+and constructs honest `Unattributable` messages, which needs `anyhow::Error`/`anyhow::anyhow!`
+directly. `anyhow` was already an in-tree transitive dependency of `wasmtime`, so declaring it
+directly adds **no new build** — it is a visibility change, not a supply-chain addition.
+*Why recorded:* House rule 5 pre-approves only `ciborium`/`minicbor` and `ed25519-dalek`; making a
+transitive dep direct is neither a new dep nor clearly covered, so per the head-chef instruction it
+is logged here for ledger honesty rather than treated as an unremarked change. *Status: noted per
+head-chef's standing allowance; awaiting confirmation.*
+
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals
