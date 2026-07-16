@@ -170,6 +170,30 @@ transitive dep direct is neither a new dep nor clearly covered, so per the head-
 is logged here for ledger honesty rather than treated as an unremarked change. *Status: noted per
 head-chef's standing allowance; awaiting confirmation.*
 
+**Deviation 7 (Phase 6f.2b) — Windows in-process CPU/wall enforcement is refused, not executed.**
+*What:* On Windows + wasmtime 27, in-process CPU/wall limit enforcement uses host-initiated wasm
+traps (fuel exhaustion / epoch interruption), and unwinding one `__fastfail`s the host process
+(exit 0xc0000409) — an **uncatchable** crash, i.e. a plugin that merely spins would take the host
+down, breaking trap 5's "host continues" promise. All three head-chef-ruled candidates were tried
+as actual Windows runs and each still fastfailed inside `func.call`: (1) `wasm_backtrace(false)`,
+(2) `signals_based_traps(false)`, (3) their combination. Bisected to the mechanism (fuel-only and
+epoch-only each crash, with or without a guest memory, in debug and release); **guest** traps
+(`unreachable`, div-by-zero) unwind cleanly, which is why Stage 3's differential and the
+memory-bomb/bug-trap attribution witnesses are unaffected.
+*Degradation (safety by construction):* on Windows, `run_contained_export` returns
+`TrapCause::EnforcementUnsupported` **before creating any store** — the fastfailing path is
+`#[cfg(not(windows))]` and does not compile into the Windows binary at all (non-negotiable 1: never
+execute a path that can fastfail; a fastfail cannot be caught). The refusal is honest: not a limit
+hit (never DL1506, never an authority-widening repair), not a plugin fault; it names the reason
+(non-negotiable 2: no silent weakening). The evidence-based attribution core and its both-direction
+witnesses run on **every** platform (unit tests); the live-engine criterion-5 witnesses (fuel, wall,
+memory, host-survival, bug-trap-not-a-limit) run on the **non-Windows** cross-check, the
+enforcement-grade platform (spec §5.2/§5.4).
+*Status: the out-of-process Job Object enforcement path (reuse `foreign_worker.rs` +
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) is **held for a head-chef ruling** before being built — not
+started unasked. This deviation records the interim honest degradation. Candidates exhausted per the
+ruling's hard cap; awaiting the enforcement-path ruling.*
+
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals

@@ -23,11 +23,17 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
-use wasmtime::{Config, Engine, Linker, Module, ResourceLimiter, Store, Trap, Val};
+use wasmtime::{ResourceLimiter, Trap};
 
 use delulu_runtime::Limits;
+
+// The live-execution path is compiled only off Windows (see `run_contained_export`): on Windows
+// it would be a code path that can fastfail the host, so it literally does not exist there.
+#[cfg(not(windows))]
+use std::time::Duration;
+#[cfg(not(windows))]
+use wasmtime::{Config, Engine, Linker, Module, Store, Val};
 
 /// Default fuel when `limits.fuel == 0` ("broker/profile default" — never "unlimited", spec §4).
 pub const DEFAULT_FUEL: u64 = 50_000_000;
@@ -51,6 +57,11 @@ pub enum TrapCause {
     /// The engine did not give evidence that attributes this stop. **Honest ignorance**: the plugin
     /// is still killed, but nothing is claimed about why, and no widening repair is offered.
     Unattributable(String),
+    /// This platform + engine config cannot **enforce** the granted CPU/wall limits safely, so the
+    /// run was **refused before it started** (Windows, Phase 6f.2b — see [`run_contained_export`]).
+    /// Not a limit that was hit; not a plugin fault. Never DL1506, never an authority-widening
+    /// repair — the honest degradation for a platform where in-process enforcement would fastfail.
+    EnforcementUnsupported(String),
 }
 
 impl TrapCause {
@@ -81,6 +92,9 @@ impl TrapCause {
             ),
             TrapCause::Unattributable(w) => format!(
                 "stopped for a reason this engine cannot attribute ({w}) — the plugin was terminated, but no cause is claimed and no limit change is advised"
+            ),
+            TrapCause::EnforcementUnsupported(w) => format!(
+                "was not run because its CPU/wall limits cannot be enforced here: {w}"
             ),
         }
     }
@@ -214,16 +228,62 @@ pub fn run_contained_export(
     export: &str,
     limits: Effective,
 ) -> Result<Option<i64>, TrapCause> {
+    // --- Windows safety by construction (Phase 6f.2b, NOT-FIXED branch) ------------------------
+    // In-process CPU/wall enforcement uses host-initiated wasm traps (fuel exhaustion / epoch
+    // interruption). On Windows + wasmtime 27, unwinding one of those `__fastfail`s the host
+    // process — an UNCATCHABLE crash. All three ruled candidates (wasm_backtrace(false),
+    // signals_based_traps(false), and their combination) were tried and each still fastfailed at
+    // `func.call`. A fastfail cannot be caught, so the only safe move is to NOT REACH IT: on
+    // Windows we refuse the run up front rather than execute a path that can crash the host
+    // (non-negotiable 1). This is stated in diagnostics and docs (non-negotiable 2); it is neither
+    // a limit hit (never DL1506, never authority-widening) nor a plugin fault. The out-of-process
+    // enforcement path is a separate head-chef ruling. See build-order deviation 7.
+    #[cfg(windows)]
+    {
+        let _ = (wasm, export, limits);
+        return Err(TrapCause::EnforcementUnsupported(
+            "in-process CPU/wall limits use host-initiated wasm traps, whose unwind fastfails the \
+             host on Windows with this engine; Contained plugins are refused here until \
+             out-of-process enforcement lands"
+                .into(),
+        ));
+    }
+    #[cfg(not(windows))]
+    {
+        run_contained_export_impl(wasm, export, limits)
+    }
+}
+
+/// The real execution path (non-Windows). Split out so the Windows guard in
+/// [`run_contained_export`] is a clean early return and this body never compiles into a Windows
+/// binary at all — the fastfailing path literally does not exist there (safety by construction).
+#[cfg(not(windows))]
+fn run_contained_export_impl(
+    wasm: &[u8],
+    export: &str,
+    limits: Effective,
+) -> Result<Option<i64>, TrapCause> {
     // A fresh Engine per run: the watchdog increments THIS engine's epoch only, so a late fire can
     // never disturb another plugin (or the host).
     let mut config = Config::new();
     config.consume_fuel(true);
     config.epoch_interruption(true);
+    // --- Windows host-safety by construction (Phase 6f.2b) ------------------------------------
+    // Applied to the PLUGIN store's Config ONLY — Stage 3's engine Config is untouched, so its
+    // 5,000-program differential is unaffected.
+    //
     // Host-initiated traps (fuel exhaustion, epoch interruption) unwind the guest differently from a
-    // guest `unreachable`; on Windows, capturing a backtrace across that unwind can fault the host
-    // process. We never surface a guest backtrace (attribution reads the store's own state, not a
-    // stack trace), so turning it off costs nothing and keeps a limit-kill from taking the host down.
+    // guest `unreachable`. On Windows + wasmtime 27, that unwind `__fastfail`s the host process
+    // (0xc0000409) — an uncatchable crash, so the only safe move is to not reach it. Two settings,
+    // both of which our evidence-based attribution makes free:
+    //   1. wasm_backtrace(false): wasmtime otherwise stack-walks the guest on every trap to build a
+    //      backtrace — a known Windows fastfail source. We never surface a guest backtrace
+    //      (attribution reads the store's own fuel/limiter/watchdog state, not a stack trace).
     config.wasm_backtrace(false);
+    //   2. signals_based_traps(false): deliver traps as an ordinary returned error instead of via
+    //      the SEH/signal unwind path that fastfails. Costs some throughput; a plugin sandbox trades
+    //      throughput for not being able to crash its host.
+    config.signals_based_traps(false);
     let engine = match Engine::new(&config) {
         Ok(e) => e,
         Err(e) => return Err(TrapCause::Unattributable(format!("engine setup failed: {e}"))),
@@ -392,16 +452,35 @@ mod tests {
         assert!(cause.message().contains("no limit change is advised"), "{}", cause.message());
     }
 
-    // ----- criterion 5 against the LIVE engine (not the semantics) ----------------------------
+    // On Windows, in-process CPU/wall enforcement is refused up front (6f.2b, NOT-FIXED branch):
+    // the honest degradation returns `EnforcementUnsupported` and never executes into a fastfail.
+    #[cfg(windows)]
+    #[test]
+    fn windows_refuses_contained_execution_rather_than_risk_a_fastfail() {
+        // A minimal module — even a well-behaved one — is refused, BEFORE any store is created, so
+        // no code path that could fastfail the host is ever reached. The refusal is honest: not a
+        // limit (never DL1506), not a plugin fault, and it names the reason.
+        let e = run_contained_export(b"\0asm\x01\0\0\0", "run", Effective { fuel: 1, mem_bytes: 1, wall_ms: 1 })
+            .expect_err("Windows refuses in-process Contained execution");
+        assert!(matches!(e, TrapCause::EnforcementUnsupported(_)));
+        assert!(!e.is_limit(), "an enforcement-unsupported refusal is never a limit (never DL1506)");
+        assert!(e.limit_name().is_none(), "and never advises raising a limit");
+        assert!(e.message().contains("cannot be enforced here"), "{}", e.message());
+    }
 
-    use wasm_encoder::{
-        CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, MemorySection,
-        MemoryType, Module as WasmModule, TypeSection, ValType,
-    };
+    // ----- criterion 5 against the LIVE engine (not the semantics). Gated off Windows: in-process
+    // CPU/wall enforcement fastfails the host there (6f.2b), so these run on the Linux cross-check,
+    // which is the enforcement-grade platform (spec §5.2/§5.4). The evidence-based ATTRIBUTION
+    // itself is witnessed on every platform by the unit tests above. -----------------------------
+    #[cfg(not(windows))]
+    mod live_engine {
+        use super::*;
+        use wasm_encoder::{
+            CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction,
+            MemorySection, MemoryType, Module as WasmModule, TypeSection, ValType,
+        };
 
     /// A module whose `run` export spins forever: `(loop (br 0))`. Consumes fuel, touches no memory.
-    /// Only the async-interruption (fuel/wall) witnesses use it, and those are gated off Windows.
-    #[cfg(not(windows))]
     fn infinite_loop_module() -> Vec<u8> {
         let mut m = WasmModule::new();
         let mut t = TypeSection::new();
@@ -504,15 +583,6 @@ mod tests {
         Effective { fuel, mem_bytes: mem_mb * 1024 * 1024, wall_ms }
     }
 
-    // NOTE (Windows blocker, escalated): the two infinite-loop witnesses below are gated off Windows.
-    // Fuel exhaustion and epoch interruption are *host-initiated* traps; unwinding one on this
-    // Windows + wasmtime-27 build `__fastfail`s the process (0xc0000409) in BOTH debug and release —
-    // while *guest* traps (`unreachable`, div-by-zero) unwind cleanly (Stage 3 relies on them, and
-    // the memory-bomb / bug-trap witnesses below pass on Windows because they end in a guest trap).
-    // These two therefore run on the Linux cross-check, where async-interruption traps unwind
-    // normally. They are UNRUN on Windows pending that cross-check or a head-chef ruling on the
-    // enforcement strategy — not asserted-passing here.
-    #[cfg(not(windows))]
     #[test]
     fn criterion5_infinite_loop_dies_at_fuel_and_the_host_survives() {
         // Low fuel, generous wall → fuel is the cause, decided by the engine's own discriminant.
@@ -526,7 +596,6 @@ mod tests {
         assert_eq!(ok, Some(42), "post-kill work returns the real result — the host was unharmed");
     }
 
-    #[cfg(not(windows))]
     #[test]
     fn criterion5_infinite_loop_dies_at_wall_when_fuel_is_generous() {
         // Huge fuel, tiny wall → the watchdog wins, and it is proven by OUR flag + an epoch interrupt.
@@ -571,6 +640,7 @@ mod tests {
             Some(42)
         );
     }
+    } // mod live_engine
 
     #[test]
     fn only_the_three_real_limits_are_limits() {
