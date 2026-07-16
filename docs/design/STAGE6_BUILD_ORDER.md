@@ -189,12 +189,43 @@ hit (never DL1506, never an authority-widening repair), not a plugin fault; it n
 witnesses run on **every** platform (unit tests); the live-engine criterion-5 witnesses (fuel, wall,
 memory, host-survival, bug-trap-not-a-limit) run on the **non-Windows** cross-check, the
 enforcement-grade platform (spec §5.2/§5.4).
-*Status: the out-of-process Job Object enforcement path (reuse `foreign_worker.rs` +
-`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) is **held for a head-chef ruling** before being built — not
-started unasked. This deviation records the interim honest degradation. Candidates exhausted per the
-ruling's hard cap; awaiting the enforcement-path ruling.*
+*Why the BROAD cfg-out is correct, not over-broad (on the record):* a Contained plugin that can be
+memory-limited but **not** CPU/wall-limited is not "Contained" — it could spin forever and hang the
+host (a DoS by hang instead of by crash), which *looks like* "working" and is arguably worse to
+reason about than an honest refusal. Refusing **all** Contained execution on Windows is more honest
+than offering a half-containment that does not actually contain.
+*Status: **ruled: approved (accept honest refusal for v0.6)**. The out-of-process Job Object path is
+**NOT** built now and is deferred to the post-v0.6 RFC ledger (§5). Head-chef reasons of record:
+(1) the spec's own enforcement-grade platform for hostile Contained code is the WASM engine on Linux
+(§5.4/§10) — this degradation lands on the axis the spec already designates non-primary, and Verified
+plugins run on all platforms via the interpreter; (2) out-of-process is a second execution
+architecture that splits the enforcement model (fuel has no subprocess analogue) and collides with
+R-6b invalidate-on-return and R-Get (marshalling host capability values across a process boundary) —
+bolting it on under ship pressure is how the next fail-open gets built; (3) the root cause is most
+likely an upstream wasmtime-27-on-Windows host-trap-unwind bug, whose right long-term fix is a
+version bump that restores the in-process path with zero model split.*
 
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals
 461 → N; verification evidence)*
+
+## 5. Post-v0.6 RFC ledger
+
+Deferred by ruling, recorded so no future builder starts blind:
+
+1. **Multi-module plugin packages** (Deviation 3). Needs a whole-program DIR replay path
+   (`check_program`) with cross-module interface metadata. Refused honestly (DL1004) in v0.6.
+2. **Declared-effect plugins** (spec non-goal). Plugins exporting types or effects would
+   complicate row identity across load boundaries — RFC-gated by the spec itself.
+3. **Windows Contained-execution enforcement** (Deviation 7). v0.6 refuses Contained execution
+   on Windows honestly (`EnforcementUnsupported`) because wasmtime-27's host-initiated trap
+   unwind fastfails the process there (bisected; three Config candidates exhausted).
+   **Preferred resolution:** revisit the in-process path on a future wasmtime whose Windows
+   host-trap unwind is fixed — zero enforcement-model split. **Fallback only if that never
+   lands:** out-of-process execution via the Stage-5 foreign-worker subprocess +
+   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` — knowing going in that (a) fuel (deterministic CPU
+   metering) has no subprocess analogue, so the enforcement model splits by platform; and
+   (b) host capability values must never be marshalled across the process boundary in a way
+   that weakens R-6b invalidate-on-return or R-Get — that design must be ruled on before it
+   is built.
