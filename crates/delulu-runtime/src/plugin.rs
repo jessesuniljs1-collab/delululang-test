@@ -1966,4 +1966,20 @@ mod tests {
         let LoadedPlugin::Verified { signer, .. } = load_verified(&art, &grant(&[]), &mut c).expect("loads");
         assert!(signer.is_none(), "an unsigned plugin has no signer identity");
     }
+
+    #[test]
+    fn criterion6_load_succeeds_with_an_invalid_wasm_cache_never_rests_on_machine_code() {
+        // CRITERION 6 (loader side, spec §3.2): the Verified guarantee never rests on shipped machine
+        // code. A load SUCCEEDS even with a corrupt `delulu:wasm` cache — the loader never touches it
+        // (a WASM host recompiles from DIR; the interpreter host ignores it entirely). The DIR-flip
+        // half is DL1504 at the container read (delulu-wasm `criterion6_dir_flip_...`).
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        art.wasm = Some(b"a corrupt, stale compilation cache".to_vec());
+        art.wasm_cache_valid = false; // as the container reader flags a Verified cache mismatch
+        let mut c = host_custody(&[]);
+        assert!(
+            load_verified(&art, &grant(&[]), &mut c).is_ok(),
+            "an invalid wasm cache must not fail a Verified load"
+        );
+    }
 }

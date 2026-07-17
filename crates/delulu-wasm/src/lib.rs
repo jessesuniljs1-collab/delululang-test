@@ -35,6 +35,28 @@ pub fn compile_and_run_int(module: &Module, name: &str, args: &[i64]) -> Result<
     run_int_fn(&wasm, name, args).map_err(|e| e.message())
 }
 
+/// The executable WASM for a **Verified** plugin on the WASM host (spec §5.2/§3.2, phase 6h).
+///
+/// Uses the shipped `delulu:wasm` **cache** only when it is present AND matched its content binding
+/// (`cache_valid`); otherwise it **recompiles from the re-proved DIR module**. This is spec §3.2 made
+/// executable: *the verified guarantee never rests on shipped machine code.* A cache byte-flip
+/// therefore never fails a load — the loader ignores the corrupt cache and recompiles (criterion 6).
+///
+/// The resulting module is run through [`limits::run_contained_export`], the SAME limits machinery a
+/// Contained plugin uses — so on Windows a Verified-on-WASM run inherits the honest
+/// `EnforcementUnsupported` refusal before any store exists (build-order deviation 7); the
+/// interpreter host (`delulu-runtime`) is unaffected and runs Verified plugins on every platform.
+pub fn verified_executable_wasm(
+    module: &Module,
+    cache: Option<&[u8]>,
+    cache_valid: bool,
+) -> Result<Vec<u8>, CompileError> {
+    if let (Some(w), true) = (cache, cache_valid) {
+        return Ok(w.to_vec()); // a valid cache is used as-is
+    }
+    compile_module(module) // recompiled from DIR — the guarantee never rests on shipped machine code
+}
+
 /// Lower every `foreign` block in `module` to its per-lib marshalling signatures for [`HostConfig`]
 /// (Stage 4 phase 4g). Uses the interpreter's own `lower_foreign_sig`, so the WASM host resolves
 /// symbols and marshals exactly as the reference engine does (verify≡run, one code path).
@@ -730,5 +752,90 @@ mod tests {
         // And no custody at all (embedded) is unchanged.
         let cfg = HostConfig { console: true, ..HostConfig::default() };
         assert_eq!(run_main(&wasm, &cfg).expect("embedded run"), "never\n");
+    }
+
+    // ----- Phase 6h: Verified-on-WASM + criterion 6 (the wasm cache is never trusted) --------
+
+    #[test]
+    fn criterion6_dir_flip_is_dl1504_and_a_wasm_cache_flip_recompiles_from_dir() {
+        // CRITERION 6, both directions, through the real container + engine.
+        use delulu_runtime::PluginEngine; // the trait, for `read_artifact`
+        let src = "module p\npub fn shout(s: Str) -> Str { s + \"!\" }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let dir = delulu_check::dir_serialize(&checked.module, &checked.result);
+        let cache = compile_module(&checked.module).expect("the flagship compiles to WASM");
+        let manifest = serde_json::json!({
+            "name": "shout", "version": "0.1.0", "api": 1, "class": "verified",
+            "authority": { "effects": [], "requires": [] },
+            "exports": { "shout": "fn(Str) -> Str" },
+        });
+        let dpx = write_dpx(&manifest, Some(&dir), Some(&cache), None, None);
+
+        // Direction 1: flip a DIR byte -> DL1504 at load (a failed Verified re-check precondition).
+        let dpos = dpx.windows(dir.len()).position(|w| w == &dir[..]).expect("dir present");
+        let mut td = dpx.clone();
+        td[dpos] ^= 0x01;
+        let e = WasmPluginEngine::new().read_artifact(&td).expect_err("a tampered DIR is refused at load");
+        assert_eq!(e.code, "DL1504", "a DIR byte-flip is a failed Verified re-check");
+        assert!(e.requires_human, "never machine-repaired, never a Contained fallback");
+
+        // Direction 2: flip a WASM-CACHE byte -> ignored, recompiled from DIR, load succeeds.
+        let cpos = dpx.windows(cache.len()).position(|w| w == &cache[..]).expect("cache present");
+        let mut tc = dpx.clone();
+        tc[cpos] ^= 0x01;
+        let art = WasmPluginEngine::new().read_artifact(&tc).expect("a bad cache does NOT fail the read");
+        assert!(!art.wasm_cache_valid, "the corrupt cache is flagged invalid");
+        let recompiled =
+            verified_executable_wasm(&checked.module, art.wasm.as_deref(), art.wasm_cache_valid)
+                .expect("recompiles from DIR");
+        assert!(
+            wasmtime::Module::new(&wasmtime::Engine::default(), &recompiled).is_ok(),
+            "the DIR-recompiled module validates — load succeeds"
+        );
+        assert_ne!(recompiled.as_slice(), art.wasm.as_deref().unwrap(), "the corrupt cache was NOT used");
+
+        // A VALID cache is used as-is (the fast path); the guarantee still rests on DIR, not on it.
+        let art_ok = WasmPluginEngine::new().read_artifact(&dpx).expect("clean read");
+        assert!(art_ok.wasm_cache_valid);
+        assert_eq!(
+            verified_executable_wasm(&checked.module, art_ok.wasm.as_deref(), art_ok.wasm_cache_valid).unwrap(),
+            cache,
+            "a valid cache is used as-is"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_verified_plugin_runs_on_the_wasm_engine_under_the_contained_limits() {
+        // spec §5.2: Verified-on-WASM compiles DIR->module and runs under the SAME limits machinery
+        // as Contained. A no-arg pure export returns its value on the enforcement-grade platform.
+        let checked = check_source(0, "module p\npub fn answer() -> Int { 42 }\n");
+        let wasm = compile_module(&checked.module).expect("compiles");
+        let out = crate::limits::run_contained_export(
+            &wasm,
+            "answer",
+            crate::limits::Effective { fuel: 1_000_000, mem_bytes: 64 * 1024 * 1024, wall_ms: 1_000 },
+        )
+        .expect("a Verified plugin runs on the WASM engine");
+        assert_eq!(out, Some(42));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_verified_plugin_on_wasm_inherits_the_windows_enforcement_refusal() {
+        // Deviation 7: on Windows, in-process CPU/wall enforcement fastfails, so run_contained_export
+        // refuses BEFORE any store — and a Verified-on-WASM run inherits exactly that honest refusal
+        // (never a crash, never a silent no-op, never DL1506).
+        let checked = check_source(0, "module p\npub fn answer() -> Int { 42 }\n");
+        let wasm = compile_module(&checked.module).expect("compiles");
+        let e = crate::limits::run_contained_export(
+            &wasm,
+            "answer",
+            crate::limits::Effective { fuel: 1, mem_bytes: 1, wall_ms: 1 },
+        )
+        .expect_err("Windows refuses in-process enforcement");
+        assert!(matches!(e, crate::limits::TrapCause::EnforcementUnsupported(_)));
+        assert!(!e.is_limit(), "an enforcement-unsupported refusal is never DL1506");
     }
 }

@@ -473,3 +473,28 @@ is phase 6h; by construction it runs through the *same* `run_contained_export` l
 Contained plugin, which on Windows returns an honest `EnforcementUnsupported` refusal before any store
 exists (deviation 7) — so a Verified-on-WASM run inherits that refusal, while the interpreter path
 here runs on every platform (a Verified plugin was re-proved safe by type).
+
+**Phase 6h — ed25519 signatures + Verified-on-WASM — is implemented and green** (603 tests).
+**Signatures** (spec §2.2/§3.1 step 6, ed25519-dalek v2 — crypto never hand-rolled): a `delulu:sig`
+section is a 32-byte public key ‖ a 64-byte signature over the canonical `delulu:plugin` manifest ‖
+the class payload (DIR for Verified, module for Contained). Signing (`plugin build --sign <keyfile>`)
+and verification (load step 6) share one message-construction path (`sig_message`), so verify can
+never drift from sign; verification reads only existing artifact fields, so every unsigned load is
+unchanged. **Signatures authenticate origin, not behavior** (§10) — v0.6 has no trust policy. Two
+DIFFERENT faults get different codes (build-order deviation 8, the kitchen rule): **DL1510** a
+present-but-invalid signature (tampered/wrong-key/malformed — refused regardless of policy), **DL1511**
+an unsigned plugin under a `require_signed` grant (a policy refusal). The signer's identity (the
+public key, hex) is recorded in the audit log via `Custody::note_plugin_signature` →
+`Broker::record_plugin_signature` (embedded custody with a sink; daemon-side signature audit is
+deferred — deviation 8) and shown by `plugin inspect` (`signed_by`) through the SAME
+`verify_signature` the loader runs. Criterion 8 is witnessed both directions; the signature kitchen
+rule is witnessed (malformed section, wrong key, tampered content, unsigned-vs-badly-signed as
+distinct faults). **Verified-on-WASM** (spec §5.2/§3.2): `verified_executable_wasm` uses the
+`delulu:wasm` **cache** only when it matched its content binding, else **recompiles from DIR** — the
+verified guarantee never rests on shipped machine code — and runs through the *same*
+`run_contained_export` limits path as a Contained plugin (so on Windows it inherits the honest
+`EnforcementUnsupported` refusal before any store, deviation 7; on the Linux cross-check it runs).
+**Criterion 6** is witnessed both directions end-to-end: a `.dpx` **DIR** byte-flip is **DL1504** at
+load (a failed Verified re-check, never a Contained fallback); a `.dpx` **wasm-cache** byte-flip is
+ignored, recompiled from DIR, and the load **succeeds** (the recompiled module validates and is not
+the corrupt cache).
