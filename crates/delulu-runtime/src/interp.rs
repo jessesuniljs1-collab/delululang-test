@@ -17,6 +17,72 @@ use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Valu
 
 const MAX_DEPTH: u32 = 10_000;
 
+/// Default best-effort step budget for a plugin run when `Limits::fuel == 0` (spec §4/§5.4). A
+/// bound, never "unlimited" — but generous, because the interpreter is a *courtesy* path, not the
+/// enforcement path: a Contained plugin always runs on the WASM engine by construction.
+pub const DEFAULT_INTERP_STEPS: u64 = 200_000_000;
+/// Default best-effort memory-accounting budget (bytes) when `Limits::mem_mb == 0`.
+pub const DEFAULT_INTERP_MEM_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Best-effort interpreter execution limits (spec §5.4, invariant 32).
+///
+/// **"Best-effort" is a load-bearing label, not a hedge.** The tree-walking interpreter is *not*
+/// the enforcement-grade sandbox for hostile code — a Contained plugin ALWAYS runs on the WASM
+/// engine (spec §5.1/§5.4), and a Verified plugin was re-proved safe *by type* at load. These
+/// limits only bound *accidental* runaway (an infinite loop, a runaway allocation) in a Verified
+/// plugin a host chose to run here. `fuel` maps to a **step counter**; `mem_mb` maps to
+/// **allocator accounting** at the interpreter's own value-construction sites — which cannot see
+/// every byte the Rust allocator touches, so it under-counts, and the diagnostic says so. We never
+/// claim the interpreter *contains* hostile code.
+///
+/// Interior-mutable (`Cell`) because the interpreter evaluates through `&self`; [`Budget::reset`]
+/// gives each call its own fresh budget so one call cannot starve a later one.
+struct Budget {
+    fuel: u64,
+    mem_bytes: u64,
+    steps_left: Cell<u64>,
+    bytes_left: Cell<u64>,
+}
+
+impl Budget {
+    fn new(fuel: u64, mem_bytes: u64) -> Budget {
+        Budget { fuel, mem_bytes, steps_left: Cell::new(fuel), bytes_left: Cell::new(mem_bytes) }
+    }
+    /// Restore the full budget — called before each export invocation.
+    fn reset(&self) {
+        self.steps_left.set(self.fuel);
+        self.bytes_left.set(self.mem_bytes);
+    }
+    /// Charge one evaluation step (fuel). `Err("fuel")` once the budget is spent.
+    fn step(&self) -> Result<(), &'static str> {
+        let s = self.steps_left.get();
+        if s == 0 {
+            return Err("fuel");
+        }
+        self.steps_left.set(s - 1);
+        Ok(())
+    }
+    /// Charge `n` bytes of allocation (mem). `Err("mem_mb")` once the budget is spent.
+    fn alloc(&self, n: u64) -> Result<(), &'static str> {
+        let b = self.bytes_left.get();
+        if n > b {
+            self.bytes_left.set(0);
+            return Err("mem_mb");
+        }
+        self.bytes_left.set(b - n);
+        Ok(())
+    }
+}
+
+/// The DL1506 message for a best-effort interpreter limit. It **LABELS** the mechanism (spec §5.4)
+/// so no reader mistakes the interpreter for the enforcement-grade path: a Contained plugin runs on
+/// the WASM engine, where the same limit is *enforced*, not merely *accounted*.
+fn best_effort_limit_msg(limit: &str) -> String {
+    format!(
+        "best-effort interpreter {limit} budget exhausted — the interpreter is not the enforcement-grade sandbox (spec §5.4); a Contained plugin runs on the WASM engine, where this limit is enforced rather than merely accounted"
+    )
+}
+
 /// Non-local control flow. `Fault` is a real runtime error; the others are ordinary control.
 enum Escape {
     Return(Value),
@@ -55,6 +121,11 @@ pub struct Interp {
     /// daemon` swaps in a `BrokerClientCustody` (IPC) via [`Interp::with_custody`]. Interior
     /// mutability because `eval_*` take `&self` and custody `check`/`expose` mutate the epoch cache.
     custody: RefCell<Box<dyn Custody>>,
+    /// Best-effort execution limits (spec §5.4, Stage 6 phase 6e.5). **`None` for every Stage-1..5
+    /// entry point** — attached only for a Verified plugin run via [`Interp::with_plugin_budget`], so
+    /// a program built with `Interp::new` is byte-identical to Stages 1–4 (criterion 11). When
+    /// absent, every budget check is a single always-false branch.
+    budget: Option<Budget>,
 }
 
 impl Interp {
@@ -88,7 +159,47 @@ impl Interp {
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
             foreign_binder: Rc::new(InProcBinder),
             custody: RefCell::new(Box::new(EmbeddedCustody::new())),
+            budget: None,
         }
+    }
+
+    /// Attach best-effort execution limits for a Verified plugin run (spec §5.4, phase 6e.5). Builder
+    /// style, additive: `fuel` becomes a step budget and `mem_bytes` an allocation-accounting budget.
+    /// Every existing entry point leaves this `None` — so the interpreter's behavior for a host
+    /// program is unchanged (criterion 11). The budget is **best-effort and labeled so**: the
+    /// interpreter is not the enforcement-grade sandbox (that is the WASM engine, spec §5.1/§5.4).
+    pub fn with_plugin_budget(mut self, fuel: u64, mem_bytes: u64) -> Interp {
+        self.budget = Some(Budget::new(fuel, mem_bytes));
+        self
+    }
+
+    /// Restore the full best-effort budget (no-op if none is attached). Called before each Verified
+    /// export invocation so a plugin cannot starve a later call with an earlier one's spending.
+    pub fn reset_plugin_budget(&self) {
+        if let Some(b) = &self.budget {
+            b.reset();
+        }
+    }
+
+    /// Charge one evaluation step against the best-effort budget (no-op when absent). A spent budget
+    /// surfaces as DL1506 (`LimitExceeded`) with the best-effort label (spec §5.4).
+    fn charge_step(&self) -> R<()> {
+        if let Some(b) = &self.budget {
+            if let Err(limit) = b.step() {
+                return Err(Escape::Fault(Fault::new("DL1506", best_effort_limit_msg(limit))));
+            }
+        }
+        Ok(())
+    }
+
+    /// Charge `n` bytes of allocation against the best-effort budget (no-op when absent).
+    fn charge_alloc(&self, n: u64) -> R<()> {
+        if let Some(b) = &self.budget {
+            if let Err(limit) = b.alloc(n) {
+                return Err(Escape::Fault(Fault::new("DL1506", best_effort_limit_msg(limit))));
+            }
+        }
+        Ok(())
     }
 
     /// Route foreign binds through a custom [`ForeignBinder`] (Stage 5 phase 5h). The CLI attaches a
@@ -340,6 +451,9 @@ impl Interp {
     // ----- expressions ----------------------------------------------------
 
     fn eval_expr(&self, e: &Expr, env: &Env) -> R<Value> {
+        // Best-effort fuel (spec §5.4): one step per expression node. A no-op unless a plugin budget
+        // is attached, so every host-program entry point is unaffected (criterion 11).
+        self.charge_step()?;
         match e {
             Expr::Lit { kind, .. } => Ok(self.lit(kind)),
             Expr::Var { path, span, .. } => self.eval_var(path, *span, env),
@@ -348,6 +462,8 @@ impl Interp {
                 for it in items {
                     vs.push(self.eval_expr(it, env)?);
                 }
+                // Best-effort memory accounting (spec §5.4): ~one word per slot plus the header.
+                self.charge_alloc((items.len() as u64).saturating_mul(16).saturating_add(16))?;
                 Ok(Value::List(Rc::new(std::cell::RefCell::new(vs))))
             }
             Expr::Record { path, fields, .. } => {
@@ -356,6 +472,7 @@ impl Interp {
                 for (fname, fexpr) in fields {
                     fs.push((fname.name.clone(), self.eval_expr(fexpr, env)?));
                 }
+                self.charge_alloc((fields.len() as u64).saturating_mul(16).saturating_add(16))?;
                 Ok(Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) })
             }
             Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env),
@@ -783,7 +900,12 @@ impl Interp {
             Eq => Ok(Value::Bool(l.eq(&r))),
             Ne => Ok(Value::Bool(!l.eq(&r))),
             Add if matches!(l, Value::Str(_)) => {
-                Ok(Value::str(format!("{}{}", l.display(), r.display())))
+                // Charge the projected result size (best-effort memory, spec §5.4) BEFORE allocating
+                // it, so a runaway doubling concatenation trips the byte budget instead of the heap.
+                let ls = l.display();
+                let rs = r.display();
+                self.charge_alloc((ls.len() + rs.len()) as u64)?;
+                Ok(Value::str(format!("{ls}{rs}")))
             }
             Add | Sub | Mul | Div | Rem => self.arith(op, l, r, span),
             Lt | Le | Gt | Ge => self.compare(op, l, r, span),

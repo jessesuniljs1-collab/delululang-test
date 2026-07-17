@@ -20,7 +20,8 @@ pub use plugin::{
     cap_slice, kill_on_limit, load_prepare, load_verified, plugin_err_code, r_get_contained,
     r_get_verified, step5_verified, unload, Grant, HandleTable, ImportSig, ImportSlice, Limits,
     LoadRefusal, LoadedPlugin, PluginArtifact, PluginClass, PluginEngine, PluginErr, PluginRef,
-    PreparedLoad, VerifiedPlugin, WasmVal, PLUGIN_API_SUPPORTED,
+    PluginRunError, PreparedLoad, VerifiedInterpInstance, VerifiedPlugin, WasmVal,
+    PLUGIN_API_SUPPORTED,
 };
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};

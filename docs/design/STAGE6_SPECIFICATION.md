@@ -446,3 +446,30 @@ revoking audit seq that **DL0801** carries; `PluginRef` binds the load-time `Gra
 mints a fresh node and an old reference stays dead **forever**. **Criterion 4** (R-7 composition) is
 witnessed through the real loader across three levels: a sub-plugin exceeding its parent is DL0802,
 a conforming one loads, and host revocation kills all three transitively.
+
+**Phase 6e.5 — Verified interpreter instantiation (the flagship RUNS) — is implemented and green**
+(592 tests). Phase 6e proved a Verified plugin and typed its surface; 6e.5 makes it *execute* on the
+interpreter host (spec §5.2). `VerifiedInterpInstance` (in `delulu-runtime::plugin`) builds an
+`Interp` over the **re-proved `dir.module`** — the exact AST `step5_verified` re-verified at load —
+and `call_export(name, args)` runs it. Because the module was re-checked in full at load, the
+interpreter's well-typedness assumption holds, so every failure is a *defined* fault, never UB.
+**Criterion 1 at the interpreter** is witnessed end-to-end: a zero-authority (`Grant { effects: [] }`)
+text-transform loads, R-Get accepts `let f: fn(Str) -> Str ! {} = p.get("shout")?` (the annotation
+form — deviation 4, bracket syntax is notation only), calling `f` returns the transformed string, and
+the host's row is unchanged (a pure export under a pure `F` adds nothing to any caller row). The
+**rigged half** is refused *at load*: a plugin that hides a `Clock` (or `Read`/`Net`) effect behind a
+pure manifest row is a **DL1504 row violation**, never a fallback to Contained (invariant 29) — the
+effect never reaches a run. **Interpreter limits are best-effort and labeled so** (spec §5.4): `fuel`
+is a step counter, `mem_mb` is allocator accounting at value-construction sites, both attached only
+for a plugin run (`Interp::with_plugin_budget`, `None` for every host-program entry point — criterion
+11 unchanged), and a trip is **DL1506 whose message states plainly it is best-effort and names the
+WASM engine as the enforcement-grade path** — we never claim the interpreter *contains* hostile code.
+**The couldn't-tell case is named and total** (`PluginRunError`): a best-effort limit is `Limit`
+(DL1506); the plugin's own runtime bug (overflow/div-by-zero/bounds) is `Faulted` (its DL09xx,
+honestly surfaced — never a limit, since more authority cannot fix a bug); and a DIR that verified
+yet reaches something the interpreter cannot evaluate (a missing primitive, an unexpected node) is
+`Unevaluable` (DL0907) — **never a panic, never a silent `Unit`**. **Verified-on-WASM** (DIR→module)
+is phase 6h; by construction it runs through the *same* `run_contained_export` limits machinery as a
+Contained plugin, which on Windows returns an honest `EnforcementUnsupported` refusal before any store
+exists (deviation 7) — so a Verified-on-WASM run inherits that refusal, while the interpreter path
+here runs on every platform (a Verified plugin was re-proved safe by type).

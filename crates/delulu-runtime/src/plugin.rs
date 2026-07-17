@@ -39,6 +39,8 @@ use delulu_check::Effect;
 use delulu_syntax::parse_type_string;
 
 use crate::custody::{Custody, CustodyDenial, Liveness};
+use crate::interp::{Interp, DEFAULT_INTERP_MEM_BYTES, DEFAULT_INTERP_STEPS};
+use crate::value::{Fault, Value};
 
 /// The plugin ABI version this runtime loads. Kept in lockstep with
 /// `delulu_check::plugin::PLUGIN_API_SUPPORTED`; a mismatch is DL1507.
@@ -808,6 +810,131 @@ pub fn load_verified(
     }
 }
 
+// ===== 6e.5 — Verified interpreter instantiation (the flagship RUNS) ==========================
+//
+// A Verified plugin ships DIR — re-proved source-grade semantics — and is executed by the HOST's
+// own engine (spec §5.2). On the interpreter host, "instantiate" means: build an [`Interp`] over the
+// re-verified `dir.module` and call an export through it. Because `step5_verified` re-ran the whole
+// checker over that exact module at load, the interpreter's well-typedness assumption holds — so a
+// runtime failure is a *defined* DL09xx fault, never UB and (crucially, per the kitchen rule) never
+// a panic and never a silent `Unit`.
+//
+// **Verified on the WASM engine** (spec §5.2, playbook 6h) compiles the DIR to a module and runs it
+// through `delulu-wasm`'s `run_contained_export` — the SAME limits machinery as a Contained plugin,
+// which on Windows returns an honest `EnforcementUnsupported` refusal *before any store exists*
+// (build-order deviation 7). So a Verified-on-WASM run inherits that refusal by construction; the
+// interpreter path below is unaffected by it and runs on every platform (a Verified plugin was
+// re-proved safe by type, so the interpreter is a legitimate engine for it — spec §5.4).
+
+/// The effective best-effort interpreter limits for a load (§5.4): `0` → profile default, **never
+/// "unlimited"**. `fuel` → a step budget; `mem_mb` → an allocation-accounting byte budget.
+fn effective_interp_limits(limits: &Limits) -> (u64, u64) {
+    let steps = if limits.fuel > 0 { limits.fuel as u64 } else { DEFAULT_INTERP_STEPS };
+    let mem_bytes = if limits.mem_mb > 0 {
+        (limits.mem_mb as u64).saturating_mul(1024 * 1024)
+    } else {
+        DEFAULT_INTERP_MEM_BYTES
+    };
+    (steps, mem_bytes)
+}
+
+/// A Verified plugin instantiated on the interpreter host (spec §5.2), ready to run exports.
+///
+/// Holds an [`Interp`] built over the **re-proved** `dir.module` — the exact AST the checker
+/// validated and `step5_verified` re-verified at load — under a **best-effort** budget (§5.4).
+/// Best-effort is not a hedge: the interpreter is a courtesy engine, not the containment boundary.
+/// A *Contained* plugin never runs here (it runs on the WASM engine); this runs *Verified* plugins,
+/// which were re-proved safe by type, and the budget only bounds accidental runaway.
+pub struct VerifiedInterpInstance {
+    interp: Interp,
+    fn_types: BTreeMap<String, Type>,
+}
+
+impl VerifiedInterpInstance {
+    /// Instantiate a re-proved Verified plugin on the interpreter under its granted best-effort
+    /// limits. Pure construction — **no plugin code runs** until [`VerifiedInterpInstance::call_export`].
+    pub fn instantiate(verified: &VerifiedPlugin, limits: &Limits) -> VerifiedInterpInstance {
+        let (steps, mem_bytes) = effective_interp_limits(limits);
+        let interp = Interp::new(&verified.dir.module).with_plugin_budget(steps, mem_bytes);
+        VerifiedInterpInstance { interp, fn_types: verified.dir.fn_types.clone() }
+    }
+
+    /// The re-verified static type of an export (for a caller re-confirming R-Get before a call).
+    pub fn export_type(&self, name: &str) -> Option<&Type> {
+        self.fn_types.get(name)
+    }
+
+    /// Call a Verified export with host-provided argument values, under the best-effort budget.
+    ///
+    /// The budget is **reset per call** — fresh fuel/mem each invocation, so a plugin cannot starve
+    /// a later call by spending an earlier one's budget. The outcome is honest and *total*:
+    /// - `Ok(value)` — the export returned its result.
+    /// - `Err(Limit)` — a best-effort limit (step/mem) tripped; DL1506, **LABELED best-effort**.
+    /// - `Err(Faulted)` — the plugin's export hit a **defined** runtime fault (overflow, div-by-zero,
+    ///   out-of-bounds): the plugin's own bug, surfaced cleanly — not a host failure, not a limit.
+    /// - `Err(Unevaluable)` — the DIR verified, yet evaluation reached something the interpreter
+    ///   cannot evaluate (a missing primitive, an unexpected node). **The couldn't-tell case**:
+    ///   honest, **never a panic, never a silent `Unit`**.
+    pub fn call_export(&self, name: &str, args: Vec<Value>) -> Result<Value, PluginRunError> {
+        self.interp.reset_plugin_budget();
+        self.interp.call_with(name, args).map_err(classify_run_fault)
+    }
+}
+
+/// The outcome of a failed Verified-export call (§5.2/§5.4). Kept **distinct from** the load-time
+/// [`PluginErr`]: loading a plugin and running one are different phases, and conflating their error
+/// codes would make a message a lie (the kitchen rule — a skipped check and a violated check are
+/// different faults and earn different codes).
+#[derive(Clone, Debug)]
+pub enum PluginRunError {
+    /// A best-effort interpreter limit tripped (DL1506, spec §5.4). The message LABELS best-effort:
+    /// the interpreter is not the enforcement-grade sandbox.
+    Limit(Fault),
+    /// The plugin's export hit a defined runtime fault (its own bug), surfaced cleanly.
+    Faulted(Fault),
+    /// The DIR verified, but the interpreter could not evaluate some node/primitive — the
+    /// couldn't-tell case. Never a panic, never a silent `Unit`.
+    Unevaluable(Fault),
+}
+
+impl PluginRunError {
+    /// The registered diagnostic code this outcome surfaces as.
+    pub fn code(&self) -> &'static str {
+        self.fault().code
+    }
+    /// The human-facing message (for `Limit`, it carries the best-effort label).
+    pub fn message(&self) -> &str {
+        &self.fault().message
+    }
+    /// The underlying interpreter fault.
+    pub fn fault(&self) -> &Fault {
+        match self {
+            PluginRunError::Limit(f) | PluginRunError::Faulted(f) | PluginRunError::Unevaluable(f) => f,
+        }
+    }
+}
+
+/// Classify an interpreter [`Fault`] from a plugin export call into an honest [`PluginRunError`].
+///
+/// This is a security-honesty distinction, so it is its own function and tested directly (the
+/// kitchen rule: the couldn't-tell branch is where honesty dies):
+/// - **DL1506** is a best-effort limit — the only code the interpreter budget emits (§5.4).
+/// - **DL0907** is the interpreter's "unexpected / cannot evaluate" catch-all: an unknown function,
+///   a missing method/primitive, a non-callable value, `?` on a non-`Result`, an unexpected node.
+///   In a re-verified (well-typed) module these are *can't-happens* — so if one nonetheless occurs,
+///   the honest report is "the interpreter could not evaluate this", **not** a claim about the
+///   plugin's behavior and **not** a limit.
+/// - Every **other** DL09xx/DL07xx/DL14xx is a **defined** runtime fault the plugin's own code hit
+///   (overflow DL0901, div-by-zero DL0902, bounds DL0903, depth DL0905, an ungranted or
+///   again-revoked capability): the plugin faulted, honestly, and the host learns exactly which.
+fn classify_run_fault(f: Fault) -> PluginRunError {
+    match f.code {
+        "DL1506" => PluginRunError::Limit(f),
+        "DL0907" => PluginRunError::Unevaluable(f),
+        _ => PluginRunError::Faulted(f),
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1366,5 +1493,169 @@ mod tests {
         let ceiling = art.ceiling();
         assert!(ceiling.effects.is_empty(), "an unreadable ceiling confers nothing");
         assert!(step3_ceiling(&grant(&["Read"]).to_authority(), &ceiling).is_err());
+    }
+
+    // ----- 6e.5: Verified interpreter instantiation — the flagship RUNS -----------------------
+
+    /// Complete a load and pull out the re-proved plugin (the shape a host embedding holds).
+    fn load_and_get_verified(
+        code: &str,
+        exports: serde_json::Value,
+        ceiling: &[&str],
+        g: &Grant,
+        c: &mut EmbeddedCustody,
+    ) -> Box<VerifiedPlugin> {
+        let art = verified_artifact(code, exports, ceiling);
+        let LoadedPlugin::Verified { verified, .. } = load_verified(&art, g, c).expect("loads");
+        verified
+    }
+
+    #[test]
+    fn flagship_a_zero_authority_text_transform_loads_gets_and_runs() {
+        // CRITERION 1 (the flagship, Constitution §4 Possibility 2) at the INTERPRETER engine. A
+        // third-party text-transform plugin loads with `Grant { effects: [] }`; the host asks for a
+        // PURE `fn(Str) -> Str ! {}` (annotation form — build-order deviation 4, not bracket
+        // syntax); R-Get succeeds; calling it returns the transformed string; and the host's row is
+        // unchanged — the export is pure, so a pure `F` covers it and nothing is added to any caller
+        // row (that "host row unchanged" is exactly R-Get accepting a pure export under a pure F).
+        let code = "module p\npub fn shout(s: Str) -> Str { s + \"!\" }\n";
+        let mut c = host_custody(&["Read", "Net"]); // the host holds authority the plugin will NOT get
+        let verified = load_and_get_verified(code, json!({ "shout": "fn(Str) -> Str" }), &[], &grant(&[]), &mut c);
+
+        // R-Get, annotation form: `let f: fn(Str) -> Str ! {} = p.get("shout")?`.
+        let pure_f = fnty(vec![Type::Str], Type::Str, &[]);
+        r_get_verified(verified.dir.fn_types.get("shout"), &pure_f, "shout")
+            .expect("R-Get accepts a pure export under a pure F — the host row is unchanged");
+
+        // Instantiate on the interpreter and RUN. The transformed string comes back.
+        let inst = VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits::default());
+        let out = inst.call_export("shout", vec![Value::str("hello")]).expect("the export runs");
+        assert_eq!(out.display(), "hello!", "the plugin transformed the string");
+
+        // It is re-runnable and deterministic — a fresh budget each call.
+        assert_eq!(
+            inst.call_export("shout", vec![Value::str("world")]).unwrap().display(),
+            "world!"
+        );
+    }
+
+    #[test]
+    fn flagship_a_rigged_variant_that_tries_to_tell_the_clock_is_refused_at_load() {
+        // CRITERION 1's rigged half. A plugin that ATTEMPTS an effect (here reading the clock) while
+        // hiding it behind a pure manifest row is refused AT LOAD — a DL1504-class ROW violation —
+        // so the effect never reaches the point of running. A file-read or a net-reach rig is
+        // refused identically: the manifest row cannot conceal what the code's row performs, and
+        // Verified NEVER falls back to Contained (invariant 29).
+        let code = "module p\npub fn shout(clk: Cap[Clock], s: Str) -> Str ! {Clock} { let _t = clk.now_ms()\n s }\n";
+        // The manifest LIES — same shape, but a PURE row.
+        let art = verified_artifact(code, json!({ "shout": "fn(Cap[Clock], Str) -> Str ! {}" }), &["Clock"]);
+        let mut c = host_custody(&["Clock"]);
+        let e = load_verified(&art, &grant(&["Clock"]), &mut c).expect_err("the hidden effect is caught at load");
+        assert_eq!(e.code, "DL1504", "a hidden effect is a DL1504 row violation: {}", e.message);
+        assert!(e.message.contains("Clock"), "the refusal names the hidden effect: {}", e.message);
+        assert!(e.requires_human, "DL1504 is requires_human and never falls back to Contained");
+    }
+
+    #[test]
+    fn couldnt_tell_an_unevaluable_export_is_an_honest_error_never_a_panic_or_silent_unit() {
+        // THE KITCHEN RULE for 6e.5. A DIR that verified, but whose evaluation reaches something the
+        // interpreter cannot evaluate, must yield an honest error — NEVER a panic, NEVER a silent
+        // `Unit`. We provoke it deterministically: ask the instance to run a name the interpreter's
+        // function table does not hold. The interpreter faults DL0907 ("unknown function"), its
+        // couldn't-tell catch-all, and the runner reports `Unevaluable` — an `Err`, not `Ok(Unit)`.
+        let code = "module p\npub fn shout(s: Str) -> Str { s }\n";
+        let mut c = host_custody(&[]);
+        let verified = load_and_get_verified(code, json!({ "shout": "fn(Str) -> Str" }), &[], &grant(&[]), &mut c);
+        let inst = VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits::default());
+
+        let r = inst.call_export("ghost", vec![Value::str("x")]);
+        assert!(r.is_err(), "an unevaluable export must be an Err, never a silent Ok(Unit)");
+        let e = r.unwrap_err();
+        assert!(matches!(e, PluginRunError::Unevaluable(_)), "the couldn't-tell case is Unevaluable: {e:?}");
+        assert_eq!(e.code(), "DL0907");
+    }
+
+    #[test]
+    fn classify_run_fault_maps_each_class_honestly() {
+        // The couldn't-tell classification, tested at the seam (the kitchen rule, written first).
+        // DL1506 → Limit; DL0907 → Unevaluable; every other defined fault → Faulted.
+        assert!(matches!(classify_run_fault(Fault::new("DL1506", "x")), PluginRunError::Limit(_)));
+        assert!(matches!(classify_run_fault(Fault::new("DL0907", "x")), PluginRunError::Unevaluable(_)));
+        for code in ["DL0901", "DL0902", "DL0903", "DL0905", "DL0703", "DL1403"] {
+            assert!(
+                matches!(classify_run_fault(Fault::new(code, "x")), PluginRunError::Faulted(_)),
+                "{code} is the plugin's own runtime fault, not a limit or a couldn't-tell"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plugin_that_faults_at_runtime_surfaces_cleanly_as_faulted() {
+        // The plugin's own runtime bug (division by zero) surfaces as a clean Faulted(DL0902) —
+        // never a panic, never a silent `Unit`, and NOT a limit (more authority cannot fix a bug).
+        let code = "module p\npub fn crash(x: Int) -> Int { x / 0 }\n";
+        let mut c = host_custody(&[]);
+        let verified = load_and_get_verified(code, json!({ "crash": "fn(Int) -> Int" }), &[], &grant(&[]), &mut c);
+        let inst = VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits::default());
+        let e = inst.call_export("crash", vec![Value::Int(10)]).expect_err("div by zero faults");
+        assert!(matches!(e, PluginRunError::Faulted(_)), "a runtime bug is Faulted: {e:?}");
+        assert_eq!(e.code(), "DL0902");
+    }
+
+    #[test]
+    fn best_effort_fuel_kills_an_infinite_loop_and_is_labeled_best_effort() {
+        // §5.4: on the interpreter `fuel` is a best-effort STEP COUNTER. An infinite loop is killed
+        // by it — but the message says plainly it is best-effort and names the WASM engine as the
+        // enforcement-grade path. We never claim the interpreter *contains* hostile code. (An
+        // *unbounded loop*, not unbounded recursion: the latter grows the interpreter's own native
+        // call stack, which the depth guard DL0905 bounds — a different, orthogonal limit.)
+        let code = "module p\npub fn spin(s: Str) -> Str { while true { let _k = 1 }\n s }\n";
+        let mut c = host_custody(&[]);
+        let verified = load_and_get_verified(code, json!({ "spin": "fn(Str) -> Str" }), &[], &grant(&[]), &mut c);
+        let inst =
+            VerifiedInterpInstance::instantiate(verified.as_ref(), &Limits { fuel: 5_000, mem_mb: 0, wall_ms: 0 });
+        let e = inst.call_export("spin", vec![Value::str("x")]).expect_err("an infinite loop is killed");
+        assert!(matches!(e, PluginRunError::Limit(_)), "a step-budget kill is a Limit: {e:?}");
+        assert_eq!(e.code(), "DL1506");
+        assert!(e.message().contains("best-effort"), "the message LABELS best-effort: {}", e.message());
+        assert!(e.message().contains("WASM engine"), "and names the enforcement-grade path: {}", e.message());
+        // The budget resets per call — a second call gets fresh fuel and also trips (never wedged).
+        assert!(matches!(inst.call_export("spin", vec![Value::str("y")]), Err(PluginRunError::Limit(_))));
+    }
+
+    #[test]
+    fn best_effort_memory_accounting_stops_a_runaway_allocation_labeled_best_effort() {
+        // §5.4: `mem_mb` maps to allocator accounting at value-construction sites. A doubling string
+        // concatenation would blow real memory; the byte budget trips first — and is honestly
+        // labeled, with generous fuel so the STEP counter is not what caught it.
+        let code =
+            "module p\npub fn grow(s: Str, n: Int) -> Str { if n <= 0 { s } else { grow(s + s, n - 1) } }\n";
+        let mut c = host_custody(&[]);
+        let verified =
+            load_and_get_verified(code, json!({ "grow": "fn(Str, Int) -> Str" }), &[], &grant(&[]), &mut c);
+        let inst = VerifiedInterpInstance::instantiate(
+            verified.as_ref(),
+            &Limits { fuel: 10_000_000, mem_mb: 1, wall_ms: 0 },
+        );
+        let e = inst
+            .call_export("grow", vec![Value::str("padpadpadpadpadpad"), Value::Int(40)])
+            .expect_err("a runaway allocation is stopped");
+        assert!(matches!(e, PluginRunError::Limit(_)), "a memory-budget kill is a Limit: {e:?}");
+        assert_eq!(e.code(), "DL1506");
+        assert!(
+            e.message().contains("best-effort") && e.message().contains("mem_mb"),
+            "labeled best-effort memory: {}",
+            e.message()
+        );
+    }
+
+    #[test]
+    fn a_host_program_run_is_byte_identical_no_budget_attached() {
+        // Criterion 11 shape: the budget is opt-in. A plugin instance attaches one; the ordinary
+        // `Interp::new` path used by every host program does NOT — so its behavior is unchanged.
+        // (Witnessed by every pre-existing interpreter test still passing; asserted here directly.)
+        let checked = delulu_check::check_source(0, "module m\nfn f(n: Int) -> Int { n + 1 }\n");
+        let interp = Interp::new(&checked.module);
+        assert_eq!(interp.call_with("f", vec![Value::Int(41)]).unwrap().display(), "42");
     }
 }
