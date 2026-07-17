@@ -1,0 +1,19 @@
+[package]
+name = "shout-rigged"
+version = "0.1.0"
+kind = "plugin"
+
+[plugin]
+api = 1
+class = "verified"
+
+# This manifest LIES: it advertises a pure `! {}` row, but the code below reads the clock (`! {Clock}`).
+# `delulu plugin build` runs the manifest-vs-code fence and refuses with DL1501 — the manifest never
+# overrides the code. (If a dishonest DIR were smuggled past the build, a load would still refuse with
+# a DL1504 row violation; Verified never falls back to Contained.)
+[plugin.authority]
+effects  = ["Clock"]
+requires = ["Cap[Clock]"]
+
+[plugin.exports]
+shout = "fn(Cap[Clock], Str) -> Str ! {}"

@@ -1,0 +1,19 @@
+[package]
+name = "shout"
+version = "0.1.0"
+kind = "plugin"                      # a plugin package builds to a .dpx, never a runnable binary
+
+[plugin]
+api = 1                              # the plugin ABI version (independent of the language version)
+class = "verified"                   # Verified: ships DIR, re-checked per-function at load
+
+# The hard authority ceiling (Stage-1 §8.1): the MOST a host may ever grant this plugin.
+# It is EMPTY — this is the flagship's whole point. A zero-authority plugin provably cannot
+# read a file, tell the time, or reach the network: it has no capability parameter and its
+# type is a pure `fn(Str) -> Str`, so the type system forbids every effect by construction.
+[plugin.authority]
+effects  = []
+requires = []
+
+[plugin.exports]
+shout = "fn(Str) -> Str"

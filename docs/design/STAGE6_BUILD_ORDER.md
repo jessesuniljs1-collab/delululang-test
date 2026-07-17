@@ -227,8 +227,53 @@ the Implementation status log and `E-PLUGIN`; the daemon-audit gap is stated in 
 
 ## 4. Close-out
 
-*(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals
-461 → N; verification evidence)*
+**Suite:** 461 (Stage-6 open) → **608 passed / 0 failed / 2 ignored** on Windows (full workspace).
+Zero pre-existing tests edited. The head chef runs the Linux/WSL cross-check at close-out; the
+platform split is stated per criterion below.
+
+### The 11 §9 acceptance criteria, each with its witnessing test(s)
+
+| # | Criterion | Witness(es) |
+|---|---|---|
+| 1 | The flagship demo (zero-authority transform loads/gets/runs; host row unchanged; rigged refused at load) | `flagship_a_zero_authority_text_transform_loads_gets_and_runs`, `flagship_a_rigged_variant_that_tries_to_tell_the_clock_is_refused_at_load` (delulu-runtime `plugin.rs`); runnable example `examples/plugin_shout/` (honest builds+verifies; `rigged/` refused DL1501) |
+| 2 | Audit F-1: a Contained export types at `effects(grant)` (R-1); the honest annotation is the only one accepted | `r_get_contained_types_every_export_at_the_full_grant_r1` (delulu-runtime) |
+| 3 | R-6c: unload → DL0801 w/ audit seq; reload → old ref dead forever, new handle works | `r6c_unload_then_a_retained_reference_is_dl0801_with_the_revoking_seq`, `r6c_reload_mints_a_fresh_node_and_the_old_reference_stays_dead_forever` (delulu-runtime) |
+| 4 | R-7 composition across three levels; host revocation kills all transitively | `criterion4_r7_composition_a_sub_plugin_can_never_exceed_its_parent` (delulu-runtime) |
+| 5 | Limits: infinite loop dies at fuel/wall; memory bomb at mem_mb; host continues; a bug-trap is NOT a limit | **Non-Windows (live engine):** `criterion5_infinite_loop_dies_at_fuel_and_the_host_survives`, `criterion5_infinite_loop_dies_at_wall_when_fuel_is_generous`, `criterion5_memory_bomb_dies_at_mem_mb_and_the_host_survives`, `criterion5_a_bug_trap_under_generous_limits_is_not_a_limit_through_the_real_engine` (delulu-wasm `limits.rs`). **All platforms:** the evidence-based attribution unit tests (`a_bug_trap_under_generous_limits_is_never_a_limit`, `an_unattributable_stop_claims_nothing_and_advises_no_widening`). **Windows:** `windows_refuses_contained_execution_rather_than_risk_a_fastfail`. **Interpreter best-effort (all platforms):** `best_effort_fuel_kills_an_infinite_loop_and_is_labeled_best_effort`, `best_effort_memory_accounting_stops_a_runaway_allocation_labeled_best_effort` (delulu-runtime) |
+| 6 | DIR byte-flip → DL1504 at load; wasm-cache byte-flip → ignored, recompiled from DIR, load succeeds | `criterion6_dir_flip_is_dl1504_and_a_wasm_cache_flip_recompiles_from_dir` (delulu-wasm), `criterion6_load_succeeds_with_an_invalid_wasm_cache_never_rests_on_machine_code` (delulu-runtime), `tampered_dir_is_dl1504_dir_tampered` + `tampered_verified_wasm_cache_is_ignored_not_an_error` (delulu-wasm `dpx.rs`) |
+| 7 | A function-typed parameter in `F` on a Contained `get` → DL0803 at compile time | `a_function_typed_param_to_a_contained_export_is_dl0803_at_compile_time`, `a_nested_function_typed_param_to_a_contained_export_is_also_dl0803` (delulu-check); fail-closed side: `an_unpinned_get_on_a_contained_plugin_is_dl1509_not_a_silent_skip`, `generic_laundering_of_a_closure_into_a_contained_export_is_dl1509` |
+| 8 | A signed plugin verifies and its identity lands in the audit log; `require_signed` refuses an unsigned plugin | `criterion8_a_signed_plugin_verifies_and_its_identity_lands_in_the_audit_log`, `criterion8_require_signed_refuses_an_unsigned_plugin_as_dl1511` (delulu-runtime) |
+| 9 | `plugin verify` ≡ real load across the corpus (no verify/load divergence) | `criterion9_verify_gives_identical_verdicts_to_a_real_load_across_the_corpus` (delulu-runtime; 9-artifact corpus proven to exercise ok/DL1504/DL1507/DL1510) |
+| 10 | `why` traverses a Verified plugin to the primitive op; labels a Contained boundary | `criterion10_verified_why_traverses_the_real_chain_to_the_primitive_op`, `plugin_why_chain_is_cycle_safe` (delulu `cli.rs`); live: `why Read reader.dpx` → `[verified plugin reader] scan -> slurp — Read`; `why Net opaque.dpx` → `→ [contained plugin opaque-tool] — Net` |
+| 11 | Full prior conformance suites green on both engines, embedded and daemon custody | The full 608-test suite green; two-engine parity (interpreter reference vs WASM, incl. the 5,000-program differential `wasm_matches_interpreter_on_random_programs_including_faults`); both custody modes (`EmbeddedCustody` default + daemon via `FakeCustody`/`DenyAll`/`AllowAll` seam tests) |
+
+**Criterion 5 / 11 platform split (explicit, nothing claimed passing where unrun).** The live-engine
+criterion-5 witnesses (fuel/wall/memory kills, host-survival, bug-trap-not-a-limit) are
+`#[cfg(not(windows))]` and run on the Linux/WSL cross-check — the spec's enforcement-grade platform
+(§5.2/§5.4). On Windows they do **not** run (in-process host-trap unwind fastfails there, deviation 7);
+Windows instead runs the evidence-based attribution unit tests (every platform) and the honest
+`EnforcementUnsupported` refusal witness. Verified-on-WASM inherits that Windows refusal by
+construction; **Verified plugins run on every platform via the interpreter.** Criterion 11's
+"both engines / both custody" is green on Windows here and re-run on the Linux/WSL cross-check.
+
+### Per-trap proof lines (playbook §3)
+
+1. **Class never inferred; Verified never silently falls back to Contained** — `step2_refuses_a_class_mismatch_and_never_substitutes`, `a_verified_class_never_falls_back_when_step5_fails_and_the_node_is_revoked` (delulu-runtime); a malformed DIR verifies as DL1504 with no fallback path (`a_malformed_dir_verifies_as_dl1504_never_falls_back`, delulu-check).
+2. **R-1 is the honesty keystone** — `r_get_contained_types_every_export_at_the_full_grant_r1`; the F-1 scenario is refused at the gate unless the annotation covers the whole grant.
+3. **`dir::verify` reuses the checker's rule code** — `valid_dir_verifies_and_agrees_with_check_source` (agrees with `check_source` across a corpus) + criterion 9's verify≡load corpus (one code path, proven, not spot-checked).
+4. **No plugin reaches the broker** — `dl1505_a_root_constructor_is_never_in_any_slice` (a plugin can never mint a capability); invariant 31 is guaranteed by *absence* (the loader holds the `GrantId` host-side; the plugin's value vocabulary has no `attenuate`/`revoke`/lease/IPC).
+5. **A limit-killed plugin is gone, not wounded** — `trap5_a_limit_killed_plugin_is_gone_not_wounded` (drops the instance AND revokes the node in one act); the criterion-5 host-survival witnesses confirm the host continues.
+6. **Interpreter limits are best-effort, and it says so** — `best_effort_fuel_...` / `best_effort_memory_...`: the DL1506 message states it is best-effort and names the WASM engine as the enforcement-grade path; the interpreter is never claimed to contain hostile code.
+7. **Signatures authenticate origin, not behavior** — the §10 caveat is verbatim in `delulu explain E-PLUGIN` (`plugin_codes_and_e_plugin_topic`); `a_badly_signed_plugin_is_dl1510_a_different_fault_from_unsigned` keeps the fault honest.
+8. **Exports are functions only in v1.0** — a generic export is refused DL1501 at build (delulu-check plugin fence); plugin packages are single-module (deviation 3, DL1004), refused cleanly, never half-built.
+
+### Deviation ledger status
+
+Deviations 1–7 were ruled during the build (§3); deviation 8 (DL1510/DL1511 + embedded-mode
+signature audit) is recorded above and awaits a head-chef ruling. All deviation conditions are
+discharged: the honesty text lives in `delulu explain E-PLUGIN`, `docs/design/STAGE6_PLUGINS_GUIDE.md`,
+and the spec §11 Implementation status; the deviation-1(b) timing witness is
+`verify_is_comfortably_fast_for_per_load_use` (~0.75 ms/load).
 
 ## 5. Post-v0.6 RFC ledger
 

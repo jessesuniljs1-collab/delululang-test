@@ -629,6 +629,33 @@ mod tests {
     }
 
     #[test]
+    fn verify_is_comfortably_fast_for_per_load_use() {
+        // Build-order deviation 1 condition (b): a rough timing witness that re-verification is fast
+        // enough to run at EVERY load. Re-verification is a FULL same-code-path re-check (single-
+        // module `resolve` + `check_module`) PLUS a stored-truth comparison — strictly stronger than
+        // the §2.3 assert-replay description, and still linear and fast.
+        let src = "module p\n\
+            fn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n\
+            fn greet(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\n\
+            fn r(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} { fs.read_text(\"a.txt\") }\n\
+            pub fn scan(fs: Cap[FsRead], p: Str) -> Result[Str, IoErr] ! {Read} { fs.read_text(p) }\n";
+        let c = check_source(0, src);
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let bytes = serialize(&c.module, &c.result);
+
+        let n = 200u32;
+        let start = std::time::Instant::now();
+        for _ in 0..n {
+            verify(&bytes).expect("verifies");
+        }
+        let per = start.elapsed() / n;
+        // Comfortably fast: well under a millisecond per verify on a dev machine. The 5 ms ceiling is
+        // generous enough to stay green on a loaded CI box while still catching a pathological blowup.
+        assert!(per < std::time::Duration::from_millis(5), "verify per-load must be fast for per-load use: {per:?}");
+        eprintln!("dir::verify per-load ≈ {per:?} (build-order deviation 1b timing witness)");
+    }
+
+    #[test]
     fn narrowed_declared_row_is_dl1504_via_the_boundary_rule() {
         // Tamper the code itself: drop the declared row from an effectful function. Re-checking the
         // body then performs Write with no declared effect — the checker's own T-Fn boundary rule

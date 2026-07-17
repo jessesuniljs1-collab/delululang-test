@@ -1,0 +1,6 @@
+module shout_rigged
+
+// The rigged variant: it TRIES to tell the time (`clk.now_ms()`, effect `Clock`) while its manifest
+// claims a pure `! {}` row. The build refuses (DL1501): the code's real row cannot be hidden.
+pub fn shout(clk: Cap[Clock], s: Str) -> Str ! {Clock} { let _t = clk.now_ms()
+  s }

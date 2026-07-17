@@ -498,3 +498,30 @@ verified guarantee never rests on shipped machine code — and runs through the 
 load (a failed Verified re-check, never a Contained fallback); a `.dpx` **wasm-cache** byte-flip is
 ignored, recompiled from DIR, and the load **succeeds** (the recompiled module validates and is not
 the corrupt cache).
+
+**Phase 6i — the CLI surface (`plugin verify`, `authority` plugins, `why` traversal, `E-PLUGIN`) — is
+implemented and green** (608 tests). **`delulu plugin verify`** runs load steps 1, 2, 5 (+ the
+signature check) without instantiating, calling the EXACT functions a load calls (`verify_plugin`
+reuses `step1_container_api`/`step5_verified`/`verify_signature`/`step6_signature`), so **criterion 9**
+holds by construction — proven across a corpus of nine tricky artifacts (pure, effectful-honest,
+tampered DIR, type mismatch, missing export, bad api, row-exceeds-manifest, signed, badly-signed):
+verify's verdict equals a real load's for every one. **`delulu authority`** gains a **`plugins`
+array** (spec §6): it walks the checked AST for `load(host, "path", grant)` call sites and reports
+`{name, class, grant.effects, loaded_at, signed_by}` — grant effects resolve from an inline or
+same-function-`let` `Grant { … }` literal (best-effort), and name/class/signed_by are enriched from the
+`.dpx` through the same `verify_signature` a load runs. The array is present only when the program
+loads a plugin, so a plugin-free report is byte-identical (criterion 11). **`delulu why <Effect>
+<file.dpx>`** satisfies **criterion 10**: for a Verified plugin it replays the DIR's own facts and
+follows the real chain from an export through its callees to the primitive op
+(`[verified plugin reader] scan -> slurp — Read`); for a Contained plugin it stops at the module
+boundary and labels the edge (`→ [contained plugin opaque-tool] — Net`, spec §6 verbatim shape).
+**`delulu explain E-PLUGIN`** carries the spec §10 honesty caveats VERBATIM plus every ruled-deviation
+condition (2 = DL1508, 3 = single-module + DL1004, 4 = the annotation form with a "will not parse"
+warning, 7 = the Windows `EnforcementUnsupported` caveat plain, 8 = DL1510/DL1511 as different faults);
+DL1510/DL1511 are registered in the code registry. `plugin build --sign <keyfile>` (raw 32-byte seed
+or 64 hex chars) signs; `plugin inspect` shows the real signature identity. Deviation-1 condition (b) is
+met: `verify_is_comfortably_fast_for_per_load_use` measures re-verification at ~0.75 ms per load. The
+in-language load surface (`root.plugin_host()` → an executable `load`) remains a runtime stub in v0.6
+(the checker types `load`/`p.get`/`Plugin[C]`, so `authority`/`why` analyze real programs; the
+interpreter mechanics are witnessed by the 6e.5 library tests) — a full `delulu run` load integration
+is future work, honestly out of v0.6 scope.
