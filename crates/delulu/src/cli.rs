@@ -620,12 +620,203 @@ fn cmd_authority(rest: &[String]) -> i32 {
     stamp_custody(&mut report, &opts);
     stamp_foreign_isolation(&mut report, &opts);
     stamp_isolation(&mut report, &opts);
+    stamp_plugins(&mut report, &checked.module, &file, &map);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+/// Stamp the `plugins` array on an authority report (Stage 6 "Live", spec §6): the runtime plugins
+/// this program **loads**, found by walking the checked AST for `load(host, "path", grant)` call
+/// sites. Each entry carries the plugin's declared grant effects (from the `Grant { … }` literal),
+/// its `loaded_at` source location, and — when the `.dpx` path resolves on disk — the artifact's
+/// name, class, and signer identity (through the SAME `verify_signature` a load runs).
+///
+/// **Only added when the program actually loads a plugin** — a program with no `load` call gets no
+/// `plugins` key, so every prior authority report is byte-identical (criterion 11). Grant/effects
+/// extraction is best-effort over a literal `Grant { … }`; a computed grant reports what it can.
+fn stamp_plugins(report: &mut Json, module: &delulu_syntax::ast::Module, src_path: &str, map: &SourceMap) {
+    let mut entries: Vec<Json> = Vec::new();
+    let mut loads = Vec::new();
+    for item in &module.items {
+        if let Item::Fn(f) = item {
+            collect_plugin_loads(&f.body, &mut loads);
+        }
+    }
+    let base = std::path::Path::new(src_path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    for lc in &loads {
+        let (line, _col) = map.position(lc.span.file, lc.span.start);
+        let file_name = map.name(lc.span.file).to_string();
+        let mut entry = json!({
+            "path": lc.path,
+            "grant": { "effects": lc.grant_effects },
+            "loaded_at": [{ "file": file_name, "line": line }],
+            "name": Json::Null,
+            "class": Json::Null,
+            "signed_by": Json::Null,
+        });
+        // Enrich from the artifact on disk when the path resolves (best-effort — a missing file is
+        // not an error here; `authority` is a static report, not a loader).
+        if let Some(p) = &lc.path {
+            let full = base.join(p);
+            if let Ok(bytes) = std::fs::read(&full) {
+                if let Ok(dpx) = delulu_wasm::read_dpx(&bytes) {
+                    let obj = entry.as_object_mut().unwrap();
+                    obj.insert("name".into(), dpx.manifest.get("name").cloned().unwrap_or(Json::Null));
+                    obj.insert("class".into(), json!(dpx.class));
+                    let payload = if dpx.class == "verified" { dpx.dir.as_deref() } else { dpx.wasm.as_deref() };
+                    if let delulu_runtime::SignatureStatus::Valid { signer } =
+                        delulu_runtime::verify_signature(&dpx.manifest, payload, dpx.sig.as_deref())
+                    {
+                        obj.insert("signed_by".into(), json!(signer));
+                    }
+                }
+            }
+        }
+        entries.push(entry);
+    }
+    if !entries.is_empty() {
+        if let Some(obj) = report.as_object_mut() {
+            obj.insert("plugins".to_string(), Json::Array(entries));
+        }
+    }
+}
+
+/// One `load(...)` call site found in the AST: the string-literal path (if literal), the grant's
+/// declared effects (if a `Grant { effects: [...] }` literal), and the call span.
+struct PluginLoad {
+    path: Option<String>,
+    grant_effects: Vec<String>,
+    span: delulu_diag::Span,
+}
+
+/// Recursively collect `load(host, path, grant)` call sites in a block. `load` is the Stage-6
+/// builtin (checker §3.1); we recognize it by callee name and read its literal arguments. The grant
+/// argument resolves either from an inline `Grant { … }` literal or from a same-function
+/// `let g = Grant { … }` binding (a single-level, best-effort resolution — a computed grant reports
+/// what it can, honestly).
+fn collect_plugin_loads(block: &delulu_syntax::ast::Block, out: &mut Vec<PluginLoad>) {
+    use delulu_syntax::ast::{Expr, Stmt};
+    type Grants = std::collections::HashMap<String, Vec<String>>;
+
+    fn resolve_grant(arg: &Expr, grants: &Grants) -> Vec<String> {
+        match arg {
+            Expr::Record { .. } => grant_effects_of(arg),
+            Expr::Var { path, .. } if path.segs.len() == 1 => {
+                grants.get(&path.segs[0].name).cloned().unwrap_or_default()
+            }
+            _ => Vec::new(),
+        }
+    }
+    fn walk_expr(e: &Expr, out: &mut Vec<PluginLoad>, grants: &Grants) {
+        match e {
+            Expr::Call { callee, args, span, .. } => {
+                if let Expr::Var { path, .. } = &**callee {
+                    if path.segs.len() == 1 && path.segs[0].name == "load" {
+                        out.push(PluginLoad {
+                            path: args.get(1).and_then(literal_str),
+                            grant_effects: args.get(2).map(|a| resolve_grant(a, grants)).unwrap_or_default(),
+                            span: *span,
+                        });
+                    }
+                }
+                walk_expr(callee, out, grants);
+                for a in args {
+                    walk_expr(a, out, grants);
+                }
+            }
+            Expr::Try { inner, .. } => walk_expr(inner, out, grants),
+            Expr::Method { recv, args, .. } => {
+                walk_expr(recv, out, grants);
+                for a in args {
+                    walk_expr(a, out, grants);
+                }
+            }
+            Expr::List { items, .. } => items.iter().for_each(|i| walk_expr(i, out, grants)),
+            Expr::Record { fields, .. } => fields.iter().for_each(|(_, fe)| walk_expr(fe, out, grants)),
+            Expr::Field { recv, .. } => walk_expr(recv, out, grants),
+            Expr::Index { recv, index, .. } => {
+                walk_expr(recv, out, grants);
+                walk_expr(index, out, grants);
+            }
+            Expr::Unary { operand, .. } => walk_expr(operand, out, grants),
+            Expr::Binary { lhs, rhs, .. } => {
+                walk_expr(lhs, out, grants);
+                walk_expr(rhs, out, grants);
+            }
+            Expr::If { cond, then_, else_, .. } => {
+                walk_expr(cond, out, grants);
+                walk_block(then_, out, grants);
+                if let Some(e) = else_ {
+                    walk_expr(e, out, grants);
+                }
+            }
+            Expr::Match { scrutinee, arms, .. } => {
+                walk_expr(scrutinee, out, grants);
+                arms.iter().for_each(|a| walk_expr(&a.body, out, grants));
+            }
+            Expr::Lambda { body, .. } => walk_block(body, out, grants),
+            Expr::Block(b) => walk_block(b, out, grants),
+            Expr::Lit { .. } | Expr::Var { .. } => {}
+        }
+    }
+    fn walk_block(b: &delulu_syntax::ast::Block, out: &mut Vec<PluginLoad>, grants: &Grants) {
+        // A block-local view of the grant bindings, so a `let g = Grant { … }` before a `load(…, g)`
+        // resolves. Clone-on-extend keeps outer bindings visible without leaking inner ones out.
+        let mut grants = grants.clone();
+        for stmt in &b.stmts {
+            match stmt {
+                Stmt::Let { name, value, .. } => {
+                    if let Expr::Record { path, .. } = value {
+                        if path.segs.last().is_some_and(|s| s.name == "Grant") {
+                            grants.insert(name.name.clone(), grant_effects_of(value));
+                        }
+                    }
+                    walk_expr(value, out, &grants);
+                }
+                Stmt::Assign { value, .. } => walk_expr(value, out, &grants),
+                Stmt::While { cond, body, .. } => {
+                    walk_expr(cond, out, &grants);
+                    walk_block(body, out, &grants);
+                }
+                Stmt::Return { value, .. } => {
+                    if let Some(e) = value {
+                        walk_expr(e, out, &grants);
+                    }
+                }
+                Stmt::Expr(e) => walk_expr(e, out, &grants),
+            }
+        }
+    }
+    walk_block(block, out, &std::collections::HashMap::new());
+}
+
+/// The string value of a string-literal expression (else `None` — a computed path is not extracted).
+fn literal_str(e: &delulu_syntax::ast::Expr) -> Option<String> {
+    use delulu_syntax::ast::{Expr, LitKind};
+    match e {
+        Expr::Lit { kind: LitKind::Str(s), .. } => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// The declared effect names of a literal `Grant { effects: ["Read", …], … }` expression (else
+/// empty — a computed grant reports no static effects here).
+fn grant_effects_of(e: &delulu_syntax::ast::Expr) -> Vec<String> {
+    use delulu_syntax::ast::Expr;
+    if let Expr::Record { fields, .. } = e {
+        for (name, fe) in fields {
+            if name.name == "effects" {
+                if let Expr::List { items, .. } = fe {
+                    return items.iter().filter_map(literal_str).collect();
+                }
+            }
+        }
+    }
+    Vec::new()
 }
 
 /// Stamp the custody label on an authority report (Stage 5, playbook 5j): `embedded` unless the
@@ -767,6 +958,25 @@ fn render_authority(report: &Json) -> String {
             let symbols = strs(&f["symbols"]);
             let binary = f["granted_path"].as_str().unwrap_or("(chosen by the human at grant time)");
             let _ = writeln!(out, "    - {abi} {lib} [{}]  binary: {binary}", symbols.join(", "));
+        }
+    }
+    // The runtime plugins this program loads (Stage 6, spec §6). Present only when the program has a
+    // `load(...)` call, so a plugin-free report is byte-identical to prior stages (criterion 11).
+    if let Some(plugins) = report["plugins"].as_array() {
+        if !plugins.is_empty() {
+            let _ = writeln!(out, "  plugins:");
+            for p in plugins {
+                let name = p["name"].as_str().unwrap_or_else(|| p["path"].as_str().unwrap_or("?"));
+                let class = p["class"].as_str().unwrap_or("?");
+                let effects = strs(&p["grant"]["effects"]);
+                let eff = if effects.is_empty() { "(none)".to_string() } else { effects.join(", ") };
+                let signed = p["signed_by"].as_str().map(|s| format!("  signed-by {s}")).unwrap_or_default();
+                let loc = p["loaded_at"].as_array().and_then(|a| a.first());
+                let at = loc
+                    .map(|l| format!("{}:{}", l["file"].as_str().unwrap_or("?"), l["line"].as_i64().unwrap_or(0)))
+                    .unwrap_or_default();
+                let _ = writeln!(out, "    - {name} [{class}]  grant.effects: [{eff}]  loaded at {at}{signed}");
+            }
         }
     }
     out
@@ -4530,5 +4740,26 @@ mod plugin_why_tests {
         let chain = plugin_why_chain(&facts, "a", "Read"); // must terminate
         assert!(chain.first().map(String::as_str) == Some("a"));
         assert!(chain.len() <= facts.len() + 1, "a cycle never revisits a node");
+    }
+
+    #[test]
+    fn authority_plugins_array_extracts_load_call_sites() {
+        // The `plugins` array (spec §6) is built by walking the AST for `load(host, "path", grant)`
+        // call sites. Parsing is enough (no type-check needed for the walk), so we exercise the
+        // extraction directly: the literal path and the literal grant effects are pulled out.
+        let src = "module host\n\
+            fn main(root: Root) ! {Load, Read} { \
+             let h = root.plugin_host()\n \
+             let p = load(h, \"reader.dpx\", Grant { effects: [\"Read\", \"Net\"] })? }\n";
+        let (module, _diags) = delulu_syntax::parse_file(0, src);
+        let mut loads = Vec::new();
+        for item in &module.items {
+            if let delulu_syntax::ast::Item::Fn(f) = item {
+                collect_plugin_loads(&f.body, &mut loads);
+            }
+        }
+        assert_eq!(loads.len(), 1, "one load call site found");
+        assert_eq!(loads[0].path.as_deref(), Some("reader.dpx"), "the literal path is extracted");
+        assert_eq!(loads[0].grant_effects, vec!["Read".to_string(), "Net".to_string()], "the grant effects are extracted");
     }
 }
