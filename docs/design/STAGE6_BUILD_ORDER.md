@@ -205,6 +205,26 @@ bolting it on under ship pressure is how the next fail-open gets built; (3) the 
 likely an upstream wasmtime-27-on-Windows host-trap-unwind bug, whose right long-term fix is a
 version bump that restores the in-process path with zero model split.*
 
+**Deviation 8 (Phase 6h) — DL1510 and DL1511 allocated for signature faults; signature audit is
+embedded-mode in v0.6.**
+*What:* The spec §7 table has no diagnostic for a signature that fails to verify, nor for an unsigned
+plugin under a `require_signed` grant. Two codes are allocated in the DL15xx range: **DL1510** — a
+present-but-invalid signature (tampered content, a wrong key, or a malformed `delulu:sig` section),
+refused regardless of `require_signed`; and **DL1511** — an unsigned plugin under a `require_signed`
+grant (a policy refusal). Additionally, the signer identity is written to the audit log by
+**embedded** custody (which holds the in-process broker + sink); the daemon-client `note_plugin_signature`
+is a no-op in v0.6.
+*Why:* A present-but-invalid signature and an unsigned-but-required plugin are **different faults with
+different remedies** — one says "this signature does not verify", the other "this grant needs a
+signature and none is present". Reusing one code (or reusing DL1508 "corrupt container") would make a
+message a lie (the kitchen rule / skip-branch rule). The allocation follows the deviation-2 precedent
+(DL1508) inside the fresh DL15xx range. Signatures authenticate **origin, not behavior** (spec §10):
+neither code asserts anything about safety. The embedded-only audit recording is honest for v0.6 —
+the load (and thus the signature verification) runs in the program process; wiring the daemon to log
+a client-verified signature server-side is a small future addition, recorded here rather than
+silently skipped. *Status: awaiting ruling — conditions proposed: at B4 close-out DL1510/DL1511 join
+the Implementation status log and `E-PLUGIN`; the daemon-audit gap is stated in the honesty caveats.*
+
 ## 4. Close-out
 
 *(filled at the end: the 11 §9 criteria, each with its witnessing test(s); suite totals

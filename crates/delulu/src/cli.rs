@@ -251,6 +251,10 @@ struct Opts {
     /// under EXACTLY that node's authority — the orchestration payoff: whoever holds a grant
     /// delegates a slice, hands the token over, and this run can acquire nothing outside it.
     lease: Option<String>,
+    /// `--sign <keyfile>` (Stage 6 phase 6h, spec §2.2/§6): for `plugin build`, sign the artifact
+    /// with the raw 32-byte ed25519 seed in `keyfile`. Signatures authenticate ORIGIN, not behavior
+    /// (spec §10) — a signed plugin is not a safe plugin.
+    sign: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -277,6 +281,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         foreign_isolation: None,
         isolation: None,
         lease: None,
+        sign: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -390,6 +395,13 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--lease=") => opts.lease = Some(s["--lease=".len()..].to_string()),
+            "--sign" => {
+                if i + 1 < rest.len() {
+                    opts.sign = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--sign=") => opts.sign = Some(s["--sign=".len()..].to_string()),
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -982,11 +994,37 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     let lock_bytes = std::fs::read(root.join("delulu.lock")).ok();
 
     let manifest_json = plugin_manifest_json(&pm);
+
+    // Phase 6h: optionally sign the artifact. The signature covers the EXACT canonical manifest bytes
+    // the container will hold (`augmented_plugin_manifest`) followed by the class payload — DIR for
+    // Verified, the module for Contained (spec §2.2). Signatures authenticate origin, not behavior.
+    let sig_bytes: Option<Vec<u8>> = match &opts.sign {
+        None => None,
+        Some(keyfile) => {
+            let seed = match read_ed25519_seed(keyfile) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: --sign: {e}");
+                    return 2;
+                }
+            };
+            let augmented = delulu_wasm::augmented_plugin_manifest(
+                &manifest_json,
+                dir_bytes.as_deref(),
+                wasm_bytes.as_deref(),
+                lock_bytes.as_deref(),
+            );
+            // The signed payload is the class's own bytes (spec §2.2): DIR (Verified) or module (Contained).
+            let payload = dir_bytes.as_deref().or(wasm_bytes.as_deref());
+            Some(delulu_runtime::sign_plugin(&seed, &augmented, payload))
+        }
+    };
+
     let dpx = delulu_wasm::write_dpx(
         &manifest_json,
         dir_bytes.as_deref(),
         wasm_bytes.as_deref(),
-        None,
+        sig_bytes.as_deref(),
         lock_bytes.as_deref(),
     );
 
@@ -1008,11 +1046,13 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
                 "name": pm.name, "version": pm.version,
                 "api": pm.api, "class": pm.class.as_str(),
                 "exports": pm.exports.keys().cloned().collect::<Vec<_>>(),
+                "signed": sig_bytes.is_some(),
             })
         );
     } else {
+        let signed = if sig_bytes.is_some() { " (signed)" } else { "" };
         ok_line!(
-            "ok: wrote `{out_path}` ({} bytes) — {} plugin `{}` v{}, {} export(s)",
+            "ok: wrote `{out_path}` ({} bytes) — {} plugin `{}` v{}, {} export(s){signed}",
             dpx.len(),
             pm.class.as_str(),
             pm.name,
@@ -1021,6 +1061,30 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
         );
     }
     0
+}
+
+/// Read an ed25519 signing seed from a key file (phase 6h). Accepts a raw 32-byte seed or 64 hex
+/// characters (whitespace ignored) — nothing is generated here; the human supplies the key.
+fn read_ed25519_seed(path: &str) -> Result<[u8; 32], String> {
+    let raw = std::fs::read(path).map_err(|e| format!("cannot read key file `{path}`: {e}"))?;
+    if raw.len() == 32 {
+        let mut s = [0u8; 32];
+        s.copy_from_slice(&raw);
+        return Ok(s);
+    }
+    let hex: String = String::from_utf8_lossy(&raw).chars().filter(|c| !c.is_whitespace()).collect();
+    if hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let mut s = [0u8; 32];
+        for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+            s[i] = u8::from_str_radix(std::str::from_utf8(chunk).expect("ascii hex"), 16)
+                .map_err(|_| "key file is not valid hex".to_string())?;
+        }
+        return Ok(s);
+    }
+    Err(format!(
+        "key file must be a raw 32-byte ed25519 seed or 64 hex characters (found {} bytes)",
+        raw.len()
+    ))
 }
 
 /// Build the `delulu:plugin` section JSON from the parsed manifest (spec §2.2). Fixed shape,
@@ -1073,6 +1137,15 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
 
     // The hashes shown are the manifest's content bindings — already verified against the actual
     // section bytes by `read_dpx` (class-aware; a Verified cache may be flagged invalid instead).
+    // Phase 6h: the signature identity comes from the SAME `verify_signature` the loader runs (spec
+    // §9.9), over the class payload (DIR for Verified, the module for Contained).
+    let sig_payload = if dpx.class == "verified" { dpx.dir.as_deref() } else { dpx.wasm.as_deref() };
+    let sig_status = delulu_runtime::verify_signature(&dpx.manifest, sig_payload, dpx.sig.as_deref());
+    let (signed_by, sig_human): (Json, String) = match &sig_status {
+        delulu_runtime::SignatureStatus::Unsigned => (Json::Null, "none".into()),
+        delulu_runtime::SignatureStatus::Valid { signer } => (json!(signer), format!("valid — signed by {signer}")),
+        delulu_runtime::SignatureStatus::Invalid { reason } => (Json::Null, format!("INVALID — {reason}")),
+    };
     let null = Json::Null;
     let get = |k: &str| dpx.manifest.get(k).unwrap_or(&null).clone();
     if opts.json {
@@ -1092,7 +1165,7 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
                     "sig": dpx.sig.is_some(),
                     "lock": get("lock_blake3"),
                 },
-                "signed_by": null,
+                "signed_by": signed_by,
                 "wasm_cache_valid": dpx.wasm_cache_valid,
             })
         );
@@ -1135,7 +1208,7 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
         if let Some(h) = hash8(get("lock_blake3")) {
             println!("    delulu:lock    blake3 {h}…");
         }
-        println!("  signature: none");
+        println!("  signature: {sig_human}");
     }
     0
 }

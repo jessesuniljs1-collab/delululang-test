@@ -149,6 +149,12 @@ registry! {
     // cannot be decided at all. A security rule must never be skippable because inference was
     // underdetermined — the two codes have different remedies, so they are different codes.
     "DL1509" => "a Contained plugin export's signature must be concrete at the `get` site (R-6a is otherwise undecidable)",
+    // ed25519 plugin signatures (phase 6h, build-order deviation 8). A present-but-invalid signature
+    // and an unsigned-but-required plugin are DIFFERENT faults with different remedies, so they get
+    // different codes: DL1510 says "the signature does not verify"; DL1511 says "this grant requires
+    // a signature and none is present". Reusing one code would make a message a lie (kitchen rule).
+    "DL1510" => "plugin signature present but invalid (tampered content, wrong key, or malformed signature)",
+    "DL1511" => "plugin is unsigned but the grant requires a signature (require_signed)",
 
     // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
     // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule

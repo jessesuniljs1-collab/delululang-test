@@ -123,18 +123,7 @@ pub fn write_dpx(
     sig: Option<&[u8]>,
     lock: Option<&[u8]>,
 ) -> Vec<u8> {
-    let mut m = manifest.clone();
-    let obj = m.as_object_mut().expect("plugin manifest is a JSON object");
-    obj.insert("container".into(), Value::from(DPX_VERSION));
-    if let Some(d) = dir {
-        obj.insert("dir_blake3".into(), Value::from(blake3::hash(d).to_hex().to_string()));
-    }
-    if let Some(w) = wasm {
-        obj.insert("wasm_blake3".into(), Value::from(blake3::hash(w).to_hex().to_string()));
-    }
-    if let Some(l) = lock {
-        obj.insert("lock_blake3".into(), Value::from(blake3::hash(l).to_hex().to_string()));
-    }
+    let m = augmented_plugin_manifest(manifest, dir, wasm, lock);
     let manifest_bytes = serde_json::to_vec(&m).expect("manifest serializes");
 
     let mut out = b"\0asm\x01\0\0\0".to_vec();
@@ -152,6 +141,32 @@ pub fn write_dpx(
         append_custom_section(&mut out, LOCK_SECTION, l);
     }
     out
+}
+
+/// The **augmented** `delulu:plugin` manifest that `write_dpx` serializes into the container: the
+/// caller's manifest plus the `container` version and the blake3 binding of every present section.
+/// Exposed (Stage 6 phase 6h) so `plugin build --sign` can sign over the EXACT canonical manifest
+/// bytes the container will hold — `serde_json::to_vec` of this value equals the `delulu:plugin`
+/// section a loader reads and re-serializes for signature verification (`sig_message`).
+pub fn augmented_plugin_manifest(
+    manifest: &Value,
+    dir: Option<&[u8]>,
+    wasm: Option<&[u8]>,
+    lock: Option<&[u8]>,
+) -> Value {
+    let mut m = manifest.clone();
+    let obj = m.as_object_mut().expect("plugin manifest is a JSON object");
+    obj.insert("container".into(), Value::from(DPX_VERSION));
+    if let Some(d) = dir {
+        obj.insert("dir_blake3".into(), Value::from(blake3::hash(d).to_hex().to_string()));
+    }
+    if let Some(w) = wasm {
+        obj.insert("wasm_blake3".into(), Value::from(blake3::hash(w).to_hex().to_string()));
+    }
+    if let Some(l) = lock {
+        obj.insert("lock_blake3".into(), Value::from(blake3::hash(l).to_hex().to_string()));
+    }
+    m
 }
 
 /// Append one custom section (id 0): name as a length-prefixed UTF-8 string, then the payload —
@@ -526,6 +541,29 @@ mod tests {
         let read = read_dpx(&t).expect("a bad cache must not fail the read");
         assert!(!read.wasm_cache_valid, "the invalid cache must be flagged");
         assert_eq!(read.dir.as_deref(), Some(&dir[..]), "the DIR is untouched and intact");
+    }
+
+    #[test]
+    fn a_signed_verified_dpx_verifies_end_to_end_through_the_loaders_message() {
+        // Phase 6h byte-stability guard for the verify-from-manifest approach: sign over the
+        // augmented manifest ‖ DIR (exactly as `plugin build --sign` does), write the .dpx, read it
+        // back, and verify with the LOADER's own `verify_signature` — which re-serializes the PARSED
+        // manifest. If serde_json's parse∘serialize were not byte-stable here, this would fail.
+        let seed = [9u8; 32];
+        let dir = b"the DIR payload of a verified plugin".to_vec();
+        let m = manifest("verified");
+        let augmented = augmented_plugin_manifest(&m, Some(&dir), None, None);
+        let sig = delulu_runtime::sign_plugin(&seed, &augmented, Some(&dir));
+        let dpx = write_dpx(&m, Some(&dir), None, Some(&sig), None);
+
+        let read = read_dpx(&dpx).expect("a signed .dpx reads");
+        assert!(read.sig.is_some(), "the signature section is present");
+        let status =
+            delulu_runtime::verify_signature(&read.manifest, read.dir.as_deref(), read.sig.as_deref());
+        assert!(
+            matches!(status, delulu_runtime::SignatureStatus::Valid { .. }),
+            "the signed .dpx verifies end-to-end via the loader's message construction: {status:?}"
+        );
     }
 
     #[test]

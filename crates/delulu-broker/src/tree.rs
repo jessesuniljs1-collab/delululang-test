@@ -292,6 +292,27 @@ impl Broker {
         }
     }
 
+    /// Record a verified plugin **signature identity** in the audit log (Stage 6 phase 6h, spec §3.1
+    /// step 6). `signer` is the ed25519 public key (lowercase hex). **No-op when no sink is
+    /// attached** — and it then consumes NO seq, so a run that never signs plugins is byte-identical
+    /// to chunk-1 accounting. Observability, not enforcement (invariant 26 / trap 6): no decision
+    /// ever reads this record, and a signature authenticates origin, not behavior (spec §10).
+    pub fn record_plugin_signature(&mut self, node: &GrantId, signer: &str) {
+        if self.sink.is_none() {
+            return;
+        }
+        let seq = self.take_seq();
+        self.record_op(
+            seq,
+            "plugin-signature",
+            Some(node.as_str().to_string()),
+            None,
+            Some(serde_json::json!({ "signed_by": signer })),
+            "allow",
+            None,
+        );
+    }
+
     /// Issue a **root** grant (spec §3.2 `issue`, CLI-only human action — nothing programmatic
     /// creates root nodes, Constitution §5.16 law 4). Returns the new node's id.
     pub fn issue(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> GrantId {

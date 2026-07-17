@@ -18,8 +18,8 @@ pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
 pub use dpx::{
-    read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine, DIR_SECTION, DPX_VERSION,
-    LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
+    augmented_plugin_manifest, read_dpx, require_api, write_dpx, Dpx, DpxError, WasmPluginEngine,
+    DIR_SECTION, DPX_VERSION, LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
 pub use codegen::{compile_module, compile_module_with, uses_console, CompileError};
 pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, CustodyHandle, HostConfig, WasmError};

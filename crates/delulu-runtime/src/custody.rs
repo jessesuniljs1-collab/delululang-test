@@ -101,6 +101,14 @@ pub trait Custody {
         let _ = target;
         Liveness::Unknown
     }
+
+    /// Record a verified plugin signature's identity in the audit log (spec §3.1 step 6). Additive;
+    /// the **default is a no-op** — a custody with no audit sink records nothing, and the identity
+    /// still travels on the returned plugin handle. Embedded custody writes an audit record when its
+    /// in-process broker has a sink. (Signatures authenticate origin, not behavior — spec §10.)
+    fn note_plugin_signature(&mut self, node: &GrantId, signer: &str) {
+        let _ = (node, signer);
+    }
 }
 
 /// A node's liveness for the R-6c per-call re-check. `Unknown` is not "maybe fine" — callers treat
@@ -218,6 +226,14 @@ impl Custody for EmbeddedCustody {
             Some(delulu_broker::EffState::Revoked { by_seq }) => Liveness::Revoked(by_seq),
             // An expired lease and an unknown node both confer nothing — dead, fail-closed.
             Some(delulu_broker::EffState::Expired { .. }) | None => Liveness::Unknown,
+        }
+    }
+
+    fn note_plugin_signature(&mut self, node: &GrantId, signer: &str) {
+        // Write the identity into the in-process audit log when a sink is attached (spec §3.1 step
+        // 6). No-op with no tree/sink — observability, never enforcement (invariant 26 / trap 6).
+        if let Some(tree) = self.tree.as_mut() {
+            tree.record_plugin_signature(node, signer);
         }
     }
 }

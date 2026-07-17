@@ -23,6 +23,11 @@ delulu-broker = { path = "../delulu-broker" }
 # Stage 6 (Live): the `.dpx` plugin manifest is JSON, so the loader reads its ceiling/exports out of
 # a `serde_json::Value` (the container itself is parsed above this crate — see `plugin.rs` topology).
 serde_json = { workspace = true }
+# Stage 6 (Live) phase 6h: ed25519 plugin signatures (spec §2.2/§3.1 step 6). House rule 5 pre-approves
+# ed25519-dalek v2 — cryptography is NEVER hand-rolled. Verification (load step 6) and signing (the
+# `plugin build --sign` helper) share ONE message-construction path here, so verify never drifts from
+# sign. Default features only (no rng: keys are supplied as raw 32-byte seeds, never generated here).
+ed25519-dalek = "2"
 # Stage 4 C FFI (spec §4). `libloading` binds a shared library; `libffi` assembles the call because
 # a foreign signature is runtime data. Both are isolated behind `src/foreign.rs`.
 libloading = "0.8"

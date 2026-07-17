@@ -238,8 +238,10 @@ impl LoadRefusal {
     pub fn to_plugin_err(&self) -> PluginErr {
         match self.code {
             "DL1507" => PluginErr::ApiMismatch(self.message.clone()),
-            "DL1502" | "DL0802" => PluginErr::NotGranted(self.message.clone()),
-            "DL1504" | "DL1505" => PluginErr::VerifyFailed(self.message.clone()),
+            // DL1511 (unsigned but required) is a grant-policy refusal — `NotGranted`.
+            "DL1502" | "DL0802" | "DL1511" => PluginErr::NotGranted(self.message.clone()),
+            // DL1510 (badly-signed) is a verification failure — `VerifyFailed`.
+            "DL1504" | "DL1505" | "DL1510" => PluginErr::VerifyFailed(self.message.clone()),
             "DL1506" => PluginErr::LimitExceeded(self.message.clone()),
             _ => PluginErr::BadArtifact(self.message.clone()),
         }
@@ -780,30 +782,55 @@ pub fn plugin_err_code(e: &PluginErr) -> &'static str {
 /// The result of a completed load: the plugin's node and its class-specific content.
 #[derive(Debug)]
 pub enum LoadedPlugin {
-    Verified { grant_id: GrantId, authority: Authority, verified: Box<VerifiedPlugin> },
+    Verified {
+        grant_id: GrantId,
+        authority: Authority,
+        verified: Box<VerifiedPlugin>,
+        /// The signer's ed25519 public-key identity (lowercase hex) if the artifact carried a valid
+        /// signature, else `None` (spec §3.1 step 6). Recorded in the audit log at load.
+        signer: Option<String>,
+    },
 }
 
-/// Steps 1–5 for a **Verified** plugin, in the normative order, with the refusal discipline the
-/// spec demands: if step 5 fails, the plugin's node is **revoked** and nothing is instantiated.
+/// Steps 1–6 for a **Verified** plugin, in the normative order, with the refusal discipline the
+/// spec demands: if any step fails, the plugin's node is **revoked** and nothing is instantiated.
 ///
-/// A step-5 failure never degrades the request to Contained (invariant 29) — the only outcomes are
-/// a fully re-proved Verified plugin or a DL1504-class refusal.
+/// - **Step 5** — the DIR replay + export-row check (DL1504). A failure never degrades the request
+///   to Contained (invariant 29).
+/// - **Step 6** — the signature policy (spec §3.1): a present-but-invalid signature is **DL1510**,
+///   an unsigned plugin under `require_signed` is **DL1511** (a *different* fault), and a valid
+///   signature records the signer's identity in the audit log via [`Custody::note_plugin_signature`].
 pub fn load_verified(
     art: &PluginArtifact,
     grant: &Grant,
     custody: &mut dyn Custody,
 ) -> Result<LoadedPlugin, LoadRefusal> {
     let prepared = load_prepare(art, PluginClass::Verified, grant, custody)?;
-    match step5_verified(art) {
-        Ok(verified) => Ok(LoadedPlugin::Verified {
-            grant_id: prepared.grant_id,
-            authority: prepared.authority,
-            verified: Box::new(verified),
-        }),
+    // Steps 5–6 together, so a refusal at either revokes the step-4 node in one place. Neither step
+    // touches custody, so it is free for the note/revoke that follows.
+    let outcome = (|| {
+        let verified = step5_verified(art)?;
+        let status = verify_signature(&art.manifest, art.dir.as_deref(), art.sig.as_deref());
+        let signer = step6_signature(&status, grant.require_signed)?;
+        Ok::<_, LoadRefusal>((verified, signer))
+    })();
+    match outcome {
+        Ok((verified, signer)) => {
+            // Record the signer identity in the audit log (spec §3.1 step 6). No-op if the custody
+            // has no audit sink; the identity also travels on the returned handle either way.
+            if let Some(s) = &signer {
+                custody.note_plugin_signature(&prepared.grant_id, s);
+            }
+            Ok(LoadedPlugin::Verified {
+                grant_id: prepared.grant_id,
+                authority: prepared.authority,
+                verified: Box::new(verified),
+                signer,
+            })
+        }
         Err(e) => {
-            // The node was minted at step 4; a failed verification must not leave it alive. The
-            // revoke is best-effort in the sense that its own failure cannot rescue the load — the
-            // refusal stands either way, and it is the refusal the caller sees.
+            // The node was minted at step 4; a failed verification/signature check must not leave it
+            // alive. The revoke's own failure cannot rescue the load — the refusal stands either way.
             let _ = custody.revoke_node(&prepared.grant_id);
             Err(e)
         }
@@ -933,6 +960,153 @@ fn classify_run_fault(f: Fault) -> PluginRunError {
         "DL0907" => PluginRunError::Unevaluable(f),
         _ => PluginRunError::Faulted(f),
     }
+}
+
+// ===== 6h — ed25519 plugin signatures (spec §2.2 / §3.1 step 6) ===============================
+//
+// A `.dpx` may carry a `delulu:sig` section: a 32-byte ed25519 public key followed by a 64-byte
+// signature over the SIGNED MESSAGE (the canonical `delulu:plugin` manifest bytes ‖ the class
+// payload — DIR for Verified, the module for Contained; spec §2.2). Verification (load step 6) and
+// signing (`plugin build --sign`) share [`sig_message`], so the two can never drift.
+//
+// **Signatures authenticate ORIGIN, not behavior** (spec §10, playbook trap 7): a signed plugin is
+// not a safe plugin. v0.6 has no trust *policy* (governance, Stage 9) — a signature says only
+// "whoever holds this key signed these exact bytes". The recorded identity is the public key.
+//
+// The kitchen rule travels to signatures: every "couldn't tell" case refuses honestly with the
+// right code, and — the head-chef point — an UNSIGNED-when-required plugin (DL1511) is a DIFFERENT
+// fault from a BADLY-signed one (DL1510). Reusing one code would make a message a lie.
+
+/// Load-refusal code for a **present but invalid** signature — tampered content, a wrong key, or a
+/// malformed section (build-order deviation 8). `requires_human`: a broken signature is never
+/// machine-repairable, and it is refused regardless of `require_signed`.
+pub const DL_SIGNATURE_INVALID: &str = "DL1510";
+/// Load-refusal code for an **unsigned** plugin under a `require_signed` grant (build-order
+/// deviation 8) — a *policy* refusal, deliberately a different fault from a bad signature.
+pub const DL_SIGNATURE_REQUIRED: &str = "DL1511";
+
+/// The signature-verification outcome for an artifact (spec §3.1 step 6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SignatureStatus {
+    /// No `delulu:sig` section. Not a fault by itself — only under `require_signed` (DL1511).
+    Unsigned,
+    /// A valid signature; carries the signer's ed25519 public key as lowercase hex (the identity).
+    Valid { signer: String },
+    /// A signature is present but does NOT verify — tampered content, a wrong key, or a malformed
+    /// section. A DIFFERENT fault from unsigned: refused (DL1510) regardless of policy, because a
+    /// broken signature means the artifact is not what it claims.
+    Invalid { reason: String },
+}
+
+/// The exact bytes an ed25519 signature covers (spec §2.2): the canonical `delulu:plugin` manifest
+/// JSON followed by the class payload (DIR for Verified, the module for Contained). Both signing and
+/// verification call THIS, so the message is constructed exactly one way.
+pub fn sig_message(manifest: &serde_json::Value, payload: Option<&[u8]>) -> Vec<u8> {
+    let mut msg = serde_json::to_vec(manifest).unwrap_or_default();
+    if let Some(p) = payload {
+        msg.extend_from_slice(p);
+    }
+    msg
+}
+
+/// Verify a `.dpx`'s signature (load step 6). Reads only existing artifact fields — the manifest
+/// (re-serialized canonically), the class payload, and the `delulu:sig` section — so an UNSIGNED
+/// artifact (every prior load path, `sig = None`) is `Unsigned` with no change in behavior.
+///
+/// The couldn't-tell cases each refuse honestly rather than skip: a section that is not 96 bytes, a
+/// public key that is not a valid ed25519 point, and a signature that does not verify are all
+/// `Invalid` with a distinct reason — never silently treated as unsigned (that would let a tampered
+/// artifact through).
+pub fn verify_signature(
+    manifest: &serde_json::Value,
+    payload: Option<&[u8]>,
+    sig: Option<&[u8]>,
+) -> SignatureStatus {
+    let Some(sig) = sig else {
+        return SignatureStatus::Unsigned;
+    };
+    if sig.len() != 96 {
+        return SignatureStatus::Invalid {
+            reason: format!(
+                "signature section is {} bytes, not the expected 96 (32-byte key ‖ 64-byte signature)",
+                sig.len()
+            ),
+        };
+    }
+    let key_bytes: [u8; 32] = sig[..32].try_into().expect("32 bytes");
+    let sig_bytes: [u8; 64] = sig[32..].try_into().expect("64 bytes");
+    let vk = match ed25519_dalek::VerifyingKey::from_bytes(&key_bytes) {
+        Ok(vk) => vk,
+        Err(_) => {
+            return SignatureStatus::Invalid {
+                reason: "the signing public key is not a valid ed25519 key".into(),
+            }
+        }
+    };
+    let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    let msg = sig_message(manifest, payload);
+    match vk.verify_strict(&msg, &signature) {
+        Ok(()) => SignatureStatus::Valid { signer: hex_lower(&key_bytes) },
+        Err(_) => SignatureStatus::Invalid {
+            reason: "the signature does not verify over the plugin's bytes (tampered content, or a key that did not sign it)".into(),
+        },
+    }
+}
+
+/// Load-sequence **step 6** (spec §3.1): apply the signature POLICY. Returns the signer identity to
+/// record on success, or a refusal. The two refusals are deliberately DIFFERENT faults:
+/// - **DL1510** — a present signature that does not verify. Refused regardless of `require_signed`:
+///   a broken signature means the artifact is not what it claims.
+/// - **DL1511** — an unsigned plugin under a `require_signed` grant (a policy refusal), distinct
+///   from DL1510 so the diagnostic is honest about which fault occurred.
+pub fn step6_signature(
+    status: &SignatureStatus,
+    require_signed: bool,
+) -> Result<Option<String>, LoadRefusal> {
+    match status {
+        SignatureStatus::Invalid { reason } => Err(LoadRefusal {
+            code: DL_SIGNATURE_INVALID,
+            message: format!(
+                "the plugin carries a signature that does not verify: {reason}. A badly-signed artifact is refused — this is NOT the same fault as an unsigned one"
+            ),
+            intersection: None,
+            requires_human: true,
+        }),
+        SignatureStatus::Unsigned if require_signed => Err(LoadRefusal {
+            code: DL_SIGNATURE_REQUIRED,
+            message:
+                "this grant sets `require_signed`, but the plugin carries no signature — sign it (`plugin build --sign`) or clear `require_signed`. (An unsigned plugin is a different fault from a badly-signed one.)"
+                    .into(),
+            intersection: None,
+            requires_human: true,
+        }),
+        SignatureStatus::Unsigned => Ok(None),
+        SignatureStatus::Valid { signer } => Ok(Some(signer.clone())),
+    }
+}
+
+/// Sign a plugin's bytes with an ed25519 private key (the `plugin build --sign` helper). `key_seed`
+/// is a raw 32-byte ed25519 seed; the returned section is `public key (32) ‖ signature (64)` — the
+/// exact `delulu:sig` layout [`verify_signature`] reads. Signs the SAME message verification checks
+/// ([`sig_message`]), so signing and verification can never disagree.
+pub fn sign_plugin(key_seed: &[u8; 32], manifest: &serde_json::Value, payload: Option<&[u8]>) -> Vec<u8> {
+    use ed25519_dalek::Signer;
+    let sk = ed25519_dalek::SigningKey::from_bytes(key_seed);
+    let signature = sk.sign(&sig_message(manifest, payload));
+    let mut section = Vec::with_capacity(96);
+    section.extend_from_slice(sk.verifying_key().as_bytes());
+    section.extend_from_slice(&signature.to_bytes());
+    section
+}
+
+/// Lowercase-hex a byte slice (the signer-identity rendering — the key is short, no dep needed).
+fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(s, "{b:02x}");
+    }
+    s
 }
 
 
@@ -1657,5 +1831,139 @@ mod tests {
         let checked = delulu_check::check_source(0, "module m\nfn f(n: Int) -> Int { n + 1 }\n");
         let interp = Interp::new(&checked.module);
         assert_eq!(interp.call_with("f", vec![Value::Int(41)]).unwrap().display(), "42");
+    }
+
+    // ----- 6h: ed25519 signatures (spec §2.2 / §3.1 step 6) -----------------------------------
+    //
+    // Kitchen rule for signatures (head-chef): the couldn't-tell cases each refuse honestly, and an
+    // UNSIGNED-when-required plugin (DL1511) is a DIFFERENT fault from a BADLY-signed one (DL1510).
+
+    /// Attach an ed25519 signature over this artifact's (manifest ‖ DIR), the Verified signing shape.
+    fn sign_verified(art: &mut PluginArtifact, seed: &[u8; 32]) {
+        let sig = sign_plugin(seed, &art.manifest, art.dir.as_deref());
+        art.sig = Some(sig);
+    }
+
+    #[test]
+    fn verify_signature_couldnt_tell_cases_all_refuse_never_skip() {
+        // Written FIRST (kitchen rule). Each ambiguous case is a distinct, honest outcome — a
+        // present-but-unusable signature is NEVER read as "unsigned" (that would pass a tamper).
+        let m = json!({ "name": "p", "version": "0.1.0" });
+        let payload = Some(&b"dir bytes"[..]);
+        assert_eq!(verify_signature(&m, payload, None), SignatureStatus::Unsigned, "no section ⇒ Unsigned");
+        assert!(
+            matches!(verify_signature(&m, payload, Some(&[0u8; 10])), SignatureStatus::Invalid { .. }),
+            "a wrong-length section is Invalid, never skipped"
+        );
+        assert!(
+            matches!(verify_signature(&m, payload, Some(&[0u8; 96])), SignatureStatus::Invalid { .. }),
+            "a bogus 96-byte section (bad key/sig) is Invalid"
+        );
+        let seed = [3u8; 32];
+        let good = sign_plugin(&seed, &m, payload);
+        assert!(matches!(verify_signature(&m, payload, Some(&good)), SignatureStatus::Valid { .. }), "a real signature is Valid");
+        assert!(
+            matches!(verify_signature(&m, Some(&b"other payload"[..]), Some(&good)), SignatureStatus::Invalid { .. }),
+            "a valid signature over DIFFERENT content does not verify"
+        );
+    }
+
+    #[test]
+    fn sign_then_verify_round_trips_and_the_identity_is_the_public_key() {
+        // verify ≡ sign: signing and verification share `sig_message`, so a fresh signature always
+        // verifies, and the recorded identity is the signer's public key (hex).
+        let seed = [42u8; 32];
+        let m = json!({ "name": "p" });
+        let sig = sign_plugin(&seed, &m, Some(b"dir"));
+        match verify_signature(&m, Some(b"dir"), Some(&sig)) {
+            SignatureStatus::Valid { signer } => {
+                assert_eq!(signer.len(), 64, "the identity is a 32-byte ed25519 key in hex");
+                assert!(signer.chars().all(|c| c.is_ascii_hexdigit()));
+            }
+            other => panic!("a fresh signature must verify, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn criterion8_a_signed_plugin_verifies_and_its_identity_lands_in_the_audit_log() {
+        // CRITERION 8, first half. A signed plugin loads, carries its signer identity on the handle,
+        // and that identity is written to the audit log (spec §3.1 step 6).
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        sign_verified(&mut art, &[7u8; 32]);
+
+        let mut c = host_custody(&[]);
+        let sink = delulu_broker::MemSink::new();
+        c.broker_mut().expect("embedded tree").set_sink(Box::new(sink.clone()));
+
+        let LoadedPlugin::Verified { signer, .. } =
+            load_verified(&art, &grant(&[]), &mut c).expect("a validly-signed plugin loads");
+        let signer = signer.expect("a signed plugin carries its signer identity");
+        assert_eq!(signer.len(), 64, "identity = 32-byte key in hex");
+
+        let records = sink.records();
+        let sig_rec = records
+            .iter()
+            .find(|r| r.action == "plugin-signature")
+            .expect("the signature identity landed in the audit log");
+        assert_eq!(
+            sig_rec.authority.as_ref().and_then(|a| a.get("signed_by")).and_then(|v| v.as_str()),
+            Some(signer.as_str()),
+            "the audit record names the signer"
+        );
+    }
+
+    #[test]
+    fn criterion8_require_signed_refuses_an_unsigned_plugin_as_dl1511() {
+        // CRITERION 8, second half. `require_signed: true` refuses an UNSIGNED plugin — DL1511, a
+        // policy refusal distinct from a bad signature.
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]); // no sig
+        let mut c = host_custody(&[]);
+        let mut g = grant(&[]);
+        g.require_signed = true;
+        let e = load_verified(&art, &g, &mut c).expect_err("require_signed refuses an unsigned plugin");
+        assert_eq!(e.code, "DL1511", "unsigned-but-required is DL1511");
+        assert_eq!(e.to_plugin_err().variant(), "NotGranted");
+        // Refusal honesty: the node minted at step 4 is revoked (no live plugin node survives).
+        let tree = c.broker().expect("tree");
+        let live = tree.nodes().iter().any(|n| {
+            n.holder.kind == "plugin"
+                && matches!(tree.effective_state(&n.id), Some(delulu_broker::EffState::Live))
+        });
+        assert!(!live, "a DL1511 refusal must revoke the plugin's node");
+    }
+
+    #[test]
+    fn a_badly_signed_plugin_is_dl1510_a_different_fault_from_unsigned() {
+        // The head-chef point: a present-but-invalid signature is DL1510, NOT DL1511. We sign, then
+        // tamper the content — the signature no longer verifies. Refused regardless of require_signed.
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        sign_verified(&mut art, &[7u8; 32]);
+        art.manifest["version"] = json!("9.9.9-tampered"); // content changed after signing
+
+        let mut c = host_custody(&[]);
+        let e = load_verified(&art, &grant(&[]), &mut c).expect_err("a broken signature is refused");
+        assert_eq!(e.code, "DL1510", "badly-signed is DL1510");
+        assert_ne!(e.code, "DL1511", "and it is NOT the unsigned fault");
+        assert!(e.requires_human, "a broken signature is never machine-repairable");
+        assert_eq!(e.to_plugin_err().variant(), "VerifyFailed");
+    }
+
+    #[test]
+    fn a_malformed_signature_section_is_dl1510_not_a_silent_skip() {
+        // A present but wrong-length signature section is a fault, never quietly ignored.
+        let mut art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        art.sig = Some(vec![0u8; 10]); // not 96 bytes
+        let mut c = host_custody(&[]);
+        let e = load_verified(&art, &grant(&[]), &mut c).expect_err("a malformed signature is refused");
+        assert_eq!(e.code, "DL1510");
+    }
+
+    #[test]
+    fn an_unsigned_plugin_without_require_signed_loads_and_records_no_identity() {
+        // Positive control: the signature machinery does not disturb the ordinary unsigned load path.
+        let art = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        let mut c = host_custody(&[]);
+        let LoadedPlugin::Verified { signer, .. } = load_verified(&art, &grant(&[]), &mut c).expect("loads");
+        assert!(signer.is_none(), "an unsigned plugin has no signer identity");
     }
 }
