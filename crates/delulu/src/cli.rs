@@ -1668,6 +1668,13 @@ fn cmd_why(rest: &[String]) -> i32 {
         return 2;
     };
 
+    // A `.dpx` plugin artifact: traverse the plugin's OWN authority chain (criterion 10, spec §6).
+    // A Verified plugin's DIR carries real per-function facts, so `why` follows the chain to the
+    // primitive op; a Contained plugin is an opaque boundary and is labeled as such.
+    if std::path::Path::new(&path).extension().and_then(|e| e.to_str()) == Some("dpx") {
+        return cmd_why_plugin(&effect_name, &path, &opts);
+    }
+
     let (diags, program, locations, map): (Vec<Diagnostic>, Program, HashMap<String, (String, u32)>, SourceMap) =
         if std::path::Path::new(&path).is_dir() {
             let ws = resolve_workspace(&path);
@@ -1781,6 +1788,152 @@ fn cmd_why(rest: &[String]) -> i32 {
         println!("{out}");
     }
     0
+}
+
+/// `delulu why <Effect> <file.dpx>` (criterion 10, spec §6): traverse a plugin artifact's own
+/// authority chain. A **Verified** plugin's DIR carries real per-function facts, so `why` follows
+/// the chain from an export to the primitive op that performs the effect (a real chain). A
+/// **Contained** plugin is opaque — `why` stops at the module boundary and labels the edge
+/// `→ [contained plugin <name>] — <Effect>` (spec §6), because containment is module-granular and
+/// the internals are not re-checkable.
+fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{path}`: {e}");
+            return 2;
+        }
+    };
+    let map = SourceMap::new();
+    let dpx = match delulu_wasm::read_dpx(&bytes) {
+        Ok(d) => d,
+        Err(e) => {
+            print_diagnostics("why", &[Diagnostic::error(e.code(), e.message())], &map, None, opts.json);
+            return 1;
+        }
+    };
+    let name = dpx.manifest.get("name").and_then(|v| v.as_str()).unwrap_or("<unnamed>").to_string();
+
+    if dpx.class == "contained" {
+        // The opaque boundary. R-1: a Contained plugin's exports type at effects(grant); its ceiling
+        // bounds what it may ever perform. We cannot see inside — we label the boundary honestly.
+        let ceiling: Vec<String> = dpx
+            .manifest
+            .get("authority")
+            .and_then(|a| a.get("effects"))
+            .and_then(|v| v.as_array())
+            .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .unwrap_or_default();
+        let declares = ceiling.iter().any(|e| e == effect_name);
+        if opts.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "effect": effect_name, "plugin": name, "class": "contained",
+                    "boundary": true, "declares": declares,
+                    "edge": if declares { format!("→ [contained plugin {name}] — {effect_name}") } else { Json::Null.to_string() },
+                }))
+                .expect("why report serializes")
+            );
+        } else if declares {
+            // The spec §6 labeled edge, verbatim shape.
+            println!("→ [contained plugin {name}] — {effect_name}");
+            println!("  (opaque module: containment is module-granular; internals are not re-checkable)");
+        } else {
+            println!("contained plugin `{name}` does not declare `{effect_name}` (its authority ceiling omits it)");
+        }
+        return 0;
+    }
+
+    // Verified: replay the DIR's own facts and follow the real chain to the primitive op.
+    let Some(dir_bytes) = dpx.dir.as_deref() else {
+        eprintln!("error: verified plugin `{name}` carries no DIR");
+        return 1;
+    };
+    let dir = match delulu_check::dir_deserialize(dir_bytes) {
+        Ok(d) => d,
+        Err(e) => {
+            print_diagnostics("why", &[Diagnostic::error(e.code(), e.message())], &map, None, opts.json);
+            return 1;
+        }
+    };
+
+    let is_known = delulu_check::Effect::core_from_name(effect_name).is_some()
+        || dir.facts.values().any(|f| f.effects.iter().any(|e| e.name() == effect_name));
+    if !is_known {
+        eprintln!("error: `{effect_name}` is not a known effect visible in plugin `{name}`");
+        return 2;
+    }
+
+    // Start from an EXPORT that performs the effect (the plugin's real entry points).
+    let exports: Vec<String> = dpx
+        .manifest
+        .get("exports")
+        .and_then(|v| v.as_object())
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default();
+    let start = exports
+        .iter()
+        .find(|ex| dir.facts.get(*ex).is_some_and(|f| f.effects.iter().any(|e| e.name() == effect_name)));
+    let Some(start) = start else {
+        if opts.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": false, "path": [] }))
+                    .expect("why report serializes")
+            );
+        } else {
+            println!("verified plugin `{name}` has no export that performs `{effect_name}`");
+        }
+        return 0;
+    };
+
+    let chain = plugin_why_chain(&dir.facts, start, effect_name);
+    if opts.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": true, "path": chain }))
+                .expect("why report serializes")
+        );
+    } else {
+        println!("[verified plugin {name}] {} — {effect_name}", chain.join(" -> "));
+    }
+    0
+}
+
+/// Follow a Verified plugin's real call chain over its DIR facts from `start` to the primitive op:
+/// at each step, descend into a callee that also performs the effect; when none does, the current
+/// function is the origin (it performs the primitive itself). Cycle-safe via a visited set.
+fn plugin_why_chain(
+    facts: &std::collections::BTreeMap<String, delulu_check::FnFacts>,
+    start: &str,
+    effect: &str,
+) -> Vec<String> {
+    let mut chain = vec![start.to_string()];
+    let mut visited: std::collections::HashSet<String> = std::iter::once(start.to_string()).collect();
+    let mut current = start.to_string();
+    loop {
+        let Some(f) = facts.get(&current) else { break };
+        let mut next = None;
+        for callee in &f.callees {
+            if visited.contains(callee) {
+                continue;
+            }
+            if facts.get(callee).is_some_and(|cf| cf.effects.iter().any(|e| e.name() == effect)) {
+                next = Some(callee.clone());
+                break;
+            }
+        }
+        match next {
+            Some(k) => {
+                visited.insert(k.clone());
+                chain.push(k.clone());
+                current = k;
+            }
+            None => break,
+        }
+    }
+    chain
 }
 
 /// Function-declaration locations (display file + 1-based line) across a whole workspace,
@@ -4335,4 +4488,47 @@ fn repl_cmd(rest: &[String]) -> i32 {
 #[allow(dead_code)]
 fn _json_marker() -> Json {
     json!({})
+}
+
+#[cfg(test)]
+mod plugin_why_tests {
+    use super::*;
+
+    #[test]
+    fn criterion10_verified_why_traverses_the_real_chain_to_the_primitive_op() {
+        // CRITERION 10 (Verified half): `why <Effect> <verified.dpx>` follows the plugin's OWN facts
+        // from an export through its callees to the function that performs the primitive op.
+        let src = "module reader\n\
+            fn slurp(fs: Cap[FsRead], p: Str) -> Result[Str, IoErr] ! {Read} { fs.read_text(p) }\n\
+            pub fn scan(fs: Cap[FsRead], p: Str) -> Result[Str, IoErr] ! {Read} { slurp(fs, p) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let facts: std::collections::BTreeMap<String, delulu_check::FnFacts> =
+            checked.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        let chain = plugin_why_chain(&facts, "scan", "Read");
+        assert_eq!(chain, vec!["scan".to_string(), "slurp".to_string()], "export → helper → primitive");
+        // The origin (last) performs Read but no callee of it performs Read — it IS the primitive op.
+        let origin = chain.last().unwrap();
+        assert!(facts[origin].effects.iter().any(|e| e.name() == "Read"), "the origin performs the effect");
+        assert!(
+            !facts[origin].callees.iter().any(|c| facts.get(c).is_some_and(|f| f.effects.iter().any(|e| e.name() == "Read"))),
+            "the origin calls nothing that performs Read — it is the primitive site"
+        );
+    }
+
+    #[test]
+    fn plugin_why_chain_is_cycle_safe() {
+        // The visited set makes a mutually-recursive chain terminate rather than loop forever.
+        let src = "module m\n\
+            fn a(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} { let _r = b(fs)\n fs.read_text(\"x\") }\n\
+            fn b(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} { a(fs) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let facts: std::collections::BTreeMap<String, delulu_check::FnFacts> =
+            checked.result.facts.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let chain = plugin_why_chain(&facts, "a", "Read"); // must terminate
+        assert!(chain.first().map(String::as_str) == Some("a"));
+        assert!(chain.len() <= facts.len() + 1, "a cycle never revisits a node");
+    }
 }

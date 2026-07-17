@@ -327,6 +327,69 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  claimed."
             ),
         )),
+        "PLUGIN" => Some((
+            "runtime plugins: Verified and Contained, the load sequence, and the honesty caveats (Stage 6 \"Live\")",
+            String::from(
+                "A plugin is code that arrives AFTER compile time and still cannot exceed its grant. \
+                 Two classes ship, and the class is DECLARED, never inferred (a `.dpx` claiming \
+                 Verified whose DIR fails any check is refused — DL1504 — and NEVER falls back to \
+                 Contained):\n\
+                 - Plugin[Verified] ships DIR (the Delulu typed IR) and is RE-CHECKED at load: the \
+                 loader replays the compiler's own resolve + check over the shipped module, so a \
+                 Verified export carries its re-verified per-function row. Verified plugins run on the \
+                 host's own engine.\n\
+                 - Plugin[Contained] ships opaque WASM and is confined at the MODULE boundary: its \
+                 imports must fit the grant-derived slice (DL1505), and — rule R-1 — every export \
+                 types at `effects(grant)`, whatever its manifest claims.\n\n\
+                 The load sequence is an ORDER (spec §3.1): (1) container + `plugin.api` (DL1507); (2) \
+                 class check; (3) manifest ceiling `grant ⊑ plugin.authority` (DL1502, intersection = \
+                 exact narrowing repair); (4) holder check `grant ⊑ holder` at the broker (DL0802) → a \
+                 child grant node; (5) class-specific verification; (6) signature policy; (7) \
+                 instantiate. `delulu plugin verify` runs steps 1, 2, 5 without instantiating and gives \
+                 identical verdicts to a real load.\n\n\
+                 NOTATION (build-order deviation 4): the spec writes `load[C](…)` and `p.get[F](…)`, \
+                 but the grammar has no turbofish (Stage-1 §6). These are inference-from-context: \
+                 `let p: Plugin[Contained] = load(host, path, grant)?` and \
+                 `let f: fn(Str) -> Str ! {} = p.get(\"shout\")?`. Do NOT copy the bracket form out of \
+                 the spec — it will not parse. R-6a still fires at the `get` site: a function-typed \
+                 parameter in a Contained `F` is DL0803, and an underdetermined `F` is DL1509.\n\n\
+                 SINGLE-MODULE (build-order deviation 3): a plugin package is exactly one module in \
+                 v0.6. A multi-module package is refused cleanly at build with DL1004 (\"plugin \
+                 packages are single-module in v0.6\") — no partial artifact, no fake repair. \
+                 Multi-module packages are on the post-v0.6 RFC ledger.\n\n\
+                 DIAGNOSTICS (spec §7 + build-order deviations 2 and 8): DL1501 manifest/export string \
+                 disagrees with the code; DL1502 grant exceeds the ceiling; DL1503 DIR version \
+                 unsupported; DL1504 Verified re-check failed (never a Contained fallback); DL1505 \
+                 Contained imports outside the grant slice; DL1506 resource limit exceeded (terminated \
+                 + node revoked); DL1507 API mismatch; DL1508 a malformed or tampered `.dpx` container \
+                 (deviation 2 — the container-corruption code the spec table lacked, mirroring Stage \
+                 3's DL1202); DL1509 an underdetermined Contained `get` signature (R-6a undecidable); \
+                 DL1510 a present-but-invalid signature; DL1511 an unsigned plugin under a \
+                 `require_signed` grant. DL1510 and DL1511 are DIFFERENT faults with different \
+                 remedies (deviation 8): a badly-signed artifact is not the same as an unsigned one.\n\n\
+                 WINDOWS (build-order deviation 7): in-process CPU/wall enforcement for a Contained (or \
+                 Verified-on-WASM) plugin uses host-initiated wasm traps, whose unwind fastfails the \
+                 host process on Windows with wasmtime 27. So on Windows, contained execution is \
+                 REFUSED up front with an honest `EnforcementUnsupported` — before any store exists — \
+                 rather than risk an uncatchable host crash: not a limit hit (never DL1506, never an \
+                 authority-widening repair), not a plugin fault. The enforcement-grade platform for \
+                 hostile Contained code is the WASM engine on Linux (spec §5.4); Verified plugins run \
+                 on all platforms via the interpreter. Out-of-process enforcement is RFC-deferred.\n\n\
+                 HONESTY AND THREAT-MODEL CAVEATS (spec §10, verbatim):\n\
+                 - The Verified/Contained split is a TRUST STATEMENT, NOT A QUALITY RANKING: Verified = \
+                 re-proved per-function at load; Contained = confined at module boundary. The type \
+                 system keeps them honest by construction (R-1) — a Contained plugin's \"read-only\" \
+                 export TYPES AS everything its module was granted.\n\
+                 - Signatures authenticate ORIGIN, not behavior; a signed plugin is not a safe plugin.\n\
+                 - Resource limits bound CPU/memory/wall-clock, NOT I/O volume within granted scopes \
+                 (an I/O-quota grant dimension is a post-1.0 RFC).\n\
+                 - Interpreter-engine limits are best-effort (§5.4); hostile code belongs on the WASM \
+                 engine.\n\
+                 - Plugins share the host's microVM in v1.0; per-plugin VMs are future work.\n\n\
+                 Stage 6 is the promise kept: code that arrives at runtime and still cannot exceed its \
+                 grant.",
+            ),
+        )),
         _ => None,
     }
 }
@@ -587,6 +650,37 @@ mod tests {
         for text in [body.as_str(), GUARD_BYPASS_BANNER, GUARD_CAVEAT] {
             assert!(!text.to_lowercase().contains("immediate"), "never claim immediate: {text}");
         }
+    }
+
+    /// Stage 6 "Live": the plugin codes DL1501–DL1511 are registered, and the `E-PLUGIN` topic
+    /// exists and carries the spec §10 honesty caveats VERBATIM plus the ruled-deviation conditions
+    /// (2 = DL1508, 3 = single-module, 4 = annotation form, 7 = Windows, 8 = DL1510/DL1511).
+    #[test]
+    fn plugin_codes_and_e_plugin_topic() {
+        for code in [
+            "DL1501", "DL1502", "DL1503", "DL1504", "DL1505", "DL1506", "DL1507", "DL1508",
+            "DL1509", "DL1510", "DL1511",
+        ] {
+            assert!(is_registered(code), "{code} must be registered");
+        }
+        let (title, body) = topic_explain("PLUGIN").expect("E-PLUGIN topic exists");
+        assert!(title.contains("Verified") && title.contains("Contained"), "the two classes named");
+        // Spec §10 caveats, verbatim.
+        assert!(body.contains("TRUST STATEMENT, NOT A QUALITY RANKING"), "§10: trust not quality");
+        assert!(body.contains("Signatures authenticate ORIGIN, not behavior"), "§10: origin not behavior");
+        assert!(body.contains("NOT I/O volume within granted scopes"), "§10: limits are CPU/mem/wall");
+        assert!(body.contains("Interpreter-engine limits are best-effort"), "§10: interpreter best-effort");
+        assert!(body.contains("share the host's microVM"), "§10: shared microVM in v1.0");
+        // Ruled-deviation conditions.
+        assert!(body.contains("DL1508"), "deviation 2: DL1508 in the diagnostics story");
+        assert!(body.contains("single-module") && body.contains("DL1004"), "deviation 3: single-module + DL1004");
+        assert!(body.contains("no turbofish") || body.contains("inference-from-context"), "deviation 4: annotation form");
+        assert!(body.contains("will not parse"), "deviation 4: warns not to copy bracket syntax");
+        assert!(body.contains("EnforcementUnsupported") && body.contains("Windows"), "deviation 7: Windows caveat, plain");
+        assert!(body.contains("DL1510") && body.contains("DL1511"), "deviation 8: the two signature codes");
+        assert!(body.contains("DIFFERENT faults"), "deviation 8: badly-signed vs unsigned are different faults");
+        // Never claim "immediate" anywhere in the plugin text.
+        assert!(!body.to_lowercase().contains("immediate"), "never claim immediate: {body}");
     }
 
     /// Surface addendum §3.2: the Palette code DL1790 is registered, the `E-PALETTE` topic exists
