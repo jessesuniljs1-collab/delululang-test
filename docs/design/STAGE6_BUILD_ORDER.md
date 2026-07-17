@@ -1,6 +1,11 @@
 # Stage 6 "Live" — Build Order
 
-**Status:** COOKING — opened 2026-07-15 by the head chef.
+**Status:** BUILT — head-chef verified 2026-07-18 at `faa6dae`. Full workspace suite: Windows
+609 passed / 0 failed / 2 ignored; Linux 613 / 0 / 2 (the +4 are the platform-gated live-engine
+criterion-5 witnesses — fuel kill, wall kill, memory bomb, bug-trap-not-a-limit — each seen green
+by name on Linux). Flagship example exercised against the real binary (build → verify → inspect;
+rigged variant refused DL1501, no partial artifact). New Stage-6 code clippy-clean. All 8
+deviations ruled; §4 close-out table complete. Opened 2026-07-15 by the head chef.
 **Binding spec:** `STAGE6_SPECIFICATION.md` (v0.6, Committed). **Binding how-to:**
 `docs/playbooks/STAGE6_PLAYBOOK.md` — its phase plan (6a–6i), crate topology (§1), and traps (§3)
 govern the build. This document adds nothing to either; it fixes the reporting gates, house
