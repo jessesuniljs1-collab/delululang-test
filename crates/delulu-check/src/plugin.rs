@@ -114,7 +114,7 @@ impl PluginManifest {
 
         // `class`: required, exactly "verified" | "contained" (invariant 29 — never inferred, so
         // never defaulted either).
-        let class = match plugin.get("class").and_then(|v| v.as_str()).and_then(PluginClass::from_str) {
+        let class = match plugin.get("class").and_then(|v| v.as_str()).and_then(PluginClass::from_name) {
             Some(c) => c,
             None => {
                 diags.push(

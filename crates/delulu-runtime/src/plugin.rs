@@ -140,7 +140,10 @@ impl PluginClass {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<PluginClass> {
+    /// Parse a declared class name. Named `from_name` (not `from_str`) so it is not mistaken for
+    /// `std::str::FromStr::from_str`, whose `Result` contract this `Option`-returning parser does not
+    /// follow (clippy `should_implement_trait`).
+    pub fn from_name(s: &str) -> Option<PluginClass> {
         match s {
             "verified" => Some(PluginClass::Verified),
             "contained" => Some(PluginClass::Contained),
@@ -225,7 +228,10 @@ pub struct LoadRefusal {
     pub code: &'static str,
     pub message: String,
     /// DL1502 only: `grant ⊓ ceiling` — narrowing by construction (`authority_widening: false`).
-    pub intersection: Option<Authority>,
+    /// **Boxed** so a `LoadRefusal` stays small: it is the `Err` of every load `Result`, and an
+    /// `Authority` inline would bloat every one (clippy `result_large_err`). Mirrors the broker's
+    /// own `Denial::intersection: Box<Authority>`.
+    pub intersection: Option<Box<Authority>>,
     pub requires_human: bool,
 }
 
@@ -361,7 +367,7 @@ pub fn step1_container_api(art: &PluginArtifact, supported_api: u32) -> Result<P
         ));
     }
     // Invariant 29: the class is *declared*. An unreadable declaration is refused, never guessed.
-    PluginClass::from_str(&art.class).ok_or_else(|| {
+    PluginClass::from_name(&art.class).ok_or_else(|| {
         LoadRefusal::new(
             "DL1508",
             format!("plugin `{}` declares unknown class `{}`", art.name(), art.class),
@@ -400,7 +406,7 @@ pub fn step3_ceiling(grant: &Authority, ceiling: &Authority) -> Result<(), LoadR
                 grant.render_compact(),
                 ceiling.render_compact()
             ),
-            intersection: Some(intersection),
+            intersection: Some(Box::new(intersection)),
             requires_human: false,
         }),
     }

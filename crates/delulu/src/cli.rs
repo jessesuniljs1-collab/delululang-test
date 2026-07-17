@@ -2122,8 +2122,7 @@ fn plugin_why_chain(
     let mut chain = vec![start.to_string()];
     let mut visited: std::collections::HashSet<String> = std::iter::once(start.to_string()).collect();
     let mut current = start.to_string();
-    loop {
-        let Some(f) = facts.get(&current) else { break };
+    while let Some(f) = facts.get(&current) {
         let mut next = None;
         for callee in &f.callees {
             if visited.contains(callee) {

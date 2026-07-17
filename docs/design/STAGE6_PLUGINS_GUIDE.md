@@ -94,7 +94,11 @@ These are recorded so no reader is surprised; each was ruled during the build.
   risk an uncatchable host crash. It is neither a limit hit (never DL1506, never an authority-widening
   repair) nor a plugin fault; it names its reason, and it is never a crash, a hang, or a silent no-op.
   The enforcement-grade platform for hostile Contained code is the WASM engine on Linux (spec §5.4);
-  **Verified plugins run on every platform via the interpreter.**
+  **Verified plugins run on every platform via the interpreter.** Verified platforms are **Windows**
+  (with the caveat above) and **Linux**; **macOS** compiles the full enforcement path by construction
+  (the gate is `cfg(not(windows))`, and wasmtime treats macOS as a first-class Unix signal-path
+  platform) and is *expected* to work, but is **unverified** in this kitchen — no witness has ever run
+  on a Mac, and nothing is claimed passing where unrun.
 
 - **Two signature faults, two codes (deviation 8).** A present-but-invalid signature (DL1510) and an
   unsigned-but-required plugin (DL1511) are different faults with different remedies; see above.

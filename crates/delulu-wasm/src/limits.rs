@@ -240,13 +240,15 @@ pub fn run_contained_export(
     // enforcement path is a separate head-chef ruling. See build-order deviation 7.
     #[cfg(windows)]
     {
+        // Tail expression (not `return`): on Windows the `not(windows)` arm is cfg-stripped, so this
+        // block IS the function's tail — no `return` needed (clippy `needless_return`).
         let _ = (wasm, export, limits);
-        return Err(TrapCause::EnforcementUnsupported(
+        Err(TrapCause::EnforcementUnsupported(
             "in-process CPU/wall limits use host-initiated wasm traps, whose unwind fastfails the \
              host on Windows with this engine; Contained plugins are refused here until \
              out-of-process enforcement lands"
                 .into(),
-        ));
+        ))
     }
     #[cfg(not(windows))]
     {

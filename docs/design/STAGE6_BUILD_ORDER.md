@@ -222,8 +222,12 @@ message a lie (the kitchen rule / skip-branch rule). The allocation follows the 
 neither code asserts anything about safety. The embedded-only audit recording is honest for v0.6 —
 the load (and thus the signature verification) runs in the program process; wiring the daemon to log
 a client-verified signature server-side is a small future addition, recorded here rather than
-silently skipped. *Status: awaiting ruling — conditions proposed: at B4 close-out DL1510/DL1511 join
-the Implementation status log and `E-PLUGIN`; the daemon-audit gap is stated in the honesty caveats.*
+silently skipped. *Status: **ruled: approved as recorded** — the head chef's standard: "DL1510 vs
+DL1511 as different faults with different remedies is the kitchen rule applied exactly right, and
+'signatures authenticate origin, not behavior — neither code asserts anything about safety' is the
+honesty standard." Conditions discharged: DL1510/DL1511 join the Implementation status log, the code
+registry, and `E-PLUGIN`; the daemon-side signature-audit gap is stated in the honesty caveats and
+joins the post-v0.6 RFC ledger (§5).*
 
 ## 4. Close-out
 
@@ -294,3 +298,10 @@ Deferred by ruling, recorded so no future builder starts blind:
    (b) host capability values must never be marshalled across the process boundary in a way
    that weakens R-6b invalidate-on-return or R-Get — that design must be ruled on before it
    is built.
+
+4. **Daemon-side plugin-signature audit** (Deviation 8). v0.6 records a verified plugin
+   signature's identity in the audit log via **embedded** custody (which holds the in-process
+   broker + sink); the daemon-client `Custody::note_plugin_signature` is a no-op. The load — and
+   thus the signature verification — runs in the program process, so wiring the broker daemon to log
+   a client-verified signature server-side is a small future addition (a new IPC note), deferred here
+   rather than silently skipped.

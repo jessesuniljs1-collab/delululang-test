@@ -213,8 +213,10 @@ impl PluginClass {
         }
     }
 
-    /// From the artifact/manifest spelling (`"verified"` / `"contained"`).
-    pub fn from_str(s: &str) -> Option<PluginClass> {
+    /// From the artifact/manifest spelling (`"verified"` / `"contained"`). Named `from_name` (not
+    /// `from_str`) so it is not confused with `std::str::FromStr::from_str`, whose `Result` contract
+    /// this `Option`-returning parser does not follow (clippy `should_implement_trait`).
+    pub fn from_name(s: &str) -> Option<PluginClass> {
         match s {
             "verified" => Some(PluginClass::Verified),
             "contained" => Some(PluginClass::Contained),

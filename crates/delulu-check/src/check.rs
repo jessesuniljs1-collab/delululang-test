@@ -607,7 +607,7 @@ impl<'a> Checker<'a> {
         let mut effects = acc.effects.clone();
         for t in &acc.tails {
             let r = self.cx.apply_row(&Row { effects: BTreeSet::new(), tail: Some(*t) });
-            effects.extend(r.effects.into_iter());
+            effects.extend(r.effects);
         }
         Row { effects, tail: None }
     }

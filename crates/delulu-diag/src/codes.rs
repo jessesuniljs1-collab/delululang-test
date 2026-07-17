@@ -374,7 +374,12 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  rather than risk an uncatchable host crash: not a limit hit (never DL1506, never an \
                  authority-widening repair), not a plugin fault. The enforcement-grade platform for \
                  hostile Contained code is the WASM engine on Linux (spec §5.4); Verified plugins run \
-                 on all platforms via the interpreter. Out-of-process enforcement is RFC-deferred.\n\n\
+                 on all platforms via the interpreter. Verified platforms are Windows (with the caveat \
+                 above) and Linux; macOS compiles the full enforcement path by construction (the gate \
+                 is `cfg(not(windows))`, and wasmtime treats macOS as a first-class Unix signal-path \
+                 platform) and is EXPECTED to work but is UNVERIFIED in this kitchen — no witness has \
+                 run on a Mac, and nothing is claimed passing where unrun. Out-of-process enforcement \
+                 is RFC-deferred.\n\n\
                  HONESTY AND THREAT-MODEL CAVEATS (spec §10, verbatim):\n\
                  - The Verified/Contained split is a TRUST STATEMENT, NOT A QUALITY RANKING: Verified = \
                  re-proved per-function at load; Contained = confined at module boundary. The type \
