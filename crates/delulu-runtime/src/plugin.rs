@@ -837,6 +837,50 @@ pub fn load_verified(
     }
 }
 
+// ===== 6i — `delulu plugin verify` (steps 1, 2, 5 — identical verdicts to a load) =============
+
+/// What `verify_plugin` reports for a well-formed artifact (spec §6). Descriptive only — a `verify`
+/// never instantiates and never mints a node.
+#[derive(Clone, Debug)]
+pub struct VerifyReport {
+    pub class: PluginClass,
+    pub signature: SignatureStatus,
+    /// Verified: the re-proved export names. Contained: the manifest-declared exports (documentation
+    /// — a Contained export types at `effects(grant)`, R-1).
+    pub exports: Vec<String>,
+}
+
+/// `delulu plugin verify` — run load-sequence **steps 1, 2, 5** (and the signature check) WITHOUT
+/// instantiating and WITHOUT a grant (spec §6). It calls the EXACT functions a real load calls
+/// ([`step1_container_api`], [`step5_verified`], [`verify_signature`], [`step6_signature`]), so a
+/// `verify` gives **identical verdicts to a real load** — criterion 9, no verify/load divergence,
+/// guaranteed by there being one code path, not two (playbook trap 3).
+///
+/// Steps 3/4 (ceiling/holder) and 7 (instantiate) are grant/runtime concerns and are deliberately
+/// not run here — `verify` answers "does this artifact pass verification?", the grant-independent
+/// half of a load. A Contained plugin's import-slice check (step 5-Contained) is grant-dependent, so
+/// for Contained `verify` covers container + api + signature and leaves the slice check to a real
+/// load with a grant (stated in the report, never faked).
+pub fn verify_plugin(art: &PluginArtifact) -> Result<VerifyReport, LoadRefusal> {
+    let class = step1_container_api(art, PLUGIN_API_SUPPORTED)?;
+    let (signature, exports) = match class {
+        PluginClass::Verified => {
+            let v = step5_verified(art)?;
+            let sig = verify_signature(&art.manifest, art.dir.as_deref(), art.sig.as_deref());
+            // A present-but-invalid signature refuses at verify EXACTLY as at load (DL1510).
+            // `require_signed` is a grant policy, not applicable to a grant-free verify.
+            step6_signature(&sig, false)?;
+            (sig, v.dir.fn_types.keys().cloned().collect())
+        }
+        PluginClass::Contained => {
+            let sig = verify_signature(&art.manifest, art.wasm.as_deref(), art.sig.as_deref());
+            step6_signature(&sig, false)?;
+            (sig, art.exports().keys().cloned().collect())
+        }
+    };
+    Ok(VerifyReport { class, signature, exports })
+}
+
 // ===== 6e.5 — Verified interpreter instantiation (the flagship RUNS) ==========================
 //
 // A Verified plugin ships DIR — re-proved source-grade semantics — and is executed by the HOST's
@@ -1965,6 +2009,65 @@ mod tests {
         let mut c = host_custody(&[]);
         let LoadedPlugin::Verified { signer, .. } = load_verified(&art, &grant(&[]), &mut c).expect("loads");
         assert!(signer.is_none(), "an unsigned plugin has no signer identity");
+    }
+
+    #[test]
+    fn criterion9_verify_gives_identical_verdicts_to_a_real_load_across_the_corpus() {
+        // CRITERION 9: `plugin verify` (steps 1, 2, 5 + signature) must NEVER diverge from a real
+        // load. It is guaranteed by ONE code path (both call step1_container_api / step5_verified /
+        // verify_signature / step6_signature), and proven here across a corpus of tricky artifacts.
+        fn verdict_verify(art: &PluginArtifact) -> String {
+            verify_plugin(art).map(|_| "ok".to_string()).unwrap_or_else(|e| e.code.to_string())
+        }
+        fn verdict_load(art: &PluginArtifact) -> String {
+            // A grant that passes steps 3/4 (empty ⊑ any ceiling; empty ⊑ the holder) and no
+            // require_signed — so the load's verdict is decided by steps 1, 5, 6: exactly what
+            // verify runs. Any divergence is then a real verify/load bug.
+            let mut c = host_custody(&["Read", "Write", "Net", "Clock"]);
+            load_verified(art, &grant(&[]), &mut c)
+                .map(|_| "ok".to_string())
+                .unwrap_or_else(|e| e.code.to_string())
+        }
+
+        let mut corpus: Vec<(&str, PluginArtifact)> = Vec::new();
+        corpus.push(("pure", verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[])));
+        let eff = "module p\npub fn w(out: Cap[Console], s: Str) ! {Write} { out.println(s) }\n";
+        corpus.push((
+            "effectful_honest",
+            verified_artifact(eff, json!({ "w": "fn(Cap[Console], Str) ! {Write}" }), &["Write"]),
+        ));
+        let mut tampered = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        tampered.dir = Some(b"garbage dir bytes".to_vec());
+        corpus.push(("tampered_dir", tampered));
+        corpus.push(("type_mismatch", verified_artifact(PURE_CODE, json!({ "shout": "fn(Int) -> Int" }), &[])));
+        corpus.push(("missing_export", verified_artifact(PURE_CODE, json!({ "ghost": "fn(Str) -> Str" }), &[])));
+        let mut api = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        api.api = 9;
+        api.manifest["api"] = json!(9);
+        corpus.push(("bad_api", api));
+        let over = "module p\npub fn shout(clk: Cap[Clock], s: Str) -> Str ! {Clock} { let _t = clk.now_ms()\n s }\n";
+        corpus.push((
+            "row_exceeds_manifest",
+            verified_artifact(over, json!({ "shout": "fn(Cap[Clock], Str) -> Str ! {}" }), &["Clock"]),
+        ));
+        let mut signed = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        signed.sig = Some(sign_plugin(&[5u8; 32], &signed.manifest, signed.dir.as_deref()));
+        corpus.push(("signed", signed));
+        let mut bad = verified_artifact(PURE_CODE, json!({ "shout": "fn(Str) -> Str" }), &[]);
+        bad.sig = Some(sign_plugin(&[5u8; 32], &bad.manifest, bad.dir.as_deref()));
+        bad.manifest["version"] = json!("tampered-after-signing");
+        corpus.push(("badly_signed", bad));
+
+        for (name, art) in &corpus {
+            let (v, l) = (verdict_verify(art), verdict_load(art));
+            assert_eq!(v, l, "verify/load divergence on `{name}`: verify={v}, load={l}");
+        }
+        // The corpus really exercised both accept and several distinct refusals (not a vacuous pass).
+        let verdicts: std::collections::BTreeSet<String> =
+            corpus.iter().map(|(_, a)| verdict_verify(a)).collect();
+        for expected in ["ok", "DL1504", "DL1507", "DL1510"] {
+            assert!(verdicts.contains(expected), "the corpus must exercise `{expected}`: {verdicts:?}");
+        }
     }
 
     #[test]

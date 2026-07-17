@@ -491,8 +491,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
      \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
      \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\
-     \x20 delulu plugin    build <package-dir> [-o out.dpx] [--json]   (a `kind = \"plugin\"` package → .dpx)\n\
-     \x20 delulu plugin    inspect <file.dpx> [--json]   (manifest, class, exports, section hashes)\n\
+     \x20 delulu plugin    build <package-dir> [-o out.dpx] [--sign keyfile] [--json]   (a `kind = \"plugin\"` package → .dpx)\n\
+     \x20 delulu plugin    inspect <file.dpx> [--json]   (manifest, class, exports, section hashes, signature)\n\
+     \x20 delulu plugin    verify  <file.dpx> [--json]   (load steps 1,2,5 — identical verdicts to a real load)\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
@@ -876,15 +877,78 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
 
 fn cmd_plugin(rest: &[String]) -> i32 {
     let Some(sub) = rest.first() else {
-        eprintln!("error: `plugin` needs a subcommand: build <package-dir> | inspect <file.dpx>");
+        eprintln!("error: `plugin` needs a subcommand: build <package-dir> | inspect <file.dpx> | verify <file.dpx>");
         return 2;
     };
     match sub.as_str() {
         "build" => cmd_plugin_build(&rest[1..]),
         "inspect" => cmd_plugin_inspect(&rest[1..]),
+        "verify" => cmd_plugin_verify(&rest[1..]),
         other => {
-            eprintln!("error: unknown `plugin` subcommand `{other}` (expected build | inspect)");
+            eprintln!("error: unknown `plugin` subcommand `{other}` (expected build | inspect | verify)");
             2
+        }
+    }
+}
+
+/// `delulu plugin verify <file.dpx> [--json]` — run load-sequence steps 1, 2, 5 (and the signature
+/// check) WITHOUT instantiating (spec §6). It reads the container through the SAME engine path a
+/// real load uses and calls the SAME verification functions, so it gives **identical verdicts to a
+/// real load** (criterion 9 — no verify/load divergence).
+fn cmd_plugin_verify(rest: &[String]) -> i32 {
+    let (file, opts) = parse_opts(rest);
+    let Some(file) = file else {
+        eprintln!("error: `plugin verify` needs a `.dpx` file");
+        return 2;
+    };
+    let bytes = match std::fs::read(&file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let map = SourceMap::new();
+    // The container read is the SAME `read_artifact` the loader uses (spec §9.9), so a corrupt
+    // artifact refuses here exactly as at load.
+    use delulu_runtime::PluginEngine as _;
+    let art = match delulu_wasm::WasmPluginEngine::new().read_artifact(&bytes) {
+        Ok(a) => a,
+        Err(e) => {
+            let d = Diagnostic::error(e.code, e.message);
+            print_diagnostics("plugin", &[d], &map, None, opts.json);
+            return 1;
+        }
+    };
+    match delulu_runtime::verify_plugin(&art) {
+        Ok(report) => {
+            let signed_by = match &report.signature {
+                delulu_runtime::SignatureStatus::Valid { signer } => Some(signer.clone()),
+                _ => None,
+            };
+            if opts.json {
+                println!(
+                    "{}",
+                    json!({
+                        "command": "plugin", "subcommand": "verify", "artifact": file,
+                        "class": report.class.as_str(), "verdict": "ok",
+                        "exports": report.exports, "signed_by": signed_by,
+                    })
+                );
+            } else {
+                let sig_note = signed_by.as_deref().map(|s| format!(", signed by {s}")).unwrap_or_default();
+                ok_line!(
+                    "ok: `{file}` verifies — {} plugin, {} export(s){sig_note}",
+                    report.class.as_str(),
+                    report.exports.len()
+                );
+            }
+            0
+        }
+        Err(e) => {
+            let d = Diagnostic::error(e.code, e.message);
+            print_diagnostics("plugin", &[d], &map, None, opts.json);
+            1
         }
     }
 }

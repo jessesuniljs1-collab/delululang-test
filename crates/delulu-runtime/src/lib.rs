@@ -19,10 +19,10 @@ pub use interp::Interp;
 pub use plugin::{
     cap_slice, kill_on_limit, load_prepare, load_verified, plugin_err_code, r_get_contained,
     r_get_verified, sig_message, sign_plugin, step5_verified, step6_signature, unload,
-    verify_signature, Grant, HandleTable, ImportSig, ImportSlice, Limits, LoadRefusal, LoadedPlugin,
-    PluginArtifact, PluginClass, PluginEngine, PluginErr, PluginRef, PluginRunError, PreparedLoad,
-    SignatureStatus, VerifiedInterpInstance, VerifiedPlugin, WasmVal, DL_SIGNATURE_INVALID,
-    DL_SIGNATURE_REQUIRED, PLUGIN_API_SUPPORTED,
+    verify_plugin, verify_signature, Grant, HandleTable, ImportSig, ImportSlice, Limits, LoadRefusal,
+    LoadedPlugin, PluginArtifact, PluginClass, PluginEngine, PluginErr, PluginRef, PluginRunError,
+    PreparedLoad, SignatureStatus, VerifiedInterpInstance, VerifiedPlugin, VerifyReport, WasmVal,
+    DL_SIGNATURE_INVALID, DL_SIGNATURE_REQUIRED, PLUGIN_API_SUPPORTED,
 };
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};
