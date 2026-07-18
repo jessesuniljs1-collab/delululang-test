@@ -49,6 +49,11 @@ struct Binding {
     /// lift_iso) of that literal. Cleared the moment the binding escapes (aliased into a
     /// call, another binding, a store, or a closure capture).
     fresh_lift: Option<(bool, bool)>,
+    /// Definite-unassignment (phase 7d, spec §3): `Some((site, loop_carried))` once the
+    /// binding has been `consume`d on SOME path reaching here — a possibly-consumed binding
+    /// is a dead binding (the unique reference may already have been transferred). The bool
+    /// marks a consume carried in from a previous loop iteration, for a clearer message.
+    consumed: Option<(Span, bool)>,
 }
 
 pub fn check_rcaps(
@@ -57,7 +62,15 @@ pub fn check_rcaps(
     node_types: &HashMap<NodeId, Type>,
     fn_types: &HashMap<String, Type>,
 ) -> Vec<Diagnostic> {
-    let mut pass = Pass { table, node_types, fn_types, diags: Vec::new(), scopes: Vec::new() };
+    let mut pass = Pass {
+        table,
+        node_types,
+        fn_types,
+        diags: Vec::new(),
+        scopes: Vec::new(),
+        recover_boundary: None,
+        capture_boundary: None,
+    };
     for item in &module.items {
         if let Item::Fn(f) = item {
             pass.check_fn(f);
@@ -72,6 +85,19 @@ struct Pass<'a> {
     fn_types: &'a HashMap<String, Type>,
     diags: Vec<Diagnostic>,
     scopes: Vec<HashMap<String, Binding>>,
+    /// Scope depth at the innermost `recover` entry: references to bindings BELOW this index
+    /// cross the recover boundary and must be `val`/`tag` (or consumed `iso`) — DL1605.
+    recover_boundary: Option<usize>,
+    /// Scope depth at the innermost lambda entry: a `consume` of a binding below this index
+    /// would consume a CAPTURE — refused (the closure may run any number of times).
+    capture_boundary: Option<usize>,
+}
+
+/// How a binding is being referenced, for the centralized use path.
+#[derive(Clone, Copy, PartialEq)]
+enum UseKind {
+    Read,
+    Consume,
 }
 
 impl<'a> Pass<'a> {
@@ -101,6 +127,125 @@ impl<'a> Pass<'a> {
         }
     }
 
+    /// THE centralized reference path (7d): every read, consume, and lvalue-base lookup goes
+    /// through here, so the consume flow analysis and the recover/lambda boundary rules
+    /// cannot be dodged by spelling. Returns the binding's rcap (even on error, for recovery).
+    fn use_binding(&mut self, name: &str, span: Span, kind: UseKind) -> Option<Rcap> {
+        // Find the binding and the scope depth it lives at.
+        struct Found {
+            depth: usize,
+            rcap: Option<Rcap>,
+            consumed: Option<(Span, bool)>,
+        }
+        let mut found: Option<Found> = None;
+        for (depth, scope) in self.scopes.iter().enumerate().rev() {
+            if let Some(b) = scope.get(name) {
+                found = Some(Found { depth, rcap: b.rcap, consumed: b.consumed });
+                break;
+            }
+        }
+        let Found { depth, rcap, consumed } = found?;
+
+        // Use after consume (DL1602) — including possibly-consumed (branch joins) and
+        // loop-carried consumes.
+        if let Some((site, loop_carried)) = consumed {
+            let mut d = Diagnostic::error(
+                "DL1602",
+                format!("use of `{name}` after `consume` — the binding is dead"),
+            )
+            .with_span(span, "used here");
+            d = if loop_carried {
+                d.with_secondary_span(site, "consumed here — by the next loop iteration this binding is already dead")
+            } else {
+                d.with_secondary_span(site, "consumed here")
+            };
+            self.diags.push(d);
+            return rcap;
+        }
+
+        // The recover boundary (DL1605, spec §3): only val/tag outer bindings are visible;
+        // a consumed iso may be transferred in.
+        if let Some(rb) = self.recover_boundary {
+            if depth < rb {
+                let allowed = matches!(
+                    (kind, rcap),
+                    (_, Some(Rcap::Val) | Some(Rcap::Tag)) | (UseKind::Consume, Some(Rcap::Iso))
+                );
+                if !allowed {
+                    let shown = rcap.map(|r| format!("`{}`", r.name())).unwrap_or_else(|| "an undetermined capability".into());
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL1605",
+                            format!(
+                                "recover block references non-sendable outer binding `{name}` ({shown}) — only `val`, `tag`, or a consumed `iso` may cross into recover"
+                            ),
+                        )
+                        .with_span(span, "crosses the recover boundary"),
+                    );
+                    return rcap;
+                }
+            }
+        }
+
+        match kind {
+            UseKind::Read => {}
+            UseKind::Consume => {
+                // Consuming a CAPTURE is refused: the closure may run any number of times,
+                // and each run would kill the same outer binding again (the closure skip
+                // branch — kitchen rule).
+                if let Some(cb) = self.capture_boundary {
+                    if depth < cb {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL1602",
+                                format!("cannot `consume` captured binding `{name}` — a closure may run any number of times"),
+                            )
+                            .with_span(span, "consume of a capture"),
+                        );
+                        return rcap;
+                    }
+                }
+                if let Some(b) = self.scopes[depth].get_mut(name) {
+                    b.consumed = Some((span, false));
+                    b.fresh_lift = None;
+                }
+            }
+        }
+        rcap
+    }
+
+    /// Snapshot every visible binding's consumed state, name-keyed per scope depth
+    /// (for branch joins).
+    fn consumed_snapshot(&self) -> Vec<HashMap<String, Option<(Span, bool)>>> {
+        self.scopes
+            .iter()
+            .map(|s| s.iter().map(|(n, b)| (n.clone(), b.consumed)).collect())
+            .collect()
+    }
+
+    fn consumed_restore(&mut self, snap: &[HashMap<String, Option<(Span, bool)>>]) {
+        for (scope, states) in self.scopes.iter_mut().zip(snap) {
+            for (n, b) in scope.iter_mut() {
+                if let Some(st) = states.get(n) {
+                    b.consumed = *st;
+                }
+            }
+        }
+    }
+
+    /// Join: consumed on ANY branch ⇒ consumed after (possibly-consumed is dead).
+    fn consumed_join(&mut self, other: &[HashMap<String, Option<(Span, bool)>>]) {
+        for (scope, states) in self.scopes.iter_mut().zip(other) {
+            for (n, b) in scope.iter_mut() {
+                if b.consumed.is_none() {
+                    if let Some(st) = states.get(n) {
+                        b.consumed = *st;
+                    }
+                }
+            }
+        }
+    }
+
     // ----- entry ------------------------------------------------------------
 
     fn check_fn(&mut self, f: &FnDecl) {
@@ -116,7 +261,7 @@ impl<'a> Pass<'a> {
                 .ty
                 .written_rcap()
                 .or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None });
         }
         let ret_dest = f
             .ret
@@ -188,7 +333,7 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
-                self.bind(&name.name, Binding { rcap, ty: vty, fresh_lift });
+                self.bind(&name.name, Binding { rcap, ty: vty, fresh_lift, consumed: None });
             }
             Stmt::Assign { target, value, span } => {
                 let vk = self.walk_expr(value);
@@ -201,6 +346,19 @@ impl<'a> Pass<'a> {
             }
             Stmt::While { cond, body, .. } => {
                 self.walk_expr(cond);
+                // Loop-carried consume: a consume anywhere in the body kills the binding for
+                // every LATER iteration, so an outer binding consumed in the body is dead at
+                // body entry — every in-body use (including the consume itself, which would
+                // re-consume a dead binding) and every post-loop use gets DL1602.
+                let mut carried = Vec::new();
+                consumed_free_names(body, &mut HashSet::new(), &mut carried);
+                for (name, site) in &carried {
+                    if let Some(b) = self.lookup_mut(name) {
+                        if b.consumed.is_none() {
+                            b.consumed = Some((*site, true));
+                        }
+                    }
+                }
                 self.walk_block_with_tail(body, None, false);
             }
             Stmt::Return { value, .. } => {
@@ -296,15 +454,13 @@ impl<'a> Pass<'a> {
     fn check_write(&mut self, target: &LValue, vk: K, span: Span) {
         match target {
             LValue::Var(name) => {
-                let (dest, _) = match self.lookup(&name.name) {
-                    Some(b) => (b.rcap, b.ty.clone()),
-                    None => (None, None),
-                };
+                let dest = self.lookup(&name.name).and_then(|b| b.rcap);
                 if let Some(d) = dest {
                     self.check_storable(vk, d, span, "assignment", false);
                 }
                 if let Some(b) = self.lookup_mut(&name.name) {
                     b.fresh_lift = None; // rebinding: no longer the tracked fresh literal
+                    b.consumed = None; // assignment REVIVES a consumed var (definite re-assignment)
                 }
             }
             LValue::Field(base, fname) => {
@@ -360,10 +516,11 @@ impl<'a> Pass<'a> {
     /// The rcap + type of an lvalue path (viewpoint-adapting through each field hop).
     fn resolve_lvalue(&mut self, lv: &LValue) -> (K, Option<Type>) {
         match lv {
-            LValue::Var(name) => match self.lookup(&name.name) {
-                Some(b) => (b.rcap.map(K::Known).unwrap_or(K::Unknown), b.ty.clone()),
-                None => (K::Unknown, None),
-            },
+            LValue::Var(name) => {
+                let rcap = self.use_binding(&name.name, name.span, UseKind::Read);
+                let ty = self.lookup(&name.name).and_then(|b| b.ty.clone());
+                (rcap.map(K::Known).unwrap_or(K::Unknown), ty)
+            }
             LValue::Field(base, fname) => {
                 let (bk, bty) = self.resolve_lvalue(base);
                 let info = bty.as_ref().and_then(|t| self.field_info(t, &fname.name));
@@ -425,17 +582,21 @@ impl<'a> Pass<'a> {
     fn walk_expr(&mut self, e: &Expr) -> K {
         match e {
             Expr::Lit { .. } => K::Known(Rcap::Val),
-            Expr::Var { path, .. } => {
+            Expr::Var { path, span, .. } => {
                 if path.segs.len() == 1 {
-                    if let Some(b) = self.lookup(&path.segs[0].name) {
-                        return b.rcap.map(K::Known).unwrap_or(K::Unknown);
+                    let name = &path.segs[0].name;
+                    if self.lookup(name).is_some() {
+                        return self
+                            .use_binding(name, *span, UseKind::Read)
+                            .map(K::Known)
+                            .unwrap_or(K::Unknown);
                     }
                     // A top-level fn used as a value captures nothing — a `val` closure.
-                    if self.table.fns.contains_key(&path.segs[0].name) {
+                    if self.table.fns.contains_key(name) {
                         return K::Known(Rcap::Val);
                     }
                     // Module consts are pure values (§5.5).
-                    if self.table.consts.contains_key(&path.segs[0].name) {
+                    if self.table.consts.contains_key(name) {
                         return K::Known(Rcap::Val);
                     }
                 }
@@ -612,11 +773,16 @@ impl<'a> Pass<'a> {
             }
             Expr::If { cond, then_, else_, .. } => {
                 self.walk_expr(cond);
+                // Branch-sensitive consume states: consumed on EITHER branch ⇒ dead after.
+                let pre = self.consumed_snapshot();
                 let a = self.walk_block_value(then_);
+                let after_then = self.consumed_snapshot();
+                self.consumed_restore(&pre);
                 let b = match else_ {
                     Some(e2) => self.walk_expr(e2),
                     None => K::Known(Rcap::Val),
                 };
+                self.consumed_join(&after_then);
                 if a == b {
                     a
                 } else {
@@ -625,17 +791,25 @@ impl<'a> Pass<'a> {
             }
             Expr::Match { scrutinee, arms, .. } => {
                 self.walk_expr(scrutinee);
+                let pre = self.consumed_snapshot();
+                let mut arm_states = Vec::new();
                 let mut out: Option<K> = None;
                 for arm in arms {
+                    self.consumed_restore(&pre);
                     self.push_scope();
                     self.bind_pattern(&arm.pattern);
                     let k = self.walk_expr(&arm.body);
                     self.pop_scope();
+                    arm_states.push(self.consumed_snapshot());
                     out = Some(match out {
                         None => k,
                         Some(prev) if prev == k => k,
                         Some(_) => K::Unknown,
                     });
+                }
+                self.consumed_restore(&pre);
+                for st in &arm_states {
+                    self.consumed_join(st);
                 }
                 match out {
                     Some(K::Unknown) | None => self.default_k(e),
@@ -664,14 +838,20 @@ impl<'a> Pass<'a> {
                     }
                     self.mark_escaped(c);
                 }
-                // Walk the body for rule violations inside (captures already marked).
+                // Walk the body for rule violations inside (captures already marked). The
+                // capture boundary makes `consume` of a capture refusable (a closure may run
+                // any number of times), while the enclosing recover boundary — if any —
+                // still applies to reads that reach past it.
+                let saved_cb = self.capture_boundary;
+                self.capture_boundary = Some(self.scopes.len());
                 self.push_scope();
                 for p in params {
                     let rcap = p.ty.written_rcap();
-                    self.bind(&p.name.name, Binding { rcap, ty: None, fresh_lift: None });
+                    self.bind(&p.name.name, Binding { rcap, ty: None, fresh_lift: None, consumed: None });
                 }
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
+                self.capture_boundary = saved_cb;
                 K::Known(if all_immutable { Rcap::Val } else { Rcap::Ref })
             }
             Expr::Try { inner, .. } => {
@@ -679,21 +859,20 @@ impl<'a> Pass<'a> {
                 self.default_k(e)
             }
             Expr::Block(b) => self.walk_block_value(b),
-            // Stage 7d territory (flow analysis); until then `consume x` already yields the
-            // binding's FULL rcap, unaliased — that much is 7c-true.
-            Expr::Consume { name, .. } => {
-                let k = self
-                    .lookup(&name.name)
-                    .and_then(|b| b.rcap)
-                    .map(K::Unaliased)
-                    .unwrap_or(K::Unknown);
-                self.mark_escaped(&name.name);
-                k
-            }
-            // A recover block's result is re-proved and lifted: full κ, unaliased (7d adds
-            // the environment restriction; the lift itself is 7c-true).
+            // T-Consume (spec §3): yields the binding's FULL rcap, unaliased, and kills the
+            // binding — flow-sensitively, through the centralized use path.
+            Expr::Consume { name, span, .. } => self
+                .use_binding(&name.name, *span, UseKind::Consume)
+                .map(K::Unaliased)
+                .unwrap_or(K::Unknown),
+            // T-Recover (spec §3): the body checks under the boundary restriction — only
+            // val/tag (or consumed iso) outer bindings are visible (DL1605 via use_binding) —
+            // and the result lifts to the target: full κ, unaliased.
             Expr::Recover { target, body, .. } => {
+                let saved = self.recover_boundary;
+                self.recover_boundary = Some(self.scopes.len());
                 self.walk_block_value(body);
+                self.recover_boundary = saved;
                 K::Unaliased(target.unwrap_or(Rcap::Iso))
             }
             // 7f territory: spawn types as tag; sends check sendability there.
@@ -728,7 +907,7 @@ impl<'a> Pass<'a> {
     fn bind_pattern(&mut self, p: &Pattern) {
         match p {
             Pattern::Bind(id) => {
-                self.bind(&id.name, Binding { rcap: None, ty: None, fresh_lift: None });
+                self.bind(&id.name, Binding { rcap: None, ty: None, fresh_lift: None, consumed: None });
             }
             Pattern::Variant { fields, .. } => {
                 for f in fields {
@@ -995,5 +1174,91 @@ fn pattern_names(p: &Pattern, out: &mut Vec<String>) {
         Pattern::Bind(id) => out.push(id.name.clone()),
         Pattern::Variant { fields, .. } => fields.iter().for_each(|f| pattern_names(f, out)),
         Pattern::Wildcard(_) | Pattern::Lit(_, _) => {}
+    }
+}
+
+/// `consume` targets free in a block (respecting let/param/pattern shadowing) — the loop
+/// pre-scan that makes consume-in-a-loop refuse loop-carried dead bindings.
+fn consumed_free_names(b: &Block, bound: &mut HashSet<String>, out: &mut Vec<(String, Span)>) {
+    let mut local_added: Vec<String> = Vec::new();
+    for stmt in &b.stmts {
+        match stmt {
+            Stmt::Let { name, value, .. } => {
+                consumed_free_in_expr(value, bound, out);
+                if bound.insert(name.name.clone()) {
+                    local_added.push(name.name.clone());
+                }
+            }
+            Stmt::Assign { value, .. } => consumed_free_in_expr(value, bound, out),
+            Stmt::While { cond, body, .. } => {
+                consumed_free_in_expr(cond, bound, out);
+                consumed_free_names(body, bound, out);
+            }
+            Stmt::Return { value: Some(v), .. } => consumed_free_in_expr(v, bound, out),
+            Stmt::Return { value: None, .. } => {}
+            Stmt::Expr(e) => consumed_free_in_expr(e, bound, out),
+        }
+    }
+    for n in local_added {
+        bound.remove(&n);
+    }
+}
+
+fn consumed_free_in_expr(e: &Expr, bound: &mut HashSet<String>, out: &mut Vec<(String, Span)>) {
+    match e {
+        Expr::Consume { name, span, .. } => {
+            if !bound.contains(&name.name) {
+                out.push((name.name.clone(), *span));
+            }
+        }
+        Expr::Lit { .. } | Expr::Var { .. } => {}
+        Expr::List { items, .. } => items.iter().for_each(|i| consumed_free_in_expr(i, bound, out)),
+        Expr::Record { fields, .. } => {
+            fields.iter().for_each(|(_, v)| consumed_free_in_expr(v, bound, out))
+        }
+        Expr::Call { callee, args, .. } => {
+            consumed_free_in_expr(callee, bound, out);
+            args.iter().for_each(|a| consumed_free_in_expr(a, bound, out));
+        }
+        Expr::Method { recv, args, .. } => {
+            consumed_free_in_expr(recv, bound, out);
+            args.iter().for_each(|a| consumed_free_in_expr(a, bound, out));
+        }
+        Expr::Field { recv, .. } => consumed_free_in_expr(recv, bound, out),
+        Expr::Index { recv, index, .. } => {
+            consumed_free_in_expr(recv, bound, out);
+            consumed_free_in_expr(index, bound, out);
+        }
+        Expr::Unary { operand, .. } => consumed_free_in_expr(operand, bound, out),
+        Expr::Binary { lhs, rhs, .. } => {
+            consumed_free_in_expr(lhs, bound, out);
+            consumed_free_in_expr(rhs, bound, out);
+        }
+        Expr::If { cond, then_, else_, .. } => {
+            consumed_free_in_expr(cond, bound, out);
+            consumed_free_names(then_, bound, out);
+            if let Some(e2) = else_ {
+                consumed_free_in_expr(e2, bound, out);
+            }
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            consumed_free_in_expr(scrutinee, bound, out);
+            for arm in arms {
+                let mut names = Vec::new();
+                pattern_names(&arm.pattern, &mut names);
+                let newly: Vec<String> = names.into_iter().filter(|n| bound.insert(n.clone())).collect();
+                consumed_free_in_expr(&arm.body, bound, out);
+                for n in newly {
+                    bound.remove(&n);
+                }
+            }
+        }
+        // A consume inside a nested lambda is refused by the capture-boundary rule at walk
+        // time, not treated as this loop iteration's consume.
+        Expr::Lambda { .. } => {}
+        Expr::Try { inner, .. } => consumed_free_in_expr(inner, bound, out),
+        Expr::Block(b) => consumed_free_names(b, bound, out),
+        Expr::Spawn { args, .. } => args.iter().for_each(|a| consumed_free_in_expr(a, bound, out)),
+        Expr::Recover { body, .. } => consumed_free_names(body, bound, out),
     }
 }

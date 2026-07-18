@@ -776,4 +776,134 @@ mod tests {
         );
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
+
+    // ----- Stage 7 phase 7d: consume flow analysis + the recover boundary ---------------
+
+    #[test]
+    fn use_after_consume_is_dl1602_with_the_consume_site() {
+        let c = check(
+            "module m\nfn f() {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             let ys: iso List[Int] = consume xs\n\
+             let n = xs.len()\n}\n",
+        );
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1602").expect("DL1602 expected");
+        assert!(d.spans.iter().any(|s| s.secondary), "carries the consume site: {d:?}");
+    }
+
+    #[test]
+    fn double_consume_is_dl1602() {
+        let e = errors(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f() {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             sink(consume xs)\n\
+             sink(consume xs)\n}\n",
+        );
+        assert!(e.contains(&"DL1602".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn consume_in_one_branch_kills_the_binding_after_the_join() {
+        // Possibly-consumed is dead: the unique reference may already have been transferred.
+        let e = errors(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f(c: Bool) {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             if c { sink(consume xs) } else { }\n\
+             let n = xs.len()\n}\n",
+        );
+        assert!(e.contains(&"DL1602".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn consume_inside_a_loop_is_loop_carried_dead() {
+        // By the second iteration the binding is already gone; the consume itself is refused.
+        let e = errors(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f(c: Bool) {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             while c { sink(consume xs) }\n}\n",
+        );
+        assert!(e.contains(&"DL1602".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn assignment_revives_a_consumed_var() {
+        let c = check(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f() {\n\
+             var xs: iso List[Int] = recover { [1] }\n\
+             sink(consume xs)\n\
+             xs = recover { [2] }\n\
+             let n = xs.len()\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn use_before_consume_in_straight_line_is_clean() {
+        let c = check(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f() {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             let n = xs.len()\n\
+             sink(consume xs)\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn recover_referencing_an_outer_ref_is_dl1605() {
+        // Criterion 3's reject half: mutable state must not leak into the re-proved region.
+        let e = errors(
+            "module m\nfn f() {\n\
+             let outer: ref List[Int] = [1]\n\
+             let xs: iso List[Int] = recover { outer }\n}\n",
+        );
+        assert!(e.contains(&"DL1605".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn recover_referencing_an_outer_val_is_clean() {
+        let c = check(
+            "module m\nfn f(seed: Int) {\n\
+             let xs: iso List[Int] = recover { [seed, seed + 1] }\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn recover_may_consume_an_outer_iso_in() {
+        let c = check(
+            "module m\nfn f() {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             let ys: iso List[Int] = recover { let zs = consume xs\nzs }\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_lambda_inside_recover_cannot_capture_an_outer_ref() {
+        // The closure skip branch: the boundary applies through a capture, not just a
+        // direct reference.
+        let e = errors(
+            "module m\nfn f() {\n\
+             let outer: ref List[Int] = [1]\n\
+             let g: val fn() -> Int = recover val { fn() -> Int { outer.len() } }\n}\n",
+        );
+        assert!(e.contains(&"DL1605".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn consuming_a_capture_inside_a_closure_is_refused() {
+        // A closure may run any number of times; each run would kill the same binding.
+        let e = errors(
+            "module m\nfn sink(v: iso List[Int]) { }\n\
+             fn f() {\n\
+             let xs: iso List[Int] = recover { [1] }\n\
+             let g = fn() { sink(consume xs) }\n}\n",
+        );
+        assert!(e.contains(&"DL1602".to_string()), "{e:?}");
+    }
 }
