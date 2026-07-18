@@ -2334,9 +2334,26 @@ fn locations_single(checked: &Checked, map: &SourceMap) -> HashMap<String, (Stri
     let mod_name = checked.module.name.dotted();
     let mut out = HashMap::new();
     for item in &checked.module.items {
-        if let Item::Fn(f) = item {
-            let (line, _col) = map.position(f.name.span.file, f.name.span.start);
-            out.insert(format!("{mod_name}::{}", f.name.name), (map.name(f.name.span.file).to_string(), line));
+        match item {
+            Item::Fn(f) => {
+                let (line, _col) = map.position(f.name.span.file, f.name.span.start);
+                out.insert(format!("{mod_name}::{}", f.name.name), (map.name(f.name.span.file).to_string(), line));
+            }
+            // Stage 7: actor members locate for the causal why-chain (criterion 5).
+            Item::Actor(a) => {
+                let aname = &a.name.name;
+                let (cl, _) = map.position(a.ctor.span.file, a.ctor.span.start);
+                out.insert(format!("{mod_name}::{aname}.new"), (map.name(a.ctor.span.file).to_string(), cl));
+                for b in &a.behaviors {
+                    let (line, _col) = map.position(b.name.span.file, b.name.span.start);
+                    out.insert(format!("{mod_name}::{aname}.{}", b.name.name), (map.name(b.name.span.file).to_string(), line));
+                }
+                for f in &a.fns {
+                    let (line, _col) = map.position(f.name.span.file, f.name.span.start);
+                    out.insert(format!("{mod_name}::{aname}.{}", f.name.name), (map.name(f.name.span.file).to_string(), line));
+                }
+            }
+            _ => {}
         }
     }
     out
@@ -2360,6 +2377,17 @@ fn synth_single_program(checked: &Checked) -> Program {
     let mut owner = HashMap::new();
     for name in checked.table.fns.keys() {
         owner.insert(name.clone(), mod_name.clone());
+    }
+    // Stage 7: spawn/send callee edges (`Counter.new`, `Counter.add`) resolve to this module
+    // too, so the why-chain crosses the actor boundary (criterion 5).
+    for (aname, adef) in &checked.table.actors {
+        owner.insert(format!("{aname}.new"), mod_name.clone());
+        for b in &adef.behaviors {
+            owner.insert(format!("{aname}.{}", b.name), mod_name.clone());
+        }
+        for f in &adef.fns {
+            owner.insert(format!("{aname}.{}", f.name), mod_name.clone());
+        }
     }
     let mut call_owner = HashMap::new();
     call_owner.insert(mod_name.clone(), owner);
