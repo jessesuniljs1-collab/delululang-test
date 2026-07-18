@@ -13,6 +13,7 @@ pub mod manifest;
 pub mod package;
 pub mod plugin;
 pub mod program;
+pub mod rcaps;
 pub mod resolve;
 pub mod ty;
 pub mod unify;

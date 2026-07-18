@@ -106,6 +106,12 @@ Numbered, argued, ruled. A deviation ships only with its ruling recorded here.
    actor's heap by rebuild, with the debug lane asserting `Rc::strong_count == 1` across the
    moved graph (exactly the §7.4 check). Sender's binding is dead (consume), so rebuild vs
    handoff is observationally identical; handoff is a Stage-10 optimization note, recorded here.
+8. **Sums in the default-rcap val set** — spec §2's list says "records of only such types"
+   and does not name user sums. Ruled: sums of only-val components default `val`, mirroring
+   records, by MECHANISM: `Value::Variant` holds its fields in an immutable `Rc<Vec<_>>` — a
+   sum has no write surface at all in this runtime, so a sum of val components is deeply
+   immutable in exactly the way a val record is. Defaulting it `ref` would be pure friction
+   with no guarantee gained. (7b; witnessed in `rcaps::tests`.)
 
 ## 4. Close-out table (criteria → witnesses)
 
