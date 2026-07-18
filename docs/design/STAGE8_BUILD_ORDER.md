@@ -117,6 +117,19 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
    that entry falls back to en-US: prose never takes the compiler down, and a catalog
    written for a newer compiler degrades instead of exploding. A template needing an arg
    the diagnostic doesn't carry falls back WHOLLY — a literal `{fn}` must never print.
+10. **RULED — first-run mechanics (8c).** (a) Suppression envs read as PRESENCE:
+    `CI` set (any value) and `DELULU_NO_FIRST_RUN` set (not only `=1`) each suppress —
+    stricter than the spec's letter, in the agent-safe direction (invariant 40 fails
+    open-to-suppression, never open-to-prompting). (b) Interactive = stdout AND stdin
+    are terminals (the picker prompts on one and reads the other); the hidden
+    `DELULU_ASSUME_TTY` override (the `DELULU_THEME_FILE` precedent) exists so the
+    criterion-6 witnesses can drive the SHOWN cases through the real binary headless.
+    (c) The picker runs only when nothing above it in the priority chain pinned a locale;
+    the welcome shows on the first interactive run regardless, then `welcomed = true`.
+    (d) Only the PICKER writes `locale` into config — `--locale`/env are per-invocation.
+    (e) An unknown locale name warns (DL1704) and falls back to en-US, mirroring DL1790.
+    (f) The suite asserts en-US human prose; the kitchen runs with no `DELULU_LOCALE`
+    and no config locale set (recorded, not fenced, in v0.8).
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 

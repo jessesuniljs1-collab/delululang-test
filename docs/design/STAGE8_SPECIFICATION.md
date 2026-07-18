@@ -328,3 +328,12 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   DL0501/DL0502/DL0602; `render_human_localized` is the ONLY catalog seam — the JSON
   envelope API cannot see a catalog (deviation 8; invariant 39 structural). Criterion-7
   seed witnessed end-to-end on a real DL0501. Locale SELECTION is 8c.
+- **8c — locale selection + first-run picker + welcome (2026-07-18).** `--locale` >
+  `DELULU_LOCALE` > `~/.delulu/config.toml` > TTY picker > en-US (`delulu/src/locale.rs`;
+  first-run mechanics ruled in build-order deviation 10). The welcome (§6.3) is a byte-
+  exact const, pinned by length + position-weighted checksum; a catalog key attempting to
+  claim it is DL1704 BY NAME. Criterion 6 witnessed through the real binary: shown exactly
+  once on a fresh interactive home (picker choice takes effect immediately and persists),
+  and each of the five machine channels alone suppresses picker + welcome with no config
+  minted. Criterion 7 witnessed at the CLI: full `--json` byte-identical across locales
+  (deviation 8's strengthening), human stderr differs, slang DL0501 matches the catalog.

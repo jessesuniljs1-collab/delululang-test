@@ -473,6 +473,13 @@ pub fn run(args: &[String]) -> i32 {
             eprint!("{}", render_human_with(w, &map, &palette));
         }
     }
+    // The locale surface (Stage 8, spec §6.2): strips `--locale`, runs the first-run
+    // picker + welcome when — and only when — every machine channel is absent
+    // (invariant 40), and pins the active catalog for human rendering.
+    let (args, locale_warnings) = crate::locale::init_locale(&args);
+    for w in &locale_warnings {
+        eprintln!("{w}");
+    }
     let args = &args[..];
     let Some(cmd) = args.first() else {
         eprintln!("{}", usage());
@@ -553,6 +560,7 @@ fn usage() -> &'static str {
      \x20 delulu fmt       --migrate 0.7 <file-or-dir>... [--json]  (rename pre-0.7 `consume`/`recover` identifiers)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
@@ -701,12 +709,14 @@ fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
 
 fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
     if json {
-        // Machine channel: never colored (addendum §2.5 / criterion 8).
+        // Machine channel: never colored (addendum §2.5 / criterion 8), never localized
+        // (invariant 39 — the envelope API cannot even see a catalog).
         println!("{}", envelope_to_string(command, diags, authority, map));
     } else {
         let palette = palette_stderr();
+        let catalog = crate::locale::active_catalog();
         for d in diags {
-            eprint!("{}", render_human_with(d, map, &palette));
+            eprint!("{}", delulu_diag::render_human_localized(d, map, &palette, catalog));
             eprintln!();
         }
     }

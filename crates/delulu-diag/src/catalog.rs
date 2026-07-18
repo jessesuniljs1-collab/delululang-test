@@ -97,6 +97,15 @@ impl Catalog {
                 let name = name.trim();
                 if name == "meta" {
                     section = Some(Section::Meta);
+                } else if name.starts_with("cli.first-run.welcome") {
+                    // Spec §6.3: the first-run welcome is never a catalog key — no catalog
+                    // may translate, paraphrase, or override it, in any locale, ever.
+                    warnings.push(dl1704(format!(
+                        "catalog key `{name}` (line {}) attempts to override the first-run \
+                         welcome — the welcome is law and no catalog may touch it",
+                        lineno + 1
+                    )));
+                    section = Some(Section::Skipped);
                 } else {
                     match placeholders_for(name) {
                         Some(allowed) => {
@@ -316,6 +325,19 @@ mod tests {
             "{warnings:?}"
         );
         assert_eq!(cat.render("DL0501", &args(&[("fn", "f")])), None, "entry dropped");
+    }
+
+    /// Spec §6.3 / criterion 8's DL1704 half: the welcome is not a catalog key, and an
+    /// attempt to claim it is called out BY NAME, not as a generic unknown key.
+    #[test]
+    fn a_welcome_override_attempt_is_dl1704_by_name() {
+        let src = "[cli.first-run.welcome]\nmessage = \"new welcome who dis\"\n";
+        let (cat, warnings) = Catalog::parse(src);
+        assert!(
+            warnings.iter().any(|d| d.code == "DL1704" && d.message.contains("welcome is law")),
+            "{warnings:?}"
+        );
+        assert!(cat.is_empty(), "the entry must not load");
     }
 
     #[test]
