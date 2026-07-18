@@ -1200,7 +1200,18 @@ impl<'a> Checker<'a> {
                     }
                     acc.add_effect(Effect::Async);
                     if let Some(r) = &beh.row {
-                        let row = self.lower_row(r, &agenv);
+                        let mut row = self.lower_row(r, &agenv);
+                        // A row tail this SITE cannot constrain (it appears in no parameter
+                        // of this behavior — `Promise.fulfill`'s `e`) contributes nothing
+                        // here: its effects are accounted at the sites that bind it (the
+                        // spec's own assignment — "row e joins THEN's send row"). Keeping
+                        // an unconstrainable fresh tail would DL0501 every caller for
+                        // effects no argument of theirs can introduce.
+                        if let Some(tail_name) = r.tail.as_ref().map(|t| t.name.clone()) {
+                            if !behavior_params_mention_tail(&beh.params, &tail_name) {
+                                row.tail = None;
+                            }
+                        }
                         acc.add_row(&row);
                     }
                     ctx.facts.callees.insert(format!("{aname}.{}", name.name));
@@ -2024,9 +2035,13 @@ impl<'a> Checker<'a> {
                     // An actor name is an actor-reference type (Stage 7, spec §2) — always
                     // `tag` (DL1607 for any other written rcap; enforced in the Rcap arm).
                     if let Some(adef) = self.table.actors.get(name) {
-                        if args.len() != adef.generics.len() {
+                        // Row-kinded actor generics (`Promise[T, e]`'s `e`) are invisible
+                        // in TYPE position — the written arity counts type-kinded only.
+                        let row_kinded = actor_row_kinded_generics(adef);
+                        let type_arity = adef.generics.iter().filter(|g| !row_kinded.contains(*g)).count();
+                        if args.len() != type_arity {
                             self.diags.push(
-                                Diagnostic::error("DL0406", format!("actor `{name}` expects {} type argument(s), found {}", adef.generics.len(), args.len()))
+                                Diagnostic::error("DL0406", format!("actor `{name}` expects {type_arity} type argument(s), found {}", args.len()))
                                     .with_span(*span, "wrong number of type arguments"),
                             );
                         }
@@ -2401,6 +2416,24 @@ fn actor_row_kinded_generics(adef: &crate::resolve::ActorDef) -> HashSet<String>
         }
     }
     adef.generics.iter().filter(|g| tails.contains(*g)).cloned().collect()
+}
+
+/// Does any parameter's written type mention `tail` as a row tail (at any fn-type depth)?
+/// The T-Send tail rule: a site can only be charged for a row variable one of its own
+/// arguments can bind.
+fn behavior_params_mention_tail(params: &[Param], tail: &str) -> bool {
+    fn scan(te: &TypeExpr, tail: &str) -> bool {
+        match te {
+            TypeExpr::Fn { params, ret, row, .. } => {
+                row.as_ref().and_then(|r| r.tail.as_ref()).is_some_and(|t| t.name == tail)
+                    || params.iter().any(|p| scan(p, tail))
+                    || ret.as_ref().is_some_and(|r| scan(r, tail))
+            }
+            TypeExpr::Named { args, .. } => args.iter().any(|a| scan(a, tail)),
+            TypeExpr::Rcap { inner, .. } => scan(inner, tail),
+        }
+    }
+    params.iter().any(|p| scan(&p.ty, tail))
 }
 
 /// Field names assigned as `self.f = …` anywhere in the constructor body (flow-insensitive,

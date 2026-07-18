@@ -38,7 +38,7 @@ pub use plugin::{
     check_plugin_module, render_type, PluginAuthority, PluginManifest, PLUGIN_API_SUPPORTED,
 };
 pub use program::{check_program, program_authority, program_effects, Program};
-pub use resolve::{DeclTable, FnSig, GKind};
+pub use resolve::{ActorDef, DeclTable, FnSig, GKind, STD_ACTORS_SRC};
 pub use ty::{Effect, PluginClass, ResourceKind, Row, RowVar, Type, TypeDefId};
 
 use delulu_diag::{Diagnostic, FileId};
@@ -1149,6 +1149,48 @@ mod tests {
     fn spawn_of_an_unknown_actor_is_dl0301() {
         let e = errors("module m\nfn go() ! {Async} { let a = spawn Ghost(1) }\n");
         assert!(e.contains(&"DL0301".to_string()), "{e:?}");
+    }
+
+    // ----- Stage 7 phase 7j: Promise[T] row plumbing (criterion 9, spec §8) -------------
+
+    #[test]
+    fn criterion9_an_effectful_callback_surfaces_in_the_callers_row() {
+        // then's send site carries {Async} ∪ e — the R-4 law applied to a stdlib actor.
+        let src = |row: &str| {
+            format!(
+                "module p\nfn go(out: Cap[Console]) ! {row} {{\n\
+                 let pr = spawn Promise()\n\
+                 pr.then(fn(v: val Str) ! {{Write}} {{ out.println(v) }})\n\
+                 pr.fulfill(\"hi\")\n}}\n"
+            )
+        };
+        let e = errors(&src("{Async}"));
+        assert!(e.contains(&"DL0501".to_string()), "the callback's Write must surface: {e:?}");
+        let c = check(&src("{Async, Write}"));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn criterion9_a_pure_callback_keeps_the_caller_at_async_only() {
+        let c = check(
+            "module p\nfn go() ! {Async} {\n\
+             let pr = spawn Promise()\n\
+             pr.then(fn(v: val Int) { })\n\
+             pr.fulfill(7)\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn criterion9_fulfill_sites_charge_async_only() {
+        // fulfill's `e` binds at THEN sites (no fulfill argument can constrain it); charging
+        // fulfill callers for an unconstrainable tail would refuse every fulfill-only fn.
+        let c = check(
+            "module p\nfn feed() ! {Async} {\n\
+             let pr = spawn Promise()\n\
+             pr.fulfill(\"data\")\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
 
     #[test]

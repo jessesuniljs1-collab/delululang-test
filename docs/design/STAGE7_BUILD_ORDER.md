@@ -114,6 +114,20 @@ Numbered, argued, ruled. A deviation ships only with its ruling recorded here.
    (a closure has no write surface, so box loses nothing); sendability still demands a
    written `val`, which is exactly what spec §8's own `Promise.then` writes. (7c;
    witnessed in `rcaps::tests` and the higher-order corpus staying green.)
+10. **The T-Send tail rule (Promise's `fulfill`)** — spec §8's `Promise[T]` needs `fulfill`
+    declared `! e` (its body runs stored callbacks), yet no `fulfill` argument can ever bind
+    `e`; a naive T-Send would DL0501 every fulfill caller for effects nothing of theirs
+    introduces. Ruled per the spec's own accounting ("row e joins THEN's send row"): a send
+    site is charged for a row-kinded actor tail ONLY when some parameter of that behavior
+    can bind it; unconstrainable-at-site tails contribute nothing there. Consequence,
+    recorded honestly: `--assert-trace` cannot check turns of row-polymorphic stdlib members
+    against a concrete static row (Promise members have no per-module facts) — a §5 RFC
+    item; plain user actors are fully covered. (7j; witnessed by criterion9_* both sides.)
+11. **`std.actors` as an injected prelude** — v0.7 actors are single-module, so `import
+    std.actors` cannot carry Promise in; the canonical source (`STD_ACTORS_SRC`) is parsed
+    and registered as a prelude actor by BOTH the checker's resolve and the runtime's
+    interpreter — one source, so verify ≡ run. A source-level stdlib import lands with
+    multi-module actors (§5). (7j.)
 8. **Sums in the default-rcap val set** — spec §2's list says "records of only such types"
    and does not name user sums. Ruled: sums of only-val components default `val`, mirroring
    records, by MECHANISM: `Value::Variant` holds its fields in an immutable `Rc<Vec<_>>` — a

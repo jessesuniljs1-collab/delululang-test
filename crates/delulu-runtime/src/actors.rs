@@ -34,7 +34,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering}
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 
 use delulu_check::ResourceKind;
-use delulu_syntax::ast::{ActorDecl, Block, Module};
+use delulu_syntax::ast::{Block, Module};
 
 use crate::trace::{Cause, TraceRecord, TraceSink};
 use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
@@ -273,12 +273,6 @@ fn worker_loop(
     trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
     debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
 ) {
-    let mut actors: HashMap<String, ActorDecl> = HashMap::new();
-    for item in &module.items {
-        if let delulu_syntax::ast::Item::Actor(a) = item {
-            actors.insert(a.name.name.clone(), a.clone());
-        }
-    }
     let mut interp = crate::interp::Interp::new(&module)
         .with_actors(ActorHost { shared: shared.clone(), senders });
     let local_sink = trace.as_ref().map(|_| TraceSink::new());
@@ -311,7 +305,7 @@ fn worker_loop(
         match job {
             Job::Shutdown => break,
             Job::Create { id, actor, args, cause } => {
-                let Some(decl) = actors.get(&actor) else {
+                let Some(decl) = interp.actor_decl(&actor).cloned() else {
                     shared.dead_sends.fetch_add(1, Ordering::SeqCst);
                     shared.done();
                     continue;
@@ -352,7 +346,7 @@ fn worker_loop(
                     let c = &cells[&id];
                     (c.actor.clone(), c.state.clone())
                 };
-                let decl = actors.get(&actor_name).expect("cell's actor is declared");
+                let decl = interp.actor_decl(&actor_name).cloned().expect("cell's actor is declared");
                 let Some(beh) = decl.behaviors.iter().find(|b| b.name.name == behavior) else {
                     shared.dead_sends.fetch_add(1, Ordering::SeqCst);
                     shared.done();

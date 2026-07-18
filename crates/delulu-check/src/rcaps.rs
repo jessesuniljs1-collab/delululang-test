@@ -531,6 +531,193 @@ mod tests {
         assert_eq!(default_rcap(&Type::Record(TypeDefId(7), vec![]), &fields), Some(Rcap::Val));
     }
 
+    // ----- criterion 8: THE SHIP-GATE (spec §9.8, playbook 7j) ---------------
+    //
+    // Generated alias/send/viewpoint sequences over a simulated multi-actor world,
+    // validated after EVERY step against the deny-property definitions. Deterministic
+    // (seeded xorshift, no dependency); any counterexample blocks the stage.
+
+    /// One alias of the simulated object: which actor holds it, at which rcap.
+    #[derive(Clone, Copy, Debug)]
+    struct SimAlias {
+        actor: u32,
+        k: Rcap,
+    }
+
+    /// The pairwise compatibility law, straight from the deny definitions: for any two
+    /// coexisting aliases, each side's PERMISSIONS must not violate what the other side
+    /// DENIES (locally for same-actor pairs, globally across actors).
+    fn compatible(a: &SimAlias, b: &SimAlias) -> bool {
+        let (da, db) = if a.actor == b.actor {
+            (denies_local(a.k), denies_local(b.k))
+        } else {
+            (denies_global(a.k), denies_global(b.k))
+        };
+        (!can_read(b.k) || !da.read)
+            && (!can_write(b.k) || !da.write)
+            && (!can_read(a.k) || !db.read)
+            && (!can_write(a.k) || !db.write)
+    }
+
+    /// In particular: no data race is expressible — a writer in one actor with any
+    /// reader/writer in another must be incompatible.
+    fn race_free(aliases: &[SimAlias]) -> Result<(), String> {
+        for (i, a) in aliases.iter().enumerate() {
+            for b in &aliases[i + 1..] {
+                if a.actor != b.actor
+                    && ((can_write(a.k) && (can_read(b.k) || can_write(b.k)))
+                        || (can_write(b.k) && can_read(a.k)))
+                {
+                    return Err(format!("cross-actor race: {a:?} vs {b:?}"));
+                }
+                if !compatible(a, b) {
+                    return Err(format!("deny violation: {a:?} vs {b:?}"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn pick(&mut self, n: usize) -> usize {
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    /// One simulated heap object: its live aliases, and its declared fields — each field has
+    /// a FIXED declared rcap and its own target object (viewpoint aliases the FIELD's
+    /// object, never the receiver's — the model's first draft got this wrong and flagged
+    /// spurious counterexamples like `iso ▷ iso = iso` "aliasing" the receiver; the same
+    /// lesson as 7b's legality model, caught the same way: by the gate itself).
+    #[derive(Default)]
+    struct SimObject {
+        aliases: Vec<SimAlias>,
+        fields: Vec<(Rcap, usize)>,
+    }
+
+    #[test]
+    fn criterion8_generated_sequences_never_reach_incompatible_aliases() {
+        // The RULES being modeled are exactly the checker's: derive a same-actor alias via
+        // alias(κ); send an alias cross-actor only at a sendable arrival (alias(κ)
+        // unconsumed, full κ consumed-with-removal); reading a field of declared rcap f
+        // through a receiver seen at o derives an alias of the FIELD's object at o ▷ f.
+        // If the tables ever let two actors reach read/write-incompatible aliases of ANY
+        // one object, this catches it — and a counterexample BLOCKS the stage.
+        let mut failures = Vec::new();
+        for seed in 1..=10_000u64 {
+            let mut rng = XorShift(seed);
+            let mut world: Vec<SimObject> = vec![SimObject {
+                aliases: vec![SimAlias { actor: 0, k: ALL[rng.pick(6)] }],
+                fields: Vec::new(),
+            }];
+            let mut trail = vec![format!("start obj0 {:?}", world[0].aliases[0])];
+            'seq: for _step in 0..40 {
+                // Pick a live (object, alias) pair uniformly.
+                let live: Vec<(usize, usize)> = world
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(oi, o)| (0..o.aliases.len()).map(move |ai| (oi, ai)))
+                    .collect();
+                if live.is_empty() {
+                    break;
+                }
+                let (oi, ai) = live[rng.pick(live.len())];
+                let src = world[oi].aliases[ai];
+                match rng.pick(3) {
+                    // Same-actor alias derivation on the same object.
+                    0 => {
+                        let derived = SimAlias { actor: src.actor, k: alias(src.k) };
+                        trail.push(format!("alias obj{oi} {src:?} -> {derived:?}"));
+                        world[oi].aliases.push(derived);
+                    }
+                    // Cross-actor send of this alias: unconsumed arrives at alias(κ);
+                    // consumed arrives at full κ and the source alias dies.
+                    1 => {
+                        let to = src.actor + 1 + (rng.pick(3) as u32);
+                        let consumed = rng.pick(2) == 0;
+                        let arriving = if consumed { src.k } else { alias(src.k) };
+                        if sendable(arriving) {
+                            if consumed {
+                                trail.push(format!(
+                                    "send(consume) obj{oi} {src:?} -> actor {to} at {arriving:?}"
+                                ));
+                                world[oi].aliases.swap_remove(ai);
+                            } else {
+                                trail.push(format!(
+                                    "send(alias) obj{oi} {src:?} -> actor {to} at {arriving:?}"
+                                ));
+                            }
+                            world[oi].aliases.push(SimAlias { actor: to, k: arriving });
+                        }
+                    }
+                    // Viewpoint: read one of up to three fields (fixed declared rcap per
+                    // slot, target object created on first touch). A RETAINED field read is
+                    // `alias(o ▷ f)` — exactly what the checker stores at a binding (a bare
+                    // `o ▷ f` is ephemeral; holding it aliases it). The first model draft
+                    // retained the unaliased adaptation and "found" two isos from reading an
+                    // iso field twice — a model bug the gate itself caught, twice over.
+                    _ => {
+                        let slot = rng.pick(3);
+                        while world[oi].fields.len() <= slot {
+                            let decl = ALL[rng.pick(6)];
+                            world.push(SimObject::default());
+                            let target = world.len() - 1;
+                            world[oi].fields.push((decl, target));
+                        }
+                        let (f_decl, target) = world[oi].fields[slot];
+                        if let Some(v) = viewpoint(src.k, f_decl) {
+                            let derived = SimAlias { actor: src.actor, k: alias(v) };
+                            trail.push(format!(
+                                "view obj{oi} {src:?} ▷ {} retained -> obj{target} {derived:?}",
+                                f_decl.name()
+                            ));
+                            world[target].aliases.push(derived);
+                        }
+                    }
+                }
+                for (i, o) in world.iter().enumerate() {
+                    if let Err(why) = race_free(&o.aliases) {
+                        failures.push(format!(
+                            "seed {seed}: obj{i}: {why}\n  trail: {}",
+                            trail.join("; ")
+                        ));
+                        break 'seq;
+                    }
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "criterion 8 COUNTEREXAMPLE(S) — the stage is blocked:\n{}",
+            failures.join("\n")
+        );
+    }
+
+    #[test]
+    fn criterion8_consumed_iso_transfer_is_exclusive_by_construction() {
+        // The directed version of the property: after a consumed-iso send, the receiving
+        // actor holds iso and NO other alias of the object can exist anywhere (iso denies
+        // all reads/writes globally, so any survivor would have tripped the pairwise law).
+        // Modeled directly: consume removes the source; the only remaining alias is the
+        // receiver's.
+        let src = SimAlias { actor: 0, k: Rcap::Iso };
+        let aliases = [SimAlias { actor: 1, k: src.k }];
+        assert!(race_free(&aliases).is_ok());
+        // And had the source SURVIVED (the bug consume-tracking exists to prevent), the
+        // pairwise law itself would refuse the world:
+        let bad = [src, SimAlias { actor: 1, k: Rcap::Iso }];
+        assert!(race_free(&bad).is_err(), "two live isos of one object must be refused");
+    }
+
     // ----- the couldn't-tell cases (kitchen rule: fail closed, never guess) --
 
     #[test]

@@ -247,6 +247,23 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
         }
     }
 
+    // `std.actors` (Stage 7 phase 7j, spec §8): the stdlib Promise actor, written in
+    // DeluluLang and injected as a PRELUDE actor wherever actors exist (v0.7 actors are
+    // single-module; a source-level `import std.actors` lands with multi-module actors,
+    // build-order §5). Registered before user actors so a user `actor Promise` is a dup.
+    {
+        let (std_mod, std_diags) = delulu_syntax::parse_file(u32::MAX, STD_ACTORS_SRC);
+        debug_assert!(
+            !std_diags.iter().any(|d| d.is_error()),
+            "std.actors must parse clean: {std_diags:?}"
+        );
+        for item in &std_mod.items {
+            if let Item::Actor(a) = item {
+                table.actors.insert(a.name.name.clone(), actor_def_of(a));
+            }
+        }
+    }
+
     // Actors (Stage 7, spec §2): the actor name joins the TYPE namespace (`Type::Actor`).
     for item in &module.items {
         if let Item::Actor(a) = item {
@@ -258,46 +275,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
                 diags.push(dup("type", &a.name));
                 continue;
             }
-            let generics = gen_names(&a.generics);
-            let behaviors = a
-                .behaviors
-                .iter()
-                .map(|b| ActorBehavior {
-                    name: b.name.name.clone(),
-                    params: b.params.clone(),
-                    row: b.row.clone(),
-                    span: b.span,
-                })
-                .collect();
-            let fns = a
-                .fns
-                .iter()
-                .map(|f| FnSig {
-                    name: f.name.name.clone(),
-                    public: false,
-                    generics: gen_names(&f.generics),
-                    gkinds: HashMap::new(),
-                    params: f.params.clone(),
-                    ret: f.ret.clone(),
-                    row: f.row.clone(),
-                })
-                .collect();
-            table.actors.insert(
-                name.clone(),
-                ActorDef {
-                    name,
-                    generics,
-                    fields: a
-                        .fields
-                        .iter()
-                        .map(|fd| (fd.name.name.clone(), fd.ty.clone(), fd.mutable))
-                        .collect(),
-                    ctor_params: a.ctor.params.clone(),
-                    ctor_row: a.ctor.row.clone(),
-                    behaviors,
-                    fns,
-                },
-            );
+            table.actors.insert(name, actor_def_of(a));
         }
     }
 
@@ -515,5 +493,83 @@ fn walk_row(r: &RowExpr, gset: &HashSet<String>, row_used: &mut HashSet<String>)
         if gset.contains(&tail.name) {
             row_used.insert(tail.name.clone());
         }
+    }
+}
+
+/// The `std.actors` stdlib source (Stage 7, spec §8): `Promise[T, e]` — a library ACTOR,
+/// not a language feature. `T` must be sendable (`val`-carried, written at every use);
+/// `e` is the row the stored callbacks may perform: it binds at `then` sites through the
+/// callback argument (the R-4 law applied to a stdlib actor — the send site of `then`
+/// carries `{Async} ∪ e`), while `fulfill` — which cannot constrain `e` from any argument
+/// — contributes only `{Async}` at its send sites (the spec's own accounting: "row e joins
+/// THEN's send row"). First fulfill wins; later ones are dropped and counted.
+pub const STD_ACTORS_SRC: &str = "module std.actors
+actor Promise[T, e] {
+  var value: Option[T]
+  var callbacks: List[fn(val T) -> Unit ! e]
+  var dropped_fulfills: Int
+  new() {
+    self.value = None
+    self.callbacks = []
+    self.dropped_fulfills = 0
+  }
+  be fulfill(v: val T) ! e {
+    match self.value {
+      Some(old) => { self.dropped_fulfills = self.dropped_fulfills + 1 },
+      None => {
+        self.value = Some(v)
+        var i = 0
+        while i < self.callbacks.len() {
+          match self.callbacks.get(i) {
+            Some(f) => f(v),
+            None => { }
+          }
+          i = i + 1
+        }
+        self.callbacks = []
+      }
+    }
+  }
+  be then(f: val fn(val T) -> Unit ! e) ! e {
+    match self.value {
+      Some(v2) => f(v2),
+      None => { push(self.callbacks, f) }
+    }
+  }
+}
+";
+
+/// Build the resolved [`ActorDef`] for one `actor` declaration (shared by user actors and
+/// the injected `std.actors` prelude).
+fn actor_def_of(a: &ActorDecl) -> ActorDef {
+    ActorDef {
+        name: a.name.name.clone(),
+        generics: gen_names(&a.generics),
+        fields: a.fields.iter().map(|fd| (fd.name.name.clone(), fd.ty.clone(), fd.mutable)).collect(),
+        ctor_params: a.ctor.params.clone(),
+        ctor_row: a.ctor.row.clone(),
+        behaviors: a
+            .behaviors
+            .iter()
+            .map(|b| ActorBehavior {
+                name: b.name.name.clone(),
+                params: b.params.clone(),
+                row: b.row.clone(),
+                span: b.span,
+            })
+            .collect(),
+        fns: a
+            .fns
+            .iter()
+            .map(|f| FnSig {
+                name: f.name.name.clone(),
+                public: false,
+                generics: gen_names(&f.generics),
+                gkinds: HashMap::new(),
+                params: f.params.clone(),
+                ret: f.ret.clone(),
+                row: f.row.clone(),
+            })
+            .collect(),
     }
 }

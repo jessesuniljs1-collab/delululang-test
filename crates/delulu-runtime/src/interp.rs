@@ -165,6 +165,16 @@ impl Interp {
                 _ => {}
             }
         }
+        // std.actors (Stage 7 phase 7j): Promise injects wherever actors can run — the
+        // same canonical source the checker registered, so verify == run.
+        {
+            let (std_mod, _) = delulu_syntax::parse_file(u32::MAX, delulu_check::STD_ACTORS_SRC);
+            for item in std_mod.items {
+                if let Item::Actor(a) = item {
+                    actors.entry(a.name.name.clone()).or_insert(a);
+                }
+            }
+        }
         Interp {
             funcs,
             consts,
@@ -256,6 +266,12 @@ impl Interp {
             Ok(_) | Err(Escape::Return(_)) | Err(Escape::Propagate(_)) => Ok(()),
             Err(Escape::Fault(f)) => Err(f),
         }
+    }
+
+    /// The declaration of an actor visible to this interpreter (module actors plus the
+    /// injected `std.actors` prelude) — the worker loop's single source of truth.
+    pub fn actor_decl(&self, name: &str) -> Option<&delulu_syntax::ast::ActorDecl> {
+        self.actors.get(name)
     }
 
     /// Rebuild an actor-boundary message into THIS interpreter's heap (closures reattach to
