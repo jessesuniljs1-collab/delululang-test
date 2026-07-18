@@ -3871,7 +3871,32 @@ fn cmd_run(rest: &[String]) -> i32 {
             trace: sink.clone(),
             custody: wasm_custody.clone(), // Stage 5 phase 5f: Some(...) in daemon mode, None embedded
         };
-        let run_result = delulu_wasm::run_main(&wasm, &cfg);
+        // Stage 7 phase 7h: a module with actors runs under the WASM engine's COOPERATIVE
+        // single-threaded scheduler (spec §6.5 — identical semantics, no parallelism,
+        // labeled in output). A module without actors takes the byte-identical v0.6 path.
+        let wasm_has_actors =
+            checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+        let run_result = if wasm_has_actors {
+            eprintln!("engine: wasm (actors: cooperative single-threaded — semantics identical, parallelism absent)");
+            let table = delulu_wasm::actor_table(&checked.module);
+            delulu_wasm::run_main_actors(&wasm, &cfg, &table).map(|(output, report)| {
+                if report.dead_actors > 0 || report.dropped_sends > 0 {
+                    eprintln!(
+                        "actors: {} died; {} message(s) to dead actors dropped",
+                        report.dead_actors, report.dropped_sends
+                    );
+                }
+                if opts.on_quiesce_report {
+                    eprintln!(
+                        "quiesce: {} surviving actor(s), {} turn(s) run",
+                        report.surviving_actors, report.total_turns
+                    );
+                }
+                output
+            })
+        } else {
+            delulu_wasm::run_main(&wasm, &cfg)
+        };
 
         // Emit the trace before verdicts (the witness is available even on a fault).
         if let Some(s) = &sink {
