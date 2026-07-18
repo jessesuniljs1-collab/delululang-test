@@ -59,6 +59,10 @@ pub enum Value {
     /// one. The GIL/ownership discipline lives in `python.rs`.
     #[cfg(feature = "python")]
     PyObj(crate::python::PyObjVal),
+    /// An actor reference (Stage 7) — `tag`: opaque identity, sendable, no synchronous
+    /// access (the checker enforces all three). Carries the process-wide address; the id is
+    /// never reused, so a reference to a dead/unloaded actor stays dead forever.
+    ActorRef { id: crate::actors::ActorId, actor: Rc<str> },
 }
 
 impl Value {
@@ -116,6 +120,8 @@ impl Value {
             Value::ForeignPtr(_) => "<foreign ptr>".to_string(),
             #[cfg(feature = "python")]
             Value::PyObj(_) => "<py obj>".to_string(),
+            // Opaque (tag): identity never renders — the checker rejects `str`/`==` anyway.
+            Value::ActorRef { actor, .. } => format!("<actor {actor}>"),
         }
     }
 
@@ -312,6 +318,17 @@ impl Scope {
         }
         self.parent.as_ref().and_then(|p| p.get(name))
     }
+    /// The parent scope, if any (Stage 7: the actor boundary flattens capture chains).
+    pub fn parent(&self) -> Option<&Env> {
+        self.parent.as_ref()
+    }
+
+    /// A snapshot of this scope's own bindings (Stage 7: closure conversion at the actor
+    /// boundary — sendable closures capture only immutable values, so a snapshot is exact).
+    pub fn vars_snapshot(&self) -> Vec<(String, Value)> {
+        self.vars.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
     /// Assign to an existing binding in the nearest enclosing scope. Returns false if unbound.
     pub fn assign(&self, name: &str, value: Value) -> bool {
         if self.vars.borrow().contains_key(name) {

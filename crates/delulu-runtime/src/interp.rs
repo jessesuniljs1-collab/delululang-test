@@ -126,6 +126,17 @@ pub struct Interp {
     /// a program built with `Interp::new` is byte-identical to Stages 1–4 (criterion 11). When
     /// absent, every budget check is a single always-false branch.
     budget: Option<Budget>,
+    /// Actor declarations by name (Stage 7) — used for self-dispatch (sync fns and
+    /// self-sends inside member bodies). Empty for a program with no actors.
+    actors: HashMap<String, delulu_syntax::ast::ActorDecl>,
+    /// The actor system's per-thread handle (Stage 7). `None` unless attached via
+    /// [`Interp::with_actors`] — a program with no actors is byte-identical to v0.6.
+    actors_host: Option<crate::actors::ActorHost>,
+    /// The turn context while a behavior/ctor runs on THIS interpreter: (state record,
+    /// address, actor name) — how `self` learns its own address for reply-to sends.
+    current_self: RefCell<Option<(Value, crate::actors::ActorId, String)>>,
+    /// Consts evaluated into `globals` (idempotence guard — Stage 7 evaluates per turn).
+    consts_ready: Cell<bool>,
 }
 
 impl Interp {
@@ -133,6 +144,7 @@ impl Interp {
         let mut funcs = HashMap::new();
         let mut consts = Vec::new();
         let mut foreign_blocks = HashMap::new();
+        let mut actors = HashMap::new();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
@@ -142,6 +154,9 @@ impl Interp {
                 Item::Foreign(fd) => {
                     let sigs = fd.fns.iter().map(lower_foreign_sig).collect();
                     foreign_blocks.insert(fd.name.name.clone(), sigs);
+                }
+                Item::Actor(a) => {
+                    actors.insert(a.name.name.clone(), a.clone());
                 }
                 _ => {}
             }
@@ -160,7 +175,68 @@ impl Interp {
             foreign_binder: Rc::new(InProcBinder),
             custody: RefCell::new(Box::new(EmbeddedCustody::new())),
             budget: None,
+            actors,
+            actors_host: None,
+            current_self: RefCell::new(None),
+            consts_ready: Cell::new(false),
         }
+    }
+
+    /// Attach the actor system's host handle (Stage 7 phase 7g). Additive: a program that
+    /// never spawns behaves identically without one; a spawn WITHOUT one is an honest fault.
+    pub fn with_actors(mut self, host: crate::actors::ActorHost) -> Interp {
+        self.actors_host = Some(host);
+        self
+    }
+
+    /// Run one actor TURN (a constructor or behavior body) to completion on this
+    /// interpreter — run-to-completion atomicity is the caller's scheduling guarantee
+    /// (invariant 34); this just evaluates. `state` is the actor's field record, bound as
+    /// `self`; the turn context makes `self`-sends resolve to `self_ref`'s address.
+    pub fn run_actor_turn(
+        &self,
+        body: &Block,
+        params: &[String],
+        args: Vec<Value>,
+        state: Value,
+        self_ref: Value,
+    ) -> Result<(), Fault> {
+        let (id, name) = match &self_ref {
+            Value::ActorRef { id, actor } => (*id, actor.to_string()),
+            _ => return Err(Fault::new("DL0907", "actor turn without an actor address")),
+        };
+        if let Err(Escape::Fault(f)) = self.eval_consts() {
+            return Err(f);
+        }
+        let env = Scope::child(&self.globals);
+        env.define("self", state.clone());
+        for (p, v) in params.iter().zip(args) {
+            env.define(p, v);
+        }
+        let prev = self.current_self.replace(Some((state, id, name)));
+        let result = self.exec_block_value(body, &env);
+        self.current_self.replace(prev);
+        match result {
+            // A behavior yields Unit at the send site; `return`/`?` inside it are ordinary
+            // turn completion.
+            Ok(_) | Err(Escape::Return(_)) | Err(Escape::Propagate(_)) => Ok(()),
+            Err(Escape::Fault(f)) => Err(f),
+        }
+    }
+
+    /// Rebuild an actor-boundary message into THIS interpreter's heap (closures reattach to
+    /// these globals).
+    pub fn msg_to_value(&self, m: crate::actors::MsgValue) -> Value {
+        crate::actors::msg_to_value(m, &self.globals)
+    }
+
+    /// Convert a value FOR an actor boundary, with this turn's self-identity attached (so
+    /// `self` in an argument position becomes the actor's own address — the reply-to
+    /// pattern; `ref self <: tag` makes it statically legal).
+    fn value_to_msg_here(&self, v: &Value) -> Result<crate::actors::MsgValue, Fault> {
+        let ctx = self.current_self.borrow();
+        let self_state = ctx.as_ref().map(|(s, id, name)| (s, *id, name.as_str()));
+        crate::actors::value_to_msg(v, self_state)
     }
 
     /// Attach best-effort execution limits for a Verified plugin run (spec §5.4, phase 6e.5). Builder
@@ -286,10 +362,16 @@ impl Interp {
     }
 
     fn eval_consts(&self) -> R<()> {
+        // Idempotent: consts are pure (checker invariant), and Stage 7 calls this per actor
+        // turn — evaluate once, then it is a load.
+        if self.consts_ready.get() {
+            return Ok(());
+        }
         for (name, expr) in &self.consts {
             let v = self.eval_expr(expr, &self.globals)?;
             self.globals.define(name, v);
         }
+        self.consts_ready.set(true);
         Ok(())
     }
 
@@ -524,13 +606,25 @@ impl Interp {
                 self.eval_var(&Path { segs: vec![name.clone()] }, *span, env)
             }
             Expr::Recover { body, .. } => self.exec_block_value(body, env),
-            // Staged build: actor execution lands in phase 7g (the scheduler). Until then the
-            // interpreter refuses honestly rather than pretending an actor exists.
-            Expr::Spawn { span, .. } => Err(Escape::Fault(Fault::at(
-                "DL0907",
-                "actor execution is not yet available in this staged v0.7 build (phase 7g)",
-                *span,
-            ))),
+            // T-Spawn at runtime (7g): mint an address, enqueue the Create (the constructor
+            // runs as the new actor's first turn on ITS worker), yield the tag reference.
+            Expr::Spawn { actor, args, span, .. } => {
+                let Some(host) = &self.actors_host else {
+                    return Err(Escape::Fault(Fault::at(
+                        "DL0907",
+                        "`spawn` without an actor system attached (this entry point does not run actors)",
+                        *span,
+                    )));
+                };
+                let name = &actor.segs.last().expect("path has segments").name;
+                let mut msgs = Vec::with_capacity(args.len());
+                for a in args {
+                    let v = self.eval_expr(a, env)?;
+                    msgs.push(self.value_to_msg_here(&v).map_err(Escape::Fault)?);
+                }
+                let id = host.spawn(name, msgs);
+                Ok(Value::ActorRef { id, actor: Rc::from(name.as_str()) })
+            }
         }
     }
 
@@ -640,6 +734,70 @@ impl Interp {
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
                 return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
             }
+        }
+        // T-Send at runtime (7g): any method on an actor REFERENCE is a behavior send (sync
+        // fns on references are checker-refused), and a behavior named on the SELF record is
+        // a self-send; a sync fn named on the self record evaluates synchronously in-turn.
+        match &recvv {
+            Value::ActorRef { id, actor } => {
+                let Some(host) = &self.actors_host else {
+                    return Err(Escape::Fault(Fault::at(
+                        "DL0907",
+                        "behavior send without an actor system attached",
+                        span,
+                    )));
+                };
+                let mut msgs = Vec::with_capacity(argvals.len());
+                for v in &argvals {
+                    msgs.push(self.value_to_msg_here(v).map_err(Escape::Fault)?);
+                }
+                host.send(*id, &name.name, msgs);
+                let _ = actor;
+                return Ok(Value::Unit);
+            }
+            Value::Record { name: rname, fields } => {
+                if let Some(decl) = self.actors.get(&**rname).cloned() {
+                    let is_self = self
+                        .current_self
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|(s, _, _)| matches!(s, Value::Record { fields: sf, .. } if Rc::ptr_eq(sf, fields)));
+                    if is_self {
+                        if let Some(f) = decl.fns.iter().find(|f| f.name.name == name.name) {
+                            // T-SyncMethod: runs within the actor's own turn.
+                            let fenv = Scope::child(&self.globals);
+                            fenv.define("self", recvv.clone());
+                            for (p, v) in f.params.iter().zip(argvals) {
+                                fenv.define(&p.name.name, v);
+                            }
+                            self.enter()?;
+                            let r = self.finish_call(self.exec_block_value(&f.body, &fenv));
+                            self.leave();
+                            return r;
+                        }
+                        if decl.behaviors.iter().any(|b| b.name.name == name.name) {
+                            // A self-send: enqueue to our own mailbox — a later turn, never
+                            // reentrant (behaviors are atomic, invariant 34).
+                            let Some(host) = &self.actors_host else {
+                                return Err(Escape::Fault(Fault::at(
+                                    "DL0907",
+                                    "self-send without an actor system attached",
+                                    span,
+                                )));
+                            };
+                            let self_id = self.current_self.borrow().as_ref().map(|(_, id, _)| *id);
+                            let id = self_id.expect("turn context has an address");
+                            let mut msgs = Vec::with_capacity(argvals.len());
+                            for v in &argvals {
+                                msgs.push(self.value_to_msg_here(v).map_err(Escape::Fault)?);
+                            }
+                            host.send(id, &name.name, msgs);
+                            return Ok(Value::Unit);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
         let result = match &recvv {
             // T-ForeignBind (spec §4): binding a lib is handled here, not in `prim`, because it needs

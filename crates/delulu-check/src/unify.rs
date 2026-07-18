@@ -87,6 +87,9 @@ impl InferCtx {
             },
             Type::Secret(inner) => Type::Secret(Box::new(self.apply_type(&inner))),
             Type::Plugin(inner) => Type::Plugin(Box::new(self.apply_type(&inner))),
+            Type::Actor(name, args) => {
+                Type::Actor(name, args.iter().map(|a| self.apply_type(a)).collect())
+            }
             other => other,
         }
     }
@@ -161,6 +164,14 @@ impl InferCtx {
             (Type::Secret(x), Type::Secret(y)) => self.unify_type(x, y),
             (Type::ForeignPtr, Type::ForeignPtr) | (Type::PyObj, Type::PyObj) => Ok(()),
             (Type::Foreign(x), Type::Foreign(y)) if x == y => Ok(()),
+            // Actor references (Stage 7) are nominal by name; their type arguments unify
+            // structurally (a `Cell[Int]` reference is not a `Cell[Str]` reference).
+            (Type::Actor(x, a1), Type::Actor(y, a2)) if x == y && a1.len() == a2.len() => {
+                for (p, q) in a1.iter().zip(a2.iter()) {
+                    self.unify_type(p, q)?;
+                }
+                Ok(())
+            }
             // `Plugin[C]` unifies structurally, so the class marker inside is an ordinary
             // inference position: `let p: Plugin[Contained] = load(…)` pins the `C` that `load`
             // returned as a fresh variable (deviation 4). `Verified`/`Contained` are nominal and
@@ -250,7 +261,9 @@ impl InferCtx {
                 self.occurs_type(v, &inner)
             }
             Type::Result(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),
-            Type::Record(_, args) | Type::Sum(_, args) => args.iter().any(|a| self.occurs_type(v, a)),
+            Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => {
+                args.iter().any(|a| self.occurs_type(v, a))
+            }
             Type::Fn { params, ret, .. } => {
                 params.iter().any(|p| self.occurs_type(v, p)) || self.occurs_type(v, &ret)
             }

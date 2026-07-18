@@ -2,6 +2,7 @@
 //! tree-walking interpreter. The runtime enforces capability scopes host-side on every use
 //! (invariant 7), independently of the compile-time authority proof.
 
+pub mod actors;
 pub mod broker;
 pub mod custody;
 pub mod foreign;

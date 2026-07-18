@@ -215,6 +215,13 @@ struct Opts {
     trace_out: Option<String>,
     /// `--assert-trace`: verify trace ⊆ the checker's row of main; violations are DL1101, exit 3.
     assert_trace: bool,
+    /// `--actors-threads N` (Stage 7): scheduler worker count; default = available parallelism.
+    actors_threads: Option<usize>,
+    /// `--on-quiesce report` (Stage 7): print surviving actor count at quiescence.
+    on_quiesce_report: bool,
+    /// `--on-actor-death abort` (Stage 7 §6.6): whole-program abort on a behavior fault
+    /// (default keeps the system live; sends to the dead actor drop and count).
+    on_actor_death_abort: bool,
     /// `--seed <u64>`: deterministic Cap[Rand] (spec §6.2).
     seed: Option<u64>,
     /// `--clock fixed:<ms>`: deterministic Cap[Clock] (spec §6.2).
@@ -270,6 +277,9 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         trace_effects: false,
         trace_out: None,
         assert_trace: false,
+        actors_threads: None,
+        on_quiesce_report: false,
+        on_actor_death_abort: false,
         seed: None,
         clock_ms: None,
         engine: None,
@@ -333,6 +343,34 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--engine=") => opts.engine = Some(s["--engine=".len()..].to_string()),
+            // Stage 7 (spec §6.1): actor scheduler controls.
+            "--actors-threads" => {
+                if i + 1 < rest.len() {
+                    opts.actors_threads = rest[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--actors-threads=") => {
+                opts.actors_threads = s["--actors-threads=".len()..].parse().ok();
+            }
+            "--on-quiesce" => {
+                if i + 1 < rest.len() {
+                    opts.on_quiesce_report = rest[i + 1] == "report";
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--on-quiesce=") => {
+                opts.on_quiesce_report = &s["--on-quiesce=".len()..] == "report";
+            }
+            "--on-actor-death" => {
+                if i + 1 < rest.len() {
+                    opts.on_actor_death_abort = rest[i + 1] == "abort";
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--on-actor-death=") => {
+                opts.on_actor_death_abort = &s["--on-actor-death=".len()..] == "abort";
+            }
             "--target" => {
                 if i + 1 < rest.len() {
                     opts.target = Some(rest[i + 1].clone());
@@ -485,6 +523,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort]  (Stage 7 actors)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -3899,7 +3938,48 @@ fn cmd_run(rest: &[String]) -> i32 {
     if let Some(s) = &sink {
         interp = interp.with_trace(s.clone());
     }
+    // Stage 7 (phase 7g): a module with actors gets the actor system. Gated on declaration —
+    // a program with no actors takes the identical path to v0.6, byte for byte.
+    let has_actors =
+        checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+    let actor_system = if has_actors {
+        let threads = opts
+            .actors_threads
+            .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
+        let system = delulu_runtime::actors::ActorSystem::start(
+            &checked.module,
+            threads,
+            opts.on_actor_death_abort,
+        );
+        interp = interp.with_actors(system.host());
+        Some(system)
+    } else {
+        None
+    };
     let run_result = interp.run_main(root);
+    // Quiescence exit (spec §6.1): `main` returned AND all mailboxes empty AND no turn
+    // running — then report per flags.
+    let mut actor_abort = false;
+    if let Some(system) = actor_system {
+        let report = system.finish();
+        actor_abort = report.aborted;
+        if report.dead_actors > 0 || report.dropped_sends > 0 {
+            eprintln!(
+                "actors: {} died; {} message(s) to dead actors dropped",
+                report.dead_actors, report.dropped_sends
+            );
+        }
+        if opts.on_quiesce_report {
+            eprintln!(
+                "quiesce: {} surviving actor(s), {} turn(s) run",
+                report.surviving_actors, report.total_turns
+            );
+        }
+    }
+    if actor_abort {
+        eprintln!("aborting: an actor died and --on-actor-death abort is set");
+        return 1;
+    }
 
     // Emit the trace before verdicts, so the witness is available even on a fault.
     if let Some(s) = &sink {
