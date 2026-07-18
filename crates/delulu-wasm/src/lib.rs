@@ -7,6 +7,7 @@
 //! calls) compiled to core WASM and run under Wasmtime, verified equal to the interpreter.
 //! Capabilities, strings, GC types, and the `delulu:cap` host interface build on this next.
 
+mod actors;
 mod artifact;
 mod codegen;
 mod dpx;
@@ -14,6 +15,7 @@ pub mod gen;
 mod host;
 pub mod limits;
 
+pub use actors::{actor_table, ActorInfo, ActorReport, ActorTable, BehaviorInfo};
 pub use artifact::{
     embed_authority, read_and_verify, Artifact, ArtifactError, AUTHORITY_SECTION, DWX_VERSION,
 };
@@ -22,7 +24,10 @@ pub use dpx::{
     DIR_SECTION, DPX_VERSION, LOCK_SECTION, PLUGIN_SECTION, SIG_SECTION, WASM_SECTION,
 };
 pub use codegen::{compile_module, compile_module_with, uses_console, CompileError};
-pub use host::{run_console_fn, run_int_fn, run_main, run_main_console, CustodyHandle, HostConfig, WasmError};
+pub use host::{
+    run_console_fn, run_int_fn, run_main, run_main_actors, run_main_console, CustodyHandle,
+    HostConfig, WasmError,
+};
 
 use std::collections::HashMap;
 

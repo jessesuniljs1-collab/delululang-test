@@ -44,6 +44,8 @@
 use std::collections::HashMap;
 
 use delulu_syntax::ast::*;
+
+use crate::actors::{actor_table, behavior_export_name, ctor_export_name, ActorTable};
 use wasm_encoder::{
     BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
     FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection,
@@ -107,6 +109,9 @@ enum Ty {
     Result(Scalar, Scalar), // Ok(T), Err(E)
     Option(Scalar),         // None, Some(T)
     Enum(u32),              // a named sum type (index into EnumEnv)
+    // Stage 7 phase 7h: an actor reference (`tag A`) is an i64 host-side slot id; `u32` is the
+    // actor's index into the module's `ActorTable` (so a send resolves the behaviour index).
+    ActorRef(u32),
 }
 
 /// The payload types a variant field may hold (a `Copy` subset of `Ty`, so `Ty` stays `Copy`).
@@ -212,11 +217,19 @@ struct EnumEnv {
     by_name: HashMap<String, u32>,
     foreign_libs: Vec<ForeignLibInfo>,
     foreign_by_name: HashMap<String, u32>,
+    /// Actor names → index into the module's `ActorTable` (Stage 7 phase 7h). Lets `wasm_ty`
+    /// lower an actor-typed field/param (`from: Ping`) to `Ty::ActorRef(idx)`. Same declaration
+    /// order as [`actor_table`], so the indices agree with the host's dispatch table.
+    actors_by_name: HashMap<String, u32>,
 }
 
 impl EnumEnv {
     fn id(&self, name: &str) -> Option<u32> {
         self.by_name.get(name).copied()
+    }
+    /// The actor index for a name introduced by an `actor A { … }` declaration (Stage 7 phase 7h).
+    fn actor_id(&self, name: &str) -> Option<u32> {
+        self.actors_by_name.get(name).copied()
     }
     fn desc(&self, id: u32) -> &EnumDesc {
         &self.descs[id as usize]
@@ -272,11 +285,23 @@ fn build_enum_env(module: &Module) -> EnumEnv {
         }
     }
 
+    // Actor names → declaration-order index (Stage 7 phase 7h), matching `actor_table`.
+    let mut actors_by_name: HashMap<String, u32> = HashMap::new();
+    for it in &module.items {
+        if let Item::Actor(a) = it {
+            if !actors_by_name.contains_key(&a.name.name) {
+                let id = actors_by_name.len() as u32;
+                actors_by_name.insert(a.name.name.clone(), id);
+            }
+        }
+    }
+
     let mut env = EnumEnv {
         descs: vec![EnumDesc { ctors: Vec::new() }; by_name.len()],
         by_name,
         foreign_libs: Vec::new(),
         foreign_by_name,
+        actors_by_name,
     };
     // Prelude descriptors.
     let str_payload = vec![Scalar::Str];
@@ -377,10 +402,38 @@ struct Imports {
     float_to_str: u32,
 }
 
+/// Host import indices for the `delulu:actors` interface (Stage 7 phase 7h). `u32::MAX` sentinels
+/// mean the module declared no actors and never reads them.
+#[derive(Clone, Copy)]
+struct ActorImports {
+    spawn: u32,
+    send: u32,
+    field_get: u32,
+    field_set: u32,
+}
+
+impl ActorImports {
+    fn none() -> ActorImports {
+        ActorImports { spawn: u32::MAX, send: u32::MAX, field_get: u32::MAX, field_set: u32::MAX }
+    }
+}
+
+/// The per-body actor context (Stage 7 phase 7h): present only while compiling an actor member
+/// (ctor or behaviour). `self_slot` is the local holding the actor's slot id (the implicit first
+/// param); `fields` maps a field name to its slot index + lowered type; `actor_idx` is which
+/// actor `self` is (so `self.beh(…)` resolves the behaviour index).
+struct ActorCtx {
+    self_slot: u32,
+    actor_idx: u32,
+    fields: HashMap<String, (u32, Ty)>,
+}
+
 fn wasm_valtype(t: Ty) -> Option<ValType> {
     match t {
         Ty::I64 => Some(ValType::I64),
         Ty::F64 => Some(ValType::F64),
+        // An actor reference is an i64 host-side slot id (Stage 7 phase 7h).
+        Ty::ActorRef(_) => Some(ValType::I64),
         // Str/Cap/variant handles are all i32 (a pointer or a host handle).
         Ty::I32 | Ty::Str | Ty::Cap | Ty::Clock | Ty::Rand | Ty::FsRead | Ty::Root
         | Ty::ForeignLoad | Ty::Foreign(_) | Ty::ForeignPtr | Ty::Result(..) | Ty::Option(..) | Ty::Enum(_) => {
@@ -433,8 +486,13 @@ fn wasm_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
                     "Root" => Some(Ty::Root),
                     "Unit" => Some(Ty::Unit),
                     "ForeignPtr" => Some(Ty::ForeignPtr),
-                    // A named sum type (prelude or user `enum`), else a `foreign … lib M` handle type.
-                    other => env.id(other).map(Ty::Enum).or_else(|| env.foreign_id(other).map(Ty::Foreign)),
+                    // A named sum type (prelude or user `enum`), else a `foreign … lib M` handle
+                    // type, else an actor type used as a reference (`tag A` — Stage 7 phase 7h).
+                    other => env
+                        .id(other)
+                        .map(Ty::Enum)
+                        .or_else(|| env.foreign_id(other).map(Ty::Foreign))
+                        .or_else(|| env.actor_id(other).map(Ty::ActorRef)),
                 };
             }
         }
@@ -529,6 +587,21 @@ pub fn compile_module_with(
         .filter(|f| is_compilable(&env, f))
         .collect();
 
+    // Stage 7 phase 7h: the module's actor table (declaration order, shared with the host) and the
+    // ordered plan of members to compile as exports (ctor then behaviours, per actor).
+    let table = actor_table(module);
+    let needs_actors = !table.is_empty();
+    let mut member_plans: Vec<(u32, &ActorDecl, &[Param], &Block, String)> = Vec::new();
+    for it in &module.items {
+        if let Item::Actor(a) = it {
+            let aidx = *table.by_name.get(&a.name.name).expect("actor is in the table");
+            member_plans.push((aidx, a, a.ctor.params.as_slice(), &a.ctor.body, ctor_export_name(&a.name.name)));
+            for b in &a.behaviors {
+                member_plans.push((aidx, a, b.params.as_slice(), &b.body, behavior_export_name(&a.name.name, &b.name.name)));
+            }
+        }
+    }
+
     let needs_console = module_calls_method(&env, module, &["console", "println"]);
     let needs_clock = module_calls_method(&env, module, &["clock", "now_ms"]);
     let needs_rand = module_calls_method(&env, module, &["rand", "int"]);
@@ -581,6 +654,16 @@ pub fn compile_module_with(
         imp.float_to_str = n_imports + 3;
         n_imports += 4;
     }
+    // Stage 7 phase 7h: the four `delulu:actors` imports follow the foreign ones (so a non-actor
+    // program's import indices are untouched — byte-identical to v0.6).
+    let mut actor_imp = ActorImports::none();
+    if needs_actors {
+        actor_imp.spawn = n_imports;
+        actor_imp.send = n_imports + 1;
+        actor_imp.field_get = n_imports + 2;
+        actor_imp.field_set = n_imports + 3;
+        n_imports += 4;
+    }
     let arith_base = n_imports; // the 4 checked-arithmetic helpers occupy [n_imports, n_imports+4)
     // The string helpers (`__concat`, `__int_to_str`) follow; user functions start after them.
     let user_base = n_imports + N_ARITH_HELPERS + N_STR_HELPERS;
@@ -590,6 +673,11 @@ pub fn compile_module_with(
     let mut data: Vec<u8> = Vec::new();
     for f in &fns {
         collect_strings_block(&f.body, &mut str_off, &mut data);
+    }
+    // Stage 7 phase 7h: actor member bodies may hold string literals too (Int-only witnesses do
+    // not, but intern any so the fragment composes if a future body prints).
+    for (_, _, _, body, _) in &member_plans {
+        collect_strings_block(body, &mut str_off, &mut data);
     }
     // Stage 4 phase 4g: the foreign lib names (for `foreign_bind`) and method names (for
     // `foreign_call`) cross to the host as interned guest strings — intern every one up front.
@@ -671,6 +759,22 @@ pub fn compile_module_with(
         types.ty().function([ValType::F64], [ValType::I32]); // float_to_str(x) -> str ptr (matches Value::Float display)
         next_type += 4;
     }
+    // Stage 7 phase 7h: the `delulu:actors` import signatures (all actor-boundary values are i64).
+    let mut actor_spawn_ty = 0;
+    let mut actor_send_ty = 0;
+    let mut actor_field_get_ty = 0;
+    let mut actor_field_set_ty = 0;
+    if needs_actors {
+        actor_spawn_ty = next_type;
+        types.ty().function([ValType::I32, ValType::I32, ValType::I32], [ValType::I64]); // actor_spawn(actor_idx, args_ptr, argc) -> slot
+        actor_send_ty = next_type + 1;
+        types.ty().function([ValType::I64, ValType::I32, ValType::I32, ValType::I32], []); // actor_send(slot, behavior_idx, args_ptr, argc)
+        actor_field_get_ty = next_type + 2;
+        types.ty().function([ValType::I64, ValType::I32], [ValType::I64]); // actor_field_get(slot, field_idx) -> value
+        actor_field_set_ty = next_type + 3;
+        types.ty().function([ValType::I64, ValType::I32, ValType::I64], []); // actor_field_set(slot, field_idx, value)
+        next_type += 4;
+    }
     let helper_type = next_type;
     types.ty().function([ValType::I64, ValType::I64], [ValType::I64]);
     next_type += 1;
@@ -686,6 +790,36 @@ pub fn compile_module_with(
         let results = result_valtypes(ret_ty(&env, f).unwrap());
         types.ty().function(params, results);
         user_types.push(next_type);
+        next_type += 1;
+    }
+    // Stage 7 phase 7h: the subset gate runs EARLY — one out-of-subset actor field or
+    // member parameter refuses the WHOLE module (honest DL1201 interpreter fallback)
+    // before any function body compiles, so no partial artifact and no late panic path.
+    for (_, decl, params, _, _) in &member_plans {
+        for fld in &decl.fields {
+            if actor_boundary_ty(&env, &fld.ty).is_none() {
+                return Err(CompileError::Unsupported(format!(
+                    "actor field `{}.{}` is outside the Int/actor-reference subset",
+                    decl.name.name, fld.name.name
+                )));
+            }
+        }
+        for p in params.iter() {
+            if actor_boundary_ty(&env, &p.ty).is_none() {
+                return Err(CompileError::Unsupported(format!(
+                    "actor member parameter `{}` is outside the Int/actor-reference subset",
+                    p.name.name
+                )));
+            }
+        }
+    }
+
+    // Stage 7 phase 7h: one type per actor member — `(self_slot, params…) -> ()`, all i64.
+    let mut actor_member_types = Vec::new();
+    for (_, _, params, _, _) in &member_plans {
+        let ptys: Vec<ValType> = std::iter::once(ValType::I64).chain(params.iter().map(|_| ValType::I64)).collect();
+        types.ty().function(ptys, []);
+        actor_member_types.push(next_type);
         next_type += 1;
     }
 
@@ -712,8 +846,15 @@ pub fn compile_module_with(
         imports.import("delulu:foreign", "foreign_call", EntityType::Function(foreign_call_ty));
         imports.import("delulu:foreign", "float_to_str", EntityType::Function(float_to_str_ty));
     }
+    if needs_actors {
+        imports.import("delulu:actors", "actor_spawn", EntityType::Function(actor_spawn_ty));
+        imports.import("delulu:actors", "actor_send", EntityType::Function(actor_send_ty));
+        imports.import("delulu:actors", "actor_field_get", EntityType::Function(actor_field_get_ty));
+        imports.import("delulu:actors", "actor_field_set", EntityType::Function(actor_field_set_ty));
+    }
 
-    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, then users.
+    // Functions (in code order): the 4 arithmetic helpers, `__concat`, `__int_to_str`, users, then
+    // the actor members (Stage 7 phase 7h).
     let mut funcsec = FunctionSection::new();
     for _ in 0..N_ARITH_HELPERS {
         funcsec.function(helper_type);
@@ -721,6 +862,9 @@ pub fn compile_module_with(
     funcsec.function(concat_type);
     funcsec.function(int_to_str_type);
     for t in &user_types {
+        funcsec.function(*t);
+    }
+    for t in &actor_member_types {
         funcsec.function(*t);
     }
 
@@ -748,6 +892,12 @@ pub fn compile_module_with(
     for (i, f) in fns.iter().enumerate() {
         exports.export(&f.name.name, ExportKind::Func, user_base + i as u32);
     }
+    // Stage 7 phase 7h: export each actor member under the `actor$<Actor>$<member>` convention, at
+    // its absolute function index (after the user fns). The host dispatches turns by these names.
+    let actor_base = user_base + fns.len() as u32;
+    for (j, (_, _, _, _, export)) in member_plans.iter().enumerate() {
+        exports.export(export, ExportKind::Func, actor_base + j as u32);
+    }
 
     let mut code = CodeSection::new();
     code.function(&ovf_add_fn());
@@ -757,7 +907,12 @@ pub fn compile_module_with(
     code.function(&concat_fn(HEAP_GLOBAL));
     code.function(&int_to_str_fn(HEAP_GLOBAL));
     for f in &fns {
-        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, foreign_binds)?);
+        code.function(&compile_fn(f, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds)?);
+    }
+    for (actor_idx, decl, params, body, _) in &member_plans {
+        code.function(&compile_actor_member(
+            *actor_idx, decl, params, body, &env, &generics, &index, &str_off, arith_base, imp, actor_imp, &table, foreign_binds,
+        )?);
     }
 
     let mut datas = DataSection::new();
@@ -769,7 +924,7 @@ pub fn compile_module_with(
     // Data(11).
     let mut m = WasmModule::new();
     m.section(&types);
-    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign {
+    if needs_console || needs_clock || needs_rand || needs_fs || needs_foreign || needs_actors {
         m.section(&imports);
     }
     m.section(&funcsec);
@@ -838,6 +993,13 @@ fn collect_strings_expr(e: &Expr, off: &mut HashMap<String, u32>, data: &mut Vec
         }
         Expr::Try { inner, .. } => collect_strings_expr(inner, off, data),
         Expr::Block(b) => collect_strings_block(b, off, data),
+        // Stage 7: spawn/send arguments and recover bodies carry literals like any call.
+        Expr::Spawn { args, .. } => {
+            for a in args {
+                collect_strings_expr(a, off, data);
+            }
+        }
+        Expr::Recover { body, .. } => collect_strings_block(body, off, data),
         _ => {}
     }
 }
@@ -902,6 +1064,13 @@ struct Cx<'a> {
     /// The checker's `root.foreign(load)` bind-site → lib-name map (Stage 4 phase 4g): recovers which
     /// lib a bind site resolves to (the grammar has no method type-argument syntax).
     foreign_binds: &'a HashMap<NodeId, String>,
+    /// The module's actor table (Stage 7 phase 7h): `spawn`/send index resolution + ctor arity.
+    actors: &'a ActorTable,
+    /// The `delulu:actors` host import indices (Stage 7 phase 7h).
+    actor_imp: ActorImports,
+    /// Present while compiling an actor member body (Stage 7 phase 7h) — `self`, self-fields,
+    /// self-sends. `None` in ordinary functions (which may still `spawn`/send).
+    actor: Option<ActorCtx>,
     /// The function's declared return type — the expected type for `return`/`?` (Phase 3o).
     ret: Ty,
     instrs: Vec<Instruction<'static>>,
@@ -926,7 +1095,7 @@ impl<'a> Cx<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports, foreign_binds: &'a HashMap<NodeId, String>) -> Result<Function, CompileError> {
+fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, FnDecl>, index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>, str_off: &'a HashMap<String, u32>, arith_base: u32, imp: Imports, actor_imp: ActorImports, actors: &'a ActorTable, foreign_binds: &'a HashMap<NodeId, String>) -> Result<Function, CompileError> {
     let mut params = HashMap::new();
     for (i, p) in f.params.iter().enumerate() {
         params.insert(p.name.name.clone(), (i as u32, wasm_ty(env, &p.ty).unwrap()));
@@ -947,6 +1116,9 @@ fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, Fn
         int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
         imp,
         foreign_binds,
+        actors,
+        actor_imp,
+        actor: None,
         ret,
         instrs: Vec::new(),
     };
@@ -959,6 +1131,93 @@ fn compile_fn<'a>(f: &FnDecl, env: &'a EnumEnv, generics: &'a HashMap<String, Fn
     }
     func.instruction(&Instruction::End);
     Ok(func)
+}
+
+/// Compile one actor member (the ctor or a behaviour) to a wasm function (Stage 7 phase 7h).
+/// The export signature is all-i64: `(self_slot, param0, param1, …) -> ()`. `Int` and actor-ref
+/// params are i64 directly; the body reaches actor state through the `delulu:actors.field_*`
+/// imports and sends through `spawn`/`send`. A param or field outside the subset (`Int`/actor-ref)
+/// makes the member — and therefore the whole module — non-compilable (honest DL1201 fallback).
+#[allow(clippy::too_many_arguments)]
+fn compile_actor_member<'a>(
+    actor_idx: u32,
+    decl: &ActorDecl,
+    params: &[Param],
+    body: &Block,
+    env: &'a EnumEnv,
+    generics: &'a HashMap<String, FnDecl>,
+    index: &'a HashMap<String, (u32, Vec<Ty>, Ty)>,
+    str_off: &'a HashMap<String, u32>,
+    arith_base: u32,
+    imp: Imports,
+    actor_imp: ActorImports,
+    actors: &'a ActorTable,
+    foreign_binds: &'a HashMap<NodeId, String>,
+) -> Result<Function, CompileError> {
+    // Field layout: name → (slot index, lowered type). Only `Int`/actor-ref fields are in-subset.
+    let mut fields: HashMap<String, (u32, Ty)> = HashMap::new();
+    for (i, fld) in decl.fields.iter().enumerate() {
+        let fty = actor_boundary_ty(env, &fld.ty).ok_or_else(|| {
+            CompileError::Unsupported(format!(
+                "an actor field `{}` of a type outside the Int/actor-reference subset",
+                fld.name.name
+            ))
+        })?;
+        fields.insert(fld.name.name.clone(), (i as u32, fty));
+    }
+    // The implicit `self_slot` is local 0; declared params follow (each an in-subset i64 value).
+    let mut scope: HashMap<String, (u32, Ty)> = HashMap::new();
+    for (i, p) in params.iter().enumerate() {
+        let pty = actor_boundary_ty(env, &p.ty).ok_or_else(|| {
+            CompileError::Unsupported(format!(
+                "an actor parameter `{}` of a type outside the Int/actor-reference subset",
+                p.name.name
+            ))
+        })?;
+        scope.insert(p.name.name.clone(), (i as u32 + 1, pty));
+    }
+    let nparams = params.len() as u32 + 1;
+    let mut cx = Cx {
+        index,
+        str_off,
+        env,
+        generics,
+        scopes: vec![scope],
+        callables: vec![HashMap::new()],
+        extra_locals: Vec::new(),
+        nparams,
+        inline_depth: 0,
+        arith_base,
+        concat_fn: arith_base + N_ARITH_HELPERS,
+        int_to_str_fn: arith_base + N_ARITH_HELPERS + 1,
+        imp,
+        foreign_binds,
+        actors,
+        actor_imp,
+        actor: Some(ActorCtx { self_slot: 0, actor_idx, fields }),
+        ret: Ty::Unit,
+        instrs: Vec::new(),
+    };
+    // A behaviour/ctor body yields Unit (invariant 34 — a behaviour returns nothing at the send
+    // site; the ctor returns nothing).
+    compile_block_as(body, &mut cx, Ty::Unit)?;
+    let mut func = Function::new(cx.extra_locals.iter().map(|&t| (1u32, t)));
+    for ins in &cx.instrs {
+        func.instruction(ins);
+    }
+    func.instruction(&Instruction::End);
+    Ok(func)
+}
+
+/// The lowered type of an actor field / behaviour-ctor parameter, restricted to the phase-7h
+/// subset: `Int` (i64) and actor references (`tag A` → i64 slot). Anything else → `None`
+/// (honest DL1201). Kept separate from `wasm_ty` so the subset boundary is explicit and testable.
+fn actor_boundary_ty(env: &EnumEnv, t: &TypeExpr) -> Option<Ty> {
+    match wasm_ty(env, t)? {
+        Ty::I64 => Some(Ty::I64),
+        Ty::ActorRef(i) => Some(Ty::ActorRef(i)),
+        _ => None,
+    }
 }
 
 /// Synthesis: compile a block and report its tail value type.
@@ -1006,6 +1265,18 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
             Ok(Ty::Unit)
         }
         Stmt::Expr(e) => {
+            // Stage 7 phase 7h: `if cond { … }` with no `else`, used as a statement (a Unit-typed
+            // then-branch — e.g. a self-send guarded by a condition). The value-`if` path
+            // (`compile_expr`) still requires an `else`; this is the statement form.
+            if let Expr::If { cond, then_, else_: None, .. } = e {
+                if compile_expr(cond, cx)? != Ty::I32 {
+                    return Err(CompileError::Unsupported("a non-Bool `if` condition".into()));
+                }
+                cx.emit(Instruction::If(BlockType::Empty));
+                compile_block_as(then_, cx, Ty::Unit)?;
+                cx.emit(Instruction::End);
+                return Ok(Ty::Unit);
+            }
             if is_last {
                 match expected {
                     Some(exp) => {
@@ -1033,10 +1304,146 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
             cx.emit(Instruction::Return);
             Ok(Ty::Unit)
         }
-        Stmt::While { .. } | Stmt::Assign { .. } => {
-            Err(CompileError::Unsupported("`while`/assignment".into()))
+        // Stage 7 phase 7h: `self.field = …` lowers to the actor-state host import. Other
+        // assignment targets (locals, indices) stay outside the subset (honest DL1201).
+        Stmt::Assign { target, value, .. } => compile_assign(target, value, cx),
+        Stmt::While { .. } => Err(CompileError::Unsupported("`while`".into())),
+    }
+}
+
+/// Compile an assignment. Only `self.field = …` is in the phase-7h subset: actor state lives
+/// host-side, reached through the `delulu:actors.field_set` import (an actor may write only its
+/// OWN fields — the checker's viewpoint/tag rules deny anything else).
+fn compile_assign(target: &LValue, value: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
+    if let LValue::Field(base, name) = target {
+        if let LValue::Var(v) = &**base {
+            if v.name == "self" {
+                let (fidx, fty, self_slot) = self_field(cx, &name.name)?;
+                if cx.actor_imp.field_set == u32::MAX {
+                    return Err(CompileError::Unsupported("a self-field assignment without the actor host interface".into()));
+                }
+                cx.emit(Instruction::LocalGet(self_slot)); // slot: i64
+                cx.emit(Instruction::I32Const(fidx as i32)); // field_idx: i32
+                compile_expr_as(value, cx, fty)?; // value at the field's logical type
+                emit_extend_to_i64(cx, fty)?; // -> the i64 boundary ABI
+                cx.emit(Instruction::Call(cx.actor_imp.field_set));
+                return Ok(Ty::Unit);
+            }
         }
     }
+    Err(CompileError::Unsupported("an assignment target other than `self.field` (locals/indices unsupported)".into()))
+}
+
+/// Resolve a `self` field to `(field index, lowered type, self-slot local)` in the current actor
+/// context, or an honest error if outside an actor member / no such field.
+fn self_field(cx: &Cx, name: &str) -> Result<(u32, Ty, u32), CompileError> {
+    let ctx = cx
+        .actor
+        .as_ref()
+        .ok_or_else(|| CompileError::Unsupported("`self` outside an actor member".into()))?;
+    let (fidx, fty) = *ctx
+        .fields
+        .get(name)
+        .ok_or_else(|| CompileError::Unsupported(format!("this actor has no field `{name}`")))?;
+    Ok((fidx, fty, ctx.self_slot))
+}
+
+/// Zero-extend an on-stack value to the i64 actor-boundary ABI. `Int`/actor-ref are already i64;
+/// the i32-backed logical types (unused in the Int-only subset but kept general) zero-extend.
+fn emit_extend_to_i64(cx: &mut Cx, t: Ty) -> Result<(), CompileError> {
+    match t {
+        Ty::I64 | Ty::ActorRef(_) => Ok(()),
+        Ty::F64 => Err(CompileError::Unsupported("a Float value crossing an actor boundary".into())),
+        Ty::Unit => Err(CompileError::Unsupported("a Unit value crossing an actor boundary".into())),
+        _ => {
+            cx.emit(Instruction::I64ExtendI32U);
+            Ok(())
+        }
+    }
+}
+
+/// Narrow an i64 actor-boundary value back to its logical wasm type after a `field_get` (no-op for
+/// `Int`/actor-ref; i32-backed logical types wrap).
+fn emit_wrap_from_i64(cx: &mut Cx, t: Ty) {
+    match t {
+        Ty::I64 | Ty::ActorRef(_) | Ty::F64 | Ty::Unit => {}
+        _ => cx.emit(Instruction::I32WrapI64),
+    }
+}
+
+/// Bump-allocate an `argc * 8` i64 argument vector in guest memory, storing each arg (extended to
+/// the i64 boundary ABI). Returns the local holding the buffer base (0 when there are no args —
+/// the host reads nothing). Used by `spawn` and behaviour sends.
+fn emit_args_buffer(cx: &mut Cx, args: &[Expr]) -> Result<u32, CompileError> {
+    let base = cx.alloc_local(Ty::I32)?;
+    if args.is_empty() {
+        cx.emit(Instruction::I32Const(0));
+        cx.emit(Instruction::LocalSet(base));
+        return Ok(base);
+    }
+    cx.emit(Instruction::GlobalGet(HEAP_GLOBAL));
+    cx.emit(Instruction::LocalTee(base));
+    cx.emit(Instruction::I32Const(args.len() as i32 * 8));
+    cx.emit(Instruction::I32Add);
+    cx.emit(Instruction::GlobalSet(HEAP_GLOBAL));
+    for (i, arg) in args.iter().enumerate() {
+        cx.emit(Instruction::LocalGet(base));
+        cx.emit(Instruction::I32Const(i as i32 * 8));
+        cx.emit(Instruction::I32Add);
+        let t = compile_expr(arg, cx)?;
+        emit_extend_to_i64(cx, t)?;
+        cx.emit(Instruction::I64Store(i64_at()));
+    }
+    Ok(base)
+}
+
+/// `spawn A(args)` (Stage 7 phase 7h, T-Spawn): lower to the `actor_spawn` import carrying the
+/// ctor args, yielding the new slot id typed `tag A` (`Ty::ActorRef`).
+fn compile_spawn(actor: &Path, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    let name = actor.segs.last().expect("spawn path has segments").name.clone();
+    let aidx = *cx
+        .actors
+        .by_name
+        .get(&name)
+        .ok_or_else(|| CompileError::Unsupported(format!("spawn of `{name}` (no such compilable actor)")))?;
+    let arity = cx.actors.actors[aidx as usize].ctor_arity;
+    if args.len() != arity {
+        return Err(CompileError::Unsupported(format!("spawn {name}() with {} args (its `new` expects {arity})", args.len())));
+    }
+    if cx.actor_imp.spawn == u32::MAX {
+        return Err(CompileError::Unsupported("spawn without the actor host interface".into()));
+    }
+    let base = emit_args_buffer(cx, args)?;
+    cx.emit(Instruction::I32Const(aidx as i32)); // actor_idx
+    cx.emit(Instruction::LocalGet(base)); // args_ptr
+    cx.emit(Instruction::I32Const(args.len() as i32)); // argc
+    cx.emit(Instruction::Call(cx.actor_imp.spawn));
+    Ok(Ty::ActorRef(aidx))
+}
+
+/// A behaviour send `recv.beh(args)` (Stage 7 phase 7h, T-Send). The receiver slot (i64) is
+/// already on the wasm stack; stash it, build the args vector, then call `actor_send`. Self-sends
+/// (`self.beh(…)`) reach here too — `self` compiled to the self-slot with type `ActorRef(self)`.
+fn compile_send(actor_idx: u32, method: &str, args: &[Expr], cx: &mut Cx) -> Result<Ty, CompileError> {
+    let beh_idx = cx.actors.behavior_index(actor_idx, method).ok_or_else(|| {
+        CompileError::Unsupported(format!("actor `{}` has no behaviour `{method}`", cx.actors.actors[actor_idx as usize].name))
+    })?;
+    let arity = cx.actors.actors[actor_idx as usize].behaviors[beh_idx as usize].arity;
+    if args.len() != arity {
+        return Err(CompileError::Unsupported(format!("send `{method}` with {} args (the behaviour expects {arity})", args.len())));
+    }
+    if cx.actor_imp.send == u32::MAX {
+        return Err(CompileError::Unsupported("a behaviour send without the actor host interface".into()));
+    }
+    let slot_local = cx.alloc_local(Ty::I64)?;
+    cx.emit(Instruction::LocalSet(slot_local)); // stash the receiver slot
+    let base = emit_args_buffer(cx, args)?;
+    cx.emit(Instruction::LocalGet(slot_local)); // slot: i64
+    cx.emit(Instruction::I32Const(beh_idx as i32)); // behavior_idx: i32
+    cx.emit(Instruction::LocalGet(base)); // args_ptr: i32
+    cx.emit(Instruction::I32Const(args.len() as i32)); // argc: i32
+    cx.emit(Instruction::Call(cx.actor_imp.send));
+    Ok(Ty::Unit)
 }
 
 fn i64_at() -> MemArg {
@@ -1455,9 +1862,36 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
                     cx.emit(Instruction::LocalGet(idx));
                     return Ok(ty);
                 }
+                // Stage 7 phase 7h: `self` in an actor member is the actor's own slot id (`tag`).
+                if path.segs[0].name == "self" {
+                    if let Some((slot, aidx)) = cx.actor.as_ref().map(|c| (c.self_slot, c.actor_idx)) {
+                        cx.emit(Instruction::LocalGet(slot));
+                        return Ok(Ty::ActorRef(aidx));
+                    }
+                }
             }
             Err(CompileError::Unsupported(format!("the name `{}` (not a local)", path.dotted())))
         }
+        // Stage 7 phase 7h: `self.field` reads the actor's own field host-side. Only self-field
+        // reads are in-subset (an actor cannot reach another actor's fields — checker-denied).
+        Expr::Field { recv, name, .. } => {
+            if let Expr::Var { path, .. } = &**recv {
+                if path.segs.len() == 1 && path.segs[0].name == "self" {
+                    let (fidx, fty, self_slot) = self_field(cx, &name.name)?;
+                    if cx.actor_imp.field_get == u32::MAX {
+                        return Err(CompileError::Unsupported("a self-field read without the actor host interface".into()));
+                    }
+                    cx.emit(Instruction::LocalGet(self_slot));
+                    cx.emit(Instruction::I32Const(fidx as i32));
+                    cx.emit(Instruction::Call(cx.actor_imp.field_get));
+                    emit_wrap_from_i64(cx, fty);
+                    return Ok(fty);
+                }
+            }
+            Err(CompileError::Unsupported("a field access other than `self.field`".into()))
+        }
+        // Stage 7 phase 7h, T-Spawn.
+        Expr::Spawn { actor, args, .. } => compile_spawn(actor, args, cx),
         Expr::Unary { op, operand, .. } => {
             let ty = compile_expr(operand, cx)?;
             match op {
@@ -1649,6 +2083,11 @@ fn compile_expr(e: &Expr, cx: &mut Cx) -> Result<Ty, CompileError> {
             let recv_ty = compile_expr(recv, cx)?;
             if let Ty::Foreign(lib_id) = recv_ty {
                 return compile_foreign_call(lib_id, &name.name, args, *span, cx);
+            }
+            // Stage 7 phase 7h, T-Send: a method on an actor reference is a behaviour send (the
+            // receiver slot is already on the stack). Self-sends reach here too (recv = `self`).
+            if let Ty::ActorRef(aidx) = recv_ty {
+                return compile_send(aidx, &name.name, args, cx);
             }
             Err(CompileError::Unsupported(format!("the method `.{}`", name.name)))
         }
