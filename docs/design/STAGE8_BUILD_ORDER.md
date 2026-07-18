@@ -88,6 +88,17 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
 4. *(open — rule at 8h)* Registry index transport for v0.8: the format is normative HTTP,
    but hosted ops are Stage 9 — the v0.8 client is expected to run against LOCAL index
    fixtures (dir/file), with the HTTP shape frozen. No network dependency without a ruling.
+5. **RULED — assertion failure = DL1707.** Spec §2 says assertion failure is "panic with a
+   structured payload" but §10's table names only tooling codes. A panic needs a code; the
+   Stage-1 DL09xx runtime family is frozen bookkeeping, so the Stage-8 construct faults
+   under a Stage-8 code: DL1707 registered with an explain body. `assert_eq`'s message is
+   symmetric (`` `a` != `b` `` — no expected/actual guess at the value level); the 8g
+   runner's JSON maps the pair into the spec's `{expected, actual}` payload.
+6. **RULED — tests in plugin artifacts: strip at build, refuse at load.** `dir::serialize`
+   strips test items and re-derives the stored truth from the stripped module (verify
+   replays the check on exactly what the artifact carries); `validate_item` refuses a DIR
+   that still carries a `Test` item (hand-crafted/hostile), mirroring the Actor precedent —
+   never silently dropped at load.
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 

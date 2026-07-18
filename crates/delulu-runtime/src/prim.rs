@@ -361,6 +361,24 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
                 Err(Fault::at("DL0907", "push expects (List, value)", span))
             }
         }
+        // Stage 8 (phase 8a, spec §2): assertion failure is a PANIC — the fault message
+        // carries the compared values, the span carries file/line (the 8g runner lifts both
+        // into the structured JSON failure payload). Only non-opaque values reach here: the
+        // checker refuses `assert_eq` on opaque types (DL0605, R-5) before anything runs.
+        "assert" => match args.first() {
+            Some(Value::Bool(true)) => Ok(Value::Unit),
+            Some(Value::Bool(false)) => Err(Fault::at("DL1707", "assertion failed", span)),
+            _ => Err(Fault::at("DL0907", "assert expects a Bool condition", span)),
+        },
+        "assert_eq" => match (args.first(), args.get(1)) {
+            (Some(a), Some(b)) if a.eq(b) => Ok(Value::Unit),
+            (Some(a), Some(b)) => Err(Fault::at(
+                "DL1707",
+                format!("assertion failed: `{}` != `{}`", a.display(), b.display()),
+                span,
+            )),
+            _ => Err(Fault::at("DL0907", "assert_eq expects two values", span)),
+        },
         _ => return None,
     })
 }

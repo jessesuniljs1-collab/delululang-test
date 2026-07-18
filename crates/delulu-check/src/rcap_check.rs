@@ -76,6 +76,9 @@ pub fn check_rcaps(
         match item {
             Item::Fn(f) => pass.check_fn(f),
             Item::Actor(a) => pass.check_actor(a),
+            // Stage 8 (phase 8a): test bodies walk under the SAME rcap rules — consume flow
+            // and the recover/capture boundaries do not relax inside a `test` block.
+            Item::Test(t) => pass.check_test(t),
             _ => {}
         }
     }
@@ -278,6 +281,19 @@ impl<'a> Pass<'a> {
                 _ => None,
             });
         self.walk_block_with_tail(&f.body, ret_dest, f.ret.is_some());
+        self.pop_scope();
+    }
+
+    /// A `test` body (Stage 8, phase 8a) is an ordinary body under this pass: `test_root`
+    /// binds at `Root`'s default rcap and the block walks with a `Unit` tail.
+    fn check_test(&mut self, t: &TestDecl) {
+        self.scopes.clear();
+        self.push_scope();
+        let root = Type::Root;
+        let rcap = self.default_of(&root);
+        self.bind("test_root", Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None });
+        let ret_dest = self.default_of(&Type::Unit);
+        self.walk_block_with_tail(&t.body, ret_dest, false);
         self.pop_scope();
     }
 

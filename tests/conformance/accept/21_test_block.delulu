@@ -1,0 +1,21 @@
+module accept21
+
+// Stage 8 (phase 8a): a `test` block co-located with production code — checked like a
+// Unit-returning fn (row bounds the body; omitted row = pure), compiled out of builds.
+
+fn double(n: Int) -> Int { n * 2 }
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(str(double(21)))
+}
+
+test "double doubles" {
+  assert_eq(double(21), 42)
+  assert(double(0) == 0)
+}
+
+test "the console writes under a declared row" ! {Write} {
+  let out = test_root.console()
+  out.println("only the 8g runner will ever print this")
+}

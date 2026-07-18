@@ -341,6 +341,12 @@ impl Parser {
         if self.at_kw_ident("foreign") {
             return Some(Item::Foreign(self.parse_foreign_decl(public)));
         }
+        // `test` is a keyword only in item position (Stage 8, spec §2): still lexed as an
+        // identifier — `let test = 1` and `fn test()` stay legal — but a bare `test` here can
+        // only start a test block (no other item begins with an identifier).
+        if self.at_kw_ident("test") {
+            return Some(Item::Test(self.parse_test_decl(public)));
+        }
         match self.peek() {
             TokenKind::KwFn => Some(Item::Fn(self.parse_fn(public))),
             TokenKind::KwType => Some(Item::Type(self.parse_type_decl(public))),
@@ -700,6 +706,44 @@ impl Parser {
         let body = self.parse_block();
         let span = start.to(self.prev_span());
         FnDecl { public, name, generics, params, ret, row, body, id: self.node_id(), span }
+    }
+
+    /// `test_decl = "test" STRING [effect_row] block` (Stage 8, spec §2). The grammar keeps
+    /// test blocks OUTSIDE the `[pub]` group — a test is not an exported item, so `pub test`
+    /// is diagnosed and the `pub` discarded (parse recovery keeps the block itself).
+    fn parse_test_decl(&mut self, public: bool) -> TestDecl {
+        let start = self.span();
+        self.bump(); // `test` (identifier token used as a contextual keyword)
+        if public {
+            self.error(
+                "DL0208",
+                "`test` blocks cannot be `pub`",
+                start,
+                "tests are not exported items — remove `pub`",
+            );
+        }
+        let (name, name_span) = match self.peek().clone() {
+            TokenKind::Str(s) => {
+                let sp = self.span();
+                self.bump();
+                self.panicking = false;
+                (s, sp)
+            }
+            other => {
+                let sp = self.span();
+                self.error(
+                    "DL0201",
+                    format!("expected a test name string after `test`, found {}", other.describe()),
+                    sp,
+                    "expected a string like `\"adds correctly\"`",
+                );
+                (String::new(), sp)
+            }
+        };
+        let row = self.parse_opt_row();
+        let body = self.parse_block();
+        let span = start.to(self.prev_span());
+        TestDecl { name, name_span, row, body, id: self.node_id(), span }
     }
 
     fn parse_const(&mut self, public: bool) -> ConstDecl {
@@ -1815,5 +1859,53 @@ mod tests {
     fn rcaps_stay_reserved_as_declared_names() {
         let (_, d) = parse_src("module m\nfn iso() { }\n");
         assert!(d.iter().any(|x| x.code == "DL0106"), "{d:?}");
+    }
+
+    // ===== Stage 8, phase 8a: `test` blocks (spec §2) ==================================
+
+    #[test]
+    fn a_test_block_parses_with_name_row_and_body() {
+        let m = parse_ok("module m\ntest \"adds correctly\" ! {Write} { assert(true) }\n");
+        match &m.items[0] {
+            Item::Test(t) => {
+                assert_eq!(t.name, "adds correctly");
+                let row = t.row.as_ref().expect("row");
+                assert_eq!(row.effects[0].dotted(), "Write");
+                assert_eq!(t.body.stmts.len(), 1);
+            }
+            _ => panic!("expected Item::Test"),
+        }
+    }
+
+    #[test]
+    fn a_rowless_test_block_parses_pure() {
+        let m = parse_ok("module m\ntest \"pure\" { assert_eq(1, 1) }\n");
+        match &m.items[0] {
+            Item::Test(t) => assert!(t.row.is_none()),
+            _ => panic!("expected Item::Test"),
+        }
+    }
+
+    #[test]
+    fn pub_test_is_refused_but_recovers() {
+        // Grammar: test_decl sits OUTSIDE the `[pub]` group — tests are not exported items.
+        let (m, d) = parse_src("module m\npub test \"t\" { assert(true) }\n");
+        assert!(d.iter().any(|x| x.code == "DL0208" && x.message.contains("cannot be `pub`")), "{d:?}");
+        assert!(matches!(&m.items[0], Item::Test(_)), "recovery keeps the block");
+    }
+
+    #[test]
+    fn a_test_without_a_name_string_is_dl0201() {
+        let (_, d) = parse_src("module m\ntest { assert(true) }\n");
+        assert!(d.iter().any(|x| x.code == "DL0201" && x.message.contains("test name")), "{d:?}");
+    }
+
+    #[test]
+    fn test_stays_an_ordinary_identifier_outside_item_position() {
+        // `test` is contextual: fine as a fn name, a binding, and a call target.
+        let m = parse_ok("module m\nfn test(n: Int) -> Int { n }\nfn f() -> Int { let test = test(1)\ntest }\n");
+        assert_eq!(m.items.len(), 2);
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        assert_eq!(f.name.name, "test");
     }
 }

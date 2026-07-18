@@ -169,9 +169,12 @@ registry! {
     "DL1608" => "identifier collides with a v0.7 keyword (`consume`/`recover`)",
     "DL1610" => "debug race-checker violation (compiler-bug class — file a bug)",
 
-    // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
-    // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule
-    // mirroring DL1404).
+    // DL17xx — Surface (Stage 8). Spec §10 defines DL1701–DL1706 (tooling); DL1707 is the
+    // assertion-failure panic (build-order deviation 5 — a Stage-8 construct faults under a
+    // Stage-8 code; the Stage-1 09xx family stays frozen). The Atlas (DL1780/DL1781) and the
+    // Palette (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated
+    // (house rule mirroring DL1404).
+    "DL1707" => "assertion failed (a `test` assertion did not hold at runtime)",
     "DL1780" => "atlas refused: the program has check errors — fix them first (no partial graph)",
     "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
     "DL1790" => "invalid theme name or malformed theme.toml — using the `default` theme",
@@ -606,6 +609,12 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1707" => "An `assert` or `assert_eq` did not hold at runtime. This is a PANIC, like \
+             integer overflow: the program (or, under `delulu test`, the failing test) stops at \
+             the assertion's span, and `assert_eq` reports both compared values in the message. \
+             Assertions are pure prelude builtins — they add no effects to a row — and \
+             `assert_eq` on an opaque type (Secret/Cap/Root…) is refused at check time (DL0605, \
+             rule R-5): comparing secrets in tests is refused like everywhere else.",
         "DL1790" => "The requested color theme could not be used: either the theme NAME (from \
              `--theme`, `DELULU_THEME`, or `~/.delulu/theme.toml`) is not a built-in \
              (`default`/`bright`/`mono`), or the `theme.toml` file was malformed, or a `[roles]` \
@@ -772,6 +781,18 @@ mod tests {
         assert!(body.contains("worker-owned") && body.contains("zero unsafe"), "deviation 3");
         assert!(body.contains("MOVES by rebuild"), "deviation 7");
         assert!(body.contains("never the guarantee"), "trap 3: the debug checker's honest framing");
+    }
+
+    /// Stage 8 (phase 8a): DL1707 — assertion failure — is a registered runtime-panic code
+    /// whose explain body carries the check-time cross-reference (DL0605/R-5: opaque values
+    /// never reach a runtime comparison), and the never-DL1784 house rule still holds.
+    #[test]
+    fn assertion_failure_code_dl1707() {
+        assert!(is_registered("DL1707"), "DL1707 (assertion failed) must be registered");
+        let body = code_explain("DL1707").expect("DL1707 has an explain body");
+        assert!(body.contains("DL0605"), "explain links the check-time opacity refusal");
+        assert!(body.contains("assert_eq"), "explain names both assertion forms");
+        assert!(!is_registered("DL1784"), "DL1784 is deliberately never allocated (house rule)");
     }
 
     /// Surface addendum §3.2: the Palette code DL1790 is registered, the `E-PALETTE` topic exists

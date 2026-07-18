@@ -167,6 +167,17 @@ impl Dir {
 
 /// Serialize a checked module to canonical DIR bytes (Phase 6a).
 pub fn serialize(module: &Module, result: &CheckResult) -> Vec<u8> {
+    // Tests are compiled out of every artifact (Stage 8, invariant 41). Strip them here and
+    // re-derive the stored truth from the stripped module: `verify()` replays the check on
+    // exactly what the artifact carries, so the truth must be computed on that same code —
+    // stored node types for test bodies the replay never sees would refute an honest DIR.
+    if module.items.iter().any(|it| matches!(it, Item::Test(_))) {
+        let mut stripped = module.clone();
+        stripped.items.retain(|it| !matches!(it, Item::Test(_)));
+        let (table, _) = crate::resolve::resolve(&stripped);
+        let result = crate::check::check_module(&stripped, &table);
+        return Dir::from_checked(&stripped, &result).encode();
+    }
     Dir::from_checked(module, result).encode()
 }
 
@@ -326,6 +337,13 @@ fn validate_item(item: &Item) -> Result<(), DirError> {
         Item::Actor(a) => Err(DirError::Malformed(format!(
             "plugin code declares actor `{}` — actors in plugins are not supported in v0.7",
             a.name.name
+        ))),
+        // Tests are compiled out of every artifact (Stage 8, invariant 41): `plugin build`
+        // strips them BEFORE lowering, so a DIR carrying one was not built by this compiler —
+        // refused at build AND at load (this walk runs on both sides), never silently dropped.
+        Item::Test(t) => Err(DirError::Malformed(format!(
+            "plugin artifact carries test block \"{}\" — tests are compiled out of artifacts",
+            t.name
         ))),
     }
 }
@@ -769,6 +787,43 @@ mod tests {
                 Err(e) => assert_eq!(e.code(), "DL1504", "malformed DIR must verify as DL1504"),
                 Ok(_) => panic!("malformed bytes must never verify"),
             }
+        }
+    }
+
+    // ===== Stage 8, phase 8a: tests are stripped at build, refused at load =============
+
+    #[test]
+    fn serialize_strips_test_blocks_and_the_stripped_dir_verifies() {
+        // Build-order deviation 6, build side: a plugin source with co-located tests produces
+        // an artifact with NO test items, and the re-derived truth verifies cleanly.
+        let c = check_source(
+            0,
+            "module m\npub fn double(n: Int) -> Int { n * 2 }\n\
+             test \"doubles\" {\n  assert_eq(double(21), 42)\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let bytes = serialize(&c.module, &c.result);
+        let dir = verify(&bytes).expect("a test-stripped DIR verifies");
+        assert!(
+            !dir.module.items.iter().any(|it| matches!(it, Item::Test(_))),
+            "the artifact must carry no test blocks"
+        );
+        assert!(dir.facts.contains_key("double"), "the real surface survives the strip");
+    }
+
+    #[test]
+    fn a_dir_carrying_a_test_block_is_refused_at_load() {
+        // Deviation 6, load side (the kitchen rule's couldn't-tell case): this compiler never
+        // BUILDS such a DIR, so one that carries a test is hand-crafted/hostile — decode
+        // refuses it as malformed, never silently strips it.
+        let c = check_source(0, "module m\nfn f(n: Int) -> Int { n }\ntest \"t\" { assert(true) }\n");
+        // Bypass serialize()'s strip to craft the artifact this compiler refuses to make.
+        let bytes = Dir::from_checked(&c.module, &c.result).encode();
+        match Dir::decode(&bytes) {
+            Err(DirError::Malformed(msg)) => {
+                assert!(msg.contains("test block"), "the refusal names the cause: {msg}")
+            }
+            other => panic!("a test-carrying DIR must be refused, got {other:?}"),
         }
     }
 }

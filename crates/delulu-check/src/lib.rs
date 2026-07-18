@@ -1203,4 +1203,104 @@ mod tests {
         ));
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
+
+    // ===== Stage 8, phase 8a: `test` blocks + assert/assert_eq (spec §2, invariant 41) =====
+
+    #[test]
+    fn a_test_block_type_checks_with_test_root_and_asserts() {
+        let c = check(
+            "module m\nfn double(n: Int) -> Int { n * 2 }\n\
+             test \"double doubles\" {\n  assert_eq(double(21), 42)\n  assert(double(0) == 0)\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_test_row_bounds_its_body_like_a_fn_row() {
+        // Undeclared Write inside a test — DL0501 with the same widening repair as a fn,
+        // and the message names the TEST honestly, not a phantom "function".
+        let c = check(
+            "module m\ntest \"writes\" {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n",
+        );
+        let d = c.diagnostics.iter().find(|d| d.code == "DL0501").expect("DL0501 expected");
+        assert!(d.message.contains("test \"writes\""), "honest wording: {}", d.message);
+        assert!(
+            d.repairs.iter().any(|r| r.id == "add_effect_to_row" && r.authority_widening),
+            "the agent-facing repair must be present"
+        );
+        // With the row declared, the same body checks clean.
+        let ok = check(
+            "module m\ntest \"writes\" ! {Write} {\n  let out = test_root.console()\n  out.println(\"hi\")\n}\n",
+        );
+        assert!(!ok.has_errors(), "{:?}", ok.diagnostics);
+    }
+
+    #[test]
+    fn a_test_declaring_an_unperformed_effect_warns_dl0502() {
+        let c = check("module m\ntest \"lazy\" ! {Write} {\n  assert(true)\n}\n");
+        assert!(
+            c.diagnostics.iter().any(|d| d.code == "DL0502" && d.message.contains("test \"lazy\"")),
+            "{:?}",
+            c.diagnostics
+        );
+    }
+
+    #[test]
+    fn assert_eq_on_a_secret_is_dl0605_r5_holds_in_tests() {
+        // "Comparing secrets in tests is refused like everywhere else" (spec §2).
+        let e = errors(
+            "module m\nfn f(a: Secret[Str], b: Secret[Str]) { assert_eq(a, b) }\n",
+        );
+        assert!(e.contains(&"DL0605".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn assert_takes_exactly_one_bool() {
+        let e = errors("module m\nfn f() { assert(1) }\n");
+        assert!(!e.is_empty(), "assert(Int) must be a type error");
+        let e2 = errors("module m\nfn f() { assert(true, false) }\n");
+        assert!(e2.contains(&"DL0401".to_string()), "{e2:?}");
+    }
+
+    #[test]
+    fn asserts_are_pure_a_rowless_test_stays_pure() {
+        // Assertions add no effects: a test with no row and only asserts checks clean (pure).
+        let c = check("module m\ntest \"pure\" {\n  assert_eq(1 + 1, 2)\n}\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_broken_test_body_still_surfaces_at_check() {
+        // THE KITCHEN RULE'S skip branch: "compiled out of builds" must never become
+        // "diagnosed never" — a type error inside a test block is a check error.
+        let c = check("module m\ntest \"broken\" {\n  let x: Int = \"not an int\"\n  assert(x == 0)\n}\n");
+        assert!(c.has_errors(), "a broken test body must fail `delulu check`");
+    }
+
+    #[test]
+    fn a_test_body_must_produce_unit() {
+        let c = check("module m\ntest \"leaks a value\" {\n  41 + 1\n}\n");
+        assert!(c.has_errors(), "a non-Unit tail in a test body must be refused");
+    }
+
+    #[test]
+    fn tests_leave_no_trace_in_authority_facts_invariant_38() {
+        // The SAME module with and without a test block yields identical facts — tests are
+        // compiled out, so authority reports cannot change (invariants 38 + 41).
+        let with = check(
+            "module m\nfn double(n: Int) -> Int { n * 2 }\n\
+             test \"t\" ! {Write} {\n  let out = test_root.console()\n  out.println(str(double(2)))\n}\n",
+        );
+        let without = check("module m\nfn double(n: Int) -> Int { n * 2 }\n");
+        assert!(!with.has_errors(), "{:?}", with.diagnostics);
+        let mut a: Vec<_> = with.result.facts.keys().collect();
+        let mut b: Vec<_> = without.result.facts.keys().collect();
+        a.sort();
+        b.sort();
+        assert_eq!(a, b, "a test block must not add authority facts");
+        assert_eq!(
+            with.result.facts["double"].effects, without.result.facts["double"].effects,
+            "existing facts must be untouched"
+        );
+    }
 }

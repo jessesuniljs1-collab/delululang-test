@@ -302,3 +302,20 @@ Prelude: `assert`, `assert_eq` (§2). Nothing else.
 
 *Stage 8 gives the language its face — terminal-first, every editor, two voices, one law. Stage 9
 freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
+
+---
+
+## 12. Implementation status (log)
+
+- **Prior art:** the Atlas + the Palette (Surface material) were early-dropped and BUILT
+  2026-07-15 under `SURFACE_ATLAS_PALETTE_ADDENDUM.md` (its own close-out; build-order
+  deviation 1).
+- **8a — `test` blocks + assert/assert_eq (2026-07-18).** Contextual `test` in item position
+  (`fn test`/`let test` stay legal; `pub test` refused with recovery); `Item::Test(TestDecl)`;
+  bodies typed as Unit-returning fns with `test_root: Root` bound, declared row bounding the
+  body (DL0501 with the same widening repair, honest `test "name"` wording; DL0502 likewise);
+  rcap pass walks test bodies unrelaxed; facts stay OUT of authority tables (invariants 38/41);
+  `assert`/`assert_eq` pure prelude builtins in BOTH primitive tables, `assert_eq` on opaque
+  types refused (DL0605/R-5); runtime failure = DL1707 panic carrying both values
+  (build-order deviation 5); tests compiled out of runs, stripped from DIR at build and
+  REFUSED in a DIR at load (deviation 6). Corpus: accept/21, reject/DL0501_test_undeclared_write.

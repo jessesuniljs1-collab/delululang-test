@@ -292,6 +292,51 @@ mod tests {
         assert_eq!(printed.unwrap_or_default(), "", "the denied effect was never performed");
     }
 
+    // ===== Stage 8, phase 8a: `test` blocks are compiled out; asserts panic DL1707 =====
+
+    /// Invariant 41's runtime half: a `test` block NEVER executes under `delulu run` — its
+    /// body's side effects are absent from the program's output (tests are compiled out).
+    #[test]
+    fn test_blocks_are_compiled_out_of_a_run() {
+        let src = "module m\nfn main(root: Root) ! {Write} { let c = root.console()\n c.println(\"main ran\") }\n\
+                   test \"side effect\" ! {Write} { let c = test_root.console()\n c.println(\"test ran\") }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let g = Grants { console: true, ..Grants::default() };
+        set_capture(true);
+        let interp = Interp::new(&checked.module);
+        let out = interp.run_main(Value::Root(Rc::new(g.build_root())));
+        let printed = take_capture();
+        assert!(out.is_ok(), "{:?}", out.err());
+        assert_eq!(printed.as_deref(), Some("main ran\n"), "the test body must never run");
+    }
+
+    #[test]
+    fn assert_failure_is_a_dl1707_panic() {
+        let src = "module m\nfn f() { assert(1 == 2) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let interp = Interp::new(&checked.module);
+        let fault = interp.call_with("f", vec![]).expect_err("assert(false) must fault");
+        assert_eq!(fault.code, "DL1707");
+    }
+
+    #[test]
+    fn assert_eq_failure_reports_both_values() {
+        let src = "module m\nfn f() { assert_eq(2 + 2, 5) }\nfn g() { assert_eq(21 * 2, 42) }\n";
+        let checked = check_source(0, src);
+        assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
+        let interp = Interp::new(&checked.module);
+        let fault = interp.call_with("f", vec![]).expect_err("4 != 5 must fault");
+        assert_eq!(fault.code, "DL1707");
+        assert!(
+            fault.message.contains('4') && fault.message.contains('5'),
+            "both compared values travel in the panic: {}",
+            fault.message
+        );
+        assert!(interp.call_with("g", vec![]).is_ok(), "equal values pass");
+    }
+
     #[test]
     fn assert_trace_is_empty_for_row_conformant_run() {
         // The trace ⊆ row law (spec §6.2 / invariant 12), executable: the checker's own

@@ -90,6 +90,19 @@ struct Genv {
     rows: HashMap<String, RowVar>,
 }
 
+/// What a row boundary belongs to — `function `f`` or `test "name"` (Stage 8, phase 8a).
+/// Carries exactly what DL0501/DL0502 and the `add_effect_to_row` repair need, so fns and
+/// tests share one boundary check without synthesizing a fake `FnDecl`.
+struct RowSubject<'a> {
+    /// Leads the message: `function `f`` keeps every pre-Stage-8 diagnostic byte-identical.
+    desc: String,
+    /// Where "declared row is here" points (fn name / test name string).
+    head_span: Span,
+    row: Option<&'a RowExpr>,
+    /// Insertion point for a fresh `! {…}` row when none was written.
+    body_start: u32,
+}
+
 pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     let mut checker = Checker {
         table,
@@ -107,6 +120,10 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
             Item::Fn(f) => checker.check_fn(f),
             // Stage 7 (phase 7e): T-Actor — fields, exactly one `new`, behaviors, sync fns.
             Item::Actor(a) => checker.check_actor(a),
+            // Stage 8 (phase 8a): T-Test — typed like a Unit-returning fn, compiled out of
+            // builds. Checked HERE so a broken test surfaces at `delulu check` — "compiled
+            // out" must never mean "diagnosed never" (the kitchen rule's skip branch).
+            Item::Test(t) => checker.check_test(t),
             _ => {}
         }
     }
@@ -346,7 +363,13 @@ impl<'a> Checker<'a> {
         self.expect_type(&ret, &body_ty, f.body.span, "function body type must match the return type");
 
         // Boundary check: ε_body ⊆ ε_declared (T-Fn), and unused declared effects (DL0502).
-        self.check_row_subset(&body_row, &declared_row, f, &sig);
+        let subj = RowSubject {
+            desc: format!("function `{}`", f.name.name),
+            head_span: f.name.span,
+            row: f.row.as_ref(),
+            body_start: f.body.span.start,
+        };
+        self.check_row_subset(&body_row, &declared_row, &subj);
 
         // Finalize facts: the function's authority is its declared row (sound upper bound).
         let mut facts = std::mem::take(&mut ctx.facts);
@@ -625,9 +648,44 @@ impl<'a> Checker<'a> {
         genv
     }
 
+    /// T-Test (Stage 8, phase 8a): a `test` body types like a `Unit`-returning fn with
+    /// `test_root: Root` bound; the declared row (omitted = pure) bounds the body — the same
+    /// DL0501 boundary and `add_effect_to_row` repair as everywhere else. Facts are
+    /// deliberately NOT recorded: tests are compiled out of builds (invariant 41), so they
+    /// must never appear in authority reports (invariant 38 keeps prior output byte-stable).
+    fn check_test(&mut self, t: &TestDecl) {
+        let genv = Genv::default();
+        let declared_row = match &t.row {
+            Some(r) => self.lower_row(r, &genv),
+            None => Row::pure(),
+        };
+        let mut ctx = FnCtx {
+            name: format!("test \"{}\"", t.name),
+            genv,
+            ret: Type::Unit,
+            ret_err: None,
+            locals: vec![HashMap::new()],
+            facts: FnFacts::default(),
+        };
+        // The runner (8g) scopes this Root by the test manifest; the TYPE is just Root.
+        self.note_caps_in(&Type::Root, &mut ctx.facts);
+        ctx.bind("test_root", Type::Root);
+
+        let (body_ty, body_row) = self.check_block(&t.body, &mut ctx);
+        self.expect_type(&Type::Unit, &body_ty, t.body.span, "a test body must produce `Unit`");
+
+        let subj = RowSubject {
+            desc: format!("test \"{}\"", t.name),
+            head_span: t.name_span,
+            row: t.row.as_ref(),
+            body_start: t.body.span.start,
+        };
+        self.check_row_subset(&body_row, &declared_row, &subj);
+    }
+
     /// The subset check at the function boundary (T-Fn). Emits DL0501 (undeclared effect,
     /// with an authority-widening repair) and DL0502 (declared-but-unused, narrowing repair).
-    fn check_row_subset(&mut self, body: &RowAcc, declared: &Row, f: &FnDecl, _sig: &FnSig) {
+    fn check_row_subset(&mut self, body: &RowAcc, declared: &Row, subj: &RowSubject) {
         // Resolve body tails through the substitution; a tail equal to the declared row's tail
         // is covered, anything else contributes possibly-unknown effects.
         let declared_resolved = self.cx.apply_row(declared);
@@ -648,19 +706,19 @@ impl<'a> Checker<'a> {
         if !missing.is_empty() || uncovered_tail {
             let list = missing.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
             let msg = if missing.is_empty() {
-                format!("function `{}` may perform an effect not declared in its row", f.name.name)
+                format!("{} may perform an effect not declared in its row", subj.desc)
             } else {
                 format!(
-                    "function `{}` performs effect{} `{}` not declared in its row",
-                    f.name.name,
+                    "{} performs effect{} `{}` not declared in its row",
+                    subj.desc,
                     if missing.len() == 1 { "" } else { "s" },
                     list
                 )
             };
             let mut diag = Diagnostic::error("DL0501", msg)
-                .with_span(f.name.span, "declared row is here");
+                .with_span(subj.head_span, "declared row is here");
             if !missing.is_empty() {
-                diag = diag.with_repair(self.add_effect_repair(f, &declared_resolved, &missing));
+                diag = diag.with_repair(self.add_effect_repair(subj, &declared_resolved, &missing));
             }
             self.diags.push(diag);
         }
@@ -668,15 +726,15 @@ impl<'a> Checker<'a> {
         // DL0502: a declared concrete effect the body never performs (narrowing → safe).
         let unused: Vec<Effect> =
             declared_resolved.effects.difference(&body_effects).cloned().collect();
-        if !unused.is_empty() && f.row.is_some() {
+        if let Some(row) = subj.row.filter(|_| !unused.is_empty()) {
             let list = unused.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
             self.diags.push(
                 Diagnostic::warning(
                     "DL0502",
-                    format!("function `{}` declares effect{} `{}` it never performs", f.name.name,
+                    format!("{} declares effect{} `{}` it never performs", subj.desc,
                         if unused.len() == 1 { "" } else { "s" }, list),
                 )
-                .with_span(f.row.as_ref().unwrap().span, "declared here")
+                .with_span(row.span, "declared here")
                 .with_repair(Repair {
                     id: "remove_effect_from_row",
                     confidence: Confidence::Safe,
@@ -688,10 +746,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn add_effect_repair(&self, f: &FnDecl, declared: &Row, missing: &[Effect]) -> Repair {
+    fn add_effect_repair(&self, subj: &RowSubject, declared: &Row, missing: &[Effect]) -> Repair {
         let add = missing.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
         // Insert into an existing `!{...}` or add a fresh row after the signature.
-        let (start, end, text) = match &f.row {
+        let (start, end, text) = match subj.row {
             Some(r) => {
                 // Insert before the closing brace of the row span.
                 let insert_at = r.span.end.saturating_sub(1);
@@ -699,7 +757,7 @@ impl<'a> Checker<'a> {
                 (insert_at, insert_at, format!("{sep}{add}"))
             }
             None => {
-                let at = f.body.span.start;
+                let at = subj.body_start;
                 (at, at, format!("! {{{add}}} "))
             }
         };
@@ -708,7 +766,7 @@ impl<'a> Checker<'a> {
             confidence: Confidence::Exact,
             authority_widening: true,
             requires_human: false,
-            edits: vec![Edit { file: f.name.span.file, start_byte: start, end_byte: end, insert: text }],
+            edits: vec![Edit { file: subj.head_span.file, start_byte: start, end_byte: end, insert: text }],
         }
     }
 
@@ -1087,6 +1145,45 @@ impl<'a> Checker<'a> {
                 let class = self.cx.fresh_type();
                 let err = Type::Sum(self.table.type_ix["PluginErr"], vec![]);
                 Some((Type::result(Type::Plugin(Box::new(class)), err), acc))
+            }
+            // Stage 8 (phase 8a, spec §2/§8): the two test assertions — prelude builtins,
+            // PURE (they add no effects; a pure test stays pure through its asserts).
+            "assert" => {
+                let ts = check_args(self, ctx, &mut acc);
+                if ts.len() != 1 {
+                    self.diags.push(
+                        Diagnostic::error("DL0401", "assert takes exactly one Bool condition")
+                            .with_span(span, "assert(condition)"),
+                    );
+                } else if let Some(t) = ts.first() {
+                    self.expect_type(&Type::Bool, t, span, "assert takes a Bool condition");
+                }
+                Some((Type::Unit, acc))
+            }
+            "assert_eq" => {
+                let ts = check_args(self, ctx, &mut acc);
+                if ts.len() != 2 {
+                    self.diags.push(
+                        Diagnostic::error("DL0401", "assert_eq takes exactly two values of one type")
+                            .with_span(span, "assert_eq(left, right)"),
+                    );
+                } else if let (Some(a), Some(b)) = (ts.first(), ts.get(1)) {
+                    self.expect_type(a, b, span, "assert_eq compares two values of one type");
+                    // R-5: opaque types have no structural equality — comparing secrets in
+                    // tests is refused exactly like `==` refuses it everywhere else.
+                    if self.is_opaque(a, &mut HashSet::new())
+                        || self.is_opaque(b, &mut HashSet::new())
+                    {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0605",
+                                "opaque types (Secret/Cap/Root) have no structural equality",
+                            )
+                            .with_span(span, "use `Secret.verify` for secrets"),
+                        );
+                    }
+                }
+                Some((Type::Unit, acc))
             }
             "str" => {
                 let ts = check_args(self, ctx, &mut acc);

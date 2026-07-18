@@ -57,6 +57,23 @@ pub enum Item {
     Foreign(ForeignDecl),
     /// An `actor A { … }` declaration (Stage 7, spec §2).
     Actor(ActorDecl),
+    /// A `test "name" [! {row}] { … }` block (Stage 8, spec §2) — checked like a
+    /// Unit-returning fn, compiled out of non-test builds (invariant 41's carrier).
+    Test(TestDecl),
+}
+
+/// `test STRING [effect_row] block` — `test` is a keyword only in item position (contextual).
+/// The body receives `test_root: Root` scoped by the test manifest (§5.1; the runner is 8g).
+/// Omitted row = pure. Tests are never `pub`: they are not exported items.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TestDecl {
+    pub name: String,
+    /// Span of the name string — where "declared row is here" diagnostics point.
+    pub name_span: Span,
+    pub row: Option<RowExpr>,
+    pub body: Block,
+    pub id: NodeId,
+    pub span: Span,
 }
 
 /// A reference capability (Stage 7, spec §3 — Pony's system, adopted not redesigned).
