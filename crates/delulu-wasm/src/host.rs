@@ -13,6 +13,9 @@ use std::rc::Rc;
 
 use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, Val};
 
+// Stage 7 phase 7h: the WASM engine's cooperative single-threaded actor scheduler (spec §6.5).
+use crate::actors::{ActorJob, ActorReport, ActorRuntime, ActorTable};
+
 // Stage 4 phase 4g: the WASM host reuses the interpreter's C FFI machinery and its trace types, so
 // verify≡run stays one code path (spec §4.3 — all of §4.1–4.2 runs host-side).
 use delulu_runtime::foreign::{self, FVal, ForeignErr, ForeignHandle, ForeignSig};
@@ -143,6 +146,9 @@ struct HostState {
     /// the enforcement, zero behavior change — criterion 11); `Some` routes every gated op through
     /// the custody seam (daemon mode: broker round-trips / epoch snapshot).
     custody: Option<CustodyHandle>,
+    /// Stage 7 phase 7h: the cooperative actor scheduler's host-side state (per-actor field slots,
+    /// the FIFO job queue, quiescence counters). Empty for a program with no actors.
+    actor_rt: ActorRuntime,
 }
 
 impl HostState {
@@ -777,7 +783,128 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
         })
         .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+
+    // ----- Stage 7 phase 7h: the `delulu:actors` host interface (cooperative scheduler) ---------
+    // `spawn`, `send`, and field access all cross as i64 (Int and actor-ref slot ids are i64).
+    // The callbacks only mutate `actor_rt`; the DRAIN loop (outside any wasm call) runs the turns.
+    // A bad index cannot come from our codegen, but a callback must NEVER panic (that aborts the
+    // process inside a wasm frame), so every access is bounds-checked and records a refusal instead.
+    linker
+        .func_wrap(
+            "delulu:actors",
+            "actor_spawn",
+            |mut caller: Caller<'_, HostState>, actor_idx: i32, args_ptr: i32, argc: i32| -> i64 {
+                if caller.data().refused.is_some() {
+                    return -1;
+                }
+                let nactors = caller.data().actor_rt.table.actors.len();
+                if actor_idx < 0 || actor_idx as usize >= nactors {
+                    caller.data_mut().refused = Some(format!("actor index {actor_idx} out of range"));
+                    return -1;
+                }
+                let Some(args) = read_i64_args(&mut caller, args_ptr, argc) else {
+                    caller.data_mut().refused = Some("DL0903: actor spawn args buffer is out of bounds".into());
+                    return -1;
+                };
+                caller.data_mut().actor_rt.spawn(actor_idx as u32, args) as i64
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap(
+            "delulu:actors",
+            "actor_send",
+            |mut caller: Caller<'_, HostState>, slot: i64, behavior_idx: i32, args_ptr: i32, argc: i32| {
+                if caller.data().refused.is_some() {
+                    return;
+                }
+                let slot = slot as u64;
+                let nslots = caller.data().actor_rt.slots.len() as u64;
+                if slot >= nslots || behavior_idx < 0 {
+                    caller.data_mut().refused = Some(format!("send to slot {slot} / behaviour {behavior_idx} out of range"));
+                    return;
+                }
+                let Some(args) = read_i64_args(&mut caller, args_ptr, argc) else {
+                    caller.data_mut().refused = Some("DL0903: actor send args buffer is out of bounds".into());
+                    return;
+                };
+                caller.data_mut().actor_rt.send(slot, behavior_idx as u32, args);
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap(
+            "delulu:actors",
+            "actor_field_get",
+            |mut caller: Caller<'_, HostState>, slot: i64, field_idx: i32| -> i64 {
+                if caller.data().refused.is_some() {
+                    return 0;
+                }
+                let v = {
+                    let rt = &caller.data().actor_rt;
+                    rt.slots.get(slot as usize).and_then(|s| s.fields.get(field_idx as usize)).copied()
+                };
+                match v {
+                    Some(x) => x,
+                    None => {
+                        caller.data_mut().refused = Some(format!("field_get out of range (slot {slot}, field {field_idx})"));
+                        0
+                    }
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    linker
+        .func_wrap(
+            "delulu:actors",
+            "actor_field_set",
+            |mut caller: Caller<'_, HostState>, slot: i64, field_idx: i32, value: i64| {
+                if caller.data().refused.is_some() {
+                    return;
+                }
+                let ok = {
+                    let rt = &mut caller.data_mut().actor_rt;
+                    match rt.slots.get_mut(slot as usize).and_then(|s| s.fields.get_mut(field_idx as usize)) {
+                        Some(f) => {
+                            *f = value;
+                            true
+                        }
+                        None => false,
+                    }
+                };
+                if !ok {
+                    caller.data_mut().refused = Some(format!("field_set out of range (slot {slot}, field {field_idx})"));
+                }
+            },
+        )
+        .map_err(|e| WasmError::Instantiate(e.to_string()))?;
     Ok(linker)
+}
+
+/// Read `argc` i64 arguments (8 bytes each, little-endian) from the guest args buffer at `ptr`.
+/// `None` on any out-of-bounds pointer (a compiled guest never hits this; defensive against a
+/// host panic inside a wasm callback). Stage 7 phase 7h.
+fn read_i64_args(caller: &mut Caller<'_, HostState>, ptr: i32, argc: i32) -> Option<Vec<i64>> {
+    if argc < 0 {
+        return None;
+    }
+    if argc == 0 {
+        return Some(Vec::new());
+    }
+    let n = (argc as usize).checked_mul(8)?;
+    let base = ptr as u32 as usize;
+    let mem = caller.get_export("memory").and_then(|e| e.into_memory())?;
+    let data = mem.data(&caller);
+    let end = base.checked_add(n)?;
+    if end > data.len() {
+        return None;
+    }
+    let mut out = Vec::with_capacity(argc as usize);
+    for i in 0..argc as usize {
+        let o = base + i * 8;
+        out.push(i64::from_le_bytes(data[o..o + 8].try_into().ok()?));
+    }
+    Some(out)
 }
 
 fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
@@ -813,6 +940,7 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
         trace: None,
         trace_seq: 0,
         custody: None, // embedded (Stage 1–4 behavior)
+        actor_rt: ActorRuntime::new(empty_actor_table()),
     };
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
@@ -820,6 +948,36 @@ pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<
     let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let params: Vec<Val> = cap_handles.iter().map(|&h| Val::I32(h as i32)).collect();
     finish(store, func, &params)
+}
+
+/// An empty actor table for the non-actor entry points (`run_console_fn`/`run_main`) — the actor
+/// imports are defined in the linker unconditionally, but a program without actors never calls them.
+fn empty_actor_table() -> ActorTable {
+    ActorTable { actors: Vec::new(), by_name: HashMap::new() }
+}
+
+/// Build the root `HostState` for running `main` (shared by [`run_main`] and [`run_main_actors`]).
+fn main_host_state(cfg: &HostConfig, actor_rt: ActorRuntime) -> HostState {
+    HostState {
+        caps: vec![CapKind::Root],
+        console_granted: cfg.console,
+        clock_granted: cfg.clock,
+        rand_granted: cfg.rand,
+        fs_read_roots: cfg.fs_read_roots.clone(),
+        fixed_clock_ms: cfg.fixed_clock_ms,
+        rng: seed_rng(cfg.rand_seed),
+        output: String::new(),
+        refused: None,
+        foreign_load_granted: cfg.foreign_load,
+        foreign_grants: cfg.foreign_grants.clone(),
+        foreign_sigs: cfg.foreign_sigs.clone(),
+        foreign_max_ret: cfg.foreign_max_ret,
+        foreign_ptrs: Vec::new(),
+        trace: cfg.trace.clone(),
+        trace_seq: 0,
+        custody: cfg.custody.clone(),
+        actor_rt,
+    }
 }
 
 /// Grants and determinism for running `main` under the host (the run-time authority a `--grant`/
@@ -860,30 +1018,130 @@ pub struct HostConfig {
 pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
     let engine = Engine::default();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
-    let state = HostState {
-        caps: vec![CapKind::Root],
-        console_granted: cfg.console,
-        clock_granted: cfg.clock,
-        rand_granted: cfg.rand,
-        fs_read_roots: cfg.fs_read_roots.clone(),
-        fixed_clock_ms: cfg.fixed_clock_ms,
-        rng: seed_rng(cfg.rand_seed),
-        output: String::new(),
-        refused: None,
-        foreign_load_granted: cfg.foreign_load,
-        foreign_grants: cfg.foreign_grants.clone(),
-        foreign_sigs: cfg.foreign_sigs.clone(),
-        foreign_max_ret: cfg.foreign_max_ret,
-        foreign_ptrs: Vec::new(),
-        trace: cfg.trace.clone(),
-        trace_seq: 0,
-        custody: cfg.custody.clone(),
-    };
+    let state = main_host_state(cfg, ActorRuntime::new(empty_actor_table()));
     let mut store = Store::new(&engine, state);
     let linker = build_linker(&engine)?;
     let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
     let func = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
     finish(store, func, &[Val::I32(0)]) // root handle
+}
+
+/// Run an actor `main(root: Root)` under the WASM engine's cooperative single-threaded scheduler
+/// (Stage 7 phase 7h, spec §6.5): call `main` (which `spawn`s actors and enqueues sends host-side),
+/// then drain the FIFO job queue to quiescence, running one turn at a time. Returns the console
+/// output and the quiescence [`ActorReport`] — the same accounting the native `QuiesceReport`
+/// makes, so a deterministic program's counts match on both engines (criterion 6).
+pub fn run_main_actors(
+    wasm: &[u8],
+    cfg: &HostConfig,
+    table: &ActorTable,
+) -> Result<(String, ActorReport), WasmError> {
+    let engine = Engine::default();
+    let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
+    let state = main_host_state(cfg, ActorRuntime::new(table.clone()));
+    let mut store = Store::new(&engine, state);
+    let linker = build_linker(&engine)?;
+    let instance = linker.instantiate(&mut store, &module).map_err(|e| WasmError::Instantiate(e.to_string()))?;
+    let main = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
+    // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
+    let mut results: [Val; 0] = [];
+    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
+    if let Some(reason) = store.data().refused.clone() {
+        return Err(WasmError::Trap(reason));
+    }
+    // Cooperative drain to quiescence (spec §6.1 exit condition: `main` returned AND the queue is
+    // empty AND no turn is running — trivially true single-threaded once the queue drains).
+    drain_actors(&mut store, &instance)?;
+    let data = store.into_data();
+    if let Some(reason) = data.refused {
+        return Err(WasmError::Trap(reason));
+    }
+    Ok((data.output, data.actor_rt.report()))
+}
+
+/// Drain the actor job queue one turn at a time until quiescence (Stage 7 phase 7h). A `Create`
+/// runs the ctor as the actor's first turn; a `Send` runs a behaviour (dropped+counted if the
+/// target is poisoned — spec §6.6). A wasm trap during a turn poisons that actor and the system
+/// stays live (later sends to it drop). The store stays usable after a trap, so other actors run on.
+fn drain_actors(store: &mut Store<HostState>, instance: &Instance) -> Result<(), WasmError> {
+    // Queue empty -> quiescence.
+    while let Some(job) = store.data_mut().actor_rt.queue.pop_front() {
+        match job {
+            ActorJob::Create { slot, actor_idx, args } => {
+                let export = store.data().actor_rt.table.actors[actor_idx as usize].ctor_export.clone();
+                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                store.data_mut().actor_rt.total_turns += 1;
+                if !ok {
+                    poison(store, slot);
+                }
+            }
+            ActorJob::Send { slot, behavior_idx, args } => {
+                let (dead, actor_idx) = {
+                    let s = &store.data().actor_rt.slots[slot as usize];
+                    (s.dead, s.actor_idx)
+                };
+                if dead {
+                    store.data_mut().actor_rt.dropped_sends += 1;
+                    continue;
+                }
+                let export = {
+                    let info = &store.data().actor_rt.table.actors[actor_idx as usize];
+                    match info.behaviors.get(behavior_idx as usize) {
+                        Some(b) => b.export.clone(),
+                        // An unknown behaviour index cannot come from our codegen; drop+count.
+                        None => {
+                            store.data_mut().actor_rt.dropped_sends += 1;
+                            continue;
+                        }
+                    }
+                };
+                let ok = call_actor_export(store, instance, &export, slot, &args)?;
+                store.data_mut().actor_rt.total_turns += 1;
+                if !ok {
+                    poison(store, slot);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Call one actor member export `(self_slot, args…)`. Returns `Ok(true)` on success, `Ok(false)`
+/// when the turn traps (a fault → poison, spec §6.6). Only a missing export (a codegen bug) is a
+/// hard `Err`.
+fn call_actor_export(
+    store: &mut Store<HostState>,
+    instance: &Instance,
+    name: &str,
+    slot: u64,
+    args: &[i64],
+) -> Result<bool, WasmError> {
+    let func = instance.get_func(&mut *store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
+    let mut params = Vec::with_capacity(1 + args.len());
+    params.push(Val::I64(slot as i64));
+    for &a in args {
+        params.push(Val::I64(a));
+    }
+    let mut results: [Val; 0] = [];
+    match func.call(&mut *store, &params, &mut results) {
+        Ok(()) => Ok(true),
+        Err(_trap) => Ok(false), // a behaviour fault poisons its actor; the system stays live
+    }
+}
+
+/// Poison an actor after a faulting turn: mark it dead (once) and count it. Later sends to it drop.
+fn poison(store: &mut Store<HostState>, slot: u64) {
+    let rt = &mut store.data_mut().actor_rt;
+    let newly_dead = match rt.slots.get_mut(slot as usize) {
+        Some(s) if !s.dead => {
+            s.dead = true;
+            true
+        }
+        _ => false,
+    };
+    if newly_dead {
+        rt.dead_actors += 1;
+    }
 }
 
 /// Back-compat convenience: run `main` with only the console grant (no clock/rand, wall clock).
