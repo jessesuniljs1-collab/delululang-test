@@ -508,6 +508,7 @@ pub fn run(args: &[String]) -> i32 {
         // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
         s if s == crate::foreign_worker::WORKER_SUBCOMMAND => crate::foreign_worker::run_worker(rest),
         "secrets" => cmd_secrets(rest),
+        "locale" => cmd_locale(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
@@ -563,6 +564,7 @@ fn usage() -> &'static str {
      \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
+     \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
@@ -850,6 +852,245 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
         );
     }
     0
+}
+
+/// `delulu locale add <file.dpx> | remove <name> | list` (Stage 8, phase 8f — spec §6.1).
+/// A catalog plugin is the plugin machinery's first zero-authority dogfood: verified
+/// class, EMPTY ceiling, one export `catalog() -> Str`. Catalogs are prose — the add
+/// confirmation states the bound: they can never alter codes, repairs, JSON, exit codes.
+fn cmd_locale(rest: &[String]) -> i32 {
+    let map = SourceMap::new();
+    let refuse = |msg: String, json: bool| -> i32 {
+        let d = Diagnostic::error("DL1704", msg);
+        print_diagnostics("locale", &[d], &map, None, json);
+        1
+    };
+    let json = rest.iter().any(|a| a == "--json");
+    let yes = rest.iter().any(|a| a == "--yes");
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            let Some(file) = rest.get(1).filter(|a| !a.starts_with("--")) else {
+                eprintln!("error: `locale add` needs a `.dpx` catalog plugin");
+                return 2;
+            };
+            let bytes = match std::fs::read(file) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("error: cannot read `{file}`: {e}");
+                    return 2;
+                }
+            };
+            use delulu_runtime::PluginEngine as _;
+            let art = match delulu_wasm::WasmPluginEngine::new().read_artifact(&bytes) {
+                Ok(a) => a,
+                Err(e) => {
+                    let d = Diagnostic::error(e.code, e.message);
+                    print_diagnostics("locale", &[d], &map, None, json);
+                    return 1;
+                }
+            };
+            // Verified class, by rule — a Contained catalog has no typed export to trust.
+            if art.class != "verified" {
+                return refuse(
+                    format!(
+                        "catalog plugins are `verified`-class by rule — `{}` declares `{}`",
+                        art.name(),
+                        art.class
+                    ),
+                    json,
+                );
+            }
+            // ZERO authority, by rule — the ceiling bounds the plugin to prose forever.
+            let ceiling = art.ceiling();
+            if !ceiling.effects.is_empty() {
+                let names: Vec<String> =
+                    ceiling.effects.iter().map(|e| format!("{e:?}")).collect();
+                return refuse(
+                    format!(
+                        "a catalog plugin must declare ZERO authority — `{}` declares effects [{}]",
+                        art.name(),
+                        names.join(", ")
+                    ),
+                    json,
+                );
+            }
+            // The full Verified replay: the checker itself re-proves the code.
+            let verified = match delulu_runtime::step5_verified(&art) {
+                Ok(v) => v,
+                Err(e) => {
+                    let d = Diagnostic::error(e.code, e.message.clone());
+                    print_diagnostics("locale", &[d], &map, None, json);
+                    return 1;
+                }
+            };
+            match art.exports().get("catalog").map(String::as_str) {
+                Some("fn() -> Str") => {}
+                Some(other) => {
+                    return refuse(
+                        format!("the `catalog` export must be `fn() -> Str`, found `{other}`"),
+                        json,
+                    )
+                }
+                None => {
+                    return refuse(
+                        format!("`{}` exports no `catalog() -> Str`", art.name()),
+                        json,
+                    )
+                }
+            }
+            // Evaluate the export: pure by type, zero-authority by ceiling — the module
+            // holds no capability and can perform no effect while producing its TOML.
+            let interp = Interp::new(&verified.dir.module);
+            let toml = match interp.call_with("catalog", vec![]) {
+                Ok(delulu_runtime::Value::Str(s)) => s.to_string(),
+                Ok(other) => {
+                    return refuse(format!("`catalog()` produced a non-string value: {other:?}"), json)
+                }
+                Err(e) => return refuse(format!("`catalog()` faulted: {}", e.message), json),
+            };
+            let (cat, cat_warnings) = delulu_diag::Catalog::parse(&toml);
+            // Per-entry defects (unknown keys/placeholders, a welcome-override attempt)
+            // warn-and-fall-back — shown HERE, at add time, where the human is looking.
+            print_diagnostics("locale", &cat_warnings, &map, None, false);
+            if cat.locale.is_empty() {
+                return refuse("the catalog declares no `[meta] locale` name".to_string(), json);
+            }
+            if matches!(cat.locale.as_str(), "en-US" | "delulu-slang") {
+                return refuse(
+                    format!("locale `{}` is a built-in and cannot be replaced", cat.locale),
+                    json,
+                );
+            }
+            if cat.is_empty() {
+                return refuse(
+                    format!("the catalog for `{}` has no valid entries — nothing to install", cat.locale),
+                    json,
+                );
+            }
+            // The prose bound, stated where the spec says to state it.
+            eprintln!(
+                "note: a catalog changes HUMAN prose only — it can never alter codes, spans, \
+                 repairs, JSON, or exit codes. A malicious catalog can mislead a reader; it \
+                 cannot change what the compiler decides."
+            );
+            if crate::locale::interactive_tty() && !yes {
+                use std::io::Write as _;
+                eprint!("install locale `{}`? [y/N]: ", cat.locale);
+                let _ = std::io::stderr().flush();
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                if !line.trim().eq_ignore_ascii_case("y") {
+                    eprintln!("not installed");
+                    return 1;
+                }
+            }
+            let Some(dir) = crate::locale::locales_dir() else {
+                eprintln!("error: cannot resolve the locales directory (no HOME/USERPROFILE)");
+                return 2;
+            };
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                eprintln!("error: cannot create {}: {e}", dir.display());
+                return 2;
+            }
+            let target = dir.join(format!("{}.toml", cat.locale));
+            if let Err(e) = std::fs::write(&target, &toml) {
+                eprintln!("error: cannot write {}: {e}", target.display());
+                return 2;
+            }
+            if json {
+                println!(
+                    "{}",
+                    json!({
+                        "command": "locale", "subcommand": "add", "locale": cat.locale,
+                        "entries": cat.len(), "coverage": cat.coverage,
+                        "warnings": cat_warnings.len(),
+                    })
+                );
+            } else {
+                ok_line!(
+                    "ok: installed locale `{}` ({} message(s){})",
+                    cat.locale,
+                    cat.len(),
+                    cat.coverage.as_deref().map(|c| format!("; coverage: {c}")).unwrap_or_default()
+                );
+            }
+            0
+        }
+        Some("remove") => {
+            let Some(name) = rest.get(1).filter(|a| !a.starts_with("--")) else {
+                eprintln!("error: `locale remove` needs a locale name");
+                return 2;
+            };
+            if matches!(name.as_str(), "en-US" | "delulu-slang") {
+                eprintln!("error: `{name}` is a built-in and cannot be removed");
+                return 1;
+            }
+            let Some(dir) = crate::locale::locales_dir() else {
+                eprintln!("error: cannot resolve the locales directory");
+                return 2;
+            };
+            let target = dir.join(format!("{name}.toml"));
+            if !target.exists() {
+                eprintln!("error: locale `{name}` is not installed");
+                return 1;
+            }
+            if let Err(e) = std::fs::remove_file(&target) {
+                eprintln!("error: cannot remove {}: {e}", target.display());
+                return 2;
+            }
+            ok_line!("ok: removed locale `{name}`");
+            0
+        }
+        Some("list") | None => {
+            let mut rows = vec![
+                json!({ "locale": "en-US", "builtin": true, "coverage": "complete (the in-code prose)" }),
+                json!({
+                    "locale": "delulu-slang", "builtin": true,
+                    "coverage": delulu_diag::Catalog::delulu_slang().coverage,
+                }),
+            ];
+            if let Some(dir) = crate::locale::locales_dir() {
+                let mut names: Vec<String> = std::fs::read_dir(&dir)
+                    .map(|it| {
+                        it.flatten()
+                            .filter_map(|e| {
+                                let p = e.path();
+                                (p.extension().and_then(|x| x.to_str()) == Some("toml"))
+                                    .then(|| p.file_stem().unwrap().to_string_lossy().to_string())
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                names.sort();
+                for n in names {
+                    if let Some(cat) = crate::locale::installed_catalog(&n) {
+                        rows.push(json!({
+                            "locale": cat.locale, "builtin": false,
+                            "version": cat.version, "coverage": cat.coverage,
+                            "entries": cat.len(),
+                        }));
+                    }
+                }
+            }
+            if json {
+                println!("{}", json!({ "command": "locale", "subcommand": "list", "locales": rows }));
+            } else {
+                for r in &rows {
+                    let b = if r["builtin"].as_bool().unwrap_or(false) { " (built-in)" } else { "" };
+                    println!(
+                        "{}{b} — {}",
+                        r["locale"].as_str().unwrap_or("?"),
+                        r["coverage"].as_str().unwrap_or("(no coverage declared)")
+                    );
+                }
+            }
+            0
+        }
+        Some(other) => {
+            eprintln!("error: unknown `locale` subcommand `{other}` (add | remove | list)");
+            2
+        }
+    }
 }
 
 fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {

@@ -30,14 +30,43 @@ const PICKER_TITLE: &str =
 const PICKER_OPTIONS: &str = "  1) English (US)   2) Delulu Slang        [1]: ";
 
 static LOCALE: OnceLock<String> = OnceLock::new();
+static INSTALLED: OnceLock<Catalog> = OnceLock::new();
 
 /// The catalog for the active locale — `None` is en-US (the in-code prose; build-order
 /// deviation 7). Every human-rendering site consults this; no machine channel does.
 pub fn active_catalog() -> Option<&'static Catalog> {
     match LOCALE.get().map(String::as_str) {
         Some("delulu-slang") => Some(Catalog::delulu_slang()),
+        Some(_) => INSTALLED.get(),
         _ => None,
     }
+}
+
+/// Where installed catalog files live: `$DELULU_LOCALES_DIR` (tests), else
+/// `~/.delulu/locales/`. Installed via `delulu locale add` (a verified-class,
+/// zero-authority catalog plugin — Stage 6's machinery, phase 8f's dogfood).
+pub fn locales_dir() -> Option<PathBuf> {
+    if let Some(explicit) = std::env::var_os("DELULU_LOCALES_DIR") {
+        return Some(PathBuf::from(explicit));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(PathBuf::from(home).join(".delulu").join("locales"))
+}
+
+/// Load an installed catalog by locale name (bounded read; a defective file simply
+/// yields no catalog — the DL1704 warnings were shown at `locale add` time).
+pub fn installed_catalog(name: &str) -> Option<Catalog> {
+    // A locale name is a bare identifier, never a path — allowlist, don't blocklist.
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return None;
+    }
+    let path = locales_dir()?.join(format!("{name}.toml"));
+    let text = std::fs::read_to_string(path).ok()?;
+    if text.len() > 256 * 1024 {
+        return None;
+    }
+    let (cat, _warnings) = Catalog::parse(&text);
+    (!cat.is_empty()).then_some(cat)
 }
 
 /// The config file path: `$DELULU_CONFIG_FILE` if set (tests and power users), else
@@ -106,7 +135,7 @@ fn write_config(locale: Option<&str>, welcomed: bool) {
 /// Is this an interactive human session? `DELULU_ASSUME_TTY` (a test-only override, the
 /// `DELULU_THEME_FILE` precedent) forces the answer; otherwise BOTH stdout and stdin must
 /// be terminals — the picker prompts on one and reads the other.
-fn interactive_tty() -> bool {
+pub(crate) fn interactive_tty() -> bool {
     match std::env::var("DELULU_ASSUME_TTY").ok().as_deref() {
         Some("1") => true,
         Some("0") => false,
@@ -167,12 +196,19 @@ pub fn init_locale(args: &[String]) -> (Vec<String>, Vec<String>) {
         .or(config_locale)
         .or(picked)
         .unwrap_or_else(|| "en-US".to_string());
-    let known = matches!(chosen.as_str(), "en-US" | "delulu-slang");
+    let known = matches!(chosen.as_str(), "en-US" | "delulu-slang")
+        || match installed_catalog(&chosen) {
+            Some(cat) => {
+                let _ = INSTALLED.set(cat);
+                true
+            }
+            None => false,
+        };
     let effective = if known {
         chosen
     } else {
         warnings.push(format!(
-            "warning[DL1704]: unknown locale `{chosen}` — using `en-US` (built-ins: en-US, delulu-slang)"
+            "warning[DL1704]: unknown locale `{chosen}` — using `en-US` (built-ins: en-US, delulu-slang; installed: `delulu locale list`)"
         ));
         "en-US".to_string()
     };

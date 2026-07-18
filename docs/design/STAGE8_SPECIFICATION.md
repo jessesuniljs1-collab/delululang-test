@@ -367,3 +367,14 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   skeleton (LSP client + TextMate grammar + language config) and `docs/editors.md`
   (the three-line universal config). Criterion 1's rename half witnessed cross-module:
   one rename edits both open documents.
+- **8f — catalog plugins + `delulu locale` (2026-07-18).** The Stage-6 machinery's first
+  zero-authority dogfood (mechanics ruled in build-order deviation 13): `locale add`
+  reads the .dpx with the loader's own reader, demands verified class + EMPTY ceiling,
+  replays the full step-5 verification, evaluates `catalog() -> Str` (pure by type),
+  validates the TOML (defects DL1704-warned at add; a welcome-override entry refused BY
+  NAME), states the prose bound, and installs to `~/.delulu/locales/`. `locale
+  remove`/`list` symmetric; installed locales join the selection chain and the picker's
+  built-ins stay fixed. Criterion 8 witnessed end to end through the real binary:
+  build → add → pirate DL0501 renders with args → en-US fallback on gaps → JSON
+  byte-invariant with the locale active → remove → unknown-locale warn. The
+  kitchen-rule case: an effectful catalog plugin is REFUSED at add, nothing installed.

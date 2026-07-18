@@ -168,6 +168,16 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
     (best of two). The 3.00× cold record stands in the Stage-7 close-out table as the
     witnessed performance; this bar exists to catch parallelism BREAKING, and 1.5×
     still does exactly that. Argued here in the open — not silently loosened.
+13. **RULED — `locale add` mechanics (8f).** (a) The zero-authority gate lives at ADD:
+    `plugin build` happily builds an effectful plugin, but a catalog plugin with ANY
+    ceiling effect is refused at install — the couldn't-tell branch closes where the
+    catalog enters the system. (b) The verified TOML is extracted ONCE at add and stored
+    under `~/.delulu/locales/<name>.toml` (`DELULU_LOCALES_DIR` test override): the
+    plugin is the trusted DELIVERY vehicle; after step-5 replay + pure evaluation, the
+    text is data. (c) Non-TTY `locale add` proceeds WITHOUT a prompt (invariant 40's
+    spirit — agents install locales cold), the prose bound printed either way; the
+    interactive prompt gates only humans. (d) Catalog entry defects warn (DL1704) at
+    add time — where the human is looking — and again degrade per-entry at render.
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 
