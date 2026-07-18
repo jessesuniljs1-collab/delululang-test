@@ -1283,6 +1283,49 @@ mod tests {
         assert!(c.has_errors(), "a non-Unit tail in a test body must be refused");
     }
 
+    // ===== Stage 8, phase 8b: the catalog layer (spec §6.1, invariant 39) ==============
+
+    /// Criterion 7's seed, end to end on a REAL diagnostic: the slang catalog renders the
+    /// human header from the site's typed args; the en-US human path is byte-identical to
+    /// the pre-catalog renderer; and the machine envelope's `message` stays the in-code
+    /// en-US prose — the envelope API cannot even see a catalog (invariant 39 by
+    /// construction).
+    #[test]
+    fn criterion7_seed_dl0501_slang_human_vs_frozen_machine_envelope() {
+        use delulu_diag::{
+            envelope, render_human, render_human_localized, Catalog, Palette, SourceMap,
+        };
+        let src = "module m\nfn greet(out: Cap[Console], n: Str) { out.println(n) }\n";
+        let c = check(src);
+        let d = c.diagnostics.iter().find(|d| d.code == "DL0501").expect("DL0501");
+        assert!(
+            d.args.iter().any(|(k, v)| k == "fn" && v.contains("greet")),
+            "the site carries typed args: {:?}",
+            d.args
+        );
+
+        let mut map = SourceMap::new();
+        map.add_file("m.delulu", src);
+        let slang = Catalog::delulu_slang();
+        let human = render_human_localized(d, &map, &Palette::none(), Some(slang));
+        assert!(human.contains("no cap 💀"), "slang voice renders: {human}");
+        assert!(human.contains("function `greet`"), "{human}");
+        assert!(human.contains("delulu explain E-DL0501"), "the explain pointer survives");
+
+        // en-US human output: byte-identical with and without the catalog layer present.
+        assert_eq!(
+            render_human(d, &map),
+            render_human_localized(d, &map, &Palette::none(), None),
+            "the catalog layer must not move a single en-US byte"
+        );
+
+        // The machine envelope: en-US prose, catalog-blind.
+        let env = envelope("check", &c.diagnostics, None, &map);
+        let msg = env["diagnostics"][0]["message"].as_str().unwrap();
+        assert!(msg.contains("performs effect"), "envelope message is en-US: {msg}");
+        assert!(!msg.contains("no cap"), "slang can never reach the machine channel");
+    }
+
     #[test]
     fn tests_leave_no_trace_in_authority_facts_invariant_38() {
         // The SAME module with and without a test block yields identical facts — tests are

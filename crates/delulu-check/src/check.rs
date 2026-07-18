@@ -718,7 +718,12 @@ impl<'a> Checker<'a> {
             let mut diag = Diagnostic::error("DL0501", msg)
                 .with_span(subj.head_span, "declared row is here");
             if !missing.is_empty() {
-                diag = diag.with_repair(self.add_effect_repair(subj, &declared_resolved, &missing));
+                // Catalog args (Stage 8, spec §6.1): `{fn}` carries the full subject desc so
+                // localized prose stays honest for `test` blocks too.
+                diag = diag
+                    .with_arg("fn", subj.desc.clone())
+                    .with_arg("effect", list.clone())
+                    .with_repair(self.add_effect_repair(subj, &declared_resolved, &missing));
             }
             self.diags.push(diag);
         }
@@ -734,6 +739,8 @@ impl<'a> Checker<'a> {
                     format!("{} declares effect{} `{}` it never performs", subj.desc,
                         if unused.len() == 1 { "" } else { "s" }, list),
                 )
+                .with_arg("fn", subj.desc.clone())
+                .with_arg("effect", list.clone())
                 .with_span(row.span, "declared here")
                 .with_repair(Repair {
                     id: "remove_effect_from_row",
@@ -2367,12 +2374,14 @@ impl<'a> Checker<'a> {
                 // A secret used where its plain type is expected is the "secret cannot flow"
                 // case (§6.4 rule 1) — reported as DL0602, not a generic type mismatch.
                 if secret_mismatch(&ea, &aa) {
+                    let inner =
+                        if matches!(ea, Type::Secret(_)) { format!("{aa}") } else { format!("{ea}") };
                     self.diags.push(
                         Diagnostic::error(
                             "DL0602",
-                            format!("secret value cannot flow here: `Secret[..]` is not `{}` (secrets never coerce)",
-                                if matches!(ea, Type::Secret(_)) { format!("{aa}") } else { format!("{ea}") }),
+                            format!("secret value cannot flow here: `Secret[..]` is not `{inner}` (secrets never coerce)"),
                         )
+                        .with_arg("inner", inner)
                         .with_span(span, "a secret cannot be used where a plain value is expected"),
                     );
                     return;

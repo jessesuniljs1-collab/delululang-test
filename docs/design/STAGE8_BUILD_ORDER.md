@@ -99,6 +99,24 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
    replays the check on exactly what the artifact carries); `validate_item` refuses a DIR
    that still carries a `Test` item (hand-crafted/hostile), mirroring the Actor precedent —
    never silently dropped at load.
+7. **RULED — en-US lives in the code; the build-refusal is literal.** The spec's "en-US
+   catalog, complete by construction, compiler refuses to build with a missing key" is
+   implemented as: every diagnostic is BORN with its en-US message at its site, and every
+   named CLI string's declaration (`catalog::CLI_STRINGS`) carries its en-US text — a key
+   cannot exist without its en-US prose, so the refusal is a compile error, strictly
+   stronger than any file-completeness check. Catalog FILES exist for the other voices.
+8. **RULED — the machine envelope is fully locale-invariant, message text included.**
+   `--json` (and every machine channel) renders the in-code en-US prose always; catalogs
+   apply only in `render_human_localized`. Criterion 7 asks byte-identical "(machine
+   fields)"; we ship byte-identical FULL JSON — strictly stronger, and structural: the
+   envelope API takes no catalog parameter.
+9. **RULED — catalogs are parsed by a hardened, bounded, zero-dependency TOML-subset
+   reader** (the Palette's `theme.toml` precedent): `[section]` + `key = "basic string"`
+   with standard escapes — the entire schema the format needs. Every defect (unknown key,
+   unknown placeholder, malformed line, non-string entry value) is a DL1704 WARNING and
+   that entry falls back to en-US: prose never takes the compiler down, and a catalog
+   written for a newer compiler degrades instead of exploding. A template needing an arg
+   the diagnostic doesn't carry falls back WHOLLY — a literal `{fn}` must never print.
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 

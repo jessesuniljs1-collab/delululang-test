@@ -74,6 +74,11 @@ pub struct Diagnostic {
     pub message: String,
     pub spans: Vec<LabeledSpan>,
     pub repairs: Vec<Repair>,
+    /// Typed placeholder values for catalog rendering (Stage 8, spec §6.1): `("fn", "greet")`.
+    /// HUMAN-surface only — the JSON envelope never serializes these (invariant 39: `message`
+    /// stays the in-code en-US prose on every machine channel). A catalog entry renders only
+    /// when every placeholder it uses has a value here; otherwise the en-US message stands.
+    pub args: Vec<(String, String)>,
 }
 
 impl Diagnostic {
@@ -85,6 +90,7 @@ impl Diagnostic {
             message: message.into(),
             spans: Vec::new(),
             repairs: Vec::new(),
+            args: Vec::new(),
         }
     }
 
@@ -96,7 +102,16 @@ impl Diagnostic {
             message: message.into(),
             spans: Vec::new(),
             repairs: Vec::new(),
+            args: Vec::new(),
         }
+    }
+
+    /// Attach a typed placeholder value for catalog rendering (Stage 8). The key must be one
+    /// of the code's declared placeholders (`catalog::placeholders_for`) for any catalog to
+    /// use it; unknown keys are harmless (they simply never render).
+    pub fn with_arg(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.args.push((key.into(), value.into()));
+        self
     }
 
     pub fn with_span(mut self, span: Span, label: impl Into<String>) -> Self {

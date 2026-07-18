@@ -4,6 +4,7 @@
 
 use std::fmt::Write as _;
 
+use crate::catalog::Catalog;
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::palette::{Palette, Role};
 use crate::source::SourceMap;
@@ -28,6 +29,22 @@ pub fn render_human(d: &Diagnostic, map: &SourceMap) -> String {
 /// [`render_human`]; when enabled it paints the severity/code, span carets + labels, and repairs
 /// via semantic [`Role`]s so the theme decides the colors.
 pub fn render_human_with(d: &Diagnostic, map: &SourceMap, palette: &Palette) -> String {
+    render_human_localized(d, map, palette, None)
+}
+
+/// The locale-aware renderer (Stage 8, spec §6.1): with a catalog, the HEADER message renders
+/// from the catalog's template when the entry exists and every placeholder it uses has a value
+/// in `d.args` — otherwise (and always with `None`) the in-code en-US message stands. This is
+/// the ONLY seam a catalog touches: codes, spans, labels, repairs, and the entire JSON envelope
+/// never pass through here (invariant 39 by construction).
+pub fn render_human_localized(
+    d: &Diagnostic,
+    map: &SourceMap,
+    palette: &Palette,
+    catalog: Option<&Catalog>,
+) -> String {
+    let localized = catalog.and_then(|c| c.render(d.code, &d.args));
+    let message: &str = localized.as_deref().unwrap_or(&d.message);
     let sev_role = match d.severity {
         Severity::Error => Role::Error,
         Severity::Warning => Role::Warning,
@@ -39,7 +56,7 @@ pub fn render_human_with(d: &Diagnostic, map: &SourceMap, palette: &Palette) -> 
         "{}[{}]: {}",
         palette.paint(sev_role, d.severity.as_str()),
         palette.paint(Role::Code, d.code),
-        d.message
+        message
     );
 
     for ls in &d.spans {

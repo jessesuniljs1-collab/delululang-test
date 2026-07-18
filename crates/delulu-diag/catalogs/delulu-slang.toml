@@ -1,0 +1,49 @@
+# The delulu-slang catalog — the project's signature voice (Stage 8, spec §6.1).
+# Authoring spec: docs/lang/delulu-slang.md. The voice rules there bind every entry:
+# casual, warm, hype-positive — but never dishonest; technical nouns stay verbatim;
+# emoji sparing and meaningful. Placeholders are typed: each key may use only the
+# placeholders the compiler declares for it (anything else is DL1704 + fallback).
+#
+# This file changes HUMAN prose only. Codes, spans, repairs, JSON, exit codes are
+# byte-identical across every locale — the machine interface cannot be localized.
+
+[meta]
+locale    = "delulu-slang"
+name      = "Delulu Slang"
+fallback  = "en-US"
+version   = "0.8.0"
+coverage  = "diagnostics: starter set (grows to all DL01-08xx short messages by v1.0); cli: lands with the first-run picker; explain: en-US"
+direction = "ltr"
+
+[DL0501]
+message = "yo, {fn} is out here doing `{effect}` but its row said no cap 💀"
+label   = "this call does `{effect}`"
+help    = "add `{effect}` to the row (heads up: that's an authority W, so CI might veto) or cut the call fr"
+
+[DL0502]
+message = "{fn} claims `{effect}` in its row but never actually does it — flex less, it's a free narrowing"
+
+[DL0701]
+message = "`main` be wanting more power than the manifest allows 💀"
+help    = "chill the effects, or open up `[authority]` in delulu.toml — but that's a real call, not a vibe"
+
+[DL0702]
+message = "grant denied: {detail} — not today"
+
+[DL0602]
+message = "nah, that `Secret` can't flow here — `Secret[{inner}]` is NOT `{inner}`, no shortcuts"
+help    = "a secret only comes out through `expose`, and that carries `Declassify`. no sneaking"
+
+[DL0605]
+message = "opaque things (Secret/Cap/Root) don't do `==` — that's the whole point of opaque 💀"
+help    = "for secrets it's `Secret.verify` or nothing"
+
+[DL0802]
+message = "you asked for more authority than you actually hold 🤨"
+help    = "attenuate it — here's the exact slice you're allowed"
+
+[DL1201]
+message = "the wasm backend can't do this one yet — running it on the interpreter, no stress"
+
+[DL1205]
+message = "secrets stay host-side, they don't go into the wasm guest ({detail}). that's the whole point fr"

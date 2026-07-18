@@ -174,6 +174,12 @@ registry! {
     // Stage-8 code; the Stage-1 09xx family stays frozen). The Atlas (DL1780/DL1781) and the
     // Palette (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated
     // (house rule mirroring DL1404).
+    "DL1701" => "LSP/workspace configuration error",
+    "DL1702" => "formatter identity/idempotence violation (compiler-bug class — file a bug)",
+    "DL1703" => "test authority exceeds the package test ceiling",
+    "DL1704" => "catalog invalid: unknown key/placeholder, bad meta, or a welcome-override attempt — entry falls back to en-US",
+    "DL1705" => "signature verification failed",
+    "DL1706" => "registry index line invalid / semver-authority conflict at publish",
     "DL1707" => "assertion failed (a `test` assertion did not hold at runtime)",
     "DL1780" => "atlas refused: the program has check errors — fix them first (no partial graph)",
     "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
@@ -609,6 +615,13 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1704" => "A message catalog had a defect: a key that is not a registered diagnostic \
+             code or named CLI string, a placeholder the key does not declare, a malformed \
+             line — or an attempt to override the first-run welcome, which no catalog may \
+             touch. This is only a warning: the affected entry FALLS BACK to the built-in \
+             en-US text and everything keeps working. Catalogs are prose — they can never \
+             change codes, spans, repairs, JSON, or exit codes (the machine interface is \
+             locale-invariant by construction).",
         "DL1707" => "An `assert` or `assert_eq` did not hold at runtime. This is a PANIC, like \
              integer overflow: the program (or, under `delulu test`, the failing test) stops at \
              the assertion's span, and `assert_eq` reports both compared values in the message. \

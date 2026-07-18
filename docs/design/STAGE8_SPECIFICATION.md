@@ -319,3 +319,12 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   types refused (DL0605/R-5); runtime failure = DL1707 panic carrying both values
   (build-order deviation 5); tests compiled out of runs, stripped from DIR at build and
   REFUSED in a DIR at load (deviation 6). Corpus: accept/21, reject/DL0501_test_undeclared_write.
+- **8b — the message-catalog layer (2026-07-18).** `delulu-diag/catalog.rs`: hardened
+  zero-dep TOML-subset reader (deviation 9), typed placeholders validated per key
+  (unknown → DL1704, entry falls back — never a half-rendered `{fn}`), DL1701–1706
+  registered. en-US lives in the code (deviation 7 — the build-refusal is a compile
+  error); the embedded `delulu-slang` starter catalog (voice per docs/lang/delulu-slang.md)
+  loads with zero warnings, suite-gated. `Diagnostic.args` + `with_arg` plumbed at
+  DL0501/DL0502/DL0602; `render_human_localized` is the ONLY catalog seam — the JSON
+  envelope API cannot see a catalog (deviation 8; invariant 39 structural). Criterion-7
+  seed witnessed end-to-end on a real DL0501. Locale SELECTION is 8c.
