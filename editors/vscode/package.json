@@ -1,0 +1,42 @@
+{
+  "name": "delulu-lang",
+  "displayName": "DeluluLang",
+  "description": "DeluluLang language support — one LSP server for every editor (`delulu lsp`).",
+  "version": "0.8.0",
+  "publisher": "delulu-lang",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:delulu"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "delulu",
+        "aliases": ["DeluluLang", "delulu"],
+        "extensions": [".delulu"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "delulu",
+        "scopeName": "source.delulu",
+        "path": "./syntaxes/delulu.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "DeluluLang",
+      "properties": {
+        "delulu.serverPath": {
+          "type": "string",
+          "default": "delulu",
+          "description": "Path to the `delulu` binary (the server is `delulu lsp`)."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}

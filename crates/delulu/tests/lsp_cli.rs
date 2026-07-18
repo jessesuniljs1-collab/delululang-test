@@ -312,6 +312,138 @@ fn latency_smoke_diagnostics_arrive_promptly_on_10kloc() {
     c.shutdown();
 }
 
+/// Criterion 1's rename half, cross-module: the declaration lives in one open document,
+/// a qualified reference in another — one rename updates BOTH (deviation 3's walk).
+#[test]
+fn criterion1_rename_updates_both_open_documents() {
+    let lib = "module lib\npub fn greet(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\n";
+    let app = "module app\nimport lib\nfn main(root: Root) ! {Write} { lib.greet(root.console(), \"hi\") }\n";
+    let mut c = Client::start();
+    c.open("file:///lib.delulu", lib);
+    let _ = c.wait_diagnostics("file:///lib.delulu");
+    c.open("file:///app.delulu", app);
+    let _ = c.wait_diagnostics("file:///app.delulu");
+
+    // definition: from the qualified use in app to the decl in lib.
+    let use_at = app.find("greet").unwrap();
+    let def = c.request(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": "file:///app.delulu" },
+            "position": { "line": 2, "character": app.lines().nth(2).unwrap().find("greet").unwrap() }
+        }),
+    );
+    assert_eq!(def["uri"], "file:///lib.delulu", "definition jumps across documents: {def}");
+    let _ = use_at;
+
+    // references: both documents.
+    let refs = c.request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": "file:///lib.delulu" },
+            "position": { "line": 1, "character": lib.lines().nth(1).unwrap().find("greet").unwrap() },
+            "context": { "includeDeclaration": true }
+        }),
+    );
+    let uris: Vec<&str> =
+        refs.as_array().unwrap().iter().map(|r| r["uri"].as_str().unwrap()).collect();
+    assert!(uris.contains(&"file:///lib.delulu") && uris.contains(&"file:///app.delulu"), "{refs}");
+
+    // rename: edits land in BOTH files.
+    let edit = c.request(
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": "file:///lib.delulu" },
+            "position": { "line": 1, "character": lib.lines().nth(1).unwrap().find("greet").unwrap() },
+            "newName": "welcome"
+        }),
+    );
+    let changes = edit["changes"].as_object().unwrap();
+    assert!(changes.contains_key("file:///lib.delulu"), "{edit}");
+    assert!(changes.contains_key("file:///app.delulu"), "{edit}");
+    assert_eq!(changes["file:///app.delulu"][0]["newText"], "welcome");
+    c.shutdown();
+}
+
+#[test]
+fn rename_of_a_local_is_refused_honestly() {
+    let src = "module m\nfn f() -> Int {\n    let local_x = 1\n    local_x\n}\n";
+    let mut c = Client::start();
+    c.open("file:///l.delulu", src);
+    let _ = c.wait_diagnostics("file:///l.delulu");
+    let id = c.next_id;
+    c.next_id += 1;
+    c.send(json!({
+        "jsonrpc": "2.0", "id": id, "method": "textDocument/rename",
+        "params": {
+            "textDocument": { "uri": "file:///l.delulu" },
+            "position": { "line": 2, "character": 8 },
+            "newName": "y"
+        }
+    }));
+    loop {
+        let msg = c.read_message();
+        if msg.get("id").and_then(Value::as_i64) == Some(id) {
+            let e = msg["error"]["message"].as_str().expect("locals refuse rename");
+            assert!(e.contains("locals are refused"), "{e}");
+            break;
+        }
+    }
+    c.shutdown();
+}
+
+#[test]
+fn semantic_tokens_carry_the_spec_named_kinds() {
+    let src = "module m\nfn f(out: Cap[Console], s: Secret[Str], xs: iso List[Int]) ! {Write} { out.println(\"x\") }\n";
+    let mut c = Client::start();
+    c.open("file:///t.delulu", src);
+    let _ = c.wait_diagnostics("file:///t.delulu");
+    let toks = c.request(
+        "textDocument/semanticTokens/full",
+        json!({ "textDocument": { "uri": "file:///t.delulu" } }),
+    );
+    let data = toks["data"].as_array().unwrap();
+    assert!(data.len() >= 5 * 5, "a real token stream: {} entries", data.len());
+    let kinds: Vec<u64> = data.chunks(5).map(|c| c[3].as_u64().unwrap()).collect();
+    assert!(kinds.contains(&8), "effect kind present: {kinds:?}");
+    assert!(kinds.contains(&9), "rcap kind present: {kinds:?}");
+    assert!(kinds.contains(&10), "capability kind present: {kinds:?}");
+    assert!(kinds.contains(&11), "secret kind present: {kinds:?}");
+    c.shutdown();
+}
+
+#[test]
+fn code_lenses_on_main_and_tests_and_the_authority_command() {
+    let src = "module m\nfn main(root: Root) ! {Write} { let out = root.console()\n out.println(\"x\") }\n\
+               test \"t\" { assert(true) }\n";
+    let mut c = Client::start();
+    c.open("file:///cl.delulu", src);
+    let _ = c.wait_diagnostics("file:///cl.delulu");
+    let lenses = c.request(
+        "textDocument/codeLens",
+        json!({ "textDocument": { "uri": "file:///cl.delulu" } }),
+    );
+    let titles: Vec<String> = lenses
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["command"]["title"].as_str().unwrap().to_string())
+        .collect();
+    assert!(titles.iter().any(|t| t == "▶ run"), "{titles:?}");
+    assert!(titles.iter().any(|t| t.starts_with("authority: ") && t.contains("Write")), "{titles:?}");
+    assert!(titles.iter().any(|t| t == "▶ run test"), "{titles:?}");
+
+    // The agent-facing command: the §10.5 report over the wire.
+    let report = c.request(
+        "workspace/executeCommand",
+        json!({ "command": "delulu.authority", "arguments": ["file:///cl.delulu"] }),
+    );
+    let effects: Vec<&str> =
+        report["effects"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
+    assert!(effects.contains(&"Write"), "the compiler-computed report: {report}");
+    c.shutdown();
+}
+
 /// Criterion 3 proper: ≤150 ms edit-to-diagnostics, release build.
 /// `cargo test -p delulu --release --test lsp_cli -- --ignored criterion3`
 #[test]

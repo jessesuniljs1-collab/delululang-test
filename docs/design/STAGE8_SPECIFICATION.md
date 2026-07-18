@@ -356,6 +356,14 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   applies to green over the wire), documentSymbol (actors/behaviors/tests), inlayHint
   authority lens (inferred rows on unannotated lambdas, from the lambda's `Type::Fn`).
   Criterion 3 witnessed: 47 ms edit-to-diagnostics on the 10-kLoC reference, release
-  (budget 150 ms), plus a debug-mode smoke ceiling always-on. Remaining in 8e.2:
-  definition/references/rename, semanticTokens, codeLens, `delulu.authority` command,
-  `editors/vscode/` skeleton + `docs/editors.md`.
+  (budget 150 ms), plus a debug-mode smoke ceiling always-on.
+- **8e.2 — the LSP surface completed (2026-07-18).** definition/references/rename across
+  open documents by declaration + reference walk (deviation 3's sub-ruling; qualified
+  uses are Method nodes Go-selector-style and are matched; locals REFUSE rename
+  honestly — witnessed); semanticTokens with dedicated effect/rcap/capability/secret
+  kinds (all four witnessed in the stream); codeLens `▶ run` + `authority: {…}` on main
+  and `▶ run test` on tests; `delulu.authority` executeCommand returns the compiler's
+  §10.5 report over the wire (manifest-less: the document alone). `editors/vscode/`
+  skeleton (LSP client + TextMate grammar + language config) and `docs/editors.md`
+  (the three-line universal config). Criterion 1's rename half witnessed cross-module:
+  one rename edits both open documents.

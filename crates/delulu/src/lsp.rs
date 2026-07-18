@@ -76,6 +76,34 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                 let r = server.inlay_hints(&msg["params"]);
                 respond(id, r);
             }
+            Some("textDocument/definition") => {
+                let r = server.definition(&msg["params"]);
+                respond(id, r);
+            }
+            Some("textDocument/references") => {
+                let r = server.references(&msg["params"]);
+                respond(id, r);
+            }
+            Some("textDocument/rename") => match server.rename(&msg["params"]) {
+                Ok(r) => respond(id, r),
+                Err(why) => {
+                    if let Some(id) = id {
+                        respond_err(id, -32602, why);
+                    }
+                }
+            },
+            Some("textDocument/semanticTokens/full") => {
+                let r = server.semantic_tokens(&msg["params"]);
+                respond(id, r);
+            }
+            Some("textDocument/codeLens") => {
+                let r = server.code_lens(&msg["params"]);
+                respond(id, r);
+            }
+            Some("workspace/executeCommand") => {
+                let r = server.execute_command(&msg["params"]);
+                respond(id, r);
+            }
             // Politely refuse anything unknown that expects an answer.
             _ => {
                 if let Some(id) = id {
@@ -100,9 +128,252 @@ impl Server {
                 "codeActionProvider": true,
                 "documentSymbolProvider": true,
                 "inlayHintProvider": true,
+                "definitionProvider": true,
+                "referencesProvider": true,
+                "renameProvider": true,
+                "codeLensProvider": { "resolveProvider": false },
+                "semanticTokensProvider": {
+                    "legend": { "tokenTypes": SEMANTIC_TOKEN_TYPES, "tokenModifiers": [] },
+                    "full": true
+                },
+                "executeCommandProvider": { "commands": ["delulu.authority"] },
             },
             "serverInfo": { "name": "delulu-lsp", "version": env!("CARGO_PKG_VERSION") }
         })
+    }
+
+    /// Definition of the module-level name under the cursor, searched across every open
+    /// document (build-order deviation 3: declaration + reference walk, not a DefId graph).
+    fn definition(&self, params: &Value) -> Value {
+        let Some((word, _, _)) = self.word_at(params) else { return Value::Null };
+        for (uri, text) in &self.docs {
+            let checked = check_source(0, text);
+            if let Some(sp) = decl_name_span(&checked.module, &word) {
+                return json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) });
+            }
+        }
+        Value::Null
+    }
+
+    fn references(&self, params: &Value) -> Value {
+        let Some((word, _, _)) = self.word_at(params) else { return json!([]) };
+        let mut out = Vec::new();
+        for (uri, text) in &self.docs {
+            let checked = check_source(0, text);
+            for sp in name_occurrences(&checked.module, &word) {
+                out.push(json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) }));
+            }
+        }
+        Value::Array(out)
+    }
+
+    /// Rename a MODULE-LEVEL name across every open document. Locals refuse honestly
+    /// (deviation 3): a shadow-aware local rename needs the DefId graph v0.8 doesn't have.
+    fn rename(&self, params: &Value) -> Result<Value, &'static str> {
+        let Some((word, _, _)) = self.word_at(params) else {
+            return Err("nothing renameable at this position");
+        };
+        let new_name = params["newName"].as_str().unwrap_or("");
+        if new_name.is_empty()
+            || !new_name.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            || !new_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            || delulu_syntax::token::is_reserved(new_name)
+        {
+            return Err("the new name is not a legal identifier");
+        }
+        let is_decl = self
+            .docs
+            .values()
+            .any(|text| decl_name_span(&check_source(0, text).module, &word).is_some());
+        if !is_decl {
+            return Err("only module-level names (fn/type/effect/const/actor) rename in v0.8 — locals are refused, not guessed");
+        }
+        let mut changes = serde_json::Map::new();
+        for (uri, text) in &self.docs {
+            let checked = check_source(0, text);
+            let edits: Vec<Value> = name_occurrences(&checked.module, &word)
+                .into_iter()
+                .map(|sp| {
+                    json!({ "range": byte_range(text, sp.start, sp.end), "newText": new_name })
+                })
+                .collect();
+            if !edits.is_empty() {
+                changes.insert(uri.clone(), Value::Array(edits));
+            }
+        }
+        Ok(json!({ "changes": changes }))
+    }
+
+    /// Full-document semantic tokens: keywords/strings/numbers/comments from the lexer,
+    /// plus the SEMANTIC classes the spec names — effects, rcaps, capability types,
+    /// secrets — from the AST (distinct kinds, criterion: spec §3 table).
+    fn semantic_tokens(&self, params: &Value) -> Value {
+        let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let Some(text) = self.docs.get(uri) else { return json!({ "data": [] }) };
+        let mut toks: Vec<(u32, u32, u32)> = Vec::new(); // (start_byte, end_byte, type)
+
+        let (lexed, _d, comments) = delulu_syntax::lexer::lex_with_comments(0, text);
+        for t in &lexed {
+            use delulu_syntax::token::TokenKind as K;
+            let ty = match &t.kind {
+                K::Str(_) => Some(TOK_STRING),
+                K::Int(_) | K::Float(_) => Some(TOK_NUMBER),
+                k if k.keyword_lexeme().is_some() => Some(TOK_KEYWORD),
+                _ => None,
+            };
+            if let Some(ty) = ty {
+                toks.push((t.span.start, t.span.end, ty));
+            }
+        }
+        for c in &comments {
+            toks.push((c.start, c.start + c.text.len() as u32, TOK_COMMENT));
+        }
+
+        let checked = check_source(0, text);
+        for item in &checked.module.items {
+            use delulu_syntax::ast::Item;
+            match item {
+                Item::Fn(f) => {
+                    toks.push((f.name.span.start, f.name.span.end, TOK_FUNCTION));
+                    for p in &f.params {
+                        classify_type(&p.ty, &mut toks);
+                    }
+                    if let Some(r) = &f.ret {
+                        classify_type(r, &mut toks);
+                    }
+                    if let Some(r) = &f.row {
+                        classify_row(r, &mut toks);
+                    }
+                }
+                Item::Type(t) => toks.push((t.name.span.start, t.name.span.end, TOK_TYPE)),
+                Item::Effect(e) => toks.push((e.name.span.start, e.name.span.end, TOK_EFFECT)),
+                Item::Actor(a) => {
+                    toks.push((a.name.span.start, a.name.span.end, TOK_TYPE));
+                    for b in &a.behaviors {
+                        toks.push((b.name.span.start, b.name.span.end, TOK_FUNCTION));
+                        if let Some(r) = &b.row {
+                            classify_row(r, &mut toks);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Delta-encode, position-sorted, overlaps dropped (first wins).
+        toks.sort_by_key(|t| t.0);
+        toks.dedup_by_key(|t| t.0);
+        let mut data: Vec<u32> = Vec::with_capacity(toks.len() * 5);
+        let (mut prev_line, mut prev_char) = (0u32, 0u32);
+        for (s, e, ty) in toks {
+            let p = byte_to_pos(text, s);
+            let (line, ch) = (p["line"].as_u64().unwrap() as u32, p["character"].as_u64().unwrap() as u32);
+            let len: u32 = text
+                .get(s as usize..(e as usize).min(text.len()))
+                .map(|t| t.chars().map(char::len_utf16).sum::<usize>() as u32)
+                .unwrap_or(0);
+            let dl = line - prev_line;
+            let dc = if dl == 0 { ch - prev_char } else { ch };
+            data.extend([dl, dc, len, ty, 0]);
+            prev_line = line;
+            prev_char = ch;
+        }
+        json!({ "data": data })
+    }
+
+    /// Code lenses on `fn main` and each `test` (spec §3): `▶ run` + the authority line.
+    fn code_lens(&self, params: &Value) -> Value {
+        let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let Some(text) = self.docs.get(uri) else { return json!([]) };
+        let checked = check_source(0, text);
+        let mut lenses = Vec::new();
+        for item in &checked.module.items {
+            use delulu_syntax::ast::Item;
+            match item {
+                Item::Fn(f) if f.name.name == "main" => {
+                    let range = byte_range(text, f.name.span.start, f.name.span.end);
+                    lenses.push(json!({
+                        "range": range,
+                        "command": { "title": "▶ run", "command": "delulu.run", "arguments": [uri] }
+                    }));
+                    let authority = checked
+                        .result
+                        .facts
+                        .get("main")
+                        .map(|fa| {
+                            let mut es: Vec<&str> = fa.effects.iter().map(|e| e.name()).collect();
+                            es.sort();
+                            if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+                        })
+                        .unwrap_or_default();
+                    lenses.push(json!({
+                        "range": byte_range(text, f.name.span.start, f.name.span.end),
+                        "command": {
+                            "title": format!("authority: {authority}"),
+                            "command": "delulu.authority",
+                            "arguments": [uri]
+                        }
+                    }));
+                }
+                Item::Test(t) => {
+                    let range = byte_range(text, t.name_span.start, t.name_span.end);
+                    lenses.push(json!({
+                        "range": range,
+                        "command": {
+                            "title": "▶ run test",
+                            "command": "delulu.test.run",
+                            "arguments": [uri, t.name]
+                        }
+                    }));
+                }
+                _ => {}
+            }
+        }
+        Value::Array(lenses)
+    }
+
+    /// `delulu.authority` (spec §3): the §10.5 report for an open document — agent
+    /// harnesses call this instead of shelling out. Analysis of the document alone: no
+    /// manifest scopes attach to a bare URI (the CLI's report is the one with custody
+    /// and manifest stamps).
+    fn execute_command(&self, params: &Value) -> Value {
+        if params["command"].as_str() != Some("delulu.authority") {
+            return Value::Null;
+        }
+        let Some(uri) = params["arguments"][0].as_str() else { return Value::Null };
+        let Some(text) = self.docs.get(uri) else { return Value::Null };
+        let checked = check_source(0, text);
+        if checked.has_errors() {
+            return json!({ "error": "the document has check errors — fix them first" });
+        }
+        delulu_check::authority_report(
+            &checked.module.name.dotted(),
+            &checked.result,
+            &delulu_check::ScopeInfo::default(),
+        )
+    }
+
+    /// The identifier word at the request's position: `(word, start, end)` bytes.
+    fn word_at(&self, params: &Value) -> Option<(String, u32, u32)> {
+        let uri = params["textDocument"]["uri"].as_str()?;
+        let text = self.docs.get(uri)?;
+        let pos = &params["position"];
+        let byte =
+            pos_to_byte(text, pos["line"].as_u64()?, pos["character"].as_u64()?) as usize;
+        let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        let b = text.as_bytes();
+        if byte >= b.len() || !is_word(b[byte]) {
+            return None;
+        }
+        let mut s = byte;
+        while s > 0 && is_word(b[s - 1]) {
+            s -= 1;
+        }
+        let mut e = byte;
+        while e < b.len() && is_word(b[e]) {
+            e += 1;
+        }
+        Some((text[s..e].to_string(), s as u32, e as u32))
     }
 
     /// Re-check the document and push its diagnostics — the compiler's own, verbatim.
@@ -420,6 +691,185 @@ fn lsp_diagnostic(text: &str, d: &Diagnostic) -> Value {
         "source": "delulu",
         "message": d.message,
     })
+}
+
+// ===== semantic-token legend and classifiers ===============================
+
+/// The legend (spec §3): the last four kinds are the ones the spec NAMES as distinct —
+/// effects, rcaps, capability types, secrets.
+const SEMANTIC_TOKEN_TYPES: [&str; 12] = [
+    "keyword", "function", "type", "variable", "string", "number", "comment", "operator",
+    "effect", "rcap", "capability", "secret",
+];
+const TOK_KEYWORD: u32 = 0;
+const TOK_FUNCTION: u32 = 1;
+const TOK_TYPE: u32 = 2;
+const TOK_STRING: u32 = 4;
+const TOK_NUMBER: u32 = 5;
+const TOK_COMMENT: u32 = 6;
+const TOK_EFFECT: u32 = 8;
+const TOK_RCAP: u32 = 9;
+const TOK_CAPABILITY: u32 = 10;
+const TOK_SECRET: u32 = 11;
+
+fn classify_row(r: &delulu_syntax::ast::RowExpr, toks: &mut Vec<(u32, u32, u32)>) {
+    for p in &r.effects {
+        let sp = p.span();
+        toks.push((sp.start, sp.end, TOK_EFFECT));
+    }
+}
+
+fn classify_type(t: &delulu_syntax::ast::TypeExpr, toks: &mut Vec<(u32, u32, u32)>) {
+    use delulu_syntax::ast::TypeExpr;
+    match t {
+        TypeExpr::Named { path, args, span } => {
+            let head = path.segs.last().map(|s| s.name.as_str()).unwrap_or("");
+            let kind = match head {
+                "Cap" | "Root" | "Plugin" => TOK_CAPABILITY,
+                "Secret" => TOK_SECRET,
+                _ => TOK_TYPE,
+            };
+            let sp = path.span();
+            toks.push((sp.start, sp.end, kind));
+            let _ = span;
+            for a in args {
+                classify_type(a, toks);
+            }
+        }
+        TypeExpr::Fn { params, ret, row, .. } => {
+            for p in params {
+                classify_type(p, toks);
+            }
+            if let Some(r) = ret {
+                classify_type(r, toks);
+            }
+            if let Some(r) = row {
+                classify_row(r, toks);
+            }
+        }
+        TypeExpr::Rcap { rcap, inner, span } => {
+            let len = rcap.name().len() as u32;
+            toks.push((span.start, span.start + len, TOK_RCAP));
+            classify_type(inner, toks);
+        }
+    }
+}
+
+// ===== name resolution (deviation 3: declaration + reference walk) =========
+
+/// The name span of a module-level declaration named `word`, if this module declares it.
+fn decl_name_span(
+    module: &delulu_syntax::ast::Module,
+    word: &str,
+) -> Option<delulu_diag::Span> {
+    use delulu_syntax::ast::Item;
+    module.items.iter().find_map(|item| match item {
+        Item::Fn(f) if f.name.name == word => Some(f.name.span),
+        Item::Type(t) if t.name.name == word => Some(t.name.span),
+        Item::Effect(e) if e.name.name == word => Some(e.name.span),
+        Item::Const(c) if c.name.name == word => Some(c.name.span),
+        Item::Actor(a) if a.name.name == word => Some(a.name.span),
+        _ => None,
+    })
+}
+
+/// Every occurrence of the module-level name `word` in this module: the declaration plus
+/// value references (bare or as a qualified path's final segment), type references, row
+/// effect references, and spawn targets. Local binders are deliberately NOT visited.
+fn name_occurrences(
+    module: &delulu_syntax::ast::Module,
+    word: &str,
+) -> Vec<delulu_diag::Span> {
+    use delulu_syntax::ast::{Item, TypeExpr};
+    let mut out = Vec::new();
+    if let Some(sp) = decl_name_span(module, word) {
+        out.push(sp);
+    }
+    let path_hit = |p: &delulu_syntax::ast::Path, out: &mut Vec<delulu_diag::Span>| {
+        if let Some(last) = p.segs.last() {
+            if last.name == word {
+                out.push(last.span);
+            }
+        }
+    };
+    fn type_paths(
+        t: &TypeExpr,
+        word: &str,
+        out: &mut Vec<delulu_diag::Span>,
+    ) {
+        match t {
+            TypeExpr::Named { path, args, .. } => {
+                if let Some(last) = path.segs.last() {
+                    if last.name == word {
+                        out.push(last.span);
+                    }
+                }
+                for a in args {
+                    type_paths(a, word, out);
+                }
+            }
+            TypeExpr::Fn { params, ret, row, .. } => {
+                for p in params {
+                    type_paths(p, word, out);
+                }
+                if let Some(r) = ret {
+                    type_paths(r, word, out);
+                }
+                if let Some(r) = row {
+                    for e in &r.effects {
+                        if let Some(last) = e.segs.last() {
+                            if last.name == word {
+                                out.push(last.span);
+                            }
+                        }
+                    }
+                }
+            }
+            TypeExpr::Rcap { inner, .. } => type_paths(inner, word, out),
+        }
+    }
+    for item in &module.items {
+        match item {
+            Item::Fn(f) => {
+                for p in &f.params {
+                    type_paths(&p.ty, word, &mut out);
+                }
+                if let Some(r) = &f.ret {
+                    type_paths(r, word, &mut out);
+                }
+                if let Some(r) = &f.row {
+                    for e in &r.effects {
+                        path_hit(e, &mut out);
+                    }
+                }
+            }
+            Item::Const(c) => {
+                if let Some(t) = &c.ty {
+                    type_paths(t, word, &mut out);
+                }
+            }
+            _ => {}
+        }
+    }
+    walk_exprs(module, &mut |e| {
+        use delulu_syntax::ast::Expr;
+        match e {
+            Expr::Var { path, .. } | Expr::Record { path, .. } | Expr::Spawn { actor: path, .. } => {
+                path_hit(path, &mut out)
+            }
+            // Dotted chains are Method/Field Go-selector style (`lib.greet(x)` is a
+            // Method with recv `lib`), so a qualified reference to a module-level name
+            // lands HERE — the deviation-3 walk's approximation includes same-named
+            // record methods, recorded openly.
+            Expr::Method { name, .. } | Expr::Field { name, .. } if name.name == word => {
+                out.push(name.span)
+            }
+            _ => {}
+        }
+    });
+    out.sort_by_key(|s| s.start);
+    out.dedup_by_key(|s| s.start);
+    out
 }
 
 /// Walk every expression in the module (fn/const/actor/test bodies), depth-first.

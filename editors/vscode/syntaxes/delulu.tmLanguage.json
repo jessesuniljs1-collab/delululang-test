@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "DeluluLang",
+  "scopeName": "source.delulu",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#rows" },
+    { "include": "#keywords" },
+    { "include": "#rcaps" },
+    { "include": "#types" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.delulu", "match": "//.*$" },
+        { "name": "comment.block.delulu", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.delulu",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "name": "constant.character.escape.delulu", "match": "\\\\(?:[nrt0\\\\\"]|u\\{[0-9a-fA-F]{1,6}\\})" }]
+    },
+    "rows": {
+      "name": "meta.effect-row.delulu",
+      "begin": "!\\s*\\{",
+      "end": "\\}",
+      "patterns": [{ "name": "entity.name.tag.effect.delulu", "match": "[A-Z][A-Za-z0-9_]*" }]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.delulu", "match": "\\b(if|else|while|match|return)\\b" },
+        { "name": "keyword.declaration.delulu", "match": "\\b(fn|let|var|type|effect|module|import|pub|actor|be|new|test|foreign|lib)\\b" },
+        { "name": "keyword.operator.delulu", "match": "\\b(spawn|consume|recover|expose)\\b" },
+        { "name": "constant.language.delulu", "match": "\\b(true|false)\\b" }
+      ]
+    },
+    "rcaps": {
+      "name": "storage.modifier.rcap.delulu",
+      "match": "\\b(iso|trn|ref|val|box|tag)\\b(?=\\s+[A-Za-z_\\[]|\\s+fn\\b)"
+    },
+    "types": {
+      "patterns": [
+        { "name": "support.type.capability.delulu", "match": "\\b(Cap|Root|Secret|Plugin)\\b" },
+        { "name": "entity.name.type.delulu", "match": "\\b[A-Z][A-Za-z0-9_]*\\b" }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.delulu",
+      "match": "\\b\\d[\\d_]*(?:\\.\\d+)?\\b"
+    }
+  }
+}
