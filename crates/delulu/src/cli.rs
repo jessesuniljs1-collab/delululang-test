@@ -222,6 +222,9 @@ struct Opts {
     /// `--on-actor-death abort` (Stage 7 §6.6): whole-program abort on a behavior fault
     /// (default keeps the system live; sends to the dead actor drop and count).
     on_actor_death_abort: bool,
+    /// `--debug-rcaps` (Stage 7 §6.4): verify statically-proven iso moves are unaliased at
+    /// each actor boundary (DL1610 on violation — a compiler-bug detector).
+    debug_rcaps: bool,
     /// `--seed <u64>`: deterministic Cap[Rand] (spec §6.2).
     seed: Option<u64>,
     /// `--clock fixed:<ms>`: deterministic Cap[Clock] (spec §6.2).
@@ -280,6 +283,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         actors_threads: None,
         on_quiesce_report: false,
         on_actor_death_abort: false,
+        debug_rcaps: false,
         seed: None,
         clock_ms: None,
         engine: None,
@@ -318,6 +322,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             s if s.starts_with("--diff=") => opts.diff = Some(s["--diff=".len()..].to_string()),
             "--trace-effects" => opts.trace_effects = true,
             "--assert-trace" => opts.assert_trace = true,
+            "--debug-rcaps" => opts.debug_rcaps = true,
             "--trace-out" => {
                 if i + 1 < rest.len() {
                     opts.trace_out = Some(rest[i + 1].clone());
@@ -523,7 +528,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort]  (Stage 7 actors)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -3942,16 +3947,28 @@ fn cmd_run(rest: &[String]) -> i32 {
     // a program with no actors takes the identical path to v0.6, byte for byte.
     let has_actors =
         checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+    let mut actor_trace: Option<std::sync::Arc<std::sync::Mutex<Vec<delulu_runtime::TraceRecord>>>> = None;
     let actor_system = if has_actors {
         let threads = opts
             .actors_threads
             .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
-        let system = delulu_runtime::actors::ActorSystem::start(
+        if sink.is_some() {
+            actor_trace = Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())));
+        }
+        let debug_set = opts
+            .debug_rcaps
+            .then(|| std::sync::Arc::new(checked.result.iso_moves.clone()));
+        let system = delulu_runtime::actors::ActorSystem::start_with(
             &checked.module,
             threads,
             opts.on_actor_death_abort,
+            actor_trace.clone(),
+            debug_set.clone(),
         );
         interp = interp.with_actors(system.host());
+        if let Some(d) = debug_set {
+            interp = interp.with_debug_rcaps(d);
+        }
         Some(system)
     } else {
         None
@@ -3962,6 +3979,18 @@ fn cmd_run(rest: &[String]) -> i32 {
     let mut actor_abort = false;
     if let Some(system) = actor_system {
         let report = system.finish();
+        // Merge worker-collected causal records into the main sink (seq renumbered to stay
+        // strictly increasing; cross-actor order is by globally monotonic turn id).
+        if let (Some(collector), Some(s)) = (&actor_trace, &sink) {
+            let mut recs = collector.lock().unwrap().clone();
+            recs.sort_by_key(|r| r.turn);
+            let mut seq = s.len() as u64;
+            for mut r in recs {
+                r.seq = seq;
+                seq += 1;
+                s.append(r);
+            }
+        }
         actor_abort = report.aborted;
         if report.dead_actors > 0 || report.dropped_sends > 0 {
             eprintln!(
@@ -4014,7 +4043,21 @@ fn cmd_run(rest: &[String]) -> i32 {
         if let Some(s) = &sink {
             let allowed: std::collections::BTreeSet<String> =
                 main_row.iter().map(|e| e.name().to_string()).collect();
-            let violations = delulu_runtime::assert_trace(&allowed, &s.records());
+            // Stage 7 (invariant 35 executable): actor-attributed records check against the
+            // EXECUTING member's row AND the send site's row via the cause chain; main-line
+            // records keep the original law byte-for-byte.
+            let member_rows: std::collections::HashMap<String, std::collections::BTreeSet<String>> = checked
+                .result
+                .facts
+                .iter()
+                .filter(|(k, _)| k.contains('.'))
+                .map(|(k, f)| (k.clone(), f.effects.iter().map(|e| e.name().to_string()).collect()))
+                .collect();
+            let violations = if has_actors {
+                delulu_runtime::assert_trace_causal(&allowed, &member_rows, &s.records())
+            } else {
+                delulu_runtime::assert_trace(&allowed, &s.records())
+            };
             if !violations.is_empty() {
                 let diags: Vec<Diagnostic> = violations
                     .iter()

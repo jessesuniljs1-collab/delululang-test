@@ -61,7 +61,7 @@ pub fn check_rcaps(
     table: &DeclTable,
     node_types: &HashMap<NodeId, Type>,
     fn_types: &HashMap<String, Type>,
-) -> Vec<Diagnostic> {
+) -> (Vec<Diagnostic>, HashSet<NodeId>) {
     let mut pass = Pass {
         table,
         node_types,
@@ -70,6 +70,7 @@ pub fn check_rcaps(
         scopes: Vec::new(),
         recover_boundary: None,
         capture_boundary: None,
+        iso_moves: HashSet::new(),
     };
     for item in &module.items {
         match item {
@@ -78,7 +79,7 @@ pub fn check_rcaps(
             _ => {}
         }
     }
-    pass.diags
+    (pass.diags, pass.iso_moves)
 }
 
 struct Pass<'a> {
@@ -93,6 +94,9 @@ struct Pass<'a> {
     /// Scope depth at the innermost lambda entry: a `consume` of a binding below this index
     /// would consume a CAPTURE — refused (the closure may run any number of times).
     capture_boundary: Option<usize>,
+    /// Send/spawn argument node ids that are statically-proven iso MOVES (phase 7i): the
+    /// runtime's `--debug-rcaps` verifies each one's graph is unaliased at the boundary.
+    iso_moves: HashSet<NodeId>,
 }
 
 /// How a binding is being referenced, for the centralized use path.
@@ -630,6 +634,9 @@ impl<'a> Pass<'a> {
         // The declaration fence (7e) already refused undeterminable parameter rcaps; a None
         // here means that diagnostic exists — don't stack a second one on every send.
         let Some(dest) = dest else { return };
+        if matches!(k, K::Unaliased(Rcap::Iso)) {
+            self.iso_moves.insert(arg.id());
+        }
         let span = arg.span();
         if matches!(self.node_types.get(&arg.id()), Some(Type::PyObj)) {
             self.diags.push(

@@ -36,7 +36,17 @@ use std::sync::{mpsc, Arc, Condvar, Mutex};
 use delulu_check::ResourceKind;
 use delulu_syntax::ast::{ActorDecl, Block, Module};
 
+use crate::trace::{Cause, TraceRecord, TraceSink};
 use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
+
+/// The causal identity of a send (spec §6.3): who sent, from which member, from where.
+/// Carried on every job so the receiving turn's trace records can name their cause.
+#[derive(Clone, Debug)]
+pub struct SendCause {
+    pub sender: String,
+    pub sender_member: Option<String>,
+    pub send_span: Option<(u32, u32, u32)>,
+}
 
 /// A process-wide actor address: the owning worker plus a unique id. The id is never
 /// reused (monotonic mint), so a reference to a dead actor stays dead forever.
@@ -86,8 +96,8 @@ pub struct RootMsg {
 }
 
 enum Job {
-    Create { id: u64, actor: String, args: Vec<MsgValue> },
-    Send { id: u64, behavior: String, args: Vec<MsgValue> },
+    Create { id: u64, actor: String, args: Vec<MsgValue>, cause: SendCause },
+    Send { id: u64, behavior: String, args: Vec<MsgValue>, cause: SendCause },
     Shutdown,
 }
 
@@ -126,18 +136,20 @@ pub struct ActorHost {
 }
 
 impl ActorHost {
-    pub fn spawn(&self, actor: &str, args: Vec<MsgValue>) -> ActorId {
+    pub fn spawn(&self, actor: &str, args: Vec<MsgValue>, cause: SendCause) -> ActorId {
         let id = self.shared.next_actor.fetch_add(1, Ordering::SeqCst);
         let worker = self.shared.round_robin.fetch_add(1, Ordering::SeqCst) % self.senders.len();
         self.shared.live_actors.fetch_add(1, Ordering::SeqCst);
         self.shared.enqueue();
-        let _ = self.senders[worker].send(Job::Create { id, actor: actor.to_string(), args });
+        let _ = self.senders[worker].send(Job::Create { id, actor: actor.to_string(), args, cause });
         ActorId { worker, id }
     }
 
-    pub fn send(&self, to: ActorId, behavior: &str, args: Vec<MsgValue>) {
+    pub fn send(&self, to: ActorId, behavior: &str, args: Vec<MsgValue>, cause: SendCause) {
         self.shared.enqueue();
-        let _ = self.senders[to.worker].send(Job::Send { id: to.id, behavior: behavior.to_string(), args });
+        let _ = self
+            .senders[to.worker]
+            .send(Job::Send { id: to.id, behavior: behavior.to_string(), args, cause });
     }
 }
 
@@ -163,6 +175,20 @@ impl ActorSystem {
     /// Start `threads` workers for `module` (its actor declarations are cloned into each
     /// worker, which builds its own single-threaded `Interp` — cells never cross threads).
     pub fn start(module: &Module, threads: usize, abort_on_death: bool) -> ActorSystem {
+        ActorSystem::start_with(module, threads, abort_on_death, None, None)
+    }
+
+    /// [`ActorSystem::start`] plus the phase-7i instrumentation: a shared trace collector
+    /// (workers stamp their records with actor/member/turn/cause and ship them here) and
+    /// the checker's iso-move node set for `--debug-rcaps` (DL1610 on a violated
+    /// uniqueness claim — a compiler-bug detector, never the guarantee).
+    pub fn start_with(
+        module: &Module,
+        threads: usize,
+        abort_on_death: bool,
+        trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
+        debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
+    ) -> ActorSystem {
         let threads = threads.max(1);
         let shared = Arc::new(Shared {
             pending: AtomicI64::new(0),
@@ -183,10 +209,12 @@ impl ActorSystem {
             let module = module.clone();
             let shared_w = shared.clone();
             let senders_w = senders.clone();
+            let trace_w = trace.clone();
+            let debug_w = debug_rcaps.clone();
             handles.push(
                 std::thread::Builder::new()
                     .name(format!("delulu-actor-{wi}"))
-                    .spawn(move || worker_loop(wi, rx, module, shared_w, senders_w))
+                    .spawn(move || worker_loop(wi, rx, module, shared_w, senders_w, trace_w, debug_w))
                     .expect("spawn actor worker"),
             );
         }
@@ -242,6 +270,8 @@ fn worker_loop(
     module: Module,
     shared: Arc<Shared>,
     senders: Vec<mpsc::Sender<Job>>,
+    trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
+    debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
 ) {
     let mut actors: HashMap<String, ActorDecl> = HashMap::new();
     for item in &module.items {
@@ -249,14 +279,38 @@ fn worker_loop(
             actors.insert(a.name.name.clone(), a.clone());
         }
     }
-    let interp = crate::interp::Interp::new(&module)
+    let mut interp = crate::interp::Interp::new(&module)
         .with_actors(ActorHost { shared: shared.clone(), senders });
+    let local_sink = trace.as_ref().map(|_| TraceSink::new());
+    if let Some(s) = &local_sink {
+        interp = interp.with_trace(s.clone());
+    }
+    if let Some(d) = &debug_rcaps {
+        interp = interp.with_debug_rcaps(d.clone());
+    }
+    // Stamp this turn's records with turn id + cause and ship them to the collector
+    // (actor/member were stamped by the interpreter at record time).
+    let ship = |turn_id: u64, cause: &SendCause| {
+        if let (Some(collector), Some(sink)) = (&trace, &local_sink) {
+            let c = Cause {
+                sender: cause.sender.clone(),
+                sender_member: cause.sender_member.clone(),
+                send_span: cause.send_span,
+            };
+            let mut recs = sink.take_records();
+            for r in &mut recs {
+                r.turn = Some(turn_id);
+                r.cause = Some(c.clone());
+            }
+            collector.lock().unwrap().extend(recs);
+        }
+    };
     let mut cells: HashMap<u64, Cell> = HashMap::new();
 
     while let Ok(job) = rx.recv() {
         match job {
             Job::Shutdown => break,
-            Job::Create { id, actor, args } => {
+            Job::Create { id, actor, args, cause } => {
                 let Some(decl) = actors.get(&actor) else {
                     shared.dead_sends.fetch_add(1, Ordering::SeqCst);
                     shared.done();
@@ -273,18 +327,19 @@ fn worker_loop(
                 let self_ref = Value::ActorRef { id: ActorId { worker: wi, id }, actor: Rc::from(actor.as_str()) };
                 let params: Vec<String> = decl.ctor.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
-                let dead = match interp.run_actor_turn(&decl.ctor.body, &params, argvals, state.clone(), self_ref) {
+                let turn_id = shared.total_turns.fetch_add(1, Ordering::SeqCst);
+                let dead = match interp.run_actor_turn(&decl.ctor.body, "new", &params, argvals, state.clone(), self_ref) {
                     Ok(()) => false,
                     Err(fault) => {
                         actor_died(&shared, &actor, "new", &fault);
                         true
                     }
                 };
-                shared.total_turns.fetch_add(1, Ordering::SeqCst);
+                ship(turn_id, &cause);
                 cells.insert(id, Cell { actor, state, dead });
                 shared.done();
             }
-            Job::Send { id, behavior, args } => {
+            Job::Send { id, behavior, args, cause } => {
                 let deliverable = matches!(cells.get(&id), Some(c) if !c.dead);
                 if !deliverable {
                     // Poisoned or unknown: dropped silently, counted, reported at exit
@@ -307,13 +362,14 @@ fn worker_loop(
                     Value::ActorRef { id: ActorId { worker: wi, id }, actor: Rc::from(actor_name.as_str()) };
                 let params: Vec<String> = beh.params.iter().map(|p| p.name.name.clone()).collect();
                 let argvals: Vec<Value> = args.into_iter().map(|m| interp.msg_to_value(m)).collect();
-                if let Err(fault) = interp.run_actor_turn(&beh.body, &params, argvals, state, self_ref) {
+                let turn_id = shared.total_turns.fetch_add(1, Ordering::SeqCst);
+                if let Err(fault) = interp.run_actor_turn(&beh.body, &behavior, &params, argvals, state, self_ref) {
                     actor_died(&shared, &actor_name, &behavior, &fault);
                     if let Some(c) = cells.get_mut(&id) {
                         c.dead = true;
                     }
                 }
-                shared.total_turns.fetch_add(1, Ordering::SeqCst);
+                ship(turn_id, &cause);
                 shared.done();
             }
         }
@@ -492,4 +548,41 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         }
         MsgValue::Actor { id, actor } => Value::ActorRef { id, actor: Rc::from(actor.as_str()) },
     }
+}
+
+/// The `--debug-rcaps` uniqueness walk (spec §7.4, phase 7i): an iso MOVE's graph must be
+/// unaliased. The value in hand is the environment's plus the evaluator's clone, so the top
+/// spine allows 2 strong refs; every NESTED mutable node (List/Record) must be exactly 1.
+/// Immutable values (Str, scalars, variants, caps) share freely and are exempt. A violation
+/// is compiler-bug class: the STATIC uniqueness proof failed — never a runtime safety net
+/// (the rebuild boundary is race-free by construction either way).
+pub fn assert_unique_graph(v: &Value) -> Result<(), String> {
+    fn walk(v: &Value, top: bool, path: &str) -> Result<(), String> {
+        match v {
+            Value::List(rc) => {
+                let max = if top { 2 } else { 1 };
+                let n = Rc::strong_count(rc);
+                if n > max {
+                    return Err(format!("list at {path} has {n} strong refs (max {max})"));
+                }
+                for (i, x) in rc.borrow().iter().enumerate() {
+                    walk(x, false, &format!("{path}[{i}]"))?;
+                }
+                Ok(())
+            }
+            Value::Record { fields, .. } => {
+                let max = if top { 2 } else { 1 };
+                let n = Rc::strong_count(fields);
+                if n > max {
+                    return Err(format!("record at {path} has {n} strong refs (max {max})"));
+                }
+                for (fname, x) in fields.borrow().iter() {
+                    walk(x, false, &format!("{path}.{fname}"))?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+    walk(v, true, "arg")
 }

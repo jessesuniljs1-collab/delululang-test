@@ -134,9 +134,13 @@ pub struct Interp {
     actors_host: Option<crate::actors::ActorHost>,
     /// The turn context while a behavior/ctor runs on THIS interpreter: (state record,
     /// address, actor name) — how `self` learns its own address for reply-to sends.
-    current_self: RefCell<Option<(Value, crate::actors::ActorId, String)>>,
+    current_self: RefCell<Option<(Value, crate::actors::ActorId, String, String)>>,
     /// Consts evaluated into `globals` (idempotence guard — Stage 7 evaluates per turn).
     consts_ready: Cell<bool>,
+    /// `--debug-rcaps` (Stage 7 phase 7i, spec §6.4): the checker's iso-move send-argument
+    /// node ids. When set, each such argument's graph is verified unaliased at the boundary
+    /// (DL1610 on violation — a compiler-bug detector, never the guarantee).
+    debug_rcaps: Option<std::sync::Arc<std::collections::HashSet<NodeId>>>,
 }
 
 impl Interp {
@@ -179,7 +183,36 @@ impl Interp {
             actors_host: None,
             current_self: RefCell::new(None),
             consts_ready: Cell::new(false),
+            debug_rcaps: None,
         }
+    }
+
+    /// Attach the checker's iso-move node set for `--debug-rcaps` verification (phase 7i).
+    pub fn with_debug_rcaps(
+        mut self,
+        moves: std::sync::Arc<std::collections::HashSet<NodeId>>,
+    ) -> Interp {
+        self.debug_rcaps = Some(moves);
+        self
+    }
+
+    /// The §7.4 debug check at a boundary: if this argument is a statically-proven iso MOVE
+    /// and `--debug-rcaps` is on, its graph must be unaliased — else DL1610.
+    fn debug_check_iso(&self, arg: &Expr, v: &Value) -> Result<(), Fault> {
+        if let Some(moves) = &self.debug_rcaps {
+            if moves.contains(&arg.id()) {
+                if let Err(why) = crate::actors::assert_unique_graph(v) {
+                    return Err(Fault::at(
+                        "DL1610",
+                        format!(
+                            "debug race-checker violation: an iso move's graph is aliased ({why}) — the static uniqueness proof failed; please file a compiler bug"
+                        ),
+                        arg.span(),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Attach the actor system's host handle (Stage 7 phase 7g). Additive: a program that
@@ -196,6 +229,7 @@ impl Interp {
     pub fn run_actor_turn(
         &self,
         body: &Block,
+        member: &str,
         params: &[String],
         args: Vec<Value>,
         state: Value,
@@ -213,7 +247,7 @@ impl Interp {
         for (p, v) in params.iter().zip(args) {
             env.define(p, v);
         }
-        let prev = self.current_self.replace(Some((state, id, name)));
+        let prev = self.current_self.replace(Some((state, id, name, member.to_string())));
         let result = self.exec_block_value(body, &env);
         self.current_self.replace(prev);
         match result {
@@ -235,8 +269,31 @@ impl Interp {
     /// pattern; `ref self <: tag` makes it statically legal).
     fn value_to_msg_here(&self, v: &Value) -> Result<crate::actors::MsgValue, Fault> {
         let ctx = self.current_self.borrow();
-        let self_state = ctx.as_ref().map(|(s, id, name)| (s, *id, name.as_str()));
+        let self_state = ctx.as_ref().map(|(s, id, name, _)| (s, *id, name.as_str()));
         crate::actors::value_to_msg(v, self_state)
+    }
+
+    /// A record template carrying this turn's actor attribution (spec §6.3). Main-line
+    /// records get all-`None`, so a program without actors traces byte-identically to v0.6.
+    /// `turn`/`cause` are the WORKER's knowledge, stamped when it drains the sink.
+    fn trace_attrib_record(&self) -> TraceRecord {
+        match &*self.current_self.borrow() {
+            Some((_, id, name, member)) => TraceRecord {
+                actor: Some(format!("{name}#{}", id.id)),
+                member: Some(format!("{name}.{member}")),
+                ..Default::default()
+            },
+            None => TraceRecord::default(),
+        }
+    }
+
+    /// The causal identity of THIS execution context for an outgoing send: (sender label,
+    /// sender member). Main line: ("main#0", None).
+    pub fn sender_identity(&self) -> (String, Option<String>) {
+        match &*self.current_self.borrow() {
+            Some((_, id, name, member)) => (format!("{name}#{}", id.id), Some(format!("{name}.{member}"))),
+            None => ("main#0".to_string(), None),
+        }
     }
 
     /// Attach best-effort execution limits for a Verified plugin run (spec §5.4, phase 6e.5). Builder
@@ -620,9 +677,16 @@ impl Interp {
                 let mut msgs = Vec::with_capacity(args.len());
                 for a in args {
                     let v = self.eval_expr(a, env)?;
+                    self.debug_check_iso(a, &v).map_err(Escape::Fault)?;
                     msgs.push(self.value_to_msg_here(&v).map_err(Escape::Fault)?);
                 }
-                let id = host.spawn(name, msgs);
+                let (sender, sender_member) = self.sender_identity();
+                let cause = crate::actors::SendCause {
+                    sender,
+                    sender_member,
+                    send_span: Some((span.file, span.start, span.end)),
+                };
+                let id = host.spawn(name, msgs, cause);
                 Ok(Value::ActorRef { id, actor: Rc::from(name.as_str()) })
             }
         }
@@ -748,10 +812,17 @@ impl Interp {
                     )));
                 };
                 let mut msgs = Vec::with_capacity(argvals.len());
-                for v in &argvals {
+                for (a, v) in args.iter().zip(&argvals) {
+                    self.debug_check_iso(a, v).map_err(Escape::Fault)?;
                     msgs.push(self.value_to_msg_here(v).map_err(Escape::Fault)?);
                 }
-                host.send(*id, &name.name, msgs);
+                let (sender, sender_member) = self.sender_identity();
+                let cause = crate::actors::SendCause {
+                    sender,
+                    sender_member,
+                    send_span: Some((span.file, span.start, span.end)),
+                };
+                host.send(*id, &name.name, msgs, cause);
                 let _ = actor;
                 return Ok(Value::Unit);
             }
@@ -761,7 +832,7 @@ impl Interp {
                         .current_self
                         .borrow()
                         .as_ref()
-                        .is_some_and(|(s, _, _)| matches!(s, Value::Record { fields: sf, .. } if Rc::ptr_eq(sf, fields)));
+                        .is_some_and(|(s, _, _, _)| matches!(s, Value::Record { fields: sf, .. } if Rc::ptr_eq(sf, fields)));
                     if is_self {
                         if let Some(f) = decl.fns.iter().find(|f| f.name.name == name.name) {
                             // T-SyncMethod: runs within the actor's own turn.
@@ -785,13 +856,20 @@ impl Interp {
                                     span,
                                 )));
                             };
-                            let self_id = self.current_self.borrow().as_ref().map(|(_, id, _)| *id);
+                            let self_id = self.current_self.borrow().as_ref().map(|(_, id, _, _)| *id);
                             let id = self_id.expect("turn context has an address");
                             let mut msgs = Vec::with_capacity(argvals.len());
-                            for v in &argvals {
+                            for (a, v) in args.iter().zip(&argvals) {
+                                self.debug_check_iso(a, v).map_err(Escape::Fault)?;
                                 msgs.push(self.value_to_msg_here(v).map_err(Escape::Fault)?);
                             }
-                            host.send(id, &name.name, msgs);
+                            let (sender, sender_member) = self.sender_identity();
+                            let cause = crate::actors::SendCause {
+                                sender,
+                                sender_member,
+                                send_span: Some((span.file, span.start, span.end)),
+                            };
+                            host.send(id, &name.name, msgs, cause);
                             return Ok(Value::Unit);
                         }
                     }
@@ -850,6 +928,7 @@ impl Interp {
             cap_kind: kind.to_string(),
             detail,
             span: Some((span.file, span.start, span.end)),
+            ..self.trace_attrib_record()
         });
     }
 
@@ -933,6 +1012,7 @@ impl Interp {
             cap_kind: lib.to_string(),
             detail: Some(format!("{lib}.{method}")),
             span: Some((span.file, span.start, span.end)),
+            ..self.trace_attrib_record()
         });
     }
 
@@ -966,6 +1046,7 @@ impl Interp {
             cap_kind: "Python".to_string(),
             detail,
             span: Some((span.file, span.start, span.end)),
+            ..self.trace_attrib_record()
         });
     }
 

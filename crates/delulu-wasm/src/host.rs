@@ -179,6 +179,9 @@ impl HostState {
             cap_kind: cap_kind.to_string(),
             detail,
             span: Some((file as u32, start as u32, end as u32)),
+            // Stage 7: actor attribution is stamped by the actor scheduler; the wasm host's
+            // main-line records carry none (byte-identical trace output preserved).
+            ..Default::default()
         });
     }
 }

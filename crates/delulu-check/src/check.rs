@@ -54,6 +54,9 @@ pub struct CheckResult {
     /// effects are dropped (they contribute nothing observable — the boundary subset check in
     /// `check_fn` is the authoritative gate, and DIR re-verification replays it).
     pub node_rows: HashMap<NodeId, Row>,
+    /// Send/spawn argument nodes that are statically-proven iso MOVES (Stage 7 phase 7i):
+    /// what the runtime's `--debug-rcaps` verifies unaliased at each actor boundary.
+    pub iso_moves: HashSet<NodeId>,
 }
 
 /// Effect-row accumulator: concrete effects plus any polymorphic tails still in play.
@@ -198,11 +201,13 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
     // over the settled types so it never participates in unification (build-order deviation 4).
     let fn_types_settled: HashMap<String, Type> =
         checker.fn_types.iter().map(|(k, v)| (k.clone(), checker.cx.apply_type(v))).collect();
-    let rcap_diags = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
+    let (rcap_diags, iso_moves) =
+        crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
     checker.diags.extend(rcap_diags);
 
     CheckResult {
         diags: checker.diags,
+        iso_moves,
         facts: checker.facts,
         main_row,
         main_present,

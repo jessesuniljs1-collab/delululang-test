@@ -27,7 +27,7 @@ pub use plugin::{
 };
 pub use prim::{set_capture, set_fixed_clock_ms, set_rand_seed, take_capture};
 pub use value::{CapScope, CapVal};
-pub use trace::{assert_trace, TraceRecord, TraceSink};
+pub use trace::{assert_trace, assert_trace_causal, Cause, TraceRecord, TraceSink};
 pub use value::{Fault, RootVal, Value};
 
 #[cfg(test)]

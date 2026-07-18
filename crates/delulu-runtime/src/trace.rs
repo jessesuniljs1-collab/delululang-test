@@ -22,7 +22,7 @@ pub const OPAQUE: &str = "\u{ab}opaque\u{bb}";
 /// One traced effect operation. Field shape is deliberately flat and hand-JSON-serializable (no
 /// new dependency): `seq` orders records within a run (strictly increasing), `span` mirrors
 /// `delulu_diag::Span` as `(file, start, end)` byte offsets.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TraceRecord {
     pub seq: u64,
     pub effect: String,
@@ -30,6 +30,25 @@ pub struct TraceRecord {
     pub cap_kind: String,
     pub detail: Option<String>,
     pub span: Option<(u32, u32, u32)>,
+    /// Stage 7 (spec §6.3): causal actor attribution — `"Ping#3"`. `None` for main-line
+    /// records, and then NONE of the actor fields serialize (a program without actors keeps
+    /// byte-identical trace output).
+    pub actor: Option<String>,
+    /// The executing member (`"Ping.ping"`) — what `--assert-trace` checks the effect against.
+    pub member: Option<String>,
+    /// The globally monotonic turn id this effect ran in.
+    pub turn: Option<u64>,
+    /// The causal edge: who sent the message that started this turn, from where.
+    pub cause: Option<Cause>,
+}
+
+/// The cause chain of a turn (spec §6.3): the sender's identity, the sender's executing
+/// member (`None` = the main line), and the send site's span.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cause {
+    pub sender: String,
+    pub sender_member: Option<String>,
+    pub send_span: Option<(u32, u32, u32)>,
 }
 
 impl TraceRecord {
@@ -55,6 +74,36 @@ impl TraceRecord {
                 out.push_str(&format!("{{\"file\":{file},\"start\":{start},\"end\":{end}}}"));
             }
             None => out.push_str("null"),
+        }
+        // Actor attribution (spec §6.3) serializes ONLY when present — non-actor records
+        // stay byte-identical to v0.6.
+        if let Some(a) = &self.actor {
+            out.push_str(",\"actor\":");
+            out.push_str(&json_string(a));
+            if let Some(m) = &self.member {
+                out.push_str(",\"member\":");
+                out.push_str(&json_string(m));
+            }
+            if let Some(t) = self.turn {
+                out.push_str(&format!(",\"turn\":{t}"));
+            }
+            if let Some(c) = &self.cause {
+                out.push_str(",\"cause\":{\"sender\":");
+                out.push_str(&json_string(&c.sender));
+                out.push_str(",\"sender_member\":");
+                match &c.sender_member {
+                    Some(m) => out.push_str(&json_string(m)),
+                    None => out.push_str("null"),
+                }
+                out.push_str(",\"send_span\":");
+                match c.send_span {
+                    Some((file, start, end)) => {
+                        out.push_str(&format!("{{\"file\":{file},\"start\":{start},\"end\":{end}}}"));
+                    }
+                    None => out.push_str("null"),
+                }
+                out.push('}');
+            }
         }
         out.push('}');
         out
@@ -107,6 +156,18 @@ impl TraceSink {
         self.0.borrow().clone()
     }
 
+    /// Drain and return all records (Stage 7: the per-worker sink empties after each turn so
+    /// the records can be stamped with actor/turn/cause and shipped to the shared collector).
+    pub fn take_records(&self) -> Vec<TraceRecord> {
+        std::mem::take(&mut *self.0.borrow_mut())
+    }
+
+    /// Append a record verbatim (Stage 7: the CLI merges worker-collected records into the
+    /// main sink before emitting/asserting).
+    pub fn append(&self, r: TraceRecord) {
+        self.0.borrow_mut().push(r);
+    }
+
     /// One JSON object per line, newline-separated, no trailing newline (spec §6.1).
     pub fn to_json_lines(&self) -> String {
         self.0.borrow().iter().map(TraceRecord::to_json).collect::<Vec<_>>().join("\n")
@@ -152,6 +213,73 @@ pub fn assert_trace(allowed_effects: &BTreeSet<String>, records: &[TraceRecord])
         .collect()
 }
 
+/// The CAUSAL trace ⊆ row law (Stage 7, invariant 35 executable): an actor-attributed record's
+/// effect must be in (a) the EXECUTING member's static row and (b) the SEND SITE's static row
+/// — the sender's member row, or `main_row` for a main-line send. Main-line records keep the
+/// original law against `main_row`. `member_rows` is keyed `"Actor.member"`.
+pub fn assert_trace_causal(
+    main_row: &BTreeSet<String>,
+    member_rows: &std::collections::HashMap<String, BTreeSet<String>>,
+    records: &[TraceRecord],
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let row_of = |member: Option<&String>| -> Option<&BTreeSet<String>> {
+        match member {
+            Some(m) => member_rows.get(m),
+            None => Some(main_row),
+        }
+    };
+    for r in records {
+        match &r.actor {
+            None => {
+                if !main_row.contains(&r.effect) {
+                    out.push(format!(
+                        "seq {}: effect `{}` (op `{}.{}`) is not in the statically computed row",
+                        r.seq, r.effect, r.cap_kind, r.op
+                    ));
+                }
+            }
+            Some(actor) => {
+                // (a) the executing member's row contains the effect.
+                match row_of(r.member.as_ref()) {
+                    Some(row) if row.contains(&r.effect) => {}
+                    Some(_) => out.push(format!(
+                        "seq {}: actor {actor}: effect `{}` is not in executing member {}'s static row",
+                        r.seq,
+                        r.effect,
+                        r.member.as_deref().unwrap_or("?")
+                    )),
+                    None => out.push(format!(
+                        "seq {}: actor {actor}: executing member {} has no known static row",
+                        r.seq,
+                        r.member.as_deref().unwrap_or("?")
+                    )),
+                }
+                // (b) the send site's row contains it too (T-Send: {Async} ∪ row(beh) flows
+                // into the sender — this is that containment, replayed on the witness).
+                if let Some(c) = &r.cause {
+                    match row_of(c.sender_member.as_ref()) {
+                        Some(row) if row.contains(&r.effect) => {}
+                        Some(_) => out.push(format!(
+                            "seq {}: actor {actor}: effect `{}` is not in the SEND SITE's static row (sender {}, member {})",
+                            r.seq,
+                            r.effect,
+                            c.sender,
+                            c.sender_member.as_deref().unwrap_or("main line")
+                        )),
+                        None => out.push(format!(
+                            "seq {}: actor {actor}: sender member {} has no known static row",
+                            r.seq,
+                            c.sender_member.as_deref().unwrap_or("main line")
+                        )),
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +320,7 @@ mod tests {
             cap_kind: "Console".into(),
             detail: Some("a \"quoted\" line\nwith a newline".into()),
             span: Some((3, 10, 20)),
+            ..Default::default()
         };
         let json = r.to_json();
         assert!(json.starts_with('{') && json.ends_with('}'));
@@ -213,6 +342,7 @@ mod tests {
             cap_kind: "Rand".into(),
             detail: None,
             span: None,
+            ..Default::default()
         };
         let json = r.to_json();
         assert!(json.contains("\"detail\":null"));
@@ -229,6 +359,7 @@ mod tests {
             cap_kind: "Console".into(),
             detail: None,
             span: None,
+            ..Default::default()
         });
         sink.push(TraceRecord {
             seq: 1,
@@ -237,6 +368,7 @@ mod tests {
             cap_kind: "FsRead".into(),
             detail: None,
             span: None,
+            ..Default::default()
         });
         assert_eq!(sink.len(), 2);
         let joined = sink.to_json_lines();
@@ -253,8 +385,8 @@ mod tests {
     fn assert_trace_flags_effects_outside_the_allowed_row() {
         let allowed: BTreeSet<String> = ["Write"].into_iter().map(String::from).collect();
         let records = vec![
-            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None },
-            TraceRecord { seq: 1, effect: "Net".into(), op: "get".into(), cap_kind: "Http".into(), detail: None, span: None },
+            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None, ..Default::default() },
+            TraceRecord { seq: 1, effect: "Net".into(), op: "get".into(), cap_kind: "Http".into(), detail: None, span: None, ..Default::default() },
         ];
         let violations = assert_trace(&allowed, &records);
         assert_eq!(violations.len(), 1);
@@ -266,8 +398,8 @@ mod tests {
     fn assert_trace_is_empty_when_every_effect_is_allowed() {
         let allowed: BTreeSet<String> = ["Write", "Read"].into_iter().map(String::from).collect();
         let records = vec![
-            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None },
-            TraceRecord { seq: 1, effect: "Read".into(), op: "read_text".into(), cap_kind: "FsRead".into(), detail: None, span: None },
+            TraceRecord { seq: 0, effect: "Write".into(), op: "println".into(), cap_kind: "Console".into(), detail: None, span: None, ..Default::default() },
+            TraceRecord { seq: 1, effect: "Read".into(), op: "read_text".into(), cap_kind: "FsRead".into(), detail: None, span: None, ..Default::default() },
         ];
         assert!(assert_trace(&allowed, &records).is_empty());
     }
