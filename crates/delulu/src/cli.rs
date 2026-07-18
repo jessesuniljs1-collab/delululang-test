@@ -489,6 +489,7 @@ pub fn run(args: &[String]) -> i32 {
     match cmd.as_str() {
         "check" => cmd_check(rest),
         "fmt" => cmd_fmt(rest),
+        "test" => cmd_test(rest),
         // Machine-only by construction: the first-run flow is suppressed for `lsp` in
         // locale.rs (a stray prompt on stdout would corrupt the JSON-RPC stream).
         "lsp" => crate::lsp::run_lsp(rest),
@@ -563,6 +564,7 @@ fn usage() -> &'static str {
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
      \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
+     \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
@@ -852,6 +854,312 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
         );
     }
     0
+}
+
+/// The `[test-authority]` package ceiling (spec §5.1): effects + fs.read scopes every
+/// test's declared row must fit inside (DL1703 otherwise). Absent table = PURE — the
+/// couldn't-tell default grants nothing (invariant 41).
+struct TestCeiling {
+    effects: Vec<String>,
+    fs_read: Vec<String>,
+}
+
+fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
+    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new() };
+    let Ok(text) = std::fs::read_to_string(dir.join("delulu.toml")) else { return ceiling };
+    let mut in_section = false;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if let Some(name) = line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            in_section = name.trim() == "test-authority";
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else { continue };
+        let items: Vec<String> = v
+            .trim()
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .split(',')
+            .filter_map(|s| {
+                let s = s.trim().trim_matches('"').to_string();
+                (!s.is_empty()).then_some(s)
+            })
+            .collect();
+        match k.trim() {
+            "effects" => ceiling.effects = items,
+            "fs.read" => ceiling.fs_read = items,
+            _ => {}
+        }
+    }
+    ceiling
+}
+
+/// `delulu test [paths|patterns] [--json] [--seed N]` — the authority-isolated test
+/// runner (Stage 8, phase 8g; spec §5). Deterministic by default (fixed clock, per-name
+/// rand seed), `--trace-effects` semantics ALWAYS on: each test's actual effect list is
+/// part of its report even when it passes. Under a reachable broker daemon, the run
+/// executes inside a `test-session` broker node with per-file children, transitively
+/// revoked at session end (build-order deviation 15 for the embedded fallback).
+fn cmd_test(rest: &[String]) -> i32 {
+    let mut json = false;
+    let mut seed_flag: Option<u64> = None;
+    let mut paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut patterns: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--json" => json = true,
+            "--seed" => {
+                i += 1;
+                seed_flag = rest.get(i).and_then(|v| v.parse().ok());
+            }
+            other if !other.starts_with("--") => {
+                let p = std::path::PathBuf::from(other);
+                if p.exists() {
+                    paths.push(p);
+                } else {
+                    patterns.push(other.to_string());
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if paths.is_empty() {
+        let default = std::path::PathBuf::from("tests");
+        if default.is_dir() {
+            paths.push(default);
+        } else {
+            eprintln!("error: `delulu test` needs test files/directories (no ./tests directory here)");
+            return 2;
+        }
+    }
+    let mut files = Vec::new();
+    for p in &paths {
+        if let Err(e) = collect_delulu_files(p, &mut files) {
+            eprintln!("cannot read {}: {e}", p.display());
+            return 2;
+        }
+    }
+    let ceiling = test_ceiling(std::path::Path::new("."));
+
+    // The broker session lane: reachable daemon ⇒ the whole run lives under a freshly
+    // ISSUED `test-session` principal node (the broker tree starts empty; a test run is
+    // its own principal); unreachable ⇒ embedded grants (the Stage-5 default posture).
+    let state_dir = crate::brokerd::resolve_state_dir(None);
+    let session = state_dir.as_ref().and_then(|sd| {
+        let spec = crate::broker_ipc::AuthoritySpec {
+            effects: ceiling.effects.clone(),
+            fs_read: ceiling.fs_read.clone(),
+            holder_kind: "process".into(),
+            holder_desc: "test-session".into(),
+            ..Default::default()
+        };
+        match crate::brokerd::request(sd, crate::broker_ipc::ReqBody::Issue(spec)) {
+            Ok(crate::broker_ipc::Response::Issued { node }) => Some(node),
+            _ => None,
+        }
+    });
+
+    let seed_base = seed_flag.unwrap_or(0xDE1);
+    let mut reports: Vec<Json> = Vec::new();
+    let mut failed = 0usize;
+    let mut passed = 0usize;
+    let t_all = std::time::Instant::now();
+
+    for f in &files {
+        let (map, id, src) = match load(&f.display().to_string()) {
+            Ok(x) => x,
+            Err(c) => return c,
+        };
+        let checked = check_source(id, &src);
+        if errors(&checked.diagnostics) > 0 {
+            print_diagnostics("test", &checked.diagnostics, &map, None, false);
+            reports.push(json!({
+                "file": f.display().to_string(), "status": "check-failed",
+            }));
+            failed += 1;
+            continue;
+        }
+        // A per-file broker child carrying exactly this file's needs (session lane only).
+        let file_node = session.as_ref().zip(state_dir.as_ref()).and_then(|(sess, sd)| {
+            let spec = crate::broker_ipc::AuthoritySpec {
+                effects: ceiling.effects.clone(),
+                fs_read: ceiling.fs_read.clone(),
+                holder_kind: "process".into(),
+                holder_desc: format!("test-file {}", f.display()),
+                ..Default::default()
+            };
+            match crate::brokerd::request(
+                sd,
+                crate::broker_ipc::ReqBody::Attenuate {
+                    parent: sess.clone(),
+                    authority: spec,
+                    owner: None,
+                },
+            ) {
+                Ok(crate::broker_ipc::Response::Issued { node }) => Some(node),
+                _ => None,
+            }
+        });
+        let _ = &file_node;
+
+        let interp_module = &checked.module;
+        for item in &interp_module.items {
+            let delulu_syntax::ast::Item::Test(t) = item else { continue };
+            if !patterns.is_empty() && !patterns.iter().any(|p| t.name.contains(p.as_str())) {
+                continue;
+            }
+            let declared: Vec<String> = t
+                .row
+                .iter()
+                .flat_map(|r| r.effects.iter())
+                .filter_map(|p| p.segs.last().map(|s| s.name.clone()))
+                .collect();
+
+            // DL1703: the test's declared row must fit the package ceiling.
+            if let Some(excess) =
+                declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e))
+            {
+                let d = Diagnostic::error(
+                    "DL1703",
+                    format!(
+                        "test \"{}\" declares effect `{excess}` but the package [test-authority] ceiling allows only {:?}",
+                        t.name, ceiling.effects
+                    ),
+                )
+                .with_span(delulu_diag::Span::new(id, t.name_span.start, t.name_span.end), "narrow the row, or widen delulu.toml's [test-authority] — a real review decision");
+                print_diagnostics("test", &[d], &map, None, false);
+                reports.push(json!({
+                    "name": t.name, "file": f.display().to_string(),
+                    "status": "fail", "failure": { "message": format!("DL1703: effect `{excess}` exceeds the test ceiling") },
+                    "effects_traced": [],
+                }));
+                failed += 1;
+                continue;
+            }
+            // Actor tests are post-v0.8 (build-order §5): refuse clearly, never half-run.
+            if declared.iter().any(|e| e == "Async") {
+                reports.push(json!({
+                    "name": t.name, "file": f.display().to_string(), "status": "fail",
+                    "failure": { "message": "actor (Async) tests are not supported by the v0.8 runner — build-order §5" },
+                    "effects_traced": [],
+                }));
+                failed += 1;
+                continue;
+            }
+
+            // Deterministic by default: fixed clock; rand seeded by (--seed ⊕ name hash).
+            let name_hash: u64 =
+                t.name.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+            delulu_runtime::set_fixed_clock_ms(Some(0));
+            delulu_runtime::set_rand_seed(seed_base ^ name_hash);
+
+            // Grants derive from the DECLARED row bounded by the ceiling — a pure test
+            // holds nothing at all (invariant 41).
+            let mut g = Grants {
+                console: declared.iter().any(|e| e == "Write"),
+                clock: declared.iter().any(|e| e == "Clock"),
+                rand: declared.iter().any(|e| e == "Rand"),
+                ..Grants::default()
+            };
+            if declared.iter().any(|e| e == "Read") {
+                g.fs_read.extend(ceiling.fs_read.iter().cloned());
+            }
+
+            let sink = delulu_runtime::TraceSink::new();
+            let interp = Interp::new(interp_module).with_trace(sink.clone());
+            delulu_runtime::set_capture(true);
+            let t0 = std::time::Instant::now();
+            let outcome = interp.run_test(&t.name, Value::Root(std::rc::Rc::new(g.build_root())));
+            let ms = t0.elapsed().as_millis() as u64;
+            let output = delulu_runtime::take_capture().unwrap_or_default();
+
+            let mut traced: Vec<String> =
+                sink.records().iter().map(|r| r.effect.clone()).collect();
+            traced.sort();
+            traced.dedup();
+
+            let (start_l, start_c) = map.position(id, t.name_span.start);
+            let mut entry = json!({
+                "name": t.name, "file": f.display().to_string(),
+                "span": { "line": start_l, "col": start_c },
+                "ms": ms, "effects_traced": traced,
+            });
+            match outcome {
+                Ok(_) => {
+                    entry["status"] = json!("pass");
+                    passed += 1;
+                    if !json {
+                        ok_line!("ok: test \"{}\" ({} ms)", t.name, ms);
+                    }
+                }
+                Err(fault) => {
+                    let status = if fault.code == "DL1707" { "fail" } else { "panic" };
+                    entry["status"] = json!(status);
+                    // deviation 5: assert_eq's symmetric `a` != `b` maps to actual/expected.
+                    let mut failure = json!({ "code": fault.code, "message": fault.message });
+                    let ticks: Vec<&str> = fault
+                        .message
+                        .split('`')
+                        .skip(1)
+                        .step_by(2)
+                        .collect();
+                    if fault.code == "DL1707" && ticks.len() == 2 {
+                        failure["actual"] = json!(ticks[0]);
+                        failure["expected"] = json!(ticks[1]);
+                    }
+                    entry["failure"] = failure;
+                    failed += 1;
+                    if !json {
+                        eprintln!("FAIL: test \"{}\" — {} ({} ms)", t.name, fault.message, ms);
+                        if !output.is_empty() {
+                            eprintln!("  captured output:\n{output}");
+                        }
+                    }
+                }
+            }
+            reports.push(entry);
+        }
+    }
+
+    // Session end: transitive revocation — nothing a test leaked survives the run.
+    let custody = match (&session, &state_dir) {
+        (Some(sess), Some(sd)) => {
+            let revoked = matches!(
+                crate::brokerd::request(
+                    sd,
+                    crate::broker_ipc::ReqBody::Revoke { caller: sess.clone(), target: sess.clone() },
+                ),
+                Ok(crate::broker_ipc::Response::Revoked { .. })
+            );
+            json!({ "mode": "daemon", "session": sess, "revoked_at_end": revoked })
+        }
+        _ => json!({ "mode": "embedded" }),
+    };
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "delulu_version": env!("CARGO_PKG_VERSION"), "schema": 1, "command": "test",
+                "tests": reports,
+                "summary": { "passed": passed, "failed": failed, "ms": t_all.elapsed().as_millis() as u64 },
+                "custody": custody,
+            }))
+            .unwrap()
+        );
+    } else {
+        println!("test result: {} passed, {} failed", passed, failed);
+    }
+    if failed > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// `delulu locale add <file.dpx> | remove <name> | list` (Stage 8, phase 8f — spec §6.1).

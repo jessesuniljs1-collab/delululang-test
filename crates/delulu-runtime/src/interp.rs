@@ -94,6 +94,9 @@ type R<T> = Result<T, Escape>;
 
 pub struct Interp {
     funcs: HashMap<String, FnDecl>,
+    /// `test` bodies by name (Stage 8, phase 8g) — read ONLY by [`Interp::run_test`],
+    /// never by any normal execution path (invariant 41).
+    tests: HashMap<String, delulu_syntax::ast::Block>,
     consts: Vec<(String, Expr)>,
     globals: Env,
     depth: Cell<u32>,
@@ -149,6 +152,7 @@ impl Interp {
         let mut consts = Vec::new();
         let mut foreign_blocks = HashMap::new();
         let mut actors = HashMap::new();
+        let mut tests = HashMap::new();
         for item in &module.items {
             match item {
                 Item::Fn(f) => {
@@ -161,6 +165,12 @@ impl Interp {
                 }
                 Item::Actor(a) => {
                     actors.insert(a.name.name.clone(), a.clone());
+                }
+                // Stage 8 (phase 8g): test bodies are held for the RUNNER's entry point
+                // only — no normal execution path reads this map, so tests stay compiled
+                // out of `delulu run` (invariant 41; the 8a witnesses pin it).
+                Item::Test(t) => {
+                    tests.insert(t.name.clone(), t.body.clone());
                 }
                 _ => {}
             }
@@ -177,6 +187,7 @@ impl Interp {
         }
         Interp {
             funcs,
+            tests,
             consts,
             globals: Scope::root(),
             depth: Cell::new(0),
@@ -401,6 +412,32 @@ impl Interp {
     pub fn run_main(&self, root: Value) -> Result<Value, Fault> {
         self.eval_consts().map_err(unwrap_fault)?;
         self.call_fn("main", vec![root]).map_err(unwrap_fault)
+    }
+
+    /// Run one `test` block body (Stage 8, phase 8g): `test_root` bound, `Unit` result.
+    /// The ONLY entry point that executes a test — `run_main` and every other path never
+    /// touch the tests map (invariant 41).
+    pub fn run_test(&self, name: &str, test_root: Value) -> Result<Value, Fault> {
+        self.eval_consts().map_err(unwrap_fault)?;
+        let Some(body) = self.tests.get(name) else {
+            return Err(Fault::new("DL0907", format!("unknown test \"{name}\"")));
+        };
+        let run = || -> R<Value> {
+            self.enter()?;
+            let env = Scope::child(&self.globals);
+            env.define("test_root", test_root);
+            let result = self.exec_block_value(body, &env);
+            self.leave();
+            self.finish_call(result)
+        };
+        run().map_err(unwrap_fault)
+    }
+
+    /// The names of this module's `test` blocks, in declaration order-independent form.
+    pub fn test_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.tests.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     /// Call a pure function with Int arguments and return its Int (or Bool-as-Int) result. Used by

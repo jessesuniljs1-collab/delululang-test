@@ -168,6 +168,21 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
     (best of two). The 3.00× cold record stands in the Stage-7 close-out table as the
     witnessed performance; this bar exists to catch parallelism BREAKING, and 1.5×
     still does exactly that. Argued here in the open — not silently loosened.
+14. **RULED — test runner mechanics (8g).** (a) `[test-authority]` absent = PURE (the
+    couldn't-tell default grants nothing — invariant 41); a per-file header wider than the
+    package ceiling is DL1703 at the run's front, before the body executes. (b) Grants
+    derive from each test's DECLARED row bounded by the ceiling — a pure test literally
+    holds no Grants; an undeclared effect is caught upstream by the normal T-Fn boundary
+    (DL0501) at check, so the runner never even sees it. (c) `--trace-effects` is
+    ALWAYS-on: `effects_traced` is in every test's JSON entry even on pass (the review
+    surface). (d) Determinism by default: fixed clock, rand seeded by `--seed ⊕
+    FNV(test-name)`; repeated runs are byte-identical modulo the `ms` timing field. (e)
+    The broker lane ISSUES a fresh `test-session` PRINCIPAL (the tree starts empty — a
+    test run is its own top-level principal, not a child of some ambient root), one
+    Attenuated child per file, transitively revoked at session end; revoked nodes are
+    MARKED `[revoked@seq]` in `grants tree`, not erased (the audit trail is the point).
+    Unreachable broker ⇒ embedded grants, labeled `custody.mode = "embedded"`. (f) Actor
+    (`Async`) tests are refused clearly — post-v0.8 (build-order §5), never half-run.
 13. **RULED — `locale add` mechanics (8f).** (a) The zero-authority gate lives at ADD:
     `plugin build` happily builds an effectful plugin, but a catalog plugin with ANY
     ceiling effect is refused at install — the couldn't-tell branch closes where the

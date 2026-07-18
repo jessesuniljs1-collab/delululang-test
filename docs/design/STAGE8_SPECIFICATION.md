@@ -378,3 +378,16 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   build → add → pirate DL0501 renders with args → en-US fallback on gaps → JSON
   byte-invariant with the locale active → remove → unknown-locale warn. The
   kitchen-rule case: an effectful catalog plugin is REFUSED at add, nothing installed.
+- **8g — `delulu test`, the authority-isolated runner (2026-07-18).** Mechanics ruled in
+  build-order deviation 14. `[test-authority]` package ceiling (absent = pure); per-test
+  declared row bounded by it (DL1703 at the front on excess); grants derive from the
+  declared row so a pure test holds nothing (invariant 41), and an undeclared effect is
+  the ordinary DL0501 at check. Deterministic by default (fixed clock, per-name-hash
+  rand seed, `--seed` override); `--trace-effects` always-on so `effects_traced` rides
+  every JSON entry even on pass. `Interp::run_test` is the ONLY path that executes a test
+  body — `run_main` never touches the tests map. Broker lane: a fresh ISSUED
+  `test-session` principal, per-file Attenuated children, transitively revoked at session
+  end (marked `[revoked@seq]`, witnessed); embedded fallback labeled. Criterion 5
+  witnessed end to end through the real binary in BOTH lanes: pure test zero-traced,
+  Write test traces Write on pass, undeclared-Net refused DL0501, over-ceiling DL1703,
+  determinism byte-identical, daemon session revoked at end.
