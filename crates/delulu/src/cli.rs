@@ -438,6 +438,7 @@ pub fn run(args: &[String]) -> i32 {
     let rest = &args[1..];
     match cmd.as_str() {
         "check" => cmd_check(rest),
+        "fmt" => cmd_fmt(rest),
         "build" => cmd_build(rest),
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
@@ -505,6 +506,7 @@ fn usage() -> &'static str {
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
+     \x20 delulu fmt       --migrate 0.7 <file-or-dir>... [--json]  (rename pre-0.7 `consume`/`recover` identifiers)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \n\
@@ -517,6 +519,126 @@ fn usage() -> &'static str {
      `delulu build` resolves path dependencies and verifies each dependency's authority against\n\
      its pin (DL1001); `delulu lock` writes delulu.lock and enforces the semver-authority law\n\
      (DL1003 — authority never widens silently across versions)."
+}
+
+/// `delulu fmt --migrate 0.7 <file-or-dir>… [--json]` — invariant 37 (Stage 7): `consume` and
+/// `recover` became keywords in v0.7; this renames every pre-0.7 identifier use to `consume_` /
+/// `recover_` (the exact repair DL1608 carries), corpus-wide and in place. Token-stream based:
+/// strings and comments are untouched because they are not identifier tokens. v0.7 ships ONLY
+/// this migration form — a general formatter is out of scope (build-order deviation 6).
+fn cmd_fmt(args: &[String]) -> i32 {
+    let mut migrate: Option<String> = None;
+    let mut json = false;
+    let mut paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--migrate" => {
+                i += 1;
+                migrate = args.get(i).cloned();
+            }
+            "--json" => json = true,
+            other => paths.push(std::path::PathBuf::from(other)),
+        }
+        i += 1;
+    }
+    match migrate.as_deref() {
+        Some("0.7") => {}
+        Some(v) => {
+            eprintln!("unknown migration `{v}` — the only migration is `0.7` (consume/recover keywords)");
+            return 2;
+        }
+        None => {
+            eprintln!("delulu fmt currently supports only `--migrate 0.7` (see usage)");
+            return 2;
+        }
+    }
+    if paths.is_empty() {
+        eprintln!("delulu fmt --migrate 0.7 needs at least one file or directory");
+        return 2;
+    }
+
+    // Expand directories to their `.delulu` files, recursively, deterministically.
+    fn collect(p: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+        if p.is_dir() {
+            let mut entries: Vec<_> =
+                std::fs::read_dir(p)?.collect::<Result<Vec<_>, _>>()?.into_iter().map(|e| e.path()).collect();
+            entries.sort();
+            for e in entries {
+                collect(&e, out)?;
+            }
+        } else if p.extension().and_then(|e| e.to_str()) == Some("delulu") {
+            out.push(p.to_path_buf());
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    for p in &paths {
+        if !p.exists() {
+            eprintln!("no such file or directory: {}", p.display());
+            return 2;
+        }
+        if let Err(e) = collect(p, &mut files) {
+            eprintln!("cannot read {}: {e}", p.display());
+            return 2;
+        }
+    }
+
+    let mut total_renames = 0usize;
+    let mut changed: Vec<String> = Vec::new();
+    for f in &files {
+        let src = match std::fs::read_to_string(f) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("cannot read {}: {e}", f.display());
+                return 2;
+            }
+        };
+        let (tokens, _lex_diags) = delulu_syntax::lexer::lex(0, &src);
+        let mut spans: Vec<(u32, u32, &'static str)> = tokens
+            .iter()
+            .filter_map(|t| match t.kind {
+                delulu_syntax::token::TokenKind::KwConsume => Some((t.span.start, t.span.end, "consume_")),
+                delulu_syntax::token::TokenKind::KwRecover => Some((t.span.start, t.span.end, "recover_")),
+                _ => None,
+            })
+            .collect();
+        if spans.is_empty() {
+            continue;
+        }
+        // Splice back-to-front so earlier byte offsets stay valid.
+        spans.sort_by_key(|s| std::cmp::Reverse(s.0));
+        let mut out = src.clone();
+        for (start, end, insert) in &spans {
+            out.replace_range(*start as usize..*end as usize, insert);
+        }
+        if let Err(e) = std::fs::write(f, &out) {
+            eprintln!("cannot write {}: {e}", f.display());
+            return 2;
+        }
+        total_renames += spans.len();
+        changed.push(f.display().to_string());
+    }
+
+    if json {
+        let report = serde_json::json!({
+            "migration": "0.7",
+            "files_scanned": files.len(),
+            "files_changed": changed,
+            "renames": total_renames,
+        });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    } else if total_renames == 0 {
+        println!("migrate 0.7: nothing to do ({} file(s) scanned)", files.len());
+    } else {
+        println!(
+            "migrate 0.7: renamed {} identifier(s) in {} file(s) (of {} scanned)",
+            total_renames,
+            changed.len(),
+            files.len()
+        );
+    }
+    0
 }
 
 fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
@@ -760,7 +882,10 @@ fn collect_plugin_loads(block: &delulu_syntax::ast::Block, out: &mut Vec<PluginL
             }
             Expr::Lambda { body, .. } => walk_block(body, out, grants),
             Expr::Block(b) => walk_block(b, out, grants),
-            Expr::Lit { .. } | Expr::Var { .. } => {}
+            // Stage 7: a `load(…)` can sit inside spawn arguments or a recover block.
+            Expr::Spawn { args, .. } => args.iter().for_each(|a| walk_expr(a, out, grants)),
+            Expr::Recover { body, .. } => walk_block(body, out, grants),
+            Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
         }
     }
     fn walk_block(b: &delulu_syntax::ast::Block, out: &mut Vec<PluginLoad>, grants: &Grants) {
@@ -4104,7 +4229,10 @@ impl PyWalk {
             Lambda { body, .. } => self.walk_block(body),
             Try { inner, .. } => self.walk_expr(inner),
             Block(b) => self.walk_block(b),
-            Lit { .. } | Var { .. } => {}
+            // Stage 7: python reachability inside spawn arguments / recover blocks.
+            Spawn { args, .. } => args.iter().for_each(|a| self.walk_expr(a)),
+            Recover { body, .. } => self.walk_block(body),
+            Lit { .. } | Var { .. } | Consume { .. } => {}
         }
     }
 }

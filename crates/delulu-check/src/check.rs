@@ -651,6 +651,19 @@ impl<'a> Checker<'a> {
                 let (t, r) = self.check_block(b, ctx);
                 (t, r)
             }
+            // Stage 7 (staged build): typing rules T-Spawn/T-Send land in phase 7f,
+            // T-Consume/T-Recover in phase 7d. Until then these forms check their
+            // sub-expressions (so nested diagnostics still surface) and yield fresh types.
+            Expr::Spawn { args, .. } => {
+                let mut acc = RowAcc::default();
+                for a in args {
+                    let (_, r) = self.check_expr(a, ctx);
+                    acc.add_row_acc(&r);
+                }
+                (self.cx.fresh_type(), acc)
+            }
+            Expr::Consume { name, span, .. } => (self.check_var(&Path { segs: vec![name.clone()] }, *span, ctx), RowAcc::default()),
+            Expr::Recover { body, .. } => self.check_block(body, ctx),
         }
     }
 
@@ -1638,6 +1651,10 @@ impl<'a> Checker<'a> {
 
     fn lower_type(&mut self, t: &TypeExpr, genv: &Genv, facts: &mut FnFacts) -> Type {
         match t {
+            // Stage 7 (build-order deviation 4): the rcap axis lives BESIDE `Type` — lowering
+            // ignores the prefix, permanently; the rcap checker reads it from the AST/side
+            // tables. This is what keeps rows and rcaps from bleeding into unification.
+            TypeExpr::Rcap { inner, .. } => self.lower_type(inner, genv, facts),
             TypeExpr::Named { path, args, span } => {
                 if path.segs.len() == 1 {
                     let name = &path.segs[0].name;
@@ -1878,6 +1895,8 @@ impl<'a> Checker<'a> {
                 false
             }
             TypeExpr::Fn { .. } => false,
+            // Opacity is a property of the core type; the rcap prefix does not change it.
+            TypeExpr::Rcap { inner, .. } => self.type_expr_opaque(inner, genv, visiting),
         }
     }
 
@@ -1941,6 +1960,9 @@ fn is_marshallable_type_expr(t: &TypeExpr) -> bool {
                 )
         }
         TypeExpr::Fn { .. } => false,
+        // An rcap prefix never appears in a foreign signature (the FFI predates rcaps and
+        // marshals by copy); refuse rather than silently strip it.
+        TypeExpr::Rcap { .. } => false,
     }
 }
 
@@ -1950,6 +1972,7 @@ fn first_fn_type(t: &TypeExpr) -> Option<Span> {
     match t {
         TypeExpr::Fn { span, .. } => Some(*span),
         TypeExpr::Named { args, .. } => args.iter().find_map(first_fn_type),
+        TypeExpr::Rcap { inner, .. } => first_fn_type(inner),
     }
 }
 
@@ -2004,6 +2027,7 @@ fn render_type_expr(t: &TypeExpr) -> String {
             }
         }
         TypeExpr::Fn { .. } => "a function type".to_string(),
+        TypeExpr::Rcap { rcap, inner, .. } => format!("{} {}", rcap.name(), render_type_expr(inner)),
     }
 }
 

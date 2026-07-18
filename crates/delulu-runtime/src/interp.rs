@@ -517,6 +517,20 @@ impl Interp {
                 }
             }
             Expr::Block(b) => self.exec_block_value(b, env),
+            // Stage 7: `consume`/`recover` are static disciplines — at runtime `consume x`
+            // is x's value (the binding-kill is the checker's job) and a recover block just
+            // evaluates (the environment restriction is the checker's job).
+            Expr::Consume { name, span, .. } => {
+                self.eval_var(&Path { segs: vec![name.clone()] }, *span, env)
+            }
+            Expr::Recover { body, .. } => self.exec_block_value(body, env),
+            // Staged build: actor execution lands in phase 7g (the scheduler). Until then the
+            // interpreter refuses honestly rather than pretending an actor exists.
+            Expr::Spawn { span, .. } => Err(Escape::Fault(Fault::at(
+                "DL0907",
+                "actor execution is not yet available in this staged v0.7 build (phase 7g)",
+                *span,
+            ))),
         }
     }
 
@@ -1067,6 +1081,7 @@ pub fn lower_foreign_sig(f: &ForeignFn) -> ForeignSig {
                 FKind::from_type_name(&path.segs.last().unwrap().name).unwrap_or(FKind::Unit)
             }
             TypeExpr::Fn { .. } => FKind::Unit, // fenced by DL1302 at check time
+            TypeExpr::Rcap { .. } => FKind::Unit, // fenced by DL1301 at check time (not marshallable)
         }
     };
     let params = f.params.iter().map(|p| kind_of(&p.ty)).collect();

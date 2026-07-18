@@ -415,6 +415,7 @@ fn walk_type(t: &TypeExpr, gset: &HashSet<String>, type_used: &mut HashSet<Strin
                 walk_row(row, gset, row_used);
             }
         }
+        TypeExpr::Rcap { inner, .. } => walk_type(inner, gset, type_used, row_used),
     }
 }
 

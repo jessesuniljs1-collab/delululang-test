@@ -320,6 +320,13 @@ fn validate_item(item: &Item) -> Result<(), DirError> {
             Ok(())
         }
         Item::Effect(_) => Ok(()),
+        // Actors inside plugin code are a post-0.7 RFC (build-order §5): a plugin that spawns
+        // concurrent state machines needs its own scheduler story before it can be Verified.
+        // Refused at build AND at load (this walk runs on both sides), never silently stripped.
+        Item::Actor(a) => Err(DirError::Malformed(format!(
+            "plugin code declares actor `{}` — actors in plugins are not supported in v0.7",
+            a.name.name
+        ))),
     }
 }
 
@@ -344,6 +351,12 @@ fn validate_type_expr(t: &TypeExpr) -> Result<(), DirError> {
             }
             Ok(())
         }
+        // Plugin exports are `val` by construction (spec §7); a written rcap in plugin code is
+        // part of the actor feature set, refused with the same v0.7 fence as actor items.
+        TypeExpr::Rcap { rcap, .. } => Err(DirError::Malformed(format!(
+            "plugin code uses reference capability `{}` — rcaps in plugins are not supported in v0.7",
+            rcap.name()
+        ))),
     }
 }
 
@@ -464,6 +477,10 @@ fn validate_expr(e: &Expr) -> Result<(), DirError> {
         }
         Expr::Try { inner, .. } => validate_expr(inner),
         Expr::Block(b) => validate_block(b),
+        // The same v0.7 fence as actor items: concurrency inside plugin code is a post-0.7 RFC.
+        Expr::Spawn { .. } | Expr::Consume { .. } | Expr::Recover { .. } => Err(DirError::Malformed(
+            "plugin code uses actor expressions (`spawn`/`consume`/`recover`) — not supported in v0.7".into(),
+        )),
     }
 }
 

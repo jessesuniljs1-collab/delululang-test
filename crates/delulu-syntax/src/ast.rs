@@ -55,6 +55,98 @@ pub enum Item {
     Const(ConstDecl),
     /// A `foreign "c" lib M { … }` block (Stage 4, spec §2).
     Foreign(ForeignDecl),
+    /// An `actor A { … }` declaration (Stage 7, spec §2).
+    Actor(ActorDecl),
+}
+
+/// A reference capability (Stage 7, spec §3 — Pony's system, adopted not redesigned).
+/// The deny-property definitions are normative; `alias`/`sendable`/viewpoint adaptation live in
+/// the checker (`delulu-check`), not here — the AST only records what was written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Rcap {
+    Iso,
+    Trn,
+    Ref,
+    Val,
+    Box_,
+    Tag,
+}
+
+impl Rcap {
+    /// The source spelling. The six words are RESERVED identifiers recognized contextually in
+    /// type position (spec §2; build-order deviation 5).
+    pub fn from_name(s: &str) -> Option<Rcap> {
+        Some(match s {
+            "iso" => Rcap::Iso,
+            "trn" => Rcap::Trn,
+            "ref" => Rcap::Ref,
+            "val" => Rcap::Val,
+            "box" => Rcap::Box_,
+            "tag" => Rcap::Tag,
+            _ => return None,
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Rcap::Iso => "iso",
+            Rcap::Trn => "trn",
+            Rcap::Ref => "ref",
+            Rcap::Val => "val",
+            Rcap::Box_ => "box",
+            Rcap::Tag => "tag",
+        }
+    }
+}
+
+/// An `actor A { fields, new, behaviors, fns }` declaration (spec §2, §2.1). Exactly one `new`
+/// per actor — the parser enforces the count and synthesizes an empty one on error so the
+/// checker always has a constructor to look at.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActorDecl {
+    pub public: bool,
+    pub name: Ident,
+    pub generics: Vec<Ident>,
+    pub fields: Vec<ActorField>,
+    pub ctor: CtorDecl,
+    pub behaviors: Vec<BehaviorDecl>,
+    pub fns: Vec<FnDecl>,
+    pub id: NodeId,
+    pub span: Span,
+}
+
+/// `("let" | "var") name ":" type` — no initializer in the grammar; fields are assigned in
+/// `new`. `var` fields are actor-internal state (legal: owned, isolated, reached only via the
+/// actor's own turn — NOT the banned module-level ambient `var`, spec §4 T-Actor).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActorField {
+    pub mutable: bool,
+    pub name: Ident,
+    pub ty: TypeExpr,
+    pub span: Span,
+}
+
+/// `new(params) [row] { … }` — construction is a send to the new actor, so parameter
+/// sendability rules match behaviors (T-Ctor).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CtorDecl {
+    pub params: Vec<Param>,
+    pub row: Option<RowExpr>,
+    pub body: Block,
+    pub id: NodeId,
+    pub span: Span,
+}
+
+/// `be name(params) [row] { … }` — behaviors have no return type: they yield `Unit` at the
+/// send site (a written return type is DL1606 with an exact delete repair).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BehaviorDecl {
+    pub name: Ident,
+    pub params: Vec<Param>,
+    pub row: Option<RowExpr>,
+    pub body: Block,
+    pub id: NodeId,
+    pub span: Span,
 }
 
 /// A `foreign <abi> lib <name> { … }` block. `name` is BOTH the nominal opaque lib-handle type
@@ -111,12 +203,34 @@ pub enum TypeExpr {
     Named { path: Path, args: Vec<TypeExpr>, span: Span },
     /// `fn(T, U) -> V ! {Read | e}` — rows never erase from function types.
     Fn { params: Vec<TypeExpr>, ret: Option<Box<TypeExpr>>, row: Option<RowExpr>, span: Span },
+    /// `iso T`, `val fn(val T) -> Unit ! e`, … — a reference-capability prefix (Stage 7,
+    /// spec §2). One wrapper variant instead of the spec sketch's `TypeExprR` struct
+    /// (build-order deviation 1): the mechanism — an optional rcap at any type position,
+    /// including fn-type parameters (spec §8 writes `val fn(val T)`) — is what is normative.
+    Rcap { rcap: Rcap, inner: Box<TypeExpr>, span: Span },
 }
 
 impl TypeExpr {
     pub fn span(&self) -> Span {
         match self {
-            TypeExpr::Named { span, .. } | TypeExpr::Fn { span, .. } => *span,
+            TypeExpr::Named { span, .. } | TypeExpr::Fn { span, .. } | TypeExpr::Rcap { span, .. } => *span,
+        }
+    }
+
+    /// The written rcap prefix, if any (`None` means the spec §2 default rule applies —
+    /// resolved by the checker, never here).
+    pub fn written_rcap(&self) -> Option<Rcap> {
+        match self {
+            TypeExpr::Rcap { rcap, .. } => Some(*rcap),
+            _ => None,
+        }
+    }
+
+    /// The type under any rcap prefix.
+    pub fn core(&self) -> &TypeExpr {
+        match self {
+            TypeExpr::Rcap { inner, .. } => inner,
+            other => other,
         }
     }
 }
@@ -271,6 +385,15 @@ pub enum Expr {
     /// Needed for `else { … }` branches and block-bodied match arms
     /// (implementation-forced addition, spec §4).
     Block(Block),
+    /// `spawn A(args)` — creates an actor; type `tag A`, row `{Async} ∪ row(A.new)`
+    /// (Stage 7, T-Spawn).
+    Spawn { actor: Path, args: Vec<Expr>, id: NodeId, span: Span },
+    /// `consume x` — yields `x`'s full rcap and kills the binding (locals/params only in
+    /// v0.7; any later use is DL1602).
+    Consume { name: Ident, id: NodeId, span: Span },
+    /// `recover [rcap] { … }` — checks the block in a restricted environment and lifts the
+    /// result to `iso` (default) or `val` (Stage 7, spec §3).
+    Recover { target: Option<Rcap>, body: Block, id: NodeId, span: Span },
 }
 
 impl Expr {
@@ -289,7 +412,10 @@ impl Expr {
             | Expr::If { span, .. }
             | Expr::Match { span, .. }
             | Expr::Lambda { span, .. }
-            | Expr::Try { span, .. } => *span,
+            | Expr::Try { span, .. }
+            | Expr::Spawn { span, .. }
+            | Expr::Consume { span, .. }
+            | Expr::Recover { span, .. } => *span,
             Expr::Block(b) => b.span,
         }
     }
@@ -309,7 +435,10 @@ impl Expr {
             | Expr::If { id, .. }
             | Expr::Match { id, .. }
             | Expr::Lambda { id, .. }
-            | Expr::Try { id, .. } => *id,
+            | Expr::Try { id, .. }
+            | Expr::Spawn { id, .. }
+            | Expr::Consume { id, .. }
+            | Expr::Recover { id, .. } => *id,
             Expr::Block(b) => b.id,
         }
     }

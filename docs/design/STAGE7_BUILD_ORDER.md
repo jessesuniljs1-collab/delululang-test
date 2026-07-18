@@ -62,7 +62,15 @@ Numbered, argued, ruled. A deviation ships only with its ruling recorded here.
    inside) is normative; the *struct shape* is notation. Implemented as whatever shape touches
    the fewest existing sites while representing every position the spec itself uses (incl.
    `val fn(val T) -> …` — §8 puts an rcap on a fn-type parameter, so fn-type params must carry
-   one). Finalized in 7a with the exact shape recorded here.
+   one). **Finalized in 7a:** a `TypeExpr::Rcap { rcap, inner }` wrapper *variant* (not a
+   wrapper struct) — every type position gets rcap capability with zero churn on existing
+   structures, and the compiler's exhaustiveness check found every consumer that needed an
+   arm. Actor members parse into `ActorDecl { fields: Vec<ActorField>, ctor: CtorDecl,
+   behaviors, fns }` (the sketch's `FieldDecl` is `ActorField` to avoid colliding with the
+   record-field `FieldDef`). Two placement notes, ruled: DL1606 (behavior return type) and the
+   DL1602 field-consume variant are emitted by the **parser** — the spec constrains the codes
+   and repairs, not the emitting stage, and the parser owns the best spans. `recover` with a
+   lift target outside {iso, val} is DL1607 at parse.
 2. **Criterion-1 witness reading** — a single strictly-alternating ping-pong pair is a serial
    dependency chain; no scheduler on earth gets 2× from adding threads to it. Ruling: the
    witness runs N independent pairs (N ≥ threads×2) totalling 1M+ messages; deterministic

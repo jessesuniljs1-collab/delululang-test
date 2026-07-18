@@ -80,6 +80,7 @@ fn collect_type_names(t: &TypeExpr, out: &mut BTreeSet<String>) {
                 collect_type_names(r, out);
             }
         }
+        TypeExpr::Rcap { inner, .. } => collect_type_names(inner, out),
     }
 }
 
@@ -471,7 +472,14 @@ fn walk_expr_for_foreign(e: &Expr, c_syms: &BTreeSet<String>, out: &mut ForeignR
         Expr::Lambda { body, .. } => walk_block_for_foreign(body, c_syms, out),
         Expr::Try { inner, .. } => walk_expr_for_foreign(inner, c_syms, out),
         Expr::Block(b) => walk_block_for_foreign(b, c_syms, out),
-        Expr::Lit { .. } | Expr::Var { .. } => {}
+        // Stage 7: spawn/send arguments can reach foreign symbols like any call arguments.
+        Expr::Spawn { args, .. } => {
+            for a in args {
+                walk_expr_for_foreign(a, c_syms, out);
+            }
+        }
+        Expr::Recover { body, .. } => walk_block_for_foreign(body, c_syms, out),
+        Expr::Lit { .. } | Expr::Var { .. } | Expr::Consume { .. } => {}
     }
 }
 

@@ -6,7 +6,7 @@
 //! words (DL0106); member names after `.` never pass through it, so `root.secret(…)`
 //! parses while `fn secret()` does not.
 
-use delulu_diag::{Diagnostic, FileId, Span};
+use delulu_diag::{Confidence, Diagnostic, Edit, FileId, Repair, Span};
 
 use crate::ast::*;
 use crate::token::{is_reserved, Token, TokenKind};
@@ -154,6 +154,17 @@ impl Parser {
     /// Expect an identifier that introduces a NEW name; reject reserved words (DL0106).
     fn expect_decl_name(&mut self) -> Ident {
         match self.peek().clone() {
+            // Stage 7: `consume`/`recover` are now keywords; a declaration named after one is
+            // pre-0.7 code — DL1608 with the exact rename repair, recovering as the identifier
+            // so the rest of the declaration still parses.
+            k @ (TokenKind::KwConsume | TokenKind::KwRecover) => {
+                let span = self.span();
+                let name = k.keyword_lexeme().unwrap().to_string();
+                self.bump();
+                self.panicking = false;
+                self.dl1608(&name, span);
+                Ident { name, span }
+            }
             TokenKind::Ident(name) => {
                 let span = self.span();
                 self.bump();
@@ -229,6 +240,7 @@ impl Parser {
                     | TokenKind::KwPub
                     | TokenKind::KwLet
                     | TokenKind::KwImport
+                    | TokenKind::KwActor
             ) {
                 return;
             }
@@ -275,7 +287,7 @@ impl Parser {
                 Some(item) => items.push(item),
                 None => {
                     if !self.at_eof() {
-                        self.error("DL0208", "expected an item (`fn`, `type`, `effect`, `let`, or `pub`)", self.span(), "not an item");
+                        self.error("DL0208", "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)", self.span(), "not an item");
                         self.recover_item();
                     }
                 }
@@ -333,6 +345,7 @@ impl Parser {
             TokenKind::KwFn => Some(Item::Fn(self.parse_fn(public))),
             TokenKind::KwType => Some(Item::Type(self.parse_type_decl(public))),
             TokenKind::KwEffect => Some(Item::Effect(self.parse_effect_decl(public))),
+            TokenKind::KwActor => Some(Item::Actor(self.parse_actor_decl(public))),
             TokenKind::KwLet => Some(Item::Const(self.parse_const(public))),
             TokenKind::KwVar => {
                 // Module-level mutable state is forbidden (§5.5, audit closes the ambient
@@ -461,6 +474,182 @@ impl Parser {
         let span = start.to(self.prev_span());
         self.expect_term();
         Some(ForeignFn { name, params, ret, span })
+    }
+
+    /// `actor_decl = "actor" IDENT [generics] "{" { actor_member } "}"` (Stage 7, spec §2).
+    /// `be`, `new` are contextual keywords INSIDE actor bodies only — top-level code may still
+    /// use them as identifiers (invariant 37 needs no migration for them). Exactly one `new`
+    /// per actor: zero synthesizes an empty one (so the checker always has a constructor node),
+    /// extras are diagnosed and dropped.
+    fn parse_actor_decl(&mut self, public: bool) -> ActorDecl {
+        let start = self.span();
+        self.bump(); // actor
+        let name = self.expect_decl_name();
+        let generics = self.parse_generics();
+        self.expect(TokenKind::LBrace);
+        let mut fields = Vec::new();
+        let mut ctors: Vec<CtorDecl> = Vec::new();
+        let mut behaviors = Vec::new();
+        let mut fns = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
+            if self.eat(&TokenKind::Term) {
+                continue;
+            }
+            let before = self.pos;
+            match self.peek().clone() {
+                TokenKind::KwLet | TokenKind::KwVar => {
+                    let mutable = matches!(self.peek(), TokenKind::KwVar);
+                    let fstart = self.span();
+                    self.bump();
+                    let fname = self.expect_decl_name();
+                    self.expect(TokenKind::Colon);
+                    let ty = self.parse_type();
+                    let span = fstart.to(self.prev_span());
+                    // Grammar: fields carry no initializer — they are assigned in `new`.
+                    if self.at(&TokenKind::Eq) {
+                        self.error(
+                            "DL0201",
+                            "actor fields have no initializer — assign them in `new`",
+                            self.span(),
+                            "remove the `= …` and initialize in the constructor",
+                        );
+                        self.recover_stmt();
+                    } else {
+                        self.expect_term();
+                    }
+                    fields.push(ActorField { mutable, name: fname, ty, span });
+                }
+                TokenKind::Ident(ref n) if n == "new" && matches!(self.peek_at(1), TokenKind::LParen) => {
+                    let cstart = self.span();
+                    self.bump(); // new
+                    let params = self.parse_params();
+                    let row = self.parse_opt_row();
+                    let body = self.parse_block();
+                    let span = cstart.to(self.prev_span());
+                    ctors.push(CtorDecl { params, row, body, id: self.node_id(), span });
+                }
+                TokenKind::Ident(ref n) if n == "be" && matches!(self.peek_at(1), TokenKind::Ident(_)) => {
+                    let bstart = self.span();
+                    self.bump(); // be
+                    let bname = self.expect_decl_name();
+                    let params = self.parse_params();
+                    // Behaviors have no return type (spec §2): they yield `Unit` at the send
+                    // site. DL1606 with the exact delete repair.
+                    if self.at(&TokenKind::Arrow) {
+                        let arrow = self.span();
+                        self.bump();
+                        let ty = self.parse_type();
+                        let bad = arrow.to(ty.span());
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL1606",
+                                format!(
+                                    "behavior `{}` declares a return type — behaviors yield `Unit` at the send site",
+                                    bname.name
+                                ),
+                            )
+                            .with_span(bad, "delete the return type")
+                            .with_repair(Repair {
+                                id: "delete-behavior-return-type",
+                                confidence: Confidence::Exact,
+                                authority_widening: false,
+                                requires_human: false,
+                                edits: vec![Edit {
+                                    file: bad.file,
+                                    start_byte: bad.start,
+                                    end_byte: bad.end,
+                                    insert: String::new(),
+                                }],
+                            }),
+                        );
+                    }
+                    let row = self.parse_opt_row();
+                    let body = self.parse_block();
+                    let span = bstart.to(self.prev_span());
+                    behaviors.push(BehaviorDecl { name: bname, params, row, body, id: self.node_id(), span });
+                }
+                TokenKind::KwFn => {
+                    fns.push(self.parse_fn(false));
+                }
+                other => {
+                    self.error(
+                        "DL0201",
+                        format!(
+                            "expected an actor member (`let`/`var` field, `new`, `be`, or `fn`), found {}",
+                            other.describe()
+                        ),
+                        self.span(),
+                        "not an actor member",
+                    );
+                    self.recover_stmt();
+                }
+            }
+            if self.pos == before {
+                self.bump();
+            }
+        }
+        self.expect(TokenKind::RBrace);
+        let span = start.to(self.prev_span());
+        let ctor = match ctors.len() {
+            0 => {
+                self.panicking = false;
+                self.error(
+                    "DL0201",
+                    format!("actor `{}` must declare exactly one `new` constructor", name.name),
+                    span,
+                    "add `new(…) { … }`",
+                );
+                self.panicking = false;
+                CtorDecl {
+                    params: Vec::new(),
+                    row: None,
+                    body: Block { stmts: Vec::new(), id: self.node_id(), span },
+                    id: self.node_id(),
+                    span,
+                }
+            }
+            1 => ctors.pop().unwrap(),
+            _ => {
+                let extra = ctors[1].span;
+                self.panicking = false;
+                self.error(
+                    "DL0201",
+                    format!("actor `{}` declares more than one `new` — exactly one is allowed", name.name),
+                    extra,
+                    "remove this constructor",
+                );
+                self.panicking = false;
+                ctors.into_iter().next().unwrap()
+            }
+        };
+        self.expect_term();
+        ActorDecl { public, name, generics, fields, ctor, behaviors, fns, id: self.node_id(), span }
+    }
+
+    /// Invariant 37 (DL1608): pre-0.7 code using `consume`/`recover` as an identifier gets an
+    /// exact rename repair (`consume` → `consume_`), applied corpus-wide by
+    /// `delulu fmt --migrate 0.7`. Never breakage-by-surprise.
+    fn dl1608(&mut self, word: &str, span: Span) {
+        let renamed = format!("{word}_");
+        self.diags.push(
+            Diagnostic::error(
+                "DL1608",
+                format!("`{word}` is a keyword in v0.7 and can no longer be used as an identifier"),
+            )
+            .with_span(span, format!("rename to `{renamed}` (or run `delulu fmt --migrate 0.7`)"))
+            .with_repair(Repair {
+                id: "rename-v07-keyword",
+                confidence: Confidence::Exact,
+                authority_widening: false,
+                requires_human: false,
+                edits: vec![Edit {
+                    file: span.file,
+                    start_byte: span.start,
+                    end_byte: span.end,
+                    insert: renamed,
+                }],
+            }),
+        );
     }
 
     fn parse_generics(&mut self) -> Vec<Ident> {
@@ -611,7 +800,44 @@ impl Parser {
 
     // ----- types ------------------------------------------------------------
 
+    /// True when the token `ahead` positions away can begin a type.
+    fn type_starts_at(&self, ahead: usize) -> bool {
+        matches!(self.peek_at(ahead), TokenKind::Ident(_) | TokenKind::KwFn | TokenKind::LParen)
+    }
+
     fn parse_type(&mut self) -> TypeExpr {
+        // Stage 7: an optional rcap prefix (`iso T`, `val fn(val T) -> …`). Contextual: the six
+        // words are RESERVED identifiers, recognized here only when a type follows (build-order
+        // deviation 5) — so `x: iso List[Int]` works while no expression position changes.
+        if let TokenKind::Ident(name) = self.peek() {
+            if let Some(rcap) = Rcap::from_name(name) {
+                if self.type_starts_at(1) {
+                    let start = self.span();
+                    self.bump();
+                    // `iso val T` — one prefix only; diagnose and skip the extras.
+                    while let TokenKind::Ident(n2) = self.peek() {
+                        if Rcap::from_name(n2).is_some() && self.type_starts_at(1) {
+                            self.error(
+                                "DL0201",
+                                "only one reference capability may prefix a type",
+                                self.span(),
+                                "remove this capability",
+                            );
+                            self.bump();
+                        } else {
+                            break;
+                        }
+                    }
+                    let inner = self.parse_type_core();
+                    let span = start.to(self.prev_span());
+                    return TypeExpr::Rcap { rcap, inner: Box::new(inner), span };
+                }
+            }
+        }
+        self.parse_type_core()
+    }
+
+    fn parse_type_core(&mut self) -> TypeExpr {
         if self.at(&TokenKind::KwFn) {
             let start = self.span();
             self.bump();
@@ -857,12 +1083,84 @@ impl Parser {
                 let span = start.to(operand.span());
                 Expr::Unary { op: UnOp::Not, operand: Box::new(operand), id: self.node_id(), span }
             }
+            // Stage 7: `consume x` — yields x's full rcap and kills the binding (spec §3).
+            // Locals/params only in v0.7: `consume x.f` gets the field-consume variant of
+            // DL1602 here, recovering on the base binding.
+            TokenKind::KwConsume => {
+                self.bump();
+                if let TokenKind::Ident(_) = self.peek() {
+                    let name = self.expect_member_name();
+                    if self.at(&TokenKind::Dot) {
+                        let dot_start = self.span();
+                        while self.at(&TokenKind::Dot) && matches!(self.peek_at(1), TokenKind::Ident(_)) {
+                            self.bump();
+                            self.bump();
+                        }
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL1602",
+                                "`consume` of a field is not supported in v0.7 — consume locals and parameters only",
+                            )
+                            .with_span(dot_start.to(self.prev_span()), "consume the whole binding instead"),
+                        );
+                    }
+                    let span = start.to(self.prev_span());
+                    Expr::Consume { name, id: self.node_id(), span }
+                } else {
+                    // Pre-0.7 identifier use (`consume(…)`, `consume = …`, bare `consume`).
+                    self.dl1608("consume", start);
+                    let seg = Ident { name: "consume".into(), span: start };
+                    let e = Expr::Var { path: Path { segs: vec![seg] }, id: self.node_id(), span: start };
+                    self.parse_postfix_on(e)
+                }
+            }
+            // Stage 7: `recover [iso|val] { … }` — restricted environment, result lifted
+            // (spec §3; default lift target iso).
+            TokenKind::KwRecover => {
+                self.bump();
+                let mut target = None;
+                let mut is_recover_form = self.at(&TokenKind::LBrace);
+                if let TokenKind::Ident(n) = self.peek().clone() {
+                    if let Some(r) = Rcap::from_name(&n) {
+                        if matches!(self.peek_at(1), TokenKind::LBrace) {
+                            let rspan = self.span();
+                            self.bump();
+                            if !matches!(r, Rcap::Iso | Rcap::Val) {
+                                self.diags.push(
+                                    Diagnostic::error(
+                                        "DL1607",
+                                        format!("`recover` lifts only to `iso` or `val`, not `{}`", r.name()),
+                                    )
+                                    .with_span(rspan, "use `iso` (the default) or `val`"),
+                                );
+                            }
+                            target = Some(r);
+                            is_recover_form = true;
+                        }
+                    }
+                }
+                if is_recover_form {
+                    let body = self.parse_block();
+                    let span = start.to(self.prev_span());
+                    Expr::Recover { target, body, id: self.node_id(), span }
+                } else {
+                    // Pre-0.7 identifier use.
+                    self.dl1608("recover", start);
+                    let seg = Ident { name: "recover".into(), span: start };
+                    let e = Expr::Var { path: Path { segs: vec![seg] }, id: self.node_id(), span: start };
+                    self.parse_postfix_on(e)
+                }
+            }
             _ => self.parse_postfix(allow_struct),
         }
     }
 
     fn parse_postfix(&mut self, allow_struct: bool) -> Expr {
-        let mut e = self.parse_primary(allow_struct);
+        let e = self.parse_primary(allow_struct);
+        self.parse_postfix_on(e)
+    }
+
+    fn parse_postfix_on(&mut self, mut e: Expr) -> Expr {
         loop {
             match self.peek() {
                 TokenKind::LParen => {
@@ -968,6 +1266,15 @@ impl Parser {
             TokenKind::KwIf => self.parse_if(),
             TokenKind::KwMatch => self.parse_match(),
             TokenKind::KwFn => self.parse_lambda(),
+            // Stage 7: `spawn A(args)` — a primary, so `spawn A(1).ping(2)` chains a send
+            // through the ordinary postfix loop (T-Spawn then T-Send).
+            TokenKind::KwSpawn => {
+                self.bump();
+                let actor = self.parse_path();
+                let args = self.parse_args();
+                let span = start.to(self.prev_span());
+                Expr::Spawn { actor, args, id: self.node_id(), span }
+            }
             TokenKind::Ident(_) => {
                 // Only a single identifier is a primary; any following `.name` is a field or
                 // method access handled by `parse_postfix` (so `out.println(x)` is a Method,
@@ -1325,5 +1632,188 @@ mod tests {
         // `foreign` is a contextual keyword: `root.foreign(...)` must keep parsing as a method.
         let m = parse_ok("module m\nfn main(root: Root) { let m = root.foreign(load) }\n");
         assert_eq!(m.items.len(), 1);
+    }
+
+    // ----- Stage 7 (phase 7a): actors, rcaps, spawn/consume/recover, DL1608 ----
+
+    #[test]
+    fn actor_decl_round_trips() {
+        let m = parse_ok(
+            "module m\n\
+             actor Counter {\n\
+               var count: Int\n\
+               let label: Str\n\
+               new(start: Int, label: Str) { }\n\
+               be add(n: Int) { }\n\
+               be report(out: val Str) ! {Write} { }\n\
+               fn double(n: Int) -> Int { n * 2 }\n\
+             }\n",
+        );
+        match &m.items[0] {
+            Item::Actor(a) => {
+                assert_eq!(a.name.name, "Counter");
+                assert_eq!(a.fields.len(), 2);
+                assert!(a.fields[0].mutable && a.fields[0].name.name == "count");
+                assert!(!a.fields[1].mutable && a.fields[1].name.name == "label");
+                assert_eq!(a.ctor.params.len(), 2);
+                assert_eq!(a.behaviors.len(), 2);
+                assert_eq!(a.behaviors[0].name.name, "add");
+                assert_eq!(a.behaviors[1].name.name, "report");
+                assert!(a.behaviors[1].row.is_some());
+                assert_eq!(a.fns.len(), 1);
+                assert_eq!(a.fns[0].name.name, "double");
+            }
+            other => panic!("expected an actor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rcap_prefixes_parse_in_every_type_position() {
+        // Param, let annotation, fn-type parameter (spec §8 writes `val fn(val T)`), generic arg.
+        let m = parse_ok(
+            "module m\n\
+             fn f(xs: iso List[Int], s: val Str, cb: val fn(val Str) -> Unit ! e) ! e {\n\
+               let b: box Int = 1\n\
+             }\n",
+        );
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        assert_eq!(f.params[0].ty.written_rcap(), Some(Rcap::Iso));
+        assert_eq!(f.params[1].ty.written_rcap(), Some(Rcap::Val));
+        assert_eq!(f.params[2].ty.written_rcap(), Some(Rcap::Val));
+        // The fn-type's own parameter carries its rcap too.
+        match f.params[2].ty.core() {
+            TypeExpr::Fn { params, .. } => assert_eq!(params[0].written_rcap(), Some(Rcap::Val)),
+            other => panic!("expected a fn type under the rcap, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_consume_recover_parse() {
+        let m = parse_ok(
+            "module m\n\
+             fn main() {\n\
+               let a = spawn m.Counter(1, \"x\")\n\
+               let xs: iso List[Int] = recover { [1, 2] }\n\
+               let f: val Str = recover val { \"s\" }\n\
+               a.add(consume xs)\n\
+             }\n",
+        );
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        // spawn with a dotted path
+        let Stmt::Let { value: Expr::Spawn { actor, args, .. }, .. } = &f.body.stmts[0] else {
+            panic!("expected spawn, got {:?}", f.body.stmts[0])
+        };
+        assert_eq!(actor.dotted(), "m.Counter");
+        assert_eq!(args.len(), 2);
+        // recover default target (iso) and explicit val
+        let Stmt::Let { value: Expr::Recover { target: None, .. }, .. } = &f.body.stmts[1] else {
+            panic!()
+        };
+        let Stmt::Let { value: Expr::Recover { target: Some(Rcap::Val), .. }, .. } = &f.body.stmts[2] else {
+            panic!()
+        };
+        // consume as a send argument
+        let Stmt::Expr(Expr::Method { args: send_args, .. }) = &f.body.stmts[3] else { panic!() };
+        assert!(matches!(&send_args[0], Expr::Consume { name, .. } if name.name == "xs"));
+    }
+
+    #[test]
+    fn spawn_chains_into_a_send_through_postfix() {
+        let m = parse_ok("module m\nfn main() { spawn Counter(0).add(1) }\n");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        let Stmt::Expr(Expr::Method { recv, name, .. }) = &f.body.stmts[0] else { panic!() };
+        assert_eq!(name.name, "add");
+        assert!(matches!(&**recv, Expr::Spawn { .. }));
+    }
+
+    #[test]
+    fn dl1608_on_consume_as_a_declared_name_with_exact_rename() {
+        let (_, d) = parse_src("module m\nfn f() { let consume = 5 }\n");
+        let diag = d.iter().find(|x| x.code == "DL1608").expect("DL1608 expected");
+        let repair = diag.repairs.first().expect("exact rename repair expected");
+        assert_eq!(repair.edits[0].insert, "consume_");
+    }
+
+    #[test]
+    fn dl1608_on_recover_as_a_fn_name() {
+        let (_, d) = parse_src("module m\nfn recover() { }\n");
+        assert!(d.iter().any(|x| x.code == "DL1608"), "{d:?}");
+    }
+
+    #[test]
+    fn dl1608_on_expression_position_use_still_parses_the_call() {
+        // Pre-0.7 `consume(3)` — a call of a function named consume. DL1608 fires and the
+        // call structure survives (recovery as an identifier + the ordinary postfix loop).
+        let (m, d) = parse_src("module m\nfn f() -> Int { consume(3) }\n");
+        assert!(d.iter().any(|x| x.code == "DL1608"), "{d:?}");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        assert!(matches!(&f.body.stmts[0], Stmt::Expr(Expr::Call { .. })));
+    }
+
+    #[test]
+    fn consume_and_recover_remain_member_names() {
+        // Member position is not a declaration site (same rule as `py.import`).
+        let m = parse_ok("module m\nfn f(q: Int) { let a = q.consume()\nlet b = q.recover(1) }\n");
+        assert_eq!(m.items.len(), 1);
+    }
+
+    #[test]
+    fn spawn_remains_a_member_name() {
+        let m = parse_ok("module m\nfn f(q: Int) { let a = q.spawn() }\n");
+        assert_eq!(m.items.len(), 1);
+    }
+
+    #[test]
+    fn dl1606_behavior_return_type_with_delete_repair() {
+        let (_, d) = parse_src(
+            "module m\nactor A { new() { }\nbe f(x: val Str) -> Int { } }\n",
+        );
+        let diag = d.iter().find(|x| x.code == "DL1606").expect("DL1606 expected: {d:?}");
+        let repair = diag.repairs.first().expect("delete repair expected");
+        assert_eq!(repair.edits[0].insert, "");
+    }
+
+    #[test]
+    fn actor_requires_exactly_one_new() {
+        let (_, d) = parse_src("module m\nactor A { be f(n: Int) { } }\n");
+        assert!(d.iter().any(|x| x.code == "DL0201" && x.message.contains("exactly one `new`")), "{d:?}");
+        let (_, d2) = parse_src("module m\nactor A { new() { }\nnew(n: Int) { } }\n");
+        assert!(d2.iter().any(|x| x.code == "DL0201" && x.message.contains("more than one")), "{d2:?}");
+    }
+
+    #[test]
+    fn actor_field_initializer_is_rejected() {
+        let (_, d) = parse_src("module m\nactor A { var n: Int = 3\nnew() { } }\n");
+        assert!(d.iter().any(|x| x.code == "DL0201" && x.message.contains("no initializer")), "{d:?}");
+    }
+
+    #[test]
+    fn double_rcap_prefix_is_an_error() {
+        let (_, d) = parse_src("module m\nfn f(x: iso val Str) { }\n");
+        assert!(d.iter().any(|x| x.code == "DL0201" && x.message.contains("one reference capability")), "{d:?}");
+    }
+
+    #[test]
+    fn recover_lift_target_must_be_iso_or_val() {
+        let (_, d) = parse_src("module m\nfn f() { let x = recover ref { 1 } }\n");
+        assert!(d.iter().any(|x| x.code == "DL1607"), "{d:?}");
+    }
+
+    #[test]
+    fn consume_of_a_field_is_the_dl1602_variant() {
+        let (_, d) = parse_src("module m\nfn f() { let y = consume x.inner }\n");
+        assert!(d.iter().any(|x| x.code == "DL1602" && x.message.contains("field")), "{d:?}");
+    }
+
+    #[test]
+    fn be_and_new_stay_ordinary_identifiers_outside_actors() {
+        let m = parse_ok("module m\nfn f() { let be = 1\nlet new = be + 1 }\n");
+        assert_eq!(m.items.len(), 1);
+    }
+
+    #[test]
+    fn rcaps_stay_reserved_as_declared_names() {
+        let (_, d) = parse_src("module m\nfn iso() { }\n");
+        assert!(d.iter().any(|x| x.code == "DL0106"), "{d:?}");
     }
 }

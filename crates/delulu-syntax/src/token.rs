@@ -27,6 +27,14 @@ pub enum TokenKind {
     KwTrue,
     KwFalse,
 
+    // Keywords activated in Stage 7 (spec §2). `actor`/`spawn` come off the reserved list;
+    // `consume`/`recover` are NEW keywords (a Stage-1 omission, invariant 37) — pre-0.7 code
+    // using them as identifiers gets DL1608 with an exact rename repair.
+    KwActor,
+    KwSpawn,
+    KwConsume,
+    KwRecover,
+
     // Punctuation and operators
     LParen,
     RParen,
@@ -81,6 +89,12 @@ impl TokenKind {
                 | TokenKind::RBracket
                 | TokenKind::RBrace
                 | TokenKind::Question
+                // Stage 7: a newline after a bare `consume`/`recover` terminates the statement.
+                // The legitimate v0.7 forms (`consume x`, `recover { … }`) are single-line, so
+                // this exists to make pre-0.7 identifier uses land on DL1608 with a clean span
+                // instead of a confusing cross-line parse cascade.
+                | TokenKind::KwConsume
+                | TokenKind::KwRecover
         )
     }
 
@@ -104,6 +118,10 @@ impl TokenKind {
             TokenKind::KwEffect => "effect",
             TokenKind::KwTrue => "true",
             TokenKind::KwFalse => "false",
+            TokenKind::KwActor => "actor",
+            TokenKind::KwSpawn => "spawn",
+            TokenKind::KwConsume => "consume",
+            TokenKind::KwRecover => "recover",
             _ => return None,
         })
     }
@@ -130,6 +148,10 @@ impl TokenKind {
             TokenKind::KwEffect => "`effect`".into(),
             TokenKind::KwTrue => "`true`".into(),
             TokenKind::KwFalse => "`false`".into(),
+            TokenKind::KwActor => "`actor`".into(),
+            TokenKind::KwSpawn => "`spawn`".into(),
+            TokenKind::KwConsume => "`consume`".into(),
+            TokenKind::KwRecover => "`recover`".into(),
             TokenKind::LParen => "`(`".into(),
             TokenKind::RParen => "`)`".into(),
             TokenKind::LBrace => "`{`".into(),
@@ -190,6 +212,10 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
         "effect" => TokenKind::KwEffect,
         "true" => TokenKind::KwTrue,
         "false" => TokenKind::KwFalse,
+        "actor" => TokenKind::KwActor,
+        "spawn" => TokenKind::KwSpawn,
+        "consume" => TokenKind::KwConsume,
+        "recover" => TokenKind::KwRecover,
         _ => return None,
     })
 }
@@ -202,8 +228,12 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
 /// lexed as an identifier (so `root.foreign(…)` stays a legal member access, and `lib`/the ABI
 /// string need no new tokens), and the parser recognizes `foreign STRING lib IDENT { … }` as a
 /// declaration at item position (spec §2).
+/// Stage 7 removed `actor` and `spawn` (now active keywords). The six reference capabilities
+/// STAY reserved: they are recognized *contextually in type position only* (spec §2, build-order
+/// deviation 5) — activation is not tokenization — and DL0106 keeps rejecting them as declared
+/// names, which is exactly what makes the contextual reading unambiguous.
 pub const RESERVED: &[&str] = &[
-    "actor", "async", "await", "spawn", "iso", "val", "ref", "box", "tag", "trn", "plugin",
+    "async", "await", "iso", "val", "ref", "box", "tag", "trn", "plugin",
     "secret", "cap", "for", "in", "break", "continue", "trait", "impl", "where",
     "pure",
 ];

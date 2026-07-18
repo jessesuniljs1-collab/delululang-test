@@ -834,6 +834,8 @@ fn render_type(t: &TypeExpr) -> String {
             let row = row.as_ref().map(render_row).unwrap_or_else(|| "{}".to_string());
             format!("fn({ps})->{r}!{row}")
         }
+        // The rcap is part of the written signature, so it is part of the fingerprint.
+        TypeExpr::Rcap { rcap, inner, .. } => format!("{} {}", rcap.name(), render_type(inner)),
     }
 }
 

@@ -156,6 +156,19 @@ registry! {
     "DL1510" => "plugin signature present but invalid (tampered content, wrong key, or malformed signature)",
     "DL1511" => "plugin is unsigned but the grant requires a signature (require_signed)",
 
+    // DL16xx — actors and reference capabilities (Stage 7 "Concurrent", spec §10).
+    // NOTE: there is deliberately NO DL1609 — the spec's table skips it (house rule mirroring
+    // DL1404/DL1784). Do not invent one.
+    "DL1601" => "non-sendable value crossing an actor boundary (incl. unconsumed iso; incl. PyObj pinning)",
+    "DL1602" => "use of a binding after `consume`",
+    "DL1603" => "alias violates a reference-capability deny property (incl. a `val` closure over a `ref` capture)",
+    "DL1604" => "access denied by viewpoint/receiver capability (write via box; field via tag; sync call on tag)",
+    "DL1605" => "recover block references a non-sendable outer binding",
+    "DL1606" => "a behavior declares a return type (behaviors yield Unit at the send site)",
+    "DL1607" => "reference capability invalid for this type (e.g. non-tag on an actor type)",
+    "DL1608" => "identifier collides with a v0.7 keyword (`consume`/`recover`)",
+    "DL1610" => "debug race-checker violation (compiler-bug class — file a bug)",
+
     // DL17xx — Surface (Stage 8, dropped early). The Atlas (DL1780/DL1781) and the Palette
     // (DL1790) — Surface addendum §3.2. DL1784 is deliberately never allocated (house rule
     // mirroring DL1404).
