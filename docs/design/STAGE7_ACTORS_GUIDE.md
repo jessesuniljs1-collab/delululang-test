@@ -119,6 +119,9 @@ delulu run app.delulu --grant console [--actors-threads N] [--on-quiesce report]
   `unsafe` anywhere in the runtime); message payloads move by rebuild, observationally the
   spec's pointer handoff. The WASM engine runs actors cooperatively, single-threaded,
   within the backend's compilable subset, and says so in its output.
+- Platforms: verified on Windows and Linux (criterion 7's ThreadSanitizer lane runs on
+  Linux). The actor runtime is platform-gate-free standard-library Rust, so macOS is
+  expected to work by construction — but no Mac has run it, and we say exactly that.
 
 ## 5. Honesty and threat-model caveats (spec §11, verbatim)
 

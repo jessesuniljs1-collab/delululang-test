@@ -1,7 +1,15 @@
 # Stage 7 Build Order — "Concurrent" (operational companion)
 
-**Status:** OPEN — head chef cooking directly this stage (Opus 4.8 sous-chefs drafted per-dish
-as needed). Opened 2026-07-18.
+**Status:** BUILT — head-chef verified 2026-07-18 at `8571eae`. Full workspace suite: Windows
+726 / 0 failed; Linux 730 / 0 / 2 ignored (the +4 are the platform-gated Stage-6 live-engine
+witnesses, green by name). All ELEVEN §9 criteria carry named witnesses in §4, criterion 6 on
+BOTH engines including the real-binary cooperative-label smoke, criterion 7 TSAN with zero
+warnings, criterion 8 (the ship-gate) green over 10,000 seeded object-sensitive worlds.
+Head chef cooked phases 7a–7g/7i/7j directly; 7h was sous-chef foundation (Opus 4.8, twice
+interrupted, worktree survived both) + head-chef completion. Eleven deviations ruled in §3.
+macOS: the Stage-7 runtime is platform-gate-free std Rust — expected to work by construction,
+unverified (no Mac in the kitchen; Stage 6's caveat inherits for the wasm engine).
+Opened 2026-07-18 by the head chef.
 **Normative:** `STAGE7_SPECIFICATION.md` (the *what*). **Binding how-to:**
 `docs/playbooks/STAGE7_PLAYBOOK.md` (phases 7a–7j, traps 1–9). **Precedence:** spec > playbook >
 this document. This document records *operational* rulings: gate order, house rules, deviations,
@@ -147,8 +155,8 @@ head chef has personally seen.
 | 3 | recover mutable-build → iso send; outer `ref` capture → DL1605 | `recover_lifts_a_mutable_build_to_iso_here_already`, `recover_referencing_an_outer_ref_is_dl1605`, `a_lambda_inside_recover_cannot_capture_an_outer_ref` + conformance `DL1605_recover_captures_ref` | head chef |
 | 4 | write via `box` → DL1604; `tag` field access → DL1604; F-3-style ascription rejected | `write_through_a_box_receiver_is_dl1604`, `field_access_through_tag_is_dl1604`, `viewpoint_write_requires_the_adapted_receiver_to_be_writable`; ascription tricks: `storing_an_aliased_ref_where_iso_is_demanded_is_dl1603_…` + `a_non_tag_rcap_on_an_actor_type_is_dl1607` (a written rcap never launders — storability refuses through the alias table) | head chef |
 | 5 | causal rows: DL0501 at send site; `delulu why Write` crosses the actor boundary | `criterion5_a_send_site_must_cover_the_behaviors_row` (both directions) + `criterion5_why_write_crosses_the_actor_boundary` (real binary) | head chef |
-| 6 | conformance under `--assert-trace --debug-rcaps`, both engines, zero violations | native: `criterion6_native_actor_run_is_clean_under_assert_trace_and_debug_rcaps` (real binary, real iso move); WASM: 7h witness | native seen; wasm pending 7h |
-| 7 | TSAN clean on the actor stress corpus (native, Linux) | nightly `-Zsanitizer=thread` over `actors_pingpong`/`actors_trace`/`actors_promise` in WSL | pending run |
+| 6 | conformance under `--assert-trace --debug-rcaps`, both engines, zero violations | native: `criterion6_native_actor_run_is_clean_under_assert_trace_and_debug_rcaps` (real binary, real iso move); WASM: `criterion6_pingpong_pair_parity`(+`_deep`), `criterion6_counter_selfsend_parity`(+`_deep`), `a_faulting_behavior_poisons_its_actor_on_both_engines`, out-of-subset DL1201 pair — plus the real-binary cooperative run (§6.5 label printed, 6 turns exact, exit 0) | head chef, both engines |
+| 7 | TSAN clean on the actor stress corpus (native, Linux) | nightly `-Zsanitizer=thread -Zbuild-std` over `actors_pingpong`/`actors_trace`/`actors_promise` in WSL at `8571eae`: 10/10 passed, ZERO ThreadSanitizer warnings (the 1M-message ping-pong ran 280s under the sanitizer clean) | head chef, Linux |
 | 8 | rcap property tests vs deny properties — **ship-gate** | `criterion8_generated_sequences_never_reach_incompatible_aliases` (10,000 seeds × 40 ops, object-sensitive worlds, ZERO counterexamples; the gate first caught two model bugs — recorded in-test) + `criterion8_consumed_iso_transfer_is_exclusive_by_construction` | head chef |
 | 9 | `Promise[T].then` row plumbing end-to-end | `criterion9_an_effectful_callback_surfaces_in_the_callers_row` (both directions), `criterion9_a_pure_callback_keeps_the_caller_at_async_only`, `criterion9_fulfill_sites_charge_async_only`, runtime `criterion9_promise_first_fulfill_wins_and_callbacks_run_as_promise_turns` (2-in-fulfill + 1-in-then split via causal trace) | head chef |
 | 10 | DL1608 + `fmt --migrate 0.7`; prior suites green post-migration | `criterion10_dl1608_then_migrate_then_clean` (real binary: DL1608 → migrate → clean → idempotent) | head chef |
