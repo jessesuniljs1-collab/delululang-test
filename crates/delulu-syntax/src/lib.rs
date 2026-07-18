@@ -8,6 +8,7 @@
 //! - Error-recovering parsing: multiple diagnostics per run, statement-boundary resync.
 
 pub mod ast;
+pub mod fmt;
 pub mod lexer;
 pub mod parser;
 pub mod token;

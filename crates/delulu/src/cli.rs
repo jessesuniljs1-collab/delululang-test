@@ -557,7 +557,8 @@ fn usage() -> &'static str {
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
-     \x20 delulu fmt       --migrate 0.7 <file-or-dir>... [--json]  (rename pre-0.7 `consume`/`recover` identifiers)\n\
+     \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
@@ -578,9 +579,48 @@ fn usage() -> &'static str {
 /// `recover_` (the exact repair DL1608 carries), corpus-wide and in place. Token-stream based:
 /// strings and comments are untouched because they are not identifier tokens. v0.7 ships ONLY
 /// this migration form — a general formatter is out of scope (build-order deviation 6).
+/// Expand directories to their `.delulu` files, recursively, deterministically.
+fn collect_delulu_files(p: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+    if p.is_dir() {
+        let mut entries: Vec<_> =
+            std::fs::read_dir(p)?.collect::<Result<Vec<_>, _>>()?.into_iter().map(|e| e.path()).collect();
+        entries.sort();
+        for e in entries {
+            collect_delulu_files(&e, out)?;
+        }
+    } else if p.extension().and_then(|e| e.to_str()) == Some("delulu") {
+        out.push(p.to_path_buf());
+    }
+    Ok(())
+}
+
+/// The two formatter laws, verified inline on EVERY run before any byte is written
+/// (spec §4): identity (fingerprint + comment sequence) and idempotence. A violation is
+/// DL1702 — compiler-bug class — and the file is NOT touched: fmt never corrupts code.
+fn fmt_laws_ok(src: &str, out: &str) -> Result<(), &'static str> {
+    use delulu_syntax::fmt::{ast_fingerprint, comment_sequence, format_source};
+    let (m1, _) = delulu_syntax::parse_file(0, src);
+    let (m2, d2) = delulu_syntax::parse_file(0, out);
+    if d2.iter().any(|d| d.is_error()) {
+        return Err("the formatted output no longer parses");
+    }
+    if ast_fingerprint(&m1) != ast_fingerprint(&m2) {
+        return Err("the formatted output changed the program (identity law)");
+    }
+    if comment_sequence(src) != comment_sequence(out) {
+        return Err("the formatted output moved or lost a comment");
+    }
+    match format_source(0, out) {
+        Ok(again) if again == out => Ok(()),
+        _ => Err("formatting is not idempotent on this file"),
+    }
+}
+
 fn cmd_fmt(args: &[String]) -> i32 {
     let mut migrate: Option<String> = None;
     let mut json = false;
+    let mut check = false;
+    let mut stdin = false;
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -590,39 +630,71 @@ fn cmd_fmt(args: &[String]) -> i32 {
                 migrate = args.get(i).cloned();
             }
             "--json" => json = true,
+            "--check" => check = true,
+            "--stdin" => stdin = true,
             other => paths.push(std::path::PathBuf::from(other)),
         }
         i += 1;
     }
+
     match migrate.as_deref() {
-        Some("0.7") => {}
+        Some("0.7") => {
+            if paths.is_empty() {
+                eprintln!("delulu fmt --migrate 0.7 needs at least one file or directory");
+                return 2;
+            }
+            let mut files = Vec::new();
+            for p in &paths {
+                if !p.exists() {
+                    eprintln!("no such file or directory: {}", p.display());
+                    return 2;
+                }
+                if let Err(e) = collect_delulu_files(p, &mut files) {
+                    eprintln!("cannot read {}: {e}", p.display());
+                    return 2;
+                }
+            }
+            return cmd_fmt_migrate(files, json);
+        }
         Some(v) => {
             eprintln!("unknown migration `{v}` — the only migration is `0.7` (consume/recover keywords)");
             return 2;
         }
-        None => {
-            eprintln!("delulu fmt currently supports only `--migrate 0.7` (see usage)");
-            return 2;
-        }
-    }
-    if paths.is_empty() {
-        eprintln!("delulu fmt --migrate 0.7 needs at least one file or directory");
-        return 2;
+        None => {}
     }
 
-    // Expand directories to their `.delulu` files, recursively, deterministically.
-    fn collect(p: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
-        if p.is_dir() {
-            let mut entries: Vec<_> =
-                std::fs::read_dir(p)?.collect::<Result<Vec<_>, _>>()?.into_iter().map(|e| e.path()).collect();
-            entries.sort();
-            for e in entries {
-                collect(&e, out)?;
-            }
-        } else if p.extension().and_then(|e| e.to_str()) == Some("delulu") {
-            out.push(p.to_path_buf());
+    // `--stdin`: editor/agent integration — format stdin to stdout, diagnostics to stderr.
+    if stdin {
+        use std::io::Read as _;
+        let mut src = String::new();
+        if std::io::stdin().read_to_string(&mut src).is_err() {
+            eprintln!("error: stdin is not valid UTF-8");
+            return 2;
         }
-        Ok(())
+        return match delulu_syntax::fmt::format_source(0, &src) {
+            Err(diags) => {
+                let mut map = SourceMap::new();
+                map.add_file("<stdin>", src.clone());
+                print_diagnostics("fmt", &diags, &map, None, json);
+                1
+            }
+            Ok(out) => {
+                if let Err(why) = fmt_laws_ok(&src, &out) {
+                    // DL1702 is compiler-bug class; per spec §10 it carries no repair.
+                    let map = SourceMap::new();
+                    let d = Diagnostic::error("DL1702", format!("formatter law violation: {why}"));
+                    print_diagnostics("fmt", &[d], &map, None, json);
+                    return 2;
+                }
+                print!("{out}");
+                0
+            }
+        };
+    }
+
+    if paths.is_empty() {
+        eprintln!("delulu fmt needs files/directories, `--stdin`, or `--migrate 0.7` (see usage)");
+        return 2;
     }
     let mut files = Vec::new();
     for p in &paths {
@@ -630,12 +702,95 @@ fn cmd_fmt(args: &[String]) -> i32 {
             eprintln!("no such file or directory: {}", p.display());
             return 2;
         }
-        if let Err(e) = collect(p, &mut files) {
+        if let Err(e) = collect_delulu_files(p, &mut files) {
             eprintln!("cannot read {}: {e}", p.display());
             return 2;
         }
     }
 
+    let mut changed: Vec<String> = Vec::new();
+    let mut refused: Vec<String> = Vec::new();
+    let mut unchanged = 0usize;
+    for f in &files {
+        let src = match std::fs::read_to_string(f) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("cannot read {}: {e}", f.display());
+                return 2;
+            }
+        };
+        match delulu_syntax::fmt::format_source(0, &src) {
+            Err(diags) => {
+                // Unparseable input is never "formatted" — surface the real diagnostics.
+                let mut map = SourceMap::new();
+                map.add_file(&f.display().to_string(), src.clone());
+                print_diagnostics("fmt", &diags, &map, None, false);
+                refused.push(f.display().to_string());
+            }
+            Ok(out) => {
+                if let Err(why) = fmt_laws_ok(&src, &out) {
+                    let map = SourceMap::new();
+                    let d = Diagnostic::error(
+                        "DL1702",
+                        format!("formatter law violation on {}: {why}", f.display()),
+                    );
+                    print_diagnostics("fmt", &[d], &map, None, json);
+                    return 2; // compiler-bug class: stop, write nothing further
+                }
+                if out == src {
+                    unchanged += 1;
+                } else if check {
+                    changed.push(f.display().to_string());
+                } else {
+                    if let Err(e) = std::fs::write(f, &out) {
+                        eprintln!("cannot write {}: {e}", f.display());
+                        return 2;
+                    }
+                    changed.push(f.display().to_string());
+                }
+            }
+        }
+    }
+
+    if json {
+        let report = serde_json::json!({
+            "delulu_version": env!("CARGO_PKG_VERSION"),
+            "schema": 1,
+            "command": "fmt",
+            "mode": if check { "check" } else { "write" },
+            "changed": changed,
+            "unchanged": unchanged,
+            "refused": refused,
+        });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    } else if check {
+        for f in &changed {
+            println!("would reformat: {f}");
+        }
+        println!(
+            "fmt --check: {} would change, {} clean, {} refused (parse errors)",
+            changed.len(),
+            unchanged,
+            refused.len()
+        );
+    } else {
+        println!(
+            "fmt: reformatted {} file(s), {} already canonical, {} refused (parse errors)",
+            changed.len(),
+            unchanged,
+            refused.len()
+        );
+    }
+    if (check && !changed.is_empty()) || !refused.is_empty() {
+        1
+    } else {
+        0
+    }
+}
+
+/// `delulu fmt --migrate 0.7`: the Stage-7 keyword migration (invariant 37) — lexical
+/// renames of pre-0.7 `consume`/`recover` identifiers, splice-based, never a reformat.
+fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
     let mut total_renames = 0usize;
     let mut changed: Vec<String> = Vec::new();
     for f in &files {

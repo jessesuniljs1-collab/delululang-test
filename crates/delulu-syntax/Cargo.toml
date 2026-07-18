@@ -7,3 +7,6 @@ edition.workspace = true
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
 serde = { workspace = true }
+# Stage 8 (8d): the formatter's identity-law fingerprint serializes the AST with spans/ids
+# stripped. Already a workspace dependency of six sibling crates — not a new dependency.
+serde_json = { workspace = true }

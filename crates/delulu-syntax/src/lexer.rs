@@ -8,7 +8,25 @@ use delulu_diag::{Diagnostic, FileId, Span};
 use crate::token::{keyword, Token, TokenKind};
 
 pub fn lex(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
+    let (tokens, diags, _comments) = Lexer::new(file, src).run();
+    (tokens, diags)
+}
+
+/// Lex with the comment side channel (Stage 8, phase 8d): identical tokens and
+/// diagnostics to [`lex`], plus every comment in source order for the formatter.
+pub fn lex_with_comments(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
     Lexer::new(file, src).run()
+}
+
+/// A source comment captured for the formatter (Stage 8, phase 8d). `text` is the raw
+/// slice INCLUDING its `//` or `/* */` markers; `own_line` is whether nothing but
+/// whitespace precedes it on its line (an own-line comment stays own-line when
+/// reprinted; anything else is a trailing comment).
+#[derive(Clone, Debug)]
+pub struct Comment {
+    pub text: String,
+    pub start: u32,
+    pub own_line: bool,
 }
 
 struct Lexer<'a> {
@@ -17,6 +35,7 @@ struct Lexer<'a> {
     pos: usize,
     tokens: Vec<Token>,
     diags: Vec<Diagnostic>,
+    comments: Vec<Comment>,
 }
 
 impl<'a> Lexer<'a> {
@@ -25,10 +44,10 @@ impl<'a> Lexer<'a> {
         // -Encoding utf8` on Windows) prepend one, and it isn't source text. Only a *leading* BOM is
         // trivia; a U+FEFF elsewhere still lexes normally (and is rejected as an unexpected char).
         let pos = if src.starts_with('\u{feff}') { '\u{feff}'.len_utf8() } else { 0 };
-        Lexer { file, src, pos, tokens: Vec::new(), diags: Vec::new() }
+        Lexer { file, src, pos, tokens: Vec::new(), diags: Vec::new(), comments: Vec::new() }
     }
 
-    fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>) {
+    fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
         while self.pos < self.src.len() {
             self.skip_trivia();
             if self.pos >= self.src.len() {
@@ -41,7 +60,21 @@ impl<'a> Lexer<'a> {
         self.maybe_insert_term(self.src.len());
         let eof = self.src.len() as u32;
         self.tokens.push(Token { kind: TokenKind::Eof, span: Span::new(self.file, eof, eof) });
-        (self.tokens, self.diags)
+        (self.tokens, self.diags, self.comments)
+    }
+
+    /// Record a comment spanning `start..self.pos` for the formatter's side channel.
+    fn record_comment(&mut self, start: usize) {
+        let own_line = self.src[..start]
+            .chars()
+            .rev()
+            .take_while(|&c| c != '\n')
+            .all(char::is_whitespace);
+        self.comments.push(Comment {
+            text: self.src[start..self.pos].to_string(),
+            start: start as u32,
+            own_line,
+        });
     }
 
     // ----- low-level cursor -----------------------------------------------
@@ -99,12 +132,14 @@ impl<'a> Lexer<'a> {
                 }
                 Some('/') if self.peek2() == Some('/') => {
                     // Line comment: runs to (not through) the newline.
+                    let start = self.pos;
                     while let Some(c) = self.peek() {
                         if c == '\n' {
                             break;
                         }
                         self.bump();
                     }
+                    self.record_comment(start);
                 }
                 Some('/') if self.peek2() == Some('*') => {
                     self.block_comment();
@@ -148,6 +183,7 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
+        self.record_comment(start);
         // §2.2: a comment containing a newline counts as a newline.
         if saw_newline {
             self.maybe_insert_term(start);

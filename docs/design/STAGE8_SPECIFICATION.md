@@ -337,3 +337,13 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   and each of the five machine channels alone suppresses picker + welcome with no config
   minted. Criterion 7 witnessed at the CLI: full `--json` byte-identical across locales
   (deviation 8's strengthening), human stderr differs, slang DL0501 matches the catalog.
+- **8d — the canonical formatter (2026-07-18).** `delulu-syntax/fmt.rs` (mechanics ruled
+  in build-order deviation 11): full-grammar printer (items, actors, tests, foreign
+  blocks, every expression form), 4-space/100-soft/trailing-commas/alphabetical-rows/
+  sorted-imports; comment side channel in the lexer (`lex_with_comments`); identity =
+  fingerprint + comment-sequence equality, idempotence byte-equal — BOTH verified inline
+  by the CLI before any write (violation = DL1702, file untouched). `delulu fmt <paths>
+  [--check] [--json]`, `--stdin`, `--migrate 0.7` intact (regression-fenced). Laws hold
+  over the whole repository corpus + the generative gate (2k always-on; 100k release
+  `#[ignore]` gate — criterion 4's witness). Unparseable input refused with its real
+  diagnostics, never rewritten.
