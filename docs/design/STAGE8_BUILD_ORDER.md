@@ -82,9 +82,21 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
    migration-only (Stage-7 deviation 6). 8d grows the same verb into the full canonical
    formatter; `--migrate` remains a mode of it; the Stage-7 migration corpus is a
    regression fence (criterion 4 names it).
-3. *(open — rule at 8e)* LSP packaging: new crate `delulu-lsp` vs CLI module, and the
-   protocol dependency question (hand-rolled JSON-RPC vs `lsp-server`/`lsp-types`).
-   Dependency austerity vs correctness-of-types tradeoff — argue it, then rule it here.
+3. **RULED (8e) — the LSP is a CLI module with ZERO new dependencies.** `tower-lsp`
+   drags in an async runtime (austerity refuses); `lsp-types` buys compile-time shapes
+   for a protocol we use a bounded slice of, at the cost of a very large dependency.
+   The JSON-RPC framing is ~60 lines; the protocol surface is value-level `serde_json`
+   (already a workspace dependency everywhere); and the correctness fence is the smoke
+   suite driving the REAL binary over the REAL wire — the same fidelity a typed
+   dependency would be tested at. Position encoding: UTF-16 (the LSP default),
+   computed correctly from the document text — no negotiation games.
+   Sub-rulings: (a) v0.8 rename/references resolve module-level names by declaration +
+   reference walk across the workspace's loaded files — not a full DefId graph; local
+   variables refuse rename honestly. (b) Incrementality v0.8 = re-check the edited
+   file per change (module granularity, the spec's own unit), latency measured in the
+   smoke suite against the 10-kLoC reference. (c) The server holds no broker
+   connection, runs no code, loads no plugins — analysis only, structurally (it never
+   constructs an Interp or a Custody).
 4. *(open — rule at 8h)* Registry index transport for v0.8: the format is normative HTTP,
    but hosted ops are Stage 9 — the v0.8 client is expected to run against LOCAL index
    fixtures (dir/file), with the HTTP shape frozen. No network dependency without a ruling.

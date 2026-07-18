@@ -489,6 +489,9 @@ pub fn run(args: &[String]) -> i32 {
     match cmd.as_str() {
         "check" => cmd_check(rest),
         "fmt" => cmd_fmt(rest),
+        // Machine-only by construction: the first-run flow is suppressed for `lsp` in
+        // locale.rs (a stray prompt on stdout would corrupt the JSON-RPC stream).
+        "lsp" => crate::lsp::run_lsp(rest),
         "build" => cmd_build(rest),
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
@@ -559,6 +562,7 @@ fn usage() -> &'static str {
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
      \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
+     \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\

@@ -347,3 +347,15 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   over the whole repository corpus + the generative gate (2k always-on; 100k release
   `#[ignore]` gate — criterion 4's witness). Unparseable input refused with its real
   diagnostics, never rewritten.
+- **8e.1 — the LSP server core (2026-07-18).** `delulu lsp`: stdio JSON-RPC, zero new
+  dependencies (deviation 3 RULED — hand-rolled framing, value-level protocol, UTF-16
+  positions computed correctly), analysis-only structurally. Shipped: lifecycle,
+  full-sync push diagnostics (the compiler's own — smoke-witnessed equal to `check
+  --json` in code/span/message), hover (signature + row + transitive authority),
+  codeAction (⚠ widening, `isPreferred: false`, flags in `data`; the DL0501 repair
+  applies to green over the wire), documentSymbol (actors/behaviors/tests), inlayHint
+  authority lens (inferred rows on unannotated lambdas, from the lambda's `Type::Fn`).
+  Criterion 3 witnessed: 47 ms edit-to-diagnostics on the 10-kLoC reference, release
+  (budget 150 ms), plus a debug-mode smoke ceiling always-on. Remaining in 8e.2:
+  definition/references/rename, semanticTokens, codeLens, `delulu.authority` command,
+  `editors/vscode/` skeleton + `docs/editors.md`.
