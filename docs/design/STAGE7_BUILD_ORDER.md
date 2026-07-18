@@ -142,17 +142,17 @@ head chef has personally seen.
 
 | # | Criterion (spec §9) | Witness | Seen |
 |---|---|---|---|
-| 1 | ping-pong 1M msgs, quiescence, deterministic, ≥2× @4 threads | — | — |
-| 2 | `ref List[Int]` send → DL1601; consumed iso crosses; later use → DL1602 | — | — |
-| 3 | recover mutable-build → iso send; outer `ref` capture → DL1605 | — | — |
-| 4 | write via `box` → DL1604; `tag` field access → DL1604; F-3-style ascription rejected | — | — |
-| 5 | causal rows: DL0501 at send site; `delulu why Write` crosses the actor boundary | — | — |
-| 6 | conformance under `--assert-trace --debug-rcaps`, both engines, zero violations | — | — |
-| 7 | TSAN clean on the actor stress corpus (native, Linux) | — | — |
-| 8 | rcap property tests vs deny properties — **ship-gate** | — | — |
-| 9 | `Promise[T].then` row plumbing end-to-end | — | — |
-| 10 | DL1608 + `fmt --migrate 0.7`; prior suites green post-migration | — | — |
-| 11 | `PyObj` send → DL1601 with pinning explanation | — | — |
+| 1 | ping-pong 1M msgs, quiescence, deterministic, ≥2× @4 threads | `criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel` — 1,000,024 turns EXACT at 1 and 4 workers, 3.00× wall-clock | head chef, Windows |
+| 2 | `ref List[Int]` send → DL1601; consumed iso crosses; later use → DL1602 | `criterion2_sending_a_ref_list_is_dl1601`, `criterion2_an_unconsumed_iso_gets_dl1601_with_the_exact_consume_repair`, `criterion2_a_consumed_iso_crosses_and_the_sender_loses_it` + conformance `DL1601_ref_list_send`, `DL1602_use_after_consume` | head chef |
+| 3 | recover mutable-build → iso send; outer `ref` capture → DL1605 | `recover_lifts_a_mutable_build_to_iso_here_already`, `recover_referencing_an_outer_ref_is_dl1605`, `a_lambda_inside_recover_cannot_capture_an_outer_ref` + conformance `DL1605_recover_captures_ref` | head chef |
+| 4 | write via `box` → DL1604; `tag` field access → DL1604; F-3-style ascription rejected | `write_through_a_box_receiver_is_dl1604`, `field_access_through_tag_is_dl1604`, `viewpoint_write_requires_the_adapted_receiver_to_be_writable`; ascription tricks: `storing_an_aliased_ref_where_iso_is_demanded_is_dl1603_…` + `a_non_tag_rcap_on_an_actor_type_is_dl1607` (a written rcap never launders — storability refuses through the alias table) | head chef |
+| 5 | causal rows: DL0501 at send site; `delulu why Write` crosses the actor boundary | `criterion5_a_send_site_must_cover_the_behaviors_row` (both directions) + `criterion5_why_write_crosses_the_actor_boundary` (real binary) | head chef |
+| 6 | conformance under `--assert-trace --debug-rcaps`, both engines, zero violations | native: `criterion6_native_actor_run_is_clean_under_assert_trace_and_debug_rcaps` (real binary, real iso move); WASM: 7h witness | native seen; wasm pending 7h |
+| 7 | TSAN clean on the actor stress corpus (native, Linux) | nightly `-Zsanitizer=thread` over `actors_pingpong`/`actors_trace`/`actors_promise` in WSL | pending run |
+| 8 | rcap property tests vs deny properties — **ship-gate** | `criterion8_generated_sequences_never_reach_incompatible_aliases` (10,000 seeds × 40 ops, object-sensitive worlds, ZERO counterexamples; the gate first caught two model bugs — recorded in-test) + `criterion8_consumed_iso_transfer_is_exclusive_by_construction` | head chef |
+| 9 | `Promise[T].then` row plumbing end-to-end | `criterion9_an_effectful_callback_surfaces_in_the_callers_row` (both directions), `criterion9_a_pure_callback_keeps_the_caller_at_async_only`, `criterion9_fulfill_sites_charge_async_only`, runtime `criterion9_promise_first_fulfill_wins_and_callbacks_run_as_promise_turns` (2-in-fulfill + 1-in-then split via causal trace) | head chef |
+| 10 | DL1608 + `fmt --migrate 0.7`; prior suites green post-migration | `criterion10_dl1608_then_migrate_then_clean` (real binary: DL1608 → migrate → clean → idempotent) | head chef |
+| 11 | `PyObj` send → DL1601 with pinning explanation | `a_pyobj_behavior_param_is_dl1601_with_the_pinning_explanation` (decl fence) + the argument-side pinning message in `check_send_arg` | head chef |
 
 ## 5. Post-v0.7 RFC ledger (deferred with eyes open)
 
