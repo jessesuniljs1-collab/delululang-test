@@ -162,6 +162,11 @@ fn default_rcap_inner(
         // Pinned to their creating actor (invariant 36: CPython affinity; a raw C pointer has
         // no cross-actor story either).
         Type::PyObj | Type::ForeignPtr => Rcap::Ref,
+        // An actor type is ALWAYS tag (spec §2: any other written rcap is DL1607) — opaque
+        // identity, sendable, no synchronous access. The spec's ergonomics list names actor
+        // references beside the val family because they are safely shareable like val; the
+        // "always tag" clause is the one that fixes the default.
+        Type::Actor(_, _) => Rcap::Tag,
         // Composites of only val-defaulting components are deeply immutable → val;
         // anything else → ref (spec §2).
         Type::List(e) | Type::Option(e) => {

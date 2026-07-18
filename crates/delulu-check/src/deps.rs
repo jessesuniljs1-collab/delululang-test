@@ -440,7 +440,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
             }
         }
 
-        let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, fn_order };
+        let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, actors: HashMap::new(), fn_order };
         let result = check_module(&unit.module, &table);
         diagnostics.extend(result.diags.iter().cloned());
         for (name, f) in result.facts {

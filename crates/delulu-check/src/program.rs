@@ -217,6 +217,9 @@ pub fn check_program(pkg: &Package) -> Program {
             fns,
             consts,
             foreigns,
+            // Cross-MODULE actor visibility is post-v0.7 (actors are declared and used within
+            // one module in v0.7 — same staging as Stage-6 single-module plugins).
+            actors: HashMap::new(),
             fn_order,
         };
         let result = check_module(&unit.module, &table);

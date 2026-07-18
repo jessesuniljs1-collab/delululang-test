@@ -357,6 +357,10 @@ pub fn render_type(t: &Type, table: &DeclTable) -> String {
         Type::Plugin(c) => format!("Plugin[{}]", render_type(c, table)),
         Type::Verified => "Verified".into(),
         Type::Contained => "Contained".into(),
+        // Stage 7: actors never appear in a plugin export type (actors in plugins are fenced
+        // in v0.7 — DIR refuses them before any signature could mention one); render the
+        // name for a coherent DL1501 message on hostile input.
+        Type::Actor(name, _) => name.clone(),
         // Defensive: inference variables never appear in a monomorphic export type; render
         // something inert rather than panicking on a hostile/degenerate input.
         Type::Var(_) => "?".into(),

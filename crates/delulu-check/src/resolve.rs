@@ -68,6 +68,40 @@ pub struct ForeignDef {
     pub fns: Vec<ForeignFnDef>,
 }
 
+/// One `be` behavior of an actor (Stage 7, spec §2). Behaviors return `Unit` structurally;
+/// the row is what the SEND site's row must contain (T-Send, `{Async} ∪ row(beh)`).
+#[derive(Clone, Debug)]
+pub struct ActorBehavior {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub row: Option<RowExpr>,
+    pub span: delulu_diag::Span,
+}
+
+/// A resolved `actor A { … }` declaration (Stage 7, spec §2). Shares the type namespace
+/// (an actor name is a type name — `Type::Actor`).
+#[derive(Clone, Debug)]
+pub struct ActorDef {
+    pub name: String,
+    pub generics: Vec<String>,
+    /// (name, declared type, mutable) — fields are actor-internal state, assigned in `new`.
+    pub fields: Vec<(String, TypeExpr, bool)>,
+    pub ctor_params: Vec<Param>,
+    pub ctor_row: Option<RowExpr>,
+    pub behaviors: Vec<ActorBehavior>,
+    /// Sync methods — callable only from `self` (T-SyncMethod; the rcap pass enforces it).
+    pub fns: Vec<FnSig>,
+}
+
+impl ActorDef {
+    pub fn behavior(&self, name: &str) -> Option<&ActorBehavior> {
+        self.behaviors.iter().find(|b| b.name == name)
+    }
+    pub fn sync_fn(&self, name: &str) -> Option<&FnSig> {
+        self.fns.iter().find(|f| f.name == name)
+    }
+}
+
 #[derive(Debug)]
 pub struct DeclTable {
     pub types: Vec<TypeDef>,
@@ -77,6 +111,8 @@ pub struct DeclTable {
     pub consts: HashMap<String, ConstSig>,
     /// `foreign` blocks by lib name (spec §2). Each name is also an opaque `Type::Foreign`.
     pub foreigns: HashMap<String, ForeignDef>,
+    /// `actor` declarations by name (Stage 7, spec §2) — also type-namespace citizens.
+    pub actors: HashMap<String, ActorDef>,
     /// Insertion order of functions, for deterministic checking and reporting.
     pub fn_order: Vec<String>,
 }
@@ -132,6 +168,7 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
         fns: HashMap::new(),
         consts: HashMap::new(),
         foreigns: HashMap::new(),
+        actors: HashMap::new(),
         fn_order: Vec::new(),
     };
 
@@ -207,6 +244,60 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
                 })
                 .collect();
             table.foreigns.insert(name.clone(), ForeignDef { abi: fd.abi.clone(), name, fns });
+        }
+    }
+
+    // Actors (Stage 7, spec §2): the actor name joins the TYPE namespace (`Type::Actor`).
+    for item in &module.items {
+        if let Item::Actor(a) = item {
+            let name = a.name.name.clone();
+            if table.type_ix.contains_key(&name)
+                || table.foreigns.contains_key(&name)
+                || table.actors.contains_key(&name)
+            {
+                diags.push(dup("type", &a.name));
+                continue;
+            }
+            let generics = gen_names(&a.generics);
+            let behaviors = a
+                .behaviors
+                .iter()
+                .map(|b| ActorBehavior {
+                    name: b.name.name.clone(),
+                    params: b.params.clone(),
+                    row: b.row.clone(),
+                    span: b.span,
+                })
+                .collect();
+            let fns = a
+                .fns
+                .iter()
+                .map(|f| FnSig {
+                    name: f.name.name.clone(),
+                    public: false,
+                    generics: gen_names(&f.generics),
+                    gkinds: HashMap::new(),
+                    params: f.params.clone(),
+                    ret: f.ret.clone(),
+                    row: f.row.clone(),
+                })
+                .collect();
+            table.actors.insert(
+                name.clone(),
+                ActorDef {
+                    name,
+                    generics,
+                    fields: a
+                        .fields
+                        .iter()
+                        .map(|fd| (fd.name.name.clone(), fd.ty.clone(), fd.mutable))
+                        .collect(),
+                    ctor_params: a.ctor.params.clone(),
+                    ctor_row: a.ctor.row.clone(),
+                    behaviors,
+                    fns,
+                },
+            );
         }
     }
 

@@ -906,4 +906,136 @@ mod tests {
         );
         assert!(e.contains(&"DL1602".to_string()), "{e:?}");
     }
+
+    // ----- Stage 7 phase 7e: actor declarations (T-Actor/Ctor/Behavior/SyncMethod) ------
+
+    const COUNTER: &str = "module m\n\
+        actor Counter {\n\
+        var count: Int\n\
+        let label: Str\n\
+        new(start: Int, label: Str) { self.count = start\nself.label = label }\n\
+        be add(n: Int) { self.count = self.count + n }\n\
+        fn doubled() -> Int { self.count * 2 }\n\
+        }\n";
+
+    #[test]
+    fn a_well_formed_actor_checks_clean() {
+        let c = check(COUNTER);
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        // Members register as Actor.member facts.
+        assert!(c.result.facts.contains_key("Counter.add"), "behavior facts registered");
+        assert!(c.result.facts.contains_key("Counter.new"), "ctor facts registered");
+    }
+
+    #[test]
+    fn a_ref_behavior_param_is_dl1601() {
+        let e = errors(
+            "module m\nactor A { var xs: List[Int]\nnew() { self.xs = [] }\n\
+             be feed(v: ref List[Int]) { } }\n",
+        );
+        assert!(e.contains(&"DL1601".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_val_defaulted_behavior_param_is_clean() {
+        // List[Int] defaults val — sendable; Int/Str default val — sendable.
+        let c = check(
+            "module m\nactor A { var total: Int\nnew() { self.total = 0 }\n\
+             be feed(vs: List[Int], name: Str) { self.total = vs.len() } }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_pyobj_behavior_param_is_dl1601_with_the_pinning_explanation() {
+        // Acceptance criterion 11: PyObj is actor-pinned (invariant 36 — CPython affinity).
+        let c = check(
+            "module m\nactor A { var n: Int\nnew() { self.n = 0 }\nbe feed(p: PyObj) { } }\n",
+        );
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1601").expect("DL1601 expected");
+        assert!(d.message.contains("pinned"), "the pinning explanation: {}", d.message);
+        assert!(d.message.contains("CPython"), "names the affinity: {}", d.message);
+    }
+
+    #[test]
+    fn undecidable_param_sendability_is_dl1601() {
+        // A bare generic parameter: sendability cannot be established — never guessed.
+        let e = errors(
+            "module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: T) { } }\n",
+        );
+        assert!(e.contains(&"DL1601".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_written_val_generic_param_is_sendable() {
+        // The Promise pattern (spec §8): `val T` is sendable by annotation.
+        let c = check(
+            "module m\nactor Cell[T] { var n: Int\nnew() { self.n = 0 }\nbe put(v: val T) { } }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_non_tag_rcap_on_an_actor_type_is_dl1607() {
+        let c = check(&format!("{COUNTER}fn f(a: ref Counter) {{ }}\n"));
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1607").expect("DL1607 expected");
+        assert!(!d.repairs.is_empty(), "carries the exact normalize repair");
+    }
+
+    #[test]
+    fn a_bare_actor_type_is_implicitly_tag_and_clean() {
+        let c = check(&format!("{COUNTER}fn f(a: Counter) {{ }}\n"));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn an_external_sync_call_on_an_actor_reference_is_dl1604() {
+        // T-SyncMethod: outsiders hold tag; messages are the only cross-actor interface.
+        let e = errors(&format!("{COUNTER}fn f(a: Counter) -> Int {{ a.doubled() }}\n"));
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_sync_call_from_self_is_clean_and_carries_the_row() {
+        let c = check(
+            "module m\nactor A {\n\
+             var n: Int\n\
+             new() { self.n = 0 }\n\
+             be report(out: Cap[Console]) ! {Write} { out.println(str(self.describe())) }\n\
+             fn describe() -> Int { self.n }\n\
+             }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn field_access_through_an_actor_reference_is_dl1604() {
+        // An outsider's actor reference is tag: no field access at all.
+        let e = errors(&format!("{COUNTER}fn f(a: Counter) -> Int {{ a.count }}\n"));
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_constructor_that_misses_a_field_is_refused() {
+        let e = errors(
+            "module m\nactor A { var x: Int\nlet y: Str\nnew(x: Int) { self.x = x } }\n",
+        );
+        assert!(e.contains(&"DL0405".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_behavior_with_an_undeclared_effect_is_dl0501() {
+        let e = errors(
+            "module m\nactor A { var n: Int\nnew() { self.n = 0 }\n\
+             be log(out: Cap[Console]) { out.println(\"x\") } }\n",
+        );
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn stringifying_an_actor_reference_is_refused() {
+        // Actor references are opaque identity (tag) — no str, no ==.
+        let e = errors(&format!("{COUNTER}fn f(a: Counter) -> Str {{ str(a) }}\n"));
+        assert!(e.contains(&"DL0604".to_string()), "{e:?}");
+    }
 }

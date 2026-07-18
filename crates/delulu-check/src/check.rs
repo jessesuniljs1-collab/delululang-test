@@ -100,8 +100,11 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         node_row_accs: HashMap::new(),
     };
     for item in &module.items {
-        if let Item::Fn(f) = item {
-            checker.check_fn(f);
+        match item {
+            Item::Fn(f) => checker.check_fn(f),
+            // Stage 7 (phase 7e): T-Actor — fields, exactly one `new`, behaviors, sync fns.
+            Item::Actor(a) => checker.check_actor(a),
+            _ => {}
         }
     }
     // The compile-time foreign fence (T-ForeignSig): every foreign signature must marshal.
@@ -346,6 +349,152 @@ impl<'a> Checker<'a> {
         facts.pure = facts.effects.is_empty();
         facts.declassifies = facts.effects.contains(&Effect::Declassify);
         self.facts.insert(f.name.name.clone(), facts);
+    }
+
+    // ===== actors (Stage 7 phase 7e: T-Actor / T-Ctor / T-Behavior / T-SyncMethod) ======
+
+    /// Check an `actor` declaration (spec §4). `var` fields are actor-internal state — owned,
+    /// isolated, reached only via the actor's own turn — NOT the banned module-level ambient
+    /// `var`. Members check like functions with `self : ref ActorType` bound; parameter
+    /// SENDABILITY (DL1601) is the rcap pass's rule, not this one (two axes, two owners).
+    fn check_actor(&mut self, a: &ActorDecl) {
+        let Some(adef) = self.table.actors.get(&a.name.name).cloned() else { return };
+
+        // Actor generics: row-kinded when they appear as a row tail anywhere in a member
+        // signature (the Promise[T] + `! e` pattern), type-kinded otherwise.
+        let row_kinded = actor_row_kinded_generics(&adef);
+        let mut genv = Genv::default();
+        let mut targs: Vec<Type> = Vec::new();
+        for g in &adef.generics {
+            if row_kinded.contains(g) {
+                let v = self.cx.fresh_row_var();
+                genv.rows.insert(g.clone(), v);
+            } else {
+                let v = self.cx.fresh_type();
+                genv.types.insert(g.clone(), v.clone());
+                targs.push(v);
+            }
+        }
+        let self_ty = Type::Actor(a.name.name.clone(), targs);
+
+        // Field types must lower cleanly (T-Actor).
+        for (_, te, _) in &adef.fields {
+            let _ = self.lower_type(te, &genv, &mut FnFacts::default());
+        }
+
+        // Construction is a send to the new actor (T-Ctor): checked like a behavior.
+        self.check_actor_member(&a.name.name, "new", &a.ctor.params, &a.ctor.row, &a.ctor.body, None, &genv, &self_ty);
+        for b in &a.behaviors {
+            self.check_actor_member(&a.name.name, &b.name.name, &b.params, &b.row, &b.body, None, &genv, &self_ty);
+        }
+        for f in &a.fns {
+            self.check_actor_member(&a.name.name, &f.name.name, &f.params, &f.row, &f.body, f.ret.as_ref(), &genv, &self_ty);
+        }
+
+        // Definite initialization (v0.7, flow-insensitive): `new` must assign every field —
+        // a field read before any assignment would be a value from nowhere. Same fault
+        // family as a missing record field (DL0405).
+        let mut assigned = HashSet::new();
+        collect_self_field_assigns(&a.ctor.body, &mut assigned);
+        for (fname, _, _) in &adef.fields {
+            if !assigned.contains(fname) {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0405",
+                        format!("actor `{}`'s constructor never assigns field `{fname}`", a.name.name),
+                    )
+                    .with_span(a.ctor.span, "every field must be assigned in `new`"),
+                );
+            }
+        }
+    }
+
+    /// One actor member (ctor / behavior / sync fn), checked with `self : ref ActorType`.
+    /// Facts and signature types register under `Actor.member` so authority reporting and
+    /// the rcap pass see them like any function.
+    #[allow(clippy::too_many_arguments)]
+    fn check_actor_member(
+        &mut self,
+        actor: &str,
+        member: &str,
+        params: &[Param],
+        row: &Option<RowExpr>,
+        body: &Block,
+        ret: Option<&TypeExpr>,
+        genv: &Genv,
+        self_ty: &Type,
+    ) {
+        let param_types: Vec<Type> =
+            params.iter().map(|p| self.lower_type(&p.ty, genv, &mut FnFacts::default())).collect();
+        let ret_ty = match ret {
+            Some(t) => self.lower_type(t, genv, &mut FnFacts::default()),
+            None => Type::Unit,
+        };
+        let declared_row = match row {
+            Some(r) => self.lower_row(r, genv),
+            None => Row::pure(),
+        };
+        let key = format!("{actor}.{member}");
+        self.fn_types.insert(
+            key.clone(),
+            Type::Fn { params: param_types.clone(), ret: Box::new(ret_ty.clone()), row: declared_row.clone() },
+        );
+        let ret_err = match &ret_ty {
+            Type::Result(_, e) => Some((**e).clone()),
+            _ => None,
+        };
+        let mut ctx = FnCtx {
+            name: key.clone(),
+            genv: genv.clone(),
+            ret: ret_ty.clone(),
+            ret_err,
+            locals: vec![HashMap::new()],
+            facts: FnFacts::default(),
+        };
+        ctx.bind("self", self_ty.clone());
+        for (p, ty) in params.iter().zip(&param_types) {
+            self.note_caps_in(ty, &mut ctx.facts);
+            ctx.bind(&p.name.name, ty.clone());
+        }
+        let (body_ty, body_row) = self.check_block(body, &mut ctx);
+        if ret.is_some() {
+            self.expect_type(&ret_ty, &body_ty, body.span, "method body type must match the return type");
+        }
+        self.check_member_row_subset(&body_row, &declared_row, body.span, &key);
+        let mut facts = std::mem::take(&mut ctx.facts);
+        facts.effects = self.resolved_effects(&declared_row);
+        facts.pure = facts.effects.is_empty();
+        facts.declassifies = facts.effects.contains(&Effect::Declassify);
+        self.facts.insert(key, facts);
+    }
+
+    /// The T-Fn boundary check applied to an actor member: ε_body ⊆ ε_declared (DL0501).
+    /// Member declarations carry no `FnDecl` shape, so this reports without the auto-repair
+    /// edit machinery — the message still names the exact missing effects.
+    fn check_member_row_subset(&mut self, body: &RowAcc, declared: &Row, span: Span, what: &str) {
+        let declared_resolved = self.cx.apply_row(declared);
+        let mut body_effects = body.effects.clone();
+        let mut uncovered_tail = false;
+        for &t in &body.tails {
+            let r = self.cx.apply_row(&Row { effects: BTreeSet::new(), tail: Some(t) });
+            body_effects.extend(r.effects.iter().cloned());
+            if let Some(rt) = r.tail {
+                if declared_resolved.tail != Some(rt) {
+                    uncovered_tail = true;
+                }
+            }
+        }
+        let missing: Vec<Effect> =
+            body_effects.iter().filter(|e| !declared_resolved.effects.contains(*e)).cloned().collect();
+        if !missing.is_empty() || uncovered_tail {
+            let list = missing.iter().map(|e| e.name()).collect::<Vec<_>>().join(", ");
+            let msg = if missing.is_empty() {
+                format!("`{what}` performs effects its declared row does not cover")
+            } else {
+                format!("`{what}` performs effect(s) not in its declared row: {list}")
+            };
+            self.diags.push(Diagnostic::error("DL0501", msg).with_span(span, "declare these effects in the member's row"));
+        }
     }
 
     // ===== the foreign marshallability fence (T-ForeignSig, spec §3) ======
@@ -960,6 +1109,44 @@ impl<'a> Checker<'a> {
             }
         }
 
+        // T-SyncMethod (Stage 7, spec §4): a call of an actor's `fn` method — typed here with
+        // the full declared row merged (method_sig's single-effect slot cannot carry one).
+        // WHO may call is the rcap pass's rule: only `self` is `ref`; outsiders hold `tag`
+        // and get DL1604 there. Behaviors are typed by T-Send (phase 7f), not here.
+        if let Type::Actor(aname, atargs) = &rt {
+            if let Some(adef) = self.table.actors.get(aname).cloned() {
+                if let Some(sig) = adef.sync_fn(&name.name).cloned() {
+                    let mut agenv = Genv::default();
+                    for (g, t) in adef.generics.iter().zip(atargs) {
+                        agenv.types.insert(g.clone(), t.clone());
+                    }
+                    if sig.params.len() != arg_tys.len() {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0403",
+                                format!("`{aname}.{}` expects {} argument(s), found {}", name.name, sig.params.len(), arg_tys.len()),
+                            )
+                            .with_span(span, "wrong number of arguments"),
+                        );
+                    }
+                    for (p, (at, aspan)) in sig.params.iter().zip(&arg_tys) {
+                        let expected = self.lower_type(&p.ty, &agenv, &mut ctx.facts);
+                        self.expect_type(&expected, at, *aspan, "method argument type mismatch");
+                    }
+                    let ret = match &sig.ret {
+                        Some(t) => self.lower_type(t, &agenv, &mut ctx.facts),
+                        None => Type::Unit,
+                    };
+                    if let Some(r) = &sig.row {
+                        let row = self.lower_row(r, &agenv);
+                        acc.add_row(&row);
+                    }
+                    ctx.facts.callees.insert(format!("{aname}.{}", name.name));
+                    return (ret, acc);
+                }
+            }
+        }
+
         if let Some((ret, effect, produced_cap)) = self.method_sig(&rt, &name.name, &arg_tys, span, ctx) {
             if let Some(e) = effect {
                 acc.add_effect(e);
@@ -1316,6 +1503,24 @@ impl<'a> Checker<'a> {
 
     fn field_type(&mut self, recv: &Type, field: &Ident, _ctx: &mut FnCtx) -> Type {
         match self.cx.apply_type(recv) {
+            // Actor fields type here; WHO may reach them is the rcap pass's rule (only
+            // `self` is `ref`; a `tag` receiver's field access is DL1604 there).
+            Type::Actor(aname, atargs) => {
+                if let Some(adef) = self.table.actors.get(&aname).cloned() {
+                    if let Some((_, te, _)) = adef.fields.iter().find(|(n, _, _)| *n == field.name) {
+                        let mut genv = Genv::default();
+                        for (g, t) in adef.generics.iter().zip(&atargs) {
+                            genv.types.insert(g.clone(), t.clone());
+                        }
+                        return self.lower_type(&te.clone(), &genv, &mut FnFacts::default());
+                    }
+                }
+                self.diags.push(
+                    Diagnostic::error("DL0405", format!("no field `{}` on actor `{aname}`", field.name))
+                        .with_span(field.span, "unknown field"),
+                );
+                self.cx.fresh_type()
+            }
             Type::Record(id, args) => {
                 let def = self.table.type_def(id).clone();
                 if let TypeDefKind::Record(fields) = &def.kind {
@@ -1661,7 +1866,35 @@ impl<'a> Checker<'a> {
             // Stage 7 (build-order deviation 4): the rcap axis lives BESIDE `Type` — lowering
             // ignores the prefix, permanently; the rcap checker reads it from the AST/side
             // tables. This is what keeps rows and rcaps from bleeding into unification.
-            TypeExpr::Rcap { inner, .. } => self.lower_type(inner, genv, facts),
+            // One rcap rule DOES live here because it is about the TYPE: an actor type is
+            // always `tag` (spec §2) — any other written rcap is DL1607 with the exact
+            // normalize repair (delete the prefix; the default is already tag).
+            TypeExpr::Rcap { rcap, inner, span } => {
+                let lowered = self.lower_type(inner, genv, facts);
+                if matches!(lowered, Type::Actor(_, _)) && *rcap != delulu_syntax::ast::Rcap::Tag {
+                    let prefix = Span::new(span.file, span.start, inner.span().start);
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL1607",
+                            format!("an actor type is always `tag` — `{}` cannot apply to it", rcap.name()),
+                        )
+                        .with_span(*span, "actor references are opaque identity (tag)")
+                        .with_repair(Repair {
+                            id: "normalize-actor-rcap",
+                            confidence: Confidence::Exact,
+                            authority_widening: false,
+                            requires_human: false,
+                            edits: vec![Edit {
+                                file: prefix.file,
+                                start_byte: prefix.start,
+                                end_byte: prefix.end,
+                                insert: String::new(),
+                            }],
+                        }),
+                    );
+                }
+                lowered
+            }
             TypeExpr::Named { path, args, span } => {
                 if path.segs.len() == 1 {
                     let name = &path.segs[0].name;
@@ -1696,6 +1929,18 @@ impl<'a> Checker<'a> {
                         "Verified" => return Type::Verified,
                         "Contained" => return Type::Contained,
                         _ => {}
+                    }
+                    // An actor name is an actor-reference type (Stage 7, spec §2) — always
+                    // `tag` (DL1607 for any other written rcap; enforced in the Rcap arm).
+                    if let Some(adef) = self.table.actors.get(name) {
+                        if args.len() != adef.generics.len() {
+                            self.diags.push(
+                                Diagnostic::error("DL0406", format!("actor `{name}` expects {} type argument(s), found {}", adef.generics.len(), args.len()))
+                                    .with_span(*span, "wrong number of type arguments"),
+                            );
+                        }
+                        let targs: Vec<Type> = args.iter().map(|a| self.lower_type(a, genv, facts)).collect();
+                        return Type::Actor(name.clone(), targs);
                     }
                     // A `foreign … lib M` block name is the nominal opaque handle type `M` (§2).
                     if self.table.foreigns.contains_key(name) {
@@ -1850,6 +2095,9 @@ impl<'a> Checker<'a> {
             // R-5 (Stage 6): a plugin handle is opaque. It binds a live broker node; stringifying
             // or comparing one would leak/forge authority identity, and it must never serialize.
             Type::Plugin(_) => true,
+            // Stage 7: an actor reference is opaque identity (tag) — no str, no ==, never
+            // serialized. Identity comparison is a post-1.0 question, not an accident.
+            Type::Actor(_, _) => true,
             Type::List(inner) | Type::Option(inner) => self.is_opaque(&inner, visiting),
             Type::Result(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
             Type::Record(id, args) | Type::Sum(id, args) => {
@@ -2017,6 +2265,82 @@ fn type_contains_var(t: &Type) -> bool {
             params.iter().any(type_contains_var) || type_contains_var(ret)
         }
         _ => false,
+    }
+}
+
+/// Actor generics that appear as a ROW TAIL anywhere in a member signature are row-kinded
+/// (the `actor Promise[T, e] { be then(f: … ! e) ! e }` pattern); the rest are type-kinded.
+fn actor_row_kinded_generics(adef: &crate::resolve::ActorDef) -> HashSet<String> {
+    fn scan_type(te: &TypeExpr, out: &mut HashSet<String>) {
+        match te {
+            TypeExpr::Fn { params, ret, row, .. } => {
+                params.iter().for_each(|p| scan_type(p, out));
+                if let Some(r) = ret {
+                    scan_type(r, out);
+                }
+                if let Some(r) = row {
+                    if let Some(t) = &r.tail {
+                        out.insert(t.name.clone());
+                    }
+                }
+            }
+            TypeExpr::Named { args, .. } => args.iter().for_each(|a| scan_type(a, out)),
+            TypeExpr::Rcap { inner, .. } => scan_type(inner, out),
+        }
+    }
+    fn scan_member(params: &[Param], row: &Option<RowExpr>, tails: &mut HashSet<String>) {
+        for p in params {
+            scan_type(&p.ty, tails);
+        }
+        if let Some(r) = row {
+            if let Some(t) = &r.tail {
+                tails.insert(t.name.clone());
+            }
+        }
+    }
+    let mut tails = HashSet::new();
+    scan_member(&adef.ctor_params, &adef.ctor_row, &mut tails);
+    for b in &adef.behaviors {
+        scan_member(&b.params, &b.row, &mut tails);
+    }
+    for f in &adef.fns {
+        scan_member(&f.params, &f.row, &mut tails);
+        if let Some(r) = &f.ret {
+            scan_type(r, &mut tails);
+        }
+    }
+    adef.generics.iter().filter(|g| tails.contains(*g)).cloned().collect()
+}
+
+/// Field names assigned as `self.f = …` anywhere in the constructor body (flow-insensitive,
+/// v0.7) — the definite-initialization scan.
+fn collect_self_field_assigns(b: &Block, out: &mut HashSet<String>) {
+    fn scan_expr(e: &Expr, out: &mut HashSet<String>) {
+        match e {
+            Expr::If { then_, else_, .. } => {
+                collect_self_field_assigns(then_, out);
+                if let Some(e2) = else_ {
+                    scan_expr(e2, out);
+                }
+            }
+            Expr::Match { arms, .. } => arms.iter().for_each(|a| scan_expr(&a.body, out)),
+            Expr::Block(inner) => collect_self_field_assigns(inner, out),
+            _ => {}
+        }
+    }
+    for stmt in &b.stmts {
+        match stmt {
+            Stmt::Assign { target: LValue::Field(base, fname), .. } => {
+                if let LValue::Var(v) = &**base {
+                    if v.name == "self" {
+                        out.insert(fname.name.clone());
+                    }
+                }
+            }
+            Stmt::While { body, .. } => collect_self_field_assigns(body, out),
+            Stmt::Expr(e) => scan_expr(e, out),
+            _ => {}
+        }
     }
 }
 

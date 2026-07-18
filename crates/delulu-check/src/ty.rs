@@ -275,6 +275,11 @@ pub enum Type {
     Verified,
     /// The `Contained` class marker (only meaningful as `Plugin`'s argument).
     Contained,
+    /// An actor reference type, `A` or `A[T]` (Stage 7, spec §2). As a type it is ALWAYS
+    /// `tag` (writing another rcap on it is DL1607): outsiders hold opaque identity, and
+    /// messages are the only cross-actor interface (T-SyncMethod). Name-based like
+    /// [`Type::Foreign`]; never enters plugin DIR (actors in plugins are fenced, v0.7).
+    Actor(String, Vec<Type>),
     Var(TypeVar),
 }
 
@@ -344,6 +349,20 @@ impl fmt::Display for Type {
             Type::Plugin(c) => write!(f, "Plugin[{c}]"),
             Type::Verified => f.write_str("Verified"),
             Type::Contained => f.write_str("Contained"),
+            Type::Actor(name, args) => {
+                f.write_str(name)?;
+                if !args.is_empty() {
+                    write!(f, "[")?;
+                    for (i, a) in args.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{a}")?;
+                    }
+                    write!(f, "]")?;
+                }
+                Ok(())
+            }
             Type::Var(TypeVar(v)) => write!(f, "'t{v}"),
         }
     }

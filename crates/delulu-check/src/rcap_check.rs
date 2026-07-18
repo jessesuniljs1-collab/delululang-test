@@ -72,8 +72,10 @@ pub fn check_rcaps(
         capture_boundary: None,
     };
     for item in &module.items {
-        if let Item::Fn(f) = item {
-            pass.check_fn(f);
+        match item {
+            Item::Fn(f) => pass.check_fn(f),
+            Item::Actor(a) => pass.check_actor(a),
+            _ => {}
         }
     }
     pass.diags
@@ -278,6 +280,111 @@ impl<'a> Pass<'a> {
     fn default_of(&self, t: &Type) -> Option<Rcap> {
         let comps = |id: TypeDefId| -> Option<Vec<Type>> { components_of(self.table, id) };
         default_rcap(t, &comps)
+    }
+
+    // ----- actors (7e): T-Behavior/T-Ctor sendability + member bodies -------
+
+    fn check_actor(&mut self, a: &ActorDecl) {
+        // Every behavior/ctor parameter must be SENDABLE — iso, val, or tag — else DL1601
+        // (T-Behavior/T-Ctor: crossing an actor boundary is the whole game). Undecidable
+        // sendability refuses too: a guarantee that cannot be established is not granted.
+        self.check_boundary_params(&a.name.name, "new", &a.ctor.params);
+        for b in &a.behaviors {
+            self.check_boundary_params(&a.name.name, &b.name.name, &b.params);
+        }
+        // Member bodies, with `self : ref ActorType` bound.
+        let self_ty = Type::Actor(a.name.name.clone(), Vec::new());
+        self.check_actor_member(&a.name.name, "new", &a.ctor.params, &a.ctor.body, false, &self_ty);
+        for b in &a.behaviors {
+            self.check_actor_member(&a.name.name, &b.name.name, &b.params, &b.body, false, &self_ty);
+        }
+        for f in &a.fns {
+            self.check_actor_member(&a.name.name, &f.name.name, &f.params, &f.body, f.ret.is_some(), &self_ty);
+        }
+    }
+
+    fn check_boundary_params(&mut self, actor: &str, member: &str, params: &[Param]) {
+        let key = format!("{actor}.{member}");
+        let sig_params: Vec<Type> = match self.fn_types.get(&key) {
+            Some(Type::Fn { params, .. }) => params.clone(),
+            _ => Vec::new(),
+        };
+        for (i, p) in params.iter().enumerate() {
+            let ty = sig_params.get(i);
+            let rcap = p.ty.written_rcap().or_else(|| ty.and_then(|t| self.default_of(t)));
+            match rcap {
+                Some(k) if sendable(k) => {}
+                Some(k) => {
+                    // Invariant 36 / acceptance criterion 11: PyObj is actor-PINNED — CPython
+                    // has thread affinity, so a Python object lives and dies on the actor
+                    // that created it. The refusal explains the pinning, not just the rcap.
+                    let msg = if matches!(ty, Some(Type::PyObj)) {
+                        format!(
+                            "`{key}` parameter `{}` is a PyObj, which is pinned to its creating actor (CPython affinity) and can never cross an actor boundary",
+                            p.name.name
+                        )
+                    } else {
+                        format!(
+                            "`{key}` parameter `{}` is `{}`, which is not sendable — a value crossing an actor boundary must be `iso` (consumed), `val` (deeply immutable), or `tag` (opaque identity)",
+                            p.name.name,
+                            k.name()
+                        )
+                    };
+                    self.diags.push(
+                        Diagnostic::error("DL1601", msg).with_span(p.ty.span(), "not sendable"),
+                    );
+                }
+                None => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL1601",
+                            format!(
+                                "`{key}` parameter `{}`'s sendability could not be determined — annotate it `iso`, `val`, or `tag` (a boundary guarantee is never guessed)",
+                                p.name.name
+                            ),
+                        )
+                        .with_span(p.ty.span(), "undecidable sendability"),
+                    );
+                }
+            }
+        }
+    }
+
+    fn check_actor_member(
+        &mut self,
+        actor: &str,
+        member: &str,
+        params: &[Param],
+        body: &Block,
+        has_ret: bool,
+        self_ty: &Type,
+    ) {
+        self.scopes.clear();
+        self.push_scope();
+        // T-Behavior: `self : ref ActorType` — the ONLY ref to an actor anywhere; every
+        // external reference is tag (spec §2 default + DL1607).
+        self.bind(
+            "self",
+            Binding { rcap: Some(Rcap::Ref), ty: Some(self_ty.clone()), fresh_lift: None, consumed: None },
+        );
+        let key = format!("{actor}.{member}");
+        let sig_params: Vec<Type> = match self.fn_types.get(&key) {
+            Some(Type::Fn { params, .. }) => params.clone(),
+            _ => Vec::new(),
+        };
+        for (i, p) in params.iter().enumerate() {
+            let ty = sig_params.get(i).cloned();
+            let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None });
+        }
+        let ret_dest = has_ret
+            .then(|| match self.fn_types.get(&key) {
+                Some(Type::Fn { ret, .. }) => self.default_of(ret),
+                _ => None,
+            })
+            .flatten();
+        self.walk_block_with_tail(body, ret_dest, has_ret);
+        self.pop_scope();
     }
 
     // ----- statements -------------------------------------------------------
@@ -564,12 +671,21 @@ impl<'a> Pass<'a> {
         }
     }
 
-    /// Field lookup on a record type: (declared-or-default rcap, field type if resolvable).
+    /// Field lookup on a record or actor type: (declared-or-default rcap, field type if
+    /// resolvable).
     fn field_info(&self, recv: &Type, fname: &str) -> Option<(Rcap, Option<Type>)> {
-        let Type::Record(id, _) = recv else { return None };
-        let td = self.table.type_def(*id);
-        let TypeDefKind::Record(fields) = &td.kind else { return None };
-        let (_, te) = fields.iter().find(|(n, _)| n == fname)?;
+        let te = match recv {
+            Type::Record(id, _) => {
+                let td = self.table.type_def(*id);
+                let TypeDefKind::Record(fields) = &td.kind else { return None };
+                fields.iter().find(|(n, _)| n == fname).map(|(_, t)| t)?
+            }
+            Type::Actor(name, _) => {
+                let adef = self.table.actors.get(name)?;
+                adef.fields.iter().find(|(n, _, _)| n == fname).map(|(_, t, _)| t)?
+            }
+            _ => return None,
+        };
         let fty = lower_shallow(te, self.table);
         let rcap = te
             .written_rcap()
@@ -720,6 +836,27 @@ impl<'a> Pass<'a> {
                 let recv_ty = self.node_types.get(&recv.id());
                 if name.name == "push" && matches!(recv_ty, Some(Type::List(_))) {
                     self.require_writable_receiver(rk, *span, "list element (push)");
+                }
+                // T-SyncMethod (7e): an actor's `fn` method is callable only from `self` —
+                // `self` is the ONLY `ref` to an actor; every outsider holds `tag`, and tag
+                // denies synchronous access. Messages are the only cross-actor interface.
+                if let Some(Type::Actor(aname, _)) = recv_ty {
+                    if let Some(adef) = self.table.actors.get(aname) {
+                        if adef.sync_fn(&name.name).is_some()
+                            && !matches!(rk, K::Known(Rcap::Ref) | K::Unaliased(Rcap::Ref))
+                        {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    "DL1604",
+                                    format!(
+                                        "`{}.{}` is a synchronous method, callable only from `self` — an actor reference is `tag`, and messages are the only cross-actor interface",
+                                        aname, name.name
+                                    ),
+                                )
+                                .with_span(*span, "send a message (`be` behavior) instead"),
+                            );
+                        }
+                    }
                 }
                 self.default_k(e)
             }
@@ -1032,6 +1169,11 @@ fn lower_shallow(te: &TypeExpr, table: &DeclTable) -> Option<Type> {
                 _ => {
                     if table.foreigns.contains_key(name) {
                         Type::Foreign(name.to_string())
+                    } else if let Some(adef) = table.actors.get(name) {
+                        if !adef.generics.is_empty() {
+                            return None; // unsubstituted generics: undeterminable
+                        }
+                        Type::Actor(name.to_string(), Vec::new())
                     } else {
                         let id = *table.type_ix.get(name)?;
                         let td = table.type_def(id);
