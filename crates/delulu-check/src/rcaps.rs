@@ -87,6 +87,47 @@ pub fn sendable(k: Rcap) -> bool {
     matches!(k, Rcap::Iso | Rcap::Val | Rcap::Tag)
 }
 
+/// Viewpoint adaptation `o ▷ f` (spec §3): the rcap you get reading a field declared `f`
+/// through a receiver seen as `o`. `None` = no field access at all (a `tag` receiver —
+/// DL1604 at the use site). The matrix is Pony's; the tests check every cell against the
+/// deny definitions' consequences.
+pub fn viewpoint(o: Rcap, f: Rcap) -> Option<Rcap> {
+    use Rcap::*;
+    Some(match (o, f) {
+        (Tag, _) => return None,
+        (Iso, Iso) => Iso,
+        (Iso, Val) => Val,
+        (Iso, _) => Tag, // trn/ref/box fields of an iso are opaque to the outside
+        (Trn, Iso) => Iso,
+        (Trn, Trn) => Trn,
+        (Trn, Ref) => Box_,
+        (Trn, Val) => Val,
+        (Trn, Box_) => Box_,
+        (Trn, Tag) => Tag,
+        (Ref, x) => x, // ref is the transparent viewpoint
+        (Val, Tag) => Tag,
+        (Val, _) => Val, // through an immutable object everything reachable is immutable
+        (Box_, Iso) => Tag,
+        (Box_, Val) => Val,
+        (Box_, Tag) => Tag,
+        (Box_, _) => Box_, // trn/ref/box read through a read-only view stay read-only
+    })
+}
+
+/// Capability subtyping `a <: b` ("a value seen at `a` may be used where `b` is expected"),
+/// **derived from the deny definitions** rather than transcribed: `a` must permit at least
+/// `b`'s holder permissions, and must deny at least everything `b` denies (locally and
+/// globally) — a stronger guarantee may stand in for a weaker one, never the reverse.
+/// The tests pin this formula to Pony's lattice (iso <: trn <: ref <: box <: tag,
+/// trn <: val <: box) cell-for-cell.
+pub fn subcap(a: Rcap, b: Rcap) -> bool {
+    let superset = |x: Deny, y: Deny| (x.read || !y.read) && (x.write || !y.write);
+    (can_read(a) || !can_read(b))
+        && (can_write(a) || !can_write(b))
+        && superset(denies_local(a), denies_local(b))
+        && superset(denies_global(a), denies_global(b))
+}
+
 /// The default rcap when a type position writes none (spec §2 "Default rcaps when omitted" —
 /// normative ergonomics; playbook 7b calls it load-bearing and easy to get subtly wrong).
 ///
@@ -172,9 +213,14 @@ fn default_rcap_inner(
                 return out;
             }
         }
-        // Closures default `ref`; a lambda whose captures are all val/tag INFERS val at its
-        // creation site (spec §3) — that is the checker's job at the site, not a default.
-        Type::Fn { .. } => Rcap::Ref,
+        // Fn-typed POSITIONS default `box` (build-order deviation 9; the spec's list says
+        // closures default ref). A closure has no write surface, and a lambda whose captures
+        // are all val/tag INFERS `val` at its creation site (spec §3) — with a `ref` default
+        // no val lambda could ever be passed to an unannotated fn parameter (val ⊄ ref),
+        // refusing essentially every higher-order call in the language. `box` is the
+        // call-only view both `val` and `ref` closures satisfy; anything sendability-related
+        // still demands a written `val` (exactly what spec §8's own `then` writes).
+        Type::Fn { .. } => Rcap::Box_,
         // Undetermined: never guess (kitchen rule).
         Type::Var(_) => return None,
     })
@@ -263,9 +309,9 @@ mod tests {
             let a = alias(k);
             assert!(legal_alias(k, a), "alias({0})={1} must itself be legal", k.name(), a.name());
             for candidate in ALL {
-                let strictly_more = can_read(candidate) >= can_read(a)
-                    && can_write(candidate) >= can_write(a)
-                    && (can_read(candidate) > can_read(a) || can_write(candidate) > can_write(a));
+                let ge = (can_read(candidate) || !can_read(a)) && (can_write(candidate) || !can_write(a));
+                let gt = (can_read(candidate) && !can_read(a)) || (can_write(candidate) && !can_write(a));
+                let strictly_more = ge && gt;
                 if strictly_more {
                     assert!(
                         !legal_alias(k, candidate),
@@ -301,6 +347,107 @@ mod tests {
         for k in ALL {
             assert_eq!(can_write(k), matches!(k, Rcap::Iso | Rcap::Trn | Rcap::Ref), "{}", k.name());
             assert_eq!(can_read(k), !matches!(k, Rcap::Tag), "{}", k.name());
+        }
+    }
+
+    // ----- viewpoint adaptation, cell for cell (spec §3; criterion 4) -------
+
+    #[test]
+    fn viewpoint_matrix_cell_for_cell() {
+        use Rcap::*;
+        // Rows in spec order (o), columns iso trn ref val box tag (f).
+        let expect: [(Rcap, [Rcap; 6]); 5] = [
+            (Iso, [Iso, Tag, Tag, Val, Tag, Tag]),
+            (Trn, [Iso, Trn, Box_, Val, Box_, Tag]),
+            (Ref, [Iso, Trn, Ref, Val, Box_, Tag]),
+            (Val, [Val, Val, Val, Val, Val, Tag]),
+            (Box_, [Tag, Box_, Box_, Val, Box_, Tag]),
+        ];
+        for (o, row) in expect {
+            for (f, want) in ALL.into_iter().zip(row) {
+                assert_eq!(viewpoint(o, f), Some(want), "{} ▷ {}", o.name(), f.name());
+            }
+        }
+        // The tag row: no field access at all (DL1604 at use sites).
+        for f in ALL {
+            assert_eq!(viewpoint(Rcap::Tag, f), None, "tag ▷ {}", f.name());
+        }
+    }
+
+    #[test]
+    fn viewpoint_never_grants_what_the_path_lacks() {
+        // Consequences of the definitions: a writable adapted result needs a writable
+        // receiver AND a writable field; a readable result needs both readable.
+        for o in ALL {
+            for f in ALL {
+                if let Some(v) = viewpoint(o, f) {
+                    if can_write(v) {
+                        assert!(can_write(o) && can_write(f), "{} ▷ {} = {}", o.name(), f.name(), v.name());
+                    }
+                    if can_read(v) {
+                        assert!(can_read(o) && can_read(f), "{} ▷ {} = {}", o.name(), f.name(), v.name());
+                    }
+                    // Immutability is contagious: through a val receiver, every readable
+                    // result is itself val (deep immutability, spec §3).
+                    if o == Rcap::Val && can_read(v) {
+                        assert_eq!(v, Rcap::Val);
+                    }
+                }
+            }
+        }
+    }
+
+    // ----- subtyping: the derived formula IS Pony's lattice ------------------
+
+    #[test]
+    fn subcap_matches_the_pony_lattice_exactly() {
+        use Rcap::*;
+        // iso <: trn <: ref <: box <: tag, trn <: val <: box (plus reflexivity/transitivity).
+        let expected: &[(Rcap, Rcap)] = &[
+            (Iso, Iso), (Trn, Trn), (Ref, Ref), (Val, Val), (Box_, Box_), (Tag, Tag),
+            (Iso, Trn), (Iso, Ref), (Iso, Val), (Iso, Box_), (Iso, Tag),
+            (Trn, Ref), (Trn, Val), (Trn, Box_), (Trn, Tag),
+            (Ref, Box_), (Ref, Tag),
+            (Val, Box_), (Val, Tag),
+            (Box_, Tag),
+        ];
+        for a in ALL {
+            for b in ALL {
+                assert_eq!(
+                    subcap(a, b),
+                    expected.contains(&(a, b)),
+                    "subcap({}, {})",
+                    a.name(),
+                    b.name()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn subcap_is_a_partial_order() {
+        for a in ALL {
+            assert!(subcap(a, a), "{}", a.name());
+            for b in ALL {
+                if a != b {
+                    assert!(!(subcap(a, b) && subcap(b, a)), "{} {}", a.name(), b.name());
+                }
+                for c in ALL {
+                    if subcap(a, b) && subcap(b, c) {
+                        assert!(subcap(a, c), "{} {} {}", a.name(), b.name(), c.name());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_unconsumed_alias_reaches_a_destination_only_through_subcap_of_its_alias() {
+        // The storability rule's two halves agree with the tables: an unconsumed iso can
+        // reach only tag destinations; a consumed iso can reach anything.
+        for dest in ALL {
+            assert_eq!(subcap(alias(Rcap::Iso), dest), subcap(Rcap::Tag, dest));
+            assert!(subcap(Rcap::Iso, dest), "consumed iso must satisfy {}", dest.name());
         }
     }
 
@@ -348,7 +495,8 @@ mod tests {
         let clo = Type::Fn { params: vec![Type::Int], ret: Box::new(Type::Int), row: Row::pure() };
         assert_eq!(dr(&Type::list(clo.clone())), Some(Rcap::Ref));
         assert_eq!(dr(&Type::result(Type::Int, clo.clone())), Some(Rcap::Ref));
-        assert_eq!(dr(&clo), Some(Rcap::Ref));
+        // Fn positions default `box` (deviation 9): the call-only view every closure satisfies.
+        assert_eq!(dr(&clo), Some(Rcap::Box_));
     }
 
     #[test]

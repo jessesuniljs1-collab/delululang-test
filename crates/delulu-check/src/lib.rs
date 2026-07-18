@@ -13,6 +13,7 @@ pub mod manifest;
 pub mod package;
 pub mod plugin;
 pub mod program;
+pub mod rcap_check;
 pub mod rcaps;
 pub mod resolve;
 pub mod ty;
@@ -608,5 +609,171 @@ mod tests {
         let pure: Vec<String> = report["pure_functions"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
         assert!(pure.contains(&"fib".to_string()) && pure.contains(&"apply".to_string()));
         assert_eq!(report["secrets"][0], "API_KEY");
+    }
+
+    // ----- Stage 7 phase 7c: viewpoint adaptation + read/write rules (criterion 4) ------
+
+    #[test]
+    fn write_through_a_box_receiver_is_dl1604() {
+        let e = errors(
+            "module m\ntype P { x: Int }\nfn f(p: box P) { p.x = 1 }\n",
+        );
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn write_through_a_val_defaulted_param_is_dl1604() {
+        // No written rcap: `P` is a record of only-val fields, so the param defaults `val` —
+        // deeply immutable, not writable.
+        let e = errors("module m\ntype P { x: Int }\nfn f(p: P) { p.x = 1 }\n");
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn write_through_a_ref_receiver_is_clean() {
+        let c = check("module m\ntype P { x: Int }\nfn f(p: ref P) { p.x = 1 }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn field_access_through_tag_is_dl1604() {
+        let e = errors("module m\ntype P { x: Int }\nfn f(p: tag P) -> Int { p.x }\n");
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn field_read_through_box_is_clean() {
+        let c = check("module m\ntype P { x: Int }\nfn f(p: box P) -> Int { p.x }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn push_on_a_val_defaulted_list_param_is_dl1604() {
+        // `List[Int]` defaults `val` (spec §2): a parameter so typed is immutable data.
+        let e = errors("module m\nfn f(xs: List[Int]) { xs.push(1) }\n");
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn push_on_a_ref_list_param_is_clean() {
+        let c = check("module m\nfn f(xs: ref List[Int]) { xs.push(1) }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn free_form_push_gets_the_same_write_rule_as_method_push() {
+        // `push(xs, v)` and `xs.push(v)` are the same mutation; the write rule must not be
+        // dodgeable by spelling (kitchen rule: hunt the skip branch).
+        let e = errors("module m\nfn f(xs: List[Int]) { push(xs, 1) }\n");
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+        let c = check("module m\nfn g(xs: ref List[Int]) { push(xs, 1) }\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn build_and_return_lifts_a_fresh_unescaped_local() {
+        // The bread-and-butter pattern: build a list mutably, return it at the (val-defaulted)
+        // return type. The local is fresh-born and never escaped, so the lift is sound —
+        // mutating it via `push` is receiver use, not an escape.
+        let c = check(
+            "module m\nfn build(n: Int) -> List[Int] {\n\
+             let xs = [0]\n\
+             var i = 0\n\
+             while i < n { xs.push(i)\ni = i + 1 }\n\
+             xs\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn an_escaped_local_cannot_lift_at_return() {
+        // Passing xs to a call could retain an alias; returning it as (defaulted) val after
+        // that would let the caller and the retained alias disagree about immutability.
+        let e = errors(
+            "module m\nfn sink(xs: ref List[Int]) { }\n\
+             fn f() -> List[Int] {\n\
+             let xs = [1]\n\
+             sink(xs)\n\
+             xs\n}\n",
+        );
+        assert!(e.contains(&"DL1603".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn storing_an_aliased_ref_where_iso_is_demanded_is_dl1603_with_consume_hint() {
+        let c = check(
+            "module m\nfn f() {\n\
+             let xs: ref List[Int] = [1]\n\
+             let ys: iso List[Int] = xs\n}\n",
+        );
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1603");
+        assert!(d.is_some(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_val_lambda_capturing_a_ref_is_dl1603() {
+        // Criterion: a `val` (sendable) claim cannot rest on a mutable capture (spec §3).
+        let e = errors(
+            "module m\nfn g() {\n\
+             let xs: ref List[Int] = [1]\n\
+             let f: val fn() -> Int = fn() -> Int { xs.len() }\n}\n",
+        );
+        assert!(e.contains(&"DL1603".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_pure_lambda_is_val_and_flows_into_fn_params() {
+        // Deviation 9: fn positions default `box`, so both val and ref closures pass; and an
+        // all-val-capture lambda satisfies an explicit `val` demand.
+        let c = check(
+            "module m\nfn apply(f: fn(Int) -> Int, x: Int) -> Int { f(x) }\n\
+             fn g() -> Int { apply(fn(n: Int) -> Int { n * 2 }, 3) }\n\
+             fn h() {\n\
+             let f: val fn(Int) -> Int = fn(n: Int) -> Int { n + 1 }\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn passing_an_aliased_ref_list_where_the_param_defaults_val_is_dl1603() {
+        // The laundering channel: a val parameter fed shared mutable state could later be
+        // sent across an actor boundary as "immutable".
+        let e = errors(
+            "module m\nfn reader(xs: List[Int]) -> Int { xs.len() }\n\
+             fn f() -> Int {\n\
+             let xs: ref List[Int] = [1]\n\
+             reader(xs)\n}\n",
+        );
+        assert!(e.contains(&"DL1603".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_fresh_literal_argument_satisfies_a_val_param() {
+        let c = check(
+            "module m\nfn reader(xs: List[Int]) -> Int { xs.len() }\n\
+             fn f() -> Int { reader([1, 2, 3]) }\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn viewpoint_write_requires_the_adapted_receiver_to_be_writable() {
+        // p: ref Outer, Outer.inner declared `box Inner` — writing inner.x goes through
+        // ref ▷ box = box, which is not writable.
+        let e = errors(
+            "module m\ntype Inner { x: Int }\ntype Outer { inner: box Inner }\n\
+             fn f(p: ref Outer) { p.inner.x = 1 }\n",
+        );
+        assert!(e.contains(&"DL1604".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn recover_lifts_a_mutable_build_to_iso_here_already() {
+        // The 7c half of criterion 3: the lift itself (env restriction lands in 7d).
+        let c = check(
+            "module m\nfn f() {\n\
+             let xs: iso List[Int] = recover { let ys = [1]\nys.push(2)\nys }\n}\n",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
     }
 }

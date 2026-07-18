@@ -191,6 +191,13 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         node_rows.insert(*id, checker.resolve_row_acc(acc));
     }
 
+    // Stage 7 (phases 7c–7f): the reference-capability pass — the SECOND checking axis, run
+    // over the settled types so it never participates in unification (build-order deviation 4).
+    let fn_types_settled: HashMap<String, Type> =
+        checker.fn_types.iter().map(|(k, v)| (k.clone(), checker.cx.apply_type(v))).collect();
+    let rcap_diags = crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
+    checker.diags.extend(rcap_diags);
+
     CheckResult {
         diags: checker.diags,
         facts: checker.facts,

@@ -106,6 +106,14 @@ Numbered, argued, ruled. A deviation ships only with its ruling recorded here.
    actor's heap by rebuild, with the debug lane asserting `Rc::strong_count == 1` across the
    moved graph (exactly the §7.4 check). Sender's binding is dead (consume), so rebuild vs
    handoff is observationally identical; handoff is a Stage-10 optimization note, recorded here.
+9. **Fn-typed positions default `box`, not `ref`** — spec §2's list says closures default
+   `ref`, but a lambda whose captures are all val/tag *infers* `val` (spec §3), and
+   `val ⊄ ref`: with a ref default, no pure lambda could ever be passed to an unannotated
+   fn-typed parameter — every higher-order call in the language would be refused. Ruled: fn
+   positions default `box`, the call-only view that both `val` and `ref` closures satisfy
+   (a closure has no write surface, so box loses nothing); sendability still demands a
+   written `val`, which is exactly what spec §8's own `Promise.then` writes. (7c;
+   witnessed in `rcaps::tests` and the higher-order corpus staying green.)
 8. **Sums in the default-rcap val set** — spec §2's list says "records of only such types"
    and does not name user sums. Ruled: sums of only-val components default `val`, mirroring
    records, by MECHANISM: `Value::Variant` holds its fields in an immutable `Rc<Vec<_>>` — a
