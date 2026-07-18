@@ -1038,4 +1038,127 @@ mod tests {
         let e = errors(&format!("{COUNTER}fn f(a: Counter) -> Str {{ str(a) }}\n"));
         assert!(e.contains(&"DL0604".to_string()), "{e:?}");
     }
+
+    // ----- Stage 7 phase 7f: Async + T-Spawn/T-Send (causal rows, criteria 2 & 5) -------
+
+    #[test]
+    fn spawn_and_send_check_clean_under_async_and_carry_the_causal_edge() {
+        let c = check(&format!(
+            "{COUNTER}fn go() ! {{Async}} {{\n\
+             let a = spawn Counter(0, \"c\")\n\
+             a.add(5)\n}}\n"
+        ));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        assert!(c.result.facts["go"].effects.contains(&Effect::Async), "Async in go's row");
+        // The causal edge for `delulu why` (criterion 5): send sites are callees.
+        assert!(c.result.facts["go"].callees.contains("Counter.add"), "{:?}", c.result.facts["go"].callees);
+        assert!(c.result.facts["go"].callees.contains("Counter.new"));
+    }
+
+    #[test]
+    fn spawn_without_async_in_the_row_is_dl0501() {
+        let e = errors(&format!(
+            "{COUNTER}fn go() {{\nlet a = spawn Counter(0, \"c\")\n}}\n"
+        ));
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn criterion5_a_send_site_must_cover_the_behaviors_row() {
+        // The behavior is !{Write}; a send from an !{Async}-only function is DL0501 — the
+        // effect system and the actor system are ONE system (invariant 35).
+        let src = "module m\n\
+            actor Logger {\n\
+            var out: Cap[Console]\n\
+            new(out: Cap[Console]) { self.out = out }\n\
+            be log(msg: Str) ! {Write} { self.out.println(msg) }\n\
+            }\n";
+        let e = errors(&format!(
+            "{src}fn go(l: Logger) ! {{Async}} {{ l.log(\"x\") }}\n"
+        ));
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+        let c = check(&format!(
+            "{src}fn go(l: Logger) ! {{Async, Write}} {{ l.log(\"x\") }}\n"
+        ));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_constructor_row_is_the_spawners_row() {
+        // T-Spawn: row {Async} ∪ row(A.new) — a Read-ing constructor makes the spawner Read.
+        let src = "module m\n\
+            actor Loader {\n\
+            var data: Str\n\
+            new(fs: Cap[FsRead]) ! {Read} { self.data = \"\" }\n\
+            }\n";
+        let e = errors(&format!("{src}fn go(fs: Cap[FsRead]) ! {{Async}} {{ let a = spawn Loader(fs) }}\n"));
+        assert!(e.contains(&"DL0501".to_string()), "{e:?}");
+        let c = check(&format!(
+            "{src}fn go(fs: Cap[FsRead]) ! {{Async, Read}} {{ let a = spawn Loader(fs) }}\n"
+        ));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn criterion2_sending_a_ref_list_is_dl1601() {
+        let src = "module m\n\
+            actor Sink { var n: Int\nnew() { self.n = 0 }\nbe feed(vs: List[Int]) { } }\n";
+        let e = errors(&format!(
+            "{src}fn go(s: Sink) ! {{Async}} {{\n\
+             let xs: ref List[Int] = [1]\n\
+             s.feed(xs)\n}}\n"
+        ));
+        assert!(e.contains(&"DL1601".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn criterion2_an_unconsumed_iso_gets_dl1601_with_the_exact_consume_repair() {
+        let src = "module m\n\
+            actor Sink { var n: Int\nnew() { self.n = 0 }\nbe take(vs: iso List[Int]) { } }\n";
+        let c = check(&format!(
+            "{src}fn go(s: Sink) ! {{Async}} {{\n\
+             let xs: iso List[Int] = recover {{ [1] }}\n\
+             s.take(xs)\n}}\n"
+        ));
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1601").expect("DL1601 expected");
+        let r = d.repairs.first().expect("the exact consume repair");
+        assert_eq!(r.edits[0].insert, "consume ");
+    }
+
+    #[test]
+    fn criterion2_a_consumed_iso_crosses_and_the_sender_loses_it() {
+        let src = "module m\n\
+            actor Sink { var n: Int\nnew() { self.n = 0 }\nbe take(vs: iso List[Int]) { } }\n";
+        let c = check(&format!(
+            "{src}fn go(s: Sink) ! {{Async}} {{\n\
+             let xs: iso List[Int] = recover {{ [1] }}\n\
+             s.take(consume xs)\n}}\n"
+        ));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        // …and any later use is DL1602 (the binding is dead — the list is GONE).
+        let e = errors(&format!(
+            "{src}fn go(s: Sink) ! {{Async}} {{\n\
+             let xs: iso List[Int] = recover {{ [1] }}\n\
+             s.take(consume xs)\n\
+             let n = xs.len()\n}}\n"
+        ));
+        assert!(e.contains(&"DL1602".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn spawn_of_an_unknown_actor_is_dl0301() {
+        let e = errors("module m\nfn go() ! {Async} { let a = spawn Ghost(1) }\n");
+        assert!(e.contains(&"DL0301".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn async_is_an_ordinary_row_citizen() {
+        // Row polymorphism, manifests, `why` — Async obeys every row rule; here: it flows
+        // through a row-polymorphic higher-order function like any effect.
+        let c = check(&format!(
+            "{COUNTER}fn apply[e](f: fn() -> Unit ! e) ! e {{ f() }}\n\
+             fn go(a: Counter) ! {{Async}} {{ apply(fn() ! {{Async}} {{ a.add(1) }}) }}\n"
+        ));
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
 }

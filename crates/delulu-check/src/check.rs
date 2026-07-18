@@ -497,6 +497,62 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// T-Spawn (spec §4): `spawn A(ā)` — `ā` match `A.new`'s params; type `tag A`; row
+    /// `{Async} ∪ row(A.new)`. Generics instantiate fresh per spawn site (type-kinded flow
+    /// into the actor reference's arguments; row-kinded get fresh row variables, R-4-style).
+    fn check_spawn(&mut self, actor: &Path, args: &[Expr], span: Span, ctx: &mut FnCtx) -> (Type, RowAcc) {
+        let mut acc = RowAcc::default();
+        let arg_tys: Vec<(Type, Span)> = args
+            .iter()
+            .map(|a| {
+                let (t, r) = self.check_expr(a, ctx);
+                acc.add_row_acc(&r);
+                (self.cx.apply_type(&t), a.span())
+            })
+            .collect();
+        let name = actor.segs.last().expect("path has segments").name.clone();
+        let Some(adef) = self.table.actors.get(&name).cloned() else {
+            self.diags.push(
+                Diagnostic::error("DL0301", format!("unknown actor `{}`", actor.dotted()))
+                    .with_span(span, "`spawn` needs an actor declared in this module"),
+            );
+            return (self.cx.fresh_type(), acc);
+        };
+        let row_kinded = actor_row_kinded_generics(&adef);
+        let mut agenv = Genv::default();
+        let mut targs: Vec<Type> = Vec::new();
+        for g in &adef.generics {
+            if row_kinded.contains(g) {
+                let v = self.cx.fresh_row_var();
+                agenv.rows.insert(g.clone(), v);
+            } else {
+                let v = self.cx.fresh_type();
+                agenv.types.insert(g.clone(), v.clone());
+                targs.push(v);
+            }
+        }
+        if adef.ctor_params.len() != arg_tys.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL0403",
+                    format!("`{name}.new` expects {} argument(s), found {}", adef.ctor_params.len(), arg_tys.len()),
+                )
+                .with_span(span, "wrong number of constructor arguments"),
+            );
+        }
+        for (p, (at, aspan)) in adef.ctor_params.iter().zip(&arg_tys) {
+            let expected = self.lower_type(&p.ty, &agenv, &mut ctx.facts);
+            self.expect_type(&expected, at, *aspan, "spawn argument type mismatch");
+        }
+        acc.add_effect(Effect::Async);
+        if let Some(r) = &adef.ctor_row {
+            let row = self.lower_row(r, &agenv);
+            acc.add_row(&row);
+        }
+        ctx.facts.callees.insert(format!("{name}.new"));
+        (Type::Actor(name, targs), acc)
+    }
+
     // ===== the foreign marshallability fence (T-ForeignSig, spec §3) ======
 
     /// Check every parameter and return type of every function in a `foreign` block. This is the
@@ -807,17 +863,10 @@ impl<'a> Checker<'a> {
                 let (t, r) = self.check_block(b, ctx);
                 (t, r)
             }
-            // Stage 7 (staged build): typing rules T-Spawn/T-Send land in phase 7f,
-            // T-Consume/T-Recover in phase 7d. Until then these forms check their
-            // sub-expressions (so nested diagnostics still surface) and yield fresh types.
-            Expr::Spawn { args, .. } => {
-                let mut acc = RowAcc::default();
-                for a in args {
-                    let (_, r) = self.check_expr(a, ctx);
-                    acc.add_row_acc(&r);
-                }
-                (self.cx.fresh_type(), acc)
-            }
+            // T-Spawn (Stage 7 phase 7f, spec §4): `spawn A(ā)` types as `tag A` with row
+            // `{Async} ∪ row(A.new)` — creating an actor is itself the Async effect, and the
+            // constructor's effects are causally the spawner's (invariant 35).
+            Expr::Spawn { actor, args, span, .. } => self.check_spawn(actor, args, *span, ctx),
             Expr::Consume { name, span, .. } => (self.check_var(&Path { segs: vec![name.clone()] }, *span, ctx), RowAcc::default()),
             Expr::Recover { body, .. } => self.check_block(body, ctx),
         }
@@ -1109,12 +1158,49 @@ impl<'a> Checker<'a> {
             }
         }
 
-        // T-SyncMethod (Stage 7, spec §4): a call of an actor's `fn` method — typed here with
-        // the full declared row merged (method_sig's single-effect slot cannot carry one).
-        // WHO may call is the rcap pass's rule: only `self` is `ref`; outsiders hold `tag`
-        // and get DL1604 there. Behaviors are typed by T-Send (phase 7f), not here.
+        // T-Send (Stage 7 phase 7f, spec §4): `a.beh(ā)` on an actor reference types as
+        // `Unit` with row `{Async} ∪ row(beh)` — every send site's row contains the target
+        // behavior's row, which is exactly what makes whole-program authority `row(main)`
+        // across the actor boundary (invariant 35; the DL0501 of criterion 5 falls out of
+        // the ordinary boundary check). Row-kinded actor generics instantiate FRESH per
+        // send site (the R-4 law — Promise.then's `e` plumbing, criterion 9).
+        // Argument SENDABILITY (unconsumed iso → DL1601 + consume repair) is the rcap
+        // pass's rule.
         if let Type::Actor(aname, atargs) = &rt {
             if let Some(adef) = self.table.actors.get(aname).cloned() {
+                if let Some(beh) = adef.behavior(&name.name).cloned() {
+                    let row_kinded = actor_row_kinded_generics(&adef);
+                    let mut agenv = Genv::default();
+                    let mut ti = atargs.iter();
+                    for g in &adef.generics {
+                        if row_kinded.contains(g) {
+                            let v = self.cx.fresh_row_var();
+                            agenv.rows.insert(g.clone(), v);
+                        } else if let Some(t) = ti.next() {
+                            agenv.types.insert(g.clone(), t.clone());
+                        }
+                    }
+                    if beh.params.len() != arg_tys.len() {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0403",
+                                format!("behavior `{aname}.{}` expects {} argument(s), found {}", name.name, beh.params.len(), arg_tys.len()),
+                            )
+                            .with_span(span, "wrong number of arguments"),
+                        );
+                    }
+                    for (p, (at, aspan)) in beh.params.iter().zip(&arg_tys) {
+                        let expected = self.lower_type(&p.ty, &agenv, &mut ctx.facts);
+                        self.expect_type(&expected, at, *aspan, "send argument type mismatch");
+                    }
+                    acc.add_effect(Effect::Async);
+                    if let Some(r) = &beh.row {
+                        let row = self.lower_row(r, &agenv);
+                        acc.add_row(&row);
+                    }
+                    ctx.facts.callees.insert(format!("{aname}.{}", name.name));
+                    return (Type::Unit, acc);
+                }
                 if let Some(sig) = adef.sync_fn(&name.name).cloned() {
                     let mut agenv = Genv::default();
                     for (g, t) in adef.generics.iter().zip(atargs) {

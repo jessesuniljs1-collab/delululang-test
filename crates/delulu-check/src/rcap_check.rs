@@ -19,7 +19,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use delulu_diag::{Diagnostic, Span};
+use delulu_diag::{Confidence, Diagnostic, Edit, Repair, Span};
 use delulu_syntax::ast::*;
 
 use crate::rcaps::{alias, can_write, default_rcap, sendable, subcap, viewpoint};
@@ -620,6 +620,113 @@ impl<'a> Pass<'a> {
         }
     }
 
+    /// One value crossing an actor boundary (send or spawn argument) — invariant 33: what
+    /// arrives must satisfy the parameter's (necessarily sendable) rcap. Arrival is
+    /// `alias(κ)` for an ordinary value, full κ when consumed/recovered, and the lift rules
+    /// for a fresh literal — so an UNCONSUMED iso aliases as `tag` and cannot satisfy an
+    /// `iso` parameter: DL1601 with the exact `consume` repair (spec §10). A `tag` alias of
+    /// an iso CAN satisfy a `tag` parameter (opaque identity travels freely).
+    fn check_send_arg(&mut self, k: K, dest: Option<Rcap>, arg: &Expr) {
+        // The declaration fence (7e) already refused undeterminable parameter rcaps; a None
+        // here means that diagnostic exists — don't stack a second one on every send.
+        let Some(dest) = dest else { return };
+        let span = arg.span();
+        if matches!(self.node_types.get(&arg.id()), Some(Type::PyObj)) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1601",
+                    "a PyObj can never cross an actor boundary — it is pinned to its creating actor (CPython affinity, invariant 36)",
+                )
+                .with_span(span, "PyObj is actor-pinned"),
+            );
+            return;
+        }
+        let ok = match k {
+            K::Unaliased(kk) => subcap(kk, dest),
+            K::Known(kk) => subcap(alias(kk), dest),
+            K::Fresh { natural, lift_val, lift_iso } => match dest {
+                Rcap::Val => lift_val,
+                Rcap::Iso | Rcap::Trn => lift_iso,
+                d => subcap(natural, d),
+            },
+            K::Unknown => false,
+        };
+        if ok {
+            return;
+        }
+        match k {
+            K::Known(Rcap::Iso) => {
+                // Uniqueness makes it sendable — but only by transfer, never by alias.
+                let mut d = Diagnostic::error(
+                    "DL1601",
+                    "an `iso` value must be `consume`d to cross an actor boundary — the unique reference transfers, it never copies",
+                )
+                .with_span(span, "add `consume`");
+                if matches!(arg, Expr::Var { path, .. } if path.segs.len() == 1) {
+                    d = d.with_repair(Repair {
+                        id: "consume-iso-send",
+                        confidence: Confidence::Exact,
+                        authority_widening: false,
+                        requires_human: false,
+                        edits: vec![Edit {
+                            file: span.file,
+                            start_byte: span.start,
+                            end_byte: span.start,
+                            insert: "consume ".into(),
+                        }],
+                    });
+                }
+                self.diags.push(d);
+            }
+            K::Unknown => {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL1601",
+                        "this value's sendability could not be determined — a boundary guarantee is never guessed; annotate the value `iso`, `val`, or `tag`",
+                    )
+                    .with_span(span, "undecidable sendability"),
+                );
+            }
+            K::Known(kk) | K::Unaliased(kk) => {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL1601",
+                        format!(
+                            "a `{}` value cannot cross this actor boundary as `{}` — only `iso` (consumed), `val` (deeply immutable), or `tag` (opaque identity) travel",
+                            kk.name(),
+                            dest.name()
+                        ),
+                    )
+                    .with_span(span, "not sendable"),
+                );
+            }
+            K::Fresh { .. } => {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL1601",
+                        "this fresh value's contents are not sendable — something aliased and mutable rides along",
+                    )
+                    .with_span(span, "contents not sendable"),
+                );
+            }
+        }
+    }
+
+    /// Parameter destination rcaps for a boundary member (`Actor.member`): written rcap or
+    /// the default of the settled signature type, positionally.
+    fn boundary_dests(&self, actor: &str, member: &str, params: &[Param]) -> Vec<Option<Rcap>> {
+        let key = format!("{actor}.{member}");
+        let sig: Vec<Type> = match self.fn_types.get(&key) {
+            Some(Type::Fn { params, .. }) => params.clone(),
+            _ => Vec::new(),
+        };
+        params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| p.ty.written_rcap().or_else(|| sig.get(i).and_then(|t| self.default_of(t))))
+            .collect()
+    }
+
     /// The rcap + type of an lvalue path (viewpoint-adapting through each field hop).
     fn resolve_lvalue(&mut self, lv: &LValue) -> (K, Option<Type>) {
         match lv {
@@ -827,15 +934,37 @@ impl<'a> Pass<'a> {
             }
             Expr::Method { recv, name, args, span, .. } => {
                 let rk = self.walk_expr(recv);
-                for a in args {
-                    self.walk_expr(a);
-                    self.escape_arg(a);
-                }
+                let arg_ks: Vec<K> = args
+                    .iter()
+                    .map(|a| {
+                        let k = self.walk_expr(a);
+                        self.escape_arg(a);
+                        k
+                    })
+                    .collect();
                 // Mutating builtins require a writable receiver (the write rule applied to
                 // the one mutating method the stdlib has).
                 let recv_ty = self.node_types.get(&recv.id());
                 if name.name == "push" && matches!(recv_ty, Some(Type::List(_))) {
                     self.require_writable_receiver(rk, *span, "list element (push)");
+                }
+                // T-Send argument sendability (7f, spec §4): everything crossing an actor
+                // boundary must ARRIVE at the parameter's rcap, and an unconsumed iso gets
+                // DL1601 with the EXACT `consume` repair.
+                if let Some(Type::Actor(aname, _)) = recv_ty {
+                    let aname = aname.clone();
+                    let beh_params = self
+                        .table
+                        .actors
+                        .get(&aname)
+                        .and_then(|adef| adef.behavior(&name.name))
+                        .map(|b| b.params.clone());
+                    if let Some(params) = beh_params {
+                        let dests = self.boundary_dests(&aname, &name.name, &params);
+                        for ((a, k), dest) in args.iter().zip(&arg_ks).zip(dests) {
+                            self.check_send_arg(*k, dest, a);
+                        }
+                    }
                 }
                 // T-SyncMethod (7e): an actor's `fn` method is callable only from `self` —
                 // `self` is the ONLY `ref` to an actor; every outsider holds `tag`, and tag
@@ -1012,11 +1141,24 @@ impl<'a> Pass<'a> {
                 self.recover_boundary = saved;
                 K::Unaliased(target.unwrap_or(Rcap::Iso))
             }
-            // 7f territory: spawn types as tag; sends check sendability there.
-            Expr::Spawn { args, .. } => {
-                for a in args {
-                    self.walk_expr(a);
-                    self.escape_arg(a);
+            // T-Spawn (7f): construction is a send to the new actor — constructor arguments
+            // cross the boundary and get the same sendability rule as behavior sends.
+            Expr::Spawn { actor, args, .. } => {
+                let arg_ks: Vec<K> = args
+                    .iter()
+                    .map(|a| {
+                        let k = self.walk_expr(a);
+                        self.escape_arg(a);
+                        k
+                    })
+                    .collect();
+                let aname = actor.segs.last().map(|s| s.name.clone()).unwrap_or_default();
+                let ctor_params = self.table.actors.get(&aname).map(|adef| adef.ctor_params.clone());
+                if let Some(params) = ctor_params {
+                    let dests = self.boundary_dests(&aname, "new", &params);
+                    for ((a, k), dest) in args.iter().zip(&arg_ks).zip(dests) {
+                        self.check_send_arg(*k, dest, a);
+                    }
                 }
                 K::Known(Rcap::Tag)
             }

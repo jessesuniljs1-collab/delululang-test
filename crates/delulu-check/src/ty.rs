@@ -23,6 +23,11 @@ pub enum Effect {
     /// Loading a plugin at runtime (Stage 6). Reserved in Stage 1 §2, active here: `load` carries
     /// `{Load, Read}`, so a program that can bring in code after compile time says so in its row.
     Load,
+    /// Concurrency (Stage 7, spec §5): `spawn` and behavior sends carry `Async` — and ONLY an
+    /// effect: no futures runtime, no await, no colored functions. Unlike the other core
+    /// effects it arises from language constructs (T-Spawn/T-Send), not capability ops; the
+    /// extended soundness statement (invariant 35) covers exactly this.
+    Async,
     /// Reaching foreign (C/Python) code (Stage 4). An ordinary core effect for every row purpose;
     /// nothing special-cases it except reporting (spec §3).
     ForeignCall,
@@ -41,6 +46,7 @@ impl Effect {
             "Declassify" => Effect::Declassify,
             "ForeignCall" => Effect::ForeignCall,
             "Load" => Effect::Load,
+            "Async" => Effect::Async,
             _ => return None,
         })
     }
@@ -55,6 +61,7 @@ impl Effect {
             Effect::Declassify => "Declassify",
             Effect::ForeignCall => "ForeignCall",
             Effect::Load => "Load",
+            Effect::Async => "Async",
             Effect::User(n) => n,
         }
     }
