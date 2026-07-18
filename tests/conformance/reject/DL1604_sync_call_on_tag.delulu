@@ -1,0 +1,12 @@
+module reject1604
+
+// T-SyncMethod: outsiders hold `tag`; messages are the only cross-actor interface.
+actor Counter {
+  var count: Int
+  new() { self.count = 0 }
+  fn doubled() -> Int { self.count * 2 }
+}
+
+fn peek(c: Counter) -> Int {
+  c.doubled()
+}

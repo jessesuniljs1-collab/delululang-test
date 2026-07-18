@@ -551,7 +551,7 @@ fn usage() -> &'static str {
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
      \x20 delulu fmt       --migrate 0.7 <file-or-dir>... [--json]  (rename pre-0.7 `consume`/`recover` identifiers)\n\
-     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE>\n\
+     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\

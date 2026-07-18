@@ -1,0 +1,15 @@
+module reject1601
+
+// Criterion 2: a `ref List[Int]` cannot cross an actor boundary — it could be mutated
+// behind the receiver's back.
+actor Sink {
+  var n: Int
+  new() { self.n = 0 }
+  be feed(vs: List[Int]) { self.n = vs.len() }
+}
+
+fn main(root: Root) ! {Async} {
+  let s = spawn Sink()
+  let xs: ref List[Int] = [1]
+  s.feed(xs)
+}

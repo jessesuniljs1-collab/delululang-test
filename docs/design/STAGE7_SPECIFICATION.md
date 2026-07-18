@@ -329,3 +329,36 @@ actor Promise[T] {                       // T must be sendable (val/iso-carried)
 *Stage 7 completes the semantic core: every function typed, every effect rowed, every actor
 isolated, every authority sliced. Stages 8–9 make it a product; Stage 10 makes it an industry
 tool.*
+
+---
+
+## 12. Implementation status (log)
+
+Operational rulings, gates, and the deviations ledger live in
+`docs/design/STAGE7_BUILD_ORDER.md`; the user-facing story in
+`docs/design/STAGE7_ACTORS_GUIDE.md`; `delulu explain E-ACTOR` carries §11 verbatim.
+
+- **7a** — `consume`/`recover` keywords + DL1608 + `delulu fmt --migrate 0.7`;
+  `actor`/`spawn` active; rcaps contextual in type position; full §2 grammar → §2.1 AST.
+- **7b** — the deny-property definitions + alias/sendability tables, cell-tested against the
+  definitions; the default-rcap rule with every couldn't-tell case fail-closed.
+- **7c** — viewpoint adaptation + the write rules as a second-axis pass over settled types
+  (`rcap_check.rs`); `subcap` DERIVED from the deny definitions and pinned to Pony's lattice.
+- **7d** — consume flow analysis (branch joins, loop carry, capture refusal) + the recover
+  boundary, all through one centralized use path.
+- **7e** — T-Actor/T-Ctor/T-Behavior/T-SyncMethod; `Type::Actor`; DL1601 sendability at
+  declarations (incl. the PyObj pinning explanation); DL1604 sync-only-from-self; DL1607.
+- **7f** — `Async` activates; T-Spawn/T-Send with per-site generic instantiation; causal
+  rows across the boundary (criterion 5's DL0501 both ways); arrival-typed argument
+  sendability with the exact `consume` repair (criterion 2 end to end).
+- **7g** — the native runtime: worker-owned actors (zero `unsafe`), move-by-rebuild
+  boundaries, per-sender FIFO via mpsc, atomic-count quiescence, poison-on-fault.
+  Criterion 1: 1,000,024 turns exact at 1 and 4 workers, 3.00× wall-clock at 4.
+- **7i** — causal trace (`actor`/`member`/`turn`/`cause`), `assert_trace_causal`
+  (invariant 35 executable, both halves), `--debug-rcaps` verifying checker-exported iso
+  moves (DL1610).
+- **7j** — criterion 8 SHIP-GATE green: 10,000 seeded sequences over object-sensitive
+  worlds, zero counterexamples (the gate caught two model bugs first — recorded);
+  `std.actors.Promise[T]` as an injected prelude actor, row plumbing witnessed both ways
+  (criterion 9).
+- **7h** — the WASM cooperative scheduler, within the backend's Stage-3 subset discipline.

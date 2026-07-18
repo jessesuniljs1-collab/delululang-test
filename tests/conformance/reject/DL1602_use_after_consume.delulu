@@ -1,0 +1,15 @@
+module reject1602
+
+// Criterion 2: after `consume`, the binding is dead — the unique reference transferred.
+actor Sink {
+  var n: Int
+  new() { self.n = 0 }
+  be take(vs: iso List[Int]) ! {} { self.n = vs.len() }
+}
+
+fn main(root: Root) ! {Async} {
+  let s = spawn Sink()
+  let xs: iso List[Int] = recover { [1] }
+  s.take(consume xs)
+  let n = xs.len()
+}

@@ -1,0 +1,7 @@
+module reject1605
+
+// The recover boundary: mutable outer state must not leak into the re-proved region.
+fn f() {
+  let outer: ref List[Int] = [1]
+  let xs: iso List[Int] = recover { outer }
+}

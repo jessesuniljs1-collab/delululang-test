@@ -1,0 +1,26 @@
+module accept20
+
+// Stage 7: a well-formed actor — sendable params, causal rows, iso transfer via recover
+// and consume, a sync method used from self. Must check clean.
+actor Counter {
+  var count: Int
+  let label: Str
+  new(start: Int, label: Str) {
+    self.count = start
+    self.label = label
+  }
+  be add(n: Int) { self.count = self.count + n }
+  be take(vs: iso List[Int]) ! {} { self.count = self.count + vs.len() }
+  be report(out: Cap[Console]) ! {Write} { out.println(str(self.doubled())) }
+  fn doubled() -> Int { self.count * 2 }
+}
+
+fn main(root: Root) ! {Async, Write} {
+  let c = spawn Counter(0, "hits")
+  c.add(5)
+  let xs: iso List[Int] = recover { let ys = [1]
+    ys.push(2)
+    ys }
+  c.take(consume xs)
+  c.report(root.console())
+}

@@ -242,6 +242,45 @@ pub const GUARD_BYPASS_BANNER: &str =
 /// playbook 5j); unlike codes they explain a *semantics*, not a single failure.
 pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
     match topic {
+        "ACTOR" => Some((
+            "actors and reference capabilities: compile-time data-race freedom (Stage 7)",
+            String::from(
+                "DeluluLang's concurrency is the actor model with Pony-style reference \
+                 capabilities. Every value has an rcap — iso (unique), trn (sole writer), ref \
+                 (shared mutable within one actor), val (deeply immutable), box (read-only \
+                 view), tag (opaque identity) — checked as a SECOND axis beside effect rows: a \
+                 `val` closure can still be `!{Write}`; both axes are checked at send sites.\n\n\
+                 Everything crossing an actor boundary must be sendable: `iso` (consumed — \
+                 uniqueness proven; DL1601 with an exact `consume` repair otherwise), `val`, or \
+                 `tag`. Behaviors are atomic turns; `fn` methods run only in the actor's own \
+                 turn (a sync call on an actor reference is DL1604 — outsiders hold tag, and \
+                 messages are the only cross-actor interface). Asynchrony is the `Async` \
+                 EFFECT in the same rows — no futures runtime, no await, no colored functions; \
+                 `Promise[T]` is a library actor. Every send site's row contains the target \
+                 behavior's row (`{Async} ∪ row(beh)`), so whole-program authority remains \
+                 row(main) across the actor boundary — `delulu why <Effect>` walks the chain, \
+                 and `--assert-trace` replays it on the runtime witness with causal \
+                 actor/turn/cause attribution.\n\n\
+                 Honesty and threat-model caveats (spec §11, carried verbatim):\n\
+                 - Compile-time data-race freedom covers DeluluLang code; foreign code and \
+                 Contained plugins are bounded by their Stage-4/5/6 layers, not by rcaps.\n\
+                 - Deadlock, livelock, starvation, and mailbox exhaustion are not prevented — \
+                 the guarantee is race freedom, not liveness. Unbounded mailboxes can exhaust \
+                 memory; backpressure is post-1.0.\n\
+                 - The rcap tables are adopted from Pony's proven design; our own property-test \
+                 validation (criterion 8) is a ship-gate, and mechanized proof remains Delulu \
+                 Core future work.\n\
+                 - WASM-engine concurrency is cooperative single-threaded in v0.7 — semantics \
+                 identical, parallelism absent, labeled in output.\n\
+                 - Message ordering is per-sender-pair FIFO only; no global order, no \
+                 delivery-time bounds.\n\n\
+                 The native scheduler pins each actor to one worker at spawn (build-order \
+                 deviation 3 — worker-owned actors, zero unsafe); an iso send MOVES by rebuild \
+                 (deviation 7 — observationally the spec's pointer handoff, verified unaliased \
+                 under `--debug-rcaps`, DL1610 on a violated proof). `--debug-rcaps` is a \
+                 compiler-bug detector, never the guarantee: race freedom is static.",
+            ),
+        )),
         "GUARD" => Some((
             "the Guard: a principal-approval layer over delegated custody (Stage 5 addendum)",
             format!(
@@ -699,6 +738,40 @@ mod tests {
         assert!(body.contains("DIFFERENT faults"), "deviation 8: badly-signed vs unsigned are different faults");
         // Never claim "immediate" anywhere in the plugin text.
         assert!(!body.to_lowercase().contains("immediate"), "never claim immediate: {body}");
+    }
+
+    /// Stage 7 "Concurrent": the actor codes DL1601–DL1608 + DL1610 are registered (DL1609 is
+    /// deliberately absent — house rule mirroring DL1404/DL1784), and the `E-ACTOR` topic
+    /// exists and carries the spec §11 honesty caveats VERBATIM plus the load-bearing
+    /// deviation notes (3 = worker-owned, 7 = move-by-rebuild).
+    #[test]
+    fn actor_codes_and_e_actor_topic() {
+        for code in [
+            "DL1601", "DL1602", "DL1603", "DL1604", "DL1605", "DL1606", "DL1607", "DL1608",
+            "DL1610",
+        ] {
+            assert!(is_registered(code), "{code} must be registered");
+        }
+        assert!(!is_registered("DL1609"), "DL1609 is deliberately absent (spec §10 table skips it)");
+        let (title, body) = topic_explain("ACTOR").expect("E-ACTOR topic exists");
+        assert!(title.contains("data-race freedom"), "the guarantee named in the title");
+        // Spec §11 caveats, verbatim.
+        assert!(body.contains("bounded by their Stage-4/5/6 layers, not by rcaps"), "§11: scope of the guarantee");
+        assert!(body.contains("Deadlock, livelock, starvation, and mailbox exhaustion are not prevented"), "§11: liveness never claimed");
+        assert!(body.contains("the guarantee is race freedom, not liveness"), "§11: race freedom, full stop");
+        assert!(body.contains("Unbounded mailboxes can exhaust memory; backpressure is post-1.0"), "§11: OOM honesty");
+        assert!(body.contains("adopted from Pony's proven design"), "§11: provenance");
+        assert!(body.contains("mechanized proof remains Delulu Core future work"), "§11: proof honesty");
+        assert!(body.contains("cooperative single-threaded in v0.7"), "§11: WASM honesty");
+        assert!(body.contains("semantics identical, parallelism absent, labeled in output"), "§11: WASM labeling");
+        assert!(body.contains("per-sender-pair FIFO only; no global order, no delivery-time bounds"), "§11: ordering honesty");
+        // The two axes never bleed; the rules' shape is stated.
+        assert!(body.contains("SECOND axis"), "rcaps beside rows");
+        assert!(body.contains("`val` closure can still be `!{Write}`"), "orthogonality example");
+        // Ruled-deviation notes.
+        assert!(body.contains("worker-owned") && body.contains("zero unsafe"), "deviation 3");
+        assert!(body.contains("MOVES by rebuild"), "deviation 7");
+        assert!(body.contains("never the guarantee"), "trap 3: the debug checker's honest framing");
     }
 
     /// Surface addendum §3.2: the Palette code DL1790 is registered, the `E-PALETTE` topic exists
