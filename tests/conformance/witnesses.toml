@@ -1443,6 +1443,18 @@ test = "keygen_writes_a_key_then_refuses_to_overwrite_it"
 kind = "negative"
 
 [[witness]]
+anchor = "ref.cli.login"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "login_stores_a_token_without_ever_echoing_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.login"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "login_without_a_token_is_refused"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.cli.repl"
 file = "crates/delulu/tests/cli_contract.rs"
 test = "repl_evaluates_piped_input_and_reports_errors"

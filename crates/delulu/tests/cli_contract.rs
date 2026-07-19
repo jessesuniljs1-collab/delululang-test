@@ -206,6 +206,43 @@ fn recursion_within_the_bound_still_runs() {
     assert!(out.contains("46368"), "fib(24) = 46368, got: {out}");
 }
 
+/// `login` stores a scoped registry token — and never echoes it. A credential printed to a
+/// terminal ends up in a scrollback buffer, a screen recording, and a CI log.
+#[test]
+fn login_stores_a_token_without_ever_echoing_it() {
+    let home = scratch("login");
+    const SECRET: &str = "dlt_this_value_must_never_be_printed";
+
+    let o = delulu(&home, &["login", "--registry", "http://127.0.0.1:9", "--token", SECRET]);
+    let out = text(&o);
+    assert!(o.status.success(), "login must succeed: {out}");
+    assert!(
+        !out.contains(SECRET),
+        "the token must NEVER appear in output — it would land in scrollback and CI logs:\n{out}"
+    );
+
+    let creds = std::fs::read_to_string(home.join("credentials.jsonl")).expect("credentials stored");
+    assert!(creds.contains(SECRET), "the token must actually be stored: {creds}");
+
+    // Storing a second token for the same registry supersedes the first rather than accumulating
+    // stale credentials that might be picked up later.
+    let o2 = delulu(&home, &["login", "--registry", "http://127.0.0.1:9", "--token", "dlt_newer"]);
+    assert!(o2.status.success());
+    let creds2 = std::fs::read_to_string(home.join("credentials.jsonl")).unwrap();
+    assert!(!creds2.contains(SECRET), "the superseded token must be gone: {creds2}");
+    assert!(creds2.contains("dlt_newer"));
+}
+
+/// `login` without a token is refused — it cannot guess, and storing an empty credential would
+/// fail confusingly later.
+#[test]
+fn login_without_a_token_is_refused() {
+    let home = scratch("login-bare");
+    let o = delulu(&home, &["login", "--registry", "http://127.0.0.1:9"]);
+    assert!(!o.status.success(), "login needs a token");
+    assert!(text(&o).contains("--token"), "the refusal must say what is missing: {}", text(&o));
+}
+
 /// `repl` accepts piped input and reports errors on bad input rather than dying. The REPL's
 /// contract is that it *reports*, not that it exits nonzero — asserted honestly as such.
 #[test]

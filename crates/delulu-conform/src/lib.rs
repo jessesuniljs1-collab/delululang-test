@@ -60,7 +60,7 @@ pub const AUDIT_RULES: &[&str] = &["R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-
 /// meta flags (`--help`/`--version`) and the hidden foreign-worker subcommand. The drift test
 /// fences this against the dispatch source.
 pub const CLI_SUBCOMMANDS: &[&str] = &[
-    "check", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish", "add", "build",
+    "check", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish", "add", "login", "build",
     "lock", "run", "plugin", "authority", "why", "atlas", "repl", "audit", "grants", "guard",
     "broker", "secrets", "locale", "explain",
 ];

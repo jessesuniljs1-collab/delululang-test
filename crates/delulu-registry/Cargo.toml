@@ -1,0 +1,20 @@
+[package]
+name = "delulu-registry"
+description = "The DeluluLang package registry (Stage 9): sparse index, publish API, server-side authority recomputation"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "delulu-registry"
+path = "src/main.rs"
+
+[lib]
+name = "delulu_registry"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+delulu-runtime = { path = "../delulu-runtime" }
+# getrandom 0.3 is already the workspace's randomness source (delulu-broker ruling 3, reused by
+# delulu for keygen). Reused here for token values — not a new dependency.
+getrandom = "0.3"

@@ -509,6 +509,7 @@ pub fn run(args: &[String]) -> i32 {
         "verify-sig" => crate::signing::cmd_verify_sig(rest),
         "publish" => crate::signing::cmd_publish(rest, package_authority_value),
         "add" => crate::signing::cmd_add(rest),
+        "login" => crate::signing::cmd_login(rest),
         "build" => cmd_build(rest),
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
@@ -611,6 +612,7 @@ fn usage() -> &'static str {
      \x20 delulu sign      <artifact> | verify-sig <artifact> [--key HEX]   (detached .sig over .dwx/.dpx/tarballs)\n\
      \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
+     \x20 delulu login     --registry URL --token VALUE        (store a scoped publish token; never echoed)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\

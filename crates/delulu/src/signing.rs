@@ -221,6 +221,73 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
 
 // ===== registry client =====================================================
 
+/// `delulu login --registry <url> --token <value>` (Stage 9g, spec §5).
+///
+/// Stores a publish token for a registry. Tokens are **scoped and revocable** server-side; the
+/// client's only job is to hold one without leaking it, so the file is created 0600 on unix by the
+/// same helper that protects signing keys.
+///
+/// The token is never echoed back. A credential printed to a terminal ends up in a scrollback
+/// buffer, a screen recording, and a CI log.
+pub fn cmd_login(rest: &[String]) -> i32 {
+    let json = rest.iter().any(|a| a == "--json");
+    let registry = flag(rest, "--registry").unwrap_or_else(|| "http://127.0.0.1:8765".into());
+    let Some(token) = flag(rest, "--token") else {
+        eprintln!(
+            "error: `login` needs --token <value>\n  \
+             get one from the registry operator: `delulu-registry issue-token --owner you --scope <package>`"
+        );
+        return 2;
+    };
+    let Some(home) = home() else {
+        eprintln!("error: cannot resolve ~/.delulu (no HOME/USERPROFILE)");
+        return 2;
+    };
+    if let Err(e) = std::fs::create_dir_all(&home) {
+        eprintln!("error: cannot create {}: {e}", home.display());
+        return 2;
+    }
+    let path = home.join("credentials.jsonl");
+    // One line per registry; a later login for the same registry supersedes the earlier one.
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut out = String::new();
+    for line in existing.lines().filter(|l| !l.trim().is_empty()) {
+        let keep = serde_json::from_str::<Value>(line)
+            .map(|v| v["registry"].as_str() != Some(registry.as_str()))
+            .unwrap_or(true);
+        if keep {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out.push_str(&json!({ "registry": registry, "token": token }).to_string());
+    out.push('\n');
+    if let Err(e) = std::fs::write(&path, out) {
+        eprintln!("error: cannot write {}: {e}", path.display());
+        return 2;
+    }
+    lock_down(&path);
+
+    if json {
+        // The token itself is deliberately absent from the output.
+        println!("{}", json!({ "command": "login", "registry": registry, "stored": path.display().to_string() }));
+    } else {
+        println!("login: token stored for {registry}");
+        println!("  credentials: {} (not echoed)", path.display());
+    }
+    0
+}
+
+/// The stored token for a registry, if any.
+pub fn stored_token(registry: &str) -> Option<String> {
+    let path = home()?.join("credentials.jsonl");
+    let text = std::fs::read_to_string(path).ok()?;
+    text.lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .find(|v| v["registry"].as_str() == Some(registry))
+        .and_then(|v| v["token"].as_str().map(str::to_string))
+}
+
 /// `delulu publish --dry-run <package-dir> --index <dir>` (spec §7). Validates manifest
 /// completeness, semver-authority (DL1003 reused) against the index's prior line, and
 /// signature presence — but performs NO upload (Stage 9). All local.
@@ -295,12 +362,19 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
             .unwrap_or(false);
 
     let line = index_line(&name, &version, &effects, this_authority.as_ref());
+
+    // If a registry is named, report whether we hold a token for it — before the publisher gets
+    // as far as an upload that would fail on authentication.
+    let registry = flag(rest, "--registry");
+    let have_token = registry.as_deref().map(|r| stored_token(r).is_some());
+
     if json {
         println!(
             "{}",
             json!({
                 "command": "publish", "mode": "dry-run", "name": name, "version": version,
                 "signed": sig_present, "index_line": line,
+                "registry": registry, "authenticated": have_token,
                 "prior_version": prior.as_ref().and_then(|p| p.get("version").cloned()),
             })
         );
@@ -309,7 +383,14 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
         if !sig_present {
             println!("  note: no signature found — sign the artifact before a real publish (`delulu sign`)");
         }
+        if let (Some(r), Some(false)) = (&registry, have_token) {
+            println!("  note: no stored token for {r} — run `delulu login --registry {r} --token …`");
+        }
         println!("  index line: {line}");
+        // The authority in this line is the CLIENT's computation. The registry recomputes it from
+        // the uploaded artifact and stores its own answer; a mismatch is refused (DL1706). Said
+        // here so a publisher is never surprised by a refusal they could not have predicted.
+        println!("  note: the registry recomputes this authority from the artifact and refuses a mismatch");
     }
     0
 }

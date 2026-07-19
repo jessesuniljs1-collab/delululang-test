@@ -8,7 +8,7 @@ Every subcommand of the `delulu` binary. Exit codes and the `--json` envelopes a
 
 A subcommand's **accepting** witness is a valid invocation that succeeds; its **rejecting** witness is an invalid one that must refuse with a nonzero exit and an honest message — never a silent success, never a panic.
 
-> **Coverage (invariant 42):** 24 of 24 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 25 of 25 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 | Subcommand | Anchor | Coverage |
 |---|---|---|
@@ -21,6 +21,7 @@ A subcommand's **accepting** witness is a valid invocation that succeeds; its **
 | `delulu verify-sig` | `ref.cli.verify-sig` | covered |
 | `delulu publish` | `ref.cli.publish` | covered |
 | `delulu add` | `ref.cli.add` | covered |
+| `delulu login` | `ref.cli.login` | covered |
 | `delulu build` | `ref.cli.build` | covered |
 | `delulu lock` | `ref.cli.lock` | covered |
 | `delulu run` | `ref.cli.run` | covered |

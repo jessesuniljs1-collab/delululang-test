@@ -254,7 +254,7 @@ fn audit_rules_appear_in_the_soundness_audit() {
 ///
 /// Raise it when you add witnesses. It must never need lowering — a lowered floor in a diff is a
 /// coverage regression wearing a disguise, and reviewing this constant is how you catch it.
-const COVERED_FLOOR: usize = 272;
+const COVERED_FLOOR: usize = 273;
 
 /// The committed repo's witnesses are internally valid (no dangling/ignored/unknown citations)
 /// and coverage has not regressed.
@@ -279,7 +279,7 @@ fn coverage_never_regresses() {
 /// classified in `STAGE9_BUILD_ORDER.md` D10 are closed — the honest state is 216/233, and this
 /// test is what flips the claim from "ratcheting" to "complete".
 #[test]
-#[ignore = "release criterion 1: coverage is 272/289 — see STAGE9_BUILD_ORDER.md D10 for the classified remainder"]
+#[ignore = "release criterion 1: coverage is 273/290 — see STAGE9_BUILD_ORDER.md D10 for the classified remainder"]
 fn release_requires_full_coverage() {
     let cov = run_coverage(&repo_root());
     assert!(cov.pass(), "expected 100% coverage, {} gap(s) remain", cov.gaps.len());
