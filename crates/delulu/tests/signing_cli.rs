@@ -25,6 +25,43 @@ fn delulu(dir: &Path, home: &Path, args: &[&str]) -> Output {
         .expect("run delulu")
 }
 
+/// THE UNSIGNED CASE — the skip branch. An artifact with no signature at all must FAIL
+/// verification, and it must fail through the **exit code**, not only in the rendered verdict.
+///
+/// Added by the DRILL-001 rehearsal (see `docs/security/DRILL-001.md`). A staged bypass that
+/// returned 0 for an unsigned artifact passed the entire 875-test suite: every existing signing
+/// test asserted on the *verdict string* and none on the exit code for the missing-signature path.
+/// A caller gating on `$?` — which is every shell script and CI job on earth — would have accepted
+/// an unsigned artifact.
+///
+/// This is the shape the house rule warns about: the rule was enforced everywhere except the
+/// branch where the checker had nothing to check.
+#[test]
+fn an_unsigned_artifact_fails_verification_by_exit_code() {
+    let dir = tmp("unsigned");
+    let home = dir.join("home");
+    let art = dir.join("payload.dwx");
+    std::fs::write(&art, b"contents that nobody ever signed").unwrap();
+
+    let o = delulu(&dir, &home, &["verify-sig", art.to_str().unwrap()]);
+    let text = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "an UNSIGNED artifact must exit nonzero — a caller gating on the exit code would otherwise \
+         accept it:\n{text}"
+    );
+    assert!(text.contains("unsigned"), "the verdict must name the reason: {text}");
+
+    // And the machine surface must agree with the exit code. A JSON envelope that says one thing
+    // while the exit code says another is a bypass waiting to be found.
+    let j = delulu(&dir, &home, &["verify-sig", art.to_str().unwrap(), "--json"]);
+    assert_eq!(j.status.code(), Some(1), "--json must fail identically");
+    let v: Value = serde_json::from_slice(&j.stdout).expect("verify-sig --json is valid JSON");
+    assert_ne!(v["verdict"], "valid", "an unsigned artifact is never `valid`: {v}");
+}
+
 #[test]
 fn keygen_sign_verify_round_trip_and_tamper_detection() {
     let dir = tmp("roundtrip");

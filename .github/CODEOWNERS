@@ -1,0 +1,37 @@
+# Code owners (Stage 9f, Constitution §9 / invariant 44).
+#
+# ACTIVATION: this file takes effect when the repository is publicly hosted and branch protection
+# is enabled — `SECURITY.md` §6, build-order ruling D2. Until then, review separation is enforced
+# procedurally: the agent that writes a phase never commits it.
+#
+# The placeholder below is the project lead's handle, assigned at public launch. It is deliberately
+# a placeholder rather than a plausible-looking handle: a CODEOWNERS file naming an account that
+# does not exist reviews nothing while appearing to review everything.
+
+# Default: the project lead reviews anything not matched below.
+*                               @PENDING-PUBLIC-project-lead
+
+# The constitution and its decision record are ENTRENCHED (Constitution §10, invariant 44).
+# Changes here require the project lead specifically — not any maintainer.
+/docs/design/CONSTITUTION.md    @PENDING-PUBLIC-project-lead
+/docs/design/DELULU_CORE.md     @PENDING-PUBLIC-project-lead
+
+# The stability contract binds every future release. It does not change casually.
+/docs/design/STABILITY.md       @PENDING-PUBLIC-project-lead
+
+# The RFC process governs how the core may change at all; it cannot be edited around.
+/rfcs/                          @PENDING-PUBLIC-project-lead
+
+# Security policy and the incident runbook.
+/SECURITY.md                    @PENDING-PUBLIC-project-lead
+/docs/security/                 @PENDING-PUBLIC-project-lead
+
+# The audit rules R-1..R-7 and the exploit set that attacks them. A change here is a change to what
+# "sound" means for this language.
+/docs/design/SOUNDNESS_AUDIT.md @PENDING-PUBLIC-project-lead
+/crates/delulu-check/tests/laundering.rs @PENDING-PUBLIC-project-lead
+
+# The coverage law and the generated reference: the machinery that keeps the docs honest. Weakening
+# a gate is easier to hide in a diff than breaking a rule outright.
+/crates/delulu-conform/         @PENDING-PUBLIC-project-lead
+/tests/conformance/witnesses.toml @PENDING-PUBLIC-project-lead

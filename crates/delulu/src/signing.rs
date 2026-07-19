@@ -172,6 +172,9 @@ pub fn cmd_verify_sig(rest: &[String]) -> i32 {
     let sig = match std::fs::read(&sig_path) {
         Ok(s) => s,
         Err(_) => {
+            // No signature is a FAILURE, and it must fail through the exit code — a caller gating
+            // on `$?` is the common case, and "unsigned" printed alongside exit 0 would be read as
+            // success. Pinned by `an_unsigned_artifact_fails_verification_by_exit_code`.
             report_sig("verify-sig", &artifact, &SignatureStatus::Unsigned, json);
             return 1;
         }
