@@ -12,6 +12,7 @@ pub mod lockfile;
 pub mod manifest;
 pub mod package;
 pub mod plugin;
+pub mod prim_table;
 pub mod program;
 pub mod rcap_check;
 pub mod rcaps;

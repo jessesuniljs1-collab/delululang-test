@@ -1,3 +1,4 @@
+// anchors: ref.prim.console.println
 module conf
 
 // Performs Write (println) but declares no row.

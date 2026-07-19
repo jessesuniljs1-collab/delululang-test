@@ -1,3 +1,4 @@
+// anchors: ref.grammar.actor_decl
 module reject1601
 
 // Criterion 2: a `ref List[Int]` cannot cross an actor boundary — it could be mutated

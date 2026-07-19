@@ -1,0 +1,6 @@
+// anchors: ref.grammar.params
+module conf
+
+fn f(x Int) -> Int {
+  x
+}

@@ -1,3 +1,4 @@
+// anchors: ref.grammar.variant ref.grammar.match ref.grammar.if
 module conf
 
 // Stage-1 gap closed: user-declared sum-type variants are now constructible in source (not only

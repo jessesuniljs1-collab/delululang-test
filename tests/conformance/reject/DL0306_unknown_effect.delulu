@@ -1,3 +1,4 @@
+// anchors: ref.grammar.opt_row
 module conf
 
 fn f() ! {Bogus} {

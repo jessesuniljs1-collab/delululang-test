@@ -47,3 +47,13 @@ jobs:
       # The Python-less build must stay a first-class citizen (DL1307 path).
       - name: Python-less build check
         run: cargo check -p delulu --no-default-features
+
+      # Stage 9 invariant 42 (the coverage law): the conformance suite is the specification's
+      # executable form. `--coverage` maps tests to reference anchors and fails on any anchor
+      # missing an accepting or a rejecting witness, any dangling witness, or any unknown
+      # citation. It exits nonzero until coverage is 100% (release criterion 1), so the step
+      # reports without failing the build today and the ratchet test in delulu-conform
+      # (`coverage_never_regresses`) is what keeps it moving forward. Flip to a hard gate at
+      # the 1.0 cut — see STAGE9_BUILD_ORDER.md D10.
+      - name: Conformance coverage law (report; ratcheted by delulu-conform's own test)
+        run: cargo run -q -p delulu-conform -- --coverage || true

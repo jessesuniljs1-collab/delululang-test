@@ -1,0 +1,22 @@
+// anchors: ref.grammar.const ref.grammar.effect_decl ref.grammar.stmt ref.grammar.args
+// anchors: ref.grammar.item ref.grammar.block ref.grammar.if ref.grammar.primary
+// anchors: ref.grammar.params ref.grammar.type_decl ref.grammar.variant
+module conf
+
+let LIMIT: Int = 10
+
+effect Audit
+
+type Shape = Circle | Square
+
+type Point { x: Int, y: Int }
+
+fn clamp(v: Int, lo: Int) -> Int {
+  if v < lo { lo } else { v }
+}
+
+fn use_it() -> Int {
+  let p = Point { x: 1, y: 2 }
+  let c = clamp(p.x, LIMIT)
+  (c + p.y)
+}

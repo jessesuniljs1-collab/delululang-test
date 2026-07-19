@@ -1,0 +1,6 @@
+// anchors: ref.grammar.foreign_decl ref.grammar.foreign_fn
+module conf
+
+foreign "c" lib mathlib {
+  fn cos(x: Float) -> Float
+}

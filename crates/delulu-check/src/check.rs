@@ -1354,6 +1354,30 @@ impl<'a> Checker<'a> {
         }
 
         if let Some((ret, effect, produced_cap)) = self.method_sig(&rt, &name.name, &arg_tys, span, ctx) {
+            // The primitive-table arity gate (§7.3): `expect_arg` catches too-few and mistyped
+            // arguments per position, but can never see surplus ones — without this,
+            // `root.console(1,2,3,4,5)` minted a cap and ignored the noise (fail-open skip branch).
+            if let Some(label) = prim_receiver_label(&rt) {
+                if let Some(entry) = crate::prim_table::PRIM_TABLE
+                    .iter()
+                    .find(|e| e.receiver == label && e.method == name.name)
+                {
+                    if arg_tys.len() > entry.arity as usize {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0403",
+                                format!(
+                                    "`{label}.{}` expects {} argument(s), found {}",
+                                    name.name,
+                                    entry.arity,
+                                    arg_tys.len()
+                                ),
+                            )
+                            .with_span(span, "wrong number of arguments"),
+                        );
+                    }
+                }
+            }
             if let Some(e) = effect {
                 acc.add_effect(e);
             }
@@ -1383,6 +1407,8 @@ impl<'a> Checker<'a> {
     /// The compile-time view of the primitive table (§7.3). Returns (return type, effect, a
     /// capability kind produced). Capability operations are the ONLY source of primitive
     /// effects (T-CapOp) — this table is that single source of truth for the checker.
+    /// The arity column of `prim_table::PRIM_TABLE` is enforced by the caller's gate; per-position
+    /// types are enforced here via `expect_arg`.
     fn method_sig(&mut self, recv: &Type, method: &str, args: &[(Type, Span)], span: Span, ctx: &mut FnCtx) -> Option<(Type, Option<Effect>, Option<ResourceKind>)> {
         let io = Type::Sum(self.table.io_err(), vec![]);
         let net = Type::Sum(self.table.net_err(), vec![]);
@@ -1578,20 +1604,41 @@ impl<'a> Checker<'a> {
             }
             Type::Secret(inner) => match method {
                 // Secret.map requires a PURE function (DL0603); result stays tainted (R-5).
-                "map" => {
-                    if let Some((Type::Fn { row, ret, .. }, aspan)) = args.first() {
-                        let r = self.cx.apply_row(row);
+                "map" => match args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) {
+                    Some((Type::Fn { row, ret, .. }, aspan)) => {
+                        let r = self.cx.apply_row(&row);
                         if !r.is_pure() {
                             self.diags.push(
                                 Diagnostic::error("DL0603", "Secret.map requires a pure function")
-                                    .with_span(*aspan, "this function is not pure"),
+                                    .with_span(aspan, "this function is not pure"),
                             );
                         }
-                        Some((Type::Secret(Box::new((**ret).clone())), None, None))
-                    } else {
+                        Some((Type::Secret(ret), None, None))
+                    }
+                    // An unresolved inference variable cannot be ruled on at this site; the taint
+                    // discipline (result stays `Secret`) holds regardless. Known static gap: a var
+                    // later resolving to an impure fn is not re-checked here.
+                    Some((Type::Var(_), _)) => Some((Type::Secret(inner.clone()), None, None)),
+                    // A concrete non-function argument was the fail-open skip branch:
+                    // `s.map(42)` checked clean before Stage 9a caught it.
+                    Some((other, aspan)) => {
+                        self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("argument type mismatch: Secret.map expects a function, found `{other}`"),
+                            )
+                            .with_span(aspan, "type mismatch here"),
+                        );
                         Some((Type::Secret(inner.clone()), None, None))
                     }
-                }
+                    None => {
+                        self.diags.push(
+                            Diagnostic::error("DL0403", "missing argument 1 (expected a function)")
+                                .with_span(span, "too few arguments"),
+                        );
+                        Some((Type::Secret(inner.clone()), None, None))
+                    }
+                },
                 // verify is a constant-time comparison of two secrets — pure, no reveal.
                 "verify" => {
                     self.expect_arg(args, 0, &Type::Secret(inner.clone()), span);
@@ -1615,16 +1662,32 @@ impl<'a> Checker<'a> {
             Type::List(elem) => match method {
                 "len" => Some((Type::Int, None, None)),
                 "get" => { self.expect_arg(args, 0, &Type::Int, span); Some((Type::Option(elem.clone()), None, None)) }
-                "push" => { Some((Type::Unit, None, None)) }
+                "push" => { self.expect_arg(args, 0, elem, span); Some((Type::Unit, None, None)) }
                 "map" => {
-                    // Row-polymorphic builtin (R-4): the callback's row joins the caller's.
-                    if let Some((Type::Fn { row, ret, .. }, _)) = args.first() {
-                        // NOTE: caller already accounts for the callback row via the arg's own
-                        // check; here we surface it into the method's effect via add_row upstream.
-                        let _ = row;
-                        Some((Type::List(Box::new((**ret).clone())), None, None))
-                    } else {
-                        Some((Type::List(elem.clone()), None, None))
+                    // Row-polymorphic builtin (R-4): the callback's row joins the caller's
+                    // (already accounted for via the argument's own check upstream).
+                    match args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) {
+                        Some((Type::Fn { ret, .. }, _)) => Some((Type::List(ret), None, None)),
+                        // Unresolved inference variable: cannot rule at this site (see Secret.map).
+                        Some((Type::Var(_), _)) => Some((Type::List(elem.clone()), None, None)),
+                        // A concrete non-function was the fail-open skip branch (`xs.map(42)`).
+                        Some((other, aspan)) => {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    "DL0401",
+                                    format!("argument type mismatch: List.map expects a function, found `{other}`"),
+                                )
+                                .with_span(aspan, "type mismatch here"),
+                            );
+                            Some((Type::List(elem.clone()), None, None))
+                        }
+                        None => {
+                            self.diags.push(
+                                Diagnostic::error("DL0403", "missing argument 1 (expected a function)")
+                                    .with_span(span, "too few arguments"),
+                            );
+                            Some((Type::List(elem.clone()), None, None))
+                        }
                     }
                 }
                 _ => None,
@@ -2597,6 +2660,28 @@ fn render_type_expr(t: &TypeExpr) -> String {
 fn fn_pyobj_mismatch(a: &Type, b: &Type) -> bool {
     let is_fn = |t: &Type| matches!(t, Type::Fn { .. });
     (is_fn(a) && matches!(b, Type::PyObj)) || (matches!(a, Type::PyObj) && is_fn(b))
+}
+
+/// The `prim_table` receiver label for a checked receiver type (the §7.3 arity gate). `None` for
+/// receivers whose methods are not primitive-table entries: foreign lib handles carry their own
+/// DL0403 fence in `method_sig`, and non-primitive surfaces have their own typing rules.
+fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
+    Some(match recv {
+        Type::Root => "root",
+        Type::Cap(ResourceKind::Console) => "console",
+        Type::Cap(ResourceKind::FsRead) => "fs_read",
+        Type::Cap(ResourceKind::FsWrite) => "fs_write",
+        Type::Cap(ResourceKind::Http) => "http",
+        Type::Cap(ResourceKind::Clock) => "clock",
+        Type::Cap(ResourceKind::Rand) => "rand",
+        Type::Cap(ResourceKind::Python) => "python",
+        Type::PyObj => "pyobj",
+        Type::Secret(_) => "secret",
+        Type::Str => "str",
+        Type::List(_) => "list",
+        Type::Plugin(_) => "plugin",
+        _ => return None,
+    })
 }
 
 /// Exactly one side is a `Secret` and the other is a concrete non-secret type (not a variable) —

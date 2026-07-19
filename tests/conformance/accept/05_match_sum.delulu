@@ -1,3 +1,4 @@
+// anchors: ref.grammar.type_decl ref.grammar.variant ref.grammar.match ref.grammar.pattern ref.diag.DL0407
 module conf
 
 type Color = Red | Green | Blue

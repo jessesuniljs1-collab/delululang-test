@@ -1,3 +1,4 @@
+// anchors: ref.grammar.actor_decl ref.prim.console.println ref.prim.root.console ref.diag.DL1601 ref.diag.DL1602 ref.diag.DL1604
 module accept20
 
 // Stage 7: a well-formed actor — sendable params, causal rows, iso transfer via recover

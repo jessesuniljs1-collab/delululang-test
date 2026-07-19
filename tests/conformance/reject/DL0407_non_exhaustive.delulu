@@ -1,3 +1,4 @@
+// anchors: ref.grammar.match ref.grammar.pattern
 module conf
 
 type Color = Red | Green | Blue

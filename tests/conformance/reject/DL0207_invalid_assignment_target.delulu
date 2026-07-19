@@ -1,0 +1,7 @@
+// anchors: ref.grammar.stmt
+module conf
+
+fn f() -> Int {
+  1 = 2
+  3
+}

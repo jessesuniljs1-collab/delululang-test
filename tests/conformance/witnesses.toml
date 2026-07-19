@@ -1,0 +1,2244 @@
+# Conformance witness map (Stage 9a, invariant 42 — the coverage law).
+#
+# Maps a reference anchor to an EXISTING Rust test that exercises it, tagged `positive`
+# (an accepting witness) or `negative` (a rejecting/producing witness). `delulu-conform
+# --coverage` verifies every named test actually exists in the named file and is not
+# `#[ignore]`d — a dangling or inactive witness is a coverage FAILURE (skip-branch rule).
+#
+# This file carries the witnesses that are Rust tests rather than `.delulu` conformance
+# programs; conformance-header witnesses live in the `.delulu` files themselves.
+#
+# Schema (hand-parsed, strict): each [[witness]] table needs exactly anchor/file/test/kind.
+#
+# Curation rule: a witness must actually EXERCISE its anchor. A test that merely mentions a
+# code in a string, or matches a JSON field that happens to share a subcommand's name, is not
+# a witness. Entries here were read before they were written.
+
+# ---- The soundness-audit rules (R-1..R-7). The laundering suite IS the audit's
+# ---- exploit set, so each rule's rejecting side is a named test there.
+
+# R-1: effects(grant) is the row every Contained export types at.
+[[witness]]
+anchor = "ref.audit.R-1"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "effect_names_are_the_contained_export_row_r1"
+kind = "positive"
+
+# R-1 rejecting: an export's advisory narrower row does not shrink the grant's row.
+[[witness]]
+anchor = "ref.audit.R-1"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "r_get_contained_types_every_export_at_the_full_grant_r1"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.audit.R-2"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f2_expose_with_declassify_row_is_accepted"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.audit.R-2"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f2_expose_without_declassify_row_is_rejected"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.audit.R-3"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f3_contravariant_row_ascription_is_rejected"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.audit.R-4"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f4_pure_lambda_into_map_stays_pure"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.audit.R-4"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f4_effectful_lambda_into_map_in_pure_fn_is_rejected"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.audit.R-5"
+file = "crates/delulu-check/tests/laundering.rs"
+test = "f5_stringify_secret_is_dl0604"
+kind = "negative"
+
+# R-6b: the value classes that may cross the boundary at all.
+[[witness]]
+anchor = "ref.audit.R-6"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "r_get_contained_allows_only_scalars_str_and_caps_across_the_boundary"
+kind = "positive"
+
+# R-6a: no re-entry point into verified code, refused at compile time.
+[[witness]]
+anchor = "ref.audit.R-6"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_function_typed_param_to_a_contained_export_is_dl0803_at_compile_time"
+kind = "negative"
+
+# R-7 accepting: a valid sub-grant within the parent's authority is honored.
+[[witness]]
+anchor = "ref.audit.R-7"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "criterion4_r7_composition_a_sub_plugin_can_never_exceed_its_parent"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.audit.R-7"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step4_refuses_a_grant_wider_than_the_holder_as_dl0802"
+kind = "negative"
+
+# ---- Diagnostic codes: the PRODUCING (negative) witnesses ----
+
+[[witness]]
+anchor = "ref.diag.DL0101"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "unexpected_char_is_dl0101"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0102"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "unterminated_string_is_dl0102"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0103"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "invalid_escape_is_dl0103"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0104"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "int_overflow_is_dl0104"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0105"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "unterminated_block_comment_is_dl0105"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0201"
+file = "crates/delulu-syntax/src/parser.rs"
+test = "a_test_without_a_name_string_is_dl0201"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0208"
+file = "crates/delulu-syntax/src/parser.rs"
+test = "pub_test_is_refused_but_recovers"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0303"
+file = "crates/delulu-check/src/package.rs"
+test = "unknown_module_import_is_dl0303"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0304"
+file = "crates/delulu-check/src/package.rs"
+test = "import_cycle_is_dl0304"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0502"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_test_declaring_an_unperformed_effect_warns_dl0502"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0703"
+file = "crates/delulu/tests/cli.rs"
+test = "run_without_grant_faults_dl0703"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0801"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "r6c_unload_then_a_retained_reference_is_dl0801_with_the_revoking_seq"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0802"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step4_refuses_a_grant_wider_than_the_holder_as_dl0802"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0803"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_nested_function_typed_param_to_a_contained_export_is_also_dl0803"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0902"
+file = "crates/delulu-runtime/src/lib.rs"
+test = "division_by_zero_is_dl0902"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0903"
+file = "crates/delulu-wasm/tests/hostile_guest.rs"
+test = "out_of_bounds_string_pointer_is_refused_dl0903"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0904"
+file = "crates/delulu-wasm/tests/hostile_guest.rs"
+test = "forged_capability_handle_is_refused_dl0904"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1001"
+file = "crates/delulu/tests/provenance.rs"
+test = "pinned_pure_dependency_gaining_net_fails_dl1001_before_running"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1002"
+file = "crates/delulu/tests/provenance.rs"
+test = "stale_authority_hash_under_matching_content_is_dl1002"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1003"
+file = "crates/delulu/tests/provenance.rs"
+test = "authority_widening_with_minor_bump_is_dl1003"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1004"
+file = "crates/delulu-check/src/plugin.rs"
+test = "missing_plugin_table_is_dl1004"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1005"
+file = "crates/delulu-check/src/deps.rs"
+test = "re_export_cycle_is_dl1005"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1006"
+file = "crates/delulu/tests/provenance.rs"
+test = "import_ambiguous_between_local_and_dependency_is_dl1006"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1007"
+file = "crates/delulu/tests/provenance.rs"
+test = "git_dependency_without_pinned_rev_is_dl1007"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1008"
+file = "crates/delulu/tests/provenance.rs"
+test = "two_sources_for_one_package_name_is_dl1008"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1009"
+file = "crates/delulu/tests/cli.rs"
+test = "build_package_exceeding_manifest_authority_is_dl1009"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1010"
+file = "crates/delulu/tests/provenance.rs"
+test = "tampered_dependency_source_is_dl1010"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1011"
+file = "crates/delulu/tests/provenance.rs"
+test = "locked_build_without_lockfile_is_dl1011"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1201"
+file = "crates/delulu-wasm/tests/actors_parity.rs"
+test = "a_str_field_actor_refuses_as_dl1201"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1202"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "tampered_dwx_is_rejected_dl1202"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1205"
+file = "crates/delulu-wasm/src/lib.rs"
+test = "minting_a_secret_alone_is_refused_dl1205"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1301"
+file = "crates/delulu-check/src/lib.rs"
+test = "secret_param_in_foreign_sig_is_dl1301_and_never_suggests_expose"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1302"
+file = "crates/delulu-check/src/lib.rs"
+test = "closure_into_pyobj_call_is_dl1302_not_a_plain_mismatch"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1303"
+file = "crates/delulu/tests/cli.rs"
+test = "run_python_without_grant_is_dl1303_at_startup"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1305"
+file = "crates/delulu/tests/cli.rs"
+test = "run_import_os_off_allowlist_is_dl1305_and_the_denied_attempt_is_traced"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1308"
+file = "crates/delulu-syntax/src/parser.rs"
+test = "non_c_abi_is_dl1308"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1401"
+file = "crates/delulu/src/broker_client.rs"
+test = "unknown_wire_code_maps_to_dl1401_fail_closed"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1402"
+file = "crates/delulu-broker/src/lease.rs"
+test = "expired_token_at_redeem_is_dl1402"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1403"
+file = "crates/delulu-broker/src/diag.rs"
+test = "dl1403_carries_the_revoking_seq_and_requires_human"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1405"
+file = "crates/delulu/tests/audit_cli.rs"
+test = "audit_verify_fails_dl1405_on_a_corrupted_record"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1406"
+file = "crates/delulu/src/brokerd.rs"
+test = "version_mismatch_is_dl1406"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1407"
+file = "crates/delulu-broker/src/lease.rs"
+test = "tampered_payload_is_dl1407"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1408"
+file = "crates/delulu/tests/cli.rs"
+test = "run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1409"
+file = "crates/delulu/tests/foreign_worker.rs"
+test = "segfault_in_worker_is_dl1409_and_the_host_survives"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1410"
+file = "crates/delulu-broker/src/guard.rs"
+test = "delegated_guarded_use_without_permit_is_dl1410"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1413"
+file = "crates/delulu-broker/src/guard.rs"
+test = "sealed_use_is_dl1413_even_under_bypass"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1414"
+file = "crates/delulu-broker/src/guard.rs"
+test = "owner_gated_admin_verbs_refuse_dl1414_without_the_code"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1501"
+file = "crates/delulu-check/src/plugin.rs"
+test = "wrong_param_type_is_dl1501_with_regenerate_repair"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1503"
+file = "crates/delulu-check/src/dir.rs"
+test = "wrong_prim_table_version_is_dl1503"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1504"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "tampered_dir_body_refuses_at_inspect_as_dl1504"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1505"
+file = "crates/delulu-wasm/src/dpx.rs"
+test = "dl1505_wasi_by_the_back_door_is_refused"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1507"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step1_rejects_an_unsupported_api_as_dl1507"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1508"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "garbage_file_refuses_cleanly_as_dl1508"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1509"
+file = "crates/delulu-check/src/lib.rs"
+test = "an_unpinned_get_on_a_contained_plugin_is_dl1509_not_a_silent_skip"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1510"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "a_badly_signed_plugin_is_dl1510_a_different_fault_from_unsigned"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1511"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "criterion8_require_signed_refuses_an_unsigned_plugin_as_dl1511"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1603"
+file = "crates/delulu-check/src/lib.rs"
+test = "storing_an_aliased_ref_where_iso_is_demanded_is_dl1603_with_consume_hint"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1606"
+file = "crates/delulu-syntax/src/parser.rs"
+test = "dl1606_behavior_return_type_with_delete_repair"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1607"
+file = "crates/delulu-check/src/lib.rs"
+test = "a_non_tag_rcap_on_an_actor_type_is_dl1607"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1608"
+file = "crates/delulu-syntax/src/parser.rs"
+test = "dl1608_on_recover_as_a_fn_name"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1703"
+file = "crates/delulu/tests/test_runner_cli.rs"
+test = "a_test_exceeding_the_package_ceiling_is_dl1703"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1704"
+file = "crates/delulu-diag/src/catalog.rs"
+test = "an_unknown_placeholder_is_dl1704_and_the_entry_falls_back"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1706"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "add_on_an_unknown_package_is_dl1706"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1707"
+file = "crates/delulu-runtime/src/lib.rs"
+test = "assert_failure_is_a_dl1707_panic"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1780"
+file = "crates/delulu/tests/atlas_cli.rs"
+test = "check_errors_refuse_with_dl1780_and_no_partial_graph"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1790"
+file = "crates/delulu/tests/palette_cli.rs"
+test = "malformed_theme_file_is_dl1790_and_still_runs"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0907"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "couldnt_tell_an_unevaluable_export_is_an_honest_error_never_a_panic_or_silent_unit"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1306"
+file = "crates/delulu-runtime/tests/foreign_ffi.rs"
+test = "invalid_utf8_return_is_a_dl1306_fault_not_a_crash"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1411"
+file = "crates/delulu-broker/src/guard.rs"
+test = "request_approve_and_deny_flow"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1412"
+file = "crates/delulu-broker/src/guard.rs"
+test = "request_approve_and_deny_flow"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1502"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step3_refuses_a_grant_over_the_ceiling_with_the_intersection_as_exact_repair"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1506"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "trap5_a_limit_killed_plugin_is_gone_not_wounded"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1705"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "keygen_sign_verify_round_trip_and_tamper_detection"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1781"
+file = "crates/delulu/tests/atlas_e2e.rs"
+test = "atlas_custody_overlay_live_then_degraded_end_to_end"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0901"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "integer_overflow_at_runtime_is_dl0901"
+kind = "negative"
+
+
+# ---- Diagnostic codes: the ACCEPTING (false-positive-guard) witnesses ----
+# A diagnostic's accepting witness proves the code does NOT fire on valid input.
+
+[[witness]]
+anchor = "ref.diag.DL0101"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0102"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0103"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0104"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0105"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0106"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0201"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0202"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0203"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0204"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0205"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0206"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0207"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0208"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0209"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0301"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0302"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0303"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0304"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0305"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0306"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0307"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0401"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0402"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0403"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0404"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0405"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0406"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0407"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0408"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0409"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0410"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0501"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0502"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0503"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0504"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0601"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0602"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0603"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0604"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0605"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0701"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0702"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0703"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0801"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0802"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0803"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0901"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0902"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0903"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0904"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0905"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0906"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0907"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1001"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1002"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1003"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1004"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1005"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1006"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1007"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1008"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1009"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1010"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1011"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1101"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1102"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1201"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "run_engine_wasm_matches_the_interpreter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1202"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "run_engine_wasm_matches_the_interpreter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1204"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "run_engine_wasm_matches_the_interpreter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1205"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "run_engine_wasm_matches_the_interpreter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1206"
+file = "crates/delulu/tests/wasm_cli.rs"
+test = "run_engine_wasm_matches_the_interpreter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1301"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1302"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1303"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1304"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1305"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1306"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1307"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1308"
+file = "crates/delulu/tests/cli.rs"
+test = "run_foreign_cos_end_to_end_with_foreigncall_traced"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1401"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1402"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1403"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1405"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1406"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1407"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1408"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1409"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1410"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1411"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1412"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1413"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1414"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1501"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1502"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1503"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1504"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1505"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1506"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1507"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1508"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1509"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1510"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1511"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1601"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1602"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1603"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1604"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1605"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1606"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1607"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1608"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1610"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1701"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1702"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1703"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1704"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1705"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1706"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1707"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1780"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1781"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1790"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+# ---- CLI subcommand contracts ----
+# The stateless subcommands are covered table-driven in cli_contract.rs; the rest cite the
+# end-to-end suite that genuinely drives them.
+
+[[witness]]
+anchor = "ref.cli.check"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.check"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.fmt"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.fmt"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.authority"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.authority"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.why"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.why"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.atlas"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.atlas"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.explain"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.explain"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.audit"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.audit"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.secrets"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.secrets"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.locale"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_honors_a_valid_invocation"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.locale"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "every_listed_subcommand_refuses_an_invalid_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.keygen"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "keygen_writes_a_key_then_refuses_to_overwrite_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.keygen"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "keygen_writes_a_key_then_refuses_to_overwrite_it"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.repl"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "repl_evaluates_piped_input_and_reports_errors"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.repl"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "repl_evaluates_piped_input_and_reports_errors"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.test"
+file = "crates/delulu/tests/test_runner_cli.rs"
+test = "determinism_repeated_runs_are_byte_identical_modulo_timing"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.test"
+file = "crates/delulu/tests/test_runner_cli.rs"
+test = "a_test_exceeding_the_package_ceiling_is_dl1703"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.lsp"
+file = "crates/delulu/tests/lsp_cli.rs"
+test = "criterion1_diagnostics_equal_check_json_and_the_repair_applies"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.lsp"
+file = "crates/delulu/tests/lsp_cli.rs"
+test = "rename_of_a_local_is_refused_honestly"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.sign"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "keygen_sign_verify_round_trip_and_tamper_detection"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.sign"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "argument_taking_subcommands_refuse_an_empty_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.verify-sig"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "keygen_sign_verify_round_trip_and_tamper_detection"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.verify-sig"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "argument_taking_subcommands_refuse_an_empty_invocation"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.publish"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "criterion9_publish_catches_widening_bump_and_add_reads_the_index_line"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.publish"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "criterion9_publish_catches_widening_bump_and_add_reads_the_index_line"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.add"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "criterion9_publish_catches_widening_bump_and_add_reads_the_index_line"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.add"
+file = "crates/delulu/tests/signing_cli.rs"
+test = "add_on_an_unknown_package_is_dl1706"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.build"
+file = "crates/delulu/tests/provenance.rs"
+test = "lockfile_round_trip_then_locked_build"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.build"
+file = "crates/delulu/tests/cli.rs"
+test = "build_package_exceeding_manifest_authority_is_dl1009"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.lock"
+file = "crates/delulu/tests/provenance.rs"
+test = "lockfile_round_trip_then_locked_build"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.lock"
+file = "crates/delulu/tests/provenance.rs"
+test = "locked_build_without_lockfile_is_dl1011"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.run"
+file = "crates/delulu/tests/cli.rs"
+test = "run_executes_the_demo"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.run"
+file = "crates/delulu/tests/cli.rs"
+test = "run_without_grant_faults_dl0703"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.plugin"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "build_verified_dpx_and_inspect_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.plugin"
+file = "crates/delulu/tests/plugin_cli.rs"
+test = "garbage_file_refuses_cleanly_as_dl1508"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.grants"
+file = "crates/delulu/tests/grants_cli.rs"
+test = "delegate_lease_run_revoke_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.grants"
+file = "crates/delulu/tests/test_runner_cli.rs"
+test = "criterion5_broker_session_is_revoked_at_end"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.guard"
+file = "crates/delulu/tests/guard_e2e.rs"
+test = "guard_block_request_approve_deny_bypass_seal_orchestration_end_to_end"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.guard"
+file = "crates/delulu/tests/guard_cli.rs"
+test = "guard_cli_owner_code_once_never_on_disk_and_policy_admin"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.cli.broker"
+file = "crates/delulu/tests/broker_cli.rs"
+test = "daemon_lifecycle_run_expose_stop_fail_closed"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.broker"
+file = "crates/delulu/tests/broker_cli.rs"
+test = "daemon_lifecycle_run_expose_stop_fail_closed"
+kind = "negative"
+
+
+# ---- Grammar: `import`/`path` cannot be exercised by a single-file conformance
+# program (a lone import is an unresolved module, DL0303), so their accepting witness is
+# the multi-package build that genuinely parses and resolves them.
+
+[[witness]]
+anchor = "ref.grammar.import"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.grammar.path"
+file = "crates/delulu/tests/provenance.rs"
+test = "cross_package_call_builds_clean"
+kind = "positive"
+
+# ---- Primitive table: the per-entry table-driven witnesses in prim_table.rs.
+# `every_listed_primitive_resolves` asserts each entry RESOLVES in method_sig (accepting);
+# `..._rejects_a_five_argument_call` asserts each entry REFUSES a surplus-argument call
+# (rejecting). Both iterate PRIM_TABLE, so every entry is individually asserted.
+
+[[witness]]
+anchor = "ref.prim.root.console"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.console"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.fs_read"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.fs_read"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.fs_write"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.fs_write"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.http"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.http"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.clock"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.clock"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.rand"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.rand"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.declassify"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.declassify"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.foreign_load"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.foreign_load"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.plugin_host"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.plugin_host"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.secret"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.foreign"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.foreign"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.python"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.python"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.console.println"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.console.println"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.console.print"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.console.print"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.console.readline"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.console.readline"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.fs_read.read_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.fs_read.read_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.fs_read.list_dir"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.fs_read.list_dir"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.fs_read.narrow"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.fs_read.narrow"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.fs_write.write_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.fs_write.write_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.fs_write.append_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.fs_write.append_text"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.http.get"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.http.get"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.clock.now_ms"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.clock.now_ms"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.rand.int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.rand.int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.rand.float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.rand.float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+# Plugin[_] receivers are not constructible in a standalone snippet; the Stage-6
+[[witness]]
+anchor = "ref.prim.plugin.get"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step4_mints_a_child_node_with_a_fresh_grant_id"
+kind = "positive"
+
+# custody suite drives get/unload end to end instead.
+[[witness]]
+anchor = "ref.prim.plugin.get"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "r6c_unload_then_a_retained_reference_is_dl0801_with_the_revoking_seq"
+kind = "negative"
+
+# Plugin[_] receivers are not constructible in a standalone snippet; the Stage-6
+[[witness]]
+anchor = "ref.prim.plugin.unload"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "step4_mints_a_child_node_with_a_fresh_grant_id"
+kind = "positive"
+
+# custody suite drives get/unload end to end instead.
+[[witness]]
+anchor = "ref.prim.plugin.unload"
+file = "crates/delulu-runtime/src/plugin.rs"
+test = "r6c_unload_then_a_retained_reference_is_dl0801_with_the_revoking_seq"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.import"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.import"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.of_int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.of_int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.of_float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.of_float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.of_str"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.of_str"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.of_bool"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.of_bool"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.list"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.list"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.to_int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.to_int"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.to_float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.to_float"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.to_str"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.to_str"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.python.to_bool"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.python.to_bool"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.pyobj.attr"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.pyobj.attr"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.pyobj.call"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.pyobj.call"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.pyobj.call_method"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.pyobj.call_method"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.pyobj.index"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_resolve"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.pyobj.index"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "python_and_pyobj_primitives_reject_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.secret.map"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.secret.map"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.secret.verify"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.secret.verify"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.secret.expose"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.secret.expose"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.len"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.len"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.trim"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.trim"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.contains"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.contains"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.starts_with"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.starts_with"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.split"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.split"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.str.slice"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.str.slice"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.list.len"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.list.len"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.list.get"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.list.get"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.list.push"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.list.push"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.list.map"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.list.map"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+

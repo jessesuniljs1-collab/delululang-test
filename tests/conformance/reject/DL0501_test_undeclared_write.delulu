@@ -1,3 +1,4 @@
+// anchors: ref.grammar.test_decl ref.prim.console.println
 module r
 
 // Stage 8 (phase 8a): a test body performing Write with no declared row — the same T-Fn

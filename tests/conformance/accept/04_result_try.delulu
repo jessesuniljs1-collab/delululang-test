@@ -1,3 +1,4 @@
+// anchors: ref.grammar.type ref.prim.fs_read.read_text ref.diag.DL0409
 module conf
 
 // `?` in a Result-returning function whose error type matches read_text's.

@@ -1,0 +1,19 @@
+[package]
+name = "delulu-conform"
+description = "The DeluluLang conformance coverage law (invariant 42): delulu-conform --coverage"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "delulu-conform"
+path = "src/main.rs"
+
+[lib]
+name = "delulu_conform"
+path = "src/lib.rs"
+
+[dependencies]
+delulu-diag = { path = "../delulu-diag" }
+delulu-syntax = { path = "../delulu-syntax" }
+delulu-check = { path = "../delulu-check" }
+serde_json = { workspace = true }

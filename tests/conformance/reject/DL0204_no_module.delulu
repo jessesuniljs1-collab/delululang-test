@@ -1,3 +1,4 @@
+// anchors: ref.grammar.module
 fn f() -> Int {
   0
 }

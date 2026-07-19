@@ -1,10 +1,7 @@
 // anchors: ref.grammar.args
 module conf
 
-fn g(a: Int, b: Int) -> Int {
-  a + b
-}
-
 fn f() -> Int {
-  g(1)
+  let x = 5
+  x(1)
 }

@@ -1,0 +1,4 @@
+// anchors: ref.grammar.const
+module conf
+
+let = 5

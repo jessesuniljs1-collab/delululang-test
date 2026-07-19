@@ -1,3 +1,4 @@
+// anchors: ref.grammar.opt_row ref.prim.console.println ref.diag.DL0501
 module conf
 
 // Effectful functions declare their row; the capability parameter is the permission.

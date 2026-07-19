@@ -1,0 +1,8 @@
+// anchors: ref.grammar.pattern ref.grammar.match
+module conf
+
+fn f(x: Int) -> Int {
+  match x {
+    => 1
+  }
+}

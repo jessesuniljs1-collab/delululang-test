@@ -1,3 +1,4 @@
+// anchors: ref.grammar.expr
 module conf
 
 fn f() -> Bool {

@@ -1,3 +1,4 @@
+// anchors: ref.grammar.module ref.grammar.item ref.grammar.fn ref.grammar.params ref.grammar.type ref.grammar.block ref.grammar.if ref.grammar.expr
 module conf
 
 // Pure functions: omitted row means !{}. The checker proves they perform no effect.

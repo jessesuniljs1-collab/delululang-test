@@ -1,3 +1,4 @@
+// anchors: ref.grammar.type_decl ref.grammar.primary ref.diag.DL0405
 module conf
 
 type Point { x: Int, y: Int }

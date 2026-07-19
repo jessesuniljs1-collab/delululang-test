@@ -1,3 +1,4 @@
+// anchors: ref.prim.fs_read.narrow ref.prim.fs_read.read_text ref.prim.list.map ref.prim.list.get
 module conf
 
 // Attenuation: narrow a filesystem capability to a subdirectory.

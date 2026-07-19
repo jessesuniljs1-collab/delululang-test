@@ -1,3 +1,4 @@
+// anchors: ref.grammar.actor_decl
 module reject1604
 
 // T-SyncMethod: outsiders hold `tag`; messages are the only cross-actor interface.

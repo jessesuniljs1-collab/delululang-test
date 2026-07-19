@@ -1,3 +1,4 @@
+// anchors: ref.grammar.actor_decl
 module reject1602
 
 // Criterion 2: after `consume`, the binding is dead — the unique reference transferred.

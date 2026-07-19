@@ -1,3 +1,4 @@
+// anchors: ref.grammar.test_decl ref.prim.root.console ref.prim.console.println ref.diag.DL1703 ref.diag.DL1707
 module accept21
 
 // Stage 8 (phase 8a): a `test` block co-located with production code — checked like a
