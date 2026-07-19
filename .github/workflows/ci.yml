@@ -44,6 +44,11 @@ jobs:
       - name: fmt --check the examples corpus
         run: cargo run -q -p delulu -- fmt --check examples
 
+      # Stage 9h criterion 7: the Book's samples are conformance tests. A tutorial whose examples
+      # do not compile teaches something false and wastes the reader's afternoon proving it.
+      - name: fmt --check the Book's samples
+        run: cargo run -q -p delulu -- fmt --check docs/book/samples
+
       # The Python-less build must stay a first-class citizen (DL1307 path).
       - name: Python-less build check
         run: cargo check -p delulu --no-default-features

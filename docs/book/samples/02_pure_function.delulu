@@ -1,0 +1,7 @@
+module pure_fn
+
+// This function CANNOT read a file, reach the network, or tell time.
+// Not by convention — by type. Its row is empty, so it may perform no effect.
+pub fn shout(name: Str) -> Str {
+    name.trim()
+}

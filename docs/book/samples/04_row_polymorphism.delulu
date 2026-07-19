@@ -1,0 +1,15 @@
+module rowpoly
+
+// `apply` has exactly the row of the function it is given: no more, no less.
+// A pure callback keeps `apply` pure; an effectful one makes it effectful.
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+    f(x)
+}
+
+fn double(n: Int) -> Int {
+    n * 2
+}
+
+fn use_it() -> Int {
+    apply(double, 21)
+}

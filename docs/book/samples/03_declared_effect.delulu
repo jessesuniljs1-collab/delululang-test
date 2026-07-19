@@ -1,0 +1,11 @@
+module declared
+
+// The row `! {Write}` is the function's promise about what it may do.
+// Every caller inherits it, all the way up to `main`.
+fn greet(out: Cap[Console], name: Str) ! {Write} {
+    out.println(name)
+}
+
+fn main(root: Root) ! {Write} {
+    greet(root.console(), "world")
+}

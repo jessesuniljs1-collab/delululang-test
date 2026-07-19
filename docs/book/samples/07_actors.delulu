@@ -1,0 +1,20 @@
+module counter
+
+// An actor owns its state. Nothing outside can reach in: a reference to an
+// actor is `tag`, which lets you send to it and read nothing.
+actor Counter {
+    var count: Int
+
+    new(start: Int) {
+        self.count = start
+    }
+
+    be bump() {
+        self.count = self.count + 1
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let c = spawn Counter(0)
+    c.bump()
+}

@@ -204,6 +204,11 @@ pub fn is_registered(code: &str) -> bool {
     REGISTRY.iter().any(|c| c.code == code)
 }
 
+/// The minimum length that counts as a real explanation rather than a restated title. Chosen so
+/// that a one-sentence paraphrase does not pass: `delulu explain` exists to say what happened, why
+/// the rule is there, and what to do — three things do not fit in a sentence.
+pub const MIN_EXPLAIN_BODY: usize = 160;
+
 pub fn code_title(code: &str) -> Option<&'static str> {
     REGISTRY.iter().find(|c| c.code == code).map(|c| c.title)
 }
@@ -471,6 +476,358 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
 /// [`FOREIGN_CAVEAT`] verbatim (README honesty clause 4 / Stage-4 trap 1).
 pub fn code_explain(code: &str) -> Option<String> {
     let body = match code {
+        // ===== DL01xx — lexing =============================================
+        "DL0101" => "The lexer met a character that cannot begin any token. Usually a stray \
+             non-ASCII character pasted from a document, a smart quote where a straight one was \
+             meant, or a control character. Delete it, or replace it with the ASCII it stands for.",
+        "DL0102" => "A string literal opened and the file ended before it closed. Add the closing \
+             quote. If the string was meant to span lines, note that a string literal does not: \
+             break it into pieces or use an escape.",
+        "DL0103" => "A backslash in a string was followed by a character that is not an escape. The \
+             recognized escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"`. To write a literal \
+             backslash, double it.",
+        "DL0104" => "A numeric literal is not a valid number: an integer too large for `Int`, a \
+             float with a malformed exponent, or digits in a base that does not have them. Integer \
+             literals must fit in a signed 64-bit `Int` — there is no automatic promotion, because \
+             a silent widening is a silent change of meaning.",
+        "DL0105" => "A block comment opened with `/*` and the file ended before `*/`. Block \
+             comments NEST, so an inner `/*` needs its own close — count them from the top of the \
+             comment. Nesting is deliberate: it lets you comment out a region that already contains \
+             comments, which is the one time you actually need to.",
+        "DL0106" => "This name is RESERVED for a future stage and cannot be declared. The word is \
+             still legal as a member name after `.`, which is how `root.secret(…)` coexists with \
+             `secret` being reserved. Reserving a word early is a promise that adding it later will \
+             not break your code — the alternative is a breaking change dressed as a feature.",
+
+        // ===== DL02xx — parsing ============================================
+        "DL0201" => "The parser expected one specific token and found another. The message names \
+             both. This is the general parse error; where a more specific one exists (a type \
+             position, an expression position, a pattern) you will get that instead, because a \
+             precise code is something tooling can act on.",
+        "DL0202" => "An expression was required here and the parser found something that cannot \
+             start one. Common causes: a trailing comma, an operator with no right-hand side, or a \
+             `{` where a value was expected — remember that a record literal needs its type name in \
+             front of the brace.",
+        "DL0203" => "A TYPE was required here. Types appear after `:` in a parameter or binding, \
+             after `->` in a return, and inside `[ ]` type arguments. A literal or an operator in a \
+             type position produces this.",
+        "DL0204" => "Every file begins with a `module` declaration naming the module it defines. \
+             This is not ceremony: a module is the unit of authority (§5.5), and a file that did \
+             not say which module it belongs to could not be reasoned about as one.",
+        "DL0205" => "A PATTERN was required — the left of `=>` in a `match` arm, or a binding \
+             position. Patterns are variant names, record shapes, literals, an identifier, or `_`. \
+             An arbitrary expression is not a pattern.",
+        "DL0206" => "Comparison operators are NON-ASSOCIATIVE: `a < b < c` is refused rather than \
+             silently meaning `(a < b) < c`, which in most languages compares a boolean against a \
+             number. Write `a < b && b < c` and say what you meant.",
+        "DL0207" => "The left of `=` must be something that can be assigned to: a `var` binding, a \
+             field of one, or an index into one. A literal, a call result, or a `let` binding \
+             cannot be assigned — `let` is a binding, not a variable.",
+        "DL0208" => "An ITEM was required at the top level of a module: `fn`, `type`, `effect`, \
+             `actor`, `let` (a module constant), `foreign`, `test`, or `pub` in front of one. \
+             Statements do not float at module level, because module-level mutable state is \
+             forbidden (DL0305).",
+        "DL0209" => "Two statements ran together where one had to end. Statements are separated by \
+             a newline or a `;`. This usually means a missing newline, or an expression that \
+             consumed less than you expected.",
+
+        // ===== DL03xx — resolution =========================================
+        "DL0301" => "This name is not defined in any scope reachable from here. Check the spelling, \
+             whether it needs an `import`, and — if it comes from another module — whether it is \
+             declared `pub` there. An import brings a module's public names into scope UNQUALIFIED.",
+        "DL0302" => "This name is already defined in this module. Two definitions with one name \
+             would make every use of it ambiguous, so the second is refused rather than shadowing \
+             the first.",
+        "DL0303" => "The imported module does not exist in this package or in any declared \
+             dependency. Check the module name, and check that the package providing it is in \
+             `[dependencies]` — access is not authority (§5.7), but you still need access.",
+        "DL0304" => "The imports form a cycle. Module graphs are acyclic so that initialization \
+             order and re-export resolution are well-defined. Break the cycle by moving the shared \
+             declarations into a module both sides import.",
+        "DL0305" => "Module-level MUTABLE state is forbidden. A `let` constant is fine; a `var` is \
+             not. Shared mutable module state is ambient authority in disguise — it lets two \
+             functions communicate through a channel that appears in neither of their signatures, \
+             which is exactly what the effect system exists to make impossible.",
+        "DL0306" => "This effect name is not one the language knows. The core effects are `Read`, \
+             `Write`, `Net`, `Clock`, `Rand`, `Declassify`, and `ForeignCall`; a module may declare \
+             more with `effect`. A row variable is written bare (`! e`), not in braces.",
+        "DL0307" => "This is not a capability resource kind. The kinds are `Console`, `FsRead`, \
+             `FsWrite`, `Http`, `Clock`, `Rand`, `Declassify`, `ForeignLoad`, `PluginHost`, and \
+             `Python`. Capability kinds are fixed by the language, because each one corresponds to \
+             a primitive the runtime actually implements.",
+
+        // ===== DL04xx — typing =============================================
+        "DL0401" => "The type found does not match the type required. There are no implicit \
+             conversions anywhere in the language — not between numeric types, not to string, not \
+             to bool — because an implicit conversion is a place where the program means something \
+             other than what it says.",
+        "DL0402" => "Numeric types do not mix. `Int` and `Float` are distinct and there is no \
+             promotion: write the conversion you want. Silent numeric promotion is a classic source \
+             of precision bugs that only appear at scale.",
+        "DL0403" => "The call passes the wrong NUMBER of arguments. For a primitive, the expected \
+             count is the arity column in `docs/reference/primitives.md`, and it is normative: a \
+             call with surplus arguments is refused rather than having them ignored.",
+        "DL0404" => "This value is not a function and cannot be called. Check for a stray `(` after \
+             a value, or a local binding that shadows the function you meant. Note that there is no \
+             implicit call: a function referred to by name is a value, and calling it always takes \
+             an explicit argument list.",
+        "DL0405" => "This type has no such field or method. For a capability or builtin, the \
+             complete set is the primitive table (`docs/reference/primitives.md`) — it is the \
+             checker's single source of truth, so anything missing from it does not exist.",
+        "DL0406" => "A generic type was given the wrong number of type arguments — `Box[Int, Str]` \
+             where `Box[T]` takes one. The declaration's parameter list is the authority. There is \
+             no partial application of type arguments and no inference of the missing ones at a use \
+             site: a type is written completely or not at all.",
+        "DL0407" => "This `match` does not cover every case. Exhaustiveness is what makes adding a \
+             variant a COMPILE error at every place that handles it, instead of a silent \
+             fallthrough discovered in production. Add the missing arms, or `_` if you genuinely \
+             mean everything else.",
+        "DL0408" => "The condition of an `if` or `while` must be `Bool`. There is no truthiness: a \
+             non-empty string, a non-zero number, and a present value are not `true`. Write the \
+             comparison you mean.",
+        "DL0409" => "`?` propagates a `Result` error, so it is only valid on a `Result` inside a \
+             function that itself returns `Result`. In a function that does not, handle the error \
+             with `match` — there is no exception to fall back on, by design (§5.8).",
+        "DL0410" => "A generic variable is either a TYPE variable or a ROW variable, never both. \
+             Using `e` as `fn(e) -> e` and as `! e` in one signature is ambiguous; give them \
+             separate names.",
+
+        // ===== DL05xx — effects ============================================
+        "DL0501" => "This function performs an effect its row does not declare. This is the \
+             language's central rule: a function may do only what its type says it may. Either add \
+             the effect to the row — and accept that every caller now carries it too — or stop \
+             performing it. The repair that adds it is flagged `authority_widening`, so automated \
+             tooling will not apply it for you: widening authority to silence a diagnostic removes \
+             the objection rather than fixing the program.",
+        "DL0502" => "This function DECLARES an effect it never performs. A warning, not an error: \
+             over-declaring is safe — it never lets the program do more than it says — but it is \
+             dishonest about what the code actually does, and it makes the authority report less \
+             useful to everyone reading it.",
+        "DL0503" => "A signature carries at most one row variable. More than one makes row \
+             inference undecidable at the subsumption site (audit rule R-3). If two effect sets \
+             genuinely need to be independent, they belong in separate functions.",
+        "DL0504" => "One row variable was bound to two conflicting effect sets. Rows never \
+             union-merge to resolve a conflict — merging is precisely how an effect would enter a \
+             row nobody wrote (audit rule R-3). Make the two uses agree, or separate them.",
+
+        // ===== DL06xx — capabilities and secrets ===========================
+        "DL0601" => "A capability cannot be constructed, forged, cast, or deserialized into being. \
+             Every capability is DERIVED from the `Root` handed to `main` — that is the whole \
+             object-capability model in one sentence (§5.1). If a function needs a capability, it \
+             takes one as a parameter; there is no other way to obtain one.",
+        "DL0602" => "A `Secret[T]` cannot flow where a plain `T` is expected. Secrets never coerce. \
+             The only unwrap is `expose`, which requires `Cap[Declassify]` and carries the \
+             `Declassify` effect — so declassification is visible in the authority report rather \
+             than happening quietly.",
+        "DL0603" => "`Secret.map` requires a PURE function. An effectful mapper could exfiltrate \
+             the plaintext without ever calling `expose`, which would make the secret machinery \
+             decorative. The result stays `Secret`.",
+        "DL0604" => "An opaque type has no string form and no serialization. This is not an \
+             oversight: a secret that can be printed is a secret in every log file (audit rule \
+             R-5). To reveal it deliberately, use `expose` and hold `Cap[Declassify]`.",
+        "DL0605" => "An opaque type has no structural equality. `==` on a secret would leak its \
+             contents a byte at a time through timing. Use `verify`, which compares in constant \
+             time and returns only a `Bool`.",
+
+        // ===== DL07xx — authority ==========================================
+        "DL0701" => "`main`'s effect row exceeds what the package's `[authority]` manifest permits. \
+             The manifest is a CEILING the code is checked against, not a claim taken on trust. \
+             Either narrow what the program does, or widen the manifest — the second is a real \
+             review decision, because the manifest is what a reader trusts.",
+        "DL0702" => "A capability the program needs was not granted at startup. Grants are \
+             deny-by-default and arrive from the human or the broker, never from the program \
+             asking for itself. Pass `--grant <kind>` or record the grant in the manifest.",
+        "DL0703" => "The program tried to use a root slice it was not granted. The slice — a path \
+             prefix, a host list — is runtime scope carried by the capability, checked when the \
+             operation runs (§5.3). The static row proves what KIND of thing the program can do; \
+             the scope decides which resource.",
+
+        // ===== DL08xx — custody ============================================
+        "DL0801" => "This reference was revoked and cannot be called through. Revocation is \
+             immediate and final: a reloaded plugin gets a FRESH node, never the old one, so a \
+             retained reference can never come back to life. The diagnostic carries the audit \
+             sequence that revoked it.",
+        "DL0802" => "A grant may never exceed the authority its grantor holds — at any depth of \
+             delegation (audit rule R-7). Attenuation is monotone: derivation only ever narrows. \
+             The repair is the intersection of what was asked for and what may be given.",
+        "DL0803" => "A function-typed argument cannot be passed to a Contained plugin export (rule \
+             R-6a). Unverifiable code holding a re-entry point into verified code cannot be bounded \
+             by any effect row. This is refused at COMPILE time, at the call site.",
+
+        // ===== DL09xx — runtime faults =====================================
+        "DL0901" => "An integer operation overflowed. Arithmetic is checked, not wrapping: a silent \
+             wrap turns a bug into wrong data that flows onward. Use a wider computation or check \
+             the operands.",
+        "DL0902" => "Division (or remainder) by zero. Reported as a diagnostic with a code, never \
+             as a host crash — a runtime fault must always be something a caller can distinguish \
+             and handle.",
+        "DL0903" => "An index was outside the bounds of the collection. Bounds are ALWAYS checked — \
+             there is no unchecked indexing anywhere in the language, and no flag to turn the check \
+             off, because a program that reads past the end of a buffer is the oldest security bug \
+             there is. Use `get`, which returns an `Option`, when the index may be out of range.",
+        "DL0904" => "An operation reached outside its capability's SCOPE — a path outside the \
+             granted prefix, a host not on the granted list. The static row said the program may \
+             read; the capability decides what it may read. Refused at the moment of use.",
+        "DL0905" => "Recursion exceeded the interpreter's depth bound. Reported as a diagnostic \
+             rather than crashing the host: a raw stack-overflow abort gives a caller no code and \
+             no way to tell what happened. If the recursion is legitimate, restructure it \
+             iteratively — the bound exists so that a runaway program fails in a way you can act \
+             on.",
+        "DL0906" => "An explicit panic: a deliberate abort carrying a message. Ordinary failure is \
+             a `Result` VALUE, not a panic (§5.8) — there are no exceptions and no unwinding across \
+             frames, so a panic ends the program rather than transferring control somewhere a \
+             caller might catch it. Reach for it only where continuing would be worse than \
+             stopping.",
+        "DL0907" => "A `match` reached no arm at runtime. Exhaustiveness is checked statically \
+             (DL0407), so seeing this means the CHECKER let something through: it is a compiler \
+             bug, not your code's fault. Please report it with the program that produced it.",
+
+        // ===== DL10xx — packages and provenance ============================
+        "DL1001" => "A dependency's authority exceeds what the lockfile pinned for it. This is the \
+             xz scenario refused mechanically: a patch release that quietly gained an effect \
+             anywhere in the graph fails the build BEFORE it runs. Review what changed, then either \
+             re-pin deliberately or do not upgrade.",
+        "DL1002" => "The locked authority hash does not match: the same version now carries a \
+             different authority. A version's authority is part of what was pinned, so a change to \
+             it under an unchanged version number is refused rather than absorbed.",
+        "DL1003" => "Authority widened without a MAJOR version bump. Authority is part of the \
+             public interface and obeys semver like any other part of it. Under `0.x` the minor is \
+             the compatibility axis (cargo's rule).",
+        "DL1004" => "`delulu.toml` is malformed or missing a required field. The manifest is parsed \
+             as a pure function of its text — no code runs at resolution time — so every problem \
+             here is a text problem with a span.",
+        "DL1005" => "The package or re-export graph contains a cycle. Both are acyclic so that \
+             resolution terminates and authority composes in one direction only. A cycle would also \
+             make the authority of each package in it depend on itself, which has no least \
+             solution. Break it by extracting what both sides need into a package they both depend \
+             on.",
+        "DL1006" => "An import is ambiguous between a local module and a dependency of the same \
+             name. Rename one, or qualify the import — resolving it silently either way would make \
+             the program's meaning depend on a coincidence.",
+        "DL1007" => "A git dependency must pin a `rev` or `tag`. A moving branch is not a \
+             dependency, it is a subscription: the same lockfile would produce different code on \
+             different days, which defeats the point of having one.",
+        "DL1008" => "Two different sources claim the same package name in one graph. One name \
+             resolves to one source, always — otherwise the authority report would describe code \
+             that is not the code being built.",
+        "DL1009" => "This package performs an effect its own `[authority]` manifest does not \
+             permit. The manifest is checked against the code, never the other way round: a \
+             package cannot describe itself into having permission.",
+        "DL1010" => "A dependency's source content hash does not match the lockfile. The bytes \
+             changed under a locked version. This is tampering, a mutated cache, or an upstream \
+             that rewrote a tag — none of which should be absorbed silently.",
+        "DL1011" => "A `--locked` build requires a resolution that `delulu.lock` does not contain. \
+             `--locked` means exactly that: resolve nothing new. Run `delulu lock` deliberately, \
+             review the diff, and commit it.",
+
+        // ===== DL11xx — harnesses ==========================================
+        "DL1101" => "A runtime effect was performed that is NOT in the statically declared row. \
+             This is the soundness claim being checked against reality by `--assert-trace`, and a \
+             violation is compiler-bug class: the type system promised something the runtime did \
+             not honor. Please report it with the program.",
+        "DL1102" => "A repair the compiler offered did not produce an accepting program. Emitted by \
+             the fuzz harness, which applies repairs mechanically and re-checks. A repair that does \
+             not fix what it claims to fix is a bug in the repair, not in your code.",
+
+        // ===== DL12xx — the WASM backend ===================================
+        "DL1201" => "This construct is not supported by the WASM backend, so the program runs on \
+             the interpreter instead. Reported rather than silently degraded — you should always \
+             know which engine executed your code, because that is the difference between a \
+             measured number and a guess.",
+        "DL1202" => "The artifact's `delulu:authority` section is missing or invalid. An artifact \
+             carries its own authority; one that cannot produce it is refused rather than run, \
+             because running it would mean running code whose authority nobody can state.",
+        "DL1204" => "The artifact declares a `delulu:cap` interface version this toolchain does not \
+             support. Upgrade the toolchain. Refusing is the honest answer: interpreting an unknown \
+             interface version by guessing would be a silent compatibility break.",
+        "DL1205" => "Secret contents cannot enter the WASM guest. The guest's memory is a different \
+             trust domain, and a secret that crosses into it is no longer protected by the rules \
+             that made it a secret.",
+        "DL1206" => "The two engines disagreed on the same program in a parity self-check. \
+             Compiler-bug class: the interpreter and the WASM backend must produce the same \
+             observable behavior for any program both support. Please report it.",
+
+        // ===== DL15xx — plugins ============================================
+        "DL1501" => "The plugin manifest's export signature does not match the plugin's actual \
+             code. The manifest NEVER overrides the code — it is checked against it. A mismatch is \
+             refused at build so a plugin cannot be described into having a shape it does not have.",
+        "DL1502" => "The requested grant exceeds the plugin's declared ceiling. The ceiling is the \
+             most a plugin may ever receive, decided when the plugin was built; the grant is what \
+             it receives today. The repair is the intersection.",
+        "DL1503" => "The plugin's DIR version is not supported by this toolchain. Rebuild the \
+             plugin. A DIR is a verified intermediate representation, and accepting an unknown \
+             version would mean trusting a structure this toolchain cannot check.",
+        "DL1504" => "A Verified plugin failed re-verification: its code no longer checks as \
+             shipped. It is REFUSED — never silently downgraded to Contained. Falling back would \
+             turn a broken proof into a quiet loss of guarantee, which is worse than a failure \
+             because nobody would notice.",
+        "DL1505" => "A Contained module imports something outside its grant slice. Contained code \
+             may reach only what its grant covers; an import beyond it is refused at load, not at \
+             first use.",
+        "DL1506" => "The plugin exceeded a resource limit and was TERMINATED, and its grant node \
+             revoked. Dead, not wounded: a plugin that hit a limit does not get to continue with \
+             reduced capacity, because a partially-running plugin is a plugin in an unexamined \
+             state.",
+        "DL1507" => "The plugin was built against a different plugin API version. Rebuild it. The \
+             API version gates the host/plugin contract, and a mismatch there is not something to \
+             paper over.",
+        "DL1508" => "The `.dpx` container is malformed or tampered. It is refused cleanly — never \
+             partially loaded — because a partially loaded plugin is code running from a file the \
+             host could not fully parse.",
+        "DL1509" => "A Contained plugin export's signature must be CONCRETE at the `get` site. With \
+             an unresolved type variable, rule R-6a (no function-typed parameters into Contained \
+             code) is undecidable — and an undecidable security rule must REFUSE, never skip. \
+             Annotate the binding with the export's exact type.",
+        "DL1510" => "The plugin has a signature and it does not verify: tampered content, the wrong \
+             key, or a malformed signature. This is a DIFFERENT and louder failure than being \
+             unsigned (DL1511) — they call for different responses, so they get different codes.",
+        "DL1511" => "The grant requires a signature and the plugin is unsigned. `require_signed` \
+             means what it says. See DL1510 for the case where a signature is present but invalid.",
+
+        // ===== DL16xx — actors and reference capabilities ==================
+        "DL1601" => "A non-sendable value cannot cross an actor boundary — an unconsumed `iso`, an \
+             aliased mutable reference, or a pinned foreign object. This is data-race freedom by \
+             TYPING rather than by lock discipline: what cannot be shared cannot be raced.",
+        "DL1602" => "This binding was `consume`d and is now dead. Consumption transfers ownership, \
+             so the original name must not be usable afterwards — that is what makes the transfer \
+             exclusive rather than a copy.",
+        "DL1603" => "This alias violates a reference capability's deny property — for example a \
+             `val` (immutable, shareable) closure capturing a `ref` (mutable, local). The deny \
+             properties are what let the compiler conclude that a shared value cannot change under \
+             another actor's feet.",
+        "DL1604" => "The access is denied by the receiver's capability: no write through `box`, no \
+             field read through `tag`, no synchronous call on `tag`. A `tag` is an identity you may \
+             send messages to, not a window into another actor's state.",
+        "DL1605" => "A `recover` block cannot reference a non-sendable binding from outside it. \
+             `recover` produces a value with a stronger capability than its parts; that is only \
+             sound if nothing outside can still reach into it.",
+        "DL1606" => "A behavior cannot declare a return type: behaviors are ASYNCHRONOUS and yield \
+             `Unit` at the send site. A return value would require a hidden await, and hidden \
+             awaits are how concurrency becomes unpredictable.",
+        "DL1607" => "This reference capability is not valid for this type — most often a non-`tag` \
+             capability on an actor type. An actor reference is `tag`: you may send to it, and you \
+             may not read it.",
+        "DL1608" => "This identifier collides with a v0.7 keyword (`consume` or `recover`). Rename \
+             it, or run `delulu fmt --migrate 0.7`, which performs the rename mechanically across a \
+             whole tree. The collision is reported as its own code rather than as a confusing \
+             cascade of parse errors, so the fix is obvious from the first line you read.",
+        "DL1610" => "The debug race-checker found a uniqueness violation under `--debug-rcaps`. \
+             Compiler-bug class: the reference-capability system is supposed to make this \
+             impossible statically. The checker is a detector, never the guarantee. Please report \
+             it.",
+
+        // ===== DL17xx — tooling ============================================
+        "DL1701" => "The LSP could not read its workspace configuration, or was given a workspace \
+             root it cannot use. The language server is analysis-only — it never constructs an \
+             interpreter, a broker, or a plugin host — so this is always a configuration problem \
+             rather than a program problem.",
+        "DL1780" => "`delulu atlas` refuses to draw a graph for a program with check errors. A \
+             partial graph of a program that does not compile would show relationships that are not \
+             real. Fix the errors first; the atlas will then describe something that exists.",
+        "DL1781" => "The custody overlay is unavailable because the broker daemon is not reachable, \
+             so the atlas was emitted WITHOUT it. Said out loud rather than drawn as though the \
+             overlay were empty — an absent overlay and an empty one mean very different things.",
+
         "DL1301" => "A `foreign` signature may only marshal `Int`, `Float`, `Bool`, `Str`, `Unit`, \
              and `ForeignPtr`. `Secret[T]`, `Cap[R]`, `Root`, `Plugin[_]`, `PyObj`, and every other \
              opaque type are refused: a secret must never cross to foreign code (invariant 20), and \
@@ -852,6 +1209,39 @@ mod tests {
         assert!(body.contains("DL0605"), "explain links the check-time opacity refusal");
         assert!(body.contains("assert_eq"), "explain names both assertion forms");
         assert!(!is_registered("DL1784"), "DL1784 is deliberately never allocated (house rule)");
+    }
+
+    /// RELEASE CRITERION 7: **every** registered code has a long-form en-US explanation.
+    ///
+    /// `delulu explain <code>` is the machine surface's escape hatch and the human's first stop.
+    /// A code whose explanation is only its title tells a reader nothing they did not already have
+    /// on the diagnostic line. Measured at the start of Stage 9h: 95 of 150 codes were title-only.
+    #[test]
+    fn criterion7_every_code_has_a_long_form_explanation() {
+        let mut thin: Vec<(&str, usize)> = Vec::new();
+        for c in REGISTRY {
+            match code_explain(c.code) {
+                Some(body) if body.trim().len() >= MIN_EXPLAIN_BODY => {}
+                Some(body) => thin.push((c.code, body.trim().len())),
+                None => thin.push((c.code, 0)),
+            }
+        }
+        assert!(
+            thin.is_empty(),
+            "these codes have no long-form explanation (criterion 7 requires 100%): {thin:?}"
+        );
+    }
+
+    /// THE SKIP-BRANCH CASE (house rule 3): the coverage check must be able to FAIL. If
+    /// `code_explain` returned a long string for anything at all, the test above would pass
+    /// without measuring anything.
+    #[test]
+    fn the_explain_coverage_check_can_detect_a_missing_body() {
+        assert!(
+            code_explain("DL9999").is_none(),
+            "an unregistered code must have no explanation, or the coverage test is vacuous"
+        );
+        assert!(MIN_EXPLAIN_BODY > 100, "the threshold must exclude a restated title");
     }
 
     /// Stage 8: the full tooling DL range (DL1701–DL1707) is registered with explain bodies,

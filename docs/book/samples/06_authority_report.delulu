@@ -1,0 +1,16 @@
+module report
+
+// Everything this program can do is computed from the code:
+//   delulu authority docs/book/samples/06_authority_report.delulu
+// Read, Write, and the secret it holds — nothing hidden, nothing assumed.
+fn read_config(reader: Cap[FsRead], path: Str) -> Result[Str, IoErr] ! {Read} {
+    reader.read_text(path)
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    match read_config(root.fs_read("./config"), "./config/app.txt") {
+        Ok(text) => out.println(text)
+        Err(e) => out.println("could not read config")
+    }
+}

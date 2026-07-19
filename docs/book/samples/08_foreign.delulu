@@ -1,0 +1,8 @@
+module foreignish
+
+// The foreign boundary is honest: a foreign call carries ForeignCall, and the
+// authority report lists it under a separate heading — a hole in the proof,
+// enumerated rather than hidden.
+foreign "c" lib mathlib {
+    fn cos(x: Float) -> Float
+}
