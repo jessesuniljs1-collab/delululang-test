@@ -1,0 +1,10 @@
+[package]
+name = "cliwc_app"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects = ["Write"]
+
+[dependencies]
+cliwc_api = { path = "../cliwc_api", authority = { effects = [] } }

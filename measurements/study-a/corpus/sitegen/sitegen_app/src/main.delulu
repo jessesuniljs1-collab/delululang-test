@@ -1,0 +1,7 @@
+module sitegen_app
+import sitegen_api
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(sitegen_api_entry(root, "input"))
+}

@@ -1,0 +1,7 @@
+module parsecfg_util
+import parsecfg_base
+
+// parser: this layer delegates downward
+pub fn parsecfg_util_entry(root: Root, x: Str) -> Str {
+  parsecfg_base_entry(root, x)
+}

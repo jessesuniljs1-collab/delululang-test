@@ -1,0 +1,10 @@
+[package]
+name = "parsecfg_app"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects = ["Write"]
+
+[dependencies]
+parsecfg_api = { path = "../parsecfg_api", authority = { effects = [] } }

@@ -1,0 +1,7 @@
+module parsecfg_app
+import parsecfg_api
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(parsecfg_api_entry(root, "input"))
+}

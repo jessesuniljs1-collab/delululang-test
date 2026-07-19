@@ -1,0 +1,10 @@
+[package]
+name = "httpstack_util"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+httpstack_base = { path = "../httpstack_base", authority = { effects = [] } }

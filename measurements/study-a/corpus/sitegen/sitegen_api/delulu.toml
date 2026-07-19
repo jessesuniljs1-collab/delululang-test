@@ -1,0 +1,10 @@
+[package]
+name = "sitegen_api"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+sitegen_core = { path = "../sitegen_core", authority = { effects = [] } }

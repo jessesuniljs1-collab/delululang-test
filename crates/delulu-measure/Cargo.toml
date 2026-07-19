@@ -1,0 +1,16 @@
+[package]
+name = "delulu-measure"
+description = "The DeluluLang measurement program (Stage 9): the published, reproducible evidence"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "delulu-measure"
+path = "src/main.rs"
+
+[lib]
+name = "delulu_measure"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = { workspace = true }

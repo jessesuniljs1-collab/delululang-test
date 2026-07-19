@@ -193,6 +193,31 @@ shadowed). Rounding those up to "covered" would have made the reference lie abou
 it exists to report. Registering rule anchors moved the totals from 233 to 287 anchors; the ratchet
 floor rose 216 → 263 accordingly.
 
+**D13 — Study A's first result was a FALSE 100%; both fences are recorded, not quietly patched.**
+The initial injection emitted code that did not parse. Every build failed, the campaign scored
+20/20, and the number was worthless: the refusals were syntax errors the authority mechanism had
+not earned (`DL0202`/`DL0401` appeared at all 20 sites — the tell). RULED: the study carries two
+permanent fences, and `mechanism_holds` is false unless both pass. (a) **The validity fence** —
+every mutated package must COMPILE on its own before its result is recorded; an injection that does
+not compile is an experiment defect, never a catch. (b) **The negative control** — the identical
+pipeline run with no mutation at all, once per chain, must build CLEAN; without it a toolchain that
+refused everything would score perfectly while measuring nothing. Both the failure and the fences
+are written into `measurements/METHODOLOGY.md` §1.4 rather than erased, because a measurement
+program that hides its own near-miss has no standing to publish anything. The corpus also had to
+change: libraries now receive `Root` and pass it down (a real-world anti-pattern the authority
+report exposes), because in an object-capability language a dependency genuinely *cannot* gain a
+new effect kind unless it was handed the authority to do so — which is the design working, and is
+stated as a threat to validity rather than sold as a stronger result than it is.
+
+**D14 — The mechanical-vs-manual comparison ships UNRUN, with a structural argument instead.**
+Spec §3.1 asks for a column comparing the same audit performed manually on equivalent Rust/npm
+graphs. Doing it properly needs multiple reviewers, blinding, and a task set this stage does not
+have; publishing an uncontrolled anecdote as a comparison would be exactly the claim Constitution
+§9 forbids. RULED: no human-trial numbers are reported. The methodology states the qualitative
+difference as a structural argument (the check is a total function of the lockfile, runs on every
+build, costs ~20 ms per graph, and does not tire) and marks the measured column UNRUN. Reopens if a
+trial is funded.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
@@ -204,7 +229,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 | 9a | **DONE** — Coverage law: anchor registry (extracted from compiler source), test→anchor metadata, `delulu-conform --coverage`, the ratchet | `--coverage` fails on any zero-coverage anchor, never-produced code, dangling/ignored witness, or unknown citation; **216/233 (92.7%), 0 validation errors**; ratchet floor committed; CI wired; remainder classified in D10 |
 | 9b | **DONE** — `docs/reference/` generated-in-part: 24 chapters (16 §5 semantics + tokens/grammar/primitives/diagnostics/audit-rules/CLI/coverage/index), every normative statement anchored | `--check-reference` is a HARD CI gate; drift test + its skip-branch case green; token index fenced against `TokenKind`; every rule's enforcing code proven registered; **287 anchors, 263 covered (91.6%)** |
 | 9c | **DONE** — `STABILITY.md` (invariant 43), deprecation policy + registry (empty at 1.0, mechanism complete), `[package] language` edition, DL1801/DL1802; D10 class A 3/4 fixed; D11 `--help` fixed | Criterion 9 witnessed (`stability_cli.rs`, 8 tests incl. older-edition and unpinned skip branches); both codes registered with explain bodies; `keygen --help` no longer writes a key; **289 anchors, 270 covered (93.4%)** |
-| 9d | Study A: `measurements/` corpus ≥25 packages, depth ≥4; authority reports; injection campaign | Injection catch = 100% (mechanism claim); raw data + methodology + threats-to-validity in-repo; reproducible from clean checkout |
+| 9d | **DONE** — Study A: deterministic 25-package corpus (5 archetypes × depth 4), 20-site injection campaign, validity fence + negative controls | **20/20 caught (100%)**, all 20 mutations compile, all 5 controls clean; refusals are authority codes (DL1001/DL1010 at every site) not compile errors; raw data + corpus + METHODOLOGY with threats-to-validity committed; 9 integrity tests incl. proof the scoring can express failure |
 | 9e | Study B (two lanes per D4) + Study C (micro + 3 macro, both engines, vs C and Go) | Reproduce from clean checkout, pinned seeds/toolchains; numbers published as measured; §5.11 caveat verbatim in token appendix |
 | 9f | SECURITY.md, CONTRIBUTING.md §AI, rfcs/ process, CODEOWNERS, CI gate configs (D2) | Criterion 6 drill executed and timed, timeline recorded; skip-branch tests for every enforcement gate that has a checker |
 | 9g | Registry local go-live (D3): publish API, tokens, yank, server-side authority recomputation | Criterion 5: clean-machine publish→add→build round-trip; doctored index line demonstrably rejected (skip-branch: unverifiable artifact → refuse, not accept) |

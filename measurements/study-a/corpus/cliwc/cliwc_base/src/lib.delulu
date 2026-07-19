@@ -1,0 +1,6 @@
+module cliwc_base
+
+// CLI tool: this layer counts words
+pub fn cliwc_base_entry(root: Root, x: Str) -> Str {
+  x.trim()
+}

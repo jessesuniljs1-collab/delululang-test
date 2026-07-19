@@ -1,0 +1,10 @@
+[package]
+name = "agenttool_core"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+agenttool_util = { path = "../agenttool_util", authority = { effects = [] } }

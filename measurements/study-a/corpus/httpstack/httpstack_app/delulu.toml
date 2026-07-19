@@ -1,0 +1,10 @@
+[package]
+name = "httpstack_app"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects = ["Write"]
+
+[dependencies]
+httpstack_api = { path = "../httpstack_api", authority = { effects = [] } }

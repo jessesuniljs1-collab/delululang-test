@@ -1,0 +1,10 @@
+[package]
+name = "sitegen_app"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects = ["Write"]
+
+[dependencies]
+sitegen_api = { path = "../sitegen_api", authority = { effects = [] } }

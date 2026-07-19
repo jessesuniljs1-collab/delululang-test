@@ -1,0 +1,7 @@
+module cliwc_api
+import cliwc_core
+
+// CLI tool: this layer delegates downward
+pub fn cliwc_api_entry(root: Root, x: Str) -> Str {
+  cliwc_core_entry(root, x)
+}

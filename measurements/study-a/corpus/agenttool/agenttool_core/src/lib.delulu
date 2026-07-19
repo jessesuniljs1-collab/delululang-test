@@ -1,0 +1,7 @@
+module agenttool_core
+import agenttool_util
+
+// agent-tool server: this layer delegates downward
+pub fn agenttool_core_entry(root: Root, x: Str) -> Str {
+  agenttool_util_entry(root, x)
+}

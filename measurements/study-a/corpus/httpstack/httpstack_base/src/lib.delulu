@@ -1,0 +1,6 @@
+module httpstack_base
+
+// HTTP client stack: this layer builds a request line
+pub fn httpstack_base_entry(root: Root, x: Str) -> Str {
+  x.trim()
+}

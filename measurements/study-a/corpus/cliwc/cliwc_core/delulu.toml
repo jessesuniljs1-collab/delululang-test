@@ -1,0 +1,10 @@
+[package]
+name = "cliwc_core"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+cliwc_util = { path = "../cliwc_util", authority = { effects = [] } }

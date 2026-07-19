@@ -1,0 +1,7 @@
+module cliwc_app
+import cliwc_api
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(cliwc_api_entry(root, "input"))
+}

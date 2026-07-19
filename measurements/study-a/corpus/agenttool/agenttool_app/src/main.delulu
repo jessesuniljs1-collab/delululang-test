@@ -1,0 +1,7 @@
+module agenttool_app
+import agenttool_api
+
+fn main(root: Root) ! {Write} {
+  let out = root.console()
+  out.println(agenttool_api_entry(root, "input"))
+}

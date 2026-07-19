@@ -1,0 +1,10 @@
+[package]
+name = "parsecfg_util"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+parsecfg_base = { path = "../parsecfg_base", authority = { effects = [] } }

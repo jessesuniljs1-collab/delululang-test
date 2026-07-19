@@ -1,0 +1,7 @@
+module httpstack_api
+import httpstack_core
+
+// HTTP client stack: this layer delegates downward
+pub fn httpstack_api_entry(root: Root, x: Str) -> Str {
+  httpstack_core_entry(root, x)
+}

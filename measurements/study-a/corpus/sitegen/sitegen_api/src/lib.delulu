@@ -1,0 +1,7 @@
+module sitegen_api
+import sitegen_core
+
+// static site generator: this layer delegates downward
+pub fn sitegen_api_entry(root: Root, x: Str) -> Str {
+  sitegen_core_entry(root, x)
+}

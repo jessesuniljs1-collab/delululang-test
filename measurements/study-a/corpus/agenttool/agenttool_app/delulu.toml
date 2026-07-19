@@ -1,0 +1,10 @@
+[package]
+name = "agenttool_app"
+version = "0.1.0"
+kind = "bin"
+
+[authority]
+effects = ["Write"]
+
+[dependencies]
+agenttool_api = { path = "../agenttool_api", authority = { effects = [] } }

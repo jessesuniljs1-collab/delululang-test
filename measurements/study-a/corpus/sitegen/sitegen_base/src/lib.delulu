@@ -1,0 +1,6 @@
+module sitegen_base
+
+// static site generator: this layer renders a slug
+pub fn sitegen_base_entry(root: Root, x: Str) -> Str {
+  x.trim()
+}

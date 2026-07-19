@@ -1,0 +1,6 @@
+module parsecfg_base
+
+// parser: this layer splits key/value lines
+pub fn parsecfg_base_entry(root: Root, x: Str) -> Str {
+  x.trim()
+}

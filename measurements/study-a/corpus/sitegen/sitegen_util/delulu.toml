@@ -1,0 +1,10 @@
+[package]
+name = "sitegen_util"
+version = "0.1.0"
+kind = "lib"
+
+[authority]
+effects = []
+
+[dependencies]
+sitegen_base = { path = "../sitegen_base", authority = { effects = [] } }

@@ -1,0 +1,403 @@
+{
+  "baselines": [
+    {
+      "archetype": "CLI tool",
+      "chain": "cliwc",
+      "clean": true,
+      "depth": 4,
+      "lock_ms": 18,
+      "packages": 5,
+      "verify_ms": 21
+    },
+    {
+      "archetype": "parser",
+      "chain": "parsecfg",
+      "clean": true,
+      "depth": 4,
+      "lock_ms": 17,
+      "packages": 5,
+      "verify_ms": 20
+    },
+    {
+      "archetype": "HTTP client stack",
+      "chain": "httpstack",
+      "clean": true,
+      "depth": 4,
+      "lock_ms": 18,
+      "packages": 5,
+      "verify_ms": 21
+    },
+    {
+      "archetype": "static site generator",
+      "chain": "sitegen",
+      "clean": true,
+      "depth": 4,
+      "lock_ms": 15,
+      "packages": 5,
+      "verify_ms": 20
+    },
+    {
+      "archetype": "agent-tool server",
+      "chain": "agenttool",
+      "clean": true,
+      "depth": 4,
+      "lock_ms": 18,
+      "packages": 5,
+      "verify_ms": 22
+    }
+  ],
+  "corpus": {
+    "chains": 5,
+    "min_depth": 4,
+    "packages": 25
+  },
+  "injection": {
+    "catch_rate_pct": 100.0,
+    "caught": 20,
+    "invalid_mutations": [],
+    "mechanism_holds": true,
+    "sites": 20
+  },
+  "injections": [
+    {
+      "archetype": "CLI tool",
+      "caught": true,
+      "chain": "cliwc",
+      "codes": [
+        "DL1001",
+        "DL1010"
+      ],
+      "depth": 1,
+      "injection_valid": true,
+      "ms": 19,
+      "victim": "cliwc_api"
+    },
+    {
+      "archetype": "CLI tool",
+      "caught": true,
+      "chain": "cliwc",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 2,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "cliwc_core"
+    },
+    {
+      "archetype": "CLI tool",
+      "caught": true,
+      "chain": "cliwc",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 3,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "cliwc_util"
+    },
+    {
+      "archetype": "CLI tool",
+      "caught": true,
+      "chain": "cliwc",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 4,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "cliwc_base"
+    },
+    {
+      "archetype": "parser",
+      "caught": true,
+      "chain": "parsecfg",
+      "codes": [
+        "DL1001",
+        "DL1010"
+      ],
+      "depth": 1,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "parsecfg_api"
+    },
+    {
+      "archetype": "parser",
+      "caught": true,
+      "chain": "parsecfg",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 2,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "parsecfg_core"
+    },
+    {
+      "archetype": "parser",
+      "caught": true,
+      "chain": "parsecfg",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 3,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "parsecfg_util"
+    },
+    {
+      "archetype": "parser",
+      "caught": true,
+      "chain": "parsecfg",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 4,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "parsecfg_base"
+    },
+    {
+      "archetype": "HTTP client stack",
+      "caught": true,
+      "chain": "httpstack",
+      "codes": [
+        "DL1001",
+        "DL1010"
+      ],
+      "depth": 1,
+      "injection_valid": true,
+      "ms": 19,
+      "victim": "httpstack_api"
+    },
+    {
+      "archetype": "HTTP client stack",
+      "caught": true,
+      "chain": "httpstack",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 2,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "httpstack_core"
+    },
+    {
+      "archetype": "HTTP client stack",
+      "caught": true,
+      "chain": "httpstack",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 3,
+      "injection_valid": true,
+      "ms": 18,
+      "victim": "httpstack_util"
+    },
+    {
+      "archetype": "HTTP client stack",
+      "caught": true,
+      "chain": "httpstack",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 4,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "httpstack_base"
+    },
+    {
+      "archetype": "static site generator",
+      "caught": true,
+      "chain": "sitegen",
+      "codes": [
+        "DL1001",
+        "DL1010"
+      ],
+      "depth": 1,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "sitegen_api"
+    },
+    {
+      "archetype": "static site generator",
+      "caught": true,
+      "chain": "sitegen",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 2,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "sitegen_core"
+    },
+    {
+      "archetype": "static site generator",
+      "caught": true,
+      "chain": "sitegen",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 3,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "sitegen_util"
+    },
+    {
+      "archetype": "static site generator",
+      "caught": true,
+      "chain": "sitegen",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 4,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "sitegen_base"
+    },
+    {
+      "archetype": "agent-tool server",
+      "caught": true,
+      "chain": "agenttool",
+      "codes": [
+        "DL1001",
+        "DL1010"
+      ],
+      "depth": 1,
+      "injection_valid": true,
+      "ms": 19,
+      "victim": "agenttool_api"
+    },
+    {
+      "archetype": "agent-tool server",
+      "caught": true,
+      "chain": "agenttool",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 2,
+      "injection_valid": true,
+      "ms": 17,
+      "victim": "agenttool_core"
+    },
+    {
+      "archetype": "agent-tool server",
+      "caught": true,
+      "chain": "agenttool",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 3,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "agenttool_util"
+    },
+    {
+      "archetype": "agent-tool server",
+      "caught": true,
+      "chain": "agenttool",
+      "codes": [
+        "DL0501",
+        "DL1009",
+        "DL1001",
+        "DL1002",
+        "DL1010"
+      ],
+      "depth": 4,
+      "injection_valid": true,
+      "ms": 16,
+      "victim": "agenttool_base"
+    }
+  ],
+  "negative_controls": {
+    "all_clean": true,
+    "detail": [
+      {
+        "built_clean": true,
+        "chain": "cliwc",
+        "codes": []
+      },
+      {
+        "built_clean": true,
+        "chain": "parsecfg",
+        "codes": []
+      },
+      {
+        "built_clean": true,
+        "chain": "httpstack",
+        "codes": []
+      },
+      {
+        "built_clean": true,
+        "chain": "sitegen",
+        "codes": []
+      },
+      {
+        "built_clean": true,
+        "chain": "agenttool",
+        "codes": []
+      }
+    ],
+    "missed": [],
+    "runs": 5
+  },
+  "schema": "study-a/1",
+  "study": "A",
+  "title": "whole-program authority verification at scale"
+}
