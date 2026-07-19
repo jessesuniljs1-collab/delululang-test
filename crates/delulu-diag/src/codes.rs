@@ -200,6 +200,7 @@ registry! {
     // DL19xx — Industrial (Stage 10). Budget fixed in the spec §10: DL1901–DL1911 only;
     // anything further needs a build-order ruling.
     "DL1901" => "unknown attribute",
+    "DL1902" => "mailbox overflow dropped a message under `drop-new` in abort mode",
     "DL1906" => "native-code emission requested without the `exec.native` grant",
 
     // DL09xx — runtime
@@ -981,6 +982,17 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1902" => "A bounded mailbox was full and the `drop-new` overflow policy dropped the \
+             message — and because the program runs in abort mode, the drop is an error rather \
+             than telemetry: abort mode is the statement that losing work is worse than stopping, \
+             and a silently dropped message IS lost work. Outside abort mode the same drop is \
+             counted per actor and reported at exit (`--trace-memory` shows peaks and drops). \
+             The alternatives: raise the bound (`actor A(mailbox = N)` or `[actors] mailbox`), \
+             or use the default `block` policy, which suspends the SENDING turn at the send site \
+             until space frees — bounding memory instead of losing messages. Honesty note: \
+             backpressure bounds memory, never liveness — a cycle of full `block` mailboxes can \
+             deadlock, and same-worker sends bypass the bound (a worker cannot wait on a mailbox \
+             only it can drain).",
         "DL1906" => "The program carries a `@jit` hint, but native-code emission was not granted, \
              so the hint was IGNORED and the program ran under the interpreter — correctly, with \
              the sandbox intact. This is a warning, never an error: a hint may not change what a \

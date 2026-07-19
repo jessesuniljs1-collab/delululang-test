@@ -32,6 +32,11 @@ pub struct Manifest {
     /// and `--grant-manifest` deliberately does NOT confer it (build-order D6): the red-tier
     /// grant must be named explicitly at the prompt, like a secret must exist in the env.
     pub exec_native: bool,
+    /// Stage 10 (10c): `[actors] mailbox = N` — the package-default mailbox bound.
+    pub actors_mailbox: Option<u64>,
+    /// Stage 10 (10c): `[actors] overflow = "block" | "drop-new"` — the overflow policy for
+    /// bounded mailboxes (`block` when absent, the spec default).
+    pub actors_overflow: Option<String>,
 }
 
 /// Parse the tiny subset of TOML the Stage-1 manifest uses: `[section]` headers and
@@ -65,6 +70,10 @@ pub fn parse_manifest(src: &str) -> Manifest {
             // requests native-code emission. Declaring is not getting — the human grant
             // (`--grant exec.native`) is a separate decision, and both default to off.
             ("authority", "exec.native") => m.exec_native = val == "true",
+            // Stage 10 (10c, spec §3): package-wide mailbox defaults. A per-actor
+            // `(mailbox = N)` on the declaration wins over this; nothing = unbounded (1.0).
+            ("actors", "mailbox") => m.actors_mailbox = val.parse::<u64>().ok(),
+            ("actors", "overflow") => m.actors_overflow = values.into_iter().next(),
             _ => {}
         }
     }

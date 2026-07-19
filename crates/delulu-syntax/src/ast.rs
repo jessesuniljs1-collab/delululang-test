@@ -149,6 +149,10 @@ pub struct ActorDecl {
     /// Execution-mode hints (Stage 10, spec §2.2); see [`Attribute`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attrs: Vec<Attribute>,
+    /// Stage 10 (10c, spec §3): `actor A(mailbox = N)` — this actor's mailbox bound. `None`
+    /// (and no manifest default) = unbounded, the 1.0 behavior; bounding is opt-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailbox: Option<u64>,
 }
 
 /// `("let" | "var") name ":" type` — no initializer in the grammar; fields are assigned in

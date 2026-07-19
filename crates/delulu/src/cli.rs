@@ -219,6 +219,7 @@ struct Opts {
     actors_threads: Option<usize>,
     /// `--on-quiesce report` (Stage 7): print surviving actor count at quiescence.
     on_quiesce_report: bool,
+    trace_memory: bool,
     /// `--on-actor-death abort` (Stage 7 §6.6): whole-program abort on a behavior fault
     /// (default keeps the system live; sends to the dead actor drop and count).
     on_actor_death_abort: bool,
@@ -282,6 +283,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         assert_trace: false,
         actors_threads: None,
         on_quiesce_report: false,
+        trace_memory: false,
         on_actor_death_abort: false,
         debug_rcaps: false,
         seed: None,
@@ -364,6 +366,9 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     i += 1;
                 }
             }
+            // Stage 10 (10c, B3): per-actor mailbox telemetry at quiescence — peaks, drops,
+            // bounds. Heap bytes and collection counts arrive with the 10d collector.
+            "--trace-memory" => opts.trace_memory = true,
             s if s.starts_with("--on-quiesce=") => {
                 opts.on_quiesce_report = &s["--on-quiesce=".len()..] == "report";
             }
@@ -4847,12 +4852,26 @@ fn cmd_run(rest: &[String]) -> i32 {
         let debug_set = opts
             .debug_rcaps
             .then(|| std::sync::Arc::new(checked.result.iso_moves.clone()));
+        // Stage 10 (10c): the manifest's `[actors]` defaults. A decl-level `(mailbox = N)`
+        // wins per actor; anything but the two known overflow values is warned about rather
+        // than silently meaning `block` (the skip branch, made audible).
+        let mb_default = manifest.as_ref().and_then(|m| m.actors_mailbox).map(|n| n as usize);
+        let mb_overflow = manifest.as_ref().and_then(|m| m.actors_overflow.clone());
+        if let Some(o) = &mb_overflow {
+            if o != "block" && o != "drop-new" {
+                eprintln!(
+                    "warning: unknown `[actors] overflow = \"{o}\"` — valid values are \"block\" and \"drop-new\"; using \"block\""
+                );
+            }
+        }
         let system = delulu_runtime::actors::ActorSystem::start_with(
             &checked.module,
             threads,
             opts.on_actor_death_abort,
             actor_trace.clone(),
             debug_set.clone(),
+            mb_default,
+            mb_overflow.as_deref() == Some("drop-new"),
         );
         interp = interp.with_actors(system.host());
         if let Some(d) = debug_set {
@@ -4886,6 +4905,20 @@ fn cmd_run(rest: &[String]) -> i32 {
                 "actors: {} died; {} message(s) to dead actors dropped",
                 report.dead_actors, report.dropped_sends
             );
+        }
+        // Stage 10 (10c): overflow drops are never silent — counted and reported whenever they
+        // happened, and itemized per actor under `--trace-memory` (spec §3 B3, mailbox half).
+        if report.overflow_drops > 0 {
+            eprintln!("actors: {} message(s) dropped by mailbox overflow (`drop-new`)", report.overflow_drops);
+        }
+        if opts.trace_memory {
+            eprintln!("trace-memory: {} bounded mailbox(es)", report.mailbox.len());
+            for m in &report.mailbox {
+                eprintln!(
+                    "  {}: bound {}, peak depth {}, overflow drops {}",
+                    m.actor, m.bound, m.peak, m.drops
+                );
+            }
         }
         if opts.on_quiesce_report {
             eprintln!(

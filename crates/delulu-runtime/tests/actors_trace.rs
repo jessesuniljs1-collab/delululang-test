@@ -1,5 +1,5 @@
-//! Stage 7 phase 7i — causal trace attribution (spec §6.3) and the `--debug-rcaps`
-//! uniqueness detector (spec §6.4). The causal law (invariant 35, executable): every traced
+﻿//! Stage 7 phase 7i â€” causal trace attribution (spec Â§6.3) and the `--debug-rcaps`
+//! uniqueness detector (spec Â§6.4). The causal law (invariant 35, executable): every traced
 //! effect belongs to the EXECUTING member's static row AND the send site's static row via
 //! the cause chain.
 
@@ -27,7 +27,7 @@ fn traced_effects_carry_actor_member_turn_and_cause() {
     assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
 
     let collector: Arc<Mutex<Vec<TraceRecord>>> = Arc::new(Mutex::new(Vec::new()));
-    let system = ActorSystem::start_with(&checked.module, 2, false, Some(collector.clone()), None);
+    let system = ActorSystem::start_with(&checked.module, 2, false, Some(collector.clone()), None, None, false);
     let interp = Interp::new(&checked.module).with_actors(system.host());
     let root = Value::Root(std::rc::Rc::new(delulu_runtime::RootVal {
         console: true,
@@ -68,7 +68,7 @@ fn traced_effects_carry_actor_member_turn_and_cause() {
 
 #[test]
 fn the_causal_law_flags_an_effect_outside_the_executing_members_row() {
-    // Synthetic (a checked program can never produce this — that is the point: this is the
+    // Synthetic (a checked program can never produce this â€” that is the point: this is the
     // compiler-bug detector's own witness). The behavior's static row lacks Net.
     let main_row: BTreeSet<String> = ["Async", "Net"].iter().map(|s| s.to_string()).collect();
     let mut member_rows: HashMap<String, BTreeSet<String>> = HashMap::new();
@@ -93,7 +93,7 @@ fn the_causal_law_flags_an_effect_outside_the_executing_members_row() {
 
 #[test]
 fn the_causal_law_flags_a_send_site_that_could_not_have_carried_the_effect() {
-    // The effect IS in the executing member's row, but the SEND SITE's row lacks it — the
+    // The effect IS in the executing member's row, but the SEND SITE's row lacks it â€” the
     // T-Send containment replayed on the witness.
     let main_row: BTreeSet<String> = ["Async"].iter().map(|s| s.to_string()).collect();
     let mut member_rows: HashMap<String, BTreeSet<String>> = HashMap::new();
@@ -116,7 +116,7 @@ fn the_causal_law_flags_a_send_site_that_could_not_have_carried_the_effect() {
     );
 }
 
-// ----- --debug-rcaps: the §7.4 uniqueness detector --------------------------------------
+// ----- --debug-rcaps: the Â§7.4 uniqueness detector --------------------------------------
 
 #[test]
 fn an_unaliased_iso_graph_passes_the_uniqueness_walk() {
@@ -127,7 +127,7 @@ fn an_unaliased_iso_graph_passes_the_uniqueness_walk() {
 
 #[test]
 fn an_aliased_nested_node_is_a_dl1610_class_violation() {
-    // Two paths to the same mutable list inside a "unique" graph — exactly what the static
+    // Two paths to the same mutable list inside a "unique" graph â€” exactly what the static
     // proof forbids; the detector must see it.
     let shared = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![Value::Int(1)])));
     let outer = Value::List(std::rc::Rc::new(std::cell::RefCell::new(vec![
@@ -152,7 +152,7 @@ fn a_checked_iso_send_under_debug_rcaps_runs_clean() {
     assert!(!checked.has_errors(), "{:?}", checked.diagnostics);
     assert!(!checked.result.iso_moves.is_empty(), "the checker exported the iso move");
     let debug = Arc::new(checked.result.iso_moves.clone());
-    let system = ActorSystem::start_with(&checked.module, 2, false, None, Some(debug.clone()));
+    let system = ActorSystem::start_with(&checked.module, 2, false, None, Some(debug.clone()), None, false);
     let interp = Interp::new(&checked.module).with_actors(system.host()).with_debug_rcaps(debug);
     let root = Value::Root(std::rc::Rc::new(delulu_runtime::RootVal::default()));
     interp.run_main(root).expect("a proven-unique move passes the debug lane");

@@ -619,6 +619,9 @@ impl Parser {
         self.bump(); // actor
         let name = self.expect_decl_name();
         let generics = self.parse_generics();
+        // Stage 10 (10c, spec §3): optional `( "mailbox" "=" INT )` — the actor's mailbox
+        // bound. Additive grammar; `mailbox` stays an ordinary identifier everywhere else.
+        let mailbox = self.parse_mailbox_clause();
         self.expect(TokenKind::LBrace);
         let mut fields = Vec::new();
         let mut ctors: Vec<CtorDecl> = Vec::new();
@@ -759,7 +762,45 @@ impl Parser {
             }
         };
         self.expect_term();
-        ActorDecl { public, name, generics, fields, ctor, behaviors, fns, id: self.node_id(), span, attrs }
+        ActorDecl { public, name, generics, fields, ctor, behaviors, fns, id: self.node_id(), span, attrs, mailbox }
+    }
+
+    /// `( "mailbox" "=" INT )` after an actor's name/generics (Stage 10, 10c). A malformed
+    /// clause is DL0201 with recovery past the `)`; a bound of zero is clamped by the runtime
+    /// to 1 (a mailbox that can hold nothing is a mailbox nobody meant).
+    fn parse_mailbox_clause(&mut self) -> Option<u64> {
+        if !self.at(&TokenKind::LParen) {
+            return None;
+        }
+        self.bump(); // (
+        let mut bound = None;
+        if self.at_kw_ident("mailbox") {
+            self.bump();
+            self.expect(TokenKind::Eq);
+            match self.peek().clone() {
+                TokenKind::Int(n) => {
+                    self.bump();
+                    bound = Some(n.max(0) as u64);
+                }
+                _ => {
+                    self.error(
+                        "DL0201",
+                        "expected an integer mailbox bound",
+                        self.span(),
+                        "the clause is `(mailbox = N)`, like `actor A(mailbox = 10000)`",
+                    );
+                }
+            }
+        } else {
+            self.error(
+                "DL0201",
+                "expected `mailbox` in the actor configuration clause",
+                self.span(),
+                "the only v1.x actor configuration is `(mailbox = N)`",
+            );
+        }
+        self.expect(TokenKind::RParen);
+        bound
     }
 
     /// Invariant 37 (DL1608): pre-0.7 code using `consume`/`recover` as an identifier gets an

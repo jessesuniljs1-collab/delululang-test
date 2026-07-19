@@ -739,7 +739,10 @@ impl Interp {
                     sender_member,
                     send_span: Some((span.file, span.start, span.end)),
                 };
-                let id = host.spawn(name, msgs, cause);
+                // Stage 10 (10c): the declaration's `(mailbox = N)` rides along; the host
+                // resolves it against the manifest default (decl wins; nothing = unbounded).
+                let decl_bound = self.actors.get(name.as_str()).and_then(|d| d.mailbox);
+                let id = host.spawn(name, msgs, cause, decl_bound);
                 Ok(Value::ActorRef { id, actor: Rc::from(name.as_str()) })
             }
         }
@@ -875,7 +878,17 @@ impl Interp {
                     sender_member,
                     send_span: Some((span.file, span.start, span.end)),
                 };
-                host.send(*id, &name.name, msgs, cause);
+                // Stage 10 (10c): an overflow drop under `drop-new` is DL1902 in abort mode —
+                // telemetry-class otherwise (counted, reported at exit), per spec §10.
+                if host.send(*id, &name.name, msgs, cause) == crate::actors::SendOutcome::DroppedOverflow
+                    && host.abort_on_death()
+                {
+                    return Err(Escape::Fault(Fault::at(
+                        "DL1902",
+                        "mailbox overflow: message dropped (`drop-new` policy, abort mode)",
+                        span,
+                    )));
+                }
                 let _ = actor;
                 return Ok(Value::Unit);
             }
@@ -922,7 +935,16 @@ impl Interp {
                                 sender_member,
                                 send_span: Some((span.file, span.start, span.end)),
                             };
-                            host.send(id, &name.name, msgs, cause);
+                            if host.send(id, &name.name, msgs, cause)
+                                == crate::actors::SendOutcome::DroppedOverflow
+                                && host.abort_on_death()
+                            {
+                                return Err(Escape::Fault(Fault::at(
+                                    "DL1902",
+                                    "mailbox overflow: message dropped (`drop-new` policy, abort mode)",
+                                    span,
+                                )));
+                            }
                             return Ok(Value::Unit);
                         }
                     }

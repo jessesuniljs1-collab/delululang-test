@@ -2352,3 +2352,19 @@ anchor = "ref.diag.DL1906"
 file = "crates/delulu/tests/jit_policy_cli.rs"
 test = "an_ungranted_jit_hint_warns_dl1906_and_the_program_still_runs"
 kind = "negative"
+
+# ---- Stage 10 phase 10c: bounded mailboxes (spec §3 B2/B3). DL1902's negative witness forces
+# the overflow deterministically (a self-send storm into a bound-of-1 mailbox under drop-new +
+# abort mode); the positive is the block-policy criterion run, where nothing can drop.
+
+[[witness]]
+anchor = "ref.diag.DL1902"
+file = "crates/delulu/tests/actors_bounded_cli.rs"
+test = "block_backpressure_sustains_a_lopsided_producer_at_bounded_depth"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1902"
+file = "crates/delulu/tests/actors_bounded_cli.rs"
+test = "a_drop_new_overflow_in_abort_mode_is_dl1902"
+kind = "negative"

@@ -83,6 +83,26 @@ strong form — remove the stamp and the reports must be identical — which is 
 byte-equality it replaces, because it also pins WHAT the only difference is. DL1906 is
 warning-class by the same law: a hint may not change whether a program runs.
 
+**D8 — Bounded mailboxes (10c): what shipped, what deferred, and the two exemptions that keep it
+honest.** RULED: (a) The config surface is the actor declaration (`actor A(mailbox = N)`, additive
+grammar, decl wins) plus the manifest default (`[actors] mailbox = N`, `overflow = "block" |
+"drop-new"`); the spec's per-SPAWN override is DEFERRED to an RFC — spawn-site config is
+expression-grammar growth with three-level precedence semantics, and no §11 criterion demands it.
+(b) Unconfigured actors stay UNBOUNDED — the 1.0 behavior; bounding is opt-in, so no existing
+program changes meaning. (c) **The same-worker exemption:** a `block` send from a worker to an
+actor that worker owns can never wait — the only thread that could drain the mailbox is the one
+that would be waiting. Structural self-deadlock, refused by construction; the bypass is visible
+in telemetry (peak past the bound) and witnessed by a test that deadlocks in seconds if the
+exemption is wrong. Cross-worker cycles of full mailboxes CAN still deadlock — spec §3's
+documented non-guarantee: backpressure bounds memory, never liveness. (d) The mailbox-slot
+release rides a Drop guard in the worker's Send arm, so no early-continue path (dead actor,
+unknown behavior) can leak a slot — the skip branch closed by construction. (e) An unknown
+`overflow` value warns and means `block` — a typo must be audible, not a silent policy change.
+(f) B3 splits: 10c ships mailbox telemetry (`--trace-memory`: per-actor bound/peak/drops); heap
+bytes and collection counts arrive with 10d's collector, where a heap walk exists. (g) DL1902 is
+error-class ONLY in abort mode (abort mode is the statement that losing work is worse than
+stopping); otherwise a drop is counted per actor and reported at exit, never silent.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -91,7 +111,7 @@ warning-class by the same law: a hint may not change whether a program runs.
 |---|---|---|---|
 | 10a | A2 | **DONE** (2026-07-20) — Attribute grammar activation: `@aot`/`@interpret`/`@jit`/`@inline(...)` as hints; DL1901 on unknown attributes; fmt round-trips attributes | Invariant-45 twin witnessed (run output + authority byte-identical with and without hints); DL1901 registered + explained, exact removal repair, `authority_widening: false`; both new anchors witnessed same-commit, coverage **100%**; fmt canonical own-line form round-trips; suite **931/0/4**. One parse subtlety ruled in code: attributes swallow their line terminator (Go-style termination would otherwise orphan the decl) |
 | 10b | A3 | **DONE** (2026-07-20) — `exec.native` grant + manifest declaration (`[authority] exec.native = true`), authority request-stamp, DL1906 | `@jit` without the grant → DL1906 **warning, program still runs** (D7: a hint may not change whether a program runs); granted run clean; machine `--json` channel never carries the warning; authority stamps `native_emission` ONLY when requested (skip branch = byte-stability witnessed); `--grant-manifest` does not confer it and a lease derives it false (D6, fail closed); explain carries the authority-widening + no-tier honesty notes; coverage **100%** (290 anchors), suite **936/0/4**. Broker-lattice dimension: 10l entry gate per D6 |
-| 10c | B2/B3 | Bounded mailboxes (`block` default / `drop-new` counted, DL1902) + `--trace-memory` telemetry | 10:1 producer/consumer mismatch sustains at stable memory; DL1902 witnessed in abort mode; telemetry present; machine channels untouched elsewhere |
+| 10c | B2/B3 | **DONE** (2026-07-20) — Bounded mailboxes (`actor A(mailbox = N)` + `[actors]` manifest defaults; `block` default / `drop-new` counted; DL1902 in abort mode) + `--trace-memory` mailbox telemetry | The B2 criterion witnessed: a 500:1-paced producer against a bound-8 consumer sustains with **peak depth ≤ 8 and zero loss** (`block_backpressure_sustains_...`); DL1902 forced deterministically (self-send storm, drop-new, abort); **the same-worker exemption witnessed by a test that deadlocks if it's wrong**; slot release is a Drop guard (no skip branch); drops never silent; CAS-exact bound; unconfigured actors unbounded (1.0 preserved). D8 rules the deferrals. Coverage **100%** (291 anchors), suite **941/0/4** |
 | 10d | B1 | Per-actor cycle collection (trial deletion between turns) | Leak corpus (cyclic graphs, promise chains) goes documented-leak → collected; no perf cliff on the Study-C suite (>3% geo-mean regression blocks) |
 | 10e | D1 | `Actuate` activates: `Cap[Actuator]`/`Cap[Sensor]`, envelope scopes, double validation, `ActuateErr`, DL1904 | Envelope refusal kills the command, never the process — witnessed both ways; kind vs scope split holds (§5.3); coverage 100% incl. new anchors |
 | 10f | D2/D4 | Dead-man leases (heartbeat/TTL, broker-side revoke, declared fail-states) + `--broker-profile sim` reference simulator (deterministic, seeded) | Missed heartbeat → revoke → fail-state, latency measured and published; sim deterministic under `--seed`; artifact-hash gate (DL1905) fires in the staged flow |

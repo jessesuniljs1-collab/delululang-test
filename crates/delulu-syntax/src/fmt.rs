@@ -435,6 +435,9 @@ impl<'a> Printer<'a> {
         head.push_str("actor ");
         head.push_str(&a.name.name);
         head.push_str(&generics_text(&a.generics));
+        if let Some(n) = a.mailbox {
+            head.push_str(&format!("(mailbox = {n})"));
+        }
         head.push_str(" {");
         self.line(&head);
         self.indent += 1;

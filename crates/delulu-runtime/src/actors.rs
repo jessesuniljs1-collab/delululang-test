@@ -101,6 +101,38 @@ enum Job {
     Shutdown,
 }
 
+/// A bounded mailbox's live state (Stage 10 phase 10c, spec §3 B2). Unconfigured actors have no
+/// entry and keep the 1.0 unbounded behavior — bounding is opt-in, so no existing program
+/// changes meaning (stability contract).
+struct MailboxState {
+    actor: String,
+    bound: usize,
+    /// `true` = `drop-new` (overflow drops the NEW message, counted); `false` = `block`
+    /// (the sending turn waits at the send site until space frees — spec §3's default).
+    drop_new: bool,
+    depth: AtomicI64,
+    peak: AtomicU64,
+    drops: AtomicU64,
+}
+
+/// What a send did (Stage 10): delivery, or an overflow drop under `drop-new`. The interpreter
+/// turns a drop into DL1902 when the program runs in abort mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SendOutcome {
+    Delivered,
+    DroppedOverflow,
+}
+
+/// Per-actor mailbox telemetry, reported at quiescence under `--trace-memory` (spec §3 B3 —
+/// the mailbox half; heap bytes and collection counts arrive with the 10d collector).
+#[derive(Clone, Debug)]
+pub struct MailboxStat {
+    pub actor: String,
+    pub bound: usize,
+    pub peak: u64,
+    pub drops: u64,
+}
+
 /// State shared by every thread that can spawn or send.
 struct Shared {
     pending: AtomicI64,
@@ -114,6 +146,18 @@ struct Shared {
     total_turns: AtomicU64,
     abort_on_death: bool,
     died: AtomicBool,
+    /// Stage 10 (10c): the manifest-level default mailbox bound (`[actors] mailbox = N`);
+    /// `None` = unbounded, the 1.0 behavior.
+    default_bound: Option<usize>,
+    /// Stage 10 (10c): the manifest-level overflow policy (`[actors] overflow = "drop-new"`);
+    /// `false` = `block`, the spec default for bounded mailboxes.
+    overflow_drop_new: bool,
+    /// Live bounded-mailbox states, keyed by actor id. Only configured actors appear.
+    mailboxes: Mutex<HashMap<u64, Arc<MailboxState>>>,
+    /// Blocked senders park here; every Send-job completion (and program death) notifies.
+    space_lock: Mutex<()>,
+    space: Condvar,
+    overflow_drops: AtomicU64,
 }
 
 impl Shared {
@@ -133,28 +177,99 @@ impl Shared {
 pub struct ActorHost {
     shared: Arc<Shared>,
     senders: Vec<mpsc::Sender<Job>>,
+    /// Which worker this host belongs to (`None` = the main thread). Stage 10 (10c): a `block`
+    /// send from a worker to an actor it OWNS can never wait — the only thread that could drain
+    /// that mailbox is the one that would be waiting. Structural self-deadlock, refused by
+    /// construction: same-worker sends bypass the bound, and the exemption is documented and
+    /// witnessed rather than discovered in production.
+    me: Option<usize>,
 }
 
 impl ActorHost {
-    pub fn spawn(&self, actor: &str, args: Vec<MsgValue>, cause: SendCause) -> ActorId {
+    /// Spawn, resolving the mailbox config (Stage 10, 10c): the declaration's
+    /// `(mailbox = N)` wins, else the manifest default; no config = unbounded (1.0 behavior).
+    pub fn spawn(
+        &self,
+        actor: &str,
+        args: Vec<MsgValue>,
+        cause: SendCause,
+        decl_bound: Option<u64>,
+    ) -> ActorId {
         let id = self.shared.next_actor.fetch_add(1, Ordering::SeqCst);
         let worker = self.shared.round_robin.fetch_add(1, Ordering::SeqCst) % self.senders.len();
+        if let Some(bound) = decl_bound.map(|b| b as usize).or(self.shared.default_bound) {
+            let st = Arc::new(MailboxState {
+                actor: actor.to_string(),
+                bound: bound.max(1),
+                drop_new: self.shared.overflow_drop_new,
+                depth: AtomicI64::new(0),
+                peak: AtomicU64::new(0),
+                drops: AtomicU64::new(0),
+            });
+            self.shared.mailboxes.lock().unwrap().insert(id, st);
+        }
         self.shared.live_actors.fetch_add(1, Ordering::SeqCst);
         self.shared.enqueue();
         let _ = self.senders[worker].send(Job::Create { id, actor: actor.to_string(), args, cause });
         ActorId { worker, id }
     }
 
-    pub fn send(&self, to: ActorId, behavior: &str, args: Vec<MsgValue>, cause: SendCause) {
+    /// Send, applying the receiver's bound (Stage 10, 10c). The reservation is a CAS loop, so
+    /// the bound is exact under concurrent senders. `block` waits here — at the send site, the
+    /// turn's last-resort suspension point — until a Send-job completion frees a slot or the
+    /// program dies; cross-worker cycles of full mailboxes can therefore deadlock, which spec §3
+    /// documents as a non-guarantee (backpressure bounds MEMORY, never liveness).
+    pub fn send(&self, to: ActorId, behavior: &str, args: Vec<MsgValue>, cause: SendCause) -> SendOutcome {
+        let state = self.shared.mailboxes.lock().unwrap().get(&to.id).cloned();
+        if let Some(st) = &state {
+            loop {
+                let d = st.depth.load(Ordering::SeqCst);
+                if (d.max(0) as usize) >= st.bound {
+                    if st.drop_new {
+                        st.drops.fetch_add(1, Ordering::SeqCst);
+                        self.shared.overflow_drops.fetch_add(1, Ordering::SeqCst);
+                        return SendOutcome::DroppedOverflow;
+                    }
+                    // Same-worker or post-mortem sends may not wait (self-deadlock / shutdown);
+                    // they deliver past the bound, and the depth counter records the excess.
+                    if self.me == Some(to.worker) || self.shared.died.load(Ordering::SeqCst) {
+                        st.depth.fetch_add(1, Ordering::SeqCst);
+                        break;
+                    }
+                    let g = self.shared.space_lock.lock().unwrap();
+                    // Re-check under the lock so a completion between the load and the wait
+                    // cannot strand us (the missed-notification race, closed the classic way).
+                    if (st.depth.load(Ordering::SeqCst).max(0) as usize) < st.bound
+                        || self.shared.died.load(Ordering::SeqCst)
+                    {
+                        continue;
+                    }
+                    let _g = self.shared.space.wait(g).unwrap();
+                    continue;
+                }
+                if st.depth.compare_exchange(d, d + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                    break;
+                }
+            }
+            let now = st.depth.load(Ordering::SeqCst).max(0) as u64;
+            st.peak.fetch_max(now, Ordering::SeqCst);
+        }
         self.shared.enqueue();
         let _ = self
             .senders[to.worker]
             .send(Job::Send { id: to.id, behavior: behavior.to_string(), args, cause });
+        SendOutcome::Delivered
+    }
+
+    /// Whether the program runs in abort mode (`--on-actor-death abort`) — the interpreter
+    /// consults this to turn an overflow drop into DL1902 (spec §10).
+    pub fn abort_on_death(&self) -> bool {
+        self.shared.abort_on_death
     }
 }
 
 /// What the system reports at quiescence (`--on-quiesce report` / exit accounting).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct QuiesceReport {
     pub surviving_actors: i64,
     pub dead_actors: u64,
@@ -162,6 +277,10 @@ pub struct QuiesceReport {
     pub total_turns: u64,
     /// True when a behavior fault occurred and `--on-actor-death abort` was set.
     pub aborted: bool,
+    /// Stage 10 (10c): messages dropped by `drop-new` mailbox overflow, program-wide.
+    pub overflow_drops: u64,
+    /// Stage 10 (10c): per-bounded-actor mailbox telemetry (empty when nothing is bounded).
+    pub mailbox: Vec<MailboxStat>,
 }
 
 /// The actor system: worker threads, their mailboxes, and the quiescence machinery.
@@ -175,7 +294,7 @@ impl ActorSystem {
     /// Start `threads` workers for `module` (its actor declarations are cloned into each
     /// worker, which builds its own single-threaded `Interp` — cells never cross threads).
     pub fn start(module: &Module, threads: usize, abort_on_death: bool) -> ActorSystem {
-        ActorSystem::start_with(module, threads, abort_on_death, None, None)
+        ActorSystem::start_with(module, threads, abort_on_death, None, None, None, false)
     }
 
     /// [`ActorSystem::start`] plus the phase-7i instrumentation: a shared trace collector
@@ -188,6 +307,8 @@ impl ActorSystem {
         abort_on_death: bool,
         trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
         debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
+        default_mailbox: Option<usize>,
+        overflow_drop_new: bool,
     ) -> ActorSystem {
         let threads = threads.max(1);
         let shared = Arc::new(Shared {
@@ -202,6 +323,12 @@ impl ActorSystem {
             total_turns: AtomicU64::new(0),
             abort_on_death,
             died: AtomicBool::new(false),
+            default_bound: default_mailbox,
+            overflow_drop_new,
+            mailboxes: Mutex::new(HashMap::new()),
+            space_lock: Mutex::new(()),
+            space: Condvar::new(),
+            overflow_drops: AtomicU64::new(0),
         });
         let (senders, receivers): (Vec<_>, Vec<_>) = (0..threads).map(|_| mpsc::channel::<Job>()).unzip();
         let mut handles = Vec::new();
@@ -223,7 +350,7 @@ impl ActorSystem {
 
     /// A host handle for the calling thread's interpreter.
     pub fn host(&self) -> ActorHost {
-        ActorHost { shared: self.shared.clone(), senders: self.senders.clone() }
+        ActorHost { shared: self.shared.clone(), senders: self.senders.clone(), me: None }
     }
 
     /// Block until quiescence (all mailboxes empty, no turn running), then shut down and
@@ -246,12 +373,28 @@ impl ActorSystem {
         for h in self.handles {
             let _ = h.join();
         }
+        let mut mailbox: Vec<MailboxStat> = self
+            .shared
+            .mailboxes
+            .lock()
+            .unwrap()
+            .values()
+            .map(|st| MailboxStat {
+                actor: st.actor.clone(),
+                bound: st.bound,
+                peak: st.peak.load(Ordering::SeqCst),
+                drops: st.drops.load(Ordering::SeqCst),
+            })
+            .collect();
+        mailbox.sort_by(|a, b| a.actor.cmp(&b.actor).then(b.peak.cmp(&a.peak)));
         QuiesceReport {
             surviving_actors: self.shared.live_actors.load(Ordering::SeqCst),
             dead_actors: self.shared.dead_actors.load(Ordering::SeqCst),
             dropped_sends: self.shared.dead_sends.load(Ordering::SeqCst),
             total_turns: self.shared.total_turns.load(Ordering::SeqCst),
             aborted: self.shared.died.load(Ordering::SeqCst),
+            overflow_drops: self.shared.overflow_drops.load(Ordering::SeqCst),
+            mailbox,
         }
     }
 }
@@ -274,7 +417,7 @@ fn worker_loop(
     debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
 ) {
     let mut interp = crate::interp::Interp::new(&module)
-        .with_actors(ActorHost { shared: shared.clone(), senders });
+        .with_actors(ActorHost { shared: shared.clone(), senders, me: Some(wi) });
     let local_sink = trace.as_ref().map(|_| TraceSink::new());
     if let Some(s) = &local_sink {
         interp = interp.with_trace(s.clone());
@@ -334,6 +477,10 @@ fn worker_loop(
                 shared.done();
             }
             Job::Send { id, behavior, args, cause } => {
+                // Stage 10 (10c): this job leaving the queue is what frees a mailbox slot —
+                // on EVERY path out of this arm (dead, unknown behavior, delivered), so the
+                // depth pairs exactly with the send-site increment. Blocked senders wake here.
+                let _slot = MailboxSlot::release_on_drop(&shared, id);
                 let deliverable = matches!(cells.get(&id), Some(c) if !c.dead);
                 if !deliverable {
                     // Poisoned or unknown: dropped silently, counted, reported at exit
@@ -381,6 +528,35 @@ fn actor_died(shared: &Shared, actor: &str, member: &str, fault: &Fault) {
         shared.died.store(true, Ordering::SeqCst);
         let _g = shared.idle.lock().unwrap();
         shared.quiesced.notify_all();
+        // Blocked senders must not outlive the program: wake them so they observe `died`.
+        drop(_g);
+        let _s = shared.space_lock.lock().unwrap();
+        shared.space.notify_all();
+    }
+}
+
+/// The Send-job slot release (Stage 10, 10c): decrements the receiver's mailbox depth and wakes
+/// blocked senders when the job leaves the queue — via Drop, so no early `continue` in the job
+/// arm can ever skip it (the skip branch, closed by construction).
+struct MailboxSlot<'a> {
+    shared: &'a Shared,
+    state: Option<Arc<MailboxState>>,
+}
+
+impl<'a> MailboxSlot<'a> {
+    fn release_on_drop(shared: &'a Shared, id: u64) -> MailboxSlot<'a> {
+        let state = shared.mailboxes.lock().unwrap().get(&id).cloned();
+        MailboxSlot { shared, state }
+    }
+}
+
+impl Drop for MailboxSlot<'_> {
+    fn drop(&mut self) {
+        if let Some(st) = &self.state {
+            st.depth.fetch_sub(1, Ordering::SeqCst);
+            let _g = self.shared.space_lock.lock().unwrap();
+            self.shared.space.notify_all();
+        }
     }
 }
 
