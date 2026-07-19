@@ -262,6 +262,26 @@ which is the same class as the Stage-6 `DL0803` fail-open and the Stage-9a arity
 gap — stays recorded as NOT YET DONE rather than being quietly closed. A drill that finds a hole
 and reports only its stopwatch has wasted the hole.
 
+**D19 — The 1.0 cut is BLOCKED by its own gate, and the version says so.**
+Stage 9's stated purpose is to ship v1.0. Every piece of the machinery is built and the acceptance
+gate has been *run* — and it comes back with **two criteria NOT MET**: criterion 1 (conformance
+coverage is 273/290, not 100%) and criterion 8 (the fresh-machine first-run has never been
+performed and timed, on any OS). RULED: the version is **`1.0.0-rc.1`**, not `1.0.0`, and
+`docs/release/CHECKLIST-1.0.md` states **"1.0 DOES NOT SHIP YET"** in those words with both
+blockers named. Stamping 1.0.0 on a build its own checklist refuses would make every other honesty
+claim in this project worthless — the announcement's whole argument is *"here is the number,
+including when it is unflattering"*, and the first thing a reader would check is whether the release
+met its own bar. A gate that cannot say no is not a gate. Both blockers are bounded and listed;
+neither is unknown.
+
+**D20 — The announcement's honesty review is mechanized in BOTH directions.**
+`criterion10_the_announcement_makes_no_unsupported_claim` fails on a forbidden claim ("faster than
+C", "lowest tokens", "provably secure", …) **and** on the *absence* of the inconvenient measured
+results — the "not competitive with C" position, the 8.5% repair coverage, and the pointer to
+`measurements/`. RULED both directions deliberately: the likelier failure mode for a release
+announcement is not a loud lie, it is quiet omission, and a check that only bans bad sentences would
+pass a document that simply left performance out.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
@@ -278,7 +298,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 | 9f | **DONE** — `SECURITY.md` (rubric + runbook), `CONTRIBUTING.md` §AI, `rfcs/` process + template, `CODEOWNERS`, drill record | **Criterion 6 witnessed: DRILL-001 executed end-to-end in 5m28s** against a staged signature bypass. The drill's real finding (D18): the **entire 875-test suite passed with the bypass planted**. Regression test added; 6 governance tests pin the artifacts, incl. that PENDING-PUBLIC items are still marked |
 | 9g | **DONE** — `delulu-registry` (sparse index, publish API, scoped/revocable tokens, yank≠delete, mandatory signature, **server-side authority recomputation**), `delulu login` | **Criterion 5 witnessed**: clean-machine publish→resolve→offline-build round-trip; doctored claim refused in-process AND over HTTP; the skip branch (**cannot recompute → REFUSE**) tested; outage degrades to the cached lockfile; 18 tests, zero new deps (hand-rolled HTTP) |
 | 9h | **DONE** — 8 Book samples as real checked files, 95 missing explain bodies written, `docs/for-agents.md` | **Criterion 7 witnessed both halves**: every sample compiles (CI-gated, fmt-checked) and `criterion7_every_code_has_a_long_form_explanation` pins **100%** — measured at **95 of 150 title-only** when the phase opened. Agent page carries the honest 8.5% repair number and the "not competitive with C" position |
-| 9i | Release engineering: reproducible builds (D6), signatures (D5), SBOM, provenance, conformance tarball + `--self-check`, v1.0.0, announcement | Criteria 4 (local form), 8 (D9), 10 (line-by-line honesty review recorded in-repo) |
+| 9i | **DONE** — pinned toolchain, reproducibility check, SBOM, provenance, announcement + checklist, **version `1.0.0-rc.1`** | Criterion 4 **MET (local form)**: artifacts byte-identical across builds (SHA-256 equal), signatures verify, tamper refused. Criterion 10 **MET**: honesty review mechanized in both directions. **Criteria 1 and 8 NOT MET — the gate says 1.0 does not ship (D19)** |
 
 ## 5. Diagnostics budget
 

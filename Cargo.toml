@@ -16,7 +16,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+# 1.0.0-rc.1, not 1.0.0. Every piece of 1.0's machinery is built and the acceptance gate has been
+# run — and the gate says two criteria are NOT MET (`docs/release/CHECKLIST-1.0.md`: conformance
+# coverage is 273/290, and the fresh-machine first-run has not been timed). Stamping 1.0.0 on a
+# build its own checklist refuses would make every other honesty claim in this project worthless.
+version = "1.0.0-rc.1"
 edition = "2021"
 repository = "https://github.com/delulu-lang/delulu"
 

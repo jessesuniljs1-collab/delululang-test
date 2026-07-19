@@ -1,0 +1,10 @@
+# The pinned toolchain (Stage 9i, spec §7).
+#
+# Reproducible builds need a fixed compiler: two builders on different machines produce
+# byte-identical artifacts only if they are running the same rustc. Pinning here means every
+# contributor, every CI job, and every release build agree without anyone having to remember.
+#
+# Bumping this is a deliberate act with a reproducibility re-check attached, not a drive-by.
+[toolchain]
+channel = "1.96.1"
+components = ["rustfmt", "clippy"]

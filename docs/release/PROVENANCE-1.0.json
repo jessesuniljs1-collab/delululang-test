@@ -1,0 +1,38 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "delulu-1.0.0",
+      "digest": {
+        "note": "Filled at the release cut from the actual artifact digests. Left as a note rather than a plausible-looking hex string, because a provenance statement carrying an invented digest is worse than one carrying none: it would verify against nothing while looking as though it verified."
+      }
+    }
+  ],
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://delulu.dev/buildtypes/local-reproducible/v1",
+      "externalParameters": {
+        "source": "the committed working tree",
+        "toolchain": "rustc 1.96.1, pinned by rust-toolchain.toml",
+        "command": "cargo build --release -p delulu"
+      },
+      "internalParameters": {
+        "SOURCE_DATE_EPOCH": "set at the release cut",
+        "vendored_dependencies": true
+      }
+    },
+    "runDetails": {
+      "builder": {
+        "id": "local-developer-machine",
+        "_honesty": "This build ran on a developer machine, not on hosted CI with an attested identity. Saying so is the point: the value of provenance is that it describes the build truthfully, and a statement claiming a builder identity it does not have is a supply-chain lie with a schema around it."
+      },
+      "metadata": {
+        "invocationId": "assigned at the release cut"
+      }
+    },
+    "_slsaLevel": "sub-L3 (PENDING-PUBLIC)",
+    "_slsaNote": "SLSA L3 requires a hosted, attested build service; this repository is not publicly hosted, so L3 is not achieved and is not claimed. What IS achieved and independently checkable: a pinned toolchain, vendored dependencies, and byte-identical artifacts across independent builds (build-order D6, witnessed by criterion4_a_dwx_artifact_is_byte_identical_across_builds). Reproducibility is the property that actually lets someone else verify the artifact; the attestation level is how a third party learns it without rebuilding. We have the first and not yet the second, and this field says which.",
+    "_signature": "Release artifacts carry detached ed25519 signatures (<artifact>.sig), verifiable with `delulu verify-sig`. Signing authenticates ORIGIN, not behavior — what the artifact can do is the authority report, and that is recomputed rather than trusted."
+  }
+}

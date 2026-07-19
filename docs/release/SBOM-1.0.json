@@ -1,0 +1,40 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "delulu",
+      "version": "1.0.0",
+      "description": "The DeluluLang compiler, runtime, and toolchain"
+    },
+    "properties": [
+      {
+        "name": "delulu:note",
+        "value": "Direct third-party dependencies of the workspace, with the versions resolved in the committed Cargo.lock. Transitive dependencies are enumerated by that lockfile, which is the authoritative and complete record; this document lists what the workspace itself declares. An SBOM that omits something linked into the binary is worse than none, because it will be trusted — so the omission is stated here rather than left to be discovered."
+      },
+      {
+        "name": "delulu:toolchain",
+        "value": "rustc 1.96.1, pinned by rust-toolchain.toml"
+      }
+    ]
+  },
+  "components": [
+    { "type": "library", "name": "serde", "version": "1.0.228", "purl": "pkg:cargo/serde@1.0.228", "description": "Serialization framework — the DIR, manifests, lockfiles, and every --json envelope" },
+    { "type": "library", "name": "serde_json", "version": "1.0.150", "purl": "pkg:cargo/serde_json@1.0.150", "description": "The machine surface: diagnostics, authority reports, the registry index" },
+    { "type": "library", "name": "toml", "version": "0.8.23", "purl": "pkg:cargo/toml@0.8.23", "description": "delulu.toml manifests. Parsed as a pure function of text — no code runs at resolution time" },
+    { "type": "library", "name": "wasmtime", "version": "27.0.0", "purl": "pkg:cargo/wasmtime@27.0.0", "description": "The WASM engine. The containment floor for Contained plugins" },
+    { "type": "library", "name": "wasm-encoder", "version": "0.252.0", "purl": "pkg:cargo/wasm-encoder@0.252.0", "description": "WASM codegen for --target wasm" },
+    { "type": "library", "name": "ed25519-dalek", "version": "2.2.0", "purl": "pkg:cargo/ed25519-dalek@2.2.0", "description": "Artifact and plugin signatures, and the broker's lease tokens" },
+    { "type": "library", "name": "getrandom", "version": "0.3.4", "purl": "pkg:cargo/getrandom@0.3.4", "description": "OS randomness: signing seeds, registry tokens, guard owner codes" },
+    { "type": "library", "name": "blake3", "version": "1.8.5", "purl": "pkg:cargo/blake3@1.8.5", "description": "Content hashes for the lockfile and the audit chain" },
+    { "type": "library", "name": "ciborium", "version": "0.2.2", "purl": "pkg:cargo/ciborium@0.2.2", "description": "CBOR for the DIR container" },
+    { "type": "library", "name": "libloading", "version": "0.8.9", "purl": "pkg:cargo/libloading@0.8.9", "description": "Foreign C library loading — outside the effect proof, gated by ForeignCall" },
+    { "type": "library", "name": "libffi", "version": "3.2.0", "purl": "pkg:cargo/libffi@3.2.0", "description": "The C ABI call path" },
+    { "type": "library", "name": "pyo3", "version": "0.25.1", "purl": "pkg:cargo/pyo3@0.25.1", "description": "Embedded CPython. Optional — the Python-less build is a first-class citizen" },
+    { "type": "library", "name": "anyhow", "version": "1.0.103", "purl": "pkg:cargo/anyhow@1.0.103", "description": "Error plumbing in the host tooling" },
+    { "type": "library", "name": "libc", "version": "0.2.186", "purl": "pkg:cargo/libc@0.2.186", "description": "Platform syscalls for the isolation profiles" },
+    { "type": "library", "name": "windows-sys", "version": "0.61.2", "purl": "pkg:cargo/windows-sys@0.61.2", "description": "Windows platform APIs" }
+  ]
+}
