@@ -172,6 +172,19 @@ inside 9a (it is a CLI-surface change made mid-phase, and house rule 4 protects 
 a wart forever. Recorded here so it cannot be lost. (`keygen` is otherwise correct: it refuses to
 overwrite an existing private key — witnessed.)
 
+**D12 — The §5 normative statements live in code, and rule coverage is derived, not asserted.**
+Spec §2.1 wants each normative statement to carry a stable anchor that conformance tests cite. A
+hand-written chapter drifts from the compiler within a release, so the 54 rule statements live in
+`delulu_conform::rules::RULES` and the §5 chapters are *generated* from them. Each rule names the
+diagnostics that enforce it, and a drift guard proves every cited code is actually registered — a
+rule citing a code that does not exist fails the build rather than reading as enforcement. RULED:
+a rule is covered **only when every one of its enforcing codes is covered in both directions**.
+That strictness is deliberate and it bites: 7 of 54 rules are uncovered *because* they lean on a
+code from D10's remainder (`ref.rule.authority.no-forgery` is open exactly because `DL0601` is
+shadowed). Rounding those up to "covered" would have made the reference lie about the very thing
+it exists to report. Registering rule anchors moved the totals from 233 to 287 anchors; the ratchet
+floor rose 216 → 263 accordingly.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
@@ -181,7 +194,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 | Phase | Deliverable | Gate (verified by head chef before commit) |
 |---|---|---|
 | 9a | **DONE** — Coverage law: anchor registry (extracted from compiler source), test→anchor metadata, `delulu-conform --coverage`, the ratchet | `--coverage` fails on any zero-coverage anchor, never-produced code, dangling/ignored witness, or unknown citation; **216/233 (92.7%), 0 validation errors**; ratchet floor committed; CI wired; remainder classified in D10 |
-| 9b | `docs/reference/` generated-in-part (grammar, prim table, diagnostics extracted at build time), stable anchors | Reference builds in CI; every test-cited anchor exists; extracted sections provably match source (drift test) |
+| 9b | **DONE** — `docs/reference/` generated-in-part: 24 chapters (16 §5 semantics + tokens/grammar/primitives/diagnostics/audit-rules/CLI/coverage/index), every normative statement anchored | `--check-reference` is a HARD CI gate; drift test + its skip-branch case green; token index fenced against `TokenKind`; every rule's enforcing code proven registered; **287 anchors, 263 covered (91.6%)** |
 | 9c | Stability contract + deprecation policy + `language` edition key; DL1801/DL1802 | Criterion 9 witnessed on synthetic deprecation fixture; both codes registered w/ explain docs |
 | 9d | Study A: `measurements/` corpus ≥25 packages, depth ≥4; authority reports; injection campaign | Injection catch = 100% (mechanism claim); raw data + methodology + threats-to-validity in-repo; reproducible from clean checkout |
 | 9e | Study B (two lanes per D4) + Study C (micro + 3 macro, both engines, vs C and Go) | Reproduce from clean checkout, pinned seeds/toolchains; numbers published as measured; §5.11 caveat verbatim in token appendix |

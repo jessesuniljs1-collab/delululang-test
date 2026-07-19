@@ -254,7 +254,7 @@ fn audit_rules_appear_in_the_soundness_audit() {
 ///
 /// Raise it when you add witnesses. It must never need lowering — a lowered floor in a diff is a
 /// coverage regression wearing a disguise, and reviewing this constant is how you catch it.
-const COVERED_FLOOR: usize = 216;
+const COVERED_FLOOR: usize = 263;
 
 /// The committed repo's witnesses are internally valid (no dangling/ignored/unknown citations)
 /// and coverage has not regressed.
@@ -279,8 +279,90 @@ fn coverage_never_regresses() {
 /// classified in `STAGE9_BUILD_ORDER.md` D10 are closed — the honest state is 216/233, and this
 /// test is what flips the claim from "ratcheting" to "complete".
 #[test]
-#[ignore = "release criterion 1: coverage is 216/233 — see STAGE9_BUILD_ORDER.md D10 for the classified remainder"]
+#[ignore = "release criterion 1: coverage is 263/287 — see STAGE9_BUILD_ORDER.md D10 for the classified remainder"]
 fn release_requires_full_coverage() {
     let cov = run_coverage(&repo_root());
     assert!(cov.pass(), "expected 100% coverage, {} gap(s) remain", cov.gaps.len());
+}
+
+// ---------- the generated reference (Stage 9b) ----------
+
+/// THE ANTI-ROT GATE: the committed reference must equal what the current compiler source
+/// produces. A change to the grammar, the primitive table, the diagnostics registry or the rule
+/// index that would stale a chapter fails HERE, at the moment it is made — which is the only
+/// reliable time to catch it.
+#[test]
+fn the_generated_reference_is_not_stale() {
+    let stale = crate::reference::drift(&repo_root());
+    assert!(
+        stale.is_empty(),
+        "the generated reference is stale — run `cargo run -p delulu-conform -- --reference`:\n  {}",
+        stale.join("\n  ")
+    );
+}
+
+/// Every generated chapter carries the DO-NOT-EDIT banner naming its source of truth, so someone
+/// opening one to "just fix a typo" is told where the text actually comes from.
+#[test]
+fn every_generated_chapter_declares_itself_generated() {
+    for (path, content) in crate::reference::generate(&repo_root()) {
+        assert!(
+            content.starts_with("<!-- GENERATED FILE"),
+            "{path} does not open with the generated-file banner"
+        );
+        assert!(
+            content.contains("--check-reference"),
+            "{path} does not say how staleness is detected"
+        );
+    }
+}
+
+/// THE SKIP-BRANCH CASE (house rule 3): the drift gate must be able to FAIL. If `drift` returned
+/// empty for content that plainly differs, `the_generated_reference_is_not_stale` would be
+/// vacuous — a green light wired to nothing.
+#[test]
+fn the_drift_gate_detects_a_modified_chapter() {
+    let fx = Fixture::new();
+    // An empty fixture root has no docs/reference/ at all: every chapter is missing, and missing
+    // must be reported as drift rather than skipped.
+    let stale = crate::reference::drift(&fx.root);
+    assert!(!stale.is_empty(), "a repo with no reference at all must report drift");
+    assert!(
+        stale.iter().all(|s| s.contains("missing")),
+        "missing chapters must be named as missing: {stale:?}"
+    );
+
+    // Now write one chapter with the wrong content: it must be reported as differing, not as fine.
+    let generated = crate::reference::generate(&fx.root);
+    let (first, _) = generated.iter().next().expect("at least one chapter");
+    fx.write(first, "not what the generator produces\n");
+    let stale2 = crate::reference::drift(&fx.root);
+    assert!(
+        stale2.iter().any(|s| s.starts_with(first) && s.contains("differs")),
+        "a modified chapter must be reported as differing: {stale2:?}"
+    );
+}
+
+/// Rule coverage is DERIVED, and derivation must be strict: a rule whose enforcing code has no
+/// producing test is not covered. Proven against the live data rather than asserted in prose.
+#[test]
+fn a_rule_is_only_covered_when_every_enforcing_code_is() {
+    let cov = run_coverage(&repo_root());
+    let uncovered_codes: BTreeSet<String> = cov
+        .gaps
+        .iter()
+        .filter(|g| g.category == Category::Diag)
+        .map(|g| g.anchor.trim_start_matches("ref.diag.").to_string())
+        .collect();
+    assert!(!uncovered_codes.is_empty(), "this test needs at least one uncovered code to be meaningful");
+
+    for rule in crate::rules::RULES {
+        let leans_on_a_gap = rule.enforced_by.iter().any(|c| uncovered_codes.contains(*c));
+        let rule_is_a_gap = cov.gaps.iter().any(|g| g.anchor == rule.anchor);
+        assert_eq!(
+            leans_on_a_gap, rule_is_a_gap,
+            "rule `{}` enforced by {:?}: covered-status must follow its codes exactly",
+            rule.anchor, rule.enforced_by
+        );
+    }
 }

@@ -241,3 +241,186 @@ pub const RESERVED: &[&str] = &[
 pub fn is_reserved(word: &str) -> bool {
     RESERVED.contains(&word)
 }
+
+/// One row of the token index (Stage 9b — the generated reference's token chapter).
+pub struct TokenInfo {
+    /// The `TokenKind` variant name, exactly as written in the enum.
+    pub variant: &'static str,
+    /// The literal lexeme, where the token has exactly one spelling.
+    pub lexeme: Option<&'static str>,
+    /// The token's human description (the one diagnostics use).
+    pub describe: String,
+}
+
+/// Every `TokenKind` variant, for the generated reference. The drift guard below fences this
+/// against the enum itself, so a token added or renamed without updating this list fails the
+/// build rather than silently vanishing from the reference.
+pub fn token_index() -> Vec<TokenInfo> {
+    let rows: Vec<(&'static str, TokenKind)> = vec![
+        ("Ident", TokenKind::Ident("name".into())),
+        ("Int", TokenKind::Int(0)),
+        ("Float", TokenKind::Float(0.0)),
+        ("Str", TokenKind::Str(String::new())),
+        ("KwFn", TokenKind::KwFn),
+        ("KwLet", TokenKind::KwLet),
+        ("KwVar", TokenKind::KwVar),
+        ("KwIf", TokenKind::KwIf),
+        ("KwElse", TokenKind::KwElse),
+        ("KwWhile", TokenKind::KwWhile),
+        ("KwReturn", TokenKind::KwReturn),
+        ("KwMatch", TokenKind::KwMatch),
+        ("KwModule", TokenKind::KwModule),
+        ("KwImport", TokenKind::KwImport),
+        ("KwPub", TokenKind::KwPub),
+        ("KwType", TokenKind::KwType),
+        ("KwEffect", TokenKind::KwEffect),
+        ("KwTrue", TokenKind::KwTrue),
+        ("KwFalse", TokenKind::KwFalse),
+        ("KwActor", TokenKind::KwActor),
+        ("KwSpawn", TokenKind::KwSpawn),
+        ("KwConsume", TokenKind::KwConsume),
+        ("KwRecover", TokenKind::KwRecover),
+        ("LParen", TokenKind::LParen),
+        ("RParen", TokenKind::RParen),
+        ("LBrace", TokenKind::LBrace),
+        ("RBrace", TokenKind::RBrace),
+        ("LBracket", TokenKind::LBracket),
+        ("RBracket", TokenKind::RBracket),
+        ("Comma", TokenKind::Comma),
+        ("Dot", TokenKind::Dot),
+        ("Colon", TokenKind::Colon),
+        ("Arrow", TokenKind::Arrow),
+        ("FatArrow", TokenKind::FatArrow),
+        ("Bang", TokenKind::Bang),
+        ("Question", TokenKind::Question),
+        ("Pipe", TokenKind::Pipe),
+        ("Underscore", TokenKind::Underscore),
+        ("At", TokenKind::At),
+        ("Eq", TokenKind::Eq),
+        ("EqEq", TokenKind::EqEq),
+        ("NotEq", TokenKind::NotEq),
+        ("Lt", TokenKind::Lt),
+        ("Le", TokenKind::Le),
+        ("Gt", TokenKind::Gt),
+        ("Ge", TokenKind::Ge),
+        ("Plus", TokenKind::Plus),
+        ("Minus", TokenKind::Minus),
+        ("Star", TokenKind::Star),
+        ("Slash", TokenKind::Slash),
+        ("Percent", TokenKind::Percent),
+        ("AndAnd", TokenKind::AndAnd),
+        ("OrOr", TokenKind::OrOr),
+        ("Term", TokenKind::Term),
+        ("Eof", TokenKind::Eof),
+    ];
+    rows.into_iter()
+        .map(|(variant, kind)| TokenInfo {
+            variant,
+            lexeme: kind.keyword_lexeme().or_else(|| punctuation_lexeme(&kind)),
+            describe: kind.describe(),
+        })
+        .collect()
+}
+
+/// The single spelling of a punctuation token, where it has one.
+fn punctuation_lexeme(kind: &TokenKind) -> Option<&'static str> {
+    Some(match kind {
+        TokenKind::LParen => "(",
+        TokenKind::RParen => ")",
+        TokenKind::LBrace => "{",
+        TokenKind::RBrace => "}",
+        TokenKind::LBracket => "[",
+        TokenKind::RBracket => "]",
+        TokenKind::Comma => ",",
+        TokenKind::Dot => ".",
+        TokenKind::Colon => ":",
+        TokenKind::Arrow => "->",
+        TokenKind::FatArrow => "=>",
+        TokenKind::Bang => "!",
+        TokenKind::Question => "?",
+        TokenKind::Pipe => "|",
+        TokenKind::Underscore => "_",
+        TokenKind::At => "@",
+        TokenKind::Eq => "=",
+        TokenKind::EqEq => "==",
+        TokenKind::NotEq => "!=",
+        TokenKind::Lt => "<",
+        TokenKind::Le => "<=",
+        TokenKind::Gt => ">",
+        TokenKind::Ge => ">=",
+        TokenKind::Plus => "+",
+        TokenKind::Minus => "-",
+        TokenKind::Star => "*",
+        TokenKind::Slash => "/",
+        TokenKind::Percent => "%",
+        TokenKind::AndAnd => "&&",
+        TokenKind::OrOr => "||",
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Parse the `TokenKind` variant names straight out of this file's own source.
+    fn enum_variants() -> BTreeSet<String> {
+        let src = include_str!("token.rs");
+        let start = src.find("pub enum TokenKind {").expect("the enum is declared here");
+        let body = &src[start..];
+        let end = body.find("\n}").expect("the enum body closes");
+        let mut out = BTreeSet::new();
+        for line in body[..end].lines().skip(1) {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with("//") || t.starts_with("#[") {
+                continue;
+            }
+            let name: String =
+                t.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            if !name.is_empty() && name.chars().next().unwrap().is_uppercase() {
+                out.insert(name);
+            }
+        }
+        out
+    }
+
+    /// DRIFT GUARD: the index covers exactly the enum — no missing token, no stale entry.
+    #[test]
+    fn token_index_covers_every_variant_exactly() {
+        let listed: BTreeSet<String> =
+            token_index().iter().map(|t| t.variant.to_string()).collect();
+        let declared = enum_variants();
+        assert_eq!(
+            listed, declared,
+            "the token index drifted from `TokenKind`\n  missing from index: {:?}\n  stale in index: {:?}",
+            declared.difference(&listed).collect::<Vec<_>>(),
+            listed.difference(&declared).collect::<Vec<_>>()
+        );
+    }
+
+    /// THE SKIP-BRANCH CASE (house rule 3): the guard must be able to fail — proving
+    /// `enum_variants` really reads the enum rather than returning an empty set that any index
+    /// would vacuously satisfy.
+    #[test]
+    fn the_variant_scraper_actually_finds_variants() {
+        let declared = enum_variants();
+        assert!(declared.len() > 40, "the scraper found only {} variants — it is not reading the enum", declared.len());
+        assert!(declared.contains("KwFn") && declared.contains("Eof"));
+        assert!(!declared.contains("DefinitelyNotAToken9b"));
+    }
+
+    /// Every keyword in the active keyword table appears in the index with that lexeme.
+    #[test]
+    fn every_active_keyword_is_indexed_with_its_lexeme() {
+        let idx = token_index();
+        for word in ["fn", "let", "var", "if", "else", "while", "return", "match", "module",
+                     "import", "pub", "type", "effect", "true", "false", "actor", "spawn",
+                     "consume", "recover"] {
+            assert!(
+                idx.iter().any(|t| t.lexeme == Some(word)),
+                "active keyword `{word}` is missing from the token index"
+            );
+        }
+    }
+}

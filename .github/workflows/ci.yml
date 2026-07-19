@@ -57,3 +57,9 @@ jobs:
       # the 1.0 cut — see STAGE9_BUILD_ORDER.md D10.
       - name: Conformance coverage law (report; ratcheted by delulu-conform's own test)
         run: cargo run -q -p delulu-conform -- --coverage || true
+
+      # Stage 9b: the reference is generated in part, so it cannot drift from the compiler.
+      # This IS a hard gate: if the grammar, primitive table, diagnostics registry or rule index
+      # changed without regenerating, the docs are already wrong and the build says so.
+      - name: The generated reference is in sync with the source
+        run: cargo run -q -p delulu-conform -- --check-reference

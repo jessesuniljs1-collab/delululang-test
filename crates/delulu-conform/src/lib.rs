@@ -48,6 +48,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+pub mod reference;
+pub mod rules;
+
 pub const SCHEMA: &str = "conform-coverage/1";
 
 /// The audit rules (soundness audit R-1…R-7). Spec-fixed; the drift test cross-checks the doc.
@@ -69,6 +72,7 @@ pub enum Category {
     Grammar,
     Audit,
     Cli,
+    Rule,
 }
 
 impl Category {
@@ -79,10 +83,18 @@ impl Category {
             Category::Grammar => "grammar",
             Category::Audit => "audit",
             Category::Cli => "cli",
+            Category::Rule => "rule",
         }
     }
-    pub fn all() -> [Category; 5] {
-        [Category::Diag, Category::Prim, Category::Grammar, Category::Audit, Category::Cli]
+    pub fn all() -> [Category; 6] {
+        [
+            Category::Diag,
+            Category::Prim,
+            Category::Grammar,
+            Category::Audit,
+            Category::Cli,
+            Category::Rule,
+        ]
     }
 }
 
@@ -111,6 +123,9 @@ impl Registry {
         }
         for s in CLI_SUBCOMMANDS {
             anchors.insert(format!("ref.cli.{s}"), Category::Cli);
+        }
+        for r in rules::RULES {
+            anchors.insert(r.anchor.to_string(), Category::Rule);
         }
         Registry { anchors }
     }
@@ -461,6 +476,25 @@ pub fn run_coverage(root: &Path) -> Coverage {
             Err(errs) => validation_errors.extend(errs),
         },
         Err(_) => { /* no witness map yet — headers/reject files alone; not an error */ }
+    }
+
+    // --- Rule witnesses are DERIVED from the codes that enforce them ---
+    // A rule is witnessed in a direction exactly when EVERY enforcing code is witnessed in that
+    // direction. Deliberately strict: a rule enforced by three codes, one of which no test ever
+    // produces, is a rule with an untested edge, and the reference must say so rather than round
+    // up to "covered".
+    for rule in rules::RULES {
+        for positive in [true, false] {
+            let map = if positive { &witnesses.positive } else { &witnesses.negative };
+            let all_enforced = !rule.enforced_by.is_empty()
+                && rule.enforced_by.iter().all(|code| {
+                    map.get(&format!("ref.diag.{code}")).is_some_and(|v| !v.is_empty())
+                });
+            if all_enforced {
+                let via = rule.enforced_by.join("+");
+                witnesses.add(rule.anchor, positive, format!("via:{via}"));
+            }
+        }
     }
 
     // --- Gaps ---
