@@ -205,3 +205,44 @@ degrades to lockfile/vendored builds (never blocks existing users' CI).
 
 *Stage 9 is the promise, kept and published. Stage 10 is the language at industrial and physical
 stakes.*
+
+---
+
+## Implementation status
+
+**Stage 9 is BUILT** (2026-07-19). **v1.0 is NOT RELEASED** — the acceptance gate returned two
+blockers. Operational record, rulings D1–D20, and the criteria table: `STAGE9_BUILD_ORDER.md`.
+
+| Phase | Commit | What landed |
+|---|---|---|
+| build order | `93afcaf` | Kitchen protocol, gates, rulings D1–D9 |
+| 9a | `335a875` | The coverage law, mechanized. Found and fixed a **primitive-table arity fail-open** (`root.console(1,2,3,4,5)` minted a capability and ignored the surplus) and two permissive `map` branches |
+| 9b | `629bc3b` | The reference, **generated in part** from compiler source; `--check-reference` a hard CI gate; 54 normative rules with derived coverage |
+| 9c | `9edde1e` | `STABILITY.md`, deprecation policy, language editions (DL1801/DL1802); 3 shadowed codes made reachable; `keygen --help` no longer writes a key |
+| 9d | `2f08b44` | Study A — **20/20 injections caught**, after catching a **false 100%** in the study's own first run |
+| 9e | `0cb09e5` | Studies B and C published as measured; found and fixed a **host crash on deep recursion** (DL0905) |
+| 9f | `f118396` | Governance + `DRILL-001`: the runbook rehearsed in 5m28s, and it proved the **875-test suite was blind to a signature bypass** |
+| 9g | `9589e5d` | The registry: server-side authority recomputation, scoped tokens, yank≠delete |
+| 9h | `20b7245` | Book samples as conformance tests; **95 missing explain bodies** written; `docs/for-agents.md` |
+| 9i | `7acc354` | Release engineering; reproducibility witnessed; **the gate said no** (D19) |
+
+### The two blockers
+
+1. **Criterion 1** — conformance coverage is **273/290 (94.1%)**. The 17 open anchors are
+   classified in the build order's D10: shadowed codes, producible-but-untested, and codes no
+   program can produce by construction.
+2. **Criterion 8** — the fresh-machine first-run has not been performed or timed on any OS.
+
+### Verification
+
+Windows **916 passed / 0 failed / 5 ignored**. Linux (WSL Ubuntu) **920 passed / 0 failed /
+5 ignored** at `7acc354` — the +4 are platform-gated tests that only run on Linux. macOS
+**unverified**: no Apple hardware (D8). The one Stage-9 change worth confirming there is the 512 MB
+interpreter thread stack introduced in 9e.
+
+### Honest note on §3
+
+Study B's live-model lane and the mechanical-vs-manual comparison in Study A are **UNRUN**, not
+dropped (D4, D14). The Go baselines in Studies B and C are UNRUN — no Go toolchain on the
+measurement machine. Each is labelled in its report rather than omitted so the remainder looks
+complete.
