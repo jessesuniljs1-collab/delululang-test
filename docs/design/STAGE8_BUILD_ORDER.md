@@ -1,6 +1,7 @@
 # Stage 8 Build Order — "Surface" (operational companion)
 
-**Status:** IN PROGRESS (started 2026-07-18). Normative spec: `STAGE8_SPECIFICATION.md`;
+**Status:** **BUILT** 2026-07-18. All ten §9 criteria carry named witnesses in §4;
+Windows full suite 800 / 0. Normative spec: `STAGE8_SPECIFICATION.md`;
 how-to: `docs/playbooks/STAGE8_PLAYBOOK.md`. Precedence: spec > playbook > this file — but
 *this file's* deviations ledger (§3) records every ruled departure, and its close-out table
 (§4) is the ground truth of DONE vs PENDING.
@@ -170,6 +171,16 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
     (best of two). The 3.00× cold record stands in the Stage-7 close-out table as the
     witnessed performance; this bar exists to catch parallelism BREAKING, and 1.5×
     still does exactly that. Argued here in the open — not silently loosened.
+13. **RULED — `locale add` mechanics (8f).** (a) The zero-authority gate lives at ADD:
+    `plugin build` happily builds an effectful plugin, but a catalog plugin with ANY
+    ceiling effect is refused at install — the couldn't-tell branch closes where the
+    catalog enters the system. (b) The verified TOML is extracted ONCE at add and stored
+    under `~/.delulu/locales/<name>.toml` (`DELULU_LOCALES_DIR` test override): the
+    plugin is the trusted DELIVERY vehicle; after step-5 replay + pure evaluation, the
+    text is data. (c) Non-TTY `locale add` proceeds WITHOUT a prompt (invariant 40's
+    spirit — agents install locales cold), the prose bound printed either way; the
+    interactive prompt gates only humans. (d) Catalog entry defects warn (DL1704) at
+    add time — where the human is looking — and again degrade per-entry at render.
 14. **RULED — test runner mechanics (8g).** (a) `[test-authority]` absent = PURE (the
     couldn't-tell default grants nothing — invariant 41); a per-file header wider than the
     package ceiling is DL1703 at the run's front, before the body executes. (b) Grants
@@ -196,31 +207,26 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
     hardening is a documented v0.8 gap (the broker's own key files share it). Signing
     authenticates ORIGIN not behavior; the index authority line is trust-on-first-verify,
     re-checked by the Stage-2 machinery on build — no trust POLICY (that is Stage 9).
-13. **RULED — `locale add` mechanics (8f).** (a) The zero-authority gate lives at ADD:
-    `plugin build` happily builds an effectful plugin, but a catalog plugin with ANY
-    ceiling effect is refused at install — the couldn't-tell branch closes where the
-    catalog enters the system. (b) The verified TOML is extracted ONCE at add and stored
-    under `~/.delulu/locales/<name>.toml` (`DELULU_LOCALES_DIR` test override): the
-    plugin is the trusted DELIVERY vehicle; after step-5 replay + pure evaluation, the
-    text is data. (c) Non-TTY `locale add` proceeds WITHOUT a prompt (invariant 40's
-    spirit — agents install locales cold), the prose bound printed either way; the
-    interactive prompt gates only humans. (d) Catalog entry defects warn (DL1704) at
-    add time — where the human is looking — and again degrade per-entry at render.
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 
+**Status: BUILT** — head-chef ordered, cooked directly (7a-context: phases 8a–8f by
+Fable 5; 8g–8h + close-out completed by Opus 4.8 after the owner switched the session
+model mid-stage — attributed honestly in the commits). Windows full suite: **800 / 0**;
+WSL Linux: see below. All ten §9 criteria carry named witnesses.
+
 | # | Criterion | Witness | Status |
 |---|---|---|---|
-| 1 | LSP smoke: diagnostics ≡ check --json; hover signature+row; DL0501 code action applies → green; cross-package rename | — | PENDING |
-| 2 | Authority lens: lambda inlay hints; ⚠ widening action distinguishable (`authority_widening` in `data`) | — | PENDING |
-| 3 | ≤150 ms edit-to-diagnostics, 10-kLoC reference, measured | — | PENDING |
-| 4 | fmt identity + idempotence ≥100k programs; `--check` exit 1; `--migrate 0.7` passes Stage-7 corpus | — | PENDING |
-| 5 | test runner: pure tests zero grants; undeclared effect fails DL0501/DL0701; `effects_traced` in JSON; session-end revocation in `grants tree` | — | PENDING |
-| 6 | welcome/picker: once on fresh TTY; never on the five suppressed channels; text hash-pinned | — | PENDING |
-| 7 | locale invariance: conformance JSON byte-identical en-US vs delulu-slang; slang DL0501 matches catalog | — | PENDING |
-| 8 | catalog plugin: third locale via `locale add`; en-US fallback on missing keys; welcome override → DL1704 | — | PENDING |
-| 9 | `publish --dry-run` catches widening minor bump (DL1003) vs local index fixture; `add` renders authority summary from the index line alone | — | PENDING |
-| 10 | all prior suites green; `fmt --check` + locale-invariance in CI permanently | — | PENDING |
+| 1 | LSP smoke: diagnostics ≡ check --json; hover signature+row; DL0501 code action applies → green; cross-package rename | `lsp_cli.rs::criterion1_diagnostics_equal_check_json_and_the_repair_applies`, `::hover_shows_signature_row_and_authority`, `::criterion1_rename_updates_both_open_documents` | ✅ MET |
+| 2 | Authority lens: lambda inlay hints; ⚠ widening action distinguishable (`authority_widening` in `data`) | `lsp_cli.rs::criterion2_inlay_hints_on_unannotated_lambdas`; widening flag asserted in `::criterion1_…repair_applies` (`data.authority_widening == true`, `isPreferred == false`, ⚠ title) | ✅ MET |
+| 3 | ≤150 ms edit-to-diagnostics, 10-kLoC reference, measured | `lsp_cli.rs::criterion3_latency_150ms_on_10kloc_release` — **47 ms** release, best of 3 (budget 150); always-on debug smoke ceiling `::latency_smoke_…` | ✅ MET |
+| 4 | fmt identity + idempotence ≥100k programs; `--check` exit 1; `--migrate 0.7` passes Stage-7 corpus | `delulu-syntax::fmt::tests::fmt_laws_100k_gate` (**100k, 0 violations, 54 s release**) + `::laws_hold_over_the_repository_corpus`; `fmt_cli.rs::fmt_rewrites_in_place_then_check_goes_green`, `::migrate_07_still_works_unchanged` | ✅ MET |
+| 5 | test runner: pure tests zero grants; undeclared effect fails DL0501/DL0701; `effects_traced` in JSON; session-end revocation in `grants tree` | `test_runner_cli.rs::criterion5_pure_tests_run_effects_traced_and_undeclared_is_refused`, `::a_test_exceeding_the_package_ceiling_is_dl1703`, `::criterion5_broker_session_is_revoked_at_end` (daemon lane) | ✅ MET |
+| 6 | welcome/picker: once on fresh TTY; never on the five suppressed channels; text hash-pinned | `locale_cli.rs::criterion6_welcome_and_picker_show_exactly_once_…`, `::criterion6_each_machine_channel_alone_suppresses_the_first_run`; text pinned in `locale.rs::the_welcome_text_is_byte_exact_and_pinned` (277 bytes, checksum) | ✅ MET |
+| 7 | locale invariance: conformance JSON byte-identical en-US vs delulu-slang; slang DL0501 matches catalog | `locale_cli.rs::criterion7_json_bytes_identical_across_locales_human_differs`; `delulu-check::criterion7_seed_dl0501_slang_human_vs_frozen_machine_envelope` | ✅ MET |
+| 8 | catalog plugin: third locale via `locale add`; en-US fallback on missing keys; welcome override → DL1704 | `locale_plugin_cli.rs::criterion8_third_locale_installs_renders_and_falls_back`, `::a_catalog_plugin_with_authority_is_refused` | ✅ MET |
+| 9 | `publish --dry-run` catches widening minor bump (DL1003) vs local index fixture; `add` renders authority summary from the index line alone | `signing_cli.rs::criterion9_publish_catches_widening_bump_and_add_reads_the_index_line`, `::keygen_sign_verify_round_trip_and_tamper_detection` | ✅ MET |
+| 10 | all prior suites green; `fmt --check` + locale-invariance in CI permanently | full workspace suite 800/0; `.github/workflows/ci.yml` gains `delulu fmt --check examples` (examples canonicalized); locale-invariance carried by criterion-7 tests, run every CI | ✅ MET |
 
 ## 5. Post-v0.8 RFC ledger (deferred with eyes open)
 

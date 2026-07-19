@@ -615,6 +615,30 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1702" => "The formatter produced output that is not equivalent to its input, or is not \
+             idempotent — a COMPILER BUG, never your code's fault. `delulu fmt` verifies both laws \
+             inline before writing any byte: identity (the reprinted program parses to the same AST, \
+             comments preserved) and idempotence (formatting the output again is a no-op). On a \
+             violation the file is left UNTOUCHED — the formatter never corrupts code — and this is \
+             reported so you can file a bug with the offending source.",
+        "DL1703" => "A `test` block's declared effect row exceeds the package's `[test-authority]` \
+             ceiling in `delulu.toml`. Tests hold no ambient authority (invariant 41): each gets \
+             exactly its declared row, and that row must be ⊑ the package ceiling. Either narrow the \
+             test's row to what it truly needs, or widen `[test-authority]` in `delulu.toml` — the \
+             latter is a real review decision (the ceiling is the most any test in this package may \
+             ever do). An absent `[test-authority]` table means the ceiling is PURE.",
+        "DL1705" => "A signature did not verify. `delulu verify-sig` checks a detached \
+             `<artifact>.sig` (a 32-byte ed25519 public key ‖ a 64-byte signature) over the \
+             artifact's raw bytes. This fault means the bytes changed since signing, the `.sig` is \
+             malformed, the key is not a valid ed25519 key, or (`--key HEX`) the signer is not the \
+             pinned identity. Signing authenticates ORIGIN, not behavior: a valid signature says who \
+             produced the artifact, never that it is safe to run.",
+        "DL1706" => "A registry index line is invalid, or `delulu publish --dry-run` found a \
+             semver-authority conflict against the package's prior index line (see also DL1003: \
+             widening authority is a semver-MAJOR change — a minor/patch bump may not add effects, \
+             capabilities, or scopes). The index line carries the authority summary so `delulu add` \
+             can show the authority diff before downloading anything. v0.8 validates against a local \
+             `--index <dir>` fixture; hosted registry operations are Stage 9.",
         "DL1704" => "A message catalog had a defect: a key that is not a registered diagnostic \
              code or named CLI string, a placeholder the key does not declare, a malformed \
              line — or an attempt to override the first-run welcome, which no catalog may \
@@ -806,6 +830,27 @@ mod tests {
         assert!(body.contains("DL0605"), "explain links the check-time opacity refusal");
         assert!(body.contains("assert_eq"), "explain names both assertion forms");
         assert!(!is_registered("DL1784"), "DL1784 is deliberately never allocated (house rule)");
+    }
+
+    /// Stage 8: the full tooling DL range (DL1701–DL1707) is registered with explain bodies,
+    /// and DL1706 links the semver-authority law (DL1003) it enforces at publish.
+    #[test]
+    fn stage8_tooling_codes_registered_with_explanations() {
+        for code in ["DL1701", "DL1702", "DL1703", "DL1704", "DL1705", "DL1706", "DL1707"] {
+            assert!(is_registered(code), "{code} must be registered");
+        }
+        // The load-bearing ones carry real explain bodies (house rule 6).
+        for code in ["DL1702", "DL1703", "DL1704", "DL1705", "DL1706", "DL1707"] {
+            assert!(code_explain(code).is_some(), "{code} needs an explain body");
+        }
+        assert!(
+            code_explain("DL1706").unwrap().contains("DL1003"),
+            "DL1706 links the semver-authority law it enforces"
+        );
+        assert!(
+            code_explain("DL1703").unwrap().contains("invariant 41"),
+            "DL1703 cites the tests-hold-no-ambient-authority invariant"
+        );
     }
 
     /// Surface addendum §3.2: the Palette code DL1790 is registered, the `E-PALETTE` topic exists

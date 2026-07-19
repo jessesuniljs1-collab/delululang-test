@@ -4,4 +4,6 @@ module shout
 // AFTER compile time and still cannot exceed its grant. Its type is a pure `fn(Str) -> Str` and it
 // holds no capability, so — checked at load, by the type system — it cannot read a file, tell the
 // time, or reach the network. There is nothing to trust: the guarantee is by construction.
-pub fn shout(s: Str) -> Str { s + "!" }
+pub fn shout(s: Str) -> Str {
+    s + "!"
+}

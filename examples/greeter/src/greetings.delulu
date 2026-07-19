@@ -3,9 +3,9 @@ module greeter.greetings
 // Pure helpers, exported to the entry module. `salutation` performs no effect — the compiler
 // proves it across the module boundary.
 pub fn salutation(name: Str) -> Str {
-  "hello, " + name
+    "hello, " + name
 }
 
 pub fn shout_count(text: Str) -> Int {
-  text.split(" ").len()
+    text.split(" ").len()
 }

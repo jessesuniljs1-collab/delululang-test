@@ -36,6 +36,14 @@ jobs:
       - name: Full workspace test suite
         run: cargo test --workspace
 
+      # Stage 8 criterion 10: `delulu fmt --check` and locale invariance are permanent CI
+      # gates. The suite already carries them (fmt identity/idempotence over the corpus +
+      # generative gate in delulu-syntax::fmt; locale-invariant JSON in delulu/tests/
+      # locale_cli.rs criterion7) — these steps make the fmt corpus check explicit and
+      # fail the build on any unformatted committed source.
+      - name: fmt --check the examples corpus
+        run: cargo run -q -p delulu -- fmt --check examples
+
       # The Python-less build must stay a first-class citizen (DL1307 path).
       - name: Python-less build check
         run: cargo check -p delulu --no-default-features

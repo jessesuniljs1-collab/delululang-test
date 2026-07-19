@@ -5,6 +5,6 @@ module hello
 //   delulu run examples/hello_wasm.delulu --grant console
 //   delulu run examples/hello_wasm.delulu --engine wasm --grant console
 fn main(root: Root) ! {Write} {
-  let out = root.console()
-  out.println("hello from the wasm engine")
+    let out = root.console()
+    out.println("hello from the wasm engine")
 }
