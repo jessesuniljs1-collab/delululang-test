@@ -4,17 +4,33 @@
 **Status:** Committed. Unlike Stages 1–9, Stage 10 is a **program of parallel tracks**, each
 independently shippable in a 1.x minor, each RFC-visible, none changing v1.0 semantics except
 where an activation was explicitly reserved (attributes, `Actuate`, threads-in-WASM).
+**Revision 2 (2026-07-19, at the owner's direction):** scope extended from five tracks to eight.
+New: **Track F** (heterogeneous compute — any vendor's GPU/TPU/NPU behind one authority model),
+**Track G** (post-quantum cryptography — hybrid, KAT-gated, and never called "quantum-proof"),
+**Track H** (cloud, fleets, and infrastructure — deployment is a grant). **Track D is generalized**
+from the arm to the autonomy domains — road vehicles, aircraft and UAS, spacecraft and satellites,
+robot fleets — with energy systems (batteries/BMS) and safety mechanisms (e-stop chains,
+interlocks, watchdogs) as first-class device classes; domain depth lives in
+`STAGE10_AUTONOMY_ADDENDUM.md`. The owner's charge, recorded: *DeluluLang is to be a key pillar of
+a safe and secure autonomous future — the language in which the command layers of vehicles,
+aircraft, satellites, and robots are written and modified, by humans and by AI, under authority
+they cannot exceed.* Rev 2 turns that charge into tracks, invariants, and criteria; it changes no
+v1.0 semantics and claims nothing built.
 **Depends on:** Stage 9 (v1.0 released; stability contract in force; measurement baseline
-published).
-**Governing documents:** `CONSTITUTION.md` (§5.11 execution modes, §7 robotics, §9 honesty),
-`SOUNDNESS_AUDIT.md`.
+published). *Honest status note (2026-07-19): v1.0 stands at `1.0.0-rc.1` with two published
+blockers (coverage 273/290; the untimed fresh-machine first-run — `STAGE9_BUILD_ORDER.md`
+close-out). Stage 10 build work does not begin until v1.0 ships; revising this specification is
+design work, not build work.*
+**Governing documents:** `CONSTITUTION.md` (§5.11 execution modes, §5.12 interop, §7 robotics,
+§9 honesty), `SOUNDNESS_AUDIT.md`, `STAGE10_AUTONOMY_ADDENDUM.md` (normative for Track D domain
+scope).
 
 ---
 
 ## 0. Scope and goal — what "production-ready DeluluLang" concretely means
 
 Production-ready is a checklist, not a vibe. DeluluLang is production-ready when **all** of the
-following are true, each verified by a named criterion in §8:
+following are true, each verified by a named criterion in §11:
 
 P1. **Performance:** measured competitive-with-C on the published hot-path suite (geometric mean
     within 2.5× of C on compute kernels via the optimizing backend; the honest target from
@@ -30,8 +46,21 @@ P5. **Operational maturity:** LTS releases, CVE process exercised for real, upgr
 P6. **Ecosystem viability:** the registry carries independently-authored packages and plugins;
     at least one third-party catalog locale; the agent-harness page (`for-agents.md`) adopted by
     at least two independent harnesses.
+P7. **Heterogeneous compute:** any vendor's accelerator — GPU, TPU, NPU — behind one vendor-neutral
+    authority model: enumerated, envelope-bounded, and honestly labeled outside the proof (§7).
+P8. **Post-quantum cryptography:** hybrid, KAT-validated, crypto-agile signatures and transport
+    (§8) — the registry's trust built to outlive the arrival of a cryptographically relevant
+    quantum computer (retroactive forgery for signatures; harvest-now-decrypt-later for
+    transport).
+P9. **Cloud and fleets:** a deployment's whole authority computed and approved before launch;
+    fleet updates signed, staged, and hash-gated (§9).
+P10. **Autonomy domains:** the autonomy generalization *specified* for vehicles, aircraft,
+    satellites, and robot fleets with energy systems and safety chains as device classes; each
+    domain's honest boundary reviewed line-by-line; the satellite domain *witnessed* in
+    simulation; and the broker-federation gap named, not papered over (§5.6, criterion 10,
+    `STAGE10_AUTONOMY_ADDENDUM.md` §2.5).
 
-**In scope:** the five tracks below (§2–§6), LTS machinery (§7), DL19xx diagnostics.
+**In scope:** the eight tracks below (§2–§9), DL19xx diagnostics (§10), LTS machinery (§4).
 **Non-goals (RFC-gated future, recorded so nobody claims them early):** distributed actors;
 per-plugin microVMs; per-actor broker nodes; I/O-quota grant dimensions; effect handlers;
 `await`; information-flow taint beyond `Secret`; certified/mechanized compiler.
@@ -56,6 +85,28 @@ All prior invariants hold — Stage 10 is where they earn their keep. New:
 48. **Sim and real are the same program.** The sim-to-real transition changes only the broker
     profile and grants — a source or artifact diff between what was simulated and what is
     deployed is detectable (artifact hash comparison is part of the deploy flow, §5.4).
+49. **No privileged vendor.** Device and cloud-provider access goes through adapters implementing
+    vendor-neutral interfaces; no adapter carries semantics the interface cannot express. The day
+    one vendor's chip or cloud needs privileged hooks is the day the authority model has a second
+    class of citizen — refused by construction.
+50. **A kernel is a foreign call with an envelope.** Compute dispatch is typed with the existing
+    core `ForeignCall` effect — outside the proof, honestly labeled in `delulu authority` — and
+    bounded by a device envelope (memory, kernel time, queue depth, power) enforced host-side
+    and, where the adapter can enforce it, adapter-side; an adapter that cannot attest
+    independent below-adapter enforcement is refused the grant (DL1911; waiver is human-gated),
+    so double enforcement is never silently single. DeluluLang closures never become kernels;
+    kernels are hashed, signed *data*.
+51. **Hybrid or nothing; KAT or `--unstable`.** Post-quantum signatures and KEM ship only in
+    hybrid with the classical algorithms v1.0 already trusts, and reach stable only after
+    byte-exact validation against the official known-answer vectors. No product surface says
+    "quantum-proof" (§8.3).
+52. **The safety chain survives DeluluLang's death.** Hardware e-stops, interlocks, watchdogs, and
+    BMS/firmware protection must function with the DeluluLang layer absent, hung, or compromised.
+    DeluluLang supervises *above* that chain and revokes *toward* it; it never replaces it, and no
+    deployment profile may route a hardware safety function through a DeluluLang program.
+53. **No plan, no launch.** A deployment — cloud service, fleet update, or vehicle mission — runs
+    only after its whole-deployment authority answer is computed and approved against its
+    environment profile (§9.2). Deploy-time is compile-time for infrastructure.
 
 ---
 
@@ -119,7 +170,7 @@ count).
 - Broker/protocol/DIR major-version co-evolution policy: one page, published, with n−1 majors
   supported concurrently during LTS windows.
 
-## 5. Track D — The embodied/robotics profile (`Actuate` activates)
+## 5. Track D — The embodied/autonomy profile (`Actuate` activates)
 
 ### 5.1 Model (Constitution §7, now mechanism)
 
@@ -180,13 +231,159 @@ harness that stops heartbeating loses the arm to `safe-park`; an operator e-stop
 subtree. Recorded, reproducible (`measurements/robotics-demo/`), and honest about being
 simulation.
 
+### 5.6 Beyond the arm — the autonomy domains (Rev 2; addendum-governed)
+
+The same four mechanisms — envelope-scoped capabilities, dead-man leases, declared fail-states,
+and the sim-to-real hash gate — generalize from the arm to every domain where a software command
+matters physically: **road vehicles, aircraft and UAS, spacecraft and satellites, and robot
+fleets**, with **energy systems** (batteries/BMS, power distribution) and **safety mechanisms**
+(e-stop chains, interlocks, watchdogs) as first-class device classes, and **microcontrollers and
+accessories** as devices you flash and talk to (§7.3). Domain profiles — device classes, command
+rates, fail-state vocabularies, link models (a satellite's contact window *is* a lease TTL), and
+each domain's honest boundary — are specified in `STAGE10_AUTONOMY_ADDENDUM.md`, which is
+normative for Track D domain scope. Two rules travel with every domain: the honest boundary
+(§5.3) scales — DeluluLang is the command/mission layer above certified firmware, never the servo
+loop, never the airworthy autopilot, never the BMS cell protection; and invariant 52 — the
+hardware safety chain must not depend on DeluluLang existing. One gap is named rather than
+papered over: the cross-machine broker federation the satellite and fleet profiles imply is
+RFC-gated future work, not a claimed capability (addendum §2.5); Stage 5's broker is local-only,
+and criterion 10's demonstration runs both broker roles in one simulated host and says so.
+
 ## 6. Track E — Ecosystem
 
 Registry growth mechanics (curated "authority showcase" list — packages notable for *minimal*
 authority), third-party adapter/catalog support channels, `for-agents.md` versioned as an API,
 and the deprecation of nothing (v1 stability holding is itself the deliverable).
 
-## 7. Diagnostics (fresh range DL19xx)
+## 7. Track F — Heterogeneous compute (every chip, one authority model)
+
+### 7.1 The model — a device is a capability; a kernel is a foreign call with an envelope (invariant 50)
+
+New capability kind `Compute`. A `Cap[Compute]`'s **scope is its device envelope**:
+
+```json
+{ "kind": "Compute",
+  "scope": { "device": "gpu0", "class": "gpu", "adapter": "vendor-x",
+             "envelope": { "memory_bytes": 2147483648, "kernel_ms": [0, 50],
+                           "queue_depth": 32, "power_w": [0, 120] },
+             "formats": ["ptx-8", "spirv-1.6"] } }
+```
+
+Dispatching a kernel is typed as what it is: **foreign code** (Constitution §5.12). It carries the
+existing core `ForeignCall` effect — no new effect, no constitutional change — and appears in
+`delulu authority` under the outside-the-proof separator: `foreign: compute/gpu0 [kernels…]`.
+DeluluLang verifies *reachability* (no dispatch without the capability, the manifest entry, and
+`ForeignCall` in every row on the path) and enforces the *envelope* (memory ceiling, kernel time
+budget, queue depth, power/duty where the adapter can enforce it) host-side before submission and
+adapter-side where supported — the §5.1 double-enforcement rule, applied to silicon (over-envelope
+dispatch → refused, DL1907, the command dies and not the process; an adapter that cannot attest
+independent below-adapter enforcement is refused the grant, DL1911, human-gated waiver — so the
+double claim is never silently single). What the kernel *computes* is
+outside the proof, and the docs say so. A dedicated `Dispatch` effect distinguishing accelerator
+dispatch from other foreign calls is RFC-gated future work, recorded here so nobody claims it
+early.
+
+**Kernels are data, never code from the row system** (the spirit of audit rule R-6a): a DeluluLang
+closure never becomes a kernel; kernels arrive as opaque artifacts (PTX, SPIR-V, vendor blobs)
+named in the manifest, hashed, and signed like any artifact. The host drives; devices get buffers.
+
+### 7.2 Vendor neutrality (invariant 49)
+
+Device access goes through **compute adapters** — Verified-class, `require_signed: true` Stage-6
+plugins implementing one vendor-neutral interface: enumerate, allocate-within-envelope, submit,
+await, telemetry. CUDA, ROCm, oneAPI, Metal, Vulkan-compute, and TPU runtimes each live behind an
+adapter; **no vendor's adapter may have privileged semantics** — anything one adapter can express,
+the interface must express. An in-tree **CPU reference adapter** (deterministic, no hardware
+required) makes the interface conformance-testable on every CI run, with or without silicon.
+
+### 7.3 Microcontrollers are devices, not accelerators (the honest taxonomy)
+
+An MCU is not something you dispatch kernels to; it is a device you **flash and talk to**. MCU
+support therefore lives in the embodied profile (Track D): firmware images are signed artifacts;
+flashing is an actuation-class operation behind an explicit grant with the DL1905 hash gate;
+message exchange with running firmware is `Read`/`Write` under device scopes. Anything beyond
+this — compiling DeluluLang itself to bare-metal MCU targets — is RFC-gated future work, not a
+Stage-10 deliverable, and no doc may imply otherwise.
+
+## 8. Track G — Post-quantum cryptography (signatures that outlive the machines that made them)
+
+### 8.1 Why now
+
+A signed artifact is a claim addressed to the future, and "harvest now, decrypt later" is an
+attack mounted from it: transport recorded today is broken the day a cryptographically relevant
+quantum computer exists, and Shor's algorithm breaks the discrete-log problem under both X25519
+and ed25519. The registry's artifacts and transport therefore move to post-quantum algorithms
+*before* that day, not after.
+
+### 8.2 The mechanism — hybrid, agile, honest (invariant 51)
+
+- **Signatures:** ed25519 **and** ML-DSA-65 (FIPS 204), hybrid. The signature envelope carries
+  both, with explicit algorithm identifiers (crypto-agility: the envelope names its algorithms so
+  they can be replaced without a format break). Under hybrid-required policy **both must verify**;
+  an artifact carrying classical-only, or an unknown algorithm id, → **DL1908**.
+- **Transport:** ML-KEM-768 (FIPS 203) hybridized with X25519 for the registry channel — the
+  session stays secure if *either* assumption holds.
+- **Never PQ-only.** Lattice cryptanalysis is younger than curve cryptanalysis; hybrid means the
+  guarantee is never weaker than what v1.0 already ships.
+- **KAT or `--unstable`.** A PQC implementation ships as stable only after byte-exact validation
+  against the official NIST known-answer vectors, recorded in the build order with vector
+  provenance; until then, every invocation without `--unstable` → **DL1910**. An implementation
+  that merely round-trips its own output has proven interoperability with itself, which is not a
+  property anyone needs.
+- **House rule 5 outranks dependency austerity: cryptography is never hand-rolled.** The recorded
+  precedent is `ed25519-dalek` (v2) — a vetted implementation taken as a dependency, not an
+  in-house one — and ML-DSA/ML-KEM are constant-time lattice code, the highest-risk category
+  there is. The default is a vetted, KAT-validated implementation adopted under a build-order
+  ruling that records the vetting; writing lattice cryptography in-tree is the extraordinary path
+  and would itself need a ruling nobody should expect to win. The in-tree effort goes where it
+  belongs: the envelope format, the policy gates, and the tests. Zeroization and constant-time
+  discipline rules carry over from the Stage-8 signing integration unchanged.
+
+### 8.3 The vocabulary rule (binding; §12)
+
+The words **"quantum-proof"** and **"quantum-safe"** never appear in any product surface **as a
+claim** — they may appear only inside prohibition or honesty-caveat sentences whose purpose is to
+ban or correct the term (this section, invariant 51, the §12 caveats, and their mandated copies).
+The honest term is **post-quantum**: standardized algorithms (FIPS 203/204) believed resistant to
+known quantum attacks — a judgment about current cryptanalysis, not a proof. "Proof" claims about
+cryptography are exactly the overclaim the Constitution's honesty clauses exist to prevent, and
+the hybrid construction (§8.2) exists *because* the judgment is young.
+
+## 9. Track H — Cloud, fleets, and infrastructure (deployment is a grant)
+
+### 9.1 The model — no new semantics, the same authority story at datacenter scale
+
+Cloud provider APIs are network resources: `Cap[Http]` scoped to provider endpoints, wrapped by
+**provider adapters** (Verified-class plugins) that type the operations (create-instance,
+put-object, …) so a program's cloud reach reads off its authority report like everything else. No
+new effects; no privileged provider (invariant 49 applies to clouds exactly as to chips).
+
+### 9.2 The deploy plan is an authority manifest (invariant 53)
+
+`delulu deploy plan` computes, for a deployment (program + manifest + environment profile), the
+**whole-deployment authority answer before anything runs**: effects, capability scopes, and
+foreign holes, per service. Environment profiles (`envs/prod.toml`) declare the maximum authority
+a deployment may hold there; a plan exceeding its profile → **DL1909** and the deploy refuses.
+"What can this deployment do to my cloud account?" gets the same mechanical answer as "what can
+this function do?" — before launch, not in the postmortem.
+
+### 9.3 Fleets and updates
+
+Fleet/OTA updates ride the existing machinery: artifacts signed (hybrid, once Track G lands),
+staged rollout with health gates, and the approved-hash rule (DL1905) generalized — a fleet never
+receives an artifact whose hash differs from what was approved, without explicit human
+re-approval. Rollback artifacts are pinned at rollout start; an update that cannot be undone is an
+outage with extra steps.
+
+### 9.4 The honest boundary
+
+DeluluLang bounds **its programs'** authority over cloud APIs. The provider's control plane, IAM,
+billing, and hypervisor are layers it does not control and does not claim — a DeluluLang deploy
+plan is least-privilege *input* to provider IAM, never a substitute for it. And this track
+**deploys** programs; it does not distribute the actor runtime — distributed actors remain
+RFC-gated (§0 non-goals).
+
+## 10. Diagnostics (fresh range DL19xx)
 
 | Code | Meaning | Repair |
 |---|---|---|
@@ -196,8 +393,13 @@ and the deprecation of nothing (v1 stability holding is itself the deliverable).
 | DL1904 | actuator command refused by envelope (runtime telemetry class) | none — envelope shown |
 | DL1905 | hw grant requested for artifact hash ≠ sim-approved hash | re-approve — `requires_human: true` |
 | DL1906 | `@jit`/native emission requested without `exec.native` grant | none — `authority_widening` note in explanation |
+| DL1907 | compute dispatch refused by device envelope (runtime telemetry class) | none — envelope shown |
+| DL1908 | signature policy requires hybrid; artifact is classical-only or unknown algorithm | re-sign — exact |
+| DL1909 | deploy plan authority exceeds environment profile | narrow the plan; widening the profile is flagged `authority_widening`, `requires_human: true` |
+| DL1910 | unvalidated (pre-KAT) cryptography invoked without `--unstable` | none — validation status shown |
+| DL1911 | device adapter cannot attest independent below-adapter envelope enforcement | grant refused; waiver is policy-explicit, `requires_human: true` |
 
-## 8. Acceptance criteria
+## 11. Acceptance criteria
 
 1. **P1:** published hot-path table: geo-mean ≤ 2.5× C on the compute-kernel suite under the
    optimizing backend, with per-benchmark numbers, both better and worse, published as-is.
@@ -214,10 +416,30 @@ and the deprecation of nothing (v1 stability holding is itself the deliverable).
    with advisory + DL1903 feed entry); the drill timeline published.
 6. **P6:** ≥ 10 independently-authored registry packages, ≥ 1 third-party locale catalog,
    ≥ 2 independent agent harnesses consuming `for-agents.md` (referenced by their docs).
-7. Every claim in Stage-10 marketing/release prose traces to one of these criteria — honesty
-   review sign-off, same as Stage 9.
+7. **P7:** the vendor-neutral compute interface passes conformance via the in-tree CPU reference
+   adapter on every CI run; at least one hardware accelerator adapter demonstrated end-to-end (or
+   the deferral published, invariant-45-style honesty); an over-envelope dispatch is refused
+   (DL1907) with the refusal measured; an adapter that cannot attest below-adapter enforcement
+   has its grant refused (DL1911), witnessed; the kernels-are-data law has laundering tests — no
+   closure crosses, and an unsigned kernel artifact is refused.
+8. **P8:** hybrid signing live for registry artifacts and the release pipeline; KAT validation
+   recorded with vector provenance; a classical-only artifact under hybrid-required policy →
+   DL1908, witnessed; the repo-wide scrub finds "quantum-proof"/"quantum-safe" only inside
+   prohibition/honesty-caveat sentences (§8.3's rule), never as a claim.
+9. **P9:** a reference deployment's whole-authority answer is computed, printed, and approved
+   before launch in the staged test; a plan exceeding its environment profile → DL1909, witnessed;
+   one fleet-update drill: staged rollout, health gate, approved-hash gate (DL1905), and rollback
+   exercised.
+10. **P10:** the autonomy addendum's per-domain honest boundaries pass line-by-line honesty
+    review; a second simulated domain demonstration beyond the arm reproduces from a clean
+    checkout — the satellite scenario: a contact-window lease expires at loss-of-signal, the
+    pre-attenuated autonomy grant engages, ground re-contact re-delegates; all witnessed in sim
+    and honest about being sim, with the recording stating that both broker roles run in one
+    simulated host (the federation gap, addendum §2.5).
+11. Every claim in Stage-10 marketing/release prose traces to one of these criteria — honesty
+    review sign-off, same as Stage 9.
 
-## 9. Honesty and threat-model caveats (carry into docs verbatim)
+## 12. Honesty and threat-model caveats (carry into docs verbatim)
 
 - Performance numbers are workload-specific; "competitive with C" means the published table,
   nothing broader. Where DeluluLang loses, the table says so.
@@ -230,6 +452,18 @@ and the deprecation of nothing (v1 stability holding is itself the deliverable).
 - Backpressure prevents unbounded memory, not deadlock; liveness remains un-guaranteed
   (Stage-7 caveat, permanent).
 - LTS windows bound *our* response time, not vulnerability existence.
+- **Post-quantum, not "quantum-proof."** FIPS 203/204 algorithms are believed resistant to known
+  quantum attacks — a judgment about current cryptanalysis, never a proof; the hybrid construction
+  exists because the judgment is young.
+- **GPU/TPU kernels are foreign code.** DeluluLang bounds their reachability, resources, and
+  provenance — not their computation. The authority report says so, per device.
+- **Autonomy domains: DeluluLang is the command/mission layer.** It claims no ISO 26262, DO-178C,
+  ECSS, or any other certification; it produces *evidence a safety case can cite* (authority
+  reports, envelopes, audit chains, deterministic sim), and certified layers below it remain in
+  charge of physics. "Supports a safety case" and "is certified" are different sentences; only the
+  first is ours.
+- **Cloud: the provider's IAM, control plane, and hypervisor are trust anchors DeluluLang does not
+  verify.** A deploy plan is least-privilege input to them, not a replacement for them.
 
 ---
 

@@ -863,7 +863,14 @@ DeluluLang is built in stages, each shippable and proven before the next. The se
   reproducible signed release.
 - **Stage 10 — Industrial:** the optimizing backend and grant-gated JIT, memory/actor maturity, LTS,
   and the embodied/robotics profile — `Actuate` with dead-man actuator leases, where a hung program
-  *loses physical authority by default*.
+  *loses physical authority by default*. Its second revision (2026-07) widens the charter to the
+  autonomy domains — road vehicles, aircraft, satellites, robot fleets, with batteries and safety
+  chains as first-class device classes (a satellite's contact window is literally a lease TTL) —
+  plus vendor-neutral heterogeneous compute (any GPU/TPU behind one authority model, honestly
+  labeled outside the proof), hybrid post-quantum signing (post-quantum, never "quantum-proof"),
+  and cloud deployments whose full authority is computed *before* launch. All of it is committed
+  design gated on named criteria; none of it is shipped software, and no sentence about it gets to
+  pretend otherwise.
 
 Beyond v1.0, the language changes only through a public **RFC process**, with entrenchment analysis
 required for anything touching the constitution's core or its honesty limits. The stability contract
@@ -931,7 +938,8 @@ that is pure feeling rather than mechanism, and that is deliberate:
 | Actors + reference capabilities | `STAGE7_SPECIFICATION.md` + playbook |
 | Tooling, LSP, localization | `STAGE8_SPECIFICATION.md` + playbook |
 | v1.0 freeze, measurement, governance | `STAGE9_SPECIFICATION.md` + playbook |
-| Industrial: JIT, robotics, LTS | `STAGE10_SPECIFICATION.md` + playbook |
+| Industrial: JIT, autonomy, compute, PQC, cloud, LTS | `STAGE10_SPECIFICATION.md` + playbook |
+| The autonomy domains (vehicles/aircraft/satellites/robots) | `docs/design/STAGE10_AUTONOMY_ADDENDUM.md` |
 | Human-language plugins | `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` |
 | Keyword/character syntax skins | `docs/design/SYNTAX_MORPH_SPEC.md` |
 | The AI-native/machine surface | `docs/design/AI_NATIVE_DESIGN.md` |

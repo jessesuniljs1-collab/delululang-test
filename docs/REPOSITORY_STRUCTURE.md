@@ -68,6 +68,8 @@ DeluluLang/
     │   ├── SOUNDNESS_AUDIT.md
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled)
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
+    │   ├── STAGE10_AUTONOMY_ADDENDUM.md # [Stage 10] autonomy domains (spec Rev 2): vehicles/
+    │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs
     │   ├── LOCALIZATION_PLUGIN_GUIDE.md # human-language plugins: author/add/remove/edit (Fable 5)
     │   ├── SYNTAX_MORPH_SPEC.md         # keyword/char syntax skins, human + AI compact profiles
     │   ├── AI_NATIVE_DESIGN.md          # the machine-facing design + standing commitments
