@@ -19,7 +19,8 @@ pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignS
 pub use interp::Interp;
 pub use plugin::{
     cap_slice, kill_on_limit, load_prepare, load_verified, plugin_err_code, r_get_contained,
-    r_get_verified, sig_message, sign_plugin, step5_verified, step6_signature, unload,
+    public_key_hex, r_get_verified, sig_message, sign_detached, sign_plugin, step5_verified,
+    step6_signature, unload, verify_detached,
     verify_plugin, verify_signature, Grant, HandleTable, ImportSig, ImportSlice, Limits, LoadRefusal,
     LoadedPlugin, PluginArtifact, PluginClass, PluginEngine, PluginErr, PluginRef, PluginRunError,
     PreparedLoad, SignatureStatus, VerifiedInterpInstance, VerifiedPlugin, VerifyReport, WasmVal,

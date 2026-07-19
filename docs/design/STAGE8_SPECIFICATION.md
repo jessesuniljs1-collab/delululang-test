@@ -391,3 +391,15 @@ freezes v1.0 and proves it. Stage 10 takes it to production stakes.*
   witnessed end to end through the real binary in BOTH lanes: pure test zero-traced,
   Write test traces Write on pass, undeclared-Net refused DL0501, over-ceiling DL1703,
   determinism byte-identical, daemon session revoked at end.
+- **8h — signing + registry client groundwork (2026-07-18).** Mechanics ruled in
+  build-order deviations 4 + 15. `delulu keygen` (ed25519 seed, `~/.delulu/keys/`, 0600
+  on unix), `sign`/`verify-sig` produce/check a DETACHED `<artifact>.sig` (the Stage-6
+  96-byte format generalized to `.dwx`/`.dpx`/tarballs — ed25519 primitives stay in
+  delulu-runtime, house rule 5; getrandom reused). `verify-sig` failure = DL1705,
+  `--key HEX` pins the signer. The registry index is cargo-style sparse JSONL with the
+  authority summary ON every line; `publish --dry-run` validates manifest + semver-
+  authority (DL1003 reused) against the prior line + signature presence, no upload; `add`
+  resolves + shows authority from the index line ALONE. Criterion 9 witnessed through the
+  real binary: a widening minor bump caught DL1003, a major bump publishes, `add` renders
+  authority with no download; plus keygen→sign→verify round-trip, `--key` pin, and
+  tamper→DL1705.

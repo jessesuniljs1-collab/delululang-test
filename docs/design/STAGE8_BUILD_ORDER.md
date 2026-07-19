@@ -97,9 +97,11 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
    smoke suite against the 10-kLoC reference. (c) The server holds no broker
    connection, runs no code, loads no plugins — analysis only, structurally (it never
    constructs an Interp or a Custody).
-4. *(open — rule at 8h)* Registry index transport for v0.8: the format is normative HTTP,
-   but hosted ops are Stage 9 — the v0.8 client is expected to run against LOCAL index
-   fixtures (dir/file), with the HTTP shape frozen. No network dependency without a ruling.
+4. **RULED (8h) — registry client is LOCAL-index-only in v0.8, zero network.** The index
+   FORMAT is normative now (cargo-style sparse: `<index-dir>/<name>` → JSONL, one line
+   per version, the authority summary ON the line). `publish --dry-run` and `add` run
+   against a local `--index <dir>` fixture; no HTTP client, no network dependency —
+   hosted upload/fetch is Stage 9. The shape is frozen so Stage 9 is a transport swap.
 5. **RULED — assertion failure = DL1707.** Spec §2 says assertion failure is "panic with a
    structured payload" but §10's table names only tooling codes. A panic needs a code; the
    Stage-1 DL09xx runtime family is frozen bookkeeping, so the Stage-8 construct faults
@@ -183,6 +185,17 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
     MARKED `[revoked@seq]` in `grants tree`, not erased (the audit trail is the point).
     Unreachable broker ⇒ embedded grants, labeled `custody.mode = "embedded"`. (f) Actor
     (`Async`) tests are refused clearly — post-v0.8 (build-order §5), never half-run.
+15. **RULED — signing is DETACHED, generalized from the Stage-6 section (8h).** The
+    `delulu:sig` in-band wasm section covers `.dpx`; a package tarball is not a wasm
+    module, so the general mechanism is a detached `<artifact>.sig` (the same 96-byte
+    `pubkey ‖ signature` format) over the artifact's RAW bytes — one mechanism for
+    `.dwx`/`.dpx`/tarballs. The ed25519 primitives stay in delulu-runtime (house rule 5,
+    never hand-rolled); `delulu keygen` reuses the workspace's getrandom (delulu-broker
+    ruling 3 — reused, not new). `verify-sig` failure is DL1705, `requires_human` by
+    nature; `--key HEX` additionally pins the signer identity. Windows key-file ACL
+    hardening is a documented v0.8 gap (the broker's own key files share it). Signing
+    authenticates ORIGIN not behavior; the index authority line is trust-on-first-verify,
+    re-checked by the Stage-2 machinery on build — no trust POLICY (that is Stage 9).
 13. **RULED — `locale add` mechanics (8f).** (a) The zero-authority gate lives at ADD:
     `plugin build` happily builds an effectful plugin, but a catalog plugin with ANY
     ceiling effect is refused at install — the couldn't-tell branch closes where the

@@ -1149,6 +1149,56 @@ pub fn sign_plugin(key_seed: &[u8; 32], manifest: &serde_json::Value, payload: O
     section
 }
 
+// ===== 8h — general detached artifact signatures (spec §7) =====================================
+//
+// The Stage-6 `delulu:sig` section GENERALIZED to every artifact kind (`.dwx`, `.dpx`, package
+// tarballs): a detached 96-byte signature (32-byte ed25519 public key ‖ 64-byte signature) over
+// the artifact's RAW bytes, written beside it as `<artifact>.sig`. Detached because a tarball is
+// not a wasm module — there is no in-band custom section to splice; the raw-bytes cover is the
+// one mechanism that works for all three. Signing authenticates ORIGIN, not behavior (spec §11).
+
+/// Sign arbitrary bytes, producing the 96-byte detached signature (`pubkey ‖ signature`).
+pub fn sign_detached(key_seed: &[u8; 32], data: &[u8]) -> Vec<u8> {
+    use ed25519_dalek::Signer;
+    let sk = ed25519_dalek::SigningKey::from_bytes(key_seed);
+    let signature = sk.sign(data);
+    let mut out = Vec::with_capacity(96);
+    out.extend_from_slice(sk.verifying_key().as_bytes());
+    out.extend_from_slice(&signature.to_bytes());
+    out
+}
+
+/// Verify a detached 96-byte signature over `data`. The couldn't-tell cases each refuse
+/// honestly (wrong length, bad key, non-verifying) — never silently treated as unsigned.
+pub fn verify_detached(data: &[u8], sig96: &[u8]) -> SignatureStatus {
+    if sig96.len() != 96 {
+        return SignatureStatus::Invalid {
+            reason: format!("signature is {} bytes, not the expected 96", sig96.len()),
+        };
+    }
+    let key_bytes: [u8; 32] = sig96[..32].try_into().expect("32 bytes");
+    let sig_bytes: [u8; 64] = sig96[32..].try_into().expect("64 bytes");
+    let vk = match ed25519_dalek::VerifyingKey::from_bytes(&key_bytes) {
+        Ok(vk) => vk,
+        Err(_) => {
+            return SignatureStatus::Invalid { reason: "not a valid ed25519 public key".into() }
+        }
+    };
+    let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    match vk.verify_strict(data, &signature) {
+        Ok(()) => SignatureStatus::Valid { signer: hex_lower(&key_bytes) },
+        Err(_) => SignatureStatus::Invalid {
+            reason: "the signature does not verify over the artifact's bytes (tampered, or a key that did not sign it)".into(),
+        },
+    }
+}
+
+/// The lowercase-hex ed25519 public-key identity for a signing seed.
+pub fn public_key_hex(key_seed: &[u8; 32]) -> String {
+    let sk = ed25519_dalek::SigningKey::from_bytes(key_seed);
+    hex_lower(sk.verifying_key().as_bytes())
+}
+
 /// Lowercase-hex a byte slice (the signer-identity rendering — the key is short, no dep needed).
 fn hex_lower(bytes: &[u8]) -> String {
     use std::fmt::Write as _;

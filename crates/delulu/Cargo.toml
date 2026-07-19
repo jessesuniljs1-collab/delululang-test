@@ -34,6 +34,10 @@ delulu-wasm = { path = "../delulu-wasm" }
 delulu-broker = { path = "../delulu-broker" }
 serde_json = { workspace = true }
 serde = { workspace = true }
+# Stage 8 phase 8h: `delulu keygen` mints an ed25519 signing seed from OS randomness.
+# getrandom 0.3 is already the workspace's randomness source (delulu-broker ruling 3) — reused,
+# not a new dependency. The ed25519 primitives themselves live in delulu-runtime (house rule 5).
+getrandom = "0.3"
 # Chunk 3 wire protocol (head-chef ruling 2): length-prefixed canonical CBOR frames. ciborium is
 # pure-Rust and serde-based, so the fixed-field request/response structs encode deterministically.
 ciborium = "0.2"

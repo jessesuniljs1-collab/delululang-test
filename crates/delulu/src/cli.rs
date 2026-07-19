@@ -493,6 +493,11 @@ pub fn run(args: &[String]) -> i32 {
         // Machine-only by construction: the first-run flow is suppressed for `lsp` in
         // locale.rs (a stray prompt on stdout would corrupt the JSON-RPC stream).
         "lsp" => crate::lsp::run_lsp(rest),
+        "keygen" => crate::signing::cmd_keygen(rest),
+        "sign" => crate::signing::cmd_sign(rest),
+        "verify-sig" => crate::signing::cmd_verify_sig(rest),
+        "publish" => crate::signing::cmd_publish(rest, package_authority_value),
+        "add" => crate::signing::cmd_add(rest),
         "build" => cmd_build(rest),
         "lock" => cmd_lock(rest),
         "run" => cmd_run(rest),
@@ -567,6 +572,10 @@ fn usage() -> &'static str {
      \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
+     \x20 delulu keygen    [--name N]                          (mint an ed25519 signing key in ~/.delulu/keys)\n\
+     \x20 delulu sign      <artifact> | verify-sig <artifact> [--key HEX]   (detached .sig over .dwx/.dpx/tarballs)\n\
+     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
+     \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
@@ -2559,6 +2568,20 @@ fn cmd_lock(rest: &[String]) -> i32 {
         ok_line!("ok: wrote {} ({} package(s))", lock_path.display(), newlock.packages.len());
     }
     0
+}
+
+/// The authority report Value for a package directory (Stage 8, phase 8h: `publish
+/// --dry-run` embeds this summary in the index line). `None` if the package does not
+/// check clean — an unpublishable package has no honest authority to advertise.
+pub(crate) fn package_authority_value(dir: &str) -> Option<Json> {
+    let pkg = load_package(dir);
+    let program = check_program(&pkg);
+    if errors(&program.diagnostics) > 0 {
+        return None;
+    }
+    let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
+    let scopes = scopes_in_dir(std::path::Path::new(dir));
+    Some(program_authority(&program, &name, &scopes))
 }
 
 fn authority_package(dir: &str, opts: &Opts) -> i32 {
