@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 112 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (89.6%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 122 of 122 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -48,15 +48,13 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0410` | generic variable used as both type and effect row | `ref.diag.DL0410` | covered |
 | `DL0501` | function performs an effect not declared in its row | `ref.diag.DL0501` | covered |
 | `DL0502` | declared effect never performed | `ref.diag.DL0502` | covered |
-| `DL0503` | more than one row variable per signature | `ref.diag.DL0503` | accepting only |
 | `DL0504` | conflicting bindings for row variable (rows never union-merge) | `ref.diag.DL0504` | covered |
 | `DL0601` | capability type cannot be constructed or forged | `ref.diag.DL0601` | covered |
 | `DL0602` | secret value cannot flow here (Secret[T] is not T) | `ref.diag.DL0602` | covered |
 | `DL0603` | Secret.map requires a pure function | `ref.diag.DL0603` | covered |
 | `DL0604` | opaque type cannot be stringified or serialized | `ref.diag.DL0604` | covered |
 | `DL0605` | opaque type has no structural equality | `ref.diag.DL0605` | covered |
-| `DL0701` | main's effect row exceeds the authority manifest | `ref.diag.DL0701` | accepting only |
-| `DL0702` | authority grant refused | `ref.diag.DL0702` | accepting only |
+| `DL0701` | main's effect row exceeds the authority manifest | `ref.diag.DL0701` | covered |
 | `DL0703` | root slice not granted | `ref.diag.DL0703` | covered |
 | `DL0801` | call through revoked plugin reference | `ref.diag.DL0801` | covered |
 | `DL0802` | grant exceeds holder's grant (attenuation violation) | `ref.diag.DL0802` | covered |
@@ -72,20 +70,20 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1009` | package performs an effect not permitted by its own authority manifest | `ref.diag.DL1009` | covered |
 | `DL1010` | content hash mismatch (source changed under a locked version) | `ref.diag.DL1010` | covered |
 | `DL1011` | locked build requires resolution not present in delulu.lock | `ref.diag.DL1011` | covered |
-| `DL1101` | effect-trace assertion violation (a runtime effect not in the static row) | `ref.diag.DL1101` | accepting only |
-| `DL1102` | repair did not produce an accepting program (fuzz harness) | `ref.diag.DL1102` | accepting only |
+| `DL1101` | effect-trace assertion violation (a runtime effect not in the static row) | `ref.diag.DL1101` | covered |
+| `DL1102` | repair did not produce an accepting program (fuzz harness) | `ref.diag.DL1102` | covered |
 | `DL1201` | construct not supported by the WASM backend (runs on the interpreter instead) | `ref.diag.DL1201` | covered |
 | `DL1202` | artifact missing or invalid `delulu:authority` section | `ref.diag.DL1202` | covered |
-| `DL1204` | delulu:cap interface version unsupported by this toolchain | `ref.diag.DL1204` | accepting only |
+| `DL1204` | delulu:cap interface version unsupported by this toolchain | `ref.diag.DL1204` | covered |
 | `DL1205` | secret contents cannot enter the WASM guest (`--target wasm`) | `ref.diag.DL1205` | covered |
-| `DL1206` | engine parity self-check failure (compiler-bug class) | `ref.diag.DL1206` | accepting only |
+| `DL1206` | engine parity self-check failure (compiler-bug class) | `ref.diag.DL1206` | covered |
 | `DL1301` | unmarshallable type in a foreign signature (incl. Secret/opaque) | `ref.diag.DL1301` | covered |
 | `DL1302` | function-typed value crossing the foreign boundary (no callbacks — rule R-6a) | `ref.diag.DL1302` | covered |
 | `DL1303` | foreign lib used without a manifest entry or runtime grant | `ref.diag.DL1303` | covered |
-| `DL1304` | foreign symbol not found at bind time | `ref.diag.DL1304` | accepting only |
+| `DL1304` | foreign symbol not found at bind time | `ref.diag.DL1304` | covered |
 | `DL1305` | python import not in the granted allowlist | `ref.diag.DL1305` | covered |
 | `DL1306` | foreign return failed shape validation (encoding or size) | `ref.diag.DL1306` | covered |
-| `DL1307` | python runtime unavailable | `ref.diag.DL1307` | accepting only |
+| `DL1307` | python runtime unavailable | `ref.diag.DL1307` | covered |
 | `DL1308` | unsupported ABI string in a `foreign` block | `ref.diag.DL1308` | covered |
 | `DL1401` | broker unreachable / protocol failure (fail closed) | `ref.diag.DL1401` | covered |
 | `DL1402` | lease expired (TTL) | `ref.diag.DL1402` | covered |
@@ -119,9 +117,9 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1606` | a behavior declares a return type (behaviors yield Unit at the send site) | `ref.diag.DL1606` | covered |
 | `DL1607` | reference capability invalid for this type (e.g. non-tag on an actor type) | `ref.diag.DL1607` | covered |
 | `DL1608` | identifier collides with a v0.7 keyword (`consume`/`recover`) | `ref.diag.DL1608` | covered |
-| `DL1610` | debug race-checker violation (compiler-bug class — file a bug) | `ref.diag.DL1610` | accepting only |
-| `DL1701` | LSP/workspace configuration error | `ref.diag.DL1701` | accepting only |
-| `DL1702` | formatter identity/idempotence violation (compiler-bug class — file a bug) | `ref.diag.DL1702` | accepting only |
+| `DL1610` | debug race-checker violation (compiler-bug class — file a bug) | `ref.diag.DL1610` | covered |
+| `DL1701` | LSP/workspace configuration error | `ref.diag.DL1701` | covered |
+| `DL1702` | formatter identity/idempotence violation (compiler-bug class — file a bug) | `ref.diag.DL1702` | covered |
 | `DL1703` | test authority exceeds the package test ceiling | `ref.diag.DL1703` | covered |
 | `DL1704` | catalog invalid: unknown key/placeholder, bad meta, or a welcome-override attempt — entry falls back to en-US | `ref.diag.DL1704` | covered |
 | `DL1705` | signature verification failed | `ref.diag.DL1705` | covered |
@@ -137,5 +135,4 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0903` | index out of bounds | `ref.diag.DL0903` | covered |
 | `DL0904` | capability scope violation | `ref.diag.DL0904` | covered |
 | `DL0905` | recursion depth exceeded | `ref.diag.DL0905` | covered |
-| `DL0906` | explicit panic | `ref.diag.DL0906` | accepting only |
 | `DL0907` | match reached no arm (checker bug if ever seen) | `ref.diag.DL0907` | covered |

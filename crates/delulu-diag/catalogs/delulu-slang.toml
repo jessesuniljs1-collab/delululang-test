@@ -27,9 +27,6 @@ message = "{fn} claims `{effect}` in its row but never actually does it — flex
 message = "`main` be wanting more power than the manifest allows 💀"
 help    = "chill the effects, or open up `[authority]` in delulu.toml — but that's a real call, not a vibe"
 
-[DL0702]
-message = "grant denied: {detail} — not today"
-
 [DL0602]
 message = "nah, that `Secret` can't flow here — `Secret[{inner}]` is NOT `{inner}`, no shortcuts"
 help    = "a secret only comes out through `expose`, and that carries `Declassify`. no sneaking"

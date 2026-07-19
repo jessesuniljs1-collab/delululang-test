@@ -30,13 +30,13 @@ Declaring an effect a function never performs is a warning, not an error: over-d
 - **Coverage:** covered
 - **Note:** A warning rather than an error, because a widened row is a *smaller* claim of trustworthiness — it never lets a program do more than it says.
 
-## `ref.rule.effects.one-row-variable`
+## `ref.rule.effects.row-bindings-never-merge`
 
-A signature carries at most one row variable, and a row variable never union-merges two conflicting bindings.
+A row variable never union-merges two conflicting bindings, and a row expression carries at most one row-variable tail.
 
-- **Enforced by:** `DL0503`, `DL0504`
-- **Coverage:** accepting only
-- **Note:** Audit rule R-3: a single subsumption site is what makes row inference decidable and keeps a polymorphic row from silently absorbing an effect.
+- **Enforced by:** `DL0504`
+- **Coverage:** covered
+- **Note:** Audit rule R-3's operational form. Rewritten at the 1.0 gate (Stage 9 ruling D22): the earlier statement claimed "at most one row variable per signature", an arity rule the checker does not have — a multi-row-variable signature is legal, and the probe on record shows it cannot launder (row honesty is enforced per variable by DL0501, and a multi-variable row TERM is refused at resolution, DL0306). DL0503, which named the arity rule, was retired rather than frozen unreachable.
 
 ## `ref.rule.effects.builtin-callbacks-compose`
 

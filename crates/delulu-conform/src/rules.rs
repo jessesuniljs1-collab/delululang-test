@@ -116,13 +116,17 @@ pub const RULES: &[Rule] = &[
                trustworthiness — it never lets a program do more than it says.",
     },
     Rule {
-        anchor: "ref.rule.effects.one-row-variable",
+        anchor: "ref.rule.effects.row-bindings-never-merge",
         chapter: "5.2",
-        statement: "A signature carries at most one row variable, and a row variable never \
-                    union-merges two conflicting bindings.",
-        enforced_by: &["DL0503", "DL0504"],
-        note: "Audit rule R-3: a single subsumption site is what makes row inference decidable and \
-               keeps a polymorphic row from silently absorbing an effect.",
+        statement: "A row variable never union-merges two conflicting bindings, and a row \
+                    expression carries at most one row-variable tail.",
+        enforced_by: &["DL0504"],
+        note: "Audit rule R-3's operational form. Rewritten at the 1.0 gate (Stage 9 ruling D22): \
+               the earlier statement claimed \"at most one row variable per signature\", an arity \
+               rule the checker does not have — a multi-row-variable signature is legal, and the \
+               probe on record shows it cannot launder (row honesty is enforced per variable by \
+               DL0501, and a multi-variable row TERM is refused at resolution, DL0306). DL0503, \
+               which named the arity rule, was retired rather than frozen unreachable.",
     },
     Rule {
         anchor: "ref.rule.effects.builtin-callbacks-compose",

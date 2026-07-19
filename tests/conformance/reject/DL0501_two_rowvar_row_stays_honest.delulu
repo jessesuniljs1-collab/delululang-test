@@ -1,0 +1,16 @@
+// anchors: ref.rule.effects.row-bindings-never-merge ref.audit.R-3
+// The D22 laundering probe, on record: a two-row-variable signature whose body calls BOTH
+// functions while declaring only `! e1` is refused — the second row variable cannot smuggle
+// its effects past the declared row. This is the fence that made retiring DL0503 honest:
+// the arity rule does not exist, but row honesty is enforced per variable.
+module conf
+
+fn both3[e1, e2](f: fn() -> Unit ! e1, g: fn() -> Unit ! e2) -> Unit ! e1 {
+  f()
+  g()
+}
+
+fn main(root: Root) ! {Write} {
+  let c = root.console()
+  c.println("ok")
+}

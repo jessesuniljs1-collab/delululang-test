@@ -1,0 +1,15 @@
+// anchors: ref.rule.effects.row-bindings-never-merge ref.grammar.generics ref.audit.R-3
+// The D22 probe, on record (Stage 9 release gate): a signature carrying TWO row variables is
+// legal — there is no arity-of-row-variables rule, which is why DL0503 was retired. The row
+// stays honest: both2 declares `! e1` and calls only f. The rejecting twin
+// (DL0501_two_rowvar_row_stays_honest.delulu) proves the second variable cannot launder.
+module conf
+
+fn both2[e1, e2](f: fn() -> Unit ! e1, g: fn() -> Unit ! e2) -> Unit ! e1 {
+  f()
+}
+
+fn main(root: Root) ! {Write} {
+  let c = root.console()
+  c.println("ok")
+}

@@ -43,7 +43,7 @@ fn code_placeholders(code: &str) -> &'static [&'static str] {
     match code {
         "DL0501" | "DL0502" => &["fn", "effect"],
         "DL0602" => &["inner"],
-        "DL0702" | "DL1205" => &["detail"],
+        "DL1205" => &["detail"],
         _ => &[],
     }
 }

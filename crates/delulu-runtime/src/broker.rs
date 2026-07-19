@@ -280,6 +280,31 @@ mod tests {
         assert_eq!(m.effects, vec!["ForeignCall"]);
     }
 
+    // ----- DL0701: the manifest is a ceiling (Stage 9 release, criterion 1) -------------------
+
+    #[test]
+    fn a_main_row_exceeding_the_manifest_is_refused_with_dl0701() {
+        // The manifest declares Write only; main also performs Net. The check must produce the
+        // DL0701 diagnostic naming the undeclared effect — the manifest is a CEILING the code is
+        // checked against, not a claim taken on trust (spec §7.2).
+        let m = parse_manifest("[authority]\neffects = [\"Write\"]\n");
+        let mut row = std::collections::BTreeSet::new();
+        row.insert(Effect::Write);
+        row.insert(Effect::Net);
+        let diags = m.check_main_row(&row);
+        assert_eq!(diags.len(), 1, "exactly one undeclared effect: {diags:?}");
+        assert_eq!(diags[0].code, "DL0701");
+        assert!(
+            diags[0].message.contains("`Net`"),
+            "the refusal names the exceeding effect: {}",
+            diags[0].message
+        );
+        // And the honest converse: a row within the ceiling produces nothing.
+        let mut ok = std::collections::BTreeSet::new();
+        ok.insert(Effect::Write);
+        assert!(m.check_main_row(&ok).is_empty(), "a row within the manifest is clean");
+    }
+
     #[test]
     fn foreign_load_root_slice_follows_the_grant() {
         let mut needs = std::collections::BTreeSet::new();

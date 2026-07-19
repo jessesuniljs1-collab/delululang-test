@@ -18,7 +18,7 @@ A runtime fault — overflow, division by zero, index out of bounds, recursion d
 Every effect performed at runtime lies within the statically declared row. A violation is compiler-bug class.
 
 - **Enforced by:** `DL1101`
-- **Coverage:** accepting only
+- **Coverage:** covered
 - **Note:** This is the static claim checked against reality: `--assert-trace` makes the soundness argument falsifiable at runtime rather than only on paper.
 
 ## `ref.rule.runtime.plugin-limits-terminate-and-revoke`

@@ -162,6 +162,48 @@ pub fn read_and_verify(wasm: &[u8]) -> Result<Artifact, ArtifactError> {
     Ok(Artifact { version, authority, wasm: wasm.to_vec() })
 }
 
+#[cfg(test)]
+mod version_gate_tests {
+    use super::*;
+
+    /// Build a `.dwx` whose authority manifest claims format version `v` — the shape a NEWER
+    /// toolchain would write — using the same section machinery the real writer uses.
+    fn dwx_with_version(v: u32) -> Vec<u8> {
+        let bare: &[u8] = b"\0asm\x01\x00\x00\x00"; // minimal valid module: magic + version
+        let code_hash = blake3::hash(bare).to_hex().to_string();
+        let manifest = serde_json::json!({
+            "version": v,
+            "code_blake3": code_hash,
+            "authority": { "effects": [] },
+        });
+        let payload = serde_json::to_vec(&manifest).unwrap();
+        let name = AUTHORITY_SECTION.as_bytes();
+        let mut body = Vec::new();
+        write_uleb(name.len() as u32, &mut body);
+        body.extend_from_slice(name);
+        body.extend_from_slice(&payload);
+        let mut out = bare.to_vec();
+        out.push(0x00);
+        write_uleb(body.len() as u32, &mut out);
+        out.extend_from_slice(&body);
+        out
+    }
+
+    /// DL1204 (Stage 9 release, criterion 1): an artifact from a newer toolchain is REFUSED with
+    /// the version diagnostic — never interpreted by guessing (that would be a silent
+    /// compatibility break wearing a compatibility face).
+    #[test]
+    fn a_future_versioned_artifact_is_refused_with_dl1204() {
+        let err = read_and_verify(&dwx_with_version(DWX_VERSION + 98)).unwrap_err();
+        assert!(matches!(err, ArtifactError::UnsupportedVersion(v) if v == DWX_VERSION + 98));
+        assert_eq!(err.code(), "DL1204");
+        assert!(err.message().contains("newer than this toolchain supports"));
+        // The converse fence: the same bytes at the CURRENT version verify clean — proving the
+        // refusal above is the version gate, not an artifact-construction accident.
+        assert!(read_and_verify(&dwx_with_version(DWX_VERSION)).is_ok());
+    }
+}
+
 /// ULEB128 writer for wasm section sizes — shared with the `.dpx` plugin container (`dpx.rs`),
 /// which reuses this exact custom-section machinery (Stage 6 house rule: reuse, don't fork).
 pub(crate) fn write_uleb(mut v: u32, out: &mut Vec<u8>) {

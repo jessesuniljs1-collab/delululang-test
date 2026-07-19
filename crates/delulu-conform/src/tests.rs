@@ -254,7 +254,7 @@ fn audit_rules_appear_in_the_soundness_audit() {
 ///
 /// Raise it when you add witnesses. It must never need lowering — a lowered floor in a diff is a
 /// coverage regression wearing a disguise, and reviewing this constant is how you catch it.
-const COVERED_FLOOR: usize = 273;
+const COVERED_FLOOR: usize = 287;
 
 /// The committed repo's witnesses are internally valid (no dangling/ignored/unknown citations)
 /// and coverage has not regressed.
@@ -275,11 +275,12 @@ fn coverage_never_regresses() {
     );
 }
 
-/// RELEASE CRITERION 1: the 1.0 cut requires 100% anchor coverage. `#[ignore]`d until the gaps
-/// classified in `STAGE9_BUILD_ORDER.md` D10 are closed — the honest state is 216/233, and this
-/// test is what flips the claim from "ratcheting" to "complete".
+/// RELEASE CRITERION 1: the 1.0 cut requires 100% anchor coverage. Flipped ACTIVE at the release
+/// gate (ruling D22): the D10 remainder closed at 287/287 — Class B produced from real emission
+/// sites, Class C via constructor-level witnesses, and three codes that could never fire
+/// (DL0503/DL0702/DL0906) retired rather than frozen unreachable. From here, 100% is a hard
+/// per-commit gate, permanently.
 #[test]
-#[ignore = "release criterion 1: coverage is 273/290 — see STAGE9_BUILD_ORDER.md D10 for the classified remainder"]
 fn release_requires_full_coverage() {
     let cov = run_coverage(&repo_root());
     assert!(cov.pass(), "expected 100% coverage, {} gap(s) remain", cov.gaps.len());
@@ -344,24 +345,68 @@ fn the_drift_gate_detects_a_modified_chapter() {
 }
 
 /// Rule coverage is DERIVED, and derivation must be strict: a rule whose enforcing code has no
-/// producing test is not covered. Proven against the live data rather than asserted in prose.
+/// producing test is not covered. Until the release gate this was proven against the live repo's
+/// own gaps; at 100% coverage (D22) the live repo no longer HAS an uncovered code, so the strict
+/// case is proven on a synthetic fixture with partial coverage by construction — and the live
+/// repo keeps the equivalence check (at 100%, both sides must be false for every rule).
 #[test]
 fn a_rule_is_only_covered_when_every_enforcing_code_is() {
-    let cov = run_coverage(&repo_root());
+    // --- Synthetic: cover exactly one single-code rule's code, both directions. ---
+    let single = crate::rules::RULES
+        .iter()
+        .find(|r| r.enforced_by.len() == 1)
+        .expect("at least one rule is enforced by exactly one code");
+    let code = single.enforced_by[0];
+    let fx = Fixture::new();
+    fx.write(
+        "tests/conformance/accept/one.delulu",
+        &format!("// anchors: ref.diag.{code}\nmodule m\n"),
+    );
+    fx.write(
+        &format!("tests/conformance/reject/{code}_fixture.delulu"),
+        &format!("// anchors: ref.diag.{code}\nmodule m\n"),
+    );
+    let cov = fx.run();
     let uncovered_codes: BTreeSet<String> = cov
         .gaps
         .iter()
         .filter(|g| g.category == Category::Diag)
         .map(|g| g.anchor.trim_start_matches("ref.diag.").to_string())
         .collect();
-    assert!(!uncovered_codes.is_empty(), "this test needs at least one uncovered code to be meaningful");
-
+    assert!(
+        !uncovered_codes.is_empty(),
+        "the fixture covers one code; every other code must be a gap"
+    );
+    assert!(!uncovered_codes.contains(code), "`{code}` is covered in the fixture");
     for rule in crate::rules::RULES {
         let leans_on_a_gap = rule.enforced_by.iter().any(|c| uncovered_codes.contains(*c));
         let rule_is_a_gap = cov.gaps.iter().any(|g| g.anchor == rule.anchor);
         assert_eq!(
             leans_on_a_gap, rule_is_a_gap,
             "rule `{}` enforced by {:?}: covered-status must follow its codes exactly",
+            rule.anchor, rule.enforced_by
+        );
+    }
+    assert!(
+        !cov.gaps.iter().any(|g| g.anchor == single.anchor),
+        "`{}` (all enforcing codes covered) must not be a gap",
+        single.anchor
+    );
+
+    // --- Live repo: the equivalence must hold there too (at 100%, vacuously in both directions). ---
+    let live = run_coverage(&repo_root());
+    let live_uncovered: BTreeSet<String> = live
+        .gaps
+        .iter()
+        .filter(|g| g.category == Category::Diag)
+        .map(|g| g.anchor.trim_start_matches("ref.diag.").to_string())
+        .collect();
+    for rule in crate::rules::RULES {
+        let leans_on_a_gap = rule.enforced_by.iter().any(|c| live_uncovered.contains(*c));
+        let rule_is_a_gap = live.gaps.iter().any(|g| g.anchor == rule.anchor);
+        assert_eq!(
+            leans_on_a_gap, rule_is_a_gap,
+            "live rule `{}` enforced by {:?}: covered-status must follow its codes exactly",
             rule.anchor, rule.enforced_by
         );
     }

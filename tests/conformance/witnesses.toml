@@ -773,12 +773,6 @@ test = "accepting_programs_check_clean"
 kind = "positive"
 
 [[witness]]
-anchor = "ref.diag.DL0503"
-file = "crates/delulu/tests/conformance.rs"
-test = "accepting_programs_check_clean"
-kind = "positive"
-
-[[witness]]
 anchor = "ref.diag.DL0504"
 file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"
@@ -816,12 +810,6 @@ kind = "positive"
 
 [[witness]]
 anchor = "ref.diag.DL0701"
-file = "crates/delulu/tests/conformance.rs"
-test = "accepting_programs_check_clean"
-kind = "positive"
-
-[[witness]]
-anchor = "ref.diag.DL0702"
 file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"
 kind = "positive"
@@ -876,12 +864,6 @@ kind = "positive"
 
 [[witness]]
 anchor = "ref.diag.DL0905"
-file = "crates/delulu/tests/cli.rs"
-test = "run_executes_the_demo"
-kind = "positive"
-
-[[witness]]
-anchor = "ref.diag.DL0906"
 file = "crates/delulu/tests/cli.rs"
 test = "run_executes_the_demo"
 kind = "positive"
@@ -2284,3 +2266,72 @@ file = "crates/delulu-check/src/prim_table.rs"
 test = "every_listed_primitive_rejects_a_five_argument_call"
 kind = "negative"
 
+
+# ---- The 1.0 release gate (Stage 9 rulings D10/D22): the last 17 anchors close honestly. ----
+# Class B (producible, untested): each witness below PRODUCES its code from the real emission
+# site. Class C (unproducible by construction): per D10's ruling the witness is constructor-
+# level — the fault is built and classified, its explain body renders, the envelope carries it.
+# DL1304's witness is the bind-time fail-fast test (the code's runtime face: a declared symbol
+# the library does not export fails the BIND, ForeignErr::SymbolMissing, nothing foreign runs).
+# DL1307 joined the constructor class for the default matrix: the python feature is ON in every
+# normal build, so the feature-off shim that emits it cannot be compiled into the suite binary.
+
+[[witness]]
+anchor = "ref.diag.DL0701"
+file = "crates/delulu-runtime/src/broker.rs"
+test = "a_main_row_exceeding_the_manifest_is_refused_with_dl0701"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1204"
+file = "crates/delulu-wasm/src/artifact.rs"
+test = "a_future_versioned_artifact_is_refused_with_dl1204"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1304"
+file = "crates/delulu-runtime/tests/foreign_ffi.rs"
+test = "missing_symbol_is_symbolmissing_at_bind_never_mid_run"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1307"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1307_python_unavailable_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1101"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1101_trace_outside_row_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1102"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1102_failed_repair_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1206"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1206_engine_parity_failure_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1610"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1610_race_checker_violation_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1701"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1701_lsp_configuration_error_constructs_classifies_and_explains"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1702"
+file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
+test = "dl1702_formatter_law_violation_constructs_classifies_and_explains"
+kind = "negative"

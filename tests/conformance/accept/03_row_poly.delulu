@@ -1,4 +1,4 @@
-// anchors: ref.grammar.generics ref.grammar.lambda ref.diag.DL0503 ref.diag.DL0504 ref.audit.R-3
+// anchors: ref.grammar.generics ref.grammar.lambda ref.diag.DL0504 ref.audit.R-3 ref.rule.effects.row-bindings-never-merge
 module conf
 
 // Row polymorphism: apply's row is exactly f's row.

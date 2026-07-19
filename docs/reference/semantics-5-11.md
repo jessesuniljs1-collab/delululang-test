@@ -11,7 +11,7 @@ Each statement below is normative and carries a stable anchor id that conformanc
 The interpreter and the WASM backend produce the same observable behavior for any program both support; an unsupported construct falls back honestly rather than silently differing.
 
 - **Enforced by:** `DL1201`, `DL1206`
-- **Coverage:** accepting only
+- **Coverage:** covered
 - **Note:** Parity is checked differentially, and a disagreement is compiler-bug class.
 
 ## `ref.rule.compilation.artifacts-carry-their-authority`
@@ -19,5 +19,5 @@ The interpreter and the WASM backend produce the same observable behavior for an
 A compiled artifact carries its authority section; a missing, tampered, or unsupported one is refused rather than run.
 
 - **Enforced by:** `DL1202`, `DL1204`
-- **Coverage:** accepting only
+- **Coverage:** covered
 

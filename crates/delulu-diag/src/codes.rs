@@ -60,7 +60,11 @@ registry! {
     // DL05xx — effects
     "DL0501" => "function performs an effect not declared in its row",
     "DL0502" => "declared effect never performed",
-    "DL0503" => "more than one row variable per signature",
+    // DL0503 was retired pre-1.0 (Stage 9 release, ruling D22): it described an arity rule
+    // ("at most one row variable per signature") the checker does not have — a benign
+    // multi-row-variable signature is legal, and row honesty is enforced independently
+    // (DL0501/DL0306, laundering probe on record). Codes are add-only from 1.0; a code that
+    // cannot fire must not freeze. The number is never reused.
     "DL0504" => "conflicting bindings for row variable (rows never union-merge)",
 
     // DL06xx — capabilities & secrets
@@ -72,7 +76,10 @@ registry! {
 
     // DL07xx — manifest / authority
     "DL0701" => "main's effect row exceeds the authority manifest",
-    "DL0702" => "authority grant refused",
+    // DL0702 was retired pre-1.0 (ruling D22): "grant refused at startup" is a flow the CLI
+    // never had — deny-by-default happens at derivation (DL0703), on both engines, which is
+    // strictly better (a program is never refused for a capability it never exercises).
+    // The number is never reused.
     "DL0703" => "root slice not granted",
 
     // DL08xx — plugins & grants (types reserved in Stage 1; runtime lands Stage 6)
@@ -196,7 +203,10 @@ registry! {
     "DL0903" => "index out of bounds",
     "DL0904" => "capability scope violation",
     "DL0905" => "recursion depth exceeded",
-    "DL0906" => "explicit panic",
+    // DL0906 ("explicit panic") was retired pre-1.0 (ruling D22): no `panic` builtin exists in
+    // the language (§5.8 — divergence is abort-class, results are values), so the code could
+    // never fire. Freezing a code for a feature that does not exist strands agents keying off
+    // it. The number is never reused; if a panic construct ever lands by RFC, it gets a new code.
     "DL0907" => "match reached no arm (checker bug if ever seen)",
 }
 
@@ -603,9 +613,6 @@ pub fn code_explain(code: &str) -> Option<String> {
              over-declaring is safe — it never lets the program do more than it says — but it is \
              dishonest about what the code actually does, and it makes the authority report less \
              useful to everyone reading it.",
-        "DL0503" => "A signature carries at most one row variable. More than one makes row \
-             inference undecidable at the subsumption site (audit rule R-3). If two effect sets \
-             genuinely need to be independent, they belong in separate functions.",
         "DL0504" => "One row variable was bound to two conflicting effect sets. Rows never \
              union-merge to resolve a conflict — merging is precisely how an effect would enter a \
              row nobody wrote (audit rule R-3). Make the two uses agree, or separate them.",
@@ -634,9 +641,6 @@ pub fn code_explain(code: &str) -> Option<String> {
              The manifest is a CEILING the code is checked against, not a claim taken on trust. \
              Either narrow what the program does, or widen the manifest — the second is a real \
              review decision, because the manifest is what a reader trusts.",
-        "DL0702" => "A capability the program needs was not granted at startup. Grants are \
-             deny-by-default and arrive from the human or the broker, never from the program \
-             asking for itself. Pass `--grant <kind>` or record the grant in the manifest.",
         "DL0703" => "The program tried to use a root slice it was not granted. The slice — a path \
              prefix, a host list — is runtime scope carried by the capability, checked when the \
              operation runs (§5.3). The static row proves what KIND of thing the program can do; \
@@ -673,11 +677,6 @@ pub fn code_explain(code: &str) -> Option<String> {
              no way to tell what happened. If the recursion is legitimate, restructure it \
              iteratively — the bound exists so that a runaway program fails in a way you can act \
              on.",
-        "DL0906" => "An explicit panic: a deliberate abort carrying a message. Ordinary failure is \
-             a `Result` VALUE, not a panic (§5.8) — there are no exceptions and no unwinding across \
-             frames, so a panic ends the program rather than transferring control somewhere a \
-             caller might catch it. Reach for it only where continuing would be worse than \
-             stopping.",
         "DL0907" => "A `match` reached no arm at runtime. Exhaustiveness is checked statically \
              (DL0407), so seeing this means the CHECKER let something through: it is a compiler \
              bug, not your code's fault. Please report it with the program that produced it.",

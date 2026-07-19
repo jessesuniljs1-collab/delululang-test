@@ -302,6 +302,51 @@ was not authorized, and an errata that everyone can read beats a silently altere
 hides that the mistake was ever made. Honest attribution going forward: **Stage 9 = Fable 5 (build
 order + opening of 9a) + Opus 4.8 (bulk: 9a-tail → close-out).**
 
+**D22 — The release gate closes criterion 1: the D10 remainder ends at 287/287, and three codes
+that could never fire are RETIRED rather than frozen unreachable.**
+Executed 2026-07-20 at the owner's order to finish the blockers and release. The 17 open anchors
+closed in three honest ways, plus one D10 correction the work itself surfaced:
+
+- **Class B, produced from the real emission sites (4):** `DL0701` (a manifest-exceeding main row,
+  produced by `Manifest::check_main_row` — `a_main_row_exceeding_the_manifest_is_refused_with_dl0701`,
+  with the in-ceiling converse asserted); `DL1204` (a future-versioned `.dwx` built with the real
+  section machinery, refused by `read_and_verify` — with the current-version converse proving the
+  refusal is the version gate, not a construction accident); `DL1304` (the bind-time fail-fast
+  test: a declared symbol the library does not export fails the BIND, nothing foreign runs);
+  `DL0905` had already closed in 9i (D15's fix carried its witness).
+- **Class C, constructor-level per D10's own ruling (7):** `DL1101`, `DL1102`, `DL1206`, `DL1610`,
+  `DL1701`, `DL1702` — and `DL1307`, which D10 had classed as producible but is NOT in the default
+  matrix: the `python` feature is ON in every normal build, so the feature-off shim that emits it
+  cannot be compiled into the suite binary. Each witness proves the fault constructs at its
+  classification, the explain body meets the length bar and names the compiler-bug class where
+  that is the class, and the JSON envelope carries the code (`unproducible_witnesses.rs`).
+- **Retired pre-freeze (3): `DL0503`, `DL0702`, `DL0906`.** Codes are add-only from 1.0; a code
+  that cannot fire either strands agents keying off it forever or makes the fix that starts
+  emitting it a breaking change — pre-1.0 was the only free moment, exactly as D10 said of Class A.
+  - `DL0503`: the probe on record shows the "at most one row variable per signature" rule **does
+    not exist in the checker** — a benign two-row-variable signature checks clean
+    (`24_multi_rowvar_benign.delulu`), and the laundering attempt is refused by row honesty
+    (`DL0501_two_rowvar_row_stays_honest.delulu`): no soundness hole, but D10's Class-A framing
+    ("the rule is enforced under a more general code") was wrong for this one — the *dangerous
+    shapes* are fenced (DL0306/DL0501), the *arity rule* is fiction. The rule anchor is rewritten
+    to what is true and enforced: `ref.rule.effects.row-bindings-never-merge` (DL0504). This
+    supersedes D10's 9c note deferring the disposition to a post-1.0 RFC — post-1.0, retirement
+    would be a breaking change, which made that deferral self-defeating.
+  - `DL0702`: never emitted anywhere — the "reconcile grants and refuse at startup" flow was never
+    wired, and what actually exists is better: deny-by-default at *derivation* (`DL0703`, both
+    engines, witnessed), under which a program is never refused for a capability it never
+    exercises. D10 misclassified it as Class B.
+  - `DL0906`: no `panic` builtin exists in the language (§5.8); 9c's assigned disposition was
+    never executed, and it executes here: retire. If a panic construct ever lands by RFC, it gets
+    a new code.
+- The registry keeps a tombstone comment at each retired number; **numbers are never reused.**
+- **The ratchet rose 273 → 287, `release_requires_full_coverage` flipped from `#[ignore]` to a
+  hard per-commit gate, permanently** — coverage below 100% is now a build failure, not a report.
+
+RULED: this is the honest 100% — no anchor was widened, no witness is a mention, and the two
+fixtures that proved the DL0503 decision are committed as conformance programs so the probe
+outlives the ruling.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
