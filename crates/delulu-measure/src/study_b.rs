@@ -112,7 +112,8 @@ fn apply_repair(file: &Path, repair: &serde_json::Value) -> std::io::Result<bool
         }
         ranges.push((start, end, insert));
     }
-    ranges.sort_by(|a, b| b.0.cmp(&a.0));
+    // Back to front, so applying one edit does not shift the offsets of the ones still to come.
+    ranges.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
     for (start, end, insert) in ranges {
         src.splice(start..end, insert.bytes());
     }

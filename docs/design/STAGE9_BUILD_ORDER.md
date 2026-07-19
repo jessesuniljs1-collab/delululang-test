@@ -247,6 +247,21 @@ reads as a broken harness and the truth is more interesting than that — the ty
 real and correctly conservative, and its *coverage* does not yet match what the phrase "typed
 repairs" invites a reader to assume. The release announcement may not imply otherwise.
 
+**D18 — The drill found a real hole in the TEST SUITE, and the finding outranks the timing.**
+DRILL-001 staged a signature-verification bypass: `verify-sig` returned exit **0** for an artifact
+with **no signature at all**. The runbook executed cleanly in 5m28s — and that is the less
+interesting half. The important half: **the full 875-test suite passed with the bypass in the
+tree.** Every existing signing test asserted on the rendered *verdict* (`unsigned`/`valid`/
+`invalid`) and none on the **exit code** for the missing-signature path — the one channel every
+shell script and CI job actually gates on. Root cause is the familiar shape: the suite tested the
+paths where verification *does something* and skipped the branch where it has nothing to check,
+which is the same class as the Stage-6 `DL0803` fail-open and the Stage-9a arity gate. RULED:
+`an_unsigned_artifact_fails_verification_by_exit_code` lands permanently (asserting the exit code
+*and* that the JSON envelope agrees with it), and the drill's **open** recommendation — audit
+`plugin verify`, `audit verify`, `build --locked` for the same "verdict asserted, exit code not"
+gap — stays recorded as NOT YET DONE rather than being quietly closed. A drill that finds a hole
+and reports only its stopwatch has wasted the hole.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
@@ -260,7 +275,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 | 9c | **DONE** — `STABILITY.md` (invariant 43), deprecation policy + registry (empty at 1.0, mechanism complete), `[package] language` edition, DL1801/DL1802; D10 class A 3/4 fixed; D11 `--help` fixed | Criterion 9 witnessed (`stability_cli.rs`, 8 tests incl. older-edition and unpinned skip branches); both codes registered with explain bodies; `keygen --help` no longer writes a key; **289 anchors, 270 covered (93.4%)** |
 | 9d | **DONE** — Study A: deterministic 25-package corpus (5 archetypes × depth 4), 20-site injection campaign, validity fence + negative controls | **20/20 caught (100%)**, all 20 mutations compile, all 5 controls clean; refusals are authority codes (DL1001/DL1010 at every site) not compile errors; raw data + corpus + METHODOLOGY with threats-to-validity committed; 9 integrity tests incl. proof the scoring can express failure |
 | 9e | **DONE** — Study B (repair loops over the 47-program reject corpus) + Study C (6 benchmarks × 4 lanes, release-only) | B: **8.5% repair availability, 0 reach green mechanically** — published with the decomposition. C: **2.0×–51.1× slower than C**, "not competitive" stated in those words. §5.11 caveat verbatim; token counts deliberately not published. Found and fixed the DL0905 host-crash (D15) |
-| 9f | SECURITY.md, CONTRIBUTING.md §AI, rfcs/ process, CODEOWNERS, CI gate configs (D2) | Criterion 6 drill executed and timed, timeline recorded; skip-branch tests for every enforcement gate that has a checker |
+| 9f | **DONE** — `SECURITY.md` (rubric + runbook), `CONTRIBUTING.md` §AI, `rfcs/` process + template, `CODEOWNERS`, drill record | **Criterion 6 witnessed: DRILL-001 executed end-to-end in 5m28s** against a staged signature bypass. The drill's real finding (D18): the **entire 875-test suite passed with the bypass planted**. Regression test added; 6 governance tests pin the artifacts, incl. that PENDING-PUBLIC items are still marked |
 | 9g | Registry local go-live (D3): publish API, tokens, yank, server-side authority recomputation | Criterion 5: clean-machine publish→add→build round-trip; doctored index line demonstrably rejected (skip-branch: unverifiable artifact → refuse, not accept) |
 | 9h | Book (`docs/book/`) with every sample CI-compiled+run; `delulu explain` 100% en-US; `docs/for-agents.md` | Criterion 7 witnessed (samples are conformance tests); explain coverage meta-test at 100% |
 | 9i | Release engineering: reproducible builds (D6), signatures (D5), SBOM, provenance, conformance tarball + `--self-check`, v1.0.0, announcement | Criteria 4 (local form), 8 (D9), 10 (line-by-line honesty review recorded in-repo) |
