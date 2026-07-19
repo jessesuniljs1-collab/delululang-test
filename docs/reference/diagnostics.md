@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 106 of 123 anchors in this chapter have both an accepting and a rejecting conformance witness (86.2%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 111 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (88.8%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -22,7 +22,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0106` | reserved word used as a declared name | `ref.diag.DL0106` | covered |
 | `DL0201` | expected a different token | `ref.diag.DL0201` | covered |
 | `DL0202` | expected an expression | `ref.diag.DL0202` | covered |
-| `DL0203` | expected a type | `ref.diag.DL0203` | accepting only |
+| `DL0203` | expected a type | `ref.diag.DL0203` | covered |
 | `DL0204` | file must begin with a `module` declaration | `ref.diag.DL0204` | covered |
 | `DL0205` | expected a pattern | `ref.diag.DL0205` | covered |
 | `DL0206` | comparison operators are non-associative | `ref.diag.DL0206` | covered |
@@ -43,14 +43,14 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0405` | unknown field or method | `ref.diag.DL0405` | covered |
 | `DL0406` | wrong number of type arguments | `ref.diag.DL0406` | covered |
 | `DL0407` | non-exhaustive match | `ref.diag.DL0407` | covered |
-| `DL0408` | condition must be Bool | `ref.diag.DL0408` | accepting only |
+| `DL0408` | condition must be Bool | `ref.diag.DL0408` | covered |
 | `DL0409` | `?` requires Result in a Result-returning function | `ref.diag.DL0409` | covered |
 | `DL0410` | generic variable used as both type and effect row | `ref.diag.DL0410` | covered |
 | `DL0501` | function performs an effect not declared in its row | `ref.diag.DL0501` | covered |
 | `DL0502` | declared effect never performed | `ref.diag.DL0502` | covered |
 | `DL0503` | more than one row variable per signature | `ref.diag.DL0503` | accepting only |
 | `DL0504` | conflicting bindings for row variable (rows never union-merge) | `ref.diag.DL0504` | covered |
-| `DL0601` | capability type cannot be constructed or forged | `ref.diag.DL0601` | accepting only |
+| `DL0601` | capability type cannot be constructed or forged | `ref.diag.DL0601` | covered |
 | `DL0602` | secret value cannot flow here (Secret[T] is not T) | `ref.diag.DL0602` | covered |
 | `DL0603` | Secret.map requires a pure function | `ref.diag.DL0603` | covered |
 | `DL0604` | opaque type cannot be stringified or serialized | `ref.diag.DL0604` | covered |
@@ -130,6 +130,8 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1780` | atlas refused: the program has check errors — fix them first (no partial graph) | `ref.diag.DL1780` | covered |
 | `DL1781` | custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it | `ref.diag.DL1781` | covered |
 | `DL1790` | invalid theme name or malformed theme.toml — using the `default` theme | `ref.diag.DL1790` | covered |
+| `DL1801` | use of a deprecated feature (RFC-linked) | `ref.diag.DL1801` | covered |
+| `DL1802` | package declares a newer language edition than this toolchain | `ref.diag.DL1802` | covered |
 | `DL0901` | integer overflow | `ref.diag.DL0901` | covered |
 | `DL0902` | division by zero | `ref.diag.DL0902` | covered |
 | `DL0903` | index out of bounds | `ref.diag.DL0903` | covered |

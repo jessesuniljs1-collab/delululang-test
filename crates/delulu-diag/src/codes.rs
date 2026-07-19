@@ -185,6 +185,11 @@ registry! {
     "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
     "DL1790" => "invalid theme name or malformed theme.toml — using the `default` theme",
 
+    // DL18xx — Delulu (Stage 9). Stability and deprecation ONLY: Stage 9 adds no language
+    // features by definition, so this range can never grow a semantic code.
+    "DL1801" => "use of a deprecated feature (RFC-linked)",
+    "DL1802" => "package declares a newer language edition than this toolchain",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",
@@ -615,6 +620,23 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1801" => "This program uses a feature that has been DEPRECATED. It still works — a \
+             deprecation is a warning, never a break — but it will be removed in a future MAJOR \
+             version, and never before then. The deprecation policy (spec §2.2) binds the project: \
+             every deprecation is RFC-gated, lives at least two minor versions before any removal, \
+             and removals happen only on a major bump. Where the migration is mechanical, \
+             `delulu fmt --migrate <version>` rewrites it for you and the diagnostic carries the \
+             exact replacement; where it is not, the RFC named here explains what to do instead and \
+             why the change was worth making. Nothing about your build changes today.",
+        "DL1802" => "This package declares a language edition NEWER than the toolchain you are \
+             running: `[package] language = \"1.5\"` under a 1.3 toolchain, for example. The build is \
+             refused rather than attempted, because compiling code written for newer rules under \
+             older ones would not fail loudly — it would silently reinterpret the program. Upgrade \
+             the toolchain (the repair is exact). The reverse is always fine: an OLDER edition needs \
+             no action, because minor versions are strictly additive (invariant 43), so a 1.0 \
+             package still means exactly what it said under a later toolchain. A package that \
+             declares no edition is read at the toolchain's own — that is the default and it is \
+             back-compatible with every manifest written before 1.0.",
         "DL1702" => "The formatter produced output that is not equivalent to its input, or is not \
              idempotent — a COMPILER BUG, never your code's fault. `delulu fmt` verifies both laws \
              inline before writing any byte: identity (the reprinted program parses to the same AST, \

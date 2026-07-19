@@ -486,6 +486,17 @@ pub fn run(args: &[String]) -> i32 {
         return 2;
     };
     let rest = &args[1..];
+
+    // `--help` is answered by the dispatch, before any subcommand runs (Stage 9c, build-order
+    // D11). Subcommands treat unrecognized flags as arguments, so `delulu keygen --help` used to
+    // GENERATE A KEY, `delulu test --help` ran the suite, and `delulu repl --help` opened the
+    // REPL. Asking a tool what it does must never make it do the thing. Answered here rather than
+    // in each subcommand so no future subcommand can forget.
+    if rest.iter().any(|a| a == "--help" || a == "-h") {
+        println!("{}", subcommand_help(cmd));
+        return 0;
+    }
+
     match cmd.as_str() {
         "check" => cmd_check(rest),
         "fmt" => cmd_fmt(rest),
@@ -529,6 +540,30 @@ pub fn run(args: &[String]) -> i32 {
             2
         }
     }
+}
+
+/// Help for one subcommand: the usage lines that mention it, or the full usage when the name is
+/// unknown. Derived from `usage()` rather than duplicated, so a subcommand's help cannot drift
+/// from its documented invocation.
+fn subcommand_help(cmd: &str) -> String {
+    let needle = format!("delulu {cmd} ");
+    let mut lines: Vec<&str> = Vec::new();
+    let mut capturing = false;
+    for line in usage().lines() {
+        if line.contains(&needle) {
+            capturing = true;
+            lines.push(line);
+        } else if capturing && line.trim_start().starts_with('[') {
+            // A continuation line of the same invocation (wrapped option list).
+            lines.push(line);
+        } else {
+            capturing = false;
+        }
+    }
+    if lines.is_empty() {
+        return usage().to_string();
+    }
+    format!("delulu {cmd}\n\nUSAGE:\n{}\n", lines.join("\n"))
 }
 
 fn usage() -> &'static str {

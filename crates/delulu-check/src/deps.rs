@@ -122,6 +122,13 @@ fn resolve_dir(
     let manifest = manifest?;
     let name = manifest.name.clone();
 
+    // The language edition (spec §2.2): a package written for a NEWER edition than this toolchain
+    // speaks is refused before anything is compiled. Checked here so it applies to every package
+    // in the graph, not only the root — a dependency from the future is exactly as unreadable.
+    if let Some(d) = manifest.edition_check(crate::LANGUAGE_EDITION) {
+        ws.diagnostics.push(d);
+    }
+
     // Cycle: a dependency points back at a package currently being resolved (an ancestor).
     if stack.contains(&name) {
         ws.diagnostics.push(

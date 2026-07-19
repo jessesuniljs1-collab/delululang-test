@@ -11,7 +11,7 @@ Each statement below is normative and carries a stable anchor id that conformanc
 All authority originates in the `Root` value passed to `main`. There is no ambient authority: no global, import, or constructor yields a capability.
 
 - **Enforced by:** `DL0601`, `DL0301`
-- **Coverage:** accepting only
+- **Coverage:** covered
 - **Note:** A capability type has no literal syntax and no constructor; the only way to obtain one is to derive it from a `Root` you were handed.
 
 ## `ref.rule.authority.derivation-is-pure`
@@ -35,6 +35,6 @@ A derived capability is never wider than the one it came from. `narrow` may only
 A capability value cannot be constructed, forged, cast, or deserialized into existence.
 
 - **Enforced by:** `DL0601`, `DL0904`
-- **Coverage:** accepting only
+- **Coverage:** covered
 - **Note:** Statically there is no constructor; at the WASM boundary a forged handle is refused by the host (DL0904).
 

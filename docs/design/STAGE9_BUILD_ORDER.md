@@ -137,6 +137,14 @@ coverage` is the `#[ignore]`d test that flips. CI reports coverage without faili
 the 1.0 cut, when the step becomes a hard gate. The 17 open anchors, all "diagnostic code never
 produced by the suite":
 
+> **9c update:** Class A is **3 of 4 resolved.** `DL0203`, `DL0408` and `DL0601` now fire at their
+> own sites and carry conformance reject programs. `DL0503` remains: a signature with two row
+> variables is currently caught by `DL0501` (the effect it lets through) rather than by the
+> arity-of-row-variables rule itself, and separating them means changing where row variables are
+> collected — a change to inference, which is exactly what Stage 9 must not do. RULED: `DL0503`
+> stays open and is listed in the reference as not-stable; the disposition (emit it, or retire the
+> code) belongs to the first post-1.0 RFC that touches row inference. Coverage 263 → 270 of 289.
+
 - **Class A — shadowed codes (4): `DL0203`, `DL0408`, `DL0503`, `DL0601`.** The *rule* is enforced,
   but under a more general code, so the specific one is unreachable. Verified by probe: `if 42 {}`
   is refused as `DL0401` carrying the message "`if` condition must be Bool" while `DL0408` exists
@@ -195,7 +203,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 |---|---|---|
 | 9a | **DONE** — Coverage law: anchor registry (extracted from compiler source), test→anchor metadata, `delulu-conform --coverage`, the ratchet | `--coverage` fails on any zero-coverage anchor, never-produced code, dangling/ignored witness, or unknown citation; **216/233 (92.7%), 0 validation errors**; ratchet floor committed; CI wired; remainder classified in D10 |
 | 9b | **DONE** — `docs/reference/` generated-in-part: 24 chapters (16 §5 semantics + tokens/grammar/primitives/diagnostics/audit-rules/CLI/coverage/index), every normative statement anchored | `--check-reference` is a HARD CI gate; drift test + its skip-branch case green; token index fenced against `TokenKind`; every rule's enforcing code proven registered; **287 anchors, 263 covered (91.6%)** |
-| 9c | Stability contract + deprecation policy + `language` edition key; DL1801/DL1802 | Criterion 9 witnessed on synthetic deprecation fixture; both codes registered w/ explain docs |
+| 9c | **DONE** — `STABILITY.md` (invariant 43), deprecation policy + registry (empty at 1.0, mechanism complete), `[package] language` edition, DL1801/DL1802; D10 class A 3/4 fixed; D11 `--help` fixed | Criterion 9 witnessed (`stability_cli.rs`, 8 tests incl. older-edition and unpinned skip branches); both codes registered with explain bodies; `keygen --help` no longer writes a key; **289 anchors, 270 covered (93.4%)** |
 | 9d | Study A: `measurements/` corpus ≥25 packages, depth ≥4; authority reports; injection campaign | Injection catch = 100% (mechanism claim); raw data + methodology + threats-to-validity in-repo; reproducible from clean checkout |
 | 9e | Study B (two lanes per D4) + Study C (micro + 3 macro, both engines, vs C and Go) | Reproduce from clean checkout, pinned seeds/toolchains; numbers published as measured; §5.11 caveat verbatim in token appendix |
 | 9f | SECURITY.md, CONTRIBUTING.md §AI, rfcs/ process, CODEOWNERS, CI gate configs (D2) | Criterion 6 drill executed and timed, timeline recorded; skip-branch tests for every enforcement gate that has a checker |

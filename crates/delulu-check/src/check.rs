@@ -809,7 +809,7 @@ impl<'a> Checker<'a> {
                 Stmt::While { cond, body, .. } => {
                     let (ct, cr) = self.check_expr(cond, ctx);
                     acc.add_row_acc(&cr);
-                    self.expect_type(&Type::Bool, &ct, cond.span(), "`while` condition must be Bool");
+                    self.expect_type_coded(&Type::Bool, &ct, cond.span(), "`while` condition must be Bool", Some("DL0408"));
                     let (_, br) = self.check_block(body, ctx);
                     acc.add_row_acc(&br);
                     value_ty = Type::Unit;
@@ -1906,7 +1906,7 @@ impl<'a> Checker<'a> {
 
     fn check_if(&mut self, cond: &Expr, then_: &Block, else_: Option<&Expr>, _span: Span, ctx: &mut FnCtx) -> (Type, RowAcc) {
         let (ct, mut acc) = self.check_expr(cond, ctx);
-        self.expect_type(&Type::Bool, &ct, cond.span(), "`if` condition must be Bool");
+        self.expect_type_coded(&Type::Bool, &ct, cond.span(), "`if` condition must be Bool", Some("DL0408"));
         let (tt, tr) = self.check_block(then_, ctx);
         acc.add_row_acc(&tr);
         match else_ {
@@ -2429,6 +2429,20 @@ impl<'a> Checker<'a> {
     }
 
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span, msg: &str) {
+        self.expect_type_coded(expected, actual, span, msg, None)
+    }
+
+    /// `expect_type` with a caller-supplied code for the plain-mismatch case. The specific codes
+    /// the registry allocates (DL0408 for a non-Bool condition) must actually be reachable, or
+    /// they are frozen at 1.0 as codes nothing can ever produce.
+    fn expect_type_coded(
+        &mut self,
+        expected: &Type,
+        actual: &Type,
+        span: Span,
+        msg: &str,
+        mismatch_code: Option<&'static str>,
+    ) {
         match self.cx.unify_type(expected, actual) {
             Ok(()) => {}
             Err(e) => {
@@ -2463,9 +2477,26 @@ impl<'a> Checker<'a> {
                     );
                     return;
                 }
+                // A capability where a plain value stands (or the reverse) is the forgery case
+                // (§5.1): capabilities are derived from `Root`, never constructed, cast, or
+                // coerced into being. Reported as DL0601 so the authority failure reads as what
+                // it is rather than as an ordinary type mismatch.
+                if capability_mismatch(&ea, &aa) {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0601",
+                            format!(
+                                "a capability cannot be constructed or forged: `{ea}` is not `{aa}` \
+                                 (capabilities are derived from `Root`)"
+                            ),
+                        )
+                        .with_span(span, "a capability value has no constructor"),
+                    );
+                    return;
+                }
                 let code = match e {
                     UnifyError::RowConflict => "DL0504",
-                    _ => "DL0401",
+                    _ => mismatch_code.unwrap_or("DL0401"),
                 };
                 self.diags.push(
                     Diagnostic::error(code, format!("{msg}: expected `{ea}`, found `{aa}`"))
@@ -2660,6 +2691,16 @@ fn render_type_expr(t: &TypeExpr) -> String {
 fn fn_pyobj_mismatch(a: &Type, b: &Type) -> bool {
     let is_fn = |t: &Type| matches!(t, Type::Fn { .. });
     (is_fn(a) && matches!(b, Type::PyObj)) || (matches!(a, Type::PyObj) && is_fn(b))
+}
+
+/// Exactly one side is a capability (`Cap[_]` or `Root`) and the other is a concrete non-capability
+/// type — i.e. a program is trying to produce a capability from something that is not one, or to
+/// use one where a plain value belongs. Variables are excluded: an unresolved side is not yet a
+/// forgery attempt, it is simply unknown.
+fn capability_mismatch(a: &Type, b: &Type) -> bool {
+    let is_cap = |t: &Type| matches!(t, Type::Cap(_) | Type::Root);
+    let concrete = |t: &Type| !matches!(t, Type::Var(_));
+    (is_cap(a) ^ is_cap(b)) && concrete(a) && concrete(b)
 }
 
 /// The `prim_table` receiver label for a checked receiver type (the §7.3 arity gate). `None` for

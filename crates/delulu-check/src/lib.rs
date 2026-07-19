@@ -12,7 +12,13 @@ pub mod lockfile;
 pub mod manifest;
 pub mod package;
 pub mod plugin;
+pub mod deprecation;
 pub mod prim_table;
+
+/// The language edition this toolchain speaks (spec §2.2, invariant 43). Distinct from the
+/// toolchain's own version: the edition moves only with strictly-additive minors, so a package
+/// pinning an older one still means exactly what it said.
+pub const LANGUAGE_EDITION: &str = "1.0";
 pub mod program;
 pub mod rcap_check;
 pub mod rcaps;

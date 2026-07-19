@@ -882,6 +882,19 @@ impl Parser {
     }
 
     fn parse_type_core(&mut self) -> TypeExpr {
+        // A token that cannot begin a type gets the type-position diagnostic (DL0203), not the
+        // generic "expected a member name" the path parser would otherwise produce. Reported here
+        // because this is the only place that knows we are in type position at all.
+        if !self.type_starts_at(0) {
+            let span = self.span();
+            let found = self.peek().describe();
+            self.error("DL0203", format!("expected a type, found {found}"), span, "type expected");
+            return TypeExpr::Named {
+                path: Path { segs: vec![Ident { name: "<error>".into(), span }] },
+                args: Vec::new(),
+                span,
+            };
+        }
         if self.at(&TokenKind::KwFn) {
             let start = self.span();
             self.bump();

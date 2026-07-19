@@ -1,0 +1,6 @@
+// anchors: ref.grammar.if
+module conf
+
+fn f() -> Int {
+  if 42 { 1 } else { 2 }
+}

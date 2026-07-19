@@ -61,6 +61,10 @@ pub struct Manifest {
     pub name: String,
     pub version: String,
     pub kind: PackageKind,
+    /// The language edition the package is written against (`[package] language = "1.x"`, spec
+    /// §2.2). `None` means the package pins nothing and is read at the toolchain's own edition —
+    /// the back-compatible default for every manifest written before 1.0.
+    pub language: Option<String>,
     pub authority: AuthoritySpec,
     /// Dependencies, sorted by name for deterministic resolution and hashing.
     pub dependencies: Vec<Dependency>,
@@ -132,13 +136,58 @@ impl Manifest {
         }
         dependencies.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let manifest = Manifest { name, version, kind, authority, dependencies, raw: src.to_string(), file };
+        let language =
+            pkg.and_then(|p| p.get("language")).and_then(|v| v.as_str()).map(str::to_string);
+        if let Some(edition) = &language {
+            if let Err(msg) = validate_edition(edition) {
+                diags.push(
+                    Diagnostic::error("DL1004", msg)
+                        .with_span(key_span(src, file, "language"), "here"),
+                );
+            }
+        }
+
+        let manifest =
+            Manifest { name, version, kind, language, authority, dependencies, raw: src.to_string(), file };
         (Some(manifest), diags)
     }
 
     /// Byte span of the `effects` line under `[authority]` (for DL1009), or the file start.
     pub fn effects_span(&self) -> Span {
         key_span(&self.raw, self.file, "effects")
+    }
+
+    /// Byte span of the `[package] language` line (for DL1802), or the file start.
+    pub fn language_span(&self) -> Span {
+        key_span(&self.raw, self.file, "language")
+    }
+
+    /// DL1802 (spec §2.2): a package declaring a NEWER language edition than the toolchain speaks
+    /// is refused. The repair is exact — upgrade the toolchain — because the alternative (compiling
+    /// it anyway at the older edition) would silently reinterpret code written for newer rules.
+    ///
+    /// An OLDER edition is fine: minors are strictly additive (invariant 43), so a 1.0 package
+    /// still means what it said under a 1.4 toolchain. Only the future is refused.
+    pub fn edition_check(&self, toolchain: &str) -> Option<Diagnostic> {
+        let declared = self.language.as_deref()?;
+        let (dmaj, dmin) = parse_edition(declared)?;
+        let (tmaj, tmin) = parse_edition(toolchain)?;
+        if (dmaj, dmin) <= (tmaj, tmin) {
+            return None;
+        }
+        Some(
+            Diagnostic::error(
+                "DL1802",
+                format!(
+                    "package `{}` declares language edition `{declared}`, but this toolchain speaks \
+                     `{toolchain}`",
+                    self.name
+                ),
+            )
+            .with_span(self.language_span(), "this edition is newer than the toolchain")
+            .with_arg("declared", declared.to_string())
+            .with_arg("toolchain", toolchain.to_string()),
+        )
     }
 
     /// Byte span of a dependency's `[dependencies.<name>` header, or `[dependencies]`.
@@ -197,6 +246,24 @@ fn line_span_at(src: &str, file: FileId, off: usize) -> Span {
     let start = src[..off].rfind('\n').map(|n| n + 1).unwrap_or(0);
     let end = src[off..].find('\n').map(|n| off + n).unwrap_or(src.len());
     Span::new(file, start as u32, end as u32)
+}
+
+/// A language edition is `MAJOR.MINOR` (spec §2.2). Returns `None` for anything else, which the
+/// caller treats as "cannot compare" rather than as satisfied.
+fn parse_edition(s: &str) -> Option<(u32, u32)> {
+    let (maj, min) = s.split_once('.')?;
+    Some((maj.trim().parse().ok()?, min.trim().parse().ok()?))
+}
+
+/// A declared edition must be well-formed. A malformed one is DL1004 at parse time: silently
+/// ignoring it would leave the package unpinned while its author believed it was pinned.
+fn validate_edition(s: &str) -> Result<(), String> {
+    match parse_edition(s) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "`[package] language` must be a `MAJOR.MINOR` edition such as \"1.0\", found \"{s}\""
+        )),
+    }
 }
 
 fn key_span(src: &str, file: FileId, key: &str) -> Span {

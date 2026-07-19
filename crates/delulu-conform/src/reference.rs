@@ -146,7 +146,7 @@ fn tokens_chapter() -> String {
     let reserved: Vec<String> =
         delulu_syntax::token::RESERVED.iter().map(|r| format!("`{r}`")).collect();
     s.push_str(&reserved.join(", "));
-    s.push_str("\n");
+    s.push('\n');
     s
 }
 
