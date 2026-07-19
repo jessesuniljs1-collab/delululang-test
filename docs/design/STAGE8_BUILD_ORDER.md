@@ -1,7 +1,9 @@
 # Stage 8 Build Order — "Surface" (operational companion)
 
 **Status:** **BUILT** 2026-07-18. All ten §9 criteria carry named witnesses in §4;
-Windows full suite 800 / 0. Normative spec: `STAGE8_SPECIFICATION.md`;
+Windows full suite 800 / 0; WSL Linux 807 / 0 / 4 (the +7 = platform-gated tests that
+run on Linux, e.g. the Stage-6 live-engine witnesses). Normative spec:
+`STAGE8_SPECIFICATION.md`;
 how-to: `docs/playbooks/STAGE8_PLAYBOOK.md`. Precedence: spec > playbook > this file — but
 *this file's* deviations ledger (§3) records every ruled departure, and its close-out table
 (§4) is the ground truth of DONE vs PENDING.
@@ -210,10 +212,14 @@ covers the *remaining* Surface scope: spec §9 criteria 1–10.
 
 ## 4. Close-out table (spec §9 criteria → witnesses)
 
-**Status: BUILT** — head-chef ordered, cooked directly (7a-context: phases 8a–8f by
-Fable 5; 8g–8h + close-out completed by Opus 4.8 after the owner switched the session
-model mid-stage — attributed honestly in the commits). Windows full suite: **800 / 0**;
-WSL Linux: see below. All ten §9 criteria carry named witnesses.
+**Status: BUILT** — head-chef ordered, cooked directly (phases 8a–8f by Fable 5; 8g–8h +
+close-out completed by Opus 4.8 after the owner switched the session model mid-stage —
+attributed honestly in the commits). Windows full suite: **800 / 0**; WSL Linux:
+**807 / 0 / 4** (the +7 are platform-gated tests that run on Linux). macOS: Stage 8 adds
+no new platform gate beyond a `cfg(unix)` 0600 key-file chmod (which macOS satisfies
+natively — better-covered than Windows there); it is platform-gate-free std Rust
+otherwise, expected to work by construction, unverified (no Apple hardware — the same
+honest stance as every prior stage). All ten §9 criteria carry named witnesses.
 
 | # | Criterion | Witness | Status |
 |---|---|---|---|
