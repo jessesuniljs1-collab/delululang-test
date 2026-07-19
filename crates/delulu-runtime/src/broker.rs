@@ -27,6 +27,11 @@ pub struct Manifest {
     /// `foreign.python` import allowlist patterns the manifest permits (Stage 4, spec §5.1): exact
     /// module names (`"numpy"`) or `prefix.*` wildcards (`"numpy.*"`).
     pub foreign_python: Vec<String>,
+    /// Stage 10 (invariant 46): the package DECLARES a native-emission request
+    /// (`[authority] exec.native = true`). Declaration is reviewable intent, never permission —
+    /// and `--grant-manifest` deliberately does NOT confer it (build-order D6): the red-tier
+    /// grant must be named explicitly at the prompt, like a secret must exist in the env.
+    pub exec_native: bool,
 }
 
 /// Parse the tiny subset of TOML the Stage-1 manifest uses: `[section]` headers and
@@ -56,6 +61,10 @@ pub fn parse_manifest(src: &str) -> Manifest {
             ("authority", "secrets") => m.secrets = values,
             ("authority", "foreign.c") => m.foreign_c = values,
             ("authority", "foreign.python") => m.foreign_python = values,
+            // Stage 10 (invariant 46): `exec.native = true` is how a package DECLARES that it
+            // requests native-code emission. Declaring is not getting — the human grant
+            // (`--grant exec.native`) is a separate decision, and both default to off.
+            ("authority", "exec.native") => m.exec_native = val == "true",
             _ => {}
         }
     }
@@ -116,6 +125,11 @@ pub struct Grants {
     /// `foreign.python` grants: the granted import allowlist patterns (Stage 4, spec §5.1). Non-empty
     /// iff Python is granted; carried into `Cap[Python]`'s scope and checked at `py.import` (DL1305).
     pub foreign_python: Vec<String>,
+    /// Stage 10 (invariant 46): permission to EMIT AND RUN native code (`--grant exec.native`).
+    /// Off by default, everywhere, forever-until-granted — a human policy decision, never a
+    /// program's. v1.x ships no native tier yet; this is the leash built before the animal, and
+    /// DL1906 is the honest note that a `@jit` hint was ignored for lack of it.
+    pub exec_native: bool,
 }
 
 impl Grants {
@@ -165,6 +179,10 @@ impl Grants {
                 "clock" => self.clock = true,
                 "rand" => self.rand = true,
                 "declassify" => self.declassify = true,
+                // Invariant 46: native-code emission is a grant like any other — explicit,
+                // human-issued, default-off. (No native tier exists in v1.x; granting this today
+                // changes nothing but the DL1906 note, and that honesty is deliberate.)
+                "exec.native" => self.exec_native = true,
                 other => return Err(format!("unknown grant `{other}`")),
             },
         }

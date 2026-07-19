@@ -50,13 +50,30 @@ fn invariant45_hints_change_nothing_observable() {
     assert!(run_a.status.success() && run_b.status.success(), "both twins run clean");
     assert_eq!(run_a.stdout, run_b.stdout, "run output is identical with and without hints");
 
-    let auth_a = delulu(&["authority", &plain.to_string_lossy(), "--json"]);
-    let auth_b = delulu(&["authority", &hinted.to_string_lossy(), "--json"]);
+    let mut va: serde_json::Value =
+        serde_json::from_slice(&delulu(&["authority", &plain.to_string_lossy(), "--json"]).stdout)
+            .expect("plain authority json");
+    let mut vb: serde_json::Value =
+        serde_json::from_slice(&delulu(&["authority", &hinted.to_string_lossy(), "--json"]).stdout)
+            .expect("hinted authority json");
+    // Build-order D7: invariant 45 binds SEMANTICS and authority FACTS — effects, capabilities,
+    // secrets, scopes. The `native_emission` stamp is not a fact about what the program may do;
+    // it is the `@jit` REQUEST made reviewable, and spec §2.3 orders it onto the report. So the
+    // strong form of this test: the stamp is the ONLY difference between the twins.
+    let stamp = vb["authority"]
+        .as_object_mut()
+        .expect("authority object")
+        .remove("native_emission")
+        .expect("the hinted twin carries the request stamp");
+    assert_eq!(stamp["requested"], true);
+    assert!(
+        va["authority"].as_object_mut().unwrap().remove("native_emission").is_none(),
+        "the plain twin carries no stamp"
+    );
     assert_eq!(
-        String::from_utf8_lossy(&auth_a.stdout),
-        String::from_utf8_lossy(&auth_b.stdout),
-        "the authority report is byte-identical — a hint can never widen, narrow, or reshape \
-         what a program may do"
+        va, vb,
+        "with the request stamp removed, the reports are IDENTICAL — a hint can never widen, \
+         narrow, or reshape what a program may do"
     );
 }
 

@@ -200,6 +200,7 @@ registry! {
     // DL19xx — Industrial (Stage 10). Budget fixed in the spec §10: DL1901–DL1911 only;
     // anything further needs a build-order ruling.
     "DL1901" => "unknown attribute",
+    "DL1906" => "native-code emission requested without the `exec.native` grant",
 
     // DL09xx — runtime
     "DL0901" => "integer overflow",
@@ -980,6 +981,18 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1906" => "The program carries a `@jit` hint, but native-code emission was not granted, \
+             so the hint was IGNORED and the program ran under the interpreter — correctly, with \
+             the sandbox intact. This is a warning, never an error: a hint may not change what a \
+             program does (invariant 45), including whether it runs. Getting the grant is two \
+             separate, deliberate acts: the package declares its request in the manifest \
+             (`[authority] exec.native = true`, a reviewable statement of intent), and the human \
+             grants it at the prompt (`--grant exec.native`) — `--grant-manifest` deliberately \
+             does not confer it, because emitting native code enlarges the attack surface, and \
+             widening an attack surface is an AUTHORITY-WIDENING decision no tool should make for \
+             you. Honesty note: v1.x ships no native tier at all — today the grant changes nothing \
+             but this note. The gate exists before the engine so that no engine ever exists \
+             ungated.",
         "DL1901" => "This attribute is not one v1.x defines. The full set is `@aot`, \
              `@interpret`, `@jit`, and `@inline(\"never\"|\"always\")`, and they may sit on `fn` \
              and `actor` declarations and the module header. All of them are HINTS: the \

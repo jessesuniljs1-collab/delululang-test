@@ -1551,6 +1551,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
     stamp_foreign_isolation(&mut report, &opts);
     stamp_isolation(&mut report, &opts);
     stamp_plugins(&mut report, &checked.module, &file, &map);
+    stamp_native_emission(&mut report, &checked.module);
     if opts.json {
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
@@ -1568,6 +1569,27 @@ fn cmd_authority(rest: &[String]) -> i32 {
 /// **Only added when the program actually loads a plugin** — a program with no `load` call gets no
 /// `plugins` key, so every prior authority report is byte-identical (criterion 11). Grant/effects
 /// extraction is best-effort over a literal `Grant { … }`; a computed grant reports what it can.
+/// Whether any declaration in the module carries a `@jit` hint (Stage 10, invariant 46) — the
+/// static form of "this program requests native-code emission".
+fn module_requests_native(module: &delulu_syntax::ast::Module) -> bool {
+    use delulu_syntax::ast::Item;
+    let jit = |attrs: &[delulu_syntax::ast::Attribute]| attrs.iter().any(|a| a.name.name == "jit");
+    jit(&module.attrs)
+        || module.items.iter().any(|i| match i {
+            Item::Fn(f) => jit(&f.attrs),
+            Item::Actor(a) => jit(&a.attrs),
+            _ => false,
+        })
+}
+
+/// Stamp `native_emission` on an authority report — ONLY when the program carries a `@jit` hint,
+/// so every hint-free report stays byte-identical to 1.0 (the stamp_plugins pattern; house rule 4).
+fn stamp_native_emission(report: &mut Json, module: &delulu_syntax::ast::Module) {
+    if module_requests_native(module) {
+        report["native_emission"] = serde_json::json!({ "requested": true, "via": "@jit" });
+    }
+}
+
 fn stamp_plugins(report: &mut Json, module: &delulu_syntax::ast::Module, src_path: &str, map: &SourceMap) {
     let mut entries: Vec<Json> = Vec::new();
     let mut loads = Vec::new();
@@ -1863,6 +1885,16 @@ fn render_authority(report: &Json) -> String {
     // default report is byte-identical to prior stages (criterion 11).
     if let Some(iso) = report["isolation"].as_str() {
         let _ = writeln!(out, "  isolation:    {iso}");
+    }
+    // Native-code emission (Stage 10, invariant 46): the line appears ONLY when the program
+    // actually carries a `@jit` hint, so every hint-free report stays byte-identical to 1.0.
+    // `authority` is static (kind, not grants — §5.3): it reports the REQUEST; whether the run
+    // was granted `exec.native` is answered at run time (DL1906 when it was not).
+    if report["native_emission"]["requested"].as_bool() == Some(true) {
+        let _ = writeln!(
+            out,
+            "  native-emission: requested (`@jit`) — off by default; granted only by explicit `--grant exec.native` (no native tier exists in v1.x)"
+        );
     }
     let foreign = report["foreign_calls"].as_array().cloned().unwrap_or_default();
     if foreign.is_empty() {
@@ -3266,6 +3298,10 @@ fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: HashMap<Stri
         secrets: info.secrets.iter().map(|n| (n.clone(), String::new())).collect(),
         foreign_c,
         foreign_python: info.foreign_python.clone(),
+        // A lease can never confer native emission in v1.x: the broker has no `exec.native`
+        // dimension yet (build-order D6 — the lattice dimension lands WITH the first native
+        // tier in 10l, never after it), so the leased slice is always denied here. Fail closed.
+        exec_native: false,
     }
 }
 
@@ -4438,6 +4474,28 @@ fn cmd_run(rest: &[String]) -> i32 {
         if let Err(e) = grants.add(g) {
             eprintln!("error: bad --grant: {e}");
             return 2;
+        }
+    }
+
+    // Stage 10 (invariant 46): a `@jit` hint without the `exec.native` grant is IGNORED — the
+    // program runs interpreted, sandbox intact — and DL1906 says so on the human channel
+    // (stderr, the DL1790 surface-warning pattern; never inside `--json`, whose bytes for
+    // untouched programs are law). A hint may not change whether a program runs (invariant 45),
+    // so this is a warning by construction, never a refusal.
+    if module_requests_native(&checked.module) && !grants.exec_native {
+        let mut w = Diagnostic::warning(
+            "DL1906",
+            "`@jit` hint ignored: native-code emission was not granted (`--grant exec.native`)",
+        );
+        if manifest.as_ref().is_some_and(|m| !m.exec_native) {
+            w.message.push_str(
+                " — and the manifest does not declare the request (`[authority] exec.native = true`)",
+            );
+        }
+        if !opts.json {
+            let wmap = SourceMap::new();
+            let palette = palette_stderr();
+            eprint!("{}", render_human_with(&w, &wmap, &palette));
         }
     }
 

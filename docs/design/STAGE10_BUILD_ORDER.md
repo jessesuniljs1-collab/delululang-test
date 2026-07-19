@@ -62,6 +62,27 @@ take vetted RustCrypto implementations as dependencies with the vetting recorded
 version, KAT provenance). If this machine cannot reach a registry to add them, **the track waits
 and says so** — an offline kitchen does not hand-roll lattice cryptography to hit a milestone.
 
+**D6 — 10b ships the human-policy gate; the broker-lattice dimension lands WITH the first native
+tier (10l), never after it.** A broker dimension with no enforceable operation behind it would be
+dead policy data whose firing the audit chain could never witness. RULED: `--grant exec.native`
+(embedded grants) + the manifest declaration + DL1906 + the authority request-stamp are 10b; the
+`⊑`-checked broker dimension is a 10l entry gate — it must merge BEFORE the tier itself in that
+phase, so no tier ever exists ungated. Two sub-rulings: (a) `--grant-manifest` deliberately does
+NOT confer `exec.native` — the red-tier grant is named explicitly at the prompt or not at all;
+(b) a `--lease` run derives `exec_native: false` unconditionally until the broker dimension
+exists — fail closed, stated in code.
+
+**D7 — Invariant 45 binds semantics and authority FACTS; the authority report's request-stamp is
+the hint made reviewable, and it is the ONLY difference a hint may make.** Surfaced by the suite
+itself: 10a's twin test demanded byte-identical authority reports under hints, while spec §2.3
+orders `delulu authority` to report the native-emission request — both are spec text. RULED: a
+hint may never change effects, capabilities, secrets, scopes, outputs, or whether a program runs;
+it MAY (and for `@jit`, must) appear as the conditional `native_emission` stamp, which exists
+precisely so the request is reviewable before anyone grants it. The twin test now asserts the
+strong form — remove the stamp and the reports must be identical — which is stricter than the
+byte-equality it replaces, because it also pins WHAT the only difference is. DL1906 is
+warning-class by the same law: a hint may not change whether a program runs.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -69,7 +90,7 @@ and says so** — an offline kitchen does not hand-roll lattice cryptography to 
 | Phase | Track | Deliverable | Gate (verified before commit) |
 |---|---|---|---|
 | 10a | A2 | **DONE** (2026-07-20) — Attribute grammar activation: `@aot`/`@interpret`/`@jit`/`@inline(...)` as hints; DL1901 on unknown attributes; fmt round-trips attributes | Invariant-45 twin witnessed (run output + authority byte-identical with and without hints); DL1901 registered + explained, exact removal repair, `authority_widening: false`; both new anchors witnessed same-commit, coverage **100%**; fmt canonical own-line form round-trips; suite **931/0/4**. One parse subtlety ruled in code: attributes swallow their line terminator (Go-style termination would otherwise orphan the decl) |
-| 10b | A3 | `exec.native` grant dimension, manifest request line, `delulu authority` reporting, DL1906 | `@jit` without the grant → DL1906 (with `authority_widening` note); default-deny witnessed incl. the skip branch; authority report line exact; coverage 100%; full suite green |
+| 10b | A3 | **DONE** (2026-07-20) — `exec.native` grant + manifest declaration (`[authority] exec.native = true`), authority request-stamp, DL1906 | `@jit` without the grant → DL1906 **warning, program still runs** (D7: a hint may not change whether a program runs); granted run clean; machine `--json` channel never carries the warning; authority stamps `native_emission` ONLY when requested (skip branch = byte-stability witnessed); `--grant-manifest` does not confer it and a lease derives it false (D6, fail closed); explain carries the authority-widening + no-tier honesty notes; coverage **100%** (290 anchors), suite **936/0/4**. Broker-lattice dimension: 10l entry gate per D6 |
 | 10c | B2/B3 | Bounded mailboxes (`block` default / `drop-new` counted, DL1902) + `--trace-memory` telemetry | 10:1 producer/consumer mismatch sustains at stable memory; DL1902 witnessed in abort mode; telemetry present; machine channels untouched elsewhere |
 | 10d | B1 | Per-actor cycle collection (trial deletion between turns) | Leak corpus (cyclic graphs, promise chains) goes documented-leak → collected; no perf cliff on the Study-C suite (>3% geo-mean regression blocks) |
 | 10e | D1 | `Actuate` activates: `Cap[Actuator]`/`Cap[Sensor]`, envelope scopes, double validation, `ActuateErr`, DL1904 | Envelope refusal kills the command, never the process — witnessed both ways; kind vs scope split holds (§5.3); coverage 100% incl. new anchors |

@@ -2335,3 +2335,20 @@ anchor = "ref.diag.DL1702"
 file = "crates/delulu-diag/tests/unproducible_witnesses.rs"
 test = "dl1702_formatter_law_violation_constructs_classifies_and_explains"
 kind = "negative"
+
+# ---- Stage 10 phase 10b (invariant 46): the JIT policy gate, built before any JIT. ----
+# DL1906 is warning-class BY LAW (invariant 45: a hint may not change whether a program runs),
+# so its negative witness is the run that PRODUCES the warning while the program still succeeds,
+# and its positive witness is the granted run that stays clean.
+
+[[witness]]
+anchor = "ref.diag.DL1906"
+file = "crates/delulu/tests/jit_policy_cli.rs"
+test = "a_granted_jit_hint_runs_without_the_warning"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1906"
+file = "crates/delulu/tests/jit_policy_cli.rs"
+test = "an_ungranted_jit_hint_warns_dl1906_and_the_program_still_runs"
+kind = "negative"

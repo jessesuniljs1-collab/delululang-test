@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 123 of 123 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 124 of 124 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -131,6 +131,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1801` | use of a deprecated feature (RFC-linked) | `ref.diag.DL1801` | covered |
 | `DL1802` | package declares a newer language edition than this toolchain | `ref.diag.DL1802` | covered |
 | `DL1901` | unknown attribute | `ref.diag.DL1901` | covered |
+| `DL1906` | native-code emission requested without the `exec.native` grant | `ref.diag.DL1906` | covered |
 | `DL0901` | integer overflow | `ref.diag.DL0901` | covered |
 | `DL0902` | division by zero | `ref.diag.DL0902` | covered |
 | `DL0903` | index out of bounds | `ref.diag.DL0903` | covered |
