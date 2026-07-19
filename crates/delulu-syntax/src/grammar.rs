@@ -18,6 +18,7 @@ pub const GRAMMAR_PRODUCTIONS: &[&str] = &[
     "import",
     "path",
     "item",
+    "attribute",
     "foreign_decl",
     "foreign_fn",
     "actor_decl",

@@ -467,6 +467,16 @@ RFC-gated (§0 non-goals).
 
 ---
 
+---
+
+## Implementation status
+
+| Phase | Track | Status | Evidence |
+|---|---|---|---|
+| 10a | A2 | **BUILT** (2026-07-20) | Attributes active: `@aot`/`@interpret`/`@jit`/`@inline("never"\|"always")` on `fn`/`actor`/module header; DL1901 (exact removal repair, never widening) on unknown names, wrong shapes, and wrong placements; fmt round-trips the canonical own-line form. Witnesses: `attributes_cli.rs` (5 tests incl. the invariant-45 twin — run output and authority byte-identical with and without hints), fixtures `25_attributes_hints.delulu` + `DL1901_unknown_attribute.delulu`; coverage 100% with both new anchors; suite 931/0/4 |
+
+---
+
 *This closes the committed sequence: Stages 1–9 build and prove the language; Stage 10 makes it
 an industrial tool with physical stakes. Everything beyond lives in RFCs — proposed, argued,
 measured, and honest, like everything above. Be delulu; ship the proof.* 🐦‍🔥

@@ -6,7 +6,7 @@
 
 The parser is hand-written recursive descent, so this is the index of its productions: one row per user-facing production, each backed by a `parse_<name>` function that a drift guard verifies exists.
 
-> **Coverage (invariant 42):** 26 of 26 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 27 of 27 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 | Production | Anchor | Coverage |
 |---|---|---|
@@ -14,6 +14,7 @@ The parser is hand-written recursive descent, so this is the index of its produc
 | `import` | `ref.grammar.import` | covered |
 | `path` | `ref.grammar.path` | covered |
 | `item` | `ref.grammar.item` | covered |
+| `attribute` | `ref.grammar.attribute` | covered |
 | `foreign_decl` | `ref.grammar.foreign_decl` | covered |
 | `foreign_fn` | `ref.grammar.foreign_fn` | covered |
 | `actor_decl` | `ref.grammar.actor_decl` | covered |

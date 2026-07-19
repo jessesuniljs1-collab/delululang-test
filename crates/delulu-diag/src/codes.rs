@@ -197,6 +197,10 @@ registry! {
     "DL1801" => "use of a deprecated feature (RFC-linked)",
     "DL1802" => "package declares a newer language edition than this toolchain",
 
+    // DL19xx — Industrial (Stage 10). Budget fixed in the spec §10: DL1901–DL1911 only;
+    // anything further needs a build-order ruling.
+    "DL1901" => "unknown attribute",
+
     // DL09xx — runtime
     "DL0901" => "integer overflow",
     "DL0902" => "division by zero",
@@ -976,6 +980,15 @@ pub fn code_explain(code: &str) -> Option<String> {
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
         }
+        "DL1901" => "This attribute is not one v1.x defines. The full set is `@aot`, \
+             `@interpret`, `@jit`, and `@inline(\"never\"|\"always\")`, and they may sit on `fn` \
+             and `actor` declarations and the module header. All of them are HINTS: the \
+             scheduler may ignore any of them, and none changes what a program means or may do \
+             (invariant 45 — the conformance suite passes identically with and without every \
+             hint). Unknown names are refused rather than skipped because a silently tolerated \
+             attribute becomes a vendor extension space nobody ruled on — new attributes arrive \
+             through the RFC process or not at all. The repair removes the attribute; removing \
+             a hint never changes behavior, which is exactly the point of hints.",
         "DL1801" => "This program uses a feature that has been DEPRECATED. It still works — a \
              deprecation is a warning, never a break — but it will be removed in a future MAJOR \
              version, and never before then. The deprecation policy (spec §2.2) binds the project: \

@@ -36,6 +36,22 @@ pub struct Module {
     pub name: Path,
     pub imports: Vec<Import>,
     pub items: Vec<Item>,
+    /// Execution-mode hints on the module header (Stage 10, spec §2.2). Hints, never semantics
+    /// (invariant 45): nothing downstream of the parser may branch on them except a scheduler.
+    /// Serde default + skip keeps every attribute-free artifact byte-identical to 1.0.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<Attribute>,
+}
+
+/// `attribute = "@" IDENT [ "(" STRING ")" ]` (Stage 10, spec §2.2 — a reserved 1.0 activation).
+/// v1.x-defined names: `aot`, `interpret`, `jit`, `inline` (arg `"never"`|`"always"`). All are
+/// HINTS: the scheduler may ignore them; none changes semantics; unknown names are DL1901 —
+/// there is no silent vendor attribute space.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Attribute {
+    pub name: Ident,
+    pub arg: Option<String>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -130,6 +146,9 @@ pub struct ActorDecl {
     pub fns: Vec<FnDecl>,
     pub id: NodeId,
     pub span: Span,
+    /// Execution-mode hints (Stage 10, spec §2.2); see [`Attribute`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<Attribute>,
 }
 
 /// `("let" | "var") name ":" type` — no initializer in the grammar; fields are assigned in
@@ -206,6 +225,9 @@ pub struct FnDecl {
     pub body: Block,
     pub id: NodeId,
     pub span: Span,
+    /// Execution-mode hints (Stage 10, spec §2.2); see [`Attribute`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

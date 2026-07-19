@@ -215,6 +215,10 @@ impl<'a> Printer<'a> {
         // `module` keyword sits immediately before it; comments between the header line
         // and the first item flush with that item).
         self.flush_comments_before(m.name.span().start);
+        for a in &m.attrs {
+            let t = attr_text(a);
+            self.line(&t);
+        }
         let header = format!("module {}", m.name.dotted());
         self.line(&header);
         self.attach_same_line(m.name.span().end);
@@ -291,6 +295,12 @@ impl<'a> Printer<'a> {
     }
 
     fn fn_decl(&mut self, f: &FnDecl, prefix: &str) {
+        // Attributes: one per line, directly above the declaration, after the prefix's
+        // indentation (Stage 10, spec §2.2). One canonical placement — never inline with the
+        // head — so the identity law has exactly one shape to round-trip.
+        for a in &f.attrs {
+            self.line(&format!("{prefix}{}", attr_text(a)));
+        }
         let mut head = String::new();
         head.push_str(prefix);
         if f.public {
@@ -414,6 +424,10 @@ impl<'a> Printer<'a> {
     }
 
     fn actor_decl(&mut self, a: &ActorDecl) {
+        for at in &a.attrs {
+            let t = attr_text(at);
+            self.line(&t);
+        }
         let mut head = String::new();
         if a.public {
             head.push_str("pub ");
@@ -701,6 +715,14 @@ impl<'a> Printer<'a> {
             self.line(&format!("{},", expr_flat(a, 0, false)));
         }
         self.indent -= 1;
+    }
+}
+
+/// The canonical text of an attribute (Stage 10): `@name` or `@name("arg")`.
+fn attr_text(a: &Attribute) -> String {
+    match &a.arg {
+        Some(arg) => format!("@{}(\"{arg}\")", a.name.name),
+        None => format!("@{}", a.name.name),
     }
 }
 

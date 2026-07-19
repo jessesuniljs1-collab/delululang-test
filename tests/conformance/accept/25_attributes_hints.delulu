@@ -1,0 +1,22 @@
+// anchors: ref.grammar.attribute ref.diag.DL1901
+// Stage 10 (spec §2.2): execution-mode attributes are HINTS. This program carries every
+// v1.x-defined form; invariant 45 is that its behavior, authority, and diagnostics are
+// byte-identical to its unattributed twin — witnessed in crates/delulu/tests/attributes_cli.rs.
+@interpret
+module conf
+
+@jit
+fn hot(x: Int) -> Int {
+    x * 2
+}
+
+@inline("never")
+fn cold(x: Int) -> Int {
+    x + 1
+}
+
+@aot
+fn main(root: Root) ! {Write} {
+    let c = root.console()
+    c.println(str(hot(cold(20))))
+}

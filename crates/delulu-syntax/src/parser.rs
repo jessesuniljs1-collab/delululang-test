@@ -251,6 +251,8 @@ impl Parser {
     // ----- module ----------------------------------------------------------
 
     fn parse_module(&mut self) -> Module {
+        // Attributes on the module header (Stage 10, spec §2.2): `{ attribute } module m`.
+        let attrs = self.parse_attributes();
         // `module` header (§3). Recoverable if missing.
         let name = if self.eat(&TokenKind::KwModule) {
             let path = self.parse_path();
@@ -294,7 +296,117 @@ impl Parser {
             }
         }
 
-        Module { name, imports, items }
+        Module { name, imports, items, attrs }
+    }
+
+    // ----- attributes (Stage 10, spec §2.2 — a reserved 1.0 activation) ---------------------
+
+    /// `attribute = "@" , IDENT , [ "(" , STRING , ")" ] ;` — zero or more, validated here
+    /// against the v1.x-defined set. All attributes are HINTS (invariant 45): the parser
+    /// records them and nothing downstream may change semantics because of one. Unknown names,
+    /// and known names with the wrong argument shape, are DL1901 with an exact removal repair —
+    /// there is no silent vendor attribute space (extensions go through RFCs).
+    fn parse_attributes(&mut self) -> Vec<Attribute> {
+        let mut attrs = Vec::new();
+        while matches!(self.peek(), TokenKind::At) {
+            attrs.push(self.parse_attribute());
+            // An attribute sits on its own line in the canonical style; swallow the line
+            // terminator(s) so the decl it annotates is the next thing the parser sees.
+            while self.eat(&TokenKind::Term) {}
+        }
+        attrs
+    }
+
+    fn parse_attribute(&mut self) -> Attribute {
+        let start = self.span();
+        self.bump(); // @
+        let name = self.expect_decl_name();
+        let mut arg = None;
+        if self.eat(&TokenKind::LParen) {
+            match self.peek().clone() {
+                TokenKind::Str(s) => {
+                    self.bump();
+                    arg = Some(s);
+                }
+                _ => {
+                    self.error(
+                        "DL0202",
+                        "expected a string argument in the attribute",
+                        self.span(),
+                        "attribute arguments are string literals, like `@inline(\"never\")`",
+                    );
+                }
+            }
+            self.expect(TokenKind::RParen);
+        }
+        let span = start.to(self.prev_span());
+        let attr = Attribute { name, arg, span };
+        self.validate_attribute(&attr);
+        attr
+    }
+
+    /// DL1901 when attributes precede an item kind that does not take them. The v1.x surface is
+    /// exactly `fn`, `actor`, and the module header (spec §2.2); tolerating them elsewhere would
+    /// quietly mint a vendor attribute space one item kind at a time.
+    fn refuse_attrs_here(&mut self, attrs: &[Attribute], what: &str) {
+        for a in attrs {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1901",
+                    format!("attribute `@{}` is not permitted on {what}", a.name.name),
+                )
+                .with_span(a.span, "attributes apply to `fn`, `actor`, and the module header in v1.x")
+                .with_repair(Repair {
+                    id: "remove-unknown-attribute",
+                    confidence: Confidence::Exact,
+                    authority_widening: false,
+                    requires_human: false,
+                    edits: vec![Edit {
+                        file: a.span.file,
+                        start_byte: a.span.start,
+                        end_byte: a.span.end,
+                        insert: String::new(),
+                    }],
+                }),
+            );
+        }
+    }
+
+    /// DL1901 on anything outside the v1.x-defined attribute set, with an exact removal repair.
+    /// `authority_widening: false` — removing a hint never changes what a program may do,
+    /// which is the invariant-45 point made mechanical.
+    fn validate_attribute(&mut self, attr: &Attribute) {
+        let ok = match attr.name.name.as_str() {
+            "aot" | "interpret" | "jit" => attr.arg.is_none(),
+            "inline" => matches!(attr.arg.as_deref(), Some("never") | Some("always")),
+            _ => false,
+        };
+        if ok {
+            return;
+        }
+        let shown = match &attr.arg {
+            Some(a) => format!("@{}(\"{a}\")", attr.name.name),
+            None => format!("@{}", attr.name.name),
+        };
+        self.diags.push(
+            Diagnostic::error("DL1901", format!("unknown attribute `{shown}`"))
+                .with_span(
+                    attr.span,
+                    "v1.x defines `@aot`, `@interpret`, `@jit`, and `@inline(\"never\"|\"always\")` — all hints",
+                )
+                .with_repair(Repair {
+                    id: "remove-unknown-attribute",
+                    confidence: Confidence::Exact,
+                    authority_widening: false,
+                    requires_human: false,
+                    edits: vec![Edit {
+                        file: attr.span.file,
+                        start_byte: attr.span.start,
+                        end_byte: attr.span.end,
+                        insert: String::new(),
+                    }],
+                }),
+        );
     }
 
     fn parse_import(&mut self) -> Option<Import> {
@@ -335,24 +447,39 @@ impl Parser {
     // ----- items ------------------------------------------------------------
 
     fn parse_item(&mut self) -> Option<Item> {
+        // `{ attribute } [pub] <item>` (Stage 10, spec §2.2). Attributes attach to `fn` and
+        // `actor` declarations (and the module header, handled in `parse_module`); on any other
+        // item they are DL1901 — defined nowhere means permitted nowhere, no silent tolerance.
+        let attrs = self.parse_attributes();
         let public = self.eat(&TokenKind::KwPub);
         // `foreign` is an active *contextual* keyword (spec §2): still lexed as an identifier so
         // `root.foreign(…)` stays legal, but recognized here as `foreign STRING lib IDENT { … }`.
         if self.at_kw_ident("foreign") {
+            self.refuse_attrs_here(&attrs, "a `foreign` block");
             return Some(Item::Foreign(self.parse_foreign_decl(public)));
         }
         // `test` is a keyword only in item position (Stage 8, spec §2): still lexed as an
         // identifier — `let test = 1` and `fn test()` stay legal — but a bare `test` here can
         // only start a test block (no other item begins with an identifier).
         if self.at_kw_ident("test") {
+            self.refuse_attrs_here(&attrs, "a `test` block");
             return Some(Item::Test(self.parse_test_decl(public)));
         }
         match self.peek() {
-            TokenKind::KwFn => Some(Item::Fn(self.parse_fn(public))),
-            TokenKind::KwType => Some(Item::Type(self.parse_type_decl(public))),
-            TokenKind::KwEffect => Some(Item::Effect(self.parse_effect_decl(public))),
-            TokenKind::KwActor => Some(Item::Actor(self.parse_actor_decl(public))),
-            TokenKind::KwLet => Some(Item::Const(self.parse_const(public))),
+            TokenKind::KwFn => Some(Item::Fn(self.parse_fn(public, attrs))),
+            TokenKind::KwType => {
+                self.refuse_attrs_here(&attrs, "a `type` declaration");
+                Some(Item::Type(self.parse_type_decl(public)))
+            }
+            TokenKind::KwEffect => {
+                self.refuse_attrs_here(&attrs, "an `effect` declaration");
+                Some(Item::Effect(self.parse_effect_decl(public)))
+            }
+            TokenKind::KwActor => Some(Item::Actor(self.parse_actor_decl(public, attrs))),
+            TokenKind::KwLet => {
+                self.refuse_attrs_here(&attrs, "a module constant");
+                Some(Item::Const(self.parse_const(public)))
+            }
             TokenKind::KwVar => {
                 // Module-level mutable state is forbidden (§5.5, audit closes the ambient
                 // laundering channel). Diagnose specifically, then recover by skipping it.
@@ -487,7 +614,7 @@ impl Parser {
     /// use them as identifiers (invariant 37 needs no migration for them). Exactly one `new`
     /// per actor: zero synthesizes an empty one (so the checker always has a constructor node),
     /// extras are diagnosed and dropped.
-    fn parse_actor_decl(&mut self, public: bool) -> ActorDecl {
+    fn parse_actor_decl(&mut self, public: bool, attrs: Vec<Attribute>) -> ActorDecl {
         let start = self.span();
         self.bump(); // actor
         let name = self.expect_decl_name();
@@ -575,7 +702,10 @@ impl Parser {
                     behaviors.push(BehaviorDecl { name: bname, params, row, body, id: self.node_id(), span });
                 }
                 TokenKind::KwFn => {
-                    fns.push(self.parse_fn(false));
+                    // Actor-member fns take no attributes in v1.x (the documented surface is
+                    // `fn`/`actor` items and the module header); an `@` here falls to the
+                    // unexpected-token arm below, which is the honest refusal.
+                    fns.push(self.parse_fn(false, Vec::new()));
                 }
                 other => {
                     self.error(
@@ -629,7 +759,7 @@ impl Parser {
             }
         };
         self.expect_term();
-        ActorDecl { public, name, generics, fields, ctor, behaviors, fns, id: self.node_id(), span }
+        ActorDecl { public, name, generics, fields, ctor, behaviors, fns, id: self.node_id(), span, attrs }
     }
 
     /// Invariant 37 (DL1608): pre-0.7 code using `consume`/`recover` as an identifier gets an
@@ -695,7 +825,7 @@ impl Parser {
         params
     }
 
-    fn parse_fn(&mut self, public: bool) -> FnDecl {
+    fn parse_fn(&mut self, public: bool, attrs: Vec<Attribute>) -> FnDecl {
         let start = self.span();
         self.bump(); // fn
         let name = self.expect_decl_name();
@@ -705,7 +835,7 @@ impl Parser {
         let row = self.parse_opt_row();
         let body = self.parse_block();
         let span = start.to(self.prev_span());
-        FnDecl { public, name, generics, params, ret, row, body, id: self.node_id(), span }
+        FnDecl { public, name, generics, params, ret, row, body, id: self.node_id(), span, attrs }
     }
 
     /// `test_decl = "test" STRING [effect_row] block` (Stage 8, spec §2). The grammar keeps

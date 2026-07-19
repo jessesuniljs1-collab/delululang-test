@@ -1,0 +1,15 @@
+// anchors: ref.grammar.attribute ref.diag.DL1901
+// `@fastpath` is nobody's attribute: unknown names are refused (DL1901) rather than skipped,
+// because a silently tolerated attribute becomes a vendor extension space nobody ruled on.
+// The repair removes it — removing a hint never changes behavior (invariant 45).
+module conf
+
+@fastpath
+fn f(x: Int) -> Int {
+  x
+}
+
+fn main(root: Root) ! {Write} {
+  let c = root.console()
+  c.println(str(f(1)))
+}
