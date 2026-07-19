@@ -4919,6 +4919,12 @@ fn cmd_run(rest: &[String]) -> i32 {
                     m.actor, m.bound, m.peak, m.drops
                 );
             }
+            // 10d: collector accounting — cell COUNTS, deliberately not bytes (build-order D9:
+            // a byte figure without a real size walk would be an invented number).
+            eprintln!(
+                "  cycle collector: {} sweep(s), {} garbage-cycle cell(s) collected",
+                report.cycle_runs, report.cycle_collected
+            );
         }
         if opts.on_quiesce_report {
             eprintln!(

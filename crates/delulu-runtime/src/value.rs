@@ -312,6 +312,17 @@ impl Scope {
     pub fn define(&self, name: &str, value: Value) {
         self.vars.borrow_mut().insert(name.to_string(), value);
     }
+    /// Visit every binding's value (Stage 10 cycle collector, `cycles.rs`).
+    pub fn each_value(&self, mut f: impl FnMut(&Value)) {
+        for v in self.vars.borrow().values() {
+            f(v);
+        }
+    }
+    /// Empty this scope's bindings — called by the cycle collector ONLY on scopes it has
+    /// proven unreachable from every root; the drop cascade collapses the rest of the cycle.
+    pub fn clear_for_collector(&self) {
+        self.vars.borrow_mut().clear();
+    }
     pub fn get(&self, name: &str) -> Option<Value> {
         if let Some(v) = self.vars.borrow().get(name) {
             return Some(v.clone());

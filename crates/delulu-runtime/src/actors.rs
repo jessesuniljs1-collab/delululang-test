@@ -158,6 +158,9 @@ struct Shared {
     space_lock: Mutex<()>,
     space: Condvar,
     overflow_drops: AtomicU64,
+    /// Stage 10 (10d): program-wide cycle-collector accounting, aggregated from the workers.
+    cycle_runs: AtomicU64,
+    cycle_collected: AtomicU64,
 }
 
 impl Shared {
@@ -281,6 +284,10 @@ pub struct QuiesceReport {
     pub overflow_drops: u64,
     /// Stage 10 (10c): per-bounded-actor mailbox telemetry (empty when nothing is bounded).
     pub mailbox: Vec<MailboxStat>,
+    /// Stage 10 (10d): cycle-collector sweeps run, program-wide.
+    pub cycle_runs: u64,
+    /// Stage 10 (10d): garbage-cycle cells broken and freed, program-wide.
+    pub cycle_collected: u64,
 }
 
 /// The actor system: worker threads, their mailboxes, and the quiescence machinery.
@@ -329,6 +336,8 @@ impl ActorSystem {
             space_lock: Mutex::new(()),
             space: Condvar::new(),
             overflow_drops: AtomicU64::new(0),
+            cycle_runs: AtomicU64::new(0),
+            cycle_collected: AtomicU64::new(0),
         });
         let (senders, receivers): (Vec<_>, Vec<_>) = (0..threads).map(|_| mpsc::channel::<Job>()).unzip();
         let mut handles = Vec::new();
@@ -395,6 +404,8 @@ impl ActorSystem {
             aborted: self.shared.died.load(Ordering::SeqCst),
             overflow_drops: self.shared.overflow_drops.load(Ordering::SeqCst),
             mailbox,
+            cycle_runs: self.shared.cycle_runs.load(Ordering::SeqCst),
+            cycle_collected: self.shared.cycle_collected.load(Ordering::SeqCst),
         }
     }
 }
@@ -511,10 +522,26 @@ fn worker_loop(
                     }
                 }
                 ship(turn_id, &cause);
+                maybe_collect_cycles(&interp, &cells, &shared);
                 shared.done();
             }
         }
     }
+}
+
+/// Stage 10 (10d): the between-turns sweep. Roots are EVERY live actor state this worker owns —
+/// a worker hosts many actors, and a cell allocated by one turn may lawfully live in another
+/// actor's state... no: states never share cells across actors (messages cross as owned
+/// `MsgValue`), but the registry is worker-wide, so the root set must be worker-wide too.
+/// Runs only under registry pressure (the amortizer), and the counts feed `--trace-memory`.
+fn maybe_collect_cycles(interp: &crate::interp::Interp, cells: &HashMap<u64, Cell>, shared: &Shared) {
+    if interp.cycle_pressure() < crate::cycles::COLLECT_THRESHOLD {
+        return;
+    }
+    let roots: Vec<Value> = cells.values().filter(|c| !c.dead).map(|c| c.state.clone()).collect();
+    let broken = interp.collect_cycles(&roots);
+    shared.cycle_runs.fetch_add(1, Ordering::SeqCst);
+    shared.cycle_collected.fetch_add(broken, Ordering::SeqCst);
 }
 
 fn actor_died(shared: &Shared, actor: &str, member: &str, fault: &Fault) {

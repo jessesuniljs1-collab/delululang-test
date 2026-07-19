@@ -103,6 +103,28 @@ bytes and collection counts arrive with 10d's collector, where a heap walk exist
 error-class ONLY in abort mode (abort mode is the statement that losing work is worse than
 stopping); otherwise a drop is counted per actor and reported at exit, never silent.
 
+**D9 — The cycle collector (10d): mark-and-break between turns, and why that is sound.** The
+actor model pays for the collector's simplicity: **between turns, a worker's only live roots are
+its actors' states** — locals died with the turn, continuations do not exist (§5.8), and module
+globals are immutable pure constants (§5.5) that can never come to reference a turn's
+allocations. So trial deletion reduces to mark-and-break over a registry of the cells a cycle
+can pass through: List and Record cells (the mutable back-edges) and closure-captured scopes (a
+captured `var` can hold its own closure). RULED: (a) registration happens ONLY inside turns —
+non-actor programs pay one predictable branch per allocation, and the Study-C gate result is the
+receipt: **interp geo-mean −1.0% vs the committed baseline** (single re-run, minute-granularity
+noise on the small benches; the ≤3% gate passes with the sign pointing the wrong way for a
+regression). (b) The sweep triggers at 64 registered cells (the amortizer) and runs in the
+worker loop with EVERY live state on that worker as a root — the registry is worker-wide, so the
+root set must be too. (c) Telemetry reports CELL COUNTS, deliberately not bytes — a byte figure
+without a real size walk would be an invented number; B3's "per-actor bytes" is re-scoped to
+this honest form. (d) Primitive results register their top-level cell only; nested fresh cells
+in prim results are either the top cell or clones of eval-site-registered cells, and the ruling
+records that reasoning rather than leaving it implicit. (e) The rcap system itself resists
+cycles — the corpus needed explicit `ref` annotations to build one, which is the type system
+making the collector's job rare, and worth recording. (f) The collector's unit tests prove
+actual freeing via `Weak` handles, and prove the safety half (a reachable cycle is NEVER
+touched) — a collector that frees live data is worse than a leak.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -112,7 +134,7 @@ stopping); otherwise a drop is counted per actor and reported at exit, never sil
 | 10a | A2 | **DONE** (2026-07-20) — Attribute grammar activation: `@aot`/`@interpret`/`@jit`/`@inline(...)` as hints; DL1901 on unknown attributes; fmt round-trips attributes | Invariant-45 twin witnessed (run output + authority byte-identical with and without hints); DL1901 registered + explained, exact removal repair, `authority_widening: false`; both new anchors witnessed same-commit, coverage **100%**; fmt canonical own-line form round-trips; suite **931/0/4**. One parse subtlety ruled in code: attributes swallow their line terminator (Go-style termination would otherwise orphan the decl) |
 | 10b | A3 | **DONE** (2026-07-20) — `exec.native` grant + manifest declaration (`[authority] exec.native = true`), authority request-stamp, DL1906 | `@jit` without the grant → DL1906 **warning, program still runs** (D7: a hint may not change whether a program runs); granted run clean; machine `--json` channel never carries the warning; authority stamps `native_emission` ONLY when requested (skip branch = byte-stability witnessed); `--grant-manifest` does not confer it and a lease derives it false (D6, fail closed); explain carries the authority-widening + no-tier honesty notes; coverage **100%** (290 anchors), suite **936/0/4**. Broker-lattice dimension: 10l entry gate per D6 |
 | 10c | B2/B3 | **DONE** (2026-07-20) — Bounded mailboxes (`actor A(mailbox = N)` + `[actors]` manifest defaults; `block` default / `drop-new` counted; DL1902 in abort mode) + `--trace-memory` mailbox telemetry | The B2 criterion witnessed: a 500:1-paced producer against a bound-8 consumer sustains with **peak depth ≤ 8 and zero loss** (`block_backpressure_sustains_...`); DL1902 forced deterministically (self-send storm, drop-new, abort); **the same-worker exemption witnessed by a test that deadlocks if it's wrong**; slot release is a Drop guard (no skip branch); drops never silent; CAS-exact bound; unconfigured actors unbounded (1.0 preserved). D8 rules the deferrals. Coverage **100%** (291 anchors), suite **941/0/4** |
-| 10d | B1 | Per-actor cycle collection (trial deletion between turns) | Leak corpus (cyclic graphs, promise chains) goes documented-leak → collected; no perf cliff on the Study-C suite (>3% geo-mean regression blocks) |
+| 10d | B1 | **DONE** (2026-07-20) — The cycle collector: mark-and-break between turns over a worker-wide registry (List/Record cells + closure-captured scopes); `--trace-memory` reports sweeps + cells collected | The leak corpus collected: 200 manufactured `l → Link(l) → l` cycles broken in one sweep, program output untouched; the safety half witnessed at BOTH levels (unit: a reachable cycle untouched, `Weak` proves real freeing; language: a state-held cycle survives churn); non-actor programs show no collector surface at all; **Study-C gate: interp geo-mean −1.0%, no regression** (D9a). Soundness argument + five sub-rulings in D9. Coverage 100%; suite **948/0/4** |
 | 10e | D1 | `Actuate` activates: `Cap[Actuator]`/`Cap[Sensor]`, envelope scopes, double validation, `ActuateErr`, DL1904 | Envelope refusal kills the command, never the process — witnessed both ways; kind vs scope split holds (§5.3); coverage 100% incl. new anchors |
 | 10f | D2/D4 | Dead-man leases (heartbeat/TTL, broker-side revoke, declared fail-states) + `--broker-profile sim` reference simulator (deterministic, seeded) | Missed heartbeat → revoke → fail-state, latency measured and published; sim deterministic under `--seed`; artifact-hash gate (DL1905) fires in the staged flow |
 | 10g | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |

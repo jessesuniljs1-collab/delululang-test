@@ -100,6 +100,12 @@ pub struct Interp {
     consts: Vec<(String, Expr)>,
     globals: Env,
     depth: Cell<u32>,
+    /// Stage 10 (10d): true while an actor turn executes — the ONLY time allocations are
+    /// registered with the cycle collector. Main-thread programs never set it, so the Study-C
+    /// perf surface pays one predictable branch per allocation and nothing else.
+    in_turn: Cell<bool>,
+    /// Stage 10 (10d): this worker's cycle-collector registry (`cycles.rs`).
+    cycle: std::cell::RefCell<crate::cycles::Registry>,
     /// Effect tracing (spec §6.1): absent by default, attached via `with_trace`. Additive — does
     /// not change `Interp::new`'s signature or behavior.
     trace: Option<TraceSink>,
@@ -191,6 +197,8 @@ impl Interp {
             consts,
             globals: Scope::root(),
             depth: Cell::new(0),
+            in_turn: Cell::new(false),
+            cycle: std::cell::RefCell::new(crate::cycles::Registry::default()),
             trace: None,
             trace_seq: Cell::new(0),
             foreign_blocks,
@@ -269,7 +277,12 @@ impl Interp {
             env.define(p, v);
         }
         let prev = self.current_self.replace(Some((state, id, name, member.to_string())));
+        // Stage 10 (10d): allocations made inside the turn register with the cycle collector;
+        // the sweep itself runs between turns, from the worker loop, with every actor state on
+        // this worker as a root.
+        self.in_turn.set(true);
         let result = self.exec_block_value(body, &env);
+        self.in_turn.set(false);
         self.current_self.replace(prev);
         match result {
             // A behavior yields Unit at the send site; `return`/`?` inside it are ordinary
@@ -283,6 +296,31 @@ impl Interp {
     /// injected `std.actors` prelude) — the worker loop's single source of truth.
     pub fn actor_decl(&self, name: &str) -> Option<&delulu_syntax::ast::ActorDecl> {
         self.actors.get(name)
+    }
+
+    /// Stage 10 (10d): register an in-turn allocation with the cycle collector. A no-op
+    /// outside turns — non-actor programs pay exactly this branch.
+    fn note_alloc(&self, v: &Value) {
+        if self.in_turn.get() {
+            self.cycle.borrow_mut().note_value(v);
+        }
+    }
+
+    /// How many registered cells await a sweep (the worker loop's collect trigger).
+    pub fn cycle_pressure(&self) -> usize {
+        self.cycle.borrow().pressure()
+    }
+
+    /// Run the cycle collector with `roots` (every actor state this worker owns). Returns how
+    /// many garbage-cycle cells were broken.
+    pub fn collect_cycles(&self, roots: &[Value]) -> u64 {
+        self.cycle.borrow_mut().collect(roots)
+    }
+
+    /// (runs, cells collected) so far — the `--trace-memory` numbers.
+    pub fn cycle_stats(&self) -> (u64, u64) {
+        let c = self.cycle.borrow();
+        (c.runs, c.collected)
     }
 
     /// Rebuild an actor-boundary message into THIS interpreter's heap (closures reattach to
@@ -656,7 +694,9 @@ impl Interp {
                 }
                 // Best-effort memory accounting (spec §5.4): ~one word per slot plus the header.
                 self.charge_alloc((items.len() as u64).saturating_mul(16).saturating_add(16))?;
-                Ok(Value::List(Rc::new(std::cell::RefCell::new(vs))))
+                let v = Value::List(Rc::new(std::cell::RefCell::new(vs)));
+                self.note_alloc(&v); // 10d: a mutable cell a cycle can pass through
+                Ok(v)
             }
             Expr::Record { path, fields, .. } => {
                 let name: Rc<str> = Rc::from(path.segs.last().unwrap().name.as_str());
@@ -665,7 +705,9 @@ impl Interp {
                     fs.push((fname.name.clone(), self.eval_expr(fexpr, env)?));
                 }
                 self.charge_alloc((fields.len() as u64).saturating_mul(16).saturating_add(16))?;
-                Ok(Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) })
+                let v = Value::Record { name, fields: Rc::new(std::cell::RefCell::new(fs)) };
+                self.note_alloc(&v); // 10d
+                Ok(v)
             }
             Expr::Call { callee, args, span, .. } => self.eval_call(callee, args, *span, env),
             Expr::Method { recv, name, args, span, id } => self.eval_method(recv, name, args, *span, *id, env),
@@ -693,11 +735,16 @@ impl Interp {
                 }
             }
             Expr::Match { scrutinee, arms, span, .. } => self.eval_match(scrutinee, arms, *span, env),
-            Expr::Lambda { params, body, .. } => Ok(Value::Closure(Rc::new(Closure {
-                params: params.iter().map(|p| p.name.name.clone()).collect(),
-                body: body.clone(),
-                env: env.clone(),
-            }))),
+            Expr::Lambda { params, body, .. } => {
+                let v = Value::Closure(Rc::new(Closure {
+                    params: params.iter().map(|p| p.name.name.clone()).collect(),
+                    body: body.clone(),
+                    env: env.clone(),
+                }));
+                // 10d: the captured scope is where a `var`-holds-its-own-closure cycle lives.
+                self.note_alloc(&v);
+                Ok(v)
+            }
             Expr::Try { inner, span, .. } => {
                 let v = self.eval_expr(inner, env)?;
                 match v {
@@ -785,6 +832,9 @@ impl Interp {
                 }
                 // Prelude builtins/constructors.
                 if let Some(res) = prim::call_builtin(name, &argvals, span) {
+                    if let Ok(v) = &res {
+                        self.note_alloc(v); // 10d
+                    }
                     return res.map_err(Escape::Fault);
                 }
                 // A user function.
@@ -821,7 +871,9 @@ impl Interp {
                     for it in snapshot {
                         out.push(self.call_closure(&clo, vec![it])?);
                     }
-                    return Ok(Value::List(Rc::new(std::cell::RefCell::new(out))));
+                    let v = Value::List(Rc::new(std::cell::RefCell::new(out)));
+                    self.note_alloc(&v); // 10d
+                    return Ok(v);
                 }
                 Value::Secret(s) => {
                     let f = self.eval_expr(&args[0], env)?;
@@ -977,6 +1029,12 @@ impl Interp {
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
+        // 10d: a primitive may mint a fresh mutable cell (`split`, `slice`, …) — register its
+        // top-level cell. Anything nested was either built at eval sites (already registered)
+        // or is a clone of an existing registered cell.
+        if let Ok(v) = &result {
+            self.note_alloc(v);
+        }
         result.map_err(Escape::Fault)
     }
 

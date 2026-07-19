@@ -4,6 +4,7 @@
 
 pub mod actors;
 pub mod broker;
+pub mod cycles;
 pub mod custody;
 pub mod foreign;
 pub mod interp;
