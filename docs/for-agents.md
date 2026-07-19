@@ -103,7 +103,7 @@ Apply edits **back to front** by `start_byte`, so earlier offsets stay valid.
 `requires_human: true` means the same thing for a different reason: the repair needs a judgement
 the tool cannot make.
 
-**Honest coverage number:** as measured in Study B, **8.5%** of real defects currently offer a
+**Honest coverage number:** as measured in Study B, **8.3%** of real defects currently offer a
 machine-applicable repair, and a loop with no model reaches a clean program on **none** of them —
 either the only repair widens authority (refused above) or it addresses a warning while the error
 stands. Do not build a harness that assumes repairs will get you to green. See
@@ -191,5 +191,5 @@ overstate it downstream:
 - **Not everything is covered yet.** `docs/reference/coverage.md` reports per-item conformance
   status from a live run. Items marked other than `covered` are outside the stability promise.
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
-  v1.0 is **not competitive with C** on the measured workloads (2.0×–51.1× slower), and the report
+  v1.0 is **not competitive with C** on the measured workloads (2.0×–60.5× slower), and the report
   says so in those words. Do not let a harness's marketing copy imply otherwise.

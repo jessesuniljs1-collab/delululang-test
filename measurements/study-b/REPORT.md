@@ -10,7 +10,7 @@ The scripted lane contains **no model at all**. It applies whatever the toolchai
 
 ## The headline number, including the part that is not flattering
 
-Across **47 real defect programs** (the conformance reject corpus — genuine defects, not synthesised ones), **4 offered a machine-applicable repair: 8.5%**.
+Across **48 real defect programs** (the conformance reject corpus — genuine defects, not synthesised ones), **4 offered a machine-applicable repair: 8.3%**.
 
 The repair *mechanism* works end to end: where a repair exists, a loop with no intelligence in it applies the edits and reaches a clean program. But coverage is a small minority of real defects today. The phrase "typed repairs" invites the reader to imagine universality; the measurement does not support that, and this report says so rather than quoting the subset where it looks good.
 
@@ -38,7 +38,7 @@ Some repairs are exact and still must not be taken by a machine: `add_effect_to_
 
 ## Unauthorized-effect attempts
 
-**2 attempts were refused at COMPILE time** across the task set — before any program ran. In the Python lane the analogous operation (`os.listdir`) simply succeeds: there is no declaration to violate, so there is no diagnostic, nothing to count, and nothing to repair. The harness can only count what a toolchain surfaces, and it says so.
+**3 attempts were refused at COMPILE time** across the task set — before any program ran. In the Python lane the analogous operation (`os.listdir`) simply succeeds: there is no declaration to violate, so there is no diagnostic, nothing to count, and nothing to repair. The harness can only count what a toolchain surfaces, and it says so.
 
 ## The Python lane
 

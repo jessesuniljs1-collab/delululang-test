@@ -1,7 +1,8 @@
 # Stage 9 Build Order — "Delulu" (the v1.0 release)
 
-**Status: BUILT** (2026-07-19). All nine phases 9a–9i committed. **v1.0 is NOT released** — the
-acceptance gate returned two blockers (criteria 1 and 8); the version is `1.0.0-rc.1`. See §6.
+**Status: BUILT and RELEASED** (built 2026-07-19; **v1.0.0 released 2026-07-20** after the gate's
+two blockers — criteria 1 and 8 — were closed by work, ruling D22 and the D9 drill record. The
+gate refused once at `1.0.0-rc.1`, and that refusal stays recorded in §6 and D19). See §6.
 **Governing documents (precedence):** `STAGE9_SPECIFICATION.md` (normative) >
 `docs/playbooks/STAGE9_PLAYBOOK.md` (method) > this build order (operational rulings).
 **Depends on:** Stages 1–8 BUILT (Stage 8 closed at `aac2f33`, Windows 800/0, Linux 807/0/4).
@@ -375,37 +376,40 @@ Stage 9 adds no language features by definition.
 
 | # | Criterion | Status | Witness |
 |---|---|---|---|
-| 1 | 100% anchor coverage; suites green on OSes × engines × custody × profiles | **NOT MET** | **273/290 (94.1%)** — `delulu-conform --coverage`; ratchet `coverage_never_regresses` (floor 273); remainder classified in D10. Suites green Windows + Linux, both engines, embedded + daemon |
+| 1 | 100% anchor coverage; suites green on OSes × engines × custody × profiles | **MET** (2026-07-20) | **287/287 (100%)** — D22: Class B produced at real emission sites, Class C constructor-level per D10's ruling, 3 dead codes retired pre-freeze; ratchet floor **287**; `release_requires_full_coverage` now a hard per-commit gate. Suites green Windows 926/0/4 + Linux 930/0/4, both engines, embedded + daemon |
 | 2 | Audit exploit set (F-1…F-6, R-7) permanent + re-verified in release pipeline | **MET** | `delulu-check/tests/laundering.rs`; audit rules **7/7 covered** in `docs/reference/audit-rules.md`; re-run by the full suite on every phase gate |
-| 3 | Studies A/B/C published, raw data; Study A injection catch 100% | **MET** | `measurements/` — A: **20/20**, all mutations valid, 5/5 negative controls clean (`study_a_integrity.rs`, 9 tests). B: 8.5% / 0-to-green, published with decomposition. C: 2.0×–51.1× slower than C, published as measured |
+| 3 | Studies A/B/C published, raw data; Study A injection catch 100% | **MET** (regenerated at the cut) | `measurements/` — A: **20/20**, all mutations valid, 5/5 negative controls clean (`study_a_integrity.rs`, 9 tests). B: **8.3%** (4/48 — the corpus grew by one D22 fixture; 8.5% at 9e, restated) / 0-to-green, with decomposition. C: **2.0×–60.5×** slower than C at the cut regeneration (2.0×–51.1× at 9e; the worse fresh number is published), "not competitive" in those words |
 | 4 | Reproducible builds (D6 local form); provenance verifies (D5); Scorecard per D2 | **MET (local form)** | `criterion4_a_dwx_artifact_is_byte_identical_across_builds` (SHA-256 equal across builds); sign/verify/tamper witnessed; SLSA L3 + Scorecard `PENDING-PUBLIC` |
 | 5 | Registry live (D3 local form); round-trip; doctored-line rejection | **MET (local form)** | `delulu-registry` 18 tests — `criterion5_publish_add_build_round_trip_from_a_clean_machine`, `criterion5_a_doctored_index_line_never_reaches_a_client`, `when_the_server_cannot_recompute_the_publish_is_refused`, outage degradation |
 | 6 | Patch runbook rehearsed under target time, timeline recorded | **MET** | `docs/security/DRILL-001.md` — **5m28s** end to end vs a 14-day target; found a real hole in the suite (D18); `criterion6_the_patch_runbook_has_been_rehearsed` |
 | 7 | Book samples 100% CI-run; explain coverage 100% en-US | **MET** | `criterion7_every_book_sample_checks_clean` (8/8, fmt-gated in CI) + `criterion7_every_code_has_a_long_form_explanation` (**100%**, from 95/150 title-only at phase open) |
-| 8 | First-run < 5 min following Book only (D9 form, per-OS) | **NOT MET** | Not performed or timed on any OS. macOS additionally unverifiable here (D8) |
+| 8 | First-run < 5 min following Book only (D9 form, per-OS) | **MET (two OSes; macOS unverifiable per D8)** (2026-07-20) | `measurements/first-run/RECORD.md` — pristine homes, Book Chapter-1 journey: Windows **1.115 s**, Linux **0.019 s**; clock inclusions/exclusions stated; no `~/.delulu` state created or needed |
 | 9 | DL1801/DL1802 per §2.2 on synthetic fixture | **MET** | `crates/delulu/tests/stability_cli.rs` — 8 tests incl. the older-edition and unpinned-package skip branches |
 | 10 | Announcement passes line-by-line honesty review, sign-off recorded | **MET** | `criterion10_the_announcement_makes_no_unsupported_claim` (both directions, D20); sign-off in `docs/release/CHECKLIST-1.0.md` |
 
 ### Verdict
 
-**8 of 10 met. Stage 9 is BUILT; v1.0 is NOT RELEASED.**
+**10 of 10 met (criteria 4, 5 in their D-ruled local forms; criterion 8 on two OSes with the
+macOS gap stated). v1.0.0 RELEASED 2026-07-20.**
 
-The stage's deliverables — the coverage law, the generated reference, the stability contract, the
-three studies, governance, the registry, the docs set, and the release machinery — are all built,
-tested, and committed. The acceptance gate for the *release* was then run against them, and it
-returned **two blockers** (criteria 1 and 8). The version is `1.0.0-rc.1` and
-`docs/release/CHECKLIST-1.0.md` says **"1.0 DOES NOT SHIP YET"** in those words. See D19: a gate
-that cannot say no is not a gate.
+The history, in order, because the order is the point: the stage was BUILT (2026-07-19), the gate
+was run, and it **refused** — 8 of 10, two blockers, version pinned at `1.0.0-rc.1`, the checklist
+saying "1.0 DOES NOT SHIP YET" in those words (D19). The blockers were then closed by work at the
+owner's order: criterion 1 by D22 (coverage 287/287, three dead codes retired pre-freeze, the
+ratchet at 287, `release_requires_full_coverage` now a permanent hard gate) and criterion 8 by the
+D9 drill, performed, timed, and recorded on both available OSes. The gate re-ran green, the
+version flipped to **1.0.0**, and the release artifact was cut: built twice byte-identical
+(sha256 `410f65a1…`), signed, verified, digest written into the provenance statement
+(`release-artifacts/1.0.0/`). A gate that cannot say no is not a gate; this one said no first,
+which is why its yes is worth something.
 
-Both blockers are bounded. Criterion 1 is 17 classified anchors. Criterion 8 is a walkthrough
-nobody has sat down and timed.
-
-### Cross-platform verification
+### Cross-platform verification (at the release gate, 2026-07-20)
 
 | Platform | Result | How |
 |---|---|---|
-| **Windows 11** | **916 passed / 0 failed / 5 ignored** | Native, every phase gated before commit |
-| **Linux (WSL Ubuntu)** | **920 passed / 0 failed / 5 ignored** | Full workspace suite at `7acc354`; the +4 are platform-gated tests that only run on Linux |
+| **Windows 11** | **926 passed / 0 failed / 4 ignored** | Native, full workspace suite at the gate; `release_requires_full_coverage` active |
+| **Linux (WSL Ubuntu)** | **930 passed / 0 failed / 4 ignored** | Full workspace suite at `6d921ed`; the +4 are platform-gated tests that only run on Linux |
+| **macOS** | not run | No Apple hardware (D8) — expected by construction, stated as unverified everywhere it matters |
 | **macOS** | **UNVERIFIED** | No Apple hardware (D8) |
 
 The macOS position, precisely: Stage 9 is platform-gate-free standard Rust and is expected to work

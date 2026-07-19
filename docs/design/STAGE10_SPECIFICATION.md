@@ -17,10 +17,10 @@ aircraft, satellites, and robots are written and modified, by humans and by AI, 
 they cannot exceed.* Rev 2 turns that charge into tracks, invariants, and criteria; it changes no
 v1.0 semantics and claims nothing built.
 **Depends on:** Stage 9 (v1.0 released; stability contract in force; measurement baseline
-published). *Honest status note (2026-07-19): v1.0 stands at `1.0.0-rc.1` with two published
-blockers (coverage 273/290; the untimed fresh-machine first-run — `STAGE9_BUILD_ORDER.md`
-close-out). Stage 10 build work does not begin until v1.0 ships; revising this specification is
-design work, not build work.*
+published). *Status note (updated 2026-07-20): **v1.0.0 is RELEASED** — the rc.1 gate's two
+blockers closed (D22 coverage 287/287 hard-gated; the D9 first-run drill recorded), gate re-run
+green, artifact cut and signed. The dependency is satisfied; Stage 10 build work may begin. The
+stability contract is now in force: everything Stage 10 adds is additive.*
 **Governing documents:** `CONSTITUTION.md` (§5.11 execution modes, §5.12 interop, §7 robotics,
 §9 honesty), `SOUNDNESS_AUDIT.md`, `STAGE10_AUTONOMY_ADDENDUM.md` (normative for Track D domain
 scope).

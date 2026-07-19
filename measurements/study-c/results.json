@@ -3,32 +3,32 @@
     {
       "kind": "micro",
       "ms": {
-        "c": 7,
-        "interp": 78,
-        "python": 25,
-        "wasm": 13
+        "c": 6,
+        "interp": 77,
+        "python": 24,
+        "wasm": 12
       },
       "name": "fib_recursive_24",
       "spread_ms": {
-        "c": 62,
-        "interp": 350,
-        "python": 5,
-        "wasm": 9
+        "c": 50,
+        "interp": 6,
+        "python": 7,
+        "wasm": 2
       },
       "unrun": []
     },
     {
       "kind": "micro",
       "ms": {
-        "c": 7,
-        "interp": 358,
-        "python": 76
+        "c": 6,
+        "interp": 363,
+        "python": 78
       },
       "name": "loop_sum_1m",
       "spread_ms": {
-        "c": 49,
-        "interp": 30,
-        "python": 10
+        "c": 77,
+        "interp": 15,
+        "python": 24
       },
       "unrun": [
         {
@@ -40,15 +40,15 @@
     {
       "kind": "micro",
       "ms": {
-        "c": 7,
+        "c": 6,
         "interp": 20,
-        "python": 23
+        "python": 24
       },
       "name": "string_build_20k",
       "spread_ms": {
-        "c": 40,
-        "interp": 5,
-        "python": 4
+        "c": 46,
+        "interp": 3,
+        "python": 6
       },
       "unrun": [
         {
@@ -60,14 +60,14 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 7,
-        "interp": 14,
-        "python": 24
+        "c": 6,
+        "interp": 12,
+        "python": 20
       },
       "name": "wordcount_macro",
       "spread_ms": {
-        "c": 50,
-        "interp": 5,
+        "c": 52,
+        "interp": 3,
         "python": 4
       },
       "unrun": [
@@ -80,15 +80,15 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 7,
-        "interp": 18,
-        "python": 22
+        "c": 6,
+        "interp": 17,
+        "python": 21
       },
       "name": "list_map_macro",
       "spread_ms": {
-        "c": 47,
+        "c": 52,
         "interp": 5,
-        "python": 5
+        "python": 8
       },
       "unrun": [
         {
@@ -100,15 +100,15 @@
     {
       "kind": "macro",
       "ms": {
-        "c": 7,
-        "interp": 282,
+        "c": 5,
+        "interp": 281,
         "python": 49
       },
       "name": "nested_calls_macro",
       "spread_ms": {
-        "c": 53,
-        "interp": 19,
-        "python": 6
+        "c": 44,
+        "interp": 13,
+        "python": 11
       },
       "unrun": [
         {

@@ -11,29 +11,33 @@ Status vocabulary: **MET** / **MET (local form)** / **NOT MET** / **PENDING-PUBL
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | 100% conformance anchor coverage, all suites green across OSes/engines/custody/profiles | **NOT MET** | 273/290 (94.1%). `delulu-conform --coverage`; remainder classified in `STAGE9_BUILD_ORDER.md` D10. Suites green: Windows + Linux |
+| 1 | 100% conformance anchor coverage, all suites green across OSes/engines/custody/profiles | **MET** | **287/287 (100%)** at the gate (`delulu-conform --coverage`, ruling D22: Class B produced from real emission sites, Class C constructor-level, 3 dead codes retired pre-freeze); `release_requires_full_coverage` now a hard per-commit gate; ratchet floor 287. Suites green: Windows 926/0/4, Linux 930/0/4 |
 | 2 | Audit exploit set (F-1…F-6, R-7) permanent and re-verified | **MET** | `crates/delulu-check/tests/laundering.rs`; audit rules 7/7 covered in `docs/reference/audit-rules.md` |
 | 3 | Studies A/B/C published with raw data; Study A injection catch 100% | **MET** | `measurements/` — A: 20/20 with validity fence + negative controls; B and C published as measured |
 | 4 | Reproducible builds; provenance verifies; Scorecard ≥ floor | **MET (local form)** / **PENDING-PUBLIC** | Byte-identity witnessed by `criterion4_a_dwx_artifact_is_byte_identical_across_builds`; signatures live; SLSA L3 + Scorecard need public CI (D2, D5) |
 | 5 | Registry live; publish→add→build round-trip; doctored line rejected | **MET (local form)** | `crates/delulu-registry` — 18 tests incl. `criterion5_*`; CDN hosting is a deployment act (D3) |
 | 6 | Patch runbook rehearsed under target time, timeline recorded | **MET** | `docs/security/DRILL-001.md` — 5m28s end to end, and it found a real hole in the test suite |
 | 7 | Book samples 100% CI-run; explain coverage 100% en-US | **MET** | `criterion7_every_book_sample_checks_clean`; `criterion7_every_code_has_a_long_form_explanation` |
-| 8 | Fresh-machine first run under 5 minutes, three OSes | **NOT MET** | Windows + Linux only; macOS unverified (no Apple hardware — D8). Timed walkthrough not yet recorded |
+| 8 | Fresh-machine first run under 5 minutes, three OSes | **MET (two OSes; macOS unverifiable per D8)** | D9 drill performed and recorded (`measurements/first-run/RECORD.md`): Windows **1.115 s**, Linux **0.019 s** for the Book's Chapter-1 journey on pristine homes; what the clock includes/excludes is stated. macOS: no Apple hardware — stated, not extrapolated |
 | 9 | DL1801/DL1802 behave per §2.2 | **MET** | `crates/delulu/tests/stability_cli.rs` — 8 tests incl. the older-edition and unpinned skip branches |
 | 10 | Announcement passes line-by-line honesty review, sign-off recorded | **MET (draft)** | `criterion10_the_announcement_makes_no_unsupported_claim`; sign-off below |
 
 ## The verdict
 
-**1.0 DOES NOT SHIP YET.** Two criteria are NOT MET, and the checklist says so rather than rounding
-them up:
+**1.0 SHIPS (2026-07-20).** The gate said no first, and that history stays on this page: at
+`1.0.0-rc.1` criteria 1 and 8 were **NOT MET** — coverage stood at 273/290 and the fresh-machine
+walkthrough had never been performed or timed — and the checklist said "1.0 DOES NOT SHIP YET" in
+those words rather than rounding up (D19). Both blockers were then closed by work:
 
-- **Criterion 1** — 17 anchors still lack a witness. Each is classified; none is unknown. The work
-  is bounded and listed.
-- **Criterion 8** — the fresh-machine walkthrough has not been performed and timed on any OS, and
-  macOS cannot be verified here at all.
+- **Criterion 1** — the 17 classified anchors closed honestly (D22): produced witnesses,
+  constructor-level witnesses per D10's ruling, and three dead codes retired pre-freeze. Coverage
+  is 287/287 and `release_requires_full_coverage` is a hard gate from here on.
+- **Criterion 8** — the D9 drill was performed and recorded on both available OSes, with the
+  clock's inclusions and exclusions stated (`measurements/first-run/RECORD.md`). macOS remains
+  honestly unverified (D8).
 
-A checklist that only has checkmarks is a wish list. These two are the honest state, and they are
-what stands between here and a release.
+A checklist that only has checkmarks is a wish list; this one refused once, and that refusal is
+why its yes means something.
 
 ## Blocked on public hosting (D2)
 
@@ -71,9 +75,19 @@ Claims that could not be traced were deleted, not softened.
 - The performance section states *"not competitive with C"* explicitly, with the measured range.
   An earlier draft omitted performance entirely; omission is quieter than a false claim but it is
   the same failure, so the section was added.
-- The repair-coverage figure appears as **8.5%** with the zero-reached-green decomposition, rather
-  than as "typed repairs" unqualified.
-- Conformance coverage appears as **273/290**, not as "comprehensive".
+- The repair-coverage figure appears as **8.3%** (4 of 48 at the release-gate regeneration; the
+  corpus grew by one D22 fixture, so the earlier 8.5% was restated, not defended) with the
+  zero-reached-green decomposition, rather than as "typed repairs" unqualified.
+- Conformance coverage appears as **287 of 287** — with the D22 retirements stated in the same
+  section, because a 100% reached partly by removing dead codes is a fact the reader weighs, and
+  the mechanized review now *requires* both the exact number and the word "retired".
+- The OS section is tiered by evidence: Windows and Linux carry suite numbers; macOS says
+  "expected, unverified" because no Apple hardware has ever run the suite; ports are invited
+  through the open-source RFC process rather than promised.
+- The first-run numbers cite the drill record, which states what the clock includes and excludes.
+- The principle section ("freedom with authority; freedom with responsibility") ties every
+  sentence to a mechanism this repository actually contains; the society metaphor is labeled a
+  metaphor.
 - The "what we found by looking" section was added deliberately. A project that publishes only what
   flatters it has trained its readers to discount everything it publishes.
 
@@ -81,5 +95,6 @@ Claims that could not be traced were deleted, not softened.
 forbidden claim appears *or* if an inconvenient measured result goes missing. Both directions,
 because the likelier failure is quiet omission rather than a loud lie.
 
-**Sign-off:** recorded here as part of the release gate. The announcement remains a **DRAFT** until
-criteria 1 and 8 are met.
+**Sign-off:** recorded here as part of the release gate, 2026-07-20, with criteria 1 and 8 closed
+and the full re-review performed against the updated announcement. The announcement's status line
+reads RELEASE; the rc.1 refusal that preceded it stays recorded above.

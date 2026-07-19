@@ -9,10 +9,10 @@
 | Chain | Shaped like | Packages | Depth | Lock (ms) | Verify (ms) | Clean |
 |---|---|---|---|---|---|---|
 | `cliwc` | CLI tool | 5 | 4 | 18 | 21 | yes |
-| `parsecfg` | parser | 5 | 4 | 17 | 20 | yes |
-| `httpstack` | HTTP client stack | 5 | 4 | 18 | 21 | yes |
-| `sitegen` | static site generator | 5 | 4 | 15 | 20 | yes |
-| `agenttool` | agent-tool server | 5 | 4 | 18 | 22 | yes |
+| `parsecfg` | parser | 5 | 4 | 15 | 21 | yes |
+| `httpstack` | HTTP client stack | 5 | 4 | 14 | 19 | yes |
+| `sitegen` | static site generator | 5 | 4 | 17 | 19 | yes |
+| `agenttool` | agent-tool server | 5 | 4 | 14 | 18 | yes |
 
 ## The injection campaign
 
@@ -55,4 +55,4 @@ Which diagnostics did the catching:
 
 ## Time to verify
 
-Verifying all 25 packages across 5 graphs took **104 ms** in total (20 ms mean per graph). These are wall-clock numbers from one machine and one run; they are reported as measured and are not a performance claim (see the stability contract: performance is measured, never promised).
+Verifying all 25 packages across 5 graphs took **98 ms** in total (19 ms mean per graph). These are wall-clock numbers from one machine and one run; they are reported as measured and are not a performance claim (see the stability contract: performance is measured, never promised).

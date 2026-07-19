@@ -137,7 +137,7 @@ fn the_agent_page_keeps_its_anchors_and_its_warnings() {
         "the authority-widening warning must be unmissable"
     );
     assert!(
-        p.contains("8.5%"),
+        p.contains("8.3%"),
         "the honest repair-coverage number must be stated, not implied to be universal"
     );
     assert!(

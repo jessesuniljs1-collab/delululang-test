@@ -785,6 +785,15 @@ read, the discipline pays for itself.
 
 ## Chapter 17 — Design Philosophy
 
+The creator's own statement of the principle, from the project's first discussions, is the shortest
+form this chapter has: **freedom with authority; freedom with responsibility.** Everyone — human,
+AI, company, robot — gets the same standing and the same freedom to build; what bounds that freedom
+is never *who you are* but *what you were granted*, and the granting side (the broker, the Guard,
+the audit chain) carries the responsibility to keep freedom from becoming harm — the way a good
+government serves a free people: it educates (the explain texts and repairs), it warns (the
+diagnostics), it supports (the tooling), and it holds the line (the grants it will not widen). The
+metaphor is aspiration; the mechanisms below are what actually enforce it.
+
 The mechanisms in this book all descend from a small set of principles. Naming them makes the language
 predictable — when you wonder "why does DeluluLang do X?", the answer is almost always one of these.
 

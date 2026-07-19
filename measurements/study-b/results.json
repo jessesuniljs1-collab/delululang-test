@@ -4,7 +4,7 @@
       "authority_widening": false,
       "code": "DL0106",
       "iterations_to_green": null,
-      "ms": 28,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0106_reserved_name"
@@ -13,7 +13,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 10,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_block_without_brace"
@@ -22,7 +22,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_const_without_name"
@@ -31,7 +31,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_effect_without_name"
@@ -40,7 +40,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_foreign_member_without_fn"
@@ -49,7 +49,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 22,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_foreign_without_abi"
@@ -58,7 +58,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 16,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_import_without_path"
@@ -67,7 +67,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 17,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_param_without_colon"
@@ -76,7 +76,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 16,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_type_decl_without_name"
@@ -85,7 +85,7 @@
       "authority_widening": false,
       "code": "DL0201",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0201_variant_without_member"
@@ -94,7 +94,7 @@
       "authority_widening": false,
       "code": "DL0202",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 22,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0202_expected_expression"
@@ -103,7 +103,7 @@
       "authority_widening": false,
       "code": "DL0202",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 22,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0202_if_without_condition"
@@ -112,7 +112,7 @@
       "authority_widening": false,
       "code": "DL0202",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0202_unclosed_group"
@@ -121,7 +121,7 @@
       "authority_widening": false,
       "code": "DL0203",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0203_expected_a_type"
@@ -130,7 +130,7 @@
       "authority_widening": false,
       "code": "DL0204",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 20,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0204_no_module"
@@ -139,7 +139,7 @@
       "authority_widening": false,
       "code": "DL0205",
       "iterations_to_green": null,
-      "ms": 16,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0205_expected_pattern"
@@ -148,7 +148,7 @@
       "authority_widening": false,
       "code": "DL0206",
       "iterations_to_green": null,
-      "ms": 16,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0206_chained_cmp"
@@ -157,7 +157,7 @@
       "authority_widening": false,
       "code": "DL0207",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0207_invalid_assignment_target"
@@ -166,7 +166,7 @@
       "authority_widening": false,
       "code": "DL0208",
       "iterations_to_green": null,
-      "ms": 17,
+      "ms": 20,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0208_unknown_item_keyword"
@@ -175,7 +175,7 @@
       "authority_widening": false,
       "code": "DL0209",
       "iterations_to_green": null,
-      "ms": 17,
+      "ms": 13,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0209_missing_statement_terminator"
@@ -184,7 +184,7 @@
       "authority_widening": false,
       "code": "DL0301",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0301_unknown_name"
@@ -202,7 +202,7 @@
       "authority_widening": false,
       "code": "DL0305",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 12,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0305_module_var"
@@ -211,7 +211,7 @@
       "authority_widening": false,
       "code": "DL0306",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 20,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0306_unknown_effect"
@@ -220,7 +220,7 @@
       "authority_widening": false,
       "code": "DL0307",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0307_bad_cap_kind"
@@ -229,7 +229,7 @@
       "authority_widening": false,
       "code": "DL0401",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 19,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0401_type_mismatch"
@@ -247,7 +247,7 @@
       "authority_widening": false,
       "code": "DL0403",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 11,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0403_arg_count"
@@ -256,7 +256,7 @@
       "authority_widening": false,
       "code": "DL0404",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 13,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0404_value_is_not_callable"
@@ -265,7 +265,7 @@
       "authority_widening": false,
       "code": "DL0405",
       "iterations_to_green": null,
-      "ms": 101,
+      "ms": 99,
       "repair_ids": [
         "remove_effect_from_row"
       ],
@@ -276,7 +276,7 @@
       "authority_widening": false,
       "code": "DL0406",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0406_wrong_type_argument_count"
@@ -285,7 +285,7 @@
       "authority_widening": false,
       "code": "DL0407",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0407_non_exhaustive"
@@ -294,7 +294,7 @@
       "authority_widening": false,
       "code": "DL0408",
       "iterations_to_green": null,
-      "ms": 16,
+      "ms": 23,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0408_condition_not_bool"
@@ -303,7 +303,7 @@
       "authority_widening": false,
       "code": "DL0409",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 23,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0409_try_non_result"
@@ -312,7 +312,7 @@
       "authority_widening": false,
       "code": "DL0410",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0410_generic_kind"
@@ -321,7 +321,7 @@
       "authority_widening": true,
       "code": "DL0501",
       "iterations_to_green": null,
-      "ms": 24,
+      "ms": 33,
       "repair_ids": [
         "add_effect_to_row"
       ],
@@ -329,10 +329,19 @@
       "task": "DL0501_test_undeclared_write"
     },
     {
+      "authority_widening": false,
+      "code": "DL0501",
+      "iterations_to_green": null,
+      "ms": 21,
+      "repair_ids": [],
+      "repair_offered": false,
+      "task": "DL0501_two_rowvar_row_stays_honest"
+    },
+    {
       "authority_widening": true,
       "code": "DL0501",
       "iterations_to_green": null,
-      "ms": 23,
+      "ms": 29,
       "repair_ids": [
         "add_effect_to_row"
       ],
@@ -343,7 +352,7 @@
       "authority_widening": false,
       "code": "DL0504",
       "iterations_to_green": null,
-      "ms": 107,
+      "ms": 96,
       "repair_ids": [
         "remove_effect_from_row"
       ],
@@ -354,7 +363,7 @@
       "authority_widening": false,
       "code": "DL0601",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0601_capability_cannot_be_forged"
@@ -363,7 +372,7 @@
       "authority_widening": false,
       "code": "DL0602",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 24,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0602_secret_flow"
@@ -372,7 +381,7 @@
       "authority_widening": false,
       "code": "DL0603",
       "iterations_to_green": null,
-      "ms": 17,
+      "ms": 23,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0603_impure_secret_map"
@@ -381,7 +390,7 @@
       "authority_widening": false,
       "code": "DL0604",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 16,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0604_stringify_opaque"
@@ -390,7 +399,7 @@
       "authority_widening": false,
       "code": "DL0605",
       "iterations_to_green": null,
-      "ms": 15,
+      "ms": 18,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL0605_equality_opaque"
@@ -399,7 +408,7 @@
       "authority_widening": false,
       "code": "DL1601",
       "iterations_to_green": null,
-      "ms": 12,
+      "ms": 21,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL1601_ref_list_send"
@@ -408,7 +417,7 @@
       "authority_widening": false,
       "code": "DL1602",
       "iterations_to_green": null,
-      "ms": 13,
+      "ms": 12,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL1602_use_after_consume"
@@ -417,7 +426,7 @@
       "authority_widening": false,
       "code": "DL1604",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 12,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL1604_sync_call_on_tag"
@@ -426,7 +435,7 @@
       "authority_widening": false,
       "code": "DL1605",
       "iterations_to_green": null,
-      "ms": 14,
+      "ms": 20,
       "repair_ids": [],
       "repair_offered": false,
       "task": "DL1605_recover_captures_ref"
@@ -477,11 +486,11 @@
   "schema": "study-b/1",
   "study": "B",
   "tasks": {
-    "count": 47,
+    "count": 48,
     "reached_green_mechanically": 0,
-    "repair_availability_pct": 8.5,
+    "repair_availability_pct": 8.3,
     "with_machine_applicable_repair": 4
   },
   "title": "agent task success and repair loops",
-  "unauthorized_effect_attempts_caught_at_compile_time": 2
+  "unauthorized_effect_attempts_caught_at_compile_time": 3
 }

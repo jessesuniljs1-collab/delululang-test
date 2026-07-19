@@ -126,7 +126,7 @@ fn criterion10_the_announcement_makes_no_unsupported_claim() {
     // simply omits the performance position is not honest, it is quiet.
     for required in [
         "not competitive with C", // Study C's actual finding
-        "8.5%",                   // Study B's repair coverage
+        "8.3%",                   // Study B's repair coverage (4/48 at the release-gate regeneration)
         "measurements/",          // where the raw data lives
     ] {
         assert!(
@@ -136,10 +136,22 @@ fn criterion10_the_announcement_makes_no_unsupported_claim() {
         );
     }
 
-    // Coverage must be stated as the real number, not rounded to a claim of completeness.
+    // Coverage must be stated as the real number. Until D22 this stanza BANNED completeness
+    // claims (coverage was 273/290); at the release gate coverage reached 287/287 with the
+    // remainder closed honestly, so the requirement inverts: the announcement must state the
+    // exact number — and the retirements that got it there — rather than a vague adjective.
     assert!(
-        !a.contains("100% conformance") && !a.contains("fully covered"),
-        "conformance coverage is not 100% yet; the announcement must not imply it is"
+        a.contains("287 of 287"),
+        "coverage is stated as the exact measured number, not an adjective"
+    );
+    assert!(
+        !a.contains("fully covered"),
+        "the vague completeness adjective stays banned — the number is the claim"
+    );
+    assert!(
+        a.contains("retired"),
+        "the announcement must mention the D22 retirements — 100% reached partly by removing \
+         codes that could never fire is a fact the reader gets to weigh"
     );
 }
 

@@ -22,23 +22,23 @@ All lanes compute the same result by the same algorithm.
 
 | Benchmark | Kind | interp | wasm | C (gcc -O2) | CPython |
 |---|---|---|---|---|---|
-| `fib_recursive_24` | micro | 78 | 13 | 7 | 25 |
-| `loop_sum_1m` | micro | 358 | — | 7 | 76 |
-| `string_build_20k` | micro | 20 | — | 7 | 23 |
-| `wordcount_macro` | macro | 14 | — | 7 | 24 |
-| `list_map_macro` | macro | 18 | — | 7 | 22 |
-| `nested_calls_macro` | macro | 282 | — | 7 | 49 |
+| `fib_recursive_24` | micro | 77 | 12 | 6 | 24 |
+| `loop_sum_1m` | micro | 363 | — | 6 | 78 |
+| `string_build_20k` | micro | 20 | — | 6 | 24 |
+| `wordcount_macro` | macro | 12 | — | 6 | 20 |
+| `list_map_macro` | macro | 17 | — | 6 | 21 |
+| `nested_calls_macro` | macro | 281 | — | 5 | 49 |
 
 ### Spread across repeats (max − min, ms)
 
 | Benchmark | interp | wasm | C | CPython |
 |---|---|---|---|---|
-| `fib_recursive_24` | 350 | 9 | 62 | 5 |
-| `loop_sum_1m` | 30 | — | 49 | 10 |
-| `string_build_20k` | 5 | — | 40 | 4 |
-| `wordcount_macro` | 5 | — | 50 | 4 |
-| `list_map_macro` | 5 | — | 47 | 5 |
-| `nested_calls_macro` | 19 | — | 53 | 6 |
+| `fib_recursive_24` | 6 | 2 | 50 | 7 |
+| `loop_sum_1m` | 15 | — | 77 | 24 |
+| `string_build_20k` | 3 | — | 46 | 6 |
+| `wordcount_macro` | 3 | — | 52 | 4 |
+| `list_map_macro` | 5 | — | 52 | 8 |
+| `nested_calls_macro` | 13 | — | 44 | 11 |
 
 ## The assessment
 
@@ -46,14 +46,14 @@ Interpreter time divided by C time, per benchmark:
 
 | Benchmark | interp ÷ C |
 |---|---|
-| `fib_recursive_24` | 11.1× |
-| `loop_sum_1m` | 51.1× |
-| `string_build_20k` | 2.9× |
+| `fib_recursive_24` | 12.8× |
+| `loop_sum_1m` | 60.5× |
+| `string_build_20k` | 3.3× |
 | `wordcount_macro` | 2.0× |
-| `list_map_macro` | 2.6× |
-| `nested_calls_macro` | 40.3× |
+| `list_map_macro` | 2.8× |
+| `nested_calls_macro` | 56.2× |
 
-Range: **2.0× to 51.1× slower than C** on these benchmarks.
+Range: **2.0× to 60.5× slower than C** on these benchmarks.
 
 **The honest reading: v1.0 is NOT competitive with C on these workloads.** The constitution's committed claim is about *hot paths under a tiered backend with a JIT*; v1.0 ships a tree-walking interpreter and a straightforward WASM backend, and neither is that. The gap above is the baseline Stage 10 works against, and stating it plainly now is the only way the Stage 10 numbers will mean anything later.
 

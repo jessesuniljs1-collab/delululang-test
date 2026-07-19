@@ -154,7 +154,10 @@ authority. A loop that takes that repair has not fixed the program; it has remov
 
 ### 2.4 The results, including the unflattering ones
 
-- **4 of 47 (8.5%)** defects offered a machine-applicable repair.
+- **4 of 48 (8.3%)** defects offered a machine-applicable repair. (At the 9e run this was 4 of 47,
+  8.5%; the reject corpus gained one fixture at the release gate — the D22 row-honesty laundering
+  probe — and the study measures the corpus as it stands, so the denominator moved and the number
+  is restated rather than pinned.)
 - **0 of those 4** reached a clean program mechanically — 2 offered only the authority-widening
   repair (correctly refused), and 2 offered a warning-level repair that does not clear the error
   beside it.
@@ -177,7 +180,8 @@ imagine universality; the measurement does not support that.
   nothing to violate. It illustrates what "unauthorized-effect attempts" can and cannot mean across
   the two systems, and the harness counts only what a toolchain surfaces.
 - **The Go baseline is UNRUN** — no Go toolchain on the measurement machine.
-- **Repair coverage is a moving target.** 8.5% is today's number, not a property of the design.
+- **Repair coverage is a moving target.** 8.3% is today's number, not a property of the design —
+  it already moved once (8.5% → 8.3%) for the honest reason that the corpus grew.
 
 ---
 
@@ -200,10 +204,13 @@ nobody runs.
 
 ### 3.3 The result
 
-**2.0× to 51.1× slower than C**, depending on the benchmark. v1.0 is **not** competitive with C on
-these workloads, and the report says so in those words. The constitution's claim is about hot paths
-under a tiered backend with a JIT; v1.0 ships a tree-walker and a straightforward WASM backend, and
-neither is that. Publishing the gap now is what will make Stage 10's numbers mean something.
+**2.0× to 60.5× slower than C**, depending on the benchmark, as of the release-gate regeneration
+(the 9e run measured 2.0×–51.1×; re-timed at the cut, the worst benchmark came out worse, and the
+published range is the fresh measurement, not the flattering earlier one). v1.0 is **not**
+competitive with C on these workloads, and the report says so in those words. The constitution's
+claim is about hot paths under a tiered backend with a JIT; v1.0 ships a tree-walker and a
+straightforward WASM backend, and neither is that. Publishing the gap now is what will make
+Stage 10's numbers mean something.
 
 ### 3.4 Threats to validity — Study C
 

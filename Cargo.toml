@@ -16,11 +16,12 @@ members = [
 ]
 
 [workspace.package]
-# 1.0.0-rc.1, not 1.0.0. Every piece of 1.0's machinery is built and the acceptance gate has been
-# run — and the gate says two criteria are NOT MET (`docs/release/CHECKLIST-1.0.md`: conformance
-# coverage is 273/290, and the fresh-machine first-run has not been timed). Stamping 1.0.0 on a
-# build its own checklist refuses would make every other honesty claim in this project worthless.
-version = "1.0.0-rc.1"
+# 1.0.0 — stamped 2026-07-20, AFTER the gate said yes. The same gate refused this number at
+# rc.1 (two criteria NOT MET, recorded in `docs/release/CHECKLIST-1.0.md` and build-order D19);
+# both blockers were closed by work (D22: coverage 287/287, hard-gated; the D9 first-run drill,
+# timed and recorded in `measurements/first-run/RECORD.md`) and the gate re-ran before this line
+# changed. A gate that cannot say no is not a gate; this one did, once, and that is on record.
+version = "1.0.0"
 edition = "2021"
 repository = "https://github.com/delulu-lang/delulu"
 

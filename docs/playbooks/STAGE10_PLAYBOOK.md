@@ -3,8 +3,9 @@
 **Companion to:** `docs/design/STAGE10_SPECIFICATION.md` (normative) and, for Track D domain scope,
 `docs/design/STAGE10_AUTONOMY_ADDENDUM.md`. This file is *how to build it*.
 **Depends on:** Stage 9 (v1.0 released; stability contract in force; measurement baseline published).
-*Honest status note (2026-07-19): v1.0 stands at `1.0.0-rc.1` with two published blockers; build
-work waits for the release. Spec Rev 2 (owner-directed) widened the program to eight tracks.*
+*Status note (updated 2026-07-20): **v1.0.0 is RELEASED** (both rc.1 blockers closed — D22 and the
+D9 drill record — gate re-run green). The dependency is satisfied; Stage 10 build work may begin.
+Spec Rev 2 (owner-directed) widened the program to eight tracks.*
 
 > **The one-sentence goal:** make DeluluLang *production-ready* — a checklist (P1–P10), not a vibe:
 > competitive-with-C performance, concurrency at scale, grant-gated native code, physical-stakes

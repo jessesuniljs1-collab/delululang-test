@@ -14,36 +14,36 @@
       "chain": "parsecfg",
       "clean": true,
       "depth": 4,
-      "lock_ms": 17,
+      "lock_ms": 15,
       "packages": 5,
-      "verify_ms": 20
+      "verify_ms": 21
     },
     {
       "archetype": "HTTP client stack",
       "chain": "httpstack",
       "clean": true,
       "depth": 4,
-      "lock_ms": 18,
+      "lock_ms": 14,
       "packages": 5,
-      "verify_ms": 21
+      "verify_ms": 19
     },
     {
       "archetype": "static site generator",
       "chain": "sitegen",
       "clean": true,
       "depth": 4,
-      "lock_ms": 15,
+      "lock_ms": 17,
       "packages": 5,
-      "verify_ms": 20
+      "verify_ms": 19
     },
     {
       "archetype": "agent-tool server",
       "chain": "agenttool",
       "clean": true,
       "depth": 4,
-      "lock_ms": 18,
+      "lock_ms": 14,
       "packages": 5,
-      "verify_ms": 22
+      "verify_ms": 18
     }
   ],
   "corpus": {
@@ -69,7 +69,7 @@
       ],
       "depth": 1,
       "injection_valid": true,
-      "ms": 19,
+      "ms": 13,
       "victim": "cliwc_api"
     },
     {
@@ -85,7 +85,7 @@
       ],
       "depth": 2,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 13,
       "victim": "cliwc_core"
     },
     {
@@ -101,7 +101,7 @@
       ],
       "depth": 3,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 12,
       "victim": "cliwc_util"
     },
     {
@@ -117,7 +117,7 @@
       ],
       "depth": 4,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 14,
       "victim": "cliwc_base"
     },
     {
@@ -130,7 +130,7 @@
       ],
       "depth": 1,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 15,
       "victim": "parsecfg_api"
     },
     {
@@ -146,7 +146,7 @@
       ],
       "depth": 2,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 13,
       "victim": "parsecfg_core"
     },
     {
@@ -162,7 +162,7 @@
       ],
       "depth": 3,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 14,
       "victim": "parsecfg_util"
     },
     {
@@ -178,7 +178,7 @@
       ],
       "depth": 4,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 14,
       "victim": "parsecfg_base"
     },
     {
@@ -191,7 +191,7 @@
       ],
       "depth": 1,
       "injection_valid": true,
-      "ms": 19,
+      "ms": 13,
       "victim": "httpstack_api"
     },
     {
@@ -207,7 +207,7 @@
       ],
       "depth": 2,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 16,
       "victim": "httpstack_core"
     },
     {
@@ -223,7 +223,7 @@
       ],
       "depth": 3,
       "injection_valid": true,
-      "ms": 18,
+      "ms": 13,
       "victim": "httpstack_util"
     },
     {
@@ -239,7 +239,7 @@
       ],
       "depth": 4,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 13,
       "victim": "httpstack_base"
     },
     {
@@ -252,7 +252,7 @@
       ],
       "depth": 1,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 13,
       "victim": "sitegen_api"
     },
     {
@@ -284,7 +284,7 @@
       ],
       "depth": 3,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 21,
       "victim": "sitegen_util"
     },
     {
@@ -300,7 +300,7 @@
       ],
       "depth": 4,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 14,
       "victim": "sitegen_base"
     },
     {
@@ -313,7 +313,7 @@
       ],
       "depth": 1,
       "injection_valid": true,
-      "ms": 19,
+      "ms": 14,
       "victim": "agenttool_api"
     },
     {
@@ -329,7 +329,7 @@
       ],
       "depth": 2,
       "injection_valid": true,
-      "ms": 17,
+      "ms": 13,
       "victim": "agenttool_core"
     },
     {
@@ -345,7 +345,7 @@
       ],
       "depth": 3,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 14,
       "victim": "agenttool_util"
     },
     {
@@ -361,7 +361,7 @@
       ],
       "depth": 4,
       "injection_valid": true,
-      "ms": 16,
+      "ms": 15,
       "victim": "agenttool_base"
     }
   ],

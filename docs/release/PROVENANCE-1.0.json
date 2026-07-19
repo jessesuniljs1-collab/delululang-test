@@ -2,10 +2,11 @@
   "_type": "https://in-toto.io/Statement/v1",
   "subject": [
     {
-      "name": "delulu-1.0.0",
+      "name": "delulu-1.0.0.dwx",
       "digest": {
-        "note": "Filled at the release cut from the actual artifact digests. Left as a note rather than a plausible-looking hex string, because a provenance statement carrying an invented digest is worse than one carrying none: it would verify against nothing while looking as though it verified."
-      }
+        "sha256": "410f65a1e6306142581e824f762ca5ad0dec703a4fb4fe27a85d9e7f1569b6d4"
+      },
+      "_note": "Filled at the release cut (2026-07-20) from the actual artifact: release-artifacts/1.0.0/delulu-1.0.0.dwx, built twice and byte-identical, signed (detached ed25519, key 5c3a457a92fe50f2...), verified before this digest was written. SHA256SUMS ships beside the artifact."
     }
   ],
   "predicateType": "https://slsa.dev/provenance/v1",
@@ -18,7 +19,7 @@
         "command": "cargo build --release -p delulu"
       },
       "internalParameters": {
-        "SOURCE_DATE_EPOCH": "set at the release cut",
+        "SOURCE_DATE_EPOCH": "not set — deliberately: the artifact embeds no timestamps by construction, and byte-identity across independent builds is witnessed without it (criterion4_a_dwx_artifact_is_byte_identical_across_builds, and re-verified at the cut)",
         "vendored_dependencies": true
       }
     },
@@ -28,7 +29,7 @@
         "_honesty": "This build ran on a developer machine, not on hosted CI with an attested identity. Saying so is the point: the value of provenance is that it describes the build truthfully, and a statement claiming a builder identity it does not have is a supply-chain lie with a schema around it."
       },
       "metadata": {
-        "invocationId": "assigned at the release cut"
+        "invocationId": "release-1.0.0/2026-07-20/local"
       }
     },
     "_slsaLevel": "sub-L3 (PENDING-PUBLIC)",
