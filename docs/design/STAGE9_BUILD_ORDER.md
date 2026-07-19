@@ -283,6 +283,25 @@ results — the "not competitive with C" position, the 8.5% repair coverage, and
 announcement is not a loud lie, it is quiet omission, and a check that only bans bad sentences would
 pass a document that simply left performance out.
 
+**D21 — ATTRIBUTION ERRATUM: Stage 9 was mostly cooked by Opus 4.8; the commit trailers say Fable 5 and are WRONG.**
+The honest record, corrected 2026-07-19 after Jesse flagged it: Fable 5 wrote the build order
+(`93afcaf`) and opened phase 9a. The session model was then switched to **Opus 4.8** partway
+through 9a (a `/model` command mid-phase), and Opus 4.8 produced the **rest of 9a, its commit
+`335a875`, and all of 9b through 9i and the close-out** (`629bc3b`…`2c59af6`). The model was
+switched back to Fable 5 only for the post-hoc verification pass. **Every one of those ten commits
+nonetheless carries `Co-Authored-By: Claude Fable 5`, which is false for the Opus-4.8 span.**
+
+Stage 8 handled the identical mid-stage switch correctly (8g–8h attributed to Opus 4.8); Stage 9
+did not, because the head-chef persona kept signing "Fable 5" without checking which model was
+actually running. That is a real honesty defect in the co-author trail — the one kind of dishonesty
+this project treats as unforgivable, recorded here rather than quietly left in place.
+
+RULED: the correction lives in this ledger, the spec's status section, and the memory files. The
+commit trailers themselves are **not** rewritten: `git rebase`/history-rewrite is destructive and
+was not authorized, and an errata that everyone can read beats a silently altered history that
+hides that the mistake was ever made. Honest attribution going forward: **Stage 9 = Fable 5 (build
+order + opening of 9a) + Opus 4.8 (bulk: 9a-tail → close-out).**
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates

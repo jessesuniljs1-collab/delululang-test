@@ -211,7 +211,13 @@ stakes.*
 ## Implementation status
 
 **Stage 9 is BUILT** (2026-07-19). **v1.0 is NOT RELEASED** — the acceptance gate returned two
-blockers. Operational record, rulings D1–D20, and the criteria table: `STAGE9_BUILD_ORDER.md`.
+blockers. Operational record, rulings D1–D21, and the criteria table: `STAGE9_BUILD_ORDER.md`.
+
+**Attribution (corrected — see ruling D21).** Stage 9 was **mostly cooked by Opus 4.8**, not
+Fable 5. Fable 5 wrote the build order (`93afcaf`) and opened phase 9a; the session model switched
+to Opus 4.8 partway through 9a, and Opus 4.8 produced the rest of 9a through the close-out. The ten
+Stage-9 commit trailers all say `Co-Authored-By: Claude Fable 5`, which is **false** for the
+Opus-4.8 span; the trailers are left as-is (history is not rewritten) and this note is the errata.
 
 | Phase | Commit | What landed |
 |---|---|---|
