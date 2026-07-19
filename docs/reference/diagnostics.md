@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 111 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (88.8%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 112 of 125 anchors in this chapter have both an accepting and a rejecting conformance witness (89.6%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -136,6 +136,6 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0902` | division by zero | `ref.diag.DL0902` | covered |
 | `DL0903` | index out of bounds | `ref.diag.DL0903` | covered |
 | `DL0904` | capability scope violation | `ref.diag.DL0904` | covered |
-| `DL0905` | recursion depth exceeded | `ref.diag.DL0905` | accepting only |
+| `DL0905` | recursion depth exceeded | `ref.diag.DL0905` | covered |
 | `DL0906` | explicit panic | `ref.diag.DL0906` | accepting only |
 | `DL0907` | match reached no arm (checker bug if ever seen) | `ref.diag.DL0907` | covered |

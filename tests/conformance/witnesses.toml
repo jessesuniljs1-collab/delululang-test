@@ -547,6 +547,12 @@ test = "integer_overflow_at_runtime_is_dl0901"
 kind = "negative"
 
 [[witness]]
+anchor = "ref.diag.DL0905"
+file = "crates/delulu/tests/cli_contract.rs"
+test = "unbounded_recursion_is_dl0905_not_a_host_crash"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.diag.DL1802"
 file = "crates/delulu/tests/stability_cli.rs"
 test = "a_newer_language_edition_is_refused_dl1802"

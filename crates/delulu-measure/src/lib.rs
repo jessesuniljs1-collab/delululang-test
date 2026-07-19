@@ -18,3 +18,5 @@
 
 pub mod corpus;
 pub mod study_a;
+pub mod study_b;
+pub mod study_c;

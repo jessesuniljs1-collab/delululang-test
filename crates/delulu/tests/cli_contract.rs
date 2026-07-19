@@ -160,6 +160,52 @@ fn integer_overflow_at_runtime_is_dl0901() {
     assert!(!out.contains("panicked at"), "the fault must be a diagnostic, not a host panic: {out}");
 }
 
+/// Unbounded recursion is DL0905 — a diagnostic, not a host crash.
+///
+/// Found by Study C (Stage 9e): `fib(24)` killed the process with a raw stack-overflow abort. The
+/// interpreter's own `MAX_DEPTH` guard existed but was unreachable, because a tree-walker spends
+/// several large native frames per DeluluLang call and the default main-thread stack ran out
+/// first. A crash with no diagnostic and no usable exit code is the worst failure mode there is,
+/// and it made `ref.rule.runtime.faults-are-diagnostics` false.
+#[test]
+fn unbounded_recursion_is_dl0905_not_a_host_crash() {
+    let home = scratch("recursion");
+    let src = home.join("deep.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn down(n: Int) -> Int {\n  if n < 1 { 0 } else { down(n - 1) + 1 }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n  let out = root.console()\n  out.println(str(down(60000)))\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&home, &["run", src.to_str().unwrap(), "--grant", "console"]);
+    let out = text(&o);
+    assert!(out.contains("DL0905"), "deep recursion must report DL0905, got: {out}");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "a runtime fault exits 1; a stack-overflow abort produces no usable code at all"
+    );
+    assert!(!out.contains("has overflowed its stack"), "the host must not crash: {out}");
+}
+
+/// THE SKIP-BRANCH CASE: recursion *within* the bound must still work. A fix that made DL0905 fire
+/// by refusing all recursion would pass the test above and destroy the language.
+#[test]
+fn recursion_within_the_bound_still_runs() {
+    let home = scratch("recursion-ok");
+    let src = home.join("fib.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn fib(n: Int) -> Int {\n  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }\n}\n\n\
+         fn main(root: Root) ! {Write} {\n  let out = root.console()\n  out.println(str(fib(24)))\n}\n",
+    )
+    .unwrap();
+    let o = delulu(&home, &["run", src.to_str().unwrap(), "--grant", "console"]);
+    let out = text(&o);
+    assert!(o.status.success(), "fib(24) must run cleanly: {out}");
+    assert!(out.contains("46368"), "fib(24) = 46368, got: {out}");
+}
+
 /// `repl` accepts piped input and reports errors on bad input rather than dying. The REPL's
 /// contract is that it *reports*, not that it exits nonzero — asserted honestly as such.
 #[test]

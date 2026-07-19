@@ -1,0 +1,140 @@
+{
+  "benchmarks": [
+    {
+      "kind": "micro",
+      "ms": {
+        "c": 7,
+        "interp": 78,
+        "python": 25,
+        "wasm": 13
+      },
+      "name": "fib_recursive_24",
+      "spread_ms": {
+        "c": 62,
+        "interp": 350,
+        "python": 5,
+        "wasm": 9
+      },
+      "unrun": []
+    },
+    {
+      "kind": "micro",
+      "ms": {
+        "c": 7,
+        "interp": 358,
+        "python": 76
+      },
+      "name": "loop_sum_1m",
+      "spread_ms": {
+        "c": 49,
+        "interp": 30,
+        "python": 10
+      },
+      "unrun": [
+        {
+          "lane": "wasm",
+          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
+        }
+      ]
+    },
+    {
+      "kind": "micro",
+      "ms": {
+        "c": 7,
+        "interp": 20,
+        "python": 23
+      },
+      "name": "string_build_20k",
+      "spread_ms": {
+        "c": 40,
+        "interp": 5,
+        "python": 4
+      },
+      "unrun": [
+        {
+          "lane": "wasm",
+          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "ms": {
+        "c": 7,
+        "interp": 14,
+        "python": 24
+      },
+      "name": "wordcount_macro",
+      "spread_ms": {
+        "c": 50,
+        "interp": 5,
+        "python": 4
+      },
+      "unrun": [
+        {
+          "lane": "wasm",
+          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "ms": {
+        "c": 7,
+        "interp": 18,
+        "python": 22
+      },
+      "name": "list_map_macro",
+      "spread_ms": {
+        "c": 47,
+        "interp": 5,
+        "python": 5
+      },
+      "unrun": [
+        {
+          "lane": "wasm",
+          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "ms": {
+        "c": 7,
+        "interp": 282,
+        "python": 49
+      },
+      "name": "nested_calls_macro",
+      "spread_ms": {
+        "c": 53,
+        "interp": 19,
+        "python": 6
+      },
+      "unrun": [
+        {
+          "lane": "wasm",
+          "reason": "unsupported by the WASM backend for this program (DL1201) or failed to run"
+        }
+      ]
+    }
+  ],
+  "caveat_process_startup": "Wall-clock includes process startup. For the C lane the startup cost exceeds the compute for several benchmarks (its spread exceeds its minimum), so ratios against C UNDERSTATE the true compute gap rather than overstate it.",
+  "lanes_available": [
+    "interp",
+    "wasm",
+    "c",
+    "python"
+  ],
+  "lanes_unavailable": [
+    {
+      "lane": "go",
+      "reason": "no Go toolchain on the measurement machine"
+    }
+  ],
+  "profile": "release",
+  "repeats": 5,
+  "schema": "study-c/1",
+  "statistic": "minimum of repeats (spread published alongside)",
+  "study": "C",
+  "title": "performance honesty baseline"
+}

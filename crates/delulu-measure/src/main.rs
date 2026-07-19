@@ -11,6 +11,9 @@ fn main() -> ExitCode {
     while i < args.len() {
         match args[i].as_str() {
             "study-a" => study = "a".into(),
+            "study-b" => study = "b".into(),
+            "study-c" => study = "c".into(),
+            "all" => study = "all".into(),
             "--out" => {
                 i += 1;
                 out = args.get(i).map(PathBuf::from);
@@ -27,11 +30,93 @@ fn main() -> ExitCode {
         i += 1;
     }
 
-    if study != "a" {
-        eprint!("{}", usage());
-        return ExitCode::from(2);
+    match study.as_str() {
+        "a" => {}
+        "b" => return run_b(out),
+        "c" => return run_c(out),
+        "all" => {
+            for f in [run_a as fn(Option<PathBuf>) -> ExitCode, run_b, run_c] {
+                let code = f(None);
+                if code != ExitCode::SUCCESS {
+                    return code;
+                }
+            }
+            return ExitCode::SUCCESS;
+        }
+        _ => {
+            eprint!("{}", usage());
+            return ExitCode::from(2);
+        }
     }
+    run_a(out)
+}
 
+/// Study B: the repair-loop measurement.
+fn run_b(out: Option<PathBuf>) -> ExitCode {
+    let out = out.unwrap_or_else(|| repo_root().join("measurements/study-b"));
+    let work = std::env::temp_dir().join(format!("delulu-study-b-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    eprintln!("study B: running the mechanical repair loop over the defect corpus...");
+    let r = match delulu_measure::study_b::run_study(&repo_root(), &work) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("delulu-measure: study B failed to run: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&out) {
+        eprintln!("delulu-measure: cannot create {}: {e}", out.display());
+        return ExitCode::from(1);
+    }
+    let _ = std::fs::write(
+        out.join("results.json"),
+        format!("{}\n", serde_json::to_string_pretty(&delulu_measure::study_b::json(&r)).unwrap()),
+    );
+    let _ = std::fs::write(out.join("REPORT.md"), delulu_measure::study_b::report(&r));
+    let _ = std::fs::remove_dir_all(&work);
+    println!(
+        "study B: {} tasks, {} with a machine-applicable repair ({:.1}%), {} reached green mechanically",
+        r.tasks.len(),
+        r.with_repair(),
+        r.repair_availability_pct(),
+        r.repaired_to_green()
+    );
+    ExitCode::SUCCESS
+}
+
+/// Study C: the performance baseline.
+fn run_c(out: Option<PathBuf>) -> ExitCode {
+    let out = out.unwrap_or_else(|| repo_root().join("measurements/study-c"));
+    let work = std::env::temp_dir().join(format!("delulu-study-c-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    eprintln!("study C: running benchmarks across every available lane...");
+    let r = match delulu_measure::study_c::run_study(&work) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("delulu-measure: study C failed to run: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&out) {
+        eprintln!("delulu-measure: cannot create {}: {e}", out.display());
+        return ExitCode::from(1);
+    }
+    let _ = std::fs::write(
+        out.join("results.json"),
+        format!("{}\n", serde_json::to_string_pretty(&delulu_measure::study_c::json(&r)).unwrap()),
+    );
+    let _ = std::fs::write(out.join("REPORT.md"), delulu_measure::study_c::report(&r));
+    let _ = std::fs::remove_dir_all(&work);
+    println!(
+        "study C: {} benchmarks across lanes [{}]",
+        r.benches.len(),
+        r.lanes_available.join(", ")
+    );
+    ExitCode::SUCCESS
+}
+
+/// Study A: the injection campaign.
+fn run_a(out: Option<PathBuf>) -> ExitCode {
     let out = out.unwrap_or_else(|| repo_root().join("measurements/study-a"));
     let work = std::env::temp_dir().join(format!("delulu-study-a-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&work);
@@ -96,7 +181,10 @@ fn usage() -> String {
     "delulu-measure — the DeluluLang measurement program (Stage 9 §3)\n\
      \n\
      USAGE:\n\
-     \x20 delulu-measure study-a [--out <dir>]\n\
+     \x20 delulu-measure study-a [--out <dir>]   authority verification at scale\n\
+     \x20 delulu-measure study-b [--out <dir>]   agent repair loops\n\
+     \x20 delulu-measure study-c [--out <dir>]   the performance honesty baseline\n\
+     \x20 delulu-measure all                     all three, to their default directories\n\
      \n\
      Study A generates a 25-package corpus with dependency depth 4, verifies each graph clean,\n\
      then injects an effect at every library position and checks that every injection is refused.\n\

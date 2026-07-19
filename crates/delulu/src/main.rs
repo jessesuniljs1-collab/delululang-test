@@ -21,8 +21,39 @@ mod repl;
 
 use std::process::ExitCode;
 
+/// The interpreter is a tree-walker: one DeluluLang call costs several native frames, and a debug
+/// build's frames are large. On a default 1 MiB main stack, recursion a few hundred deep exhausted
+/// the native stack and the process died with a raw stack-overflow abort — no diagnostic, no exit
+/// code, nothing a caller could act on. That is a violation of `ref.rule.runtime.faults-are-
+/// diagnostics`: a runtime fault must be a diagnostic (`DL0905`), never a host crash.
+///
+/// So the whole CLI runs on a thread with a stack large enough for the interpreter's own depth
+/// bound (`MAX_DEPTH`) to be the limit that actually fires. The reservation is virtual — pages are
+/// committed only as they are touched — so this costs nothing for the programs that never recurse.
+///
+/// Found by Study C: `fib(24)` crashed the process instead of reporting anything.
+const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let code = cli::run(&args);
+    let worker = std::thread::Builder::new()
+        .name("delulu-main".into())
+        .stack_size(INTERPRETER_STACK_BYTES)
+        .spawn(move || cli::run(&args));
+    let code = match worker {
+        Ok(handle) => match handle.join() {
+            Ok(code) => code,
+            // The worker panicked. Rust already printed the panic; exit 2 (internal) rather than
+            // pretending success.
+            Err(_) => 2,
+        },
+        // If the thread cannot be spawned, fall back to the main stack rather than refusing to
+        // run at all — a shallow program still works, and a deep one now hits DL0905 or the same
+        // crash it would have hit anyway.
+        Err(_) => {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            cli::run(&args)
+        }
+    };
     ExitCode::from(code as u8)
 }

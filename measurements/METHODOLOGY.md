@@ -127,9 +127,111 @@ structural argument rather than as a measurement.
 
 ---
 
-## 2. Studies B and C
+## 2. Study B — agent task success and repair loops
 
-See `study-b/METHODOLOGY.md` and `study-c/METHODOLOGY.md` (Stage 9e).
+### 2.1 What is actually measured
+
+**What the toolchain hands a machine.** Not which language is better; not how clever a model is.
+The lanes compare how much *structured* information each toolchain gives an automated repair loop.
+A DeluluLang diagnostic can carry a typed repair — id, confidence, authority-widening flag, and
+byte-range edits a program can splice without understanding the language. A Python traceback
+carries prose for a human.
+
+### 2.2 The task set
+
+The **conformance reject corpus** — 47 programs with genuine defects, already used to hold the
+compiler to its diagnostics. Real defects rather than synthesised ones, and not selected for this
+study, which removes the obvious way to flatter the result.
+
+### 2.3 The loop
+
+Deterministic, with **no model in it at all**: run the checker, apply any repair the toolchain
+declares machine-applicable, re-check, repeat to a bound of 8 iterations.
+
+One rule is absolute: **a repair flagged `authority_widening` is never applied automatically**,
+however exact it is. `add_effect_to_row` silences a diagnostic by granting the program more
+authority. A loop that takes that repair has not fixed the program; it has removed the objection.
+
+### 2.4 The results, including the unflattering ones
+
+- **4 of 47 (8.5%)** defects offered a machine-applicable repair.
+- **0 of those 4** reached a clean program mechanically — 2 offered only the authority-widening
+  repair (correctly refused), and 2 offered a warning-level repair that does not clear the error
+  beside it.
+- The Python lane: **0 of 6** defect shapes offered anything machine-applicable. One (`os.listdir`)
+  produced no error at all, which is the finding rather than a gap in the harness.
+
+The honest summary: the typed-repair channel is real and correctly conservative, and it currently
+cannot drive any real defect to green without a model. "Typed repairs" invites the reader to
+imagine universality; the measurement does not support that.
+
+### 2.5 Threats to validity — Study B
+
+- **The scripted lane is not an agent.** It measures loop *mechanics*, not task success by a real
+  model. The live-model lane that would measure the latter is **UNRUN** (build order D4): no API
+  keys in CI, and a remote model version is not reproducible.
+- **The Python comparison is narrow** — 6 defect shapes against 47, chosen to mirror the DeluluLang
+  ones. It is a reference point, not a controlled comparison. No claim is made about Python beyond
+  the mechanical observation that a traceback carries no applicable edit.
+- **`os.listdir` succeeding is not a Python defect.** Python has no effect declarations, so there is
+  nothing to violate. It illustrates what "unauthorized-effect attempts" can and cannot mean across
+  the two systems, and the harness counts only what a toolchain surfaces.
+- **The Go baseline is UNRUN** — no Go toolchain on the measurement machine.
+- **Repair coverage is a moving target.** 8.5% is today's number, not a property of the design.
+
+---
+
+## 3. Study C — the performance honesty baseline
+
+### 3.1 The only permitted claim
+
+Measured facts. Constitution §5.11 rejects *"faster than C"* as false; the committed claim is
+*competitive with C on hot paths*, which this study **assesses** and Stage 10 **works**.
+
+### 3.2 Method
+
+Six benchmarks (three micro, three macro) across four lanes: the DeluluLang interpreter, the
+DeluluLang WASM backend, C at `gcc -O2`, and CPython. All lanes compute the same result by the same
+algorithm. Each runs 5 times; the **minimum** is reported with the spread beside it.
+
+**Release only.** The study refuses to run against a debug build. The first run did measure debug,
+and the numbers were both wrong and dangerous — authoritative-looking figures describing a binary
+nobody runs.
+
+### 3.3 The result
+
+**2.0× to 51.1× slower than C**, depending on the benchmark. v1.0 is **not** competitive with C on
+these workloads, and the report says so in those words. The constitution's claim is about hot paths
+under a tiered backend with a JIT; v1.0 ships a tree-walker and a straightforward WASM backend, and
+neither is that. Publishing the gap now is what will make Stage 10's numbers mean something.
+
+### 3.4 Threats to validity — Study C
+
+- **Wall-clock includes process startup**, and for the C lane it *dominates*: its spread exceeds its
+  minimum on several benchmarks, so those figures are mostly process creation. The consequence
+  points the uncomfortable way — the ratios **understate** the true compute gap, because the C
+  denominator is inflated by time C did not spend computing. The 2.0×–2.9× rows are the least
+  trustworthy for this reason, not the most impressive.
+- **The WASM lane ran only one benchmark.** Five were refused as unsupported (`DL1201` — `var`/
+  `while` constructs). That is an honest limitation of the backend at 1.0, reported rather than
+  hidden by dropping the lane.
+- **Six benchmarks are not a benchmark suite.** They are small, they fit in cache, and they were
+  written for this study. No claim generalises beyond them.
+- **One machine, one OS, one run of five repeats.** No cross-machine or cross-OS variance is
+  characterised.
+- **CPython is not a tuned baseline** — no PyPy, no JIT, no C extensions.
+
+### 3.5 What Study C found that was not a number
+
+Running `fib(24)` crashed the process with a raw stack-overflow abort — no diagnostic, no usable
+exit code. The interpreter's `MAX_DEPTH` guard existed but was unreachable: a tree-walker spends
+several large native frames per DeluluLang call, and the default main-thread stack ran out long
+first. That made `ref.rule.runtime.faults-are-diagnostics` **false**.
+
+Fixed in the same phase: the CLI now runs on a thread with a stack large enough for the depth bound
+to be the limit that actually fires, and deep recursion reports `DL0905` as it always claimed to.
+The bug is recorded here because a measurement program that finds a defect and mentions only its
+timings is not doing its job.
 
 ---
 

@@ -218,6 +218,35 @@ difference as a structural argument (the check is a total function of the lockfi
 build, costs ~20 ms per graph, and does not tire) and marks the measured column UNRUN. Reopens if a
 trial is funded.
 
+**D15 — Study C found a host crash, and it was fixed rather than benchmarked around.**
+`fib(24)` killed the process with a raw stack-overflow abort: no diagnostic, no usable exit code.
+The interpreter's `MAX_DEPTH` guard existed but was **unreachable** — a tree-walker spends several
+large native frames per DeluluLang call, and the default main-thread stack ran out first. This made
+`ref.rule.runtime.faults-are-diagnostics` — one of this stage's own published normative rules —
+**false**. RULED: fixed in-phase, because a runtime fault that crashes the host is the worst
+failure mode a language has and shipping 1.0 with it would make the reference a liar. The CLI now
+runs on a thread with a stack large enough for the depth bound to be the limit that actually fires;
+deep recursion reports `DL0905`, witnessed by `unbounded_recursion_is_dl0905_not_a_host_crash` plus
+its skip-branch twin (recursion *within* the bound must still work — a "fix" that refused all
+recursion would pass the first test and destroy the language). Closes a D10 class-B gap; coverage
+270 → 272.
+
+**D16 — Study C refuses to measure a debug build.**
+The first run measured the debug binary and produced authoritative-looking figures describing a
+binary nobody runs — and the debug build's oversized frames were also what made `fib(24)` crash at
+depth 22. RULED: the study errors out unless a release build is present. A performance baseline
+from an unoptimised binary is worse than no baseline, because it will be quoted.
+
+**D17 — Study B publishes 8.5% and a zero, with the decomposition.**
+Only 4 of 47 real defects offer a machine-applicable repair, and **none** of those four can be
+driven to green by a loop with no model: two offer only `add_effect_to_row` (authority-widening,
+which the loop refuses **by policy** — widening authority to silence a diagnostic removes the
+objection rather than fixing the program), and two offer a warning-level repair that cannot clear
+the error beside it. RULED: published as measured, with the decomposition, because a bare zero
+reads as a broken harness and the truth is more interesting than that — the typed-repair channel is
+real and correctly conservative, and its *coverage* does not yet match what the phrase "typed
+repairs" invites a reader to assume. The release announcement may not imply otherwise.
+
 *(Ledger grows as phases surface new conflicts; nothing ships un-ruled.)*
 
 ## 4. Phase plan and gates
@@ -230,7 +259,7 @@ Order is 9a → 9i as in the playbook; each phase = brief → cook → verify �
 | 9b | **DONE** — `docs/reference/` generated-in-part: 24 chapters (16 §5 semantics + tokens/grammar/primitives/diagnostics/audit-rules/CLI/coverage/index), every normative statement anchored | `--check-reference` is a HARD CI gate; drift test + its skip-branch case green; token index fenced against `TokenKind`; every rule's enforcing code proven registered; **287 anchors, 263 covered (91.6%)** |
 | 9c | **DONE** — `STABILITY.md` (invariant 43), deprecation policy + registry (empty at 1.0, mechanism complete), `[package] language` edition, DL1801/DL1802; D10 class A 3/4 fixed; D11 `--help` fixed | Criterion 9 witnessed (`stability_cli.rs`, 8 tests incl. older-edition and unpinned skip branches); both codes registered with explain bodies; `keygen --help` no longer writes a key; **289 anchors, 270 covered (93.4%)** |
 | 9d | **DONE** — Study A: deterministic 25-package corpus (5 archetypes × depth 4), 20-site injection campaign, validity fence + negative controls | **20/20 caught (100%)**, all 20 mutations compile, all 5 controls clean; refusals are authority codes (DL1001/DL1010 at every site) not compile errors; raw data + corpus + METHODOLOGY with threats-to-validity committed; 9 integrity tests incl. proof the scoring can express failure |
-| 9e | Study B (two lanes per D4) + Study C (micro + 3 macro, both engines, vs C and Go) | Reproduce from clean checkout, pinned seeds/toolchains; numbers published as measured; §5.11 caveat verbatim in token appendix |
+| 9e | **DONE** — Study B (repair loops over the 47-program reject corpus) + Study C (6 benchmarks × 4 lanes, release-only) | B: **8.5% repair availability, 0 reach green mechanically** — published with the decomposition. C: **2.0×–51.1× slower than C**, "not competitive" stated in those words. §5.11 caveat verbatim; token counts deliberately not published. Found and fixed the DL0905 host-crash (D15) |
 | 9f | SECURITY.md, CONTRIBUTING.md §AI, rfcs/ process, CODEOWNERS, CI gate configs (D2) | Criterion 6 drill executed and timed, timeline recorded; skip-branch tests for every enforcement gate that has a checker |
 | 9g | Registry local go-live (D3): publish API, tokens, yank, server-side authority recomputation | Criterion 5: clean-machine publish→add→build round-trip; doctored index line demonstrably rejected (skip-branch: unverifiable artifact → refuse, not accept) |
 | 9h | Book (`docs/book/`) with every sample CI-compiled+run; `delulu explain` 100% en-US; `docs/for-agents.md` | Criterion 7 witnessed (samples are conformance tests); explain coverage meta-test at 100% |
