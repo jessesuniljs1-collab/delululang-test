@@ -37,7 +37,11 @@ pub const DIR_VERSION: u32 = 1;
 /// checked against. Re-verifying a DIR against a *different* primitive table would silently change
 /// what its capability operations mean, so a mismatch is refused with DL1503 — same "rebuild the
 /// plugin" repair as a wire-format bump. Bump this constant whenever the primitive table changes.
-pub const PRIM_TABLE_VERSION: u32 = 1;
+///
+/// History: 1 = Stages 6–9 table; 2 = Stage 10 phase 10e (actuator/sensor mints, `command`,
+/// `read`). Ruling D10: the bump is the honest activation cost — a DIR checked against table 1
+/// refuses with DL1503 rather than pretending the two tables agree.
+pub const PRIM_TABLE_VERSION: u32 = 2;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

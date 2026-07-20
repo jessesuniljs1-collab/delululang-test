@@ -428,6 +428,11 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
             ("ApiMismatch", &["Str"]),
         ],
     ));
+    // Stage 10 (10e, Track D): the actuation error sum. `Envelope` is the command refusal —
+    // the COMMAND dies, not the process (spec §5.1); `NoDevice` is the honest 10e answer from
+    // a device surface with no adapter attached (the sim arrives in 10f). Appended LAST in both
+    // prelude paths (order law: `the_two_prelude_paths_agree_on_every_type_id`).
+    gtypes.push(mk("ActuateErr", &[("Envelope", &["Str"]), ("NoDevice", &[])]));
 }
 
 fn dummy() -> delulu_diag::Span {

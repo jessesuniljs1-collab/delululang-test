@@ -162,6 +162,56 @@ pub struct Closure {
     pub env: Env,
 }
 
+/// An actuator's envelope (Stage 10 Track D, spec §5.1): the SCOPE of a `Cap[Actuator]`,
+/// constructed by the human at grant time and enforced on every command. Dimensions are named
+/// data, not hardcoded fields — vendor-neutral by construction (invariant 49): a joint bounds
+/// `torque_nm`/`angle_deg`, a battery bounds `charge_a`/`soc_pct`, and the mechanism is one.
+#[derive(Clone, Debug)]
+pub struct ActuatorEnvelope {
+    pub device: String,
+    /// `(dimension, lo, hi)` — inclusive bounds. A command field naming a dimension not listed
+    /// here is REFUSED (fail-closed): the envelope cannot vouch for what it never bounded.
+    pub dims: Vec<(String, f64, f64)>,
+    pub rate_hz: Option<u32>,
+}
+
+impl ActuatorEnvelope {
+    /// Parse the grant form `DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N]`. Fail-closed: any
+    /// part that does not parse is an error, never a silently-unbounded dimension.
+    pub fn parse(spec: &str) -> Result<ActuatorEnvelope, String> {
+        let (device, rest) = spec.split_once(':').ok_or("missing `:` (use DEVICE:dim=lo..hi,...)")?;
+        let device = device.trim();
+        if device.is_empty() {
+            return Err("empty device name".into());
+        }
+        let mut dims = Vec::new();
+        let mut rate_hz = None;
+        for part in rest.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            let (k, v) = part.split_once('=').ok_or_else(|| format!("bad envelope part `{part}`"))?;
+            let (k, v) = (k.trim(), v.trim());
+            if k == "rate_hz" {
+                rate_hz = Some(v.parse::<u32>().map_err(|_| format!("bad rate_hz `{v}`"))?);
+                continue;
+            }
+            let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad range `{v}` (use lo..hi)"))?;
+            let lo: f64 = lo.trim().parse().map_err(|_| format!("bad bound `{lo}`"))?;
+            let hi: f64 = hi.trim().parse().map_err(|_| format!("bad bound `{hi}`"))?;
+            if lo > hi {
+                return Err(format!("inverted range `{k}={lo}..{hi}`"));
+            }
+            dims.push((k.to_string(), lo, hi));
+        }
+        if dims.is_empty() {
+            return Err("an envelope with no bounded dimension bounds nothing".into());
+        }
+        Ok(ActuatorEnvelope { device: device.to_string(), dims, rate_hz })
+    }
+}
+
 /// The runtime capability scope (§7.1) — enforced host-side on every use.
 #[derive(Clone, Debug)]
 pub enum CapScope {
@@ -174,6 +224,10 @@ pub enum CapScope {
     /// Gates binding a foreign C library (`Cap[ForeignLoad]`, spec §3 T-ForeignBind). Carries no
     /// scope of its own — the per-lib authority decision is the `foreign.c` grant checked at bind.
     ForeignLoad,
+    /// Stage 10 (10e): the actuator's scope IS its envelope (spec §5.1).
+    Actuator(ActuatorEnvelope),
+    /// Stage 10 (10e): the sensor's scope is its device identity; reads are `Read` under it.
+    Sensor { device: String },
     /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
     /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
     Python { allowlist: Vec<String> },
@@ -291,6 +345,10 @@ pub struct RootVal {
     /// `root.secret(name)` for a name in this set returns an opaque **handle** (no bytes) — the bytes
     /// stay in the broker until `expose`. Empty in embedded mode, where `secrets` carries the bytes.
     pub broker_secrets: Vec<String>,
+    /// Stage 10 (10e): granted actuator envelopes; `root.actuator(device)` mints the matching cap.
+    pub actuators: Vec<ActuatorEnvelope>,
+    /// Stage 10 (10e): granted sensor devices; `root.sensor(device)` mints the matching cap.
+    pub sensors: Vec<String>,
 }
 
 // ----- environments --------------------------------------------------------

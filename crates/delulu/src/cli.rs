@@ -3307,6 +3307,11 @@ fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: HashMap<Stri
         // dimension yet (build-order D6 — the lattice dimension lands WITH the first native
         // tier in 10l, never after it), so the leased slice is always denied here. Fail closed.
         exec_native: false,
+        // Same fail-closed rule for physical devices (10e): the broker gains its
+        // actuator/sensor dimensions with the dead-man machinery in 10f — until then a lease
+        // confers no physical authority, period.
+        actuators: Vec::new(),
+        sensors: Vec::new(),
     }
 }
 

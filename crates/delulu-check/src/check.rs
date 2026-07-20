@@ -1429,6 +1429,17 @@ impl<'a> Checker<'a> {
                     // constructors — deriving the loader authority is not itself an effect.
                     "foreign_load" => (Type::Cap(ResourceKind::ForeignLoad), ResourceKind::ForeignLoad),
                     "plugin_host" => (Type::Cap(ResourceKind::PluginHost), ResourceKind::PluginHost),
+                    // Stage 10 (10e, Track D): deriving a device capability is PURE attenuation
+                    // like every `root.X()`; the effect is in USING it. The device name selects
+                    // among the granted envelopes at runtime (kind static, scope runtime — §5.3).
+                    "actuator" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        (Type::Cap(ResourceKind::Actuator), ResourceKind::Actuator)
+                    }
+                    "sensor" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        (Type::Cap(ResourceKind::Sensor), ResourceKind::Sensor)
+                    }
                     "secret" => {
                         ctx.facts.uses_secret = true;
                         self.expect_arg(args, 0, &Type::Str, span);
@@ -1498,6 +1509,27 @@ impl<'a> Checker<'a> {
             },
             Type::Cap(ResourceKind::Clock) => match method {
                 "now_ms" => Some((Type::Int, Some(Effect::Clock), None)),
+                _ => None,
+            },
+            // Stage 10 (10e, Track D — spec §5.1). `command` takes ANY value (the command
+            // record's SHAPE is scope, validated at runtime against the envelope — §5.3's
+            // kind/scope split at physical stakes) and carries `Actuate`, the language's most
+            // physically consequential effect. The refusal channel is a Result VALUE: the
+            // command dies, not the process.
+            Type::Cap(ResourceKind::Actuator) => match method {
+                "command" => {
+                    let _ = self.cx.fresh_type(); // the command value: any shape, scope-checked at runtime
+                    let aerr = Type::Sum(self.table.actuate_err(), vec![]);
+                    Some((Type::result(Type::Unit, aerr), Some(Effect::Actuate), None))
+                }
+                _ => None,
+            },
+            // Sensor reads are `Read` with sensor scopes — deliberately NOT a new effect.
+            Type::Cap(ResourceKind::Sensor) => match method {
+                "read" => {
+                    let aerr = Type::Sum(self.table.actuate_err(), vec![]);
+                    Some((Type::result(Type::Float, aerr), Some(Effect::Read), None))
+                }
                 _ => None,
             },
             // T-Get / T-Unload (Stage 6, spec §3.3). `p.get[F](name) -> Result[F, PluginErr]`:

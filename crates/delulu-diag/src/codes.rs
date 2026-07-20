@@ -201,6 +201,7 @@ registry! {
     // anything further needs a build-order ruling.
     "DL1901" => "unknown attribute",
     "DL1902" => "mailbox overflow dropped a message under `drop-new` in abort mode",
+    "DL1904" => "actuator command refused by its envelope",
     "DL1906" => "native-code emission requested without the `exec.native` grant",
 
     // DL09xx — runtime
@@ -993,6 +994,19 @@ pub fn code_explain(code: &str) -> Option<String> {
              backpressure bounds memory, never liveness — a cycle of full `block` mailboxes can \
              deadlock, and same-worker sends bypass the bound (a worker cannot wait on a mailbox \
              only it can drain).",
+        "DL1904" => "An actuator command asked for something its envelope does not vouch for, and \
+             the envelope refused it — the COMMAND dies, never the process (spec §5.1): the \
+             program receives `Err(Envelope(reason))` and keeps running, free to clamp, retry, \
+             or degrade gracefully. The envelope is fail-closed on every branch: a field naming \
+             a dimension the envelope never bounded, a non-numeric field, a NaN, and a value \
+             outside the inclusive `lo..hi` are all refused alike, because the envelope cannot \
+             vouch for what it never bounded. This code is TELEMETRY, not a fault: each refusal \
+             appends a trace record (op `command.refused`, the reason in `detail`) so an auditor \
+             sees both the attempt and the refusal. Honesty note: the envelope is the runtime's \
+             own last line, and it is DOUBLE enforcement, not the only enforcement — a physical \
+             deployment still needs hardware interlocks; software bounds are necessary, never \
+             sufficient. The repair is on the sender: clamp the command to the envelope, or \
+             renegotiate the grant with the human who wrote it.",
         "DL1906" => "The program carries a `@jit` hint, but native-code emission was not granted, \
              so the hint was IGNORED and the program ran under the interpreter — correctly, with \
              the sandbox intact. This is a warning, never an error: a hint may not change what a \

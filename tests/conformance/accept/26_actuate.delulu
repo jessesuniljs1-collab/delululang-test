@@ -1,0 +1,40 @@
+// anchors: ref.prim.root.actuator ref.prim.root.sensor ref.prim.actuator.command ref.prim.sensor.read
+// Stage 10 (10e, Track D, spec §5.1): the physical boundary types. Minting a device capability
+// is PURE attenuation — `mint_arm` carries no effect row at all. USING it is `Actuate`, the
+// language's most physically consequential effect. Sensor reads are `Read` with sensor scopes,
+// deliberately NOT a new effect: observation is observation.
+//
+// The refusal channel is a VALUE, not a fault: `Result[Unit, ActuateErr]`. A command outside its
+// envelope kills the command, never the process — a robot that panics mid-motion is worse than
+// one that refuses a step and keeps its control loop alive.
+module conf
+
+type Elbow { angle_deg: Float, velocity_dps: Float }
+
+fn mint_arm(root: Root) -> Cap[Actuator] {
+  root.actuator("arm0/elbow")
+}
+
+fn mint_angle(root: Root) -> Cap[Sensor] {
+  root.sensor("arm0/angle")
+}
+
+fn nudge(a: Cap[Actuator]) -> Result[Unit, ActuateErr] ! {Actuate} {
+  a.command(Elbow { angle_deg: 12.5, velocity_dps: 4.0 })
+}
+
+fn angle(s: Cap[Sensor]) -> Result[Float, ActuateErr] ! {Read} {
+  s.read()
+}
+
+// The two errors of the physical boundary, matched exhaustively: the envelope refused the
+// command, or no adapter was bound to the device at all.
+fn why(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => "commanded",
+    Err(e) => match e {
+      Envelope(reason) => reason,
+      NoDevice => "no device"
+    }
+  }
+}

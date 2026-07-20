@@ -137,6 +137,10 @@ impl DeclTable {
     pub fn py_err(&self) -> TypeDefId {
         self.type_ix["PyErr"]
     }
+    /// The actuation error sum (Stage 10, 10e — spec §5.1).
+    pub fn actuate_err(&self) -> TypeDefId {
+        self.type_ix["ActuateErr"]
+    }
 
     /// Resolve a bare constructor name to the UNIQUE sum type that declares it, with the variant's
     /// declared field types. `None` if no sum type has the constructor, or if more than one does —
@@ -189,6 +193,9 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     // happens only at `load`, under the holder check. Being ordinary is the point: a program can
     // build, inspect, and narrow a Grant with no special powers at all.
     register_plugin_prelude(&mut table);
+    // Stage 10 (10e): `ActuateErr` — appended LAST, mirroring `program.rs` exactly (the
+    // two-paths order law).
+    register_prelude_type(&mut table, "ActuateErr", &[("Envelope", &["Str"]), ("NoDevice", &[])]);
 
     // First pass: type names (so signatures can forward-reference them).
     for item in &module.items {

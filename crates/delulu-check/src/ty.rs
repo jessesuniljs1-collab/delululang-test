@@ -31,6 +31,11 @@ pub enum Effect {
     /// Reaching foreign (C/Python) code (Stage 4). An ordinary core effect for every row purpose;
     /// nothing special-cases it except reporting (spec §3).
     ForeignCall,
+    /// Commanding a physical device (Stage 10 Track D, Constitution §7). Reserved in Stage 1,
+    /// active here: `actuator.command(...)` carries `Actuate` — the most physically consequential
+    /// effect in the language, synchronous-class at the broker. Sensor READS are `Read` with
+    /// sensor scopes, deliberately not a new effect (spec §5.1).
+    Actuate,
     /// A user-declared effect (`effect Name`), identified by its name.
     User(String),
 }
@@ -47,6 +52,7 @@ impl Effect {
             "ForeignCall" => Effect::ForeignCall,
             "Load" => Effect::Load,
             "Async" => Effect::Async,
+            "Actuate" => Effect::Actuate,
             _ => return None,
         })
     }
@@ -62,6 +68,7 @@ impl Effect {
             Effect::ForeignCall => "ForeignCall",
             Effect::Load => "Load",
             Effect::Async => "Async",
+            Effect::Actuate => "Actuate",
             Effect::User(n) => n,
         }
     }
@@ -164,6 +171,12 @@ pub enum ResourceKind {
     Python,
     /// Gates binding a foreign C library (`Cap[ForeignLoad]`, Stage 4, spec §3 T-ForeignBind).
     ForeignLoad,
+    /// A physical actuator (Stage 10 Track D, Constitution §7): the most physically consequential
+    /// capability. Its SCOPE is its envelope — device identity plus per-dimension numeric bounds —
+    /// enforced at runtime on every command (§5.3's kind/scope split, at physical stakes).
+    Actuator,
+    /// A physical sensor (Stage 10 Track D): reads are `Read` with sensor scopes.
+    Sensor,
 }
 
 impl ResourceKind {
@@ -179,6 +192,8 @@ impl ResourceKind {
             "PluginHost" => ResourceKind::PluginHost,
             "Python" => ResourceKind::Python,
             "ForeignLoad" => ResourceKind::ForeignLoad,
+            "Actuator" => ResourceKind::Actuator,
+            "Sensor" => ResourceKind::Sensor,
             _ => return None,
         })
     }
@@ -195,6 +210,8 @@ impl ResourceKind {
             ResourceKind::PluginHost => "PluginHost",
             ResourceKind::Python => "Python",
             ResourceKind::ForeignLoad => "ForeignLoad",
+            ResourceKind::Actuator => "Actuator",
+            ResourceKind::Sensor => "Sensor",
         }
     }
 }

@@ -134,6 +134,10 @@ fn full_root(grants: &Grants) -> RootVal {
         python_allowlist: grants.foreign_python.clone(),
         // The REPL is embedded custody only (no daemon): no broker-held secret handles.
         broker_secrets: Vec::new(),
+        // Physical devices are never implicitly granted (10e) — not even in the REPL's
+        // convenience root: an actuator envelope is a deliberate human construction.
+        actuators: grants.actuators.clone(),
+        sensors: grants.sensors.clone(),
     }
 }
 

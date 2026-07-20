@@ -93,6 +93,11 @@ pub struct RootMsg {
     pub foreign_load: bool,
     pub python_allowlist: Vec<String>,
     pub broker_secrets: Vec<String>,
+    /// Stage 10 (10e): actuator envelopes crossing an actor boundary — plain data, `Send` by
+    /// construction like everything else here; the envelope is authority data the receiving
+    /// actor can hold but never widen.
+    pub actuators: Vec<crate::value::ActuatorEnvelope>,
+    pub sensors: Vec<String>,
 }
 
 enum Job {
@@ -649,6 +654,8 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             foreign_load: r.foreign_load,
             python_allowlist: r.python_allowlist.clone(),
             broker_secrets: r.broker_secrets.clone(),
+            actuators: r.actuators.clone(),
+            sensors: r.sensors.clone(),
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // Foreign machinery is actor-pinned or v0.7-fenced at check time; reaching here
@@ -740,6 +747,8 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
                 foreign_load: r.foreign_load,
                 python_allowlist: r.python_allowlist,
                 broker_secrets: r.broker_secrets,
+                actuators: r.actuators,
+                sensors: r.sensors,
             };
             Value::Root(Rc::new(root))
         }

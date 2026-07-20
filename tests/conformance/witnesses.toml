@@ -2368,3 +2368,68 @@ anchor = "ref.diag.DL1902"
 file = "crates/delulu/tests/actors_bounded_cli.rs"
 test = "a_drop_new_overflow_in_abort_mode_is_dl1902"
 kind = "negative"
+
+# ---- Stage 10 phase 10e: `Actuate` activates (Track D, spec §5.1/§5.3). The four device
+# primitives take the standard prim-table witness pair; DL1904 follows the DL1902/DL1906 shape,
+# because it is TELEMETRY rather than a diagnostic — its negative witness is the run that produces
+# a refusal, and its positive is the in-envelope run that stays clean.
+
+[[witness]]
+anchor = "ref.prim.root.actuator"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.actuator"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.root.sensor"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.sensor"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.actuator.command"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.actuator.command"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.sensor.read"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.sensor.read"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1904"
+file = "crates/delulu/tests/actuate_cli.rs"
+test = "an_in_envelope_command_succeeds_and_traces_the_actuate"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1904"
+file = "crates/delulu/tests/actuate_cli.rs"
+test = "an_out_of_envelope_command_is_refused_as_a_value_and_traced_dl1904"
+kind = "negative"

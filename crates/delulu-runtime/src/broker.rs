@@ -139,6 +139,12 @@ pub struct Grants {
     /// program's. v1.x ships no native tier yet; this is the leash built before the animal, and
     /// DL1906 is the honest note that a `@jit` hint was ignored for lack of it.
     pub exec_native: bool,
+    /// Stage 10 (10e, Track D): actuator grants — the human constructs the ENVELOPE at the
+    /// prompt (`--grant "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40"`), and the
+    /// program can never widen it. The envelope IS the scope (spec §5.1).
+    pub actuators: Vec<crate::value::ActuatorEnvelope>,
+    /// Stage 10 (10e): granted sensor device names (`--grant sensor=arm0/angle`).
+    pub sensors: Vec<String>,
 }
 
 impl Grants {
@@ -171,6 +177,21 @@ impl Grants {
                         return Err(format!("bad foreign grant `{spec}` (use foreign.c=LOGICAL:PATH)"));
                     }
                     self.foreign_c.insert(name.to_string(), path.to_string());
+                }
+                // Stage 10 (10e): `actuator=DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N]` — the
+                // human writes the envelope at the prompt; every command is checked against it.
+                "actuator" => {
+                    let env = crate::value::ActuatorEnvelope::parse(v.trim())
+                        .map_err(|e| format!("bad actuator grant `{spec}`: {e}"))?;
+                    self.actuators.push(env);
+                }
+                // Stage 10 (10e): `sensor=DEVICE` — reads are `Read` under this device scope.
+                "sensor" => {
+                    let d = v.trim();
+                    if d.is_empty() {
+                        return Err(format!("bad sensor grant `{spec}` (use sensor=DEVICE)"));
+                    }
+                    self.sensors.push(d.to_string());
                 }
                 // `foreign.python=PATTERN` — an import allowlist pattern (spec §5.1). Repeat the flag
                 // to grant several: `--grant foreign.python=numpy --grant "foreign.python=numpy.*"`.
@@ -232,6 +253,8 @@ impl Grants {
             python_allowlist: self.foreign_python.clone(),
             // Embedded mode: secrets carry their bytes in `secrets` (above); no broker handles.
             broker_secrets: Vec::new(),
+            actuators: self.actuators.clone(),
+            sensors: self.sensors.clone(),
         }
     }
 
@@ -263,6 +286,9 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             ResourceKind::ForeignLoad => grants.foreign_c.is_empty() && grants.foreign_python.is_empty(),
             // `Cap[Python]` is covered once any `foreign.python` pattern is granted (spec §5.1).
             ResourceKind::Python => grants.foreign_python.is_empty(),
+            // Stage 10 (10e): physical devices, deny-by-default like everything else.
+            ResourceKind::Actuator => grants.actuators.is_empty(),
+            ResourceKind::Sensor => grants.sensors.is_empty(),
         })
         .copied()
         .collect()

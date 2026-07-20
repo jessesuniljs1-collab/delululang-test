@@ -191,6 +191,10 @@ pub fn effect_for(cap_kind: &str, method: &str) -> Option<&'static str> {
         ("Clock", "now_ms") => Some("Clock"),
         ("Rand", "int") | ("Rand", "float") => Some("Rand"),
         ("Secret", "expose") => Some("Declassify"),
+        // Stage 10 (10e): the physical boundary. A command is `Actuate`; a sensor read is plain
+        // `Read` (observation is observation — no new effect for it, spec §5.1).
+        ("Actuator", "command") => Some("Actuate"),
+        ("Sensor", "read") => Some("Read"),
         _ => None,
     }
 }
@@ -298,6 +302,8 @@ mod tests {
         assert_eq!(effect_for("Rand", "int"), Some("Rand"));
         assert_eq!(effect_for("Rand", "float"), Some("Rand"));
         assert_eq!(effect_for("Secret", "expose"), Some("Declassify"));
+        assert_eq!(effect_for("Actuator", "command"), Some("Actuate"));
+        assert_eq!(effect_for("Sensor", "read"), Some("Read"));
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::custody::{Custody, CustodyDecision, EmbeddedCustody, Op as CustodyOp}
 use crate::foreign::{self, FKind, FVal, ForeignBinder, ForeignHandle, ForeignSig, InProcBinder};
 use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
-use crate::value::{CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
+use crate::value::{ActuatorEnvelope, CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
 
 const MAX_DEPTH: u32 = 10_000;
 
@@ -1019,6 +1019,9 @@ impl Interp {
             // interpreter under the GIL; handled here (not `prim`) to trace `ForeignCall` and thread
             // the `--foreign-max-ret` message bound.
             Value::Cap(c) if c.kind == ResourceKind::Python => self.call_python(c, &name.name, &argvals, span),
+            // Stage 10 (10e): `Cap[Actuator]` is handled here, not in `prim`, because an envelope
+            // refusal must append its DL1904 record to the trace sink (the DL1305 pattern).
+            Value::Cap(c) if c.kind == ResourceKind::Actuator => self.call_actuator(c, &name.name, &argvals, span),
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
             // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
@@ -1053,7 +1056,7 @@ impl Interp {
         let Some(effect) = trace::effect_for(kind, &name.name) else { return };
         let involves_secret =
             matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
-        let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(kind, &name.name, argvals) };
+        let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(recvv, kind, &name.name, argvals) };
         sink.push(TraceRecord {
             seq: self.next_trace_seq(),
             effect: effect.to_string(),
@@ -1178,6 +1181,44 @@ impl Interp {
             op: format!("py.{method}"),
             cap_kind: "Python".to_string(),
             detail,
+            span: Some((span.file, span.start, span.end)),
+            ..self.trace_attrib_record()
+        });
+    }
+
+    /// `Cap[Actuator].command(shape)` — the physical boundary (Stage 10 phase 10e, spec §5.1).
+    /// The envelope is enforced HERE, on every command, fail-closed; a refusal is
+    /// `Err(Envelope(reason))` — the COMMAND dies, never the process — and appends a DL1904
+    /// telemetry record so the refusal is visible evidence, not a silent swallow (the DL1305
+    /// denied-attempt pattern). An in-envelope command reaches the null adapter (`Ok(Unit)`)
+    /// until the 10f reference simulator gives it somewhere real to go.
+    fn call_actuator(&self, cap: &Rc<CapVal>, method: &str, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        if method != "command" {
+            return Err(Fault::at("DL0907", format!("unknown Actuator method `{method}` (checker bug)"), span));
+        }
+        let CapScope::Actuator(env) = &cap.scope else {
+            return Err(Fault::at("DL0907", "Actuator capability without an envelope scope (wiring bug)", span));
+        };
+        match envelope_check(env, args.first()) {
+            Ok(()) => Ok(Value::ok(Value::Unit)),
+            Err(reason) => {
+                self.trace_actuate_refusal(&env.device, &reason, span);
+                Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])))
+            }
+        }
+    }
+
+    /// Append the DL1904 refusal record. Separate from the ordinary `Actuate` dispatch record
+    /// (which `trace_dispatch` already appended): an auditor reading the trace sees BOTH the
+    /// attempt and its refusal, in order, with the reason in `detail`.
+    fn trace_actuate_refusal(&self, device: &str, reason: &str, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: "Actuate".to_string(),
+            op: "command.refused".to_string(),
+            cap_kind: "Actuator".to_string(),
+            detail: Some(format!("DL1904 {device}: {reason}")),
             span: Some((span.file, span.start, span.end)),
             ..self.trace_attrib_record()
         });
@@ -1364,12 +1405,56 @@ impl Interp {
 /// (spec §6.1: "the path for `read_text`, host for `get`"). Only ever called once the caller
 /// (`Interp::trace_dispatch`) has established that no secret is involved — this function trusts
 /// that and never itself redacts.
-fn trace_detail(cap_kind: &str, method: &str, args: &[Value]) -> Option<String> {
+/// The envelope law (Stage 10 phase 10e, spec §5.1), fail-closed on every branch: a command must
+/// be a record; every field must be numeric (`Int` or `Float`), must name a dimension the
+/// envelope bounds, and must sit inside the inclusive `lo..hi`. The skip branch — "the checker
+/// couldn't tell what this field means" (non-record command, non-numeric field, unlisted
+/// dimension) — REFUSES: the envelope cannot vouch for what it never bounded. A `NaN` fails both
+/// range comparisons, so it is refused too, not waved through. `rate_hz` is carried by the
+/// envelope but deliberately NOT enforced here: rate limiting needs a clock, and actuation time
+/// belongs to the 10f dead-man lease machinery — an honest, documented gap, not a silent one.
+fn envelope_check(env: &ActuatorEnvelope, cmd: Option<&Value>) -> Result<(), String> {
+    let Some(Value::Record { fields, .. }) = cmd else {
+        return Err("command must be a record of named dimensions".into());
+    };
+    for (fname, fval) in fields.borrow().iter() {
+        let x = match fval {
+            Value::Int(i) => *i as f64,
+            Value::Float(f) => *f,
+            _ => return Err(format!("field `{fname}` is not numeric — the envelope cannot bound it")),
+        };
+        let Some((_, lo, hi)) = env.dims.iter().find(|(d, _, _)| d == fname) else {
+            return Err(format!("dimension `{fname}` is not bounded by the envelope for `{}`", env.device));
+        };
+        if !(x >= *lo && x <= *hi) {
+            return Err(format!("`{fname}` = {x} is outside the envelope [{lo}, {hi}]"));
+        }
+    }
+    Ok(())
+}
+
+fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> Option<String> {
     match (cap_kind, method) {
         ("Console", "println") | ("Console", "print") => args.first().map(|v| v.display()),
         ("FsRead", "read_text") | ("FsRead", "list_dir") => args.first().map(|v| v.display()),
         ("FsWrite", "write_text") | ("FsWrite", "append_text") => args.first().map(|v| v.display()),
         ("Http", "get") => args.first().map(|v| v.display()),
+        // Stage 10 (10e): the device-scoped effects name their DEVICE, taken from the capability's
+        // scope rather than its arguments — an audit of `Actuate`, the most physically
+        // consequential effect in the language, that cannot say which actuator moved is not an
+        // audit. The scope is where the truth lives: the argument is the command, and the command
+        // is meaningless without the thing it was sent to.
+        ("Actuator", "command") | ("Sensor", "read") => match recv {
+            Value::Cap(c) => match &c.scope {
+                CapScope::Actuator(e) => Some(e.device.clone()),
+                CapScope::Sensor { device } => Some(device.clone()),
+                // Unreachable while minting is the only source of these caps; if a future path
+                // ever produces one without a device scope, the record says so out loud rather
+                // than quietly claiming an unnamed device moved.
+                _ => Some("<unscoped device>".to_string()),
+            },
+            _ => None,
+        },
         _ => None,
     }
 }

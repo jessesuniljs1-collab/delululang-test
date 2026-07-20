@@ -125,6 +125,31 @@ making the collector's job rare, and worth recording. (f) The collector's unit t
 actual freeing via `Weak` handles, and prove the safety half (a reachable cycle is NEVER
 touched) — a collector that frees live data is worse than a leak.
 
+**D10 — The physical boundary (10e): what the envelope refuses, and what the bump costs.** Six
+sub-rulings. (a) **`PRIM_TABLE_VERSION` goes 1 → 2, and that is the honest price of activation.**
+Four primitives entered the table, so a DIR compiled against table 1 no longer describes this
+runtime; it refuses with DL1503 rather than pretending the two tables agree. A version that never
+moves is a version that means nothing. (b) **The envelope is fail-closed in every branch, and the
+skip branch is the whole point.** A command must be a record; every field must be numeric; every
+field must NAME a bounded dimension; and the value must lie in the inclusive range. The tempting
+bug — check the dimensions the envelope knows and let the rest through — would mean an envelope
+grants everything it forgot to mention, so an unbounded dimension is REFUSED, by name. NaN is
+refused by construction (`!(x >= lo && x <= hi)` rather than a negated comparison chain, so the
+unordered case falls to the refusing side). (c) **The refusal is a VALUE, never a fault.** A robot
+that panics mid-motion is worse than one that declines a step and keeps its control loop alive, so
+`command` returns `Result[Unit, ActuateErr]` and DL1904 is **telemetry** — a trace record with op
+`command.refused`, following DL1305's denied-attempt pattern. Both records appear, attempt then
+refusal: an attempt that was refused is still an attempt, and hiding it would hide intent. (d)
+**Sensor reads are `Read`, not a new effect** — observation is observation (§5.1). The mint is
+pure attenuation like every `root.X()`; the effect is in USING the capability. (e) **Invariant 50
+holds through the null adapter**: with no simulator bound (10f's territory), `read()` returns
+`NoDevice` and never a number. A control loop handed `0.0` by a sensor that isn't there will act
+on it — an absent measurement must be *absent*, not plausible. (f) **`rate_hz` parses and is
+carried but is NOT enforced**, and this is recorded as a gap rather than implied to work: rate
+limiting without a dead-man lease is a comfort, not a control, and both arrive together in 10f.
+Double validation likewise lands here only in its checker/runtime half — the broker half is 10f's,
+and the explain text says out loud that neither replaces a hardware interlock.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -135,7 +160,7 @@ touched) — a collector that frees live data is worse than a leak.
 | 10b | A3 | **DONE** (2026-07-20) — `exec.native` grant + manifest declaration (`[authority] exec.native = true`), authority request-stamp, DL1906 | `@jit` without the grant → DL1906 **warning, program still runs** (D7: a hint may not change whether a program runs); granted run clean; machine `--json` channel never carries the warning; authority stamps `native_emission` ONLY when requested (skip branch = byte-stability witnessed); `--grant-manifest` does not confer it and a lease derives it false (D6, fail closed); explain carries the authority-widening + no-tier honesty notes; coverage **100%** (290 anchors), suite **936/0/4**. Broker-lattice dimension: 10l entry gate per D6 |
 | 10c | B2/B3 | **DONE** (2026-07-20) — Bounded mailboxes (`actor A(mailbox = N)` + `[actors]` manifest defaults; `block` default / `drop-new` counted; DL1902 in abort mode) + `--trace-memory` mailbox telemetry | The B2 criterion witnessed: a 500:1-paced producer against a bound-8 consumer sustains with **peak depth ≤ 8 and zero loss** (`block_backpressure_sustains_...`); DL1902 forced deterministically (self-send storm, drop-new, abort); **the same-worker exemption witnessed by a test that deadlocks if it's wrong**; slot release is a Drop guard (no skip branch); drops never silent; CAS-exact bound; unconfigured actors unbounded (1.0 preserved). D8 rules the deferrals. Coverage **100%** (291 anchors), suite **941/0/4** |
 | 10d | B1 | **DONE** (2026-07-20) — The cycle collector: mark-and-break between turns over a worker-wide registry (List/Record cells + closure-captured scopes); `--trace-memory` reports sweeps + cells collected | The leak corpus collected: 200 manufactured `l → Link(l) → l` cycles broken in one sweep, program output untouched; the safety half witnessed at BOTH levels (unit: a reachable cycle untouched, `Weak` proves real freeing; language: a state-held cycle survives churn); non-actor programs show no collector surface at all; **Study-C gate: interp geo-mean −1.0%, no regression** (D9a). Soundness argument + five sub-rulings in D9. Coverage 100%; suite **948/0/4** |
-| 10e | D1 | `Actuate` activates: `Cap[Actuator]`/`Cap[Sensor]`, envelope scopes, double validation, `ActuateErr`, DL1904 | Envelope refusal kills the command, never the process — witnessed both ways; kind vs scope split holds (§5.3); coverage 100% incl. new anchors |
+| 10e | D1 | **DONE** (2026-07-20) — `Actuate` activates: `root.actuator`/`root.sensor` mints, envelope scopes (`--grant "actuator=DEV:dim=lo..hi[,rate_hz=N]"`), `ActuateErr = Envelope(Str) \| NoDevice`, DL1904 telemetry, `PRIM_TABLE_VERSION` 1→2 | Refusal kills the command, never the process — every refusal test asserts **exit 0** with the error handled in-program; the skip branch witnessed directly (`a_dimension_the_envelope_never_bounded_is_refused_not_waved_through` — an unbounded dimension is refused BY NAME, not waved through), plus the non-numeric twin; DL1904 lands as `command.refused` **after** the attempt record, order asserted; device named in every trace record (an audit that can't say which actuator moved is not an audit); kind/scope split holds — wrong-device mint is DL0703 at the mint while zero-grant refuses at the pre-flight, both witnessed; invariant 50 witnessed (unbound sensor reads `NoDevice`, never a number). D10 rules the bump and the `rate_hz` gap. Coverage **100%** (296 anchors), suite **955/0/4** |
 | 10f | D2/D4 | Dead-man leases (heartbeat/TTL, broker-side revoke, declared fail-states) + `--broker-profile sim` reference simulator (deterministic, seeded) | Missed heartbeat → revoke → fail-state, latency measured and published; sim deterministic under `--seed`; artifact-hash gate (DL1905) fires in the staged flow |
 | 10g | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
 | 10h | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |

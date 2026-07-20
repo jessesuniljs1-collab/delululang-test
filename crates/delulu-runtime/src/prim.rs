@@ -156,6 +156,24 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Err(reason) => Ok(Value::err(Value::variant("Unavailable", vec![Value::str(reason)]))),
             }
         }
+        // Stage 10 (10e): physical-device mints. Both are pure attenuation (deriving the handle is
+        // not an effect; *using* it is), and both are deny-by-default: no matching grant, no cap —
+        // the envelope/device list on `RootVal` is the whole authority story (spec §5.1).
+        "actuator" => {
+            let d = str_arg(args, 0, span)?;
+            match root.actuators.iter().find(|e| e.device == d) {
+                Some(e) => Ok(cap(ResourceKind::Actuator, CapScope::Actuator(e.clone()))),
+                None => Err(Fault::at("DL0703", format!("actuator `{d}` was not granted"), span)),
+            }
+        }
+        "sensor" => {
+            let d = str_arg(args, 0, span)?;
+            if root.sensors.iter().any(|s| s == &d) {
+                Ok(cap(ResourceKind::Sensor, CapScope::Sensor { device: d }))
+            } else {
+                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted"), span))
+            }
+        }
         "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
         _ => Err(Fault::at("DL0907", format!("unknown Root method `{method}` (checker bug)"), span)),
     }
@@ -254,6 +272,10 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             Ok(Value::Int(lo + (next_rand() % (hi - lo) as u64) as i64))
         }
         (ResourceKind::Rand, "float") => Ok(Value::Float((next_rand() as f64) / (u64::MAX as f64))),
+        // Stage 10 (10e): the null sensor adapter. There is no real device behind the Stage-10e
+        // runtime (the reference simulator arrives in 10f), and a read that cannot observe anything
+        // says so honestly: `Err(NoDevice)` — never a fabricated measurement (invariant 50).
+        (ResourceKind::Sensor, "read") => Ok(Value::err(Value::variant("NoDevice", vec![]))),
         _ => Err(Fault::at("DL0907", format!("unknown capability method `{method}` (checker bug)"), span)),
     }
 }
