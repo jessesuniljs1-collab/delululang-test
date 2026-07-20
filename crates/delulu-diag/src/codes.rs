@@ -201,6 +201,7 @@ registry! {
     // anything further needs a build-order ruling.
     "DL1901" => "unknown attribute",
     "DL1902" => "mailbox overflow dropped a message under `drop-new` in abort mode",
+    "DL1903" => "dependency version has a published security advisory",
     "DL1904" => "actuator command refused by its envelope",
     "DL1905" => "hardware actuation requested for an artifact that no simulation approved",
     "DL1906" => "native-code emission requested without the `exec.native` grant",
@@ -1005,6 +1006,22 @@ pub fn code_explain(code: &str) -> Option<String> {
              backpressure bounds memory, never liveness — a cycle of full `block` mailboxes can \
              deadlock, and same-worker sends bypass the bound (a worker cannot wait on a mailbox \
              only it can drain).",
+        "DL1903" => "A resolved dependency is on a version named in a published security advisory \
+             (the registry's advisory feed, spec §4). By default this is a WARNING and the build \
+             proceeds: an advisory is information, and a toolchain that turned every advisory into \
+             a hard wall would only teach people to reach for `--ignore`. In CI, pass \
+             `--deny-advisories` and every match becomes an error — a build that uses a \
+             known-vulnerable version stops. The repair is exact when the advisory names a patched \
+             version: upgrade to it and re-lock (`delulu add <pkg>@<patched>`, then `delulu lock`). \
+             The feed is read from a local file (default `delulu.advisories.json` next to the \
+             package, or `--advisory-feed <path>`), synced from the registry — so an offline build \
+             still sees the advisories it last fetched, and the registry being down never silences \
+             a warning you already hold. Skip-branch honesty: under `--deny-advisories`, a feed \
+             that is missing, unreadable, or carries a record this toolchain cannot parse is itself \
+             a build failure, not a silent pass — a CI gate that opens because it could not find \
+             its evidence is the gate opening on damage (the same rule DL1905 draws for a missing \
+             sign-off record). WITHOUT `--deny-advisories`, an absent feed is simply silence: there \
+             is genuinely nothing known to warn about, so nothing is said.",
         "DL1904" => "An actuator command asked for something its envelope does not vouch for, and \
              the envelope refused it — the COMMAND dies, never the process (spec §5.1): the \
              program receives `Err(Envelope(reason))` and keeps running, free to clamp, retry, \

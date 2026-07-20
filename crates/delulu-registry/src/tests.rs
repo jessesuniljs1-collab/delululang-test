@@ -478,3 +478,111 @@ fn same_major_follows_the_cargo_zero_x_rule() {
     assert!(!same_major("0.1.0", "0.2.0"), "under 0.x the minor is the compatibility axis");
     assert!(same_major("0.1.0", "0.1.7"));
 }
+
+// ----- the advisory feed (Stage 10 phase 10k, Track C, spec §4) -----------------------------
+
+fn advisory(id: &str, package: &str, affected: &[&str], patched: &str) -> Value {
+    json!({
+        "id": id, "package": package,
+        "affected": affected,
+        "patched": patched, "severity": "high", "summary": "test advisory",
+    })
+}
+
+#[test]
+fn an_advisory_round_trips_and_stores_only_vouched_fields() {
+    let (r, tok) = reg_with_token("adv-roundtrip", &["widget"]);
+    let mut adv = advisory("DLSA-1", "widget", &["1.0.0", "1.0.1"], "1.0.2");
+    // A client-supplied extra field must NOT survive into the record the registry vouches for.
+    adv["injected"] = json!("evil");
+    assert!(matches!(r.file_advisory(&tok, &adv), PublishOutcome::Accepted { .. }));
+
+    let stored = r.advisories("widget");
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0]["id"], "DLSA-1");
+    assert_eq!(stored[0]["affected"], json!(["1.0.0", "1.0.1"]));
+    assert_eq!(stored[0]["patched"], "1.0.2");
+    assert!(stored[0].get("injected").is_none(), "an unknown client field must be dropped, not merged");
+}
+
+#[test]
+fn a_token_cannot_file_an_advisory_outside_its_scope() {
+    let (r, tok) = reg_with_token("adv-scope", &["widget"]);
+    // Mallory's token is scoped to `widget`, but the advisory names someone else's package.
+    let adv = advisory("DLSA-2", "not-widget", &["1.0.0"], "1.0.1");
+    match r.file_advisory(&tok, &adv) {
+        PublishOutcome::Refused { code, reason } => {
+            assert_eq!(code, "DL1706");
+            assert!(reason.contains("not scoped"), "{reason}");
+        }
+        other => panic!("an out-of-scope advisory must be refused: {other:?}"),
+    }
+    assert!(r.advisories("not-widget").is_empty(), "nothing should have been written");
+}
+
+#[test]
+fn a_half_record_advisory_is_refused_not_stored() {
+    let (r, tok) = reg_with_token("adv-half", &["widget"]);
+    // No `affected` list — the registry will not store a record a build would then have to guess about.
+    let bad = json!({ "id": "DLSA-3", "package": "widget" });
+    assert!(matches!(r.file_advisory(&tok, &bad), PublishOutcome::Refused { .. }));
+    // Empty affected, likewise.
+    let empty = json!({ "id": "DLSA-3", "package": "widget", "affected": [] });
+    assert!(matches!(r.file_advisory(&tok, &empty), PublishOutcome::Refused { .. }));
+    assert!(r.advisories("widget").is_empty());
+}
+
+#[test]
+fn all_advisories_exports_every_package_in_stable_order() {
+    let (r, tok) = reg_with_token("adv-all", &["a", "b"]);
+    r.file_advisory(&tok, &advisory("DLSA-b", "b", &["2.0.0"], "2.0.1"));
+    r.file_advisory(&tok, &advisory("DLSA-a", "a", &["1.0.0"], "1.0.1"));
+    let all = r.all_advisories();
+    assert_eq!(all.len(), 2);
+    // Sorted by package name — a whole-feed export diffs cleanly regardless of filing order.
+    assert_eq!(all[0]["package"], "a");
+    assert_eq!(all[1]["package"], "b");
+}
+
+#[test]
+fn the_http_surface_files_and_serves_advisories() {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+
+    let root = scratch("adv-http");
+    let reg = Arc::new(Registry::open(&root).unwrap());
+    let tok = reg.issue_token("alice", vec!["widget".into()]);
+    let (addr, _h) = serve(reg.clone(), "127.0.0.1:0", Arc::new(recompute)).expect("serve");
+
+    let request = |method: &str, path: &str, body: &str, token: &str| -> String {
+        let mut s = TcpStream::connect(addr).expect("connect");
+        let req = format!(
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\
+             Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        s.write_all(req.as_bytes()).unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        out
+    };
+
+    // A package with no advisories answers 200 with an empty list — a first-class safe answer a
+    // build acts on, not a 404.
+    let empty = request("GET", "/advisories/widget", "", "");
+    assert!(empty.contains("\"advisories\":[]"), "{empty}");
+
+    // File one over the wire.
+    let body = advisory("DLSA-9", "widget", &["1.0.0"], "1.0.1").to_string();
+    let resp = request("POST", "/advisory", &body, &tok);
+    assert!(resp.contains("\"advisory\":\"DLSA-9\""), "{resp}");
+
+    // Now it serves — publicly, no token needed.
+    let served = request("GET", "/advisories/widget", "", "");
+    assert!(served.contains("DLSA-9"), "{served}");
+    assert!(served.contains("\"patched\":\"1.0.1\""), "{served}");
+
+    // An unauthenticated file attempt gets nowhere.
+    let anon = request("POST", "/advisory", &body, "");
+    assert!(anon.contains("DL1706"), "{anon}");
+}

@@ -2369,6 +2369,24 @@ file = "crates/delulu/tests/actors_bounded_cli.rs"
 test = "a_drop_new_overflow_in_abort_mode_is_dl1902"
 kind = "negative"
 
+# ---- Stage 10 phase 10k: the registry advisory feed (Track C, spec §4). DL1903 follows the
+# DL1905 shape: the positive is the gate SEEN TO PASS (a build on a version no advisory names
+# clears `--deny-advisories`), because an advisory gate witnessed only by its refusals is
+# indistinguishable from a gate that is simply shut. The negative is the flagged build — a
+# dependency on an advised version, DL1903.
+
+[[witness]]
+anchor = "ref.diag.DL1903"
+file = "crates/delulu/tests/advisories_cli.rs"
+test = "a_clean_version_passes_the_deny_advisories_gate"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1903"
+file = "crates/delulu/tests/advisories_cli.rs"
+test = "an_advised_dependency_is_flagged_dl1903"
+kind = "negative"
+
 # ---- Stage 10 phase 10e: `Actuate` activates (Track D, spec §5.1/§5.3). The four device
 # primitives take the standard prim-table witness pair; DL1904 follows the DL1902/DL1906 shape,
 # because it is TELEMETRY rather than a diagnostic — its negative witness is the run that produces

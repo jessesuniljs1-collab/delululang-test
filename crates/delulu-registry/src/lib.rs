@@ -76,6 +76,7 @@ impl Registry {
         let root = root.into();
         std::fs::create_dir_all(root.join("index"))?;
         std::fs::create_dir_all(root.join("artifacts"))?;
+        std::fs::create_dir_all(root.join("advisories"))?;
         let tokens = token::Store::load(&root.join("tokens.jsonl"))?;
         Ok(Registry { root, tokens: Mutex::new(tokens) })
     }
@@ -301,6 +302,111 @@ impl Registry {
         let mut t = self.tokens.lock().expect("token store");
         t.revoke(tok, &self.root.join("tokens.jsonl"))
     }
+
+    // ----- the advisory feed (Stage 10 phase 10k, Track C, spec §4) --------------------------
+    //
+    // An advisory ties a package to a set of affected version strings and, where there is one, the
+    // patched version to upgrade to. Stored per package as JSONL under `advisories/<name>`,
+    // mirroring the index exactly — one append-only file per package, one JSON record per line.
+    //
+    // `delulu build` reads this feed (synced to a local file) and warns (DL1903) when a resolved
+    // dependency is on an affected version; `--deny-advisories` turns the warning into a CI gate.
+    // The registry is the *source* of that feed; the build is deliberately offline against a local
+    // copy, so the registry being down never silences an advisory a build already holds.
+
+    /// Every advisory recorded for a package, oldest first. Absent package = empty.
+    pub fn advisories(&self, name: &str) -> Vec<Value> {
+        let path = self.root.join("advisories").join(name);
+        let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+        text.lines()
+            .filter(|l| !l.trim().is_empty())
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .collect()
+    }
+
+    /// Every advisory across every package, for exporting a whole-feed file a build can consult.
+    pub fn all_advisories(&self) -> Vec<Value> {
+        let mut out = Vec::new();
+        let Ok(entries) = std::fs::read_dir(self.root.join("advisories")) else { return out };
+        let mut names: Vec<String> = entries
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect();
+        names.sort(); // stable export order — a feed file diffs cleanly
+        for name in names {
+            out.extend(self.advisories(&name));
+        }
+        out
+    }
+
+    /// File an advisory against a package. Requires a token **scoped to that package** — the same
+    /// standing `yank` requires, and for the same reason: the feed is load-bearing, and a token
+    /// with no authority over a package must not be able to plant (or, by extension, shape) an
+    /// advisory that will fail other people's builds. The record is written from only the fields
+    /// the registry vouches for; a submission missing `id`, `package`, or a non-empty `affected`
+    /// list is refused rather than stored as a half-record a build would then have to guess about.
+    pub fn file_advisory(&self, token_str: &str, advisory: &Value) -> PublishOutcome {
+        let Some(package) = advisory.get("package").and_then(Value::as_str).filter(|s| !s.is_empty())
+        else {
+            return PublishOutcome::Refused {
+                code: "DL1706",
+                reason: "an advisory must name a `package`".into(),
+            };
+        };
+
+        let tokens = self.tokens.lock().expect("token store");
+        match tokens.authorize(token_str, package) {
+            token::Authorization::Ok => {}
+            token::Authorization::Unknown => {
+                return PublishOutcome::Refused { code: "DL1706", reason: "unknown or revoked token".into() }
+            }
+            token::Authorization::OutOfScope => {
+                return PublishOutcome::Refused {
+                    code: "DL1706",
+                    reason: format!("this token is not scoped to `{package}`; advisory refused"),
+                }
+            }
+        }
+        drop(tokens);
+
+        let id = advisory.get("id").and_then(Value::as_str).filter(|s| !s.is_empty());
+        let affected = advisory
+            .get("affected")
+            .and_then(Value::as_array)
+            .filter(|xs| !xs.is_empty() && xs.iter().all(Value::is_string));
+        let (Some(id), Some(affected)) = (id, affected) else {
+            return PublishOutcome::Refused {
+                code: "DL1706",
+                reason: "an advisory needs a non-empty `id` and a non-empty `affected` list of \
+                         version strings"
+                    .into(),
+            };
+        };
+
+        // Only the vouched-for fields are stored — an unknown extra field a client sends is dropped,
+        // never merged into a record the registry signs its name to (the same discipline `publish`
+        // takes toward a client-supplied index line).
+        let line = json!({
+            "id": id,
+            "package": package,
+            "affected": affected,
+            "patched": advisory.get("patched").and_then(Value::as_str),
+            "severity": advisory.get("severity").and_then(Value::as_str).unwrap_or("unknown"),
+            "summary": advisory.get("summary").and_then(Value::as_str).unwrap_or(""),
+        });
+
+        let path = self.root.join("advisories").join(package);
+        let mut existing = std::fs::read_to_string(&path).unwrap_or_default();
+        if !existing.is_empty() && !existing.ends_with('\n') {
+            existing.push('\n');
+        }
+        existing.push_str(&line.to_string());
+        existing.push('\n');
+        if std::fs::write(&path, existing).is_err() {
+            return PublishOutcome::Refused { code: "DL1706", reason: "advisory write failed".into() };
+        }
+        PublishOutcome::Accepted { name: package.to_string(), version: id.to_string() }
+    }
 }
 
 fn effect_set(line: &Value) -> Vec<String> {
@@ -445,6 +551,27 @@ fn route(
             match reg.yank(token, req["name"].as_str().unwrap_or(""), req["version"].as_str().unwrap_or(""), yanked) {
                 PublishOutcome::Accepted { name, version } => {
                     ("200 OK", json!({"yanked": yanked, "name": name, "version": version}))
+                }
+                PublishOutcome::Refused { code, reason } => {
+                    ("400 Bad Request", json!({"code": code, "error": reason}))
+                }
+            }
+        }
+        // The advisory feed (10k). GET is public — a build must be able to fetch advisories with
+        // no token, exactly as it fetches the index — and returns `[]` for a package with none
+        // (not 404: "this package has no advisories" is a first-class, safe answer a build acts on,
+        // unlike "no such package" which the index reserves 404 for).
+        ("GET", p) if p.starts_with("/advisories/") => {
+            let name = p.trim_start_matches("/advisories/");
+            ("200 OK", json!({ "name": name, "advisories": reg.advisories(name) }))
+        }
+        ("POST", "/advisory") => {
+            let Ok(req) = serde_json::from_slice::<Value>(body) else {
+                return ("400 Bad Request", json!({"code": "DL1706", "error": "malformed request"}));
+            };
+            match reg.file_advisory(token, &req) {
+                PublishOutcome::Accepted { name, version } => {
+                    ("200 OK", json!({"advisory": version, "package": name}))
                 }
                 PublishOutcome::Refused { code, reason } => {
                     ("400 Bad Request", json!({"code": code, "error": reason}))

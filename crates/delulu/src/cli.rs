@@ -276,6 +276,13 @@ struct Opts {
     /// `--approved <path>`: the sign-off record a `hw:` run is checked against. Its absence is a
     /// refusal, never a pass — DL1905.
     approved: Option<String>,
+    /// `--deny-advisories` (Stage 10 phase 10k, spec §4): for `build`, turn every advisory match
+    /// into an error (the CI gate) instead of a DL1903 warning — AND refuse to pass at all if the
+    /// advisory feed cannot be read, so a gate never opens because it could not find its evidence.
+    deny_advisories: bool,
+    /// `--advisory-feed <path>`: the advisory feed to consult (default `delulu.advisories.json`
+    /// next to the package). Synced out-of-band from the registry; read offline at build time.
+    advisory_feed: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -311,6 +318,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         broker_profile: None,
         signoff: None,
         approved: None,
+        deny_advisories: false,
+        advisory_feed: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -368,6 +377,17 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.approved = Some(rest[i + 1].clone());
                     i += 1;
                 }
+            }
+            // Stage 10 (10k, spec §4): the advisory-feed gate.
+            "--deny-advisories" => opts.deny_advisories = true,
+            "--advisory-feed" => {
+                if i + 1 < rest.len() {
+                    opts.advisory_feed = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--advisory-feed=") => {
+                opts.advisory_feed = Some(s["--advisory-feed=".len()..].to_string())
             }
             "--clock" => {
                 if i + 1 < rest.len() {
@@ -2555,6 +2575,18 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
         }
     }
 
+    // Stage 10 phase 10k (Track C, spec §4): the registry advisory feed. Scoped to `build` — the
+    // supply-chain gate — because `check`'s output is byte-stable and does not run CI gates. A
+    // resolved dependency on an advised version is DL1903 (a warning by default, an error under
+    // `--deny-advisories`); the `gate_note` carries the skip-branch refusals where the feed itself
+    // cannot be trusted to have been evaluated (see `advisory_diagnostics`).
+    let mut advisory_gate_note: Option<String> = None;
+    if command == "build" {
+        let (adv_diags, gate_note) = advisory_diagnostics(dir, &ws, opts);
+        diags.extend(adv_diags);
+        advisory_gate_note = gate_note;
+    }
+
     let n = errors(&diags);
     print_diagnostics(command, &diags, &ws.source_map, None, opts.json);
     // Git dependencies are parsed and rev/tag-validated, but fetching is deferred to a later stage.
@@ -2566,7 +2598,15 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
             ws.git_deferred.join(", ")
         );
     }
-    let failed = n > 0 || git_blocked;
+    // The advisory gate refusing (feed missing/unreadable under `--deny-advisories`) forces a
+    // non-zero exit exactly as `git_blocked` does — same posture, same reason: a supply-chain
+    // check that could not run must not report success.
+    if let Some(note) = &advisory_gate_note {
+        if !opts.json {
+            eprintln!("note: {note}");
+        }
+    }
+    let failed = n > 0 || git_blocked || advisory_gate_note.is_some();
     // §5.5: `interface.json` is a build artifact, not a check artifact — only `build` writes it,
     // and only after a clean whole-graph check (never on a failed/diagnostic-bearing build).
     if command == "build" && !failed {
@@ -2589,6 +2629,122 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     } else {
         0
     }
+}
+
+/// The advisory-feed scan for a `build` (Stage 10 phase 10k, Track C, spec §4).
+///
+/// Returns the DL1903 diagnostics (warnings by default, errors under `--deny-advisories`) and an
+/// optional *gate-blocked note*: the skip-branch conditions under `--deny-advisories` where the
+/// feed cannot be trusted to have been fully evaluated (absent, unreadable, or carrying a record
+/// this toolchain cannot parse). Those are not DL1903 — DL1903 means specifically "this dependency
+/// is on an advised version," and a gate that cannot read its feed has not found such a dependency;
+/// it has found that it *cannot answer*, which under a CI gate must fail. The note + forced
+/// non-zero exit mirrors the existing `git_deferred` refusal exactly: a condition about the
+/// toolchain's evidence, not the program, so it takes a note rather than a code.
+///
+/// Skip-branch discipline (the reason this function is written the way it is): WITHOUT the gate an
+/// absent feed is silence — there is genuinely nothing known to warn about — but WITH the gate an
+/// absent, unreadable, or partly-unparseable feed is a refusal, because "I could not find the
+/// evidence" must never render as "the scan was clean." This is the same rule DL1905 draws for a
+/// missing hardware sign-off record.
+fn advisory_diagnostics(dir: &str, ws: &Workspace, opts: &Opts) -> (Vec<Diagnostic>, Option<String>) {
+    use crate::advisories::{load_feed, scan, FeedStatus};
+
+    let feed_path = match &opts.advisory_feed {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::path::Path::new(dir).join("delulu.advisories.json"),
+    };
+    let deny = opts.deny_advisories;
+    let mut diags = Vec::new();
+
+    let advisories = match load_feed(&feed_path) {
+        FeedStatus::Absent => {
+            if deny {
+                return (
+                    diags,
+                    Some(format!(
+                        "`--deny-advisories` was set, but no advisory feed was found (looked for \
+                         `{p}`). A gate with nothing to check passes nothing — refusing rather than \
+                         reporting a clean scan against a feed that is not there. Point at one with \
+                         `--advisory-feed <path>`, or sync one from the registry \
+                         (`delulu-registry advisory export --out {p}`).",
+                        p = feed_path.display()
+                    )),
+                );
+            }
+            // No feed and no gate: genuine silence. Nothing known, so nothing said.
+            return (diags, None);
+        }
+        FeedStatus::Unreadable(why) => {
+            if deny {
+                return (
+                    diags,
+                    Some(format!(
+                        "`--deny-advisories` was set, but the advisory feed could not be read: \
+                         {why}. Refusing to pass a gate it cannot evaluate."
+                    )),
+                );
+            }
+            // A feed that exists but cannot be read is a visible warning, never a silent skip:
+            // the file is there, so advisory checks were expected, and they did not run.
+            diags.push(Diagnostic::warning(
+                "DL1903",
+                format!("advisory feed could not be read: {why} — building without advisory checks"),
+            ));
+            return (diags, None);
+        }
+        FeedStatus::Loaded { advisories, malformed } => {
+            if malformed > 0 {
+                if deny {
+                    return (
+                        diags,
+                        Some(format!(
+                            "`--deny-advisories` was set, but the advisory feed carries {malformed} \
+                             record(s) this toolchain cannot parse. Refusing to enforce a feed it \
+                             cannot fully read — an unreadable record is exactly where a gate would \
+                             silently miss the advisory that mattered."
+                        )),
+                    );
+                }
+                diags.push(Diagnostic::warning(
+                    "DL1903",
+                    format!(
+                        "advisory feed carries {malformed} unparseable record(s), skipped — the \
+                         readable advisories were still checked"
+                    ),
+                ));
+            }
+            advisories
+        }
+    };
+
+    // The resolved set is every workspace package name@version. The feed names none of the packages
+    // that have no advisory, so scanning all of them is safe and needs no graph bookkeeping the
+    // workspace does not already carry.
+    let deps: Vec<(String, String)> = ws
+        .packages
+        .iter()
+        .map(|p| (p.name.clone(), p.manifest.version.clone()))
+        .collect();
+
+    for hit in scan(&advisories, &deps) {
+        let fix = match &hit.patched {
+            Some(v) => format!(" — upgrade to {v} (`delulu add {}@{v}`, then `delulu lock`)", hit.package),
+            None => String::new(),
+        };
+        let summary = if hit.summary.is_empty() { String::new() } else { format!(": {}", hit.summary) };
+        let msg = format!(
+            "dependency `{}` {} is affected by advisory {} ({}){}{}",
+            hit.package, hit.version, hit.advisory_id, hit.severity, summary, fix
+        );
+        diags.push(if deny {
+            Diagnostic::error("DL1903", msg)
+        } else {
+            Diagnostic::warning("DL1903", msg)
+        });
+    }
+
+    (diags, None)
 }
 
 /// §5.5: write `<pkgdir>/target/<pkg>/interface.json` for every package in the workspace (root +

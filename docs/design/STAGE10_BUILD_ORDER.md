@@ -507,6 +507,65 @@ capability scopes and foreign holes are not compared against the environment pro
 and the narrower scope is stated in `deploy.rs`'s own module doc and the DL1909 explain text
 rather than implied as covered.
 
+**D17 — LTS and security operations (10k): the advisory feed is the index one level over, the gate
+refuses when it cannot see, and criterion 5 splits into a built mechanism and a pending calendar.**
+Built **solo by the head chef** (no subagents), reverting 10i/10j's delegation per the explicit
+instruction "don't need to run multiple agents — you only do everything"; running model Opus 4.8, so
+the trailer says Opus 4.8 (the environment states the running model, which settles the S9-D21
+attribution concern for this phase). Seven sub-rulings. (a) **The advisory feed is not a new format,
+and no new inter-crate dependency.** The registry stores advisories as JSONL under `advisories/<name>`
+— one append-only file per package, one record per line — mirroring the index *exactly*, and serves
+them at `GET /advisories/<package>`. The build reads a local `delulu.advisories.json` synced
+out-of-band (`delulu-registry advisory export`). Client and server share only the JSON *wire* shape,
+never a Rust type — `delulu` does **not** depend on `delulu-registry`, exactly as it does not for the
+index (`read_local_line` returns a `Value` the client re-parses). Reading a local copy rather than
+phoning the registry at build time is the "outage degrades to lockfiles" property one level up: the
+registry being down never breaks a build, and never *silences* an advisory a build already synced.
+(b) **Matching is exact version-string membership, deliberately NOT semver ranges.** An advisory
+names affected version strings; a dependency is affected iff its resolved version is one of them.
+A range predicate that could not be evaluated against some unusual version string would be a place
+the checker silently answers "not affected" because it could not tell — precisely the fail-open this
+detector exists to prevent. Exact membership is total: a version is in the list or it is not, and a
+half-record (missing `id`/`package`/`affected`) is *counted as malformed*, never read as "matches
+nothing." (c) **DL1903 is a WARNING by default, an ERROR only under `--deny-advisories`.** An
+advisory is information; a toolchain that turned every advisory into a hard wall would only teach
+people to reach for an ignore flag. `--deny-advisories` is the CI gate. Scoped to `command ==
+"build"` (not `check`) because the supply-chain gate is a build concern and `check`'s output is
+byte-stable and must not shift. (d) **THE SKIP BRANCH — a gate that cannot find its evidence
+refuses.** Under `--deny-advisories`, a feed that is absent, unreadable, or carries an unparseable
+record is a build *failure*, not a silent pass — the DL1905 missing-sign-off precedent applied to
+the supply chain ([[skip-branch-verification-rule]]). The asymmetry is the whole point and is
+load-bearing: **without** the gate an absent feed is silence (there is genuinely nothing known to
+warn about); **with** the gate an absent feed is a refusal (you asked for a gate, and a gate with
+nothing to check guarantees nothing). Both were witnessed, including the malformed-record case, and
+the end-to-end skip branch is the 6th pass of the drill. (e) **The gate-blocked refusal is a note +
+forced non-zero exit, not a DL1903 diagnostic — and that is a budget constraint resolved by
+precedent, not a shortcut.** DL1903 means specifically "this dependency is on an advised version"; a
+gate that could not read its feed has found no such dependency — it has found that it *cannot
+answer*, a categorically different thing. Reusing DL1903 for "no feed" would blur the code's meaning;
+minting a new code would exceed the DL1901–DL1911 budget (spec §10 — no free slot) for a condition
+that is about the toolchain's evidence rather than the program. So it mirrors the existing
+`git_deferred` refusal *exactly*: a note, and a forced exit 1, folded into the same `failed`
+computation. (f) **Advisory filing is authorized by a package-scoped token — yank's standing,
+reused — and the CNA nuance is named, not built.** A token files an advisory only for a package it is
+scoped to (the identical `authorize(token, name)` yank takes), and an out-of-scope or unsigned filing
+is refused (DL1706, tested over HTTP too). Real advisories are often filed by a third-party CNA or
+security team, not the package owner; DeluluLang is **not** a CNA, registers no CVEs, and invents
+none — spec §4 names "CNA registration or partner CNA" as *process*, and the owner/operator-token
+model is the mechanism that fits the existing token system. The CNA-authority story is recorded as a
+named boundary in `SUPPORT_MATRIX.md` and `measurements/lts-cycle/RECORD.md`, not implied as solved.
+(g) **Criterion 5 splits honestly: the mechanism is built and drilled; the timed cycle is pending
+calendar time.** The whole loop — release → advisory filed on the registry → feed exported →
+DL1903 warning → `--deny-advisories` CI failure → backported fix → clean gate → skip-branch refusal
+— is reproduced end to end in `measurements/lts-cycle/run-demo.sh` (6/6, registry as source of
+truth). A *full* LTS cycle (a real 12-week train, a real 24-month backport aged in production, a real
+CVE/CNA) cannot be compressed into a session and is recorded as **PENDING-ADOPTION** — the
+invariant-45 / D3 posture — never faked; `DLSA-2026-0007` in the drill is a scratch identifier, not a
+real advisory. Two documents published alongside: `docs/release/SUPPORT_MATRIX.md` (trains, LTS every
+4th minor, 24-month windows, the schedule labelled plan-not-history since only 1.0 has shipped) and
+`docs/design/VERSION_COEVOLUTION.md` (broker/protocol/DIR majors, n−1 concurrent during LTS windows,
+grounded in the real `WIRE_VERSION`/`DIR_VERSION`/`PRIM_TABLE_VERSION` constants).
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -523,7 +582,7 @@ rather than implied as covered.
 | 10h ✅ | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
 | 10i ✅ | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
 | 10j ✅ | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
-| 10k | C | Advisory feed + DL1903 + `--deny-advisories`; LTS/support-matrix pages; co-evolution policy | Criterion 5's machinery (the timed LTS cycle itself needs calendar time — recorded honestly) |
+| 10k | C | **DONE** (2026-07-20) — Registry advisory feed (`advisories/<pkg>` JSONL + `GET /advisories/<pkg>` + `advisory file`/`export` CLI), `delulu build` DL1903 detector (warning) + `--deny-advisories` CI gate; `SUPPORT_MATRIX.md` (trains + LTS every 4th minor + 24-month windows) + `VERSION_COEVOLUTION.md` (n−1 majors during LTS) | Criterion 5's **mechanism** built and drilled end to end (`measurements/lts-cycle/`, 6/6, registry as source of truth); the **timed** LTS cycle recorded PENDING-ADOPTION (needs calendar time — no CVE/CNA invented). DL1903 warning-by-default / error-under-`--deny-advisories`, scoped to `build`; **the skip branch witnessed** — absent/unreadable/malformed feed under the gate refuses, never a silent pass (DL1905 precedent), while an absent feed *without* the gate is silence; exact version-string membership (no fail-open range parse); feed filed by a package-scoped token, CNA nuance named not built (D17); coverage **100%** (307 anchors, ratchet 306→307), clippy baseline 65 unchanged, suite **1098/0/4** |
 | 10l | A1/A4 | Optimizing tier + threads — or their honest deferrals (D4) | Criterion 1/3 or deferral notes published |
 
 ## 4. Close-out table (spec §11 — criteria 1–11)
