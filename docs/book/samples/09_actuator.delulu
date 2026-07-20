@@ -11,12 +11,16 @@ module arm
 //
 // Minting the capability is PURE attenuation — `hold` carries no effect row at all. Using it is
 // `Actuate`, the most physically consequential effect in the language.
-type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+type Cmd {
+    angle_deg: Float,
+    velocity_dps: Float,
+    torque_nm: Float,
+}
 
 fn hold(root: Root) -> Cap[Actuator] {
-  root.actuator("arm0/elbow")
+    root.actuator("arm0/elbow")
 }
 
 fn nudge(a: Cap[Actuator]) -> Result[Unit, ActuateErr] ! {Actuate} {
-  a.command(Cmd { angle_deg: 12.0, velocity_dps: 4.0, torque_nm: 1.4 })
+    a.command(Cmd { angle_deg: 12.0, velocity_dps: 4.0, torque_nm: 1.4 })
 }
