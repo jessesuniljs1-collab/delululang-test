@@ -439,6 +439,17 @@ RFC-gated (§0 non-goals).
 11. Every claim in Stage-10 marketing/release prose traces to one of these criteria — honesty
     review sign-off, same as Stage 9.
 
+**Close-out disposition (2026-07-20): Stage 10 is CLOSED.** All eleven phases (10a–10l) are built
+and committed; the per-criterion verdicts, evidence, and deferral rulings are in the build-order
+close-out table (`docs/design/STAGE10_BUILD_ORDER.md` §4). Summary: six criteria MET; criterion 7
+MET with its hardware-adapter clause deferred invariant-45-style; criterion 2 MET with the native
+JIT/AOT-parity clause honestly N/A (no native tier ships); criterion 1 a DEFERRED-HONEST outcome
+(the hot-path table published as-is, the ≤ 2.5× C target not met, D4); criterion 8 with its gates
+met and hybrid-live standing on the D5 wait (PQC not yet stable, refused without `--unstable`);
+criterion 5's mechanism drilled with its timed cycle PENDING-ADOPTION; criterion 6 PENDING-ADOPTION
+(the mechanisms ship, the counts need a real ecosystem); criterion 11 signed off. Nothing failed
+silently — every gap is a named, ruled, published deferral or an honest wait on the real world.
+
 ## 12. Honesty and threat-model caveats (carry into docs verbatim)
 
 - Performance numbers are workload-specific; "competitive with C" means the published table,

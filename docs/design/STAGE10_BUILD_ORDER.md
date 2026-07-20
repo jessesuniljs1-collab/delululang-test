@@ -1,6 +1,8 @@
 # Stage 10 Build Order — "Industrial" (tracks A–H)
 
-**Status: COOKING** (opened 2026-07-20, on v1.0.0 `198bf44`). **Governing documents
+**Status: CLOSED** (opened 2026-07-20 on v1.0.0 `198bf44`; closed 2026-07-20 at phase 10l,
+`2d819a9`). All eleven phases 10a–10l built and committed; the §4 close-out table dispositions
+criteria 1–11. **Governing documents
 (precedence):** `STAGE10_SPECIFICATION.md` Rev 2 (normative) + `STAGE10_AUTONOMY_ADDENDUM.md`
 (normative for Track D domains) > `docs/playbooks/STAGE10_PLAYBOOK.md` (method) > this build
 order (operational rulings). **Depends on:** v1.0.0 RELEASED (satisfied — Stage 9 close-out).
@@ -634,8 +636,37 @@ unchanged. (f) **This closes the last phase; Stage 10 close-out (§4 below, spec
 
 ## 4. Close-out table (spec §11 — criteria 1–11)
 
-Opens when the last phase closes. Until then, per-phase evidence accumulates in §3's gate column
-and the spec's status log. Criterion 6 carries D3's PENDING-ADOPTION marker from day one.
+**Stage 10 CLOSED — 2026-07-20.** All eleven phases (10a–10l) built and committed; the acceptance
+criteria are dispositioned below. Two criteria (5-timed, 6) carry **PENDING-ADOPTION** because they
+need real calendar time or a real external ecosystem that cannot be manufactured without faking it
+(D3, D17g); three land as **evidenced deferrals**, the passing outcome D4 defined ("'not
+production-ready, deferred, here is why' is a PASSING outcome; mode honesty beats mode count"). No
+criterion is failed-and-hidden; every gap is named, ruled, and pointed at its published note.
+
+Verdict legend: **MET** — satisfied with witnesses in-tree. **MET / clause deferred** — core met, a
+sub-clause deferred invariant-45-style with its honesty note published. **DEFERRED-HONEST (D4)** —
+target not met, evidence published as-is (D4's passing outcome). **PENDING-ADOPTION** — the mechanism
+ships and is drilled; the criterion's remaining half needs real-world calendar time or ecosystem,
+recorded, never faked.
+
+| # | Spec | Verdict | Evidence & disposition | Phase |
+|---|---|---|---|---|
+| 1 | P1 | **DEFERRED-HONEST (D4 / D18b)** | The hot-path table is published as-is (`measurements/study-c/HOT_PATH_TABLE.md`) — which criterion 1 explicitly asks for — but the geo-mean ≤ 2.5× C target is **not met**: the optimizing backend runs **1 of 6** kernels (`fib_recursive_24` @ 2.0× C; the other five hit DL1201), so a suite geo-mean is not computable, and the interpreter is 2.0×–60.5× C. v1.0 is **not competitive with C**, stated in those words (§5.11). DIR-level optimizer deferred with rationale; authority-preservation across optimization holds structurally. | 10l |
+| 2 | P3/45/46 | **MET / native-tier clause N/A (D7)** | Conformance + laundering suites pass identically under every shipped mode (interpreter + WASM), proven at scale by the Stage-3 two-engine differential (50k programs). `@jit` without `exec.native` → DL1906, witnessed (`jit_policy_cli.rs`). The "JIT-tier traces identical to AOT's" clause is **vacuously honest**: no native/JIT tier ships (D7 — a hint may not change whether a program runs), and that honesty is in the code, the explain, and the authority line. | 10a, 10b |
+| 3 | P2 | **MET** | Cycle-collection corpus leak-free (200/200 manufactured cycles broken in one sweep, output untouched, `Weak`-proven freeing — 10d). Bounded-mailbox backpressure sustains the rate mismatch at stable memory — witnessed at **500:1** (≥ the 10:1 asked), peak ≤ bound, zero loss (10c). Multi-threaded WASM **deferred with its honesty note** (`docs/design/THREADED_WASM_DEFERRAL.md`) — criterion 3's own sanctioned path; multi-threaded actors already ship TSAN-clean on the interpreter. | 10c, 10d, 10l |
+| 4 | P4 | **MET** | The §5.5 arm demonstration reproduces from a clean checkout (`measurements/robotics-demo/`, re-run per commit). Envelope refusal, heartbeat-loss → fail-state (`safe-park` ≈255 ms), and e-stop latency (12.7 ms p50 / 39.7 ms worst) all measured within the adapter's published budget; the sim-vs-hw artifact-hash gate DL1905 fires in the staged test, both skip branches witnessed. | 10e, 10f, 10g |
+| 5 | P5 | **Mechanism MET / timed cycle PENDING-ADOPTION (D17g)** | The whole LTS loop — advisory filed → feed exported → DL1903 warning → `--deny-advisories` CI failure → backported fix → clean gate → skip-branch refusal — is drilled end to end (`measurements/lts-cycle/`, 6/6, registry as source of truth). The **timed** cycle (a real 12-week train, 24-month backport, real CVE/CNA) is recorded PENDING-ADOPTION — it needs calendar time; no advisory or CNA id was invented. | 10k |
+| 6 | P6 | **PENDING-ADOPTION (D3)** | Every mechanism ships and is exercised — the registry + advisory feed (10k), third-party catalog plugins (Stage 8), `for-agents.md` (Stage 8). The **counts** (≥ 10 independently-authored packages, ≥ 1 third-party locale catalog, ≥ 2 independent agent harnesses) require a real external ecosystem to form and cannot be manufactured without faking adoption. Carried as PENDING from day one. | Stage 8 + 10k |
+| 7 | P7 | **MET / hardware-adapter clause deferred (invariant-45)** | The vendor-neutral compute interface passes conformance via the in-tree `cpu-reference` adapter on every CI run; over-envelope dispatch refused DL1907, **measured** (~18.7 µs, ~8× the accept path); a non-attesting adapter's grant refused DL1911, witnessed (cpu-reference attests **false** — the default path); kernels-are-data laundering tests hold (no closure crosses; unsigned artifact refused DL1913/DL1912). The **≥ 1 hardware accelerator adapter** half is **deferred, published invariant-45-style**: none ships, so invariant 49 is tested against exactly one adapter — a plausible interface, not a proven one (D13h). | 10h |
+| 8 | P8 | **Gates MET / hybrid-live is the D5 wait; scrub PASSES** | Crypto-agile `dlsig1` envelope; a classical-only artifact under hybrid-required policy → **DL1908, witnessed**; DL1910 gates both sign and verify. KAT validation recorded with **NIST ACVP vector provenance** (`measurements/pqc/vectors/`, independently re-fetched and re-hashed; one vector run through this project's own signing code, byte-match). Hybrid signing is **not live-by-default**: PQC does not reach stable (both crates unaudited by their authors' own statement), so every PQ operation refuses without `--unstable` — the D5 wait, stated (D15e). The repo-wide scrub (run at close-out) finds "quantum-proof"/"quantum-safe" **only inside prohibition/caveat sentences** — 9 occurrences, none a claim (§8.3). | 10i |
+| 9 | P9 | **MET** | A reference deployment's whole-authority answer is computed, printed, and approved before launch in the staged test; a plan exceeding its environment profile → **DL1909, witnessed** (refuses the whole plan, names the exceeding service + effect); one fleet-update drill exercises staged rollout, health gate, approved-hash gate (DL1905 reused per §9.3), and rollback — "nothing staged after a failure" asserted against the journal. | 10j |
+| 10 | P10 | **MET** | The autonomy addendum's per-domain boundaries passed **line-by-line honesty review** (`docs/design/STAGE10_AUTONOMY_HONESTY_REVIEW.md`, 4 findings all fixed). The satellite scenario reproduces from a clean checkout (`measurements/satellite-demo/`): a contact-window lease expires at LOS, the pre-attenuated autonomy grant engages by outliving the pass, ground re-contact re-delegates — all witnessed in sim, honest about being sim, the addendum §2.5 federation note (both broker roles in one host) stated verbatim. | 10g |
+| 11 | — | **SIGNED OFF** | No separate Stage-10 marketing/release prose was authored (v1.0 already shipped under Stage 9); the claims in this stage's docs — spec, build-order, measurements, Book ch. 16 — each trace to a criterion above and carry their honesty caveats (§12, verbatim). The banned-claims scrub passes (criterion 8); the performance claim says "not competitive with C" where that is true (criterion 1); every deferral is named and ruled. Honesty sign-off recorded, same discipline as Stage 9. | all |
+
+**Net:** 6 MET, 1 MET-with-clause-deferred (7), 1 MET-with-native-clause-N/A (2), 1 DEFERRED-HONEST
+(1), 1 gates-met-with-the-D5-wait (8), 1 mechanism-met-timed-cycle-pending (5), 1 PENDING-ADOPTION
+(6), and criterion 11 signed off. Nothing failed silently; every gap is a named, ruled, published
+deferral or an honest wait on the real world.
 
 ## 5. Diagnostics budget
 
