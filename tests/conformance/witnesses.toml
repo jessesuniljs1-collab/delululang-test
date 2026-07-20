@@ -2538,3 +2538,32 @@ anchor = "ref.prim.compute.dispatch"
 file = "crates/delulu-check/src/prim_table.rs"
 test = "every_listed_primitive_rejects_a_five_argument_call"
 kind = "negative"
+
+# ---- Stage 10 phase 10i: post-quantum signatures (Track G, spec §8, invariant 51).
+# Both DL1908 and DL1910 are ordinary refusing diagnostics, so both take the ordinary pair — and
+# per the DL1905/DL1907 precedent, the positive is chosen deliberately: the run where the gate is
+# seen to PASS. A gate witnessed only by its refusals is indistinguishable from one simply shut.
+
+[[witness]]
+anchor = "ref.diag.DL1908"
+file = "crates/delulu/tests/pqc_cli.rs"
+test = "verify_sig_require_hybrid_accepts_a_genuine_hybrid_signature_under_unstable"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1908"
+file = "crates/delulu/tests/pqc_cli.rs"
+test = "verify_sig_require_hybrid_refuses_classical_only_in_both_of_its_spellings"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1910"
+file = "crates/delulu/tests/pqc_cli.rs"
+test = "sign_hybrid_with_unstable_succeeds_and_the_signature_verifies"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1910"
+file = "crates/delulu/tests/pqc_cli.rs"
+test = "sign_hybrid_without_unstable_refuses_and_writes_no_signature_file"
+kind = "negative"

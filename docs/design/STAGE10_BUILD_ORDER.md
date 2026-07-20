@@ -316,6 +316,120 @@ manifest" (a `[authority] compute.kernels` declaration mirroring `foreign.c`'s r
 ceiling) is NOT built — the grant enumerates kernels today, and that gap is recorded here rather
 than implied to exist.
 
+**D14 — The PQC dependency vetting (10i, discharging D5), and why post-quantum signing cannot ship
+stable in this phase.** Five sub-rulings. (a) **The registry is reachable, so D5's "the track
+waits" branch does NOT apply** — that branch exists for an offline kitchen, and this one is not.
+The vetting was performed and is recorded here in full, because a dependency ruling whose evidence
+lives only in a terminal that has since scrolled away is not a record.
+
+**The vetting, as found on 2026-07-20:**
+
+| | `ml-dsa` | `ml-kem` |
+|---|---|---|
+| Version adopted | **=0.1.1** (pinned exactly) | **=0.3.2** (pinned exactly) |
+| Standard | FIPS 204 (final) | FIPS 203 |
+| Repository | `RustCrypto/signatures` | `RustCrypto/KEMs` |
+| Licence | Apache-2.0 OR MIT | Apache-2.0 OR MIT |
+| `zeroize` support | yes (feature enabled) | yes (feature enabled) |
+| Independent audit | **NONE — "has never been independently audited! USE AT YOUR OWN RISK!"** | **NONE — same warning, verbatim** |
+| Vectors the crate itself tests against | Wycheproof | Wycheproof |
+| Official NIST ACVP vectors shipped in the crate | **no** | **no** |
+
+(b) **Adopted, but post-quantum signing does NOT reach stable in 10i, and the reason is stronger
+than the spec's.** Invariant 51 says a PQC implementation reaches stable only after byte-exact
+validation against the official NIST known-answer vectors. Two independent facts block that here,
+and BOTH are published rather than one being allowed to stand in for the other: the official ACVP
+vectors are not in hand (the crates validate against Wycheproof, which is a different corpus with
+a different purpose), and **the implementations are unaudited by their own authors' statement.**
+RULED: **KAT validation is necessary, not sufficient.** A known-answer test proves an
+implementation computes the standard's answers; it says nothing about constant-time behaviour,
+side channels, or conduct under adversarial input — which is what an audit finds. Reading invariant
+51 as "KAT ⇒ stable" would let this project ship unaudited lattice code on a security-critical path
+because it passed an arithmetic check. So the audit status is a SECOND, independent gate, and until
+both clear, every post-quantum invocation without `--unstable` is **DL1910**. This is stricter than
+the spec text and deliberately so; the safe direction is the only direction available here.
+(c) **Versions are pinned exactly (`=0.1.1`, `=0.3.2`), not caret-ranged**, because `Cargo.lock` is
+gitignored in this repo. Without a committed lock a caret range lets a fresh clone resolve a
+DIFFERENT unaudited lattice implementation than the one this table describes, which would make the
+vetting above a statement about bytes nobody is building. (d) **Recommendation, not yet acted on:
+`Cargo.lock` should be committed.** Rust's convention of ignoring it applies to libraries; this
+workspace ships a **binary** and a **signed release artifact**, and Stage 9's reproducibility claim
+for that artifact quietly depends on dependency resolution nobody has pinned. Changing repo-wide
+`.gitignore` policy is out of scope for a Track G phase and is flagged for the owner rather than
+done unilaterally. (e) **The in-tree effort goes where §8.2 says it goes** — the envelope format,
+the policy gates, and the tests — never into lattice arithmetic. House rule 5 outranks dependency
+austerity; two adopted dependencies with a published audit gap is a better outcome than one
+hand-rolled implementation with an unpublished one.
+
+**D15 — Post-quantum signing (10i completion): the crypto-agile envelope, both gates live, real NIST
+vectors obtained — and D14's factual predicate updated without rewriting it.** Six sub-rulings.
+(a) **The envelope (`crates/delulu-runtime/src/pqc.rs`).** A self-describing `dlsig1` format —
+`alg:` line naming its algorithms, one hex part per algorithm — so a new algorithm is addable
+without a format break (crypto-agility, spec §8.2). A bare 96-byte blob (every artifact this
+language has ever signed) still parses, marked `legacy: true`, and still verifies under the
+default policy: the stability contract does not bend for a new feature. Two skip branches closed at
+parse time, before any signature is checked: a declared algorithm with no bytes, and a part present
+but undeclared. Neither is "verify what lines up" — a self-describing format that does not match
+its own declaration has already failed at being self-describing, and the first of the two is
+exactly how an envelope could claim a post-quantum guarantee it never carried.
+(b) **Both policy gates are live and both are the honest direction.** DL1908 fires for a
+classical-only artifact under hybrid-required policy — in EITHER classical-only shape, the legacy
+blob and a `dlsig1` envelope naming only `ed25519`, because a check catching only the second shape
+would wave through every artifact ever signed straight past the gate built to catch them. DL1908
+ALSO fires for an algorithm id this build cannot evaluate, under EVERY policy, not only
+hybrid-required — a verifier that shrugs at an unevaluable claim is the "when the checker cannot
+tell, it says yes" failure wearing a crypto-agility costume. DL1910 gates BOTH signing and
+verifying without `--unstable`, and verifying is the more important half to gate: verifying is
+invoking unvalidated cryptography to make a trust decision, the more dangerous direction, not the
+safer one. (c) **The CLI surface is additive by construction.** `sign --hybrid --unstable` and
+`verify-sig --require-hybrid` are new, opt-in flags; every existing call with neither flag takes the
+literal pre-10i code path — `cmd_verify_sig` now always routes through `pqc::verify`, but under the
+default policy `pqc::verify` calls the same `verify_detached` internally, so "byte-for-byte
+unchanged" is a checked fact, not an intention. Plugin/package artifact verification (`.dpx`'s
+in-band `delulu:sig` section) was investigated and deliberately left untouched: it is an
+architecturally separate 96-byte-fixed mechanism from `pqc.rs`'s envelope, and layering hybrid
+policy onto it safely would mean threading a new field through the same six files
+`require_signed` already spans — a feature in its own right, not a drop-in for this phase.
+(d) **Official NIST ACVP known-answer vectors were obtained**, from `usnistgov/ACVP-Server`
+(NIST's own repository, `gen-val/json-files/`) — real input→output pairs for ML-DSA-65 (keyGen,
+sigGen, sigVer) and ML-KEM-768 (keyGen, encapDecap), saved under `measurements/pqc/vectors/` with
+per-file origin URL and git blob SHA1, independently re-verified by fetching each file fresh and
+hashing it again rather than trusting a self-report. One vector was run through this project's own
+signing code (`ml_dsa_sign`'s key-derivation path, not a re-implementation of it) and matched
+NIST's answer byte-for-byte — `crates/delulu-runtime/src/pqc.rs`'s
+`nist_acvp_ml_dsa_65_keygen_seed_to_pk_matches`. Three things obtained but NOT run the same way,
+named rather than hidden: `sk` (the pinned `ml-dsa` 0.1.1 exposes no public encoder for the raw
+FIPS-204 secret-key layout, so nothing exists to compare NIST's `sk` field against); sigGen/sigVer
+(the vectors hand you an already-expanded `sk` this crate cannot construct from, and sigVer's
+vectors carry their own per-vector context while `pqc.rs` signs under one fixed domain-separator
+context by design — running them would test the crate's raw API again, not `pqc.rs`); and ML-KEM
+entirely (no function in `pqc.rs` calls `ml-kem` yet — Track G's KEM half is a pinned dependency
+with no caller, recorded here rather than implied to exist). Full record, including every source
+tried and every one that came back empty (NIST's CAVP page, both FIPS final-publication pages, the
+PQC project page — all reachable, none carrying vector data): `measurements/pqc/KAT_RECORD.md`.
+(e) **D14's factual predicate has changed; D14's conclusion has not — and D14's text is not
+rewritten, per the D21 precedent (Stage 9): the errata is a new ruling, not an edit to the old
+one.** D14b said "the official ACVP vectors are not in hand." As of this ruling they are, for both
+algorithms this project depends on. D14b's actual conclusion — **KAT validation is necessary, not
+sufficient** — is untouched: the vectors prove the implementation computes the standard's answers
+on the cases checked; they say nothing about constant-time behaviour or conduct under adversarial
+input, which is what an audit finds, and both adopted crates remain, by their own authors'
+statement, never independently audited. So the second, independent gate D14b established still
+holds on its own, and post-quantum signing does not reach stable in this phase regardless of the
+vectors. DL1910 refuses every post-quantum operation without `--unstable`, unchanged.
+(f) **Subagent attribution, recorded plainly.** Ruling D14's dependency vetting and this ruling's
+integration were done by the head chef. The CLI wiring (sub-ruling c, the flags, `pqc_cli.rs`'s six
+tests) and the vector research (sub-ruling d, the KAT record, the provenance-verified fetch, the
+bonus KAT test) were each produced by an independent Sonnet 5 subagent — the first delegation of
+this kind in Stage 10 (`docs/design/STAGE10_BUILD_ORDER.md`'s house rules do not forbid it; a
+standing head-chef-only norm from Stage 9 was explicitly amended by the owner mid-phase). Every
+line of both agents' output was independently re-verified before landing here: the CLI agent's
+tests were re-run from a clean build rather than trusted from its report, and the vector-research
+agent's central claim — that it reached NIST's actual repository rather than a substitute — was
+checked by re-fetching two of the saved files directly from `github.com/usnistgov/ACVP-Server` and
+confirming the bytes and git blob SHA1s matched, independently of anything the agent asserted about
+its own work.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -330,7 +444,7 @@ than implied to exist.
 | 10f | D2/D4 | **DONE** (2026-07-20) — Dead-man leases (`heartbeat_ms`/`ttl_ms`/`fail` mandatory on every actuator grant; watchdog-thread revoke; `hold`/`coast`/`safe-park` fail-states), `ActuateErr::LeaseRevoked`, `--broker-profile sim` reference simulator (deterministic under `--seed`, mirror sensors close the loop), `rate_hz` enforced, DL1905 sim-to-hardware hash gate (`--signoff`/`--approved`), `PRIM_TABLE_VERSION` 2→3 | Missed heartbeat → revoke → fail-state witnessed at CLI level **with its control** (identical program + generous heartbeat keeps the device — without it, "revoked" proves only that the phase revokes things); TTL expiry witnessed against a perfectly-beaten lease; latency measured and published (`measurements/dead-man/RECORD.md`: overdue max 6.33 ms, sim engage max 17 µs, at `heartbeat_ms=25`, n=20, Windows, terms reported separately); sim replays identically under `--seed` and DIFFERS across seeds; **both DL1905 skip branches witnessed** — no sign-off record → refused, edited artifact → refused, matching sign-off → gate seen to PASS then the honest no-adapter wall; the sim's own skip branch witnessed (a mirror sensor of a device the simulator lacks reads `NoDevice`, never a synthetic number). D11 rules the mandatory terms, the new variant, the version bump, and three named deferrals. Coverage **100%** (297 anchors), suite **980/0/4** |
 | 10g ✅ | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
 | 10h ✅ | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
-| 10i | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
+| 10i ✅ | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
 | 10j | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
 | 10k | C | Advisory feed + DL1903 + `--deny-advisories`; LTS/support-matrix pages; co-evolution policy | Criterion 5's machinery (the timed LTS cycle itself needs calendar time — recorded honestly) |
 | 10l | A1/A4 | Optimizing tier + threads — or their honest deferrals (D4) | Criterion 1/3 or deferral notes published |

@@ -120,6 +120,11 @@ pub fn cmd_keygen(rest: &[String]) -> i32 {
 
 pub fn cmd_sign(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
+    // Stage 10 phase 10i (Track G): `--hybrid` routes through `pqc::sign_hybrid` instead of the
+    // classical-only path below. `hybrid == false` (the default) takes the ORIGINAL branch,
+    // byte-for-byte — this flag is purely additive, never a change to existing behaviour.
+    let hybrid = rest.iter().any(|a| a == "--hybrid");
+    let unstable = rest.iter().any(|a| a == "--unstable");
     let name = flag(rest, "--key-name");
     let Some(artifact) = positional(rest) else {
         eprintln!("error: `sign` needs an artifact (.dwx / .dpx / tarball)");
@@ -139,7 +144,23 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
             return 1;
         }
     };
-    let sig = delulu_runtime::sign_detached(&seed, &data);
+    let sig = if hybrid {
+        match delulu_runtime::pqc::sign_hybrid(&seed, &data, unstable) {
+            Ok(s) => s,
+            Err(delulu_runtime::pqc::Verdict::Refused { code, reason }) => {
+                report_refusal("sign", &artifact, code, &reason, json);
+                return 1;
+            }
+            // `sign_hybrid` only ever returns `Refused` today; matched generically (rather than
+            // assumed) so this stays honest if that ever stops being true.
+            Err(other) => {
+                eprintln!("error: unexpected refusal from sign_hybrid: {other:?}");
+                return 2;
+            }
+        }
+    } else {
+        delulu_runtime::sign_detached(&seed, &data)
+    };
     let sig_path = format!("{artifact}.sig");
     if let Err(e) = std::fs::write(&sig_path, &sig) {
         eprintln!("error: cannot write {sig_path}: {e}");
@@ -147,7 +168,17 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
     }
     let signer = delulu_runtime::public_key_hex(&seed);
     if json {
-        println!("{}", json!({ "command": "sign", "artifact": artifact, "signature": sig_path, "signer": signer }));
+        let mut obj = json!({ "command": "sign", "artifact": artifact, "signature": sig_path, "signer": signer });
+        if hybrid {
+            obj["algorithms"] = json!([delulu_runtime::pqc::ALG_ED25519, delulu_runtime::pqc::ALG_ML_DSA_65]);
+        }
+        println!("{obj}");
+    } else if hybrid {
+        println!(
+            "sign: wrote {sig_path} (signed by {signer}, hybrid {}+{})",
+            delulu_runtime::pqc::ALG_ED25519,
+            delulu_runtime::pqc::ALG_ML_DSA_65
+        );
     } else {
         println!("sign: wrote {sig_path} (signed by {signer})");
     }
@@ -157,6 +188,11 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
 pub fn cmd_verify_sig(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
     let expect_key = flag(rest, "--key");
+    // Stage 10 phase 10i (Track G): `--require-hybrid` swaps in `Policy::HybridRequired`; with
+    // neither flag the policy is `AcceptClassical` and `unstable` is `false` — the ORIGINAL
+    // defaults — so a plain classical signature verifies exactly as it always has.
+    let require_hybrid = rest.iter().any(|a| a == "--require-hybrid");
+    let unstable = rest.iter().any(|a| a == "--unstable");
     let Some(artifact) = positional(rest) else {
         eprintln!("error: `verify-sig` needs an artifact");
         return 2;
@@ -176,7 +212,23 @@ pub fn cmd_verify_sig(rest: &[String]) -> i32 {
             return 1;
         }
     };
-    let status = delulu_runtime::verify_detached(&data, &sig);
+    let policy = if require_hybrid {
+        delulu_runtime::pqc::Policy::HybridRequired
+    } else {
+        delulu_runtime::pqc::Policy::AcceptClassical
+    };
+    // `pqc::verify` subsumes `verify_detached`: given a legacy 96-byte signature under
+    // `Policy::AcceptClassical`/`unstable=false` (the defaults), it calls the SAME
+    // `verify_detached` internally and returns the same signer/reason — so the default path
+    // below is byte-for-byte what this command has always printed.
+    let status = match delulu_runtime::pqc::verify(&data, &sig, policy, unstable) {
+        delulu_runtime::pqc::Verdict::Valid { signer, .. } => SignatureStatus::Valid { signer },
+        delulu_runtime::pqc::Verdict::Invalid { reason } => SignatureStatus::Invalid { reason },
+        delulu_runtime::pqc::Verdict::Refused { code, reason } => {
+            report_refusal("verify-sig", &artifact, code, &reason, json);
+            return 1;
+        }
+    };
     // `--key <hex>`: the signature must ALSO be by exactly this key (pin the identity).
     if let (SignatureStatus::Valid { signer }, Some(want)) = (&status, &expect_key) {
         if !signer.eq_ignore_ascii_case(want.trim()) {
@@ -216,6 +268,20 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
             SignatureStatus::Valid { signer } => println!("verify-sig: {artifact} — valid, signed by {signer}"),
             _ => eprintln!("verify-sig[DL1705]: {artifact} — {verdict}: {detail}"),
         }
+    }
+}
+
+/// Print a POLICY refusal from `pqc` — `Verdict::Refused { code, reason }`, i.e. DL1908 or DL1910.
+/// Deliberately NOT routed through [`report_sig`]: `SignatureStatus` has no variant for "the CLI
+/// declined to attempt this", and giving it one would blur the line `pqc::Verdict` draws on purpose
+/// between "a signature was checked and did not verify" (always a fault) and "no check was even
+/// run" (a policy decision). Shaped like `report_publish` below: a bare `{code}: {artifact} —
+/// {reason}` line, or the JSON equivalent with a `code` field.
+fn report_refusal(command: &str, artifact: &str, code: &str, reason: &str, json: bool) {
+    if json {
+        println!("{}", json!({ "command": command, "artifact": artifact, "code": code, "error": reason }));
+    } else {
+        eprintln!("{code}: {artifact} — {reason}");
     }
 }
 

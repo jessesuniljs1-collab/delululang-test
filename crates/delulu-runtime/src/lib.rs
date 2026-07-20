@@ -11,6 +11,7 @@ pub mod device;
 pub mod foreign;
 pub mod interp;
 pub mod plugin;
+pub mod pqc;
 pub mod prim;
 pub mod python;
 pub mod trace;

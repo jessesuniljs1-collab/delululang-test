@@ -648,7 +648,9 @@ fn usage() -> &'static str {
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu keygen    [--name N]                          (mint an ed25519 signing key in ~/.delulu/keys)\n\
-     \x20 delulu sign      <artifact> | verify-sig <artifact> [--key HEX]   (detached .sig over .dwx/.dpx/tarballs)\n\
+     \x20 delulu sign      <artifact> [--hybrid] [--unstable] | verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)\n\
      \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu login     --registry URL --token VALUE        (store a scoped publish token; never echoed)\n\
