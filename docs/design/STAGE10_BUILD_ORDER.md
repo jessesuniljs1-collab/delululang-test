@@ -566,6 +566,53 @@ real advisory. Two documents published alongside: `docs/release/SUPPORT_MATRIX.m
 `docs/design/VERSION_COEVOLUTION.md` (broker/protocol/DIR majors, n−1 concurrent during LTS windows,
 grounded in the real `WIRE_VERSION`/`DIR_VERSION`/`PRIM_TABLE_VERSION` constants).
 
+**D18 — The final phase (10l): both remaining Track-A items land as evidenced deferrals, and D4
+makes that the passing outcome.** The two items left in Track A — A1's optimizing backend
+(criterion 1) and A4's multi-threaded WASM engine (criterion 3) — both defer honestly, with their
+evidence published, which is exactly what D4 ruled a passing result for this phase ("'not
+production-ready, deferred, here is why' is a PASSING outcome; mode honesty beats mode count").
+Built **solo** (Opus 4.8). Six sub-rulings. (a) **The optimizing backend that ships in 1.x is the
+Cranelift-optimized Wasmtime tier, now explicitly pinned.** `delulu_wasm::optimizing_engine()` sets
+`cranelift_opt_level(Speed)` **explicitly** — wasmtime 27's own default, so behaviorally identical
+(the Stage-3 two-engine differential was re-run at 3000 programs against the pinned engine and agreed
+on every one) — rather than inheriting the default, so the tier a `.dwx` runs under is a documented,
+drift-proof artifact instead of an accident of an upstream default. The four run-path
+`Engine::default()` sites route through it; the plugin/limits engine keeps its own `Config` (its
+Windows host-safety settings are deliberately separate, per the 6f.2b comment). (b) **Criterion 1 is
+NOT met, and the hot-path table is published as-is — which criterion 1 explicitly asks for.** The
+optimizing (wasm) backend runs **1 of 6** compute kernels (`fib_recursive_24` at 2.0× C, a single
+startup-dominated point); the other five hit DL1201 because the 1.x WASM backend compiles a
+**subset** of the language. A geo-mean "on the compute-kernel suite under the optimizing backend" is
+not computable over one sixth of the suite. The interpreter (the default engine, which runs all six)
+is **2.0×–60.5× C**, and — the caveat cutting against us — the C lane is startup-dominated (its
+spread exceeds its own minimum), so the ratios **understate** the true compute gap. v1.0 is **not
+competitive with C** on this suite, stated in those words (constitution §5.11 forbids implying
+otherwise). Published in `measurements/study-c/HOT_PATH_TABLE.md`, drawn from the **pinned** Study-C
+results — not regenerated, since those figures are meta-test-pinned. (c) **The DIR-level optimizer is
+deferred with rationale.** Cross-package inlining, monomorphization, and escape analysis — the piece
+that would close the gap — is a substantial compiler needing (i) an authority-preservation *proof*
+for cross-package inlining (legal in principle because rows are declared and checked, §2.1, but the
+proof machinery is not built) and (ii) evidence the passes pay off (none exists). Rushing it into the
+final phase would trade this stage's honesty for a mode count. **Authority-preservation across
+optimization holds structurally regardless**: `delulu authority` is checker-computed before any
+backend runs and embedded in the `.dwx` hash-bound to the code, so codegen-time inlining has nothing
+authority-relevant to change; semantic parity is proven by the 50k two-engine differential. (d)
+**A4's multi-threaded WASM engine is deferred with its honesty note — criterion 3's own sanctioned
+path** ("or the track is explicitly deferred with its honesty note published"). Multi-threaded actor
+execution **already ships on the interpreter** (worker-owned scheduler, `--actors-threads`,
+TSAN-clean, the Stage-7 concurrency criteria met there), so the *capability* is not pending — the
+deferral is about adding a *second* multi-threaded engine. The WASM engine's actor scheduler is
+**cooperative single-threaded by design** (Stage 7 §6.5) with the same observable semantics. Porting
+it to a genuinely multi-threaded WASM engine needs the **shared-everything-GC** proposal stack to
+host actor heaps across threads; the pinned wasmtime 27 run-path engine enables neither the
+wasm-threads nor the wasm-GC proposals, and that stack was not a production-ready foundation at 1.x.
+§2.4 sanctions the wait ("mode honesty beats mode count"); the note is
+`docs/design/THREADED_WASM_DEFERRAL.md`; it re-opens when the proposal stack matures, at which point
+the Stage-7 criteria re-run on the new engine. (e) **No new diagnostics, no new anchors — coverage
+unchanged at 307.** A deferral phase mints no codes, and the optimizing-tier pin is behavior-
+preserving (differential-witnessed), so there is no witness churn and no floor move. Clippy baseline
+unchanged. (f) **This closes the last phase; Stage 10 close-out (§4 below, spec §11) opens.**
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -583,7 +630,7 @@ grounded in the real `WIRE_VERSION`/`DIR_VERSION`/`PRIM_TABLE_VERSION` constants
 | 10i ✅ | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
 | 10j ✅ | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
 | 10k | C | **DONE** (2026-07-20) — Registry advisory feed (`advisories/<pkg>` JSONL + `GET /advisories/<pkg>` + `advisory file`/`export` CLI), `delulu build` DL1903 detector (warning) + `--deny-advisories` CI gate; `SUPPORT_MATRIX.md` (trains + LTS every 4th minor + 24-month windows) + `VERSION_COEVOLUTION.md` (n−1 majors during LTS) | Criterion 5's **mechanism** built and drilled end to end (`measurements/lts-cycle/`, 6/6, registry as source of truth); the **timed** LTS cycle recorded PENDING-ADOPTION (needs calendar time — no CVE/CNA invented). DL1903 warning-by-default / error-under-`--deny-advisories`, scoped to `build`; **the skip branch witnessed** — absent/unreadable/malformed feed under the gate refuses, never a silent pass (DL1905 precedent), while an absent feed *without* the gate is silence; exact version-string membership (no fail-open range parse); feed filed by a package-scoped token, CNA nuance named not built (D17); coverage **100%** (307 anchors, ratchet 306→307), clippy baseline 65 unchanged, suite **1098/0/4** |
-| 10l | A1/A4 | Optimizing tier + threads — or their honest deferrals (D4) | Criterion 1/3 or deferral notes published |
+| 10l | A1/A4 | **DONE** (2026-07-20) — The last phase: both remaining Track-A items land as **evidenced deferrals** (D4's passing outcome). A1: the optimizing backend that ships in 1.x is the Cranelift-optimized Wasmtime tier, now **explicitly pinned** (`delulu_wasm::optimizing_engine()` sets `cranelift_opt_level(Speed)` rather than inheriting wasmtime's default; the four run-path engine sites route through it). A4: the multi-threaded WASM engine is deferred with its published honesty note. Built **solo** (Opus 4.8) | **Criterion 1 NOT met, published as-is** — the hot-path table (`measurements/study-c/HOT_PATH_TABLE.md`) shows the optimizing backend runs **1 of 6** compute kernels (`fib_recursive_24` at 2.0× C; the other five hit DL1201), so a suite geo-mean is not computable; the interpreter is 2.0×–60.5× C and the C lane is startup-dominated so the ratios *understate* the gap; v1.0 is **not competitive with C**, stated in those words (§5.11). The DIR-level optimizer is deferred with rationale; **authority-preservation across optimization holds structurally** (authority is checker-computed and `.dwx`-embedded before any backend runs; semantic parity proven by the 50k two-engine differential, re-run at 3000 programs against the pinned engine — agreed on every one). **Criterion 3: multi-threaded WASM deferred**, its sanctioned path — multi-threaded actors already ship TSAN-clean on the interpreter; the WASM engine's scheduler is cooperative single-threaded by design; the shared-everything-GC stack needed to port it was not production-ready at 1.x and this project's engine enables neither wasm-threads nor wasm-GC (`docs/design/THREADED_WASM_DEFERRAL.md`). **No new diagnostics, no new anchors** — coverage unchanged at **307**, the pin is behavior-preserving (differential-witnessed), clippy baseline 65 unchanged, suite **1098/0/4**. D18 rules the phase and opens close-out |
 
 ## 4. Close-out table (spec §11 — criteria 1–11)
 

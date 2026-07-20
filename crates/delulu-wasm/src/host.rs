@@ -11,7 +11,28 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
-use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, Val};
+use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, OptLevel, Store, Val};
+
+/// The optimizing execution engine — Track A §2.1's "Cranelift-optimized Wasmtime tier".
+///
+/// wasmtime compiles every module with Cranelift, its optimizing backend; this pins the
+/// optimization level to `Speed` **explicitly** rather than inheriting wasmtime's default, so the
+/// tier a `.dwx` runs under is a documented, deliberate choice that cannot silently change if a
+/// future wasmtime default does. On the pinned wasmtime 27 (whose default already IS `Speed`) this
+/// is behaviorally identical to `Engine::default()`, so Stage 3's two-engine differential is
+/// unaffected — the point is intent and drift-resistance, not a behavior change.
+///
+/// The **DIR-level optimizer** §2.1 *also* describes (cross-package inlining, monomorphization,
+/// escape analysis) is NOT part of this tier; it is deferred honestly for 1.x — see build-order
+/// D18 and `measurements/study-c/HOT_PATH_TABLE.md` (criterion 1). This engine is the whole of the
+/// "optimizing backend" that ships in 1.x.
+pub(crate) fn optimizing_engine() -> Engine {
+    let mut config = Config::new();
+    config.cranelift_opt_level(OptLevel::Speed);
+    // `Speed` is an always-valid level, so construction cannot fail on wasmtime 27; fall back to
+    // the default engine rather than panic if a future wasmtime ever disagrees.
+    Engine::new(&config).unwrap_or_default()
+}
 
 // Stage 7 phase 7h: the WASM engine's cooperative single-threaded actor scheduler (spec §6.5).
 use crate::actors::{ActorJob, ActorReport, ActorRuntime, ActorTable};
@@ -67,7 +88,7 @@ impl WasmError {
 
 /// Run an exported PURE function with i64 arguments (no imports, no ambient authority).
 pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmError> {
-    let engine = Engine::default();
+    let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
     let mut store = Store::new(&engine, ());
     let instance = Instance::new(&mut store, &module, &[]).map_err(|e| WasmError::Instantiate(e.to_string()))?;
@@ -923,7 +944,7 @@ fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> 
 /// Run an exported function that takes Console-capability handles directly (index 0 = a granted
 /// Console). Returns the captured console output.
 pub fn run_console_fn(wasm: &[u8], name: &str, cap_handles: &[usize]) -> Result<String, WasmError> {
-    let engine = Engine::default();
+    let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
     let state = HostState {
         caps: vec![CapKind::Console],
@@ -1019,7 +1040,7 @@ pub struct HostConfig {
 /// is passed in; `root.console()`/`root.clock()`/`root.rand()` mint their handles host-side iff granted.
 /// Returns the captured console output (or a `WasmError` if a capability was refused).
 pub fn run_main(wasm: &[u8], cfg: &HostConfig) -> Result<String, WasmError> {
-    let engine = Engine::default();
+    let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
     let state = main_host_state(cfg, ActorRuntime::new(empty_actor_table()));
     let mut store = Store::new(&engine, state);
@@ -1039,7 +1060,7 @@ pub fn run_main_actors(
     cfg: &HostConfig,
     table: &ActorTable,
 ) -> Result<(String, ActorReport), WasmError> {
-    let engine = Engine::default();
+    let engine = optimizing_engine();
     let module = Module::new(&engine, wasm).map_err(|e| WasmError::Module(e.to_string()))?;
     let state = main_host_state(cfg, ActorRuntime::new(table.clone()));
     let mut store = Store::new(&engine, state);
