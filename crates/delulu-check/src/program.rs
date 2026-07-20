@@ -433,11 +433,27 @@ pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
     // a control program must react to differently, which is exactly why it is a separate variant
     // and not a reason string: you clamp a bad setpoint and retry, but when you no longer hold
     // the device you STOP (build-order D11b). `NoDevice` is the honest answer from a device
-    // surface with no adapter attached. Appended LAST in both prelude paths (order law:
-    // `the_two_prelude_paths_agree_on_every_type_id`).
+    // surface with no adapter attached.
     gtypes.push(mk(
         "ActuateErr",
         &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])],
+    ));
+    // Stage 10 (10h, Track F): the compute-dispatch error sum. **Appended LAST in both prelude
+    // paths** — the order law (`the_two_prelude_paths_agree_on_every_type_id`) means a new prelude
+    // type goes on the END or every later type's `TypeDefId` shifts under it.
+    //
+    // Every variant name is DISTINCT from `ActuateErr`'s on purpose. Bare constructors resolve to
+    // the unique sum type declaring them (`resolve.rs`), so reusing `Envelope`/`NoDevice` here
+    // would make BOTH ambiguous and break every 10e/10f program that matches them bare — a
+    // stability-contract break disguised as a naming convenience (build-order D11b, learned again).
+    //
+    // `KernelEnvelope` is the DL1907 refusal — the dispatch dies, not the process. `UnknownKernel`
+    // is naming a kernel this grant never carried, which is a different mistake from asking too
+    // much of one it did. `NoAdapter` is the honest answer from a compute surface with no adapter
+    // attached: absence, never a fabricated result (invariant 50's rule, applied to silicon).
+    gtypes.push(mk(
+        "ComputeErr",
+        &[("KernelEnvelope", &["Str"]), ("UnknownKernel", &["Str"]), ("NoAdapter", &[])],
     ));
 }
 

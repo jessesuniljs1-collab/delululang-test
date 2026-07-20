@@ -1,0 +1,21 @@
+{
+  "reps": 20,
+  "iterations_per_run": 2000,
+  "adapter": "cpu-reference",
+  "unit": "us",
+  "method": "differential; each baseline constructs the SAME buffer its comparison program does",
+  "accepted_dispatch": {
+    "n": 20,
+    "min": -4.233,
+    "p50": 2.288,
+    "p95": 3.804,
+    "max": 6.105
+  },
+  "refused_dispatch_dl1907": {
+    "n": 20,
+    "min": 14.448,
+    "p50": 18.667,
+    "p95": 21.201,
+    "max": 24.843
+  }
+}

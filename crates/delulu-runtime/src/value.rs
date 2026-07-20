@@ -162,6 +162,181 @@ pub struct Closure {
     pub env: Env,
 }
 
+/// A compute device's envelope (Stage 10 Track F, spec §7.1): the SCOPE of a `Cap[Compute]`.
+///
+/// Vendor neutrality (invariant 49) is why `class`, `adapter` and `formats` are plain data the
+/// interface carries rather than switches anything inspects: **no adapter may have semantics the
+/// interface cannot express.** The day one vendor needs a privileged hook is the day the authority
+/// model has a second class of citizen. Nothing in the dispatch path branches on `adapter`.
+#[derive(Clone, Debug)]
+pub struct ComputeEnvelope {
+    pub device: String,
+    /// Descriptive taxonomy (`cpu`, `gpu`, `tpu`) — recorded and displayed, never a decision input.
+    pub class: String,
+    /// Which adapter backs this device. `cpu-reference` is the only one in-tree.
+    pub adapter: String,
+    /// The buffer ceiling, in bytes. A dispatch whose buffer exceeds it is refused (DL1907).
+    pub memory_bytes: u64,
+    /// Kernel wall-clock budget, milliseconds, inclusive: a kernel that overruns is refused.
+    pub kernel_ms: (f64, f64),
+    /// How many dispatches may be in flight. Carried and enforced as a per-run counter.
+    pub queue_depth: u32,
+    /// Power envelope, watts. Carried; the reference adapter draws no measurable power and
+    /// **does not pretend to enforce it** — see `ComputeBroker::dispatch`.
+    pub power_w: (f64, f64),
+    /// The kernel artifact formats this device accepts (`ptx-8`, `spirv-1.6`, `refkernel-1`).
+    pub formats: Vec<String>,
+    /// Kernel names this grant carries, each with the PATH of its artifact. A dispatch naming
+    /// anything else is `UnknownKernel` — kernels are DATA, enumerated at grant time (§7.1).
+    /// The path is grant data, exactly like `foreign.c=LIB:PATH`: the manifest says which kernels
+    /// a package may reach for, the human says which bytes those names resolve to.
+    pub kernels: Vec<(String, String)>,
+    /// Whether the adapter attested independent below-adapter envelope enforcement, and — if not —
+    /// whether a human explicitly waived that requirement. See DL1911.
+    pub attested: bool,
+    pub waived: bool,
+}
+
+impl ComputeEnvelope {
+    /// Parse the grant form
+    /// `DEVICE:memory_bytes=N,kernel_ms=lo..hi,queue_depth=N,power_w=lo..hi,adapter=A,
+    ///  format=F[,format=F2],kernel=NAME:PATH[,kernel=N2:P2][,class=C][,waive-attestation]`.
+    ///
+    /// Fail-closed, and every bounding term is MANDATORY and refused **by name** when absent. The
+    /// rule is 10f's, applied to silicon: a resource the grant forgot to bound is a resource
+    /// nothing bounds, and defaulting one would be the runtime quietly making a decision that
+    /// belongs to whoever is paying for the hardware.
+    ///
+    /// `class` is the one optional term, because it is the one term nothing branches on — it is
+    /// display-only taxonomy (invariant 49). Defaulting a *descriptive* field is fine; defaulting
+    /// a *bounding* field is the sin.
+    ///
+    /// Note what cannot be written here at all: an attestation. A grant may `waive-attestation`,
+    /// never claim one — see `compute::check_grant`.
+    pub fn parse(spec: &str) -> Result<ComputeEnvelope, String> {
+        let (device, rest) =
+            spec.split_once(':').ok_or("missing `:` (use DEVICE:memory_bytes=N,...)")?;
+        let device = device.trim();
+        if device.is_empty() {
+            return Err("empty device name".into());
+        }
+        let (mut memory_bytes, mut queue_depth) = (None, None);
+        let (mut kernel_ms, mut power_w) = (None, None);
+        let (mut adapter, mut class) = (None, None);
+        let (mut formats, mut kernels) = (Vec::new(), Vec::new());
+        let mut waived = false;
+
+        let range = |k: &str, v: &str| -> Result<(f64, f64), String> {
+            let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad `{k}` range `{v}` (use lo..hi)"))?;
+            let lo: f64 = lo.trim().parse().map_err(|_| format!("bad `{k}` bound `{lo}`"))?;
+            let hi: f64 = hi.trim().parse().map_err(|_| format!("bad `{k}` bound `{hi}`"))?;
+            if lo > hi {
+                return Err(format!("inverted range `{k}={lo}..{hi}`"));
+            }
+            Ok((lo, hi))
+        };
+
+        for part in rest.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            // The one valueless term. Spelled as a word rather than `waive=true` so it reads like
+            // what it is in a shell history someone audits later.
+            if part == "waive-attestation" {
+                waived = true;
+                continue;
+            }
+            let (k, v) = part.split_once('=').ok_or_else(|| format!("bad compute grant part `{part}`"))?;
+            let (k, v) = (k.trim(), v.trim());
+            match k {
+                "memory_bytes" => {
+                    let n: u64 = v.parse().map_err(|_| format!("bad memory_bytes `{v}`"))?;
+                    if n == 0 {
+                        return Err("memory_bytes=0 would refuse every dispatch, including the empty one".into());
+                    }
+                    memory_bytes = Some(n);
+                }
+                "queue_depth" => {
+                    let n: u32 = v.parse().map_err(|_| format!("bad queue_depth `{v}`"))?;
+                    if n == 0 {
+                        return Err("queue_depth=0 would refuse every dispatch".into());
+                    }
+                    queue_depth = Some(n);
+                }
+                "kernel_ms" => kernel_ms = Some(range("kernel_ms", v)?),
+                "power_w" => power_w = Some(range("power_w", v)?),
+                "adapter" => adapter = Some(v.to_string()),
+                "class" => class = Some(v.to_string()),
+                "format" => formats.push(v.to_string()),
+                "kernel" => {
+                    // `NAME:PATH` — the provenance half of "kernels are data", and deliberately the
+                    // same shape as `foreign.c=LIB:PATH`. Split at the FIRST `:` so a Windows path
+                    // (`C:\k\reduce.refkernel`) survives intact on the right.
+                    let (name, path) = v.split_once(':').ok_or_else(|| {
+                        format!("bad kernel `{v}` — use kernel=NAME:PATH naming the artifact file")
+                    })?;
+                    let (name, path) = (name.trim(), path.trim());
+                    if name.is_empty() || path.is_empty() {
+                        return Err(format!("bad kernel `{v}` — both the name and the artifact path must be present"));
+                    }
+                    kernels.push((name.to_string(), path.to_string()));
+                }
+                _ => return Err(format!("unknown compute grant term `{k}`")),
+            }
+        }
+
+        // Each refusal names the term the operator left out. An operator who forgot one should be
+        // told which, not handed a syntax summary to diff by eye (10f's rule, D11a).
+        let memory_bytes = memory_bytes.ok_or(
+            "no `memory_bytes` — a device with no memory ceiling is a device with no ceiling",
+        )?;
+        let kernel_ms = kernel_ms.ok_or(
+            "no `kernel_ms=lo..hi` — a kernel with no time budget can occupy the device forever",
+        )?;
+        let queue_depth = queue_depth
+            .ok_or("no `queue_depth` — unbounded in-flight work is unbounded resource use")?;
+        let power_w = power_w.ok_or(
+            "no `power_w=lo..hi` — power is a real envelope dimension even where this build \
+             cannot measure it (see the honesty note on enforcement)",
+        )?;
+        let adapter = adapter.ok_or(
+            "no `adapter=` — which adapter backs this device is not something the runtime may pick \
+             for you",
+        )?;
+        if formats.is_empty() {
+            return Err(
+                "no `format=` — a device that accepts any kernel format accepts kernels nobody \
+                 vetted"
+                    .into(),
+            );
+        }
+        if kernels.is_empty() {
+            return Err(
+                "no `kernel=NAME:PATH` — a compute grant enumerates the kernels it carries, each \
+                 pointing at the artifact file it resolves to; a grant that named none would \
+                 either dispatch nothing or dispatch anything, and the second is how a kernel \
+                 nobody signed gets to run"
+                    .into(),
+            );
+        }
+        Ok(ComputeEnvelope {
+            device: device.to_string(),
+            class: class.unwrap_or_else(|| "unspecified".to_string()),
+            adapter,
+            memory_bytes,
+            kernel_ms,
+            queue_depth,
+            power_w,
+            formats,
+            kernels,
+            // Set by the pre-flight from the ADAPTER's own declaration, never from this string.
+            attested: false,
+            waived,
+        })
+    }
+}
+
 /// An actuator's envelope (Stage 10 Track D, spec §5.1): the SCOPE of a `Cap[Actuator]`,
 /// constructed by the human at grant time and enforced on every command. Dimensions are named
 /// data, not hardcoded fields — vendor-neutral by construction (invariant 49): a joint bounds
@@ -289,6 +464,8 @@ pub enum CapScope {
     Actuator(ActuatorEnvelope),
     /// Stage 10 (10e): the sensor's scope is its device identity; reads are `Read` under it.
     Sensor { device: String },
+    /// Stage 10 (10h): the compute device's scope IS its envelope (spec §7.1, invariant 50).
+    Compute(ComputeEnvelope),
     /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
     /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
     Python { allowlist: Vec<String> },
@@ -410,6 +587,8 @@ pub struct RootVal {
     pub actuators: Vec<ActuatorEnvelope>,
     /// Stage 10 (10e): granted sensor devices; `root.sensor(device)` mints the matching cap.
     pub sensors: Vec<String>,
+    /// Stage 10 (10h): granted compute devices; `root.compute(device)` mints the matching cap.
+    pub computes: Vec<ComputeEnvelope>,
 }
 
 // ----- environments --------------------------------------------------------

@@ -1,0 +1,38 @@
+// anchors: ref.prim.root.compute ref.prim.compute.dispatch
+// Stage 10 (10h, Track F, spec §7.1): the compute boundary. Minting a `Cap[Compute]` is PURE
+// attenuation — `mint_gpu` carries no effect row at all. Dispatching a kernel carries the EXISTING
+// core `ForeignCall` effect and no new one, because a kernel is foreign code and DeluluLang says
+// nothing about what it computes. It bounds three narrower things: the kernel's reachability, its
+// resources, and its provenance.
+//
+// Look at what `dispatch` takes: a `Str` naming the kernel, and a buffer. Not a function. **A
+// DeluluLang closure can never become a kernel** — not by policy, but because there is no way to
+// spell it (spec §7.1's kernels-are-data law, the spirit of audit rule R-6a). Kernels arrive as
+// signed artifacts on disk; the host drives, and the device gets buffers.
+//
+// The refusal channel is a VALUE, as at every device boundary: `Result[Float, ComputeErr]`. An
+// over-envelope dispatch kills the dispatch and leaves the host running.
+module conf
+
+fn mint_gpu(root: Root) -> Cap[Compute] {
+  root.compute("gpu0")
+}
+
+fn reduce(g: Cap[Compute], buf: List[Float]) -> Result[Float, ComputeErr] ! {ForeignCall} {
+  g.dispatch("reduce_sum", buf)
+}
+
+// The three ways a dispatch fails, matched exhaustively. `KernelEnvelope` and `UnknownKernel` are
+// separate variants because the mistakes differ: one asked too much of a kernel it holds, the
+// other named one it does not — and an auditor counting envelope refusals must not see the second.
+// `NoAdapter` is absence, never a fabricated number (invariant 50, applied to silicon).
+fn why(r: Result[Float, ComputeErr]) -> Str {
+  match r {
+    Ok(v) => "computed",
+    Err(e) => match e {
+      KernelEnvelope(reason) => reason,
+      UnknownKernel(name) => name,
+      NoAdapter => "no adapter"
+    }
+  }
+}

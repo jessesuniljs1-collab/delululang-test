@@ -1958,6 +1958,21 @@ fn render_authority(report: &Json) -> String {
                 let _ = writeln!(out, "    - python  allowlist: [{allow_str}]  imports seen: [{seen_str}]");
                 continue;
             }
+            if abi == "compute" {
+                // `compute/<device> [kernels…]` — the shape spec §7.1 names. The kernels are the
+                // names the program dispatches; which ARTIFACT each resolves to, and its hash, is
+                // a grant-time human decision reported by the run, not by this static command.
+                let devices = strs(&f["devices"]);
+                let kernels = strs(&f["kernels"]);
+                let ks = if kernels.is_empty() { "(none named statically)".to_string() } else { kernels.join(", ") };
+                for d in &devices {
+                    let _ = writeln!(out, "    - compute/{d} [{ks}]  (kernels are signed artifacts; what they compute is not proven)");
+                }
+                if devices.is_empty() {
+                    let _ = writeln!(out, "    - compute/(device chosen at runtime) [{ks}]");
+                }
+                continue;
+            }
             let lib = f["lib"].as_str().unwrap_or("?");
             let symbols = strs(&f["symbols"]);
             let binary = f["granted_path"].as_str().unwrap_or("(chosen by the human at grant time)");
@@ -3431,6 +3446,11 @@ fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: HashMap<Stri
         // confers no physical authority, period.
         actuators: Vec::new(),
         sensors: Vec::new(),
+        // And the same for accelerators (10h). The reason is sharper here than the note above:
+        // 10g established that a grant node cannot express a device ENVELOPE at all (D12e), so a
+        // lease could only ever confer "some compute, bounds unknown" — which is not a bound.
+        // Fail closed, and `--lease` refuses a local compute grant by name rather than dropping it.
+        computes: Vec::new(),
     }
 }
 
@@ -4572,6 +4592,7 @@ fn cmd_run(rest: &[String]) -> i32 {
         Err(code) => return code,
     };
 
+
     // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
     if file.ends_with(".dwx") {
         return run_dwx_artifact(&file, &opts);
@@ -4611,6 +4632,28 @@ fn cmd_run(rest: &[String]) -> i32 {
         if let Err(e) = grants.add(g) {
             eprintln!("error: bad --grant: {e}");
             return 2;
+        }
+    }
+
+    // ----- the compute attestation gate (Stage 10 phase 10h, spec §7.1 — DL1911) -----------------
+    // Decided here, before a line of the program runs, for a sharper reason than convenience: the
+    // claim this gate protects is that a device envelope is enforced in TWO places. If the adapter
+    // cannot attest a layer below itself, the claim is single — and the run must either say so out
+    // loud, via an explicit human waiver in the grant, or not happen. *Silently* single is the one
+    // outcome this code exists to prevent.
+    for env in &grants.computes {
+        if let Err(refusal) = delulu_runtime::compute::check_grant(env) {
+            let d = Diagnostic::error(
+                "DL1911",
+                format!(
+                    "`{}`: {} [a human must accept single enforcement for this device; see \
+                     `delulu explain DL1911` and spec §7.1]",
+                    env.device,
+                    refusal.message()
+                ),
+            );
+            print_diagnostics("run", &[d], &map, None, opts.json);
+            return 1;
         }
     }
 
@@ -5034,6 +5077,37 @@ fn cmd_run(rest: &[String]) -> i32 {
         interp = interp.with_devices(b.clone());
         Some(b)
     };
+    // Stage 10 (10h): the compute broker, on the same gate — no compute grants, no adapter bound,
+    // and a dispatch would answer `NoAdapter` rather than a number nobody computed.
+    let computes = if grants.computes.is_empty() {
+        None
+    } else {
+        // Kernels are DATA: every artifact is read, its detached signature verified, and its
+        // content hashed BEFORE the program starts. A dispatch later resolves against these
+        // verified artifacts, never against the grant string — so an artifact that failed
+        // verification is not merely reported, it is absent, and nothing can run it.
+        let mut broker = delulu_runtime::compute::ComputeBroker::new(&grants.computes);
+        for env in &grants.computes {
+            let mut arts = Vec::new();
+            for (name, path) in &env.kernels {
+                match delulu_runtime::compute::load_kernel(name, path, &env.formats) {
+                    Ok(a) => arts.push(a),
+                    Err(refusal) => {
+                        let d = Diagnostic::error(
+                            refusal.code(),
+                            format!("`{}`: {}", env.device, refusal.message()),
+                        );
+                        print_diagnostics("run", &[d], &map, None, opts.json);
+                        return 1;
+                    }
+                }
+            }
+            broker = broker.with_artifacts(&env.device, arts);
+        }
+        let b = std::sync::Arc::new(broker);
+        interp = interp.with_computes(b.clone());
+        Some(b)
+    };
     // Stage 7 (phase 7g): a module with actors gets the actor system. Gated on declaration —
     // a program with no actors takes the identical path to v0.6, byte for byte.
     let has_actors =
@@ -5166,6 +5240,24 @@ fn cmd_run(rest: &[String]) -> i32 {
         // never offers an operator an arm that nobody holds (see `revoke_device_nodes`).
         if let Some(dir) = &device_state_dir {
             revoke_device_nodes(dir, &device_nodes);
+        }
+    }
+
+    // Stage 10 (10h): compute telemetry. Every dispatch that reached the adapter is summarised on
+    // stderr — how many elements crossed, how long the kernel took — and every refusal is named.
+    // A dispatch is foreign code doing work on a device the human paid to bound; the run says what
+    // actually happened rather than leaving it to be inferred from a return value.
+    if let Some(cb) = &computes {
+        let records = cb.records();
+        if !records.is_empty() && !opts.json {
+            let landed = records.iter().filter(|r| r.refused.is_none()).count();
+            let refused = records.len() - landed;
+            eprintln!("compute: {landed} dispatch(es) ran, {refused} refused");
+            for r in records.iter() {
+                if let Some((code, why)) = &r.refused {
+                    eprintln!("compute: {code} {}/{}: {why}", r.device, r.kernel);
+                }
+            }
         }
     }
 
@@ -5534,6 +5626,19 @@ fn foreign_calls_json(module: &delulu_syntax::ast::Module, map: &SourceMap, pyth
     // The embedded-Python entry (spec §6): `{abi:"python", allowlist, imports_seen, used_at}`. Present
     // only when the program actually reaches for Python (`root.python`), so a non-Python program's
     // report is unchanged. `imports_seen` is the statically-known set of `py.import("literal")` names.
+    // Stage 10 (10h, spec §7.1): compute devices ride the SAME separator as C and Python, because
+    // they are the same kind of thing — code outside the proof. DeluluLang bounds a kernel's
+    // reachability, resources and provenance; it says nothing about what the kernel computes, and
+    // the report puts that fact where a reader meets it rather than in a footnote.
+    if let Some(usage) = compute_usage(module) {
+        let (line, _col) = map.position(usage.used_at.file, usage.used_at.start);
+        out.push(json!({
+            "abi": "compute",
+            "devices": usage.devices,
+            "kernels": usage.kernels,
+            "used_at": [ { "file": map.name(usage.used_at.file), "line": line } ],
+        }));
+    }
     if let Some(usage) = python_usage(module) {
         let (line, _col) = map.position(usage.used_at.file, usage.used_at.start);
         out.push(json!({
@@ -5554,7 +5659,13 @@ struct PythonUsage {
 }
 
 fn python_usage(module: &delulu_syntax::ast::Module) -> Option<PythonUsage> {
-    let mut w = PyWalk { python_call: None, imports: Vec::new() };
+    let mut w = PyWalk {
+        python_call: None,
+        imports: Vec::new(),
+        compute_call: None,
+        devices: Vec::new(),
+        kernels: Vec::new(),
+    };
     for item in &module.items {
         match item {
             Item::Fn(f) => w.walk_block(&f.body),
@@ -5565,11 +5676,43 @@ fn python_usage(module: &delulu_syntax::ast::Module) -> Option<PythonUsage> {
     w.python_call.map(|used_at| PythonUsage { used_at, imports_seen: w.imports })
 }
 
+/// A program's compute use (Stage 10 phase 10h): where `root.compute` is first reached, the device
+/// names it mints, and the kernel names it dispatches — all statically, from string literals.
+struct ComputeUsage {
+    used_at: delulu_diag::Span,
+    devices: Vec<String>,
+    kernels: Vec<String>,
+}
+
+fn compute_usage(module: &delulu_syntax::ast::Module) -> Option<ComputeUsage> {
+    let mut w = PyWalk {
+        python_call: None,
+        imports: Vec::new(),
+        compute_call: None,
+        devices: Vec::new(),
+        kernels: Vec::new(),
+    };
+    for item in &module.items {
+        match item {
+            Item::Fn(f) => w.walk_block(&f.body),
+            Item::Const(c) => w.walk_expr(&c.value),
+            _ => {}
+        }
+    }
+    w.compute_call.map(|used_at| ComputeUsage { used_at, devices: w.devices, kernels: w.kernels })
+}
+
 /// A read-only AST walk collecting embedded-Python use: the first `root.python(...)` method call
 /// (which is what mints a `Cap[Python]`) and every `py.import("literal")` module name.
 struct PyWalk {
     python_call: Option<delulu_diag::Span>,
     imports: Vec<String>,
+    /// Stage 10 (10h): `root.compute("dev")` sites and the kernel names dispatched, collected by
+    /// the same walk. Compute belongs in the same report section as Python and C for the same
+    /// reason — it is code outside the proof.
+    compute_call: Option<delulu_diag::Span>,
+    devices: Vec<String>,
+    kernels: Vec<String>,
 }
 
 impl PyWalk {
@@ -5607,6 +5750,23 @@ impl PyWalk {
                 }
                 if name.name == "python" && self.python_call.is_none() {
                     self.python_call = Some(*span);
+                }
+                if name.name == "compute" {
+                    if self.compute_call.is_none() {
+                        self.compute_call = Some(*span);
+                    }
+                    if let Some(Lit { kind: LitKind::Str(d), .. }) = args.first() {
+                        if !self.devices.contains(d) {
+                            self.devices.push(d.clone());
+                        }
+                    }
+                }
+                if name.name == "dispatch" {
+                    if let Some(Lit { kind: LitKind::Str(k), .. }) = args.first() {
+                        if !self.kernels.contains(k) {
+                            self.kernels.push(k.clone());
+                        }
+                    }
                 }
                 if name.name == "import" {
                     if let Some(Lit { kind: LitKind::Str(s), .. }) = args.first() {

@@ -204,6 +204,13 @@ registry! {
     "DL1904" => "actuator command refused by its envelope",
     "DL1905" => "hardware actuation requested for an artifact that no simulation approved",
     "DL1906" => "native-code emission requested without the `exec.native` grant",
+    "DL1907" => "compute dispatch refused by the device envelope",
+    "DL1911" => "compute adapter cannot attest independent below-adapter envelope enforcement",
+    // Kernel artifacts (10h). Unsigned and invalid are DIFFERENT faults with different remedies,
+    // exactly as DL1510/DL1511 are for plugins: "sign this" is not the same instruction as "these
+    // bytes are not what they claim". Reusing one code would make one of the messages a lie.
+    "DL1912" => "kernel artifact is malformed, unreadable, or its signature does not verify",
+    "DL1913" => "kernel artifact is unsigned (kernels are always signed — spec §7.1)",
 
     // DL09xx — runtime
     "DL0901" => "integer overflow",
@@ -1023,6 +1030,36 @@ pub fn code_explain(code: &str) -> Option<String> {
              answer for itself. Honesty note: this gate governs which artifact may be bound to an \
              adapter. It is not a safety case, it does not inspect what the program does, and it \
              does not replace the hardware interlocks the deployment needs anyway.",
+        "DL1912" => "A kernel artifact named in a compute grant could not be accepted: the file              is unreadable, its bytes are not a kernel artifact this build understands, or its              detached signature does not verify over them (spec §7.1). The last case is the              serious one and it is a refusal regardless of policy — a signature that does not              verify means the artifact is not what it claims to be, whether that is tampering, the              wrong key, or a truncated file. This is a separate code from DL1913 on purpose: an              unsigned artifact needs signing, a badly-signed one needs investigating, and one              message cannot honestly say both. Note the order this check runs in: the signature is              verified BEFORE the artifact is parsed, because reading structure out of bytes you              have not authenticated is how a malformed-input bug becomes a supply-chain one.",
+        "DL1913" => "A kernel artifact has no detached signature (expected beside it as              `<artifact>.sig`), and kernels are always signed (spec §7.1, criterion 7). A kernel is              foreign code that runs on hardware the program cannot otherwise reach; DeluluLang              bounds its reachability, its resources and its PROVENANCE, and provenance is the only              one of the three that says anything at all about what the kernel will do. An unsigned              kernel has none. There is deliberately no policy switch to accept one: unlike a              plugin, where `require_signed` is a grant-level decision, a kernel with no provenance              is refused everywhere, always.",
+        "DL1907" => "A kernel dispatch asked for more than the compute device's granted envelope \
+             allows (spec §7.1, invariant 50) — a buffer past `memory_bytes`, a kernel past its \
+             `kernel_ms` budget, or more work in flight than `queue_depth` permits. The refusal is \
+             a VALUE, not a fault: `ComputeErr::KernelEnvelope` kills the dispatch and leaves the \
+             program running, for the same reason an over-envelope actuator command does — a host \
+             that dies mid-pipeline is worse than one that is told no and carries on. The envelope \
+             is not in the program: it is in the grant a human wrote, and no code on this side of \
+             the boundary can widen it. Honesty note, and it is the important part: DeluluLang \
+             bounds a kernel's REACHABILITY, RESOURCES and PROVENANCE. It says nothing whatsoever \
+             about what the kernel computes — that is foreign code, outside the proof, and \
+             `delulu authority` prints it under the outside-the-proof separator so the boundary is \
+             visible before anyone runs anything.",
+        "DL1911" => "A compute grant named an adapter that cannot attest INDEPENDENT \
+             BELOW-ADAPTER envelope enforcement — a layer beneath the adapter that would refuse an \
+             over-envelope submission even if the adapter itself were wrong, absent, or lying. \
+             Spec §7.1 claims the envelope is checked host-side AND adapter-side; this code exists \
+             so that claim is never silently single. Three situations produce it: the adapter \
+             attests nothing, the adapter is one this build has never heard of (an unknown adapter \
+             cannot attest anything about itself, and `unknown` is not a reason to proceed), or it \
+             does not accept a kernel format the grant lists. Note what a grant CANNOT do: assert \
+             an attestation. Attestation is a property of the adapter's code, because a grant \
+             string that could claim it would make this gate a checkbox. What a human CAN do is \
+             waive the requirement deliberately, with `waive-attestation` in the grant — a \
+             policy-explicit, `requires_human: true` decision to accept single enforcement, \
+             recorded in the authority report rather than hidden. The in-tree `cpu-reference` \
+             adapter attests false and always will: it runs in this process, so there is no layer \
+             below it, and its envelope checks are the same code in the same address space as the \
+             thing being bounded.",
         "DL1906" => "The program carries a `@jit` hint, but native-code emission was not granted, \
              so the hint was IGNORED and the program ran under the interpreter — correctly, with \
              the sandbox intact. This is a warning, never an error: a hint may not change what a \

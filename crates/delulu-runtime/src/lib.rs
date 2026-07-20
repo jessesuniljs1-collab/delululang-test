@@ -4,6 +4,7 @@
 
 pub mod actors;
 pub mod broker;
+pub mod compute;
 pub mod cycles;
 pub mod custody;
 pub mod device;

@@ -40,11 +40,13 @@ pub const DIR_VERSION: u32 = 1;
 /// wire-format bump. Bump this constant whenever either half changes.
 ///
 /// History: 1 = Stages 6–9 table; 2 = Stage 10 phase 10e (actuator/sensor mints, `command`,
-/// `read`); 3 = phase 10f (`ActuateErr` gains `LeaseRevoked`). Rulings D10a and D11b: the bump is
-/// the honest activation cost. 10f widened the scope of this constant on purpose — a DIR whose
-/// `match` on `ActuateErr` was checked exhaustive against two variants is not exhaustive against
-/// three, and a version that only watched the table would have let that through silently.
-pub const PRIM_TABLE_VERSION: u32 = 3;
+/// `read`); 3 = phase 10f (`ActuateErr` gains `LeaseRevoked`); 4 = phase 10h (`root.compute`,
+/// `compute.dispatch`, and the new `ComputeErr` prelude sum). Rulings D10a, D11b and D13a: the
+/// bump is the honest activation cost. 10f widened the scope of this constant on purpose — a DIR
+/// whose `match` on `ActuateErr` was checked exhaustive against two variants is not exhaustive
+/// against three, and a version that only watched the table would have let that through silently.
+/// 10h is the case that widening was for: it adds BOTH table entries and a prelude type.
+pub const PRIM_TABLE_VERSION: u32 = 4;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

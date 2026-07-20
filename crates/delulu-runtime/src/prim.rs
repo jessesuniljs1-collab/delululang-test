@@ -174,6 +174,15 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 Err(Fault::at("DL0703", format!("sensor `{d}` was not granted"), span))
             }
         }
+        // Stage 10 (10h): the same shape for an accelerator. Deriving the handle is pure; the
+        // `ForeignCall` effect is in dispatching through it.
+        "compute" => {
+            let d = str_arg(args, 0, span)?;
+            match root.computes.iter().find(|e| e.device == d) {
+                Some(e) => Ok(cap(ResourceKind::Compute, CapScope::Compute(e.clone()))),
+                None => Err(Fault::at("DL0703", format!("compute device `{d}` was not granted"), span)),
+            }
+        }
         "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
         _ => Err(Fault::at("DL0907", format!("unknown Root method `{method}` (checker bug)"), span)),
     }

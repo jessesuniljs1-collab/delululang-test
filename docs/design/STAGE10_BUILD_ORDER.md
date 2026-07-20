@@ -260,6 +260,62 @@ is a latency claim — its content is authority semantics. The device-envelope-i
 (e) and addendum §2.5's broker-federation gap are both RFC-gated and both restated in the
 recordings rather than left in the design docs where a reader of the demo would not meet them.
 
+**D13 — Heterogeneous compute (10h): what "enforced" means term by term, and the one thing a grant
+may never say.** Eight sub-rulings. (a) **`Cap[Compute]` is a new capability kind; dispatch carries
+the EXISTING `ForeignCall` effect.** No new effect, no constitutional change (spec §7.1). Inventing
+a `Dispatch` effect would imply DeluluLang says something about what a kernel computes; it does
+not, and the authority report prints compute under the outside-the-proof separator so nobody has to
+infer that. `PRIM_TABLE_VERSION` goes 3 → 4: 10h adds both table entries (`root.compute`,
+`compute.dispatch`) and a prelude type (`ComputeErr`), which is exactly the case 10f widened that
+constant's scope to cover. (b) **`ComputeErr`'s variants are all NEW names**
+(`KernelEnvelope`/`UnknownKernel`/`NoAdapter`), never `Envelope`/`NoDevice`. Bare constructors
+resolve to the unique sum declaring them, so reusing `ActuateErr`'s names would make BOTH sums
+ambiguous and break every existing 10e/10f program that matches them bare — a stability-contract
+break disguised as a naming convenience. `ComputeErr` is appended LAST in both prelude paths, or
+every later type's id shifts under it. (c) **Attestation is a property of the ADAPTER, never a
+claim in a grant.** A grant may `waive-attestation`; it may not assert one. A grant string that
+could say `attest=yes` would make DL1911 a checkbox and invariant 50's "so double enforcement is
+never silently single" a sentence rather than a mechanism. Consequently **the in-tree
+`cpu-reference` adapter attests `false` and always will** — it runs in this process, so there is no
+layer below it, and its envelope checks are the same code in the same address space as the thing
+being bounded. DL1911's refusal is therefore the DEFAULT path for the only adapter that ships,
+exercised on every CI run, and a test pins the flag so a future kitchen cannot quiet the diagnostic
+by flipping it. The skip branch is closed the same way: an adapter this build cannot identify is
+refused, because a gate that waves through what it cannot recognise refuses exactly the honest
+adapters. (d) **"Enforced" is four different statements, and three are weaker than the word.**
+`memory_bytes` is checked before submission; `kernel_ms` is checked AFTER the fact, on the
+measurement, with the result discarded — the work has already happened; `queue_depth` is enforced
+but **unreachable from a program**, because dispatch is synchronous (unit-tested with threads
+instead, and stated); `power_w` is **carried and NOT enforced** — this adapter draws no measurable
+power and cannot attribute any. That last one is mandatory in every grant so a real adapter
+inherits the term, and calling it "enforced" in a summary would be precisely the silently-single
+failure DL1911 exists to prevent one layer up. The ledger lives in code as
+`compute::ENFORCEMENT_NOTE` so it cannot drift from a document nobody re-reads. (e) **Kernels are
+data, enforced twice over.** At the type level `dispatch` takes the kernel NAME as a `Str`, so a
+closure cannot be *spelled* as a kernel (DL0401 at the call site, not a runtime check). At the
+artifact level kernels are files on disk with detached ed25519 signatures, verified BEFORE the
+bytes are parsed — reading structure out of unauthenticated bytes is how a malformed-input bug
+becomes a supply-chain one. Signed DeluluLang source, named as a kernel, is still refused: a valid
+signature proves provenance, not eligibility. Dispatch resolves through the VERIFIED artifacts, not
+the grant string, so a failed artifact is absent rather than merely reported. (f) **DL1912 and
+DL1913 are separate codes**, following DL1510/DL1511 exactly: unsigned needs signing, invalid needs
+investigating, and one message cannot honestly say both. Unlike plugins there is no `require_signed`
+policy toggle — a kernel with no provenance is refused everywhere, always. (g) **The kernel name is
+an alias the human chose; the ARTIFACT decides what runs**, exactly as `foreign.c=LIB:PATH` binds a
+lib name to a binary. A grant may bind `reduce_sum` to an artifact declaring `reduce_max`, and it
+computes the max. Documented by a test rather than left to be discovered, because reading it the
+other way — assuming the name guarantees the behaviour — is the mistake worth preventing.
+(h) **Deferred, with reasons.** **No hardware accelerator adapter ships and none was demonstrated**
+(criterion 7's second item), because this machine has no GPU compute stack that could be exercised
+honestly and an adapter that cannot be run is how a deferral becomes a claim — the invariant-45
+pattern from 10b, with the note published in `measurements/compute/RECORD.md` rather than dropped.
+The cost is named there too: **invariant 49 is tested against exactly one adapter**, so the
+interface is plausible rather than proven, and no second implementation has ever been fitted to it.
+Measured numbers are Windows-only (n=20) and say so; the manifest half of "kernels named in the
+manifest" (a `[authority] compute.kernels` declaration mirroring `foreign.c`'s reviewable-intent
+ceiling) is NOT built — the grant enumerates kernels today, and that gap is recorded here rather
+than implied to exist.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -273,7 +329,7 @@ recordings rather than left in the design docs where a reader of the demo would 
 | 10e | D1 | **DONE** (2026-07-20) — `Actuate` activates: `root.actuator`/`root.sensor` mints, envelope scopes (`--grant "actuator=DEV:dim=lo..hi[,rate_hz=N]"`), `ActuateErr = Envelope(Str) \| NoDevice`, DL1904 telemetry, `PRIM_TABLE_VERSION` 1→2 | Refusal kills the command, never the process — every refusal test asserts **exit 0** with the error handled in-program; the skip branch witnessed directly (`a_dimension_the_envelope_never_bounded_is_refused_not_waved_through` — an unbounded dimension is refused BY NAME, not waved through), plus the non-numeric twin; DL1904 lands as `command.refused` **after** the attempt record, order asserted; device named in every trace record (an audit that can't say which actuator moved is not an audit); kind/scope split holds — wrong-device mint is DL0703 at the mint while zero-grant refuses at the pre-flight, both witnessed; invariant 50 witnessed (unbound sensor reads `NoDevice`, never a number). D10 rules the bump and the `rate_hz` gap. Coverage **100%** (296 anchors), suite **955/0/4** |
 | 10f | D2/D4 | **DONE** (2026-07-20) — Dead-man leases (`heartbeat_ms`/`ttl_ms`/`fail` mandatory on every actuator grant; watchdog-thread revoke; `hold`/`coast`/`safe-park` fail-states), `ActuateErr::LeaseRevoked`, `--broker-profile sim` reference simulator (deterministic under `--seed`, mirror sensors close the loop), `rate_hz` enforced, DL1905 sim-to-hardware hash gate (`--signoff`/`--approved`), `PRIM_TABLE_VERSION` 2→3 | Missed heartbeat → revoke → fail-state witnessed at CLI level **with its control** (identical program + generous heartbeat keeps the device — without it, "revoked" proves only that the phase revokes things); TTL expiry witnessed against a perfectly-beaten lease; latency measured and published (`measurements/dead-man/RECORD.md`: overdue max 6.33 ms, sim engage max 17 µs, at `heartbeat_ms=25`, n=20, Windows, terms reported separately); sim replays identically under `--seed` and DIFFERS across seeds; **both DL1905 skip branches witnessed** — no sign-off record → refused, edited artifact → refused, matching sign-off → gate seen to PASS then the honest no-adapter wall; the sim's own skip branch witnessed (a mirror sensor of a device the simulator lacks reads `NoDevice`, never a synthetic number). D11 rules the mandatory terms, the new variant, the version bump, and three named deferrals. Coverage **100%** (297 anchors), suite **980/0/4** |
 | 10g ✅ | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
-| 10h | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
+| 10h ✅ | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
 | 10i | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
 | 10j | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
 | 10k | C | Advisory feed + DL1903 + `--deny-advisories`; LTS/support-matrix pages; co-evolution policy | Criterion 5's machinery (the timed LTS cycle itself needs calendar time — recorded honestly) |

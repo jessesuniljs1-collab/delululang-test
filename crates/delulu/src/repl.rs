@@ -122,6 +122,9 @@ fn extract_repl_expr(module: &delulu_syntax::ast::Module) -> Option<Expr> {
 
 fn full_root(grants: &Grants) -> RootVal {
     RootVal {
+        // The REPL grants no compute devices (10h): an interactive session is not where a human
+        // decides what may reach an accelerator.
+        computes: Vec::new(),
         console: true,
         fs_read: vec![std::env::current_dir().unwrap_or_default()],
         fs_write: vec![std::env::current_dir().unwrap_or_default()],

@@ -74,6 +74,10 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "root", method: "sensor", arity: 1 },
     PrimEntry { receiver: "actuator", method: "command", arity: 1 },
     PrimEntry { receiver: "sensor", method: "read", arity: 0 },
+    // Compute devices (Stage 10 phase 10h, Track F). `dispatch` takes the kernel NAME and a
+    // buffer — never a function, so no closure can cross into a kernel (§7.1).
+    PrimEntry { receiver: "root", method: "compute", arity: 1 },
+    PrimEntry { receiver: "compute", method: "dispatch", arity: 2 },
     // Cap[Rand].
     PrimEntry { receiver: "rand", method: "int", arity: 2 },
     PrimEntry { receiver: "rand", method: "float", arity: 0 },
@@ -137,7 +141,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            57,
+            59,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );

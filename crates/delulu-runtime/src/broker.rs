@@ -145,6 +145,8 @@ pub struct Grants {
     pub actuators: Vec<crate::value::ActuatorEnvelope>,
     /// Stage 10 (10e): granted sensor device names (`--grant sensor=arm0/angle`).
     pub sensors: Vec<String>,
+    /// Stage 10 (10h, Track F): granted compute devices — the envelope IS the scope (spec §7.1).
+    pub computes: Vec<crate::value::ComputeEnvelope>,
 }
 
 impl Grants {
@@ -184,6 +186,15 @@ impl Grants {
                     let env = crate::value::ActuatorEnvelope::parse(v.trim())
                         .map_err(|e| format!("bad actuator grant `{spec}`: {e}"))?;
                     self.actuators.push(env);
+                }
+                // Stage 10 (10h): `compute=DEVICE:memory_bytes=N,kernel_ms=lo..hi,...` — the same
+                // shape one layer out: the human writes the device envelope, and every dispatch is
+                // checked against it. The DL1911 attestation gate runs later, at the pre-flight,
+                // because it needs the adapter registry and not just the string.
+                "compute" => {
+                    let env = crate::value::ComputeEnvelope::parse(v.trim())
+                        .map_err(|e| format!("bad compute grant `{spec}`: {e}"))?;
+                    self.computes.push(env);
                 }
                 // Stage 10 (10e): `sensor=DEVICE` — reads are `Read` under this device scope.
                 "sensor" => {
@@ -255,6 +266,7 @@ impl Grants {
             broker_secrets: Vec::new(),
             actuators: self.actuators.clone(),
             sensors: self.sensors.clone(),
+            computes: self.computes.clone(),
         }
     }
 
@@ -289,6 +301,9 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             // Stage 10 (10e): physical devices, deny-by-default like everything else.
             ResourceKind::Actuator => grants.actuators.is_empty(),
             ResourceKind::Sensor => grants.sensors.is_empty(),
+            // Stage 10 (10h): accelerators, same rule. A program that reaches for silicon it was
+            // never granted is refused at the pre-flight, before a line runs.
+            ResourceKind::Compute => grants.computes.is_empty(),
         })
         .copied()
         .collect()

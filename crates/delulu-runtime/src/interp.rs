@@ -154,6 +154,10 @@ pub struct Interp {
     /// the run's `--broker-profile` selected. `None` is 10e's null-adapter behavior exactly: the
     /// envelope still refuses, sensors still read `NoDevice`, no lease exists to lose.
     devices: Option<std::sync::Arc<crate::device::DeviceBroker>>,
+    /// Stage 10 (10h, spec §7.1): the compute broker — the granted device envelopes plus the
+    /// adapter backing them. `None` means no adapter is bound, and a dispatch answers `NoAdapter`
+    /// rather than a fabricated number (invariant 50, at silicon).
+    computes: Option<std::sync::Arc<crate::compute::ComputeBroker>>,
 }
 
 impl Interp {
@@ -218,6 +222,7 @@ impl Interp {
             consts_ready: Cell::new(false),
             debug_rcaps: None,
             devices: None,
+            computes: None,
         }
     }
 
@@ -450,6 +455,13 @@ impl Interp {
     /// commands the envelope cannot vouch for, and answer sensor reads with absence.
     pub fn with_devices(mut self, broker: std::sync::Arc<crate::device::DeviceBroker>) -> Interp {
         self.devices = Some(broker);
+        self
+    }
+
+    /// Attach this run's compute broker (10h). Absent = no adapter bound, and a dispatch answers
+    /// `NoAdapter` rather than inventing a result.
+    pub fn with_computes(mut self, broker: std::sync::Arc<crate::compute::ComputeBroker>) -> Interp {
+        self.computes = Some(broker);
         self
     }
 
@@ -1049,6 +1061,10 @@ impl Interp {
             // Stage 10 (10f): likewise routed here rather than through `prim`, because the reading
             // comes from the run's bound adapter and `prim` has no way to reach it.
             Value::Cap(c) if c.kind == ResourceKind::Sensor => self.call_sensor(c, &name.name, span),
+            // Stage 10 (10h): compute dispatch, same reason — the adapter lives on the run.
+            Value::Cap(c) if c.kind == ResourceKind::Compute => {
+                self.call_compute(c, &name.name, &argvals, span)
+            }
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
             // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
@@ -1247,6 +1263,68 @@ impl Interp {
                 Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(reason)])))
             }
         }
+    }
+
+    /// `Cap[Compute].dispatch(kernel, buffer)` (10h, spec §7.1). The refusal channel is a VALUE,
+    /// like every other device surface: an over-envelope kernel kills the dispatch, not the host.
+    fn call_compute(
+        &self,
+        cap: &Rc<CapVal>,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, Fault> {
+        if method != "dispatch" {
+            return Err(Fault::at("DL0907", format!("unknown Compute method `{method}` (checker bug)"), span));
+        }
+        let CapScope::Compute(env) = &cap.scope else {
+            return Err(Fault::at("DL0907", "Compute capability without an envelope scope (wiring bug)", span));
+        };
+        let Some(Value::Str(kernel)) = args.first() else {
+            return Err(Fault::at("DL0907", "compute.dispatch without a kernel name (checker bug)", span));
+        };
+        let buffer: Vec<f64> = match args.get(1) {
+            Some(Value::List(items)) => items
+                .borrow()
+                .iter()
+                .map(|v| match v {
+                    Value::Float(x) => *x,
+                    Value::Int(i) => *i as f64,
+                    _ => f64::NAN,
+                })
+                .collect(),
+            _ => return Err(Fault::at("DL0907", "compute.dispatch without a buffer (checker bug)", span)),
+        };
+        // No adapter bound: absence, never a fabricated result. This is invariant 50's rule at
+        // silicon — the same reason an unbound sensor reads `NoDevice` instead of a plausible float.
+        let Some(broker) = &self.computes else {
+            return Ok(Value::err(Value::variant("NoAdapter", vec![])));
+        };
+        match broker.dispatch(&env.device, kernel, &buffer) {
+            Ok(v) => Ok(Value::ok(Value::Float(v))),
+            Err(crate::compute::DispatchRefusal::Envelope(reason)) => {
+                self.trace_compute_refusal(&env.device, kernel, &reason, span);
+                Ok(Value::err(Value::variant("KernelEnvelope", vec![Value::str(reason)])))
+            }
+            Err(crate::compute::DispatchRefusal::UnknownKernel(reason)) => {
+                Ok(Value::err(Value::variant("UnknownKernel", vec![Value::str(reason)])))
+            }
+        }
+    }
+
+    /// The DL1907 telemetry record: an auditor reading the trace sees the dispatch attempt and its
+    /// refusal, in order, with the envelope term that caught it.
+    fn trace_compute_refusal(&self, device: &str, kernel: &str, reason: &str, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: "ForeignCall".to_string(),
+            op: "dispatch.refused".to_string(),
+            cap_kind: "Compute".to_string(),
+            detail: Some(format!("DL1907 {device}/{kernel}: {reason}")),
+            span: Some((span.file, span.start, span.end)),
+            ..Default::default()
+        });
     }
 
     /// `Cap[Sensor].read()` (10e's shape, 10f's adapter). Absence still reads as absence — the

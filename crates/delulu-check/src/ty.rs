@@ -177,6 +177,11 @@ pub enum ResourceKind {
     Actuator,
     /// A physical sensor (Stage 10 Track D): reads are `Read` with sensor scopes.
     Sensor,
+    /// An accelerator or compute device (Stage 10 Track F, invariant 50). Its SCOPE is its device
+    /// envelope — memory ceiling, kernel time budget, queue depth, power. Dispatching a kernel
+    /// carries the existing core `ForeignCall` effect and **no new one**: a kernel is foreign code,
+    /// and DeluluLang bounds its reachability, resources and provenance — never its computation.
+    Compute,
 }
 
 impl ResourceKind {
@@ -194,6 +199,7 @@ impl ResourceKind {
             "ForeignLoad" => ResourceKind::ForeignLoad,
             "Actuator" => ResourceKind::Actuator,
             "Sensor" => ResourceKind::Sensor,
+            "Compute" => ResourceKind::Compute,
             _ => return None,
         })
     }
@@ -212,6 +218,7 @@ impl ResourceKind {
             ResourceKind::ForeignLoad => "ForeignLoad",
             ResourceKind::Actuator => "Actuator",
             ResourceKind::Sensor => "Sensor",
+            ResourceKind::Compute => "Compute",
         }
     }
 }

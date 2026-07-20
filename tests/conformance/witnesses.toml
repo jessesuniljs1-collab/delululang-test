@@ -2450,3 +2450,91 @@ anchor = "ref.diag.DL1905"
 file = "crates/delulu/tests/dead_man_cli.rs"
 test = "a_hardware_profile_with_no_signoff_record_is_refused_dl1905"
 kind = "negative"
+
+# ---- Stage 10 phase 10h: heterogeneous compute (Track F, spec §7, invariants 49 and 50).
+# DL1907 takes a positive AND a negative for the reason 10f's DL1905 does: the positive is the run
+# where a dispatch is seen to LAND. An envelope witnessed only by its refusals is indistinguishable
+# from a device that never worked at all.
+
+[[witness]]
+anchor = "ref.diag.DL1907"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "dispatch_lands_inside_the_envelope_and_is_refused_outside_it"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1907"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "a_kernel_that_overruns_its_time_budget_is_refused_and_its_result_discarded"
+kind = "negative"
+
+# DL1911's positive is the WAIVER path — the only way past the gate — because a gate that refuses
+# everything is not a gate either. The negative is the skip branch: an adapter this build cannot
+# identify is refused rather than trusted.
+
+[[witness]]
+anchor = "ref.diag.DL1911"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "an_explicit_human_waiver_lets_the_grant_through"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1911"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "an_unknown_adapter_is_refused_because_it_cannot_attest_what_it_is_not"
+kind = "negative"
+
+# DL1912/DL1913 are the kernels-are-data pair. Their positive is the same run: the signed artifact
+# that dispatches normally, which is what makes the two refusals mean something rather than
+# describing a build where no kernel ever loads.
+
+[[witness]]
+anchor = "ref.diag.DL1912"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "the_same_artifact_signed_dispatches_normally"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1912"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "an_artifact_edited_after_signing_no_longer_verifies"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1913"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "the_same_artifact_signed_dispatches_normally"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1913"
+file = "crates/delulu/tests/compute_cli.rs"
+test = "an_unsigned_kernel_artifact_is_refused"
+kind = "negative"
+
+# The two new primitives take the same table-driven pair every primitive takes: one test proves
+# each listed entry resolves, the other proves each rejects a call with the wrong arity.
+
+[[witness]]
+anchor = "ref.prim.root.compute"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.root.compute"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.prim.compute.dispatch"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_resolves"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.prim.compute.dispatch"
+file = "crates/delulu-check/src/prim_table.rs"
+test = "every_listed_primitive_rejects_a_five_argument_call"
+kind = "negative"

@@ -254,7 +254,7 @@ fn audit_rules_appear_in_the_soundness_audit() {
 ///
 /// Raise it when you add witnesses. It must never need lowering — a lowered floor in a diff is a
 /// coverage regression wearing a disguise, and reviewing this constant is how you catch it.
-const COVERED_FLOOR: usize = 297;
+const COVERED_FLOOR: usize = 303;
 
 /// The committed repo's witnesses are internally valid (no dangling/ignored/unknown citations)
 /// and coverage has not regressed.

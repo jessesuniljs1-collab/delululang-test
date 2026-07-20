@@ -1440,6 +1440,12 @@ impl<'a> Checker<'a> {
                         self.expect_arg(args, 0, &Type::Str, span);
                         (Type::Cap(ResourceKind::Sensor), ResourceKind::Sensor)
                     }
+                    // Stage 10 (10h, Track F): the same pure attenuation for an accelerator. The
+                    // device name selects among the granted compute envelopes at runtime.
+                    "compute" => {
+                        self.expect_arg(args, 0, &Type::Str, span);
+                        (Type::Cap(ResourceKind::Compute), ResourceKind::Compute)
+                    }
                     "secret" => {
                         ctx.facts.uses_secret = true;
                         self.expect_arg(args, 0, &Type::Str, span);
@@ -1529,6 +1535,25 @@ impl<'a> Checker<'a> {
                 "read" => {
                     let aerr = Type::Sum(self.table.actuate_err(), vec![]);
                     Some((Type::result(Type::Float, aerr), Some(Effect::Read), None))
+                }
+                _ => None,
+            },
+            // Stage 10 (10h, Track F — spec §7.1, invariant 50). `dispatch(kernel, buffer)` is
+            // typed as WHAT IT IS: foreign code. It carries the existing core `ForeignCall`
+            // effect and NOT a new one, because inventing a `Dispatch` effect would suggest
+            // DeluluLang says something about what the kernel computes. It does not. It bounds
+            // the kernel's reachability, its resources, and its provenance — nothing else, and
+            // `delulu authority` prints it under the outside-the-proof separator to say so.
+            //
+            // The kernel is named by a `Str`, never passed as a function: a DeluluLang closure
+            // can never become a kernel (the kernels-are-data law, §7.1). The buffer in and the
+            // scalar out are the honest shape of "the host drives; devices get buffers".
+            Type::Cap(ResourceKind::Compute) => match method {
+                "dispatch" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::list(Type::Float), span);
+                    let cerr = Type::Sum(self.table.compute_err(), vec![]);
+                    Some((Type::result(Type::Float, cerr), Some(Effect::ForeignCall), None))
                 }
                 _ => None,
             },

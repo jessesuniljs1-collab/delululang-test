@@ -736,6 +736,9 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         MsgValue::SecretHandle(h) => Value::Secret(Rc::new(SecretVal::handle(h))),
         MsgValue::Root(r) => {
             let root = crate::value::RootVal {
+                // Actors get no compute devices: a worker thread cannot hold a device envelope
+                // this run's broker is bounding per-dispatch. Fail closed, like the actuator list.
+                computes: Vec::new(),
                 console: r.console,
                 fs_read: r.fs_read,
                 fs_write: r.fs_write,

@@ -141,6 +141,10 @@ impl DeclTable {
     pub fn actuate_err(&self) -> TypeDefId {
         self.type_ix["ActuateErr"]
     }
+    /// The compute-dispatch error sum (Stage 10, 10h — spec §7.1).
+    pub fn compute_err(&self) -> TypeDefId {
+        self.type_ix["ComputeErr"]
+    }
 
     /// Resolve a bare constructor name to the UNIQUE sum type that declares it, with the variant's
     /// declared field types. `None` if no sum type has the constructor, or if more than one does —
@@ -199,6 +203,13 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
         &mut table,
         "ActuateErr",
         &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])],
+    );
+    // Stage 10 (10h, Track F): `ComputeErr` — appended after `ActuateErr` in BOTH paths, because
+    // the order law pins every prelude type's id by position.
+    register_prelude_type(
+        &mut table,
+        "ComputeErr",
+        &[("KernelEnvelope", &["Str"]), ("UnknownKernel", &["Str"]), ("NoAdapter", &[])],
     );
 
     // First pass: type names (so signatures can forward-reference them).
