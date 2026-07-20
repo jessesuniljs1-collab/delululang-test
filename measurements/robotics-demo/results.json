@@ -1,0 +1,77 @@
+{
+  "reps": 20,
+  "binary": "D:\\nelan\\DeluluLang\\target\\release\\delulu.exe",
+  "profile": "sim (in-tree reference simulator)",
+  "embedded_accepted": {
+    "n": 20,
+    "unit": "us",
+    "min": -0.792,
+    "p50": 0.075,
+    "p95": 0.807,
+    "max": 1.385
+  },
+  "embedded_refused": {
+    "n": 20,
+    "unit": "us",
+    "min": -0.666,
+    "p50": 0.35,
+    "p95": 1.144,
+    "max": 1.418
+  },
+  "daemon_accepted": {
+    "n": 20,
+    "unit": "us",
+    "min": 275.514,
+    "p50": 338.891,
+    "p95": 352.672,
+    "max": 354.492
+  },
+  "daemon_refused": {
+    "n": 20,
+    "unit": "us",
+    "min": 281.475,
+    "p50": 338.719,
+    "p95": 349.745,
+    "max": 352.995
+  },
+  "estop_call": {
+    "n": 20,
+    "unit": "ms",
+    "min": 10.866,
+    "p50": 11.911,
+    "p95": 14.979,
+    "max": 16.627
+  },
+  "estop_end_to_end": {
+    "n": 20,
+    "unit": "ms",
+    "min": 9.978,
+    "p50": 12.706,
+    "p95": 38.576,
+    "max": 39.712
+  },
+  "estop_engage": {
+    "n": 20,
+    "unit": "us",
+    "min": 0.0,
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 1.0
+  },
+  "heartbeat_overdue": {
+    "n": 20,
+    "unit": "ms",
+    "min": 3.536,
+    "p50": 4.534,
+    "p95": 4.973,
+    "max": 5.146
+  },
+  "heartbeat_engage": {
+    "n": 20,
+    "unit": "us",
+    "min": 1.0,
+    "p50": 1.0,
+    "p95": 1.0,
+    "max": 2.0
+  }
+}

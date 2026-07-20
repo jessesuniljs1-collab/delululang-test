@@ -917,6 +917,17 @@ impl Interp {
         // (DL1403/DL1402) and an unreachable broker faults DL1401 (fail closed, invariant 27).
         if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals) {
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
+                // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
+                // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
+                // means the program asked for something it never held; this one can also mean an
+                // operator hit e-stop a millisecond ago. A supervisor holding four arms must lose
+                // the revoked one and keep parking the other three — killing the process would
+                // strand them at whatever they were doing, which is the opposite of an e-stop.
+                if op == CustodyOp::Actuate {
+                    let device = arg.as_deref().unwrap_or("<device>");
+                    self.trace_actuate_refusal(device, "command.revoked", &d.message, span);
+                    return Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(d.message)])));
+                }
                 return Err(Escape::Fault(Fault::at(d.code, d.message, span)));
             }
         }
@@ -1552,6 +1563,20 @@ fn custody_op_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<(Cus
         }
         (ResourceKind::Clock, "now_ms") => Some((CustodyOp::Clock, None)),
         (ResourceKind::Rand, "int") | (ResourceKind::Rand, "float") => Some((CustodyOp::Rand, None)),
+        // 10g: every actuator command round-trips to the grant tree, per command, carrying the
+        // device name (spec §5.1's synchronous class; addendum §2.5 states the model). This is the
+        // round-trip an operator e-stop arrives through. Sensor `read` is NOT routed: it is a
+        // `Read` with a sensor scope, and the sensor scope lives in the device broker.
+        (ResourceKind::Actuator, "command") => Some((CustodyOp::Actuate, actuator_device(&c.scope))),
+        _ => None,
+    }
+}
+
+/// The device an actuator capability commands — the `arg` the broker's `Actuate` check is made
+/// against, so a revocation can be reasoned about per device rather than per process.
+fn actuator_device(scope: &CapScope) -> Option<String> {
+    match scope {
+        CapScope::Actuator(env) => Some(env.device.clone()),
         _ => None,
     }
 }

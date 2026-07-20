@@ -1,0 +1,52 @@
+// The arm demonstration (Stage 10 §5.5) — THE E-STOP SCENARIO.
+//
+// Not an edit: this is the nominal program stretched long enough that a human can reach it. It
+// drives correctly, beats its lease constantly, and would run to completion untouched. Then an
+// operator, watching from another terminal, decides it must stop:
+//
+//     delulu grants list                      # find the node holding arm0/elbow
+//     delulu grants revoke g_<device-node>    # stop that arm
+//
+// Nothing in this program participates in that. It does not poll a stop flag, check a file, or
+// handle a signal — a program you have to ask nicely is not something you can e-stop, because the
+// case you need it for is the case where the program is not answering. The watchdog thread sees
+// the node die, engages `safe-park`, and this loop finds out on its next command.
+//
+// It then keeps running. That is deliberate: losing one device is not losing the process, and a
+// supervisor that dies on revocation cannot park the other machines it holds.
+module demo
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => "COMMANDED",
+    Err(e) => match e {
+      Envelope(reason) => "REFUSED: " + reason,
+      LeaseRevoked(reason) => "REVOKED: " + reason,
+      NoDevice => "NODEVICE"
+    }
+  }
+}
+
+fn drive(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    c.println(say(a.command(Cmd { angle_deg: 12.0, velocity_dps: 12.0, torque_nm: 1.4 })))
+    c.println("tick " + str(fib(24)))
+    drive(c, a, n - 1)
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("SUPERVISOR UP")
+  let done = drive(c, a, 20)
+  c.println("SUPERVISOR DOWN")
+}

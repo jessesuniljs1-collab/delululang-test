@@ -3270,6 +3270,82 @@ fn wasm_fault_code(msg: &str) -> &'static str {
 /// `--grant` flags in daemon mode are sugar for issue-then-run at the root, spec §3.2). Paths are
 /// the SAME absolute, lexically-normalized strings the embedded `RootVal` carries, so the broker's
 /// path lattice sees exactly what the runtime resolves against.
+/// Mint one grant node per actuator device, under this run's node, and return the e-stop probe
+/// that watches them (10g, spec §5.2; addendum §2.4's "revoking one robot kills exactly its
+/// subtree").
+///
+/// Each child carries `{Actuate}` and nothing else — strictly less than the parent, which is what
+/// makes it an attenuation rather than a second grant. The device's envelope is NOT re-encoded
+/// here: the envelope lives in the device broker, where it is enforced per command, and copying it
+/// into the node would create a second authority of record that could drift from the first.
+///
+/// The probe asked once per watchdog tick, per device. **Every non-`live` answer is death,
+/// including no answer at all.** A revoked node, an expired one, a daemon that stopped responding,
+/// a reply in a shape we do not recognise — the run cannot distinguish "your authority was
+/// withdrawn" from "you can no longer confirm you have any", and for a process holding a machine
+/// those are the same situation. The consequence is deliberate and worth stating plainly: a broker
+/// outage parks the arm. That is the direction to fail in.
+fn mint_device_nodes(
+    c: &mut crate::broker_client::BrokerClientCustody,
+    actuators: &[delulu_runtime::value::ActuatorEnvelope],
+) -> Result<(delulu_runtime::AuthorityProbe, Vec<String>), delulu_runtime::CustodyDenial> {
+    use delulu_runtime::{AuthorityState, Custody};
+    let dir = c.state_dir().to_path_buf();
+    let mut nodes: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for env in actuators {
+        let mut authority = delulu_broker::Authority::default();
+        authority.effects.insert(delulu_check::Effect::Actuate);
+        let holder = delulu_broker::Holder::new("device", &env.device, "");
+        let child = c.attenuate(authority, holder)?;
+        nodes.insert(env.device.clone(), child.as_str().to_string());
+    }
+    let ids: Vec<String> = nodes.values().cloned().collect();
+    Ok((Box::new(move |device: &str| {
+        // A device with no node of its own is not a device this run may command. Unknown is dead,
+        // like every other unanswerable case.
+        let Some(node) = nodes.get(device) else {
+            return AuthorityState::Dead(format!("`{device}` has no grant node in this run"));
+        };
+        let req = crate::broker_ipc::ReqBody::NodeState { node: node.clone() };
+        match crate::brokerd::request(&dir, req) {
+            Ok(crate::broker_ipc::Response::NodeState { state, by_seq, .. }) => {
+                if state == "live" {
+                    AuthorityState::Live
+                } else {
+                    AuthorityState::Dead(match by_seq {
+                        Some(seq) => format!("grant node `{node}` is {state} (by audit seq {seq})"),
+                        None => format!("grant node `{node}` is {state}"),
+                    })
+                }
+            }
+            Ok(other) => AuthorityState::Dead(format!(
+                "the broker answered the liveness of `{node}` with {other:?}, which is not an answer"
+            )),
+            Err(e) => AuthorityState::Dead(format!("the broker did not answer for `{node}`: {e}")),
+        }
+    }), ids))
+}
+
+/// Revoke this run's device nodes as it exits (10g). Best-effort and silent: the run is over and
+/// the devices are already released; failing to tidy the tree must not change the run's verdict.
+///
+/// Why this exists at all — it was found by a measurement harness, not by reasoning. A run's device
+/// nodes were staying `[live]` after the process was gone, so `delulu grants list` showed arms
+/// nobody held. An operator aiming an e-stop at one of those ghosts gets `ok: revoked 1 node(s)`
+/// and a machine that keeps moving. **An e-stop that reports success without stopping anything is
+/// worse than no e-stop**, because it ends the search for the real one.
+///
+/// Note the residual, which this does not fix and does not hide: the run's OWN node still outlives
+/// it (Stage 5 behaviour, shared with every other run and relied on by `run --lease`). So
+/// `grants list` after a run still shows a `(process)` node — but no longer a `(device)` one, and
+/// the device is what an e-stop is aimed at.
+fn revoke_device_nodes(state_dir: &std::path::Path, ids: &[String]) {
+    for id in ids {
+        let req = crate::broker_ipc::ReqBody::Revoke { caller: id.clone(), target: id.clone() };
+        let _ = crate::brokerd::request(state_dir, req);
+    }
+}
+
 fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_ipc::AuthoritySpec {
     let root = grants.build_root();
     let mut effects: BTreeSet<&'static str> = BTreeSet::new();
@@ -3293,6 +3369,15 @@ fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_i
     }
     if root.foreign_load {
         effects.insert("ForeignCall");
+    }
+    // 10g: an actuator grant puts `Actuate` in the NODE's authority, which is what lets the grant
+    // tree carry it — attenuate it to a child, show it in `delulu authority`, and above all revoke
+    // it. Sensor grants deliberately add nothing: a sensor read is `Read` with a sensor scope
+    // (spec §5.1), and minting `Read` here would hand the node a *file-reading* effect it was
+    // never granted — the fs scope would still be empty, but an effect nobody asked for is exactly
+    // the widening this line exists to avoid.
+    if !grants.actuators.is_empty() {
+        effects.insert("Actuate");
     }
     let mut secret_names: Vec<String> = grants.secrets.keys().cloned().collect();
     secret_names.sort();
@@ -4569,6 +4654,13 @@ fn cmd_run(rest: &[String]) -> i32 {
         // PATHS (the path is grant data — a human decision; the lease's `foreign.c` scope still
         // bounds WHICH libs, enforced by the broker's ForeignBind check). Anything else would be a
         // confusing local widening the broker would deny anyway — refuse it up front.
+        // 10g: device grants are named here explicitly, and the reason is worth recording. This
+        // list enumerates what a lease run may NOT be given locally, so every grant kind added
+        // after it was written fell through to `else` and was silently DISCARDED by
+        // `grants_from_lease` below. That is exactly what happened to `actuator=`/`sensor=`: the
+        // operator typed a device grant, was told nothing, and the program then died at the mint
+        // with `DL0703: actuator was not granted` — a diagnostic that blames the program for the
+        // CLI having thrown the grant away. A refusal list is a skip branch wearing a disguise.
         if grants.console
             || grants.clock
             || grants.rand
@@ -4583,6 +4675,21 @@ fn cmd_run(rest: &[String]) -> i32 {
             eprintln!(
                 "error: a `--lease` run derives its authority from the delegated node — only \
                  `--grant foreign.c=LIB:PATH` (the binary path, which is grant data) may accompany it"
+            );
+            return 2;
+        }
+        // Devices get their own refusal, because the honest answer is not "you may not" but "this
+        // cannot be delegated yet". A grant tree node carries the authority to actuate; it cannot
+        // yet carry an ENVELOPE (`Scopes` has no actuator dimension), so there is no way for the
+        // delegating side to say *how far* the holder may move a machine. Rather than run with the
+        // device silently absent, say which grant was refused and why.
+        if !grants.actuators.is_empty() || !grants.sensors.is_empty() {
+            eprintln!(
+                "error: a `--lease` run cannot take a local `--grant actuator=`/`sensor=`: the \
+                 delegated node carries the authority to actuate, but a device ENVELOPE is not yet \
+                 expressible in a grant node, so the delegating side could not bound it. Run the \
+                 device program under `--broker daemon` with its own device grants instead \
+                 (Stage 10 build order, ruling D12e)."
             );
             return 2;
         }
@@ -4877,6 +4984,34 @@ fn cmd_run(rest: &[String]) -> i32 {
             }
         }
     }
+    // 10g: give each actuator its own child node under this run's, then build the e-stop probe
+    // from them BEFORE custody moves into the interpreter. Two reasons for the child nodes rather
+    // than watching the run's own node: `grants revoke` on a device stops that device and leaves
+    // the program its console to report the loss with (spec §5.2's *subtree*), and revoking the
+    // parent still reaches every device transitively — the tree already does that.
+    // The device nodes' ids travel separately from the probe so the run can revoke them on the way
+    // out; the probe itself has moved into the watchdog thread by then.
+    let mut device_nodes: Vec<String> = Vec::new();
+    let device_state_dir: Option<std::path::PathBuf> =
+        daemon_custody.as_ref().map(|c| c.state_dir().to_path_buf());
+    let authority_probe: Option<delulu_runtime::AuthorityProbe> = if grants.actuators.is_empty() {
+        None
+    } else {
+        match daemon_custody.as_mut().map(|c| mint_device_nodes(c, &grants.actuators)) {
+            None => None,
+            Some(Ok((probe, ids))) => {
+                device_nodes = ids;
+                Some(probe)
+            }
+            Some(Err(d)) => {
+                // Fail closed: if a device's own node cannot be minted, the e-stop has nothing to
+                // aim at, and a run holding a machine with no way to stop it must not start.
+                let diag = Diagnostic::error(d.code, d.message);
+                print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
+    };
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
         interp = interp.with_custody(Box::new(c));
@@ -4890,10 +5025,11 @@ fn cmd_run(rest: &[String]) -> i32 {
     let devices = if grants.actuators.is_empty() && grants.sensors.is_empty() {
         None
     } else {
-        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::new(
+        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_authority_watch(
             device_profile.clone(),
             &grants.actuators,
             &grants.sensors,
+            authority_probe,
         ));
         interp = interp.with_devices(b.clone());
         Some(b)
@@ -5025,6 +5161,11 @@ fn cmd_run(rest: &[String]) -> i32 {
         // single most consequential thing that can happen to a program in this language.
         for e in events.iter().filter(|e| e.op == "lease.revoked") {
             eprintln!("devices: {}", e.detail);
+        }
+        // 10g: and the device's grant node dies with the run that minted it, so `grants list`
+        // never offers an operator an arm that nobody holds (see `revoke_device_nodes`).
+        if let Some(dir) = &device_state_dir {
+            revoke_device_nodes(dir, &device_nodes);
         }
     }
 

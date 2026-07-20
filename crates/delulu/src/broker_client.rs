@@ -132,6 +132,13 @@ impl BrokerClientCustody {
         &self.node
     }
 
+    /// The broker state directory this client talks to. Exposed for 10g's e-stop: the device
+    /// watchdog runs on its own thread and cannot borrow the custody client, so it is handed a
+    /// probe built from this pair (`state_dir`, `node`) instead.
+    pub fn state_dir(&self) -> &std::path::Path {
+        &self.state_dir
+    }
+
     /// Refresh the epoch cache from the daemon (one `NodeState` round-trip). Fail closed: an
     /// unreachable broker is an `Err`, and the STALE CACHE IS DISCARDED — a dead broker must not
     /// keep serving allows from an old snapshot beyond this refresh point.

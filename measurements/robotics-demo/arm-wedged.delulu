@@ -1,0 +1,44 @@
+// The arm demonstration (Stage 10 §5.5) — EDIT 3 of 3: the edit that stops driving.
+//
+// The agent has added an expensive computation between control steps — a replan, a search, a
+// model call, it does not matter which. Here it is `fib`, because this runtime has no sleep and
+// the shape is what counts: the controller goes away for longer than its heartbeat and comes back
+// expecting the arm to still be there.
+//
+// It is not there. Nothing in this program asked whether the lease was alive, and nothing in this
+// program was consulted when it died: the watchdog revoked it and engaged `safe-park` while this
+// code was still inside `fib`. The second command returns `LeaseRevoked`, which is a different
+// variant from `Envelope` precisely so that this case cannot be handled as "one more bad
+// setpoint" — you clamp and retry a rejected torque, and you STOP when you no longer hold the
+// machine.
+//
+// This is the failure that motivates dead-man leases at all. A wedged controller is not a
+// hypothetical: it is the normal consequence of putting a planner in a control loop.
+module demo
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => "COMMANDED",
+    Err(e) => match e {
+      Envelope(reason) => "REFUSED: " + reason,
+      LeaseRevoked(reason) => "REVOKED: " + reason,
+      NoDevice => "NODEVICE"
+    }
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("EDIT 3: a long think between steps")
+  c.println(say(a.command(Cmd { angle_deg: 10.0, velocity_dps: 12.0, torque_nm: 1.4 })))
+  c.println("thinking " + str(fib(27)))
+  c.println(say(a.command(Cmd { angle_deg: 14.0, velocity_dps: 12.0, torque_nm: 1.4 })))
+  c.println("DONE")
+}

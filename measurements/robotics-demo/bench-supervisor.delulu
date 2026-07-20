@@ -1,0 +1,58 @@
+// Measurement — the e-stop's tight loop.
+//
+// `arm-supervisor.delulu` is the readable version of this scenario, with a `fib` burn standing in
+// for a planner. That burn is exactly wrong for *measuring* the e-stop: it puts up to a whole
+// iteration of the program's own compute between the arm stopping and the program noticing, and
+// that slack would land in the published number as if it were mechanism latency.
+//
+// So this one does nothing but command, as fast as it can, and stops the instant a command comes
+// back as anything other than `Ok`. The gap between "the watchdog engaged the fail-state" and
+// "the program printed REVOKED" is then one command's worth of time — a few hundred microseconds
+// in daemon mode — which is small enough to state as slack rather than hide.
+//
+// Two nested loops rather than one 10 000-deep recursion: depth is a real resource, and a
+// measurement harness that dies of stack exhaustion measures nothing.
+module bench
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn on_err(c: Cap[Console], e: ActuateErr) -> Int ! {Write} {
+  match e {
+    Envelope(reason) => c.println("REFUSED: " + reason),
+    LeaseRevoked(reason) => c.println("REVOKED: " + reason),
+    NoDevice => c.println("NODEVICE")
+  }
+  1
+}
+
+// Returns 1 once the arm is gone, 0 while it is still ours.
+fn inner(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    match a.command(Cmd { angle_deg: 12.0, velocity_dps: 12.0, torque_nm: 1.4 }) {
+      Ok(u) => inner(c, a, n - 1),
+      Err(e) => on_err(c, e)
+    }
+  }
+}
+
+fn outer(c: Cap[Console], a: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    if inner(c, a, 100) > 0 {
+      1
+    } else {
+      outer(c, a, n - 1)
+    }
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("UP")
+  let stopped = outer(c, a, 100)
+  c.println("DOWN")
+}

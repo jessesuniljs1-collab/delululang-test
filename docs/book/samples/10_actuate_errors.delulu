@@ -1,0 +1,32 @@
+module control
+
+// Chapter 16 — the three ways a command can fail to reach a machine, and why they are three
+// variants rather than one error with a reason string.
+//
+// The reactions genuinely differ:
+//   Envelope     — you asked for the wrong motion. Clamp it and try again.
+//   LeaseRevoked — you no longer hold the machine. STOP. Retrying is the bug.
+//   NoDevice     — nothing is bound to that name. Absence is never a number (invariant 50).
+//
+// Collapse those into one error and every control program in the language starts string-matching
+// its way to a safety decision.
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn clamped(reason: Str) -> Str {
+  "clamping and retrying: " + reason
+}
+
+fn stopped(reason: Str) -> Str {
+  "stopping — the machine is no longer ours: " + reason
+}
+
+fn drive(a: Cap[Actuator]) -> Str ! {Actuate} {
+  match a.command(Cmd { angle_deg: 12.0, velocity_dps: 4.0, torque_nm: 1.4 }) {
+    Ok(u) => "commanded",
+    Err(e) => match e {
+      Envelope(reason) => clamped(reason),
+      LeaseRevoked(reason) => stopped(reason),
+      NoDevice => "no adapter is bound to this device"
+    }
+  }
+}

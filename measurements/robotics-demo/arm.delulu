@@ -1,0 +1,48 @@
+// The arm demonstration (Stage 10 §5.5) — EDIT 1 of 3: the correct control program.
+//
+// This is the baseline the agent starts from and the one the other two edits mutate. It drives
+// `arm0/elbow` through a short trajectory, entirely inside the envelope its operator granted, and
+// reports the outcome of every command. Nothing here knows what the envelope is: the program asks
+// for motion and is told, per command, whether it got it.
+//
+// Read `say` first. The refusal channel is a VALUE — `Result[Unit, ActuateErr]` — so a refused
+// command is something this loop handles and continues past, not something that kills it. That is
+// the property the whole demonstration turns on: an arm whose controller panics mid-motion is
+// worse than one whose controller is told "no" and keeps its loop alive.
+module demo
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => "COMMANDED",
+    Err(e) => match e {
+      Envelope(reason) => "REFUSED: " + reason,
+      LeaseRevoked(reason) => "REVOKED: " + reason,
+      NoDevice => "NODEVICE"
+    }
+  }
+}
+
+// One step of the trajectory. The setpoints are well inside `angle_deg=-30..95`,
+// `velocity_dps=0..40` and `torque_nm=0..2.5`, so every one of these lands.
+fn step(c: Cap[Console], a: Cap[Actuator], angle: Float) -> Unit ! {Write, Actuate} {
+  c.println(say(a.command(Cmd { angle_deg: angle, velocity_dps: 12.0, torque_nm: 1.4 })))
+}
+
+fn sweep(c: Cap[Console], a: Cap[Actuator], n: Int, angle: Float) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    step(c, a, angle)
+    sweep(c, a, n - 1, angle + 3.0)
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("EDIT 1: nominal sweep")
+  let done = sweep(c, a, 20, 0.0)
+  c.println("DONE")
+}

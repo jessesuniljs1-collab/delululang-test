@@ -2,8 +2,9 @@
 //!
 //! Every primitive-table operation is classed (spec §4.1):
 //! - **Synchronous** — validated by a broker round-trip against LIVE tree state per use:
-//!   `Declassify`/expose, `FsWrite`, `Net`, foreign bind (plugin-load and Actuate are reserved
-//!   variants, unused in v0.5).
+//!   `Declassify`/expose, `FsWrite`, `Net`, foreign bind, and — since Stage 10 phase 10g —
+//!   `Actuate`, which was reserved here in Stage 5 and now carries real commands to real
+//!   machines (plugin-load remains a reserved variant, unused).
 //! - **Epoch** — validated locally against a cached [`Snapshot`] the runtime refreshes every
 //!   `--epoch-ms` (that refresh wiring is chunk 3): `FsRead`, `Clock`, `Rand`, `Console`.
 //!
@@ -33,7 +34,9 @@ pub enum Op {
     ForeignBind,
     /// Reserved variant (Stage 6 plugin loading); unused in v0.5.
     PluginLoad,
-    /// Reserved variant (Stage 10 robotics); unused in v0.5.
+    /// Commanding a physical device (Stage 10 Track D). Reserved in Stage 5, ACTIVE since phase
+    /// 10g: `Cap[Actuator].command` round-trips here per command, which is what makes an operator
+    /// e-stop — `delulu grants revoke` on the holding node — reach a running arm at all.
     Actuate,
     // ----- epoch class -----
     FsRead,
@@ -63,7 +66,11 @@ impl Op {
             Op::Clock => Some(Effect::Clock),
             Op::Rand => Some(Effect::Rand),
             Op::Console => Some(Effect::Write),
-            Op::PluginLoad | Op::Actuate => None,
+            // A node with no `Actuate` in its authority commands nothing, whatever envelope its
+            // capability value happens to carry — the grant tree is the authority, the value is a
+            // copy of it (10e's ordering law, now enforced one layer further out).
+            Op::Actuate => Some(Effect::Actuate),
+            Op::PluginLoad => None,
         }
     }
 

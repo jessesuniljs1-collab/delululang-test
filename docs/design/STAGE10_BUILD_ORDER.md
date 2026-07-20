@@ -196,6 +196,70 @@ so, because extrapolating a scheduler-sensitive number across platforms is inven
 `delulu grants revoke` on an actuator subtree (spec §5.2's e-stop) exists in the broker API
 (`DeviceBroker::revoke`, `RevokeCause::Operator`) but has no CLI surface until 10g needs one.
 
+**D12 — The demonstrations (10g): what the e-stop turned out to require, and three defects the
+demonstrations found.** Eight sub-rulings. (a) **`Op::Actuate` is activated, and an actuator grant
+now puts `Actuate` in the node's authority.** Stage 5 reserved the variant with
+`required_effect() == None`; it now requires `Effect::Actuate`, and `Cap[Actuator].command`
+round-trips to the grant tree per command (spec §5.1's synchronous class; addendum §2.5 states
+that model). Without this there is nothing for an operator to aim an e-stop at: a device grant left
+no trace in the tree at all. **Sensor grants deliberately add nothing.** Minting `Read` for them
+would hand the node a *file-reading* effect nobody granted — the fs scope would still be empty, but
+an effect nobody asked for is exactly the widening the line exists to avoid; a sensor read is
+`Read` with a SENSOR scope (§5.1), and that scope lives in the device broker. (b) **An `Actuate`
+custody denial is a VALUE, not a fault — the only op with that asymmetry.** Every other denial at
+that gate means the program asked for something it never held; this one can also mean an operator
+hit e-stop a millisecond ago. A supervisor holding four arms must lose the revoked one and keep
+parking the other three, so it returns `LeaseRevoked` and the process lives (10e's law, carried up
+a layer). (c) **The e-stop aims at a per-device CHILD node, not the run's own.** This was ruled by
+a failing test, not by design review: watching the run's node meant `grants revoke` took the
+program's console down with the arm, so the supervisor could not report the loss. Spec §5.2 says
+*subtree*, so each device now holds its own child carrying `{Actuate}` and nothing else. **Both
+e-stops are kept** because they stop different amounts of machine: revoking the device stops that
+device; revoking the parent stops everything transitively and ends the run. The tree says which is
+which, and the blast radius of each is witnessed. (d) **A device's grant node must not outlive the
+run that minted it.** Found by the measurement harness, which could not stop the arm: finished runs
+were leaving `[live]` device nodes, so `grants list` offered an operator several arms and no way to
+tell which — if any — a live process held. Revoking a ghost prints `ok: revoked 1 node(s)` and
+stops nothing. **A successful-looking e-stop is worse than a missing one, because it ends the
+search for the real one.** Runs now revoke their device nodes on exit. The nodes are **revoked, not
+deleted** — the audit chain records what was held and when, and erasing it to tidy a listing would
+trade evidence for cosmetics. The residual is stated, not fixed: a run's own `(process)` node still
+outlives it (Stage 5 behaviour, shared with every run and relied on by `run --lease`); what no
+longer outlives a run is a *device*. (e) **`run --lease` refuses a local `--grant actuator=`/
+`sensor=` by name, and the reason is a named gap.** The lease path validated local grants by
+enumerating the kinds it forbids — so every grant kind invented after that list was written fell
+through the `else` and was silently DISCARDED by `grants_from_lease`. Device grants were exactly
+that: the operator typed one, was told nothing, and the program died at the mint with `DL0703:
+actuator was not granted`, a diagnostic that blames the program for the CLI having thrown the grant
+away. **A refusal list is a skip branch wearing a disguise.** The honest refusal is not "you may
+not" but "this cannot be delegated yet": `delulu_broker::Scopes` has dimensions for files, network,
+secrets and foreign libraries and **none for a device**, so a delegating party can say "you may
+actuate" but not "you may slew ±5°". For an arm on a bench that is a modelling detail; for a
+spacecraft it is the crux, because the ground segment is meant to be the authority. Expressing an
+envelope in a grant node means extending the `⊑` lattice and the wire protocol — the most
+safety-critical lattice in the system — and doing that late in a demonstrations phase would buy a
+shallow version of the one thing that must not be shallow. **Deferred, named, and enforced in the
+meantime.** (f) **The revocation audit line's tail differs by cause.** `overdue_us` means something
+different in each of the three: a missed beat is "beat overdue by N µs", a TTL expiry is "held N µs
+past its ttl" (the beats were arriving perfectly — the *loan* ran out), and an operator revoke
+carries the reason instead, because an e-stop reporting `overdue by 0 µs` reads like a heartbeat
+that landed exactly on time. An audit trail that says why a machine stopped has to say the right
+why. (g) **The demonstrations ship as committed programs with tests, not as scripts.** Criterion 4
+asks that the demonstration "reproduce from a clean checkout"; a shell script nobody runs is a
+script that used to work, so the demonstration's own `.delulu` files are executed by
+`robotics_demo.rs` and `satellite_demo.rs` on every `cargo test`. Those tests assert the
+demonstration's *claims* and never a latency — a test pinning a number would fail on a slow machine
+and teach everyone to ignore it; the numbers are measured separately and published. The runner
+scripts build their own binary, because an earlier draft preferred an existing `target/release`
+build, found one predating the feature, and printed a confident page of zeros. `run-demo.sh` needs
+only bash; the measurement harness `measure.py` also needs python3, and that split is deliberate —
+the thing a reader runs to *see* the demonstration should carry no dependency the demonstration
+does not. (h) **Deferred, with reasons.** Numbers are Windows-only (n=20) and say so;
+`measurements/satellite-demo` publishes no latency table at all, because nothing in that scenario
+is a latency claim — its content is authority semantics. The device-envelope-in-a-grant-node gap
+(e) and addendum §2.5's broker-federation gap are both RFC-gated and both restated in the
+recordings rather than left in the design docs where a reader of the demo would not meet them.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -208,7 +272,7 @@ so, because extrapolating a scheduler-sensitive number across platforms is inven
 | 10d | B1 | **DONE** (2026-07-20) — The cycle collector: mark-and-break between turns over a worker-wide registry (List/Record cells + closure-captured scopes); `--trace-memory` reports sweeps + cells collected | The leak corpus collected: 200 manufactured `l → Link(l) → l` cycles broken in one sweep, program output untouched; the safety half witnessed at BOTH levels (unit: a reachable cycle untouched, `Weak` proves real freeing; language: a state-held cycle survives churn); non-actor programs show no collector surface at all; **Study-C gate: interp geo-mean −1.0%, no regression** (D9a). Soundness argument + five sub-rulings in D9. Coverage 100%; suite **948/0/4** |
 | 10e | D1 | **DONE** (2026-07-20) — `Actuate` activates: `root.actuator`/`root.sensor` mints, envelope scopes (`--grant "actuator=DEV:dim=lo..hi[,rate_hz=N]"`), `ActuateErr = Envelope(Str) \| NoDevice`, DL1904 telemetry, `PRIM_TABLE_VERSION` 1→2 | Refusal kills the command, never the process — every refusal test asserts **exit 0** with the error handled in-program; the skip branch witnessed directly (`a_dimension_the_envelope_never_bounded_is_refused_not_waved_through` — an unbounded dimension is refused BY NAME, not waved through), plus the non-numeric twin; DL1904 lands as `command.refused` **after** the attempt record, order asserted; device named in every trace record (an audit that can't say which actuator moved is not an audit); kind/scope split holds — wrong-device mint is DL0703 at the mint while zero-grant refuses at the pre-flight, both witnessed; invariant 50 witnessed (unbound sensor reads `NoDevice`, never a number). D10 rules the bump and the `rate_hz` gap. Coverage **100%** (296 anchors), suite **955/0/4** |
 | 10f | D2/D4 | **DONE** (2026-07-20) — Dead-man leases (`heartbeat_ms`/`ttl_ms`/`fail` mandatory on every actuator grant; watchdog-thread revoke; `hold`/`coast`/`safe-park` fail-states), `ActuateErr::LeaseRevoked`, `--broker-profile sim` reference simulator (deterministic under `--seed`, mirror sensors close the loop), `rate_hz` enforced, DL1905 sim-to-hardware hash gate (`--signoff`/`--approved`), `PRIM_TABLE_VERSION` 2→3 | Missed heartbeat → revoke → fail-state witnessed at CLI level **with its control** (identical program + generous heartbeat keeps the device — without it, "revoked" proves only that the phase revokes things); TTL expiry witnessed against a perfectly-beaten lease; latency measured and published (`measurements/dead-man/RECORD.md`: overdue max 6.33 ms, sim engage max 17 µs, at `heartbeat_ms=25`, n=20, Windows, terms reported separately); sim replays identically under `--seed` and DIFFERS across seeds; **both DL1905 skip branches witnessed** — no sign-off record → refused, edited artifact → refused, matching sign-off → gate seen to PASS then the honest no-adapter wall; the sim's own skip branch witnessed (a mirror sensor of a device the simulator lacks reads `NoDevice`, never a synthetic number). D11 rules the mandatory terms, the new variant, the version bump, and three named deferrals. Coverage **100%** (297 anchors), suite **980/0/4** |
-| 10g | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
+| 10g ✅ | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
 | 10h | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
 | 10i | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
 | 10j | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |

@@ -1,0 +1,44 @@
+// The arm demonstration (Stage 10 §5.5) — EDIT 2 of 3: the edit that asks for too much.
+//
+// The agent has decided the arm is moving sluggishly and raised the torque, from 1.4 N·m to
+// 5.0 N·m. The operator's grant vouches for `torque_nm=0..2.5`. Nothing in this file is aware of
+// that number, and nothing in this file could have been made aware of it — the envelope is not in
+// the program, it is in the grant.
+//
+// What makes this edit interesting is what it is NOT: it is not malicious, not a bug, and not
+// obviously wrong on its face. It is a plausible tuning change of exactly the kind a competent
+// agent makes. The refusal does not depend on anyone noticing that it is wrong.
+//
+// Note the last two steps. After the over-torque command is refused, the program lowers the
+// torque and keeps driving — and those commands land. The refusal killed the command, not the
+// controller, and not the arm's ability to be commanded afterwards.
+module demo
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn say(r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => "COMMANDED",
+    Err(e) => match e {
+      Envelope(reason) => "REFUSED: " + reason,
+      LeaseRevoked(reason) => "REVOKED: " + reason,
+      NoDevice => "NODEVICE"
+    }
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("EDIT 2: torque raised to 5.0")
+
+  // In-envelope, to establish that the arm is live and this program can drive it.
+  c.println(say(a.command(Cmd { angle_deg: 10.0, velocity_dps: 12.0, torque_nm: 1.4 })))
+
+  // The edit. 5.0 N·m against a 2.5 N·m envelope: refused, per command, by name.
+  c.println(say(a.command(Cmd { angle_deg: 14.0, velocity_dps: 12.0, torque_nm: 5.0 })))
+
+  // And the controller is still alive and still holds the arm.
+  c.println(say(a.command(Cmd { angle_deg: 18.0, velocity_dps: 12.0, torque_nm: 2.4 })))
+  c.println("DONE")
+}

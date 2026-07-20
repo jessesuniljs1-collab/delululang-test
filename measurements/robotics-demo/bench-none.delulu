@@ -1,0 +1,26 @@
+// Measurement baseline — the SAME loop as `bench-ok.delulu` with the command removed.
+//
+// Everything else is identical: the same recursion, the same record construction, the same
+// arithmetic, the same number of iterations. Subtracting this run's wall clock from that one's
+// leaves the cost of the commands and nothing else — process startup, parsing, checking, and
+// interpreter overhead all cancel.
+//
+// A per-command number taken without this baseline would be measuring `delulu`'s startup time and
+// calling it actuation latency.
+module bench
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn loopn(n: Int, acc: Int) -> Int {
+  if n <= 0 {
+    acc
+  } else {
+    let cmd = Cmd { angle_deg: 12.0, velocity_dps: 12.0, torque_nm: 1.4 }
+    loopn(n - 1, acc + 1)
+  }
+}
+
+fn main(root: Root) ! {Write} {
+  let c = root.console()
+  c.println("baseline " + str(loopn(2000, 0)))
+}

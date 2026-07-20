@@ -33,10 +33,11 @@ reference — but know that the *why* in Chapters 2–5 is what lets you write c
 13. For Machines — the agent-native surface
 14. The Foreign World — C, Python, and the honest boundary
 15. Custody — where the keys actually live
-16. Migrating from Python, Rust, JavaScript, Go
-17. Design Philosophy — the principles beneath the mechanisms
-18. Honesty — what DeluluLang refuses to claim
-19. The Road Ahead — stages, RFCs, and the shape of v1.0+
+16. Commanding Machines — the physical boundary
+17. Migrating from Python, Rust, JavaScript, Go
+18. Design Philosophy — the principles beneath the mechanisms
+19. Honesty — what DeluluLang refuses to claim
+20. The Road Ahead — stages, RFCs, and the shape of v1.0+
 Appendix A. The Welcome Note
 Appendix B. Glossary
 Appendix C. Where Everything Lives (spec map)
@@ -556,7 +557,7 @@ traces the chain *across the actor boundary*. There is no second coloring mechan
 futures runtime — one authority system, extended to concurrency without adding a parallel universe of
 rules.
 
-The honesty (Chapter 18 makes this a habit): DeluluLang guarantees **race freedom**, not liveness.
+The honesty (Chapter 19 makes this a habit): DeluluLang guarantees **race freedom**, not liveness.
 Deadlock, livelock, and starvation are still possible — the language prevents the corruption class of
 concurrency bug, not the "it's stuck" class. It says so plainly, everywhere.
 
@@ -717,7 +718,7 @@ concrete:
 > `g_orch`; all six die. **Identical mechanics if the orchestrator is a human, a CI system, or a
 > robot's supervisory computer** — no code path inspects which.
 
-Revocation is honest about timing (Chapter 18): synchronous-class operations (writes, network,
+Revocation is honest about timing (Chapter 19): synchronous-class operations (writes, network,
 declassify) re-check every use, so revocation takes effect *before the next use*; epoch-class
 operations (reads, clock) validate against a snapshot refreshed every ≤50ms. "Immediate" is never
 claimed. Every issue, delegate, revoke, and declassify is written to an append-only, hash-chained
@@ -734,7 +735,130 @@ can't reach them, and you let it run.
 
 ---
 
-## Chapter 16 — Migrating from Python, Rust, JavaScript, Go
+## Chapter 16 — Commanding Machines: The Physical Boundary
+
+Everything up to here has been about information — files, sockets, secrets, code. This chapter is
+about a program that can move something heavy.
+
+The stakes change and the mechanism does not. That is the claim worth testing, so test it: an
+actuator is a capability, using it is an effect, and the grant that confers it is a node in the
+same tree from Chapter 15. Nothing about torque needs a new law.
+
+```delulu
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn nudge(a: Cap[Actuator]) -> Result[Unit, ActuateErr] ! {Actuate} {
+  a.command(Cmd { angle_deg: 12.0, velocity_dps: 4.0, torque_nm: 1.4 })
+}
+```
+
+`Actuate` is the most physically consequential effect in the language, and it reads like the
+others: it shows up in the row, in `delulu authority`, in the trace. Sensor reads are `Read` with
+a sensor scope — deliberately *not* a new effect, because observation is observation.
+
+### The envelope is not in the program
+
+Look at `nudge` again. It never mentions a limit. The bounds live in the grant a human typed:
+
+```
+--grant "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,torque_nm=0..2.5,\
+         heartbeat_ms=250,ttl_ms=600000,fail=safe-park"
+```
+
+An agent editing that program can raise the torque to 5.0 N·m — a plausible tuning change, not a
+bug and not an attack — and the command is refused, by name, against a bound the program cannot
+see and could not have widened. **The envelope is the scope.** A capability value is a *copy* of
+authority, never the authority itself, so if the value and the grant ever disagree, the grant wins.
+
+Refusal is a **value**, not a fault:
+
+```delulu
+match a.command(cmd) {
+  Ok(u) => keep_going(),
+  Err(e) => match e {
+    Envelope(reason)     => clamp_and_retry(reason),
+    LeaseRevoked(reason) => stop(reason),
+    NoDevice             => report_absent()
+  }
+}
+```
+
+A robot whose controller panics mid-motion is worse than one whose controller is told "no" and
+keeps its loop alive. And `Envelope` and `LeaseRevoked` are separate variants on purpose, because
+the correct reactions differ: you clamp a bad setpoint and retry, and you **stop** when you no
+longer hold the machine. Collapsing them into one error with a reason string would make every
+control program string-match its way to a safety decision.
+
+### Authority that expires on its own
+
+`heartbeat_ms`, `ttl_ms` and `fail` are mandatory on every actuator grant. Omit one and the grant
+is refused, naming the one you left out. There is no default, because "what this machine does when
+the software stops" is an operator's decision, and a runtime that picks quietly has made it.
+
+The heartbeat is enforced by a watchdog thread that owes your program nothing. It does not ask the
+interpreter anything; it wakes on its own tick, and when a lease's beat is overdue it revokes the
+lease and engages the declared fail-state — whether or not your program ever runs another
+instruction. A controller wedged in a loop, blocked on a socket, or stopped at a breakpoint loses
+its actuators on schedule.
+
+> A lease that expires only when the program asks whether it has expired is not a dead-man switch.
+> It is a comment.
+
+### The e-stop is revocation
+
+An operator can stop a machine from another terminal:
+
+```
+delulu grants list                     # g_… [live] … (device) arm0/elbow
+delulu grants revoke g_<device-node>   # that arm parks
+```
+
+That is the *same* `grants revoke` from Chapter 15 — no separate emergency path, no second
+mechanism to keep correct. Each device holds its own child node, so revoking it stops that device
+and leaves the program its console to report the loss with. Revoke the parent instead and
+everything goes, transitively, the program included. Two blast radii, one tree, and the listing
+tells you which is which.
+
+The watchdog probes the tree, and **every answer that is not "live" means stop** — revoked,
+expired, broker silent, reply unrecognised. A broker outage parks the arm. That is the direction
+to fail in.
+
+### What this does not do
+
+DeluluLang commands the policy layer at roughly 1–100 Hz. It is **not** the servo loop, not the
+airworthy autopilot, not the battery-management cell protection, not safe-mode entry. Those live
+below the adapter, in certified firmware, and **invariant 52 says the hardware safety chain must
+not depend on DeluluLang existing.** If the only thing standing between a machine and a person is
+a language runtime, the machine was built wrong.
+
+A dead-man lease and an operator e-stop both shorten the window in which a program can keep
+commanding a machine. Neither closes it. The published latency budgets in
+`measurements/robotics-demo/` say how wide the window is on one measured platform, which is a
+different and more useful thing than a promise.
+
+DeluluLang claims **no** ISO 26262, DO-178C, ECSS, or any other certification. It produces evidence
+a safety case can cite. It is not one, and Chapter 19 is where that habit is spelled out.
+
+### Beyond the arm
+
+The same four mechanisms — envelope-scoped capabilities, dead-man leases, declared fail-states,
+and the sim-to-hardware hash gate — generalize to vehicles, aircraft, spacecraft, and robot fleets.
+The satellite case is the neatest fit, because spaceflight has worked this way for sixty years and
+Stage 10 only makes it mechanical: **a ground station's contact window is a lease TTL.** At loss of
+signal that lease expires on its own — nobody sends a message, because at LOS there is nobody to
+send one — and the spacecraft is left holding a narrower, pre-attenuated autonomy grant that
+outlives the pass. Anomaly response attenuates; it never widens. Re-contact is a *new* delegation,
+because authority does not come back, it is issued again.
+
+One gap is named rather than implied: today's broker is local-only, so the demonstration runs both
+broker roles in one simulated host. It witnesses the grant semantics, not a cross-link transport,
+and **broker federation is RFC-gated future work that any real deployment in that domain would
+need first.** The recordings say so in their own words, where a reader of the demo will actually
+meet it.
+
+---
+
+## Chapter 17 — Migrating from Python, Rust, JavaScript, Go
 
 You already know how to program. What's different in DeluluLang is *authority*. Here is the
 translation for each background.
@@ -783,7 +907,7 @@ read, the discipline pays for itself.
 
 ---
 
-## Chapter 17 — Design Philosophy
+## Chapter 18 — Design Philosophy
 
 The creator's own statement of the principle, from the project's first discussions, is the shortest
 form this chapter has: **freedom with authority; freedom with responsibility.** Everyone — human,
@@ -817,7 +941,7 @@ predictable — when you wonder "why does DeluluLang do X?", the answer is almos
    capability and watch it appear in the authority report.
 7. **Honesty is a feature, enforced.** Every claim traces to a measurement or a stated threat model.
    The language would rather say "we don't defend against that" than imply a guarantee it can't keep
-   (Chapter 18). This is a *design* principle because trust is the product, and an oversold guarantee
+   (Chapter 19). This is a *design* principle because trust is the product, and an oversold guarantee
    is worse than none.
 8. **The reviewer is the protagonist.** Increasingly, the person (or agent) who matters is not the
    author but the one deciding whether to *run* the code. Every design choice optimizes for making
@@ -825,7 +949,7 @@ predictable — when you wonder "why does DeluluLang do X?", the answer is almos
 
 ---
 
-## Chapter 18 — Honesty: What DeluluLang Refuses to Claim
+## Chapter 19 — Honesty: What DeluluLang Refuses to Claim
 
 A language whose entire value is trust must be ruthless about not overselling. These honesty clauses
 are *binding* — they appear in the Constitution, in every stage spec, in `delulu explain` text, and
@@ -854,7 +978,7 @@ building the impossible thing — not in pretending you already have.
 
 ---
 
-## Chapter 19 — The Road Ahead
+## Chapter 20 — The Road Ahead
 
 DeluluLang is built in stages, each shippable and proven before the next. The sequence:
 

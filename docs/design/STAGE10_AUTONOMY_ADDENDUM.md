@@ -22,7 +22,11 @@ authority it was never meant to have (Constitution §7). Stage 10 does not inven
 per domain. Four mechanisms, all specified in the Stage-10 spec, generalize everywhere:
 
 1. **Envelope-scoped capabilities** (§5.1) — a device capability's scope *is* its physical
-   envelope, enforced host-side and adapter-side on every command.
+   envelope, enforced host-side and adapter-side on every command. (**As built through 10g both
+   checks live in one process**, so this is structural rehearsal for the host/adapter split, not
+   the independent defense-in-depth a hardware deployment gets — build-order D11e. What it does
+   buy today, and what is unit-witnessed: if the capability value and the grant ever disagree,
+   the grant wins.)
 2. **Dead-man leases** (§5.2, invariant 47) — every physical authority has a TTL and heartbeat; a
    hung or partitioned program *loses* physical authority by default. (A *compromised but
    still-running* program keeps heartbeating — what bounds it is the independently enforced
@@ -67,6 +71,11 @@ A battery is commanded and read like any device, with an **energy envelope**:
              "rate_hz": 1, "heartbeat_ms": 5000, "ttl_ms": 600000 } }
 ```
 
+The JSON above is the *scope* an energy device would carry, not a shipped grant format: as built,
+that envelope is written in the ordinary grant form
+(`--grant "actuator=battery0/bms:charge_a=0..12,soc_pct=15..90,heartbeat_ms=5000,ttl_ms=600000,fail=hold"`),
+there is no `kind: "energy"` tag, and **no BMS adapter exists in-tree** (10g honesty review).
+
 Charge-policy commands (set charge rate, schedule discharge, derate on thermal forecast) are
 `Actuate` within the envelope; pack telemetry (state of charge, cell temperatures, health) is
 `Read`. **The honest boundary:** the BMS firmware owns cell protection — over-current,
@@ -96,7 +105,9 @@ additive, and honest about its latency*:
 
 An MCU is a device you **flash and talk to** (spec §7.3): firmware images are signed artifacts;
 flashing is an actuation-class operation behind an explicit grant and the DL1905 approved-hash
-gate; message exchange with running firmware is `Read`/`Write` under device scopes. Accessories
+gate; message exchange with running firmware is `Read`/`Write` under device scopes. (**Design, not
+built:** DL1905 and the grant machinery exist as of 10f/10g, but there is no flashing operation and
+no MCU adapter — 10g honesty review.) Accessories
 and payloads — grippers, camera gimbals, science instruments, lighting rigs — are simply more
 device adapters with kind-appropriate envelopes. There is deliberately no "miscellaneous device"
 escape hatch: a device with no adapter and no envelope gets no capability.
@@ -127,6 +138,16 @@ while the link heartbeats) and the lost-link grant (a strict `⊑` attenuation �
 return-to-launch corridor only). Link loss is lease death; the autopilot's declared fail-state
 engages under the narrower grant. The aircraft never has to *decide* what it may do when alone;
 it was told, mechanically, before takeoff.
+
+> **Gap (named 10g, honesty review; build-order D12e).** The two-grant pattern above needs a
+> delegation that carries a device *envelope*, and today it cannot. `delulu_broker::Scopes` has
+> dimensions for files, network, secrets and foreign libraries and **none for a device**, so a
+> delegating party can say "you may actuate" but not "you may fly this corridor only". Both grants
+> above are expressible as *device grants at the holder*; what is not yet expressible is one party
+> handing another a **bounded** one. Until that lands, the attenuation is enforced where the
+> program runs rather than where the mission was uploaded — which is the wrong place for this
+> domain, and the reason `run --lease` now refuses a local device grant by name instead of
+> silently dropping it. RFC-gated, alongside §2.5's broker federation.
 
 ### 2.3 Spacecraft and satellites — the contact window is a lease
 

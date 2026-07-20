@@ -1,0 +1,75 @@
+// The satellite scenario (Stage 10 §5.6, addendum §2.3, acceptance criterion 10).
+//
+// One spacecraft, one program, two subsystems held under two different grants:
+//
+//   sat0/hga     the ground-delegated authority for this pass. Wide: ±45° of slew. Its lease
+//                `ttl_ms` IS THE CONTACT WINDOW — when the pass ends, the lease ends, and it ends
+//                without anyone sending a message, because at loss-of-signal there is nobody to
+//                send one.
+//
+//   sat0/wheels  the pre-attenuated autonomy grant. Narrow: ±0.5° of momentum management, the
+//                box the spacecraft is trusted to keep itself inside while nobody is watching.
+//                Its TTL outlives the pass.
+//
+// The program does not know which is which. It commands both, on every cycle, and reports what it
+// is told. Nothing in it polls for loss-of-signal, checks a clock, or handles a "you are now
+// autonomous" event — because a spacecraft that must be *told* it has lost the ground has already
+// assumed the one thing it cannot assume.
+//
+// Three things are witnessed, in this order, in one continuous run:
+//
+//   1. During contact, both subsystems accept commands.
+//   2. At LOS the contact lease expires on its own. `sat0/hga` returns LeaseRevoked and its
+//      declared fail-state engages; `sat0/wheels` keeps working. The autonomy grant engages by
+//      being the thing that did not expire.
+//   3. Attenuation never widens: a ±40° slew offered to the autonomy grant is REFUSED by its
+//      envelope, both during and after contact. Anomaly response narrows authority; nothing in
+//      this system turns a small grant into a large one because circumstances got interesting.
+//
+// Re-contact is a separate run with a fresh grant, and that is the honest shape: authority does
+// not come back. A new pass is a NEW delegation with a new lease.
+module sat
+
+type Slew { slew_deg: Float }
+
+fn fib(n: Int) -> Int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn say(who: Str, r: Result[Unit, ActuateErr]) -> Str {
+  match r {
+    Ok(u) => who + " COMMANDED",
+    Err(e) => match e {
+      Envelope(reason) => who + " REFUSED: " + reason,
+      LeaseRevoked(reason) => who + " REVOKED: " + reason,
+      NoDevice => who + " NODEVICE"
+    }
+  }
+}
+
+// One control cycle: hold attitude with the wheels, point the antenna with the ground-delegated
+// authority, and try one wide slew on the wheels to prove the autonomy box is a real bound.
+fn cycle(c: Cap[Console], hga: Cap[Actuator], wheels: Cap[Actuator], i: Int) -> Unit ! {Write, Actuate} {
+  c.println(say("wheels", wheels.command(Slew { slew_deg: 0.2 })))
+  c.println(say("hga", hga.command(Slew { slew_deg: 12.0 })))
+  c.println(say("wheels-wide", wheels.command(Slew { slew_deg: 40.0 })))
+  c.println("cycle " + str(i) + " " + str(fib(21)))
+}
+
+fn orbit(c: Cap[Console], hga: Cap[Actuator], wheels: Cap[Actuator], n: Int) -> Int ! {Write, Actuate} {
+  if n <= 0 {
+    0
+  } else {
+    cycle(c, hga, wheels, n)
+    orbit(c, hga, wheels, n - 1)
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let hga = root.actuator("sat0/hga")
+  let wheels = root.actuator("sat0/wheels")
+  c.println("ACQUISITION OF SIGNAL")
+  let done = orbit(c, hga, wheels, 100)
+  c.println("END OF RUN")
+}

@@ -1,0 +1,33 @@
+// Measurement — 500 ACCEPTED commands, nothing else.
+//
+// No `println` inside the loop: console output is itself an authorized effect, and in daemon mode
+// it is a broker round-trip. Printing per command would measure the console, not the actuator.
+// The count is accumulated and printed once, at the end.
+//
+// The grant used for this program deliberately carries no `rate_hz` — with one, this loop would
+// be measuring the rate limiter's refusals rather than the cost of a command that lands.
+module bench
+
+type Cmd { angle_deg: Float, velocity_dps: Float, torque_nm: Float }
+
+fn score(r: Result[Unit, ActuateErr]) -> Int {
+  match r {
+    Ok(u) => 1,
+    Err(e) => 0
+  }
+}
+
+fn loopn(a: Cap[Actuator], n: Int, acc: Int) -> Int ! {Actuate} {
+  if n <= 0 {
+    acc
+  } else {
+    let cmd = Cmd { angle_deg: 12.0, velocity_dps: 12.0, torque_nm: 1.4 }
+    loopn(a, n - 1, acc + score(a.command(cmd)))
+  }
+}
+
+fn main(root: Root) ! {Write, Actuate} {
+  let c = root.console()
+  let a = root.actuator("arm0/elbow")
+  c.println("accepted " + str(loopn(a, 2000, 0)))
+}

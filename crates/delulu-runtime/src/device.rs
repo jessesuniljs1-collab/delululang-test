@@ -118,6 +118,27 @@ impl RevokeCause {
     }
 }
 
+/// What an [`AuthorityProbe`] found when it asked whether this run still holds its grant.
+#[derive(Clone, Debug)]
+pub enum AuthorityState {
+    Live,
+    /// The authority is gone — revoked by an operator, expired, or **unanswerable**. All three
+    /// collapse to one variant on purpose: a run that cannot confirm it still holds a machine is
+    /// in exactly the position of a run that has been told it does not.
+    Dead(String),
+}
+
+/// The watchdog's link to the grant tree: asked once per tick **per device**, from the watchdog
+/// thread, so an operator e-stop reaches the machine WITHOUT the program cooperating. A program
+/// that has stopped commanding — wedged, looping, waiting on a socket — is precisely the case an
+/// e-stop exists for, and exactly the case a check on the command path would miss.
+///
+/// Per device, not per run, because spec §5.2 says *subtree*: each device holds its own child node
+/// under the run's, so revoking one arm stops that arm and leaves the supervisor its console to
+/// report with. Revoking the parent still reaches every device — transitively, through the tree,
+/// which is the broker's job and not this probe's.
+pub type AuthorityProbe = Box<dyn Fn(&str) -> AuthorityState + Send>;
+
 /// A revocation that has already happened, with the numbers the latency budget is made of.
 #[derive(Clone, Copy, Debug)]
 pub struct Revocation {
@@ -188,6 +209,19 @@ impl DeviceBroker {
     /// Build the broker for a run and start its watchdog. `envelopes` are the granted actuator
     /// envelopes; `sensors` the granted sensor device names.
     pub fn new(profile: Profile, envelopes: &[ActuatorEnvelope], sensors: &[String]) -> DeviceBroker {
+        DeviceBroker::with_authority_watch(profile, envelopes, sensors, None)
+    }
+
+    /// The same broker, plus a probe against the grant tree (10g). This is the operator e-stop:
+    /// `delulu grants revoke` kills the node in the broker daemon, the watchdog's next tick sees
+    /// it, and every device this run holds engages its declared fail-state — with no cooperation
+    /// from the program, which may well be the thing that needed stopping.
+    pub fn with_authority_watch(
+        profile: Profile,
+        envelopes: &[ActuatorEnvelope],
+        sensors: &[String],
+        authority: Option<AuthorityProbe>,
+    ) -> DeviceBroker {
         let now = Instant::now();
         let mut leases = BTreeMap::new();
         let mut devices = BTreeMap::new();
@@ -225,7 +259,7 @@ impl DeviceBroker {
             inner.sim.lock().unwrap().reads.insert(s.clone(), 0);
         }
         let stop = Arc::new(AtomicBool::new(false));
-        let watchdog = spawn_watchdog(inner.clone(), stop.clone(), envelopes);
+        let watchdog = spawn_watchdog(inner.clone(), stop.clone(), envelopes, authority);
         DeviceBroker { inner, stop, watchdog: Mutex::new(watchdog) }
     }
 
@@ -340,7 +374,7 @@ impl DeviceBroker {
         if lease.revoked.is_some() {
             return false;
         }
-        revoke_lease(&self.inner, device, lease, RevokeCause::Operator, 0);
+        revoke_lease(&self.inner, device, lease, RevokeCause::Operator, 0, Some("revoked in-process"));
         true
     }
 
@@ -379,6 +413,7 @@ fn spawn_watchdog(
     inner: Arc<BrokerInner>,
     stop: Arc<AtomicBool>,
     envelopes: &[ActuatorEnvelope],
+    authority: Option<AuthorityProbe>,
 ) -> Option<std::thread::JoinHandle<()>> {
     if envelopes.is_empty() {
         return None;
@@ -391,6 +426,31 @@ fn spawn_watchdog(
         while !stop.load(Ordering::SeqCst) {
             std::thread::sleep(tick);
             let now = Instant::now();
+            // The e-stop, checked BEFORE the heartbeat sweep so that a run whose authority is gone
+            // is never credited with a beat it has no right to. `Dead` covers "revoked", "expired"
+            // and "the broker did not answer" alike — see `AuthorityState`.
+            if let Some(probe) = &authority {
+                let live: Vec<String> = {
+                    let leases = inner.leases.lock().unwrap();
+                    leases.iter().filter(|(_, l)| l.revoked.is_none()).map(|(d, _)| d.clone()).collect()
+                };
+                for device in live {
+                    // Probed OUTSIDE the lease lock: this is an IPC round-trip, and holding the
+                    // lock across it would stall every command in the interpreter for its
+                    // duration — turning the safety mechanism into a latency problem.
+                    let AuthorityState::Dead(why) = probe(&device) else { continue };
+                    let mut leases = inner.leases.lock().unwrap();
+                    let Some(lease) = leases.get_mut(&device) else { continue };
+                    // THE SKIP BRANCH, re-checked after re-acquiring: the dead-man may have taken
+                    // this same lease while the probe was in flight, and revoking twice would
+                    // overwrite a genuine missed-heartbeat record with an operator one — falsifying
+                    // the audit trail about why a machine stopped.
+                    if lease.revoked.is_some() {
+                        continue;
+                    }
+                    revoke_lease(&inner, &device, lease, RevokeCause::Operator, 0, Some(&why));
+                }
+            }
             let mut leases = inner.leases.lock().unwrap();
             let devices: Vec<String> = leases.keys().cloned().collect();
             for device in devices {
@@ -413,7 +473,7 @@ fn spawn_watchdog(
                 } else {
                     continue;
                 };
-                revoke_lease(&inner, &device, lease, cause, overdue);
+                revoke_lease(&inner, &device, lease, cause, overdue, None);
             }
         }
     }))
@@ -427,6 +487,7 @@ fn revoke_lease(
     lease: &mut LeaseState,
     cause: RevokeCause,
     overdue_us: u64,
+    why: Option<&str>,
 ) {
     let detected = Instant::now();
     let fail = lease.env.fail_state;
@@ -458,12 +519,28 @@ fn revoke_lease(
     journal.push(DeviceEvent {
         op: "lease.revoked".to_string(),
         device: device.to_string(),
-        detail: format!(
-            "{device}: lease revoked ({}), heartbeat_ms={}, ttl_ms={}, beat overdue by {overdue_us} µs",
-            cause.name(),
-            lease.env.heartbeat_ms,
-            lease.env.ttl_ms
-        ),
+        // The tail differs by cause, because `overdue_us` MEANS something different in each and a
+        // single template would misreport two of the three. "beat overdue" is a fact about a missed
+        // heartbeat: for a TTL expiry the beats were arriving perfectly and the *loan* ran out, and
+        // for an operator revoke nothing was overdue at all — an e-stop reporting `overdue by 0 µs`
+        // reads like a heartbeat that landed exactly on time, which is the opposite of what
+        // happened. An audit trail that says why a machine stopped has to say the right why.
+        detail: match cause {
+            RevokeCause::MissedHeartbeat => format!(
+                "{device}: lease revoked (missed-heartbeat), heartbeat_ms={}, ttl_ms={}, beat overdue by {overdue_us} µs",
+                lease.env.heartbeat_ms, lease.env.ttl_ms
+            ),
+            RevokeCause::TtlExpired => format!(
+                "{device}: lease revoked (ttl-expired), heartbeat_ms={}, ttl_ms={}, held {overdue_us} µs past its ttl",
+                lease.env.heartbeat_ms, lease.env.ttl_ms
+            ),
+            RevokeCause::Operator => format!(
+                "{device}: lease revoked (operator-revoke), heartbeat_ms={}, ttl_ms={}, {}",
+                lease.env.heartbeat_ms,
+                lease.env.ttl_ms,
+                why.unwrap_or("authority withdrawn")
+            ),
+        },
         at_ms,
     });
     journal.push(DeviceEvent {
@@ -649,6 +726,163 @@ mod tests {
         }
         let r = b.revocation("arm0/elbow").expect("the TTL ends the lease regardless of beats");
         assert_eq!(r.cause, RevokeCause::TtlExpired);
+        b.shutdown();
+    }
+
+    // ----- 10g: the operator e-stop ------------------------------------------------------------
+
+    /// The e-stop's whole point: a program that is beating perfectly, driving legally, and doing
+    /// nothing wrong still loses its device the moment an operator withdraws the authority — and
+    /// loses it WITHOUT being asked anything. Note what this test does not do: it never calls
+    /// `command` to trigger the revocation. The arm parks while the program is mid-loop.
+    #[test]
+    fn an_operator_revoke_parks_every_device_without_the_program_asking() {
+        let e = env("arm0/elbow", 10_000, 60_000);
+        let live = Arc::new(AtomicBool::new(true));
+        let seen = live.clone();
+        let b = DeviceBroker::with_authority_watch(
+            Profile::Sim { seed: 7 },
+            std::slice::from_ref(&e),
+            &[],
+            Some(Box::new(move |_device| {
+                if seen.load(Ordering::SeqCst) {
+                    AuthorityState::Live
+                } else {
+                    AuthorityState::Dead("grant node `g_arm` is revoked (by audit seq 9)".to_string())
+                }
+            })),
+        );
+        // Drive it somewhere the park pose is not, so parking is observable.
+        b.command("arm0/elbow", &[("angle_deg".to_string(), 42.0)]).expect("in-envelope");
+        assert!(b.revocation("arm0/elbow").is_none(), "a live grant keeps the device");
+        // The operator pulls the lever.
+        live.store(false, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let r = b.revocation("arm0/elbow").expect("the watchdog acts on the revoked grant alone");
+        assert_eq!(r.cause, RevokeCause::Operator);
+        // The fail-state actually engaged — `safe-park` means the joint is AT the park pose, not
+        // merely that a flag was set. Checking the flag would pass with an empty fail-state.
+        assert_eq!(b.read("arm0/elbow#angle_deg"), Some(0.0), "safe-park drove the joint home");
+        // And the audit line says what happened, in the operator's words, without inventing an
+        // overdue heartbeat that never occurred.
+        let line = b
+            .events()
+            .into_iter()
+            .find(|e| e.op == "lease.revoked")
+            .expect("the revocation is journaled");
+        assert!(line.detail.contains("operator-revoke"), "{}", line.detail);
+        assert!(line.detail.contains("audit seq 9"), "the reason travels: {}", line.detail);
+        assert!(!line.detail.contains("overdue"), "an e-stop is not a missed beat: {}", line.detail);
+        b.shutdown();
+    }
+
+    /// THE SKIP BRANCH, and the one that decides whether any of this is real. A probe that cannot
+    /// answer — dead daemon, garbled reply, severed link — must be treated exactly like a probe
+    /// that answered "revoked". The tempting `else { continue }` here keeps the arm running
+    /// whenever the broker is unreachable, which is the one moment nobody is watching it.
+    #[test]
+    fn a_probe_that_cannot_answer_parks_the_device_just_like_a_revoke() {
+        let e = env("arm0/elbow", 10_000, 60_000);
+        let b = DeviceBroker::with_authority_watch(
+            Profile::Sim { seed: 7 },
+            std::slice::from_ref(&e),
+            &[],
+            Some(Box::new(|_device| {
+                AuthorityState::Dead("the broker did not answer for `g_arm`: pipe closed".to_string())
+            })),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let r = b.revocation("arm0/elbow").expect("silence from the broker is not consent");
+        assert_eq!(r.cause, RevokeCause::Operator);
+        let line = b.events().into_iter().find(|e| e.op == "lease.revoked").expect("journaled");
+        assert!(line.detail.contains("did not answer"), "the cause is not hidden: {}", line.detail);
+        b.shutdown();
+    }
+
+    /// "Revoke the subtree" means the subtree. One operator action must reach every device this
+    /// run holds — an e-stop that parks the first arm and leaves the second one driving is worse
+    /// than none, because the console now says the machine is safe.
+    #[test]
+    fn one_operator_revoke_reaches_every_device_the_run_holds() {
+        let arm = env("arm0/elbow", 10_000, 60_000);
+        let grip = env("arm0/gripper", 10_000, 60_000);
+        let b = DeviceBroker::with_authority_watch(
+            Profile::Sim { seed: 7 },
+            &[arm, grip],
+            &[],
+            Some(Box::new(|_device| AuthorityState::Dead("g_fleet revoked".to_string()))),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while b.revocation("arm0/gripper").is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        for d in ["arm0/elbow", "arm0/gripper"] {
+            let r = b.revocation(d).unwrap_or_else(|| panic!("{d} must be revoked too"));
+            assert_eq!(r.cause, RevokeCause::Operator, "{d}");
+        }
+        b.shutdown();
+    }
+
+    /// The subtree cuts where the operator aimed it, and nowhere else. Revoking one arm's node
+    /// stops that arm; the other arm — a sibling, not a descendant — keeps working. Without this,
+    /// a "revoke" that quietly stopped everything would look identical to a correct one in every
+    /// test above, and a warehouse would halt when one robot was e-stopped.
+    #[test]
+    fn revoking_one_device_leaves_its_sibling_driving() {
+        let elbow = env("arm0/elbow", 10_000, 60_000);
+        let grip = env("arm1/gripper", 10_000, 60_000);
+        let b = DeviceBroker::with_authority_watch(
+            Profile::Sim { seed: 7 },
+            &[elbow, grip],
+            &[],
+            Some(Box::new(|device: &str| {
+                if device == "arm0/elbow" {
+                    AuthorityState::Dead("grant node for arm0/elbow is revoked".to_string())
+                } else {
+                    AuthorityState::Live
+                }
+            })),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while b.revocation("arm0/elbow").is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(
+            b.revocation("arm0/elbow").expect("the aimed device stops").cause,
+            RevokeCause::Operator
+        );
+        assert!(
+            b.revocation("arm1/gripper").is_none(),
+            "a sibling device must not be collateral: e-stopping one robot is not e-stopping the fleet"
+        );
+        // And the sibling still accepts commands — it did not merely avoid the revocation record.
+        b.command("arm1/gripper", &[("angle_deg".to_string(), 5.0)]).expect("the sibling still drives");
+        b.shutdown();
+    }
+
+    /// The control case for the e-stop, mirroring the dead-man's: a probe that keeps answering
+    /// `Live` never costs the program its device. Without this, a watchdog that revoked
+    /// unconditionally would pass every test above.
+    #[test]
+    fn a_live_grant_is_never_revoked_by_the_authority_watch() {
+        let e = env("arm0/elbow", 10_000, 60_000);
+        let b = DeviceBroker::with_authority_watch(
+            Profile::Sim { seed: 7 },
+            std::slice::from_ref(&e),
+            &[],
+            Some(Box::new(|_device| AuthorityState::Live)),
+        );
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(
+            b.revocation("arm0/elbow").is_none(),
+            "a live grant, repeatedly confirmed, must not lose the device"
+        );
         b.shutdown();
     }
 
