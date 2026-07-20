@@ -150,6 +150,52 @@ limiting without a dead-man lease is a comfort, not a control, and both arrive t
 Double validation likewise lands here only in its checker/runtime half — the broker half is 10f's,
 and the explain text says out loud that neither replaces a hardware interlock.
 
+**D11 — The dead-man (10f): what became mandatory, what became a variant, and where the beat
+comes from.** Seven sub-rulings. (a) **`heartbeat_ms`, `ttl_ms` and `fail` are MANDATORY on every
+actuator grant, and each omission is refused by name.** 10e's grant form accepted an envelope with
+no lease at all, which is a device grant with no dead-man — the exact hazard invariant 47 exists
+to remove. Defaulting them was rejected: "what this machine does when the software stops" is an
+operator's decision, and a runtime that picks quietly has made it. The 10e witnesses were updated
+in the same commit; that grant form is Stage-10 syntax and has never shipped in a release, so the
+stability contract is untouched. A `ttl_ms < heartbeat_ms` grant is refused too — the lease would
+expire before its first beat was ever due. (b) **`ActuateErr` gains `LeaseRevoked(Str)` rather
+than reusing `Envelope(Str)`.** The two demand different reactions: you clamp a bad setpoint and
+retry, and you STOP when you no longer hold the machine. Forcing that distinction through a reason
+string would make every control program string-match its way to a safety decision. Named
+`LeaseRevoked`, not `Revoked`, because `PluginErr` already declares `Revoked` and bare-constructor
+resolution requires uniqueness. The prelude shape change is why **`PRIM_TABLE_VERSION` goes 2 → 3
+and why that constant's documented scope widened** to the primitive table *and the prelude types
+its signatures mention*: a DIR whose `match` was checked exhaustive against two variants is not
+exhaustive against three, and a version watching only the table would have passed it silently.
+(c) **The beat rides device activity.** Spec §5.2 says the runtime beats "while the holding
+actor's turns are healthy"; this runtime beats a device's lease on every accepted operation
+against that device. The consequence is documented rather than hidden: a control loop must touch
+its device at least once per `heartbeat_ms`, which is the dead-man's contract and the reason
+`heartbeat_ms` is a per-device human decision. (d) **The watchdog is a thread that owes the
+program nothing.** A lease that expires only when the program asks whether it has expired is a
+comment, not a dead-man; so the revoke decision runs on its own tick and fires whether or not the
+interpreter executes another instruction. The safety half is witnessed too — a beaten lease is
+never revoked — because a dead-man that fires under a healthy program teaches operators to
+disable it. (e) **"Validated twice" is claimed only as far as it is true.** The interpreter checks
+the command against the capability value's scope; the broker re-checks it against the envelope the
+GRANT carried. Both live in one process today, so this is structural rehearsal for spec §5.1's
+host/adapter split, NOT the independent defense-in-depth a hardware deployment gets — stated in
+the module docs and the DL1904 explain rather than left for a reader to assume. What it does buy
+is real and unit-witnessed: if the two copies ever disagree, the grant wins. (f) **The DL1905 gate
+refuses when it cannot tell.** No sign-off record is not "nothing to check" — the skip branch says
+no, and the passing branch is witnessed separately so the refusals prove something. A sign-off is
+written only by a clean `sim` run: a faulted run approves nothing, and a null-adapter run cannot
+sign at all, because approving an artifact whose simulation fell over would make the gate certify
+what it exists to catch. The sim adapter has its own skip branch, also witnessed: a `#` mirror
+sensor naming a device or dimension the simulator does not model reads `NoDevice` and never falls
+through to the synthetic signal — a plausible float from a joint that does not exist is precisely
+the invariant-50 failure, and it would look completely normal in the output. (g) **Deferred, with
+reasons.** The Book's Track D chapter lands with 10g, where there is a demonstration to describe
+rather than a syntax to recite; the dead-man latency record publishes Windows only (n=20) and says
+so, because extrapolating a scheduler-sensitive number across platforms is inventing evidence; and
+`delulu grants revoke` on an actuator subtree (spec §5.2's e-stop) exists in the broker API
+(`DeviceBroker::revoke`, `RevokeCause::Operator`) but has no CLI surface until 10g needs one.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -161,7 +207,7 @@ and the explain text says out loud that neither replaces a hardware interlock.
 | 10c | B2/B3 | **DONE** (2026-07-20) — Bounded mailboxes (`actor A(mailbox = N)` + `[actors]` manifest defaults; `block` default / `drop-new` counted; DL1902 in abort mode) + `--trace-memory` mailbox telemetry | The B2 criterion witnessed: a 500:1-paced producer against a bound-8 consumer sustains with **peak depth ≤ 8 and zero loss** (`block_backpressure_sustains_...`); DL1902 forced deterministically (self-send storm, drop-new, abort); **the same-worker exemption witnessed by a test that deadlocks if it's wrong**; slot release is a Drop guard (no skip branch); drops never silent; CAS-exact bound; unconfigured actors unbounded (1.0 preserved). D8 rules the deferrals. Coverage **100%** (291 anchors), suite **941/0/4** |
 | 10d | B1 | **DONE** (2026-07-20) — The cycle collector: mark-and-break between turns over a worker-wide registry (List/Record cells + closure-captured scopes); `--trace-memory` reports sweeps + cells collected | The leak corpus collected: 200 manufactured `l → Link(l) → l` cycles broken in one sweep, program output untouched; the safety half witnessed at BOTH levels (unit: a reachable cycle untouched, `Weak` proves real freeing; language: a state-held cycle survives churn); non-actor programs show no collector surface at all; **Study-C gate: interp geo-mean −1.0%, no regression** (D9a). Soundness argument + five sub-rulings in D9. Coverage 100%; suite **948/0/4** |
 | 10e | D1 | **DONE** (2026-07-20) — `Actuate` activates: `root.actuator`/`root.sensor` mints, envelope scopes (`--grant "actuator=DEV:dim=lo..hi[,rate_hz=N]"`), `ActuateErr = Envelope(Str) \| NoDevice`, DL1904 telemetry, `PRIM_TABLE_VERSION` 1→2 | Refusal kills the command, never the process — every refusal test asserts **exit 0** with the error handled in-program; the skip branch witnessed directly (`a_dimension_the_envelope_never_bounded_is_refused_not_waved_through` — an unbounded dimension is refused BY NAME, not waved through), plus the non-numeric twin; DL1904 lands as `command.refused` **after** the attempt record, order asserted; device named in every trace record (an audit that can't say which actuator moved is not an audit); kind/scope split holds — wrong-device mint is DL0703 at the mint while zero-grant refuses at the pre-flight, both witnessed; invariant 50 witnessed (unbound sensor reads `NoDevice`, never a number). D10 rules the bump and the `rate_hz` gap. Coverage **100%** (296 anchors), suite **955/0/4** |
-| 10f | D2/D4 | Dead-man leases (heartbeat/TTL, broker-side revoke, declared fail-states) + `--broker-profile sim` reference simulator (deterministic, seeded) | Missed heartbeat → revoke → fail-state, latency measured and published; sim deterministic under `--seed`; artifact-hash gate (DL1905) fires in the staged flow |
+| 10f | D2/D4 | **DONE** (2026-07-20) — Dead-man leases (`heartbeat_ms`/`ttl_ms`/`fail` mandatory on every actuator grant; watchdog-thread revoke; `hold`/`coast`/`safe-park` fail-states), `ActuateErr::LeaseRevoked`, `--broker-profile sim` reference simulator (deterministic under `--seed`, mirror sensors close the loop), `rate_hz` enforced, DL1905 sim-to-hardware hash gate (`--signoff`/`--approved`), `PRIM_TABLE_VERSION` 2→3 | Missed heartbeat → revoke → fail-state witnessed at CLI level **with its control** (identical program + generous heartbeat keeps the device — without it, "revoked" proves only that the phase revokes things); TTL expiry witnessed against a perfectly-beaten lease; latency measured and published (`measurements/dead-man/RECORD.md`: overdue max 6.33 ms, sim engage max 17 µs, at `heartbeat_ms=25`, n=20, Windows, terms reported separately); sim replays identically under `--seed` and DIFFERS across seeds; **both DL1905 skip branches witnessed** — no sign-off record → refused, edited artifact → refused, matching sign-off → gate seen to PASS then the honest no-adapter wall; the sim's own skip branch witnessed (a mirror sensor of a device the simulator lacks reads `NoDevice`, never a synthetic number). D11 rules the mandatory terms, the new variant, the version bump, and three named deferrals. Coverage **100%** (297 anchors), suite **980/0/4** |
 | 10g | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
 | 10h | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
 | 10i | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |

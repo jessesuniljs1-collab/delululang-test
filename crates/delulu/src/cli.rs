@@ -266,6 +266,16 @@ struct Opts {
     /// with the raw 32-byte ed25519 seed in `keyfile`. Signatures authenticate ORIGIN, not behavior
     /// (spec §10) — a signed plugin is not a safe plugin.
     sign: Option<String>,
+    /// `--broker-profile sim|hw:<adapter>` (Stage 10 phase 10f, spec §5.4): which device backend
+    /// this run's actuators and sensors are bound to. Absent = the null adapter (10e behavior:
+    /// envelopes still refuse, sensors still read `NoDevice`).
+    broker_profile: Option<String>,
+    /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
+    /// approved-for-hardware record (invariant 48).
+    signoff: Option<String>,
+    /// `--approved <path>`: the sign-off record a `hw:` run is checked against. Its absence is a
+    /// refusal, never a pass — DL1905.
+    approved: Option<String>,
 }
 
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
@@ -298,6 +308,9 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         isolation: None,
         lease: None,
         sign: None,
+        broker_profile: None,
+        signoff: None,
+        approved: None,
     };
     let mut i = 0;
     while i < rest.len() {
@@ -334,6 +347,25 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--seed" => {
                 if i + 1 < rest.len() {
                     opts.seed = rest[i + 1].parse().ok();
+                    i += 1;
+                }
+            }
+            // Stage 10 (10f, spec §5.4): the sim-to-real workflow's three flags.
+            "--broker-profile" => {
+                if i + 1 < rest.len() {
+                    opts.broker_profile = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--signoff" => {
+                if i + 1 < rest.len() {
+                    opts.signoff = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--approved" => {
+                if i + 1 < rest.len() {
+                    opts.approved = Some(rest[i + 1].clone());
                     i += 1;
                 }
             }
@@ -587,6 +619,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -4445,6 +4479,14 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // ----- device profile + the sim-to-hardware gate (Stage 10 phase 10f, spec §5.4) ------------
+    // Decided BEFORE anything runs, for the same reason the isolation profile is: a hardware
+    // grant for an artifact nobody approved must never reach the point of moving something.
+    let device_profile = match resolve_device_profile(&file, &opts) {
+        Ok(p) => p,
+        Err(code) => return code,
+    };
+
     // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
     if file.ends_with(".dwx") {
         return run_dwx_artifact(&file, &opts);
@@ -4842,6 +4884,20 @@ fn cmd_run(rest: &[String]) -> i32 {
     if let Some(s) = &sink {
         interp = interp.with_trace(s.clone());
     }
+    // Stage 10 (10f): the device broker starts its dead-man the moment the leases exist, which is
+    // BEFORE `main` runs. A program that never reaches its first command still holds a lease it
+    // is not beating, and the watchdog treats that exactly like any other silence.
+    let devices = if grants.actuators.is_empty() && grants.sensors.is_empty() {
+        None
+    } else {
+        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::new(
+            device_profile.clone(),
+            &grants.actuators,
+            &grants.sensors,
+        ));
+        interp = interp.with_devices(b.clone());
+        Some(b)
+    };
     // Stage 7 (phase 7g): a module with actors gets the actor system. Gated on declaration —
     // a program with no actors takes the identical path to v0.6, byte for byte.
     let has_actors =
@@ -4943,6 +4999,35 @@ fn cmd_run(rest: &[String]) -> i32 {
         return 1;
     }
 
+    // Stage 10 (10f): stop the watchdog before any verdict is reported, so a run never leaves a
+    // thread deciding things about physical devices after the program is over. Then merge its
+    // journal into the trace — the watchdog runs on its own thread and `TraceSink` is an `Rc`, so
+    // device events arrive here the same way Stage 7's worker records do. They carry `at_ms`
+    // because appending them last would otherwise misrepresent when they happened.
+    if let Some(b) = &devices {
+        b.shutdown();
+        let events = b.events();
+        if let Some(s) = &sink {
+            let base = s.len() as u64;
+            for (i, e) in events.iter().enumerate() {
+                s.append(delulu_runtime::TraceRecord {
+                    seq: base + i as u64,
+                    effect: "Actuate".to_string(),
+                    op: e.op.clone(),
+                    cap_kind: "Actuator".to_string(),
+                    detail: Some(format!("[+{} ms] {}", e.at_ms, e.detail)),
+                    span: None,
+                    ..Default::default()
+                });
+            }
+        }
+        // A lost device is never silent, trace or no trace: losing an actuator mid-run is the
+        // single most consequential thing that can happen to a program in this language.
+        for e in events.iter().filter(|e| e.op == "lease.revoked") {
+            eprintln!("devices: {}", e.detail);
+        }
+    }
+
     // Emit the trace before verdicts, so the witness is available even on a fault.
     if let Some(s) = &sink {
         if opts.trace_effects {
@@ -5002,7 +5087,142 @@ fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // Stage 10 (10f, invariant 48): the sign-off is written only for a run that actually finished
+    // clean under the simulator. Approving an artifact whose sim run FAULTED would be the gate
+    // certifying the thing it exists to catch.
+    if let Some(path) = &opts.signoff {
+        if code == 0 {
+            if let Err(e) = write_signoff(&file, path, &device_profile) {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        } else {
+            eprintln!("sign-off withheld: the run did not complete cleanly, so `{path}` was not written");
+        }
+    }
+
     code
+}
+
+/// The default simulator seed. Named rather than inlined so a run without `--seed` is still a
+/// reproducible run — an unseeded simulator that quietly picked a fresh seed each time would make
+/// "deterministic under `--seed`" true and useless.
+const DEFAULT_SIM_SEED: u64 = 0xDE1;
+
+/// Resolve `--broker-profile` and, for a hardware profile, run the artifact-hash gate
+/// (spec §5.4, invariant 48, DL1905) before anything executes.
+///
+/// The gate has three outcomes and the middle one is the whole reason it exists:
+///   - no sign-off record at all → REFUSED. "I could not tell" is the skip branch, and the skip
+///     branch says no. A gate that opens when it cannot find its evidence is not a gate.
+///   - a sign-off for different bytes → DL1905, `requires_human: true`.
+///   - a matching sign-off → the gate PASSES, and the run then stops for the honest reason that
+///     no hardware adapter ships in-tree.
+fn resolve_device_profile(file: &str, opts: &Opts) -> Result<delulu_runtime::Profile, i32> {
+    let Some(spec) = opts.broker_profile.as_deref() else {
+        return Ok(delulu_runtime::Profile::Null);
+    };
+    if spec == "sim" {
+        return Ok(delulu_runtime::Profile::Sim { seed: opts.seed.unwrap_or(DEFAULT_SIM_SEED) });
+    }
+    let Some(adapter) = spec.strip_prefix("hw:") else {
+        eprintln!("error: unknown --broker-profile `{spec}` (sim | hw:<adapter>)");
+        return Err(2);
+    };
+    if adapter.is_empty() {
+        eprintln!("error: --broker-profile hw: needs an adapter name");
+        return Err(2);
+    }
+    let bytes = match std::fs::read(file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}` to check it against its sign-off: {e}");
+            return Err(2);
+        }
+    };
+    let actual = delulu_broker::content_hash(&bytes);
+    let Some(approval_path) = opts.approved.as_deref() else {
+        let d = Diagnostic::error(
+            "DL1905",
+            format!(
+                "`--broker-profile hw:{adapter}` was requested for `{file}` with no sign-off \
+                 record — pass `--approved <record>` naming the simulation that approved these \
+                 exact bytes (`--broker-profile sim --signoff <record>`). This artifact hashes to \
+                 {actual} [a human must approve hardware actuation for this artifact; see \
+                 `delulu explain DL1905` and spec §5.4]"
+            ),
+        );
+        print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
+        return Err(1);
+    };
+    let src = match std::fs::read_to_string(approval_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read the sign-off record `{approval_path}`: {e}");
+            return Err(2);
+        }
+    };
+    let approval = match delulu_runtime::Approval::parse(&src) {
+        Ok(a) => a,
+        Err(e) => {
+            // An unreadable approval is not an absent approval — it is a damaged one, and the
+            // answer to damage at a physical boundary is no.
+            eprintln!("error: the sign-off record `{approval_path}` is not readable as an approval: {e}");
+            return Err(2);
+        }
+    };
+    if approval.hash != actual {
+        let d = Diagnostic::error(
+            "DL1905",
+            format!(
+                "`{file}` does not match its sign-off: the simulator approved {} but these bytes \
+                 hash to {actual} — re-run the simulation and re-approve, or restore the approved \
+                 artifact. The code that moved something in simulation is the only code this \
+                 grant covers [a human must re-approve; see `delulu explain DL1905` and spec §5.4]",
+                approval.hash
+            ),
+        );
+        print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
+        return Err(1);
+    }
+    // Gate passed — and then the honest wall. Hardware adapters are Verified-class Stage-6
+    // plugins (spec §5.4) and none ships in this tree; saying so beats pretending.
+    eprintln!(
+        "device sign-off: OK — `{file}` matches the artifact approved under `{}` ({})",
+        approval.profile, approval.hash
+    );
+    eprintln!(
+        "error: no hardware device adapter named `{adapter}` is available in this build — \
+         hardware adapters are Verified-class plugins with `require_signed: true` (spec §5.4), \
+         and none ships in-tree. Run under `--broker-profile sim`."
+    );
+    Err(2)
+}
+
+/// Write the sim sign-off record (spec §5.4).
+fn write_signoff(file: &str, path: &str, profile: &delulu_runtime::Profile) -> Result<(), String> {
+    // Only a simulator run can approve an artifact for hardware. A null-adapter run commanded
+    // nothing and observed nothing; letting it sign would make the gate a formality.
+    let profile_name = match profile {
+        delulu_runtime::Profile::Sim { seed } => format!("sim:seed={seed}"),
+        _ => {
+            return Err(format!(
+                "--signoff needs `--broker-profile sim`: an artifact is approved for hardware by \
+                 having been exercised in simulation, and this run bound no simulator, so \
+                 `{path}` was not written"
+            ))
+        }
+    };
+    let bytes = std::fs::read(file).map_err(|e| format!("cannot read `{file}` to sign it off: {e}"))?;
+    let approval = delulu_runtime::Approval {
+        artifact: file.to_string(),
+        hash: delulu_broker::content_hash(&bytes),
+        profile: profile_name,
+    };
+    std::fs::write(path, approval.to_json())
+        .map_err(|e| format!("cannot write the sign-off record `{path}`: {e}"))?;
+    eprintln!("device sign-off: wrote `{path}` for {} ({})", approval.artifact, approval.hash);
+    Ok(())
 }
 
 fn build_root(grants: &Grants) -> RootVal {

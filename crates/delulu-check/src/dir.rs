@@ -33,15 +33,18 @@ use crate::ty::{Effect, Row, Type};
 /// different version is refused with DL1503 (rebuild the plugin). Activates in Phase 6a.
 pub const DIR_VERSION: u32 = 1;
 
-/// The version of the checker's primitive table (`check::method_sig`, spec §7.3) that a DIR was
-/// checked against. Re-verifying a DIR against a *different* primitive table would silently change
-/// what its capability operations mean, so a mismatch is refused with DL1503 — same "rebuild the
-/// plugin" repair as a wire-format bump. Bump this constant whenever the primitive table changes.
+/// The version of the checker's PRIMITIVE CONTRACT (spec §7.3) that a DIR was checked against:
+/// the primitive table (`check::method_sig`) **and the prelude types those signatures mention**.
+/// Re-verifying a DIR against a different contract would silently change what its capability
+/// operations mean, so a mismatch is refused with DL1503 — same "rebuild the plugin" repair as a
+/// wire-format bump. Bump this constant whenever either half changes.
 ///
 /// History: 1 = Stages 6–9 table; 2 = Stage 10 phase 10e (actuator/sensor mints, `command`,
-/// `read`). Ruling D10: the bump is the honest activation cost — a DIR checked against table 1
-/// refuses with DL1503 rather than pretending the two tables agree.
-pub const PRIM_TABLE_VERSION: u32 = 2;
+/// `read`); 3 = phase 10f (`ActuateErr` gains `LeaseRevoked`). Rulings D10a and D11b: the bump is
+/// the honest activation cost. 10f widened the scope of this constant on purpose — a DIR whose
+/// `match` on `ActuateErr` was checked exhaustive against two variants is not exhaustive against
+/// three, and a version that only watched the table would have let that through silently.
+pub const PRIM_TABLE_VERSION: u32 = 3;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

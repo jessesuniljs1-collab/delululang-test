@@ -2433,3 +2433,20 @@ anchor = "ref.diag.DL1904"
 file = "crates/delulu/tests/actuate_cli.rs"
 test = "an_out_of_envelope_command_is_refused_as_a_value_and_traced_dl1904"
 kind = "negative"
+
+# ---- Stage 10 phase 10f: dead-man leases + the sim-to-hardware gate (Track D, spec §5.2/§5.4).
+# DL1905 is an ordinary refusing diagnostic, so it takes the ordinary pair — but the positive is
+# chosen deliberately: it is the run where the gate is seen to PASS. A gate witnessed only by its
+# refusals is indistinguishable from a gate that is simply shut.
+
+[[witness]]
+anchor = "ref.diag.DL1905"
+file = "crates/delulu/tests/dead_man_cli.rs"
+test = "a_matching_signoff_passes_the_gate_and_then_stops_for_want_of_an_adapter"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1905"
+file = "crates/delulu/tests/dead_man_cli.rs"
+test = "a_hardware_profile_with_no_signoff_record_is_refused_dl1905"
+kind = "negative"

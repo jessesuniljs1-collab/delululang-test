@@ -202,6 +202,7 @@ registry! {
     "DL1901" => "unknown attribute",
     "DL1902" => "mailbox overflow dropped a message under `drop-new` in abort mode",
     "DL1904" => "actuator command refused by its envelope",
+    "DL1905" => "hardware actuation requested for an artifact that no simulation approved",
     "DL1906" => "native-code emission requested without the `exec.native` grant",
 
     // DL09xx — runtime
@@ -1007,6 +1008,21 @@ pub fn code_explain(code: &str) -> Option<String> {
              deployment still needs hardware interlocks; software bounds are necessary, never \
              sufficient. The repair is on the sender: clamp the command to the envelope, or \
              renegotiate the grant with the human who wrote it.",
+        "DL1905" => "A run asked to bind REAL hardware (`--broker-profile hw:<adapter>`) for an \
+             artifact that no simulation has approved (spec §5.4, invariant 48). The rule is that \
+             the bytes exercised in simulation are the bytes a hardware grant covers: sign off a \
+             sim run with `--broker-profile sim --signoff <record>`, then pass that record as \
+             `--approved <record>`. Two situations produce this code and both are refusals. The \
+             artifact's content hash differs from the approved one — an edit after sign-off, even \
+             a comment, is a different program at the end of a wire that moves something. Or \
+             there is no sign-off record at all, which is the more important case: when the gate \
+             cannot tell whether these bytes were ever simulated, it says NO. A gate that opens \
+             when it cannot find its evidence is not a gate. Re-approving is a HUMAN act \
+             (`requires_human: true`) because the question it answers — has anyone watched this \
+             exact program drive this exact machine in simulation — is not one a toolchain can \
+             answer for itself. Honesty note: this gate governs which artifact may be bound to an \
+             adapter. It is not a safety case, it does not inspect what the program does, and it \
+             does not replace the hardware interlocks the deployment needs anyway.",
         "DL1906" => "The program carries a `@jit` hint, but native-code emission was not granted, \
              so the hint was IGNORED and the program ran under the interpreter — correctly, with \
              the sandbox intact. This is a warning, never an error: a hint may not change what a \

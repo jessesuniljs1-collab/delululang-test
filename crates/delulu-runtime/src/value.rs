@@ -173,11 +173,20 @@ pub struct ActuatorEnvelope {
     /// here is REFUSED (fail-closed): the envelope cannot vouch for what it never bounded.
     pub dims: Vec<(String, f64, f64)>,
     pub rate_hz: Option<u32>,
+    /// Stage 10 (10f, spec §5.2): the dead-man terms. All three are MANDATORY — a device grant
+    /// that does not say how fast the holder must prove it is alive, when the loan ends, and what
+    /// the machine does when either fails is not a grant this runtime will issue (build-order
+    /// D11a). Defaulting them would be the runtime making an operator's safety decision quietly.
+    pub heartbeat_ms: u64,
+    pub ttl_ms: u64,
+    pub fail_state: crate::device::FailState,
 }
 
 impl ActuatorEnvelope {
-    /// Parse the grant form `DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N]`. Fail-closed: any
-    /// part that does not parse is an error, never a silently-unbounded dimension.
+    /// Parse the grant form
+    /// `DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N],heartbeat_ms=N,ttl_ms=N,fail=STATE`.
+    /// Fail-closed: any part that does not parse is an error, never a silently-unbounded
+    /// dimension and never a defaulted dead-man.
     pub fn parse(spec: &str) -> Result<ActuatorEnvelope, String> {
         let (device, rest) = spec.split_once(':').ok_or("missing `:` (use DEVICE:dim=lo..hi,...)")?;
         let device = device.trim();
@@ -186,6 +195,9 @@ impl ActuatorEnvelope {
         }
         let mut dims = Vec::new();
         let mut rate_hz = None;
+        let mut heartbeat_ms = None;
+        let mut ttl_ms = None;
+        let mut fail_state = None;
         for part in rest.split(',') {
             let part = part.trim();
             if part.is_empty() {
@@ -193,9 +205,34 @@ impl ActuatorEnvelope {
             }
             let (k, v) = part.split_once('=').ok_or_else(|| format!("bad envelope part `{part}`"))?;
             let (k, v) = (k.trim(), v.trim());
-            if k == "rate_hz" {
-                rate_hz = Some(v.parse::<u32>().map_err(|_| format!("bad rate_hz `{v}`"))?);
-                continue;
+            match k {
+                "rate_hz" => {
+                    rate_hz = Some(v.parse::<u32>().map_err(|_| format!("bad rate_hz `{v}`"))?);
+                    continue;
+                }
+                "heartbeat_ms" => {
+                    let n = v.parse::<u64>().map_err(|_| format!("bad heartbeat_ms `{v}`"))?;
+                    if n == 0 {
+                        return Err("heartbeat_ms=0 would revoke the lease before the first command".into());
+                    }
+                    heartbeat_ms = Some(n);
+                    continue;
+                }
+                "ttl_ms" => {
+                    let n = v.parse::<u64>().map_err(|_| format!("bad ttl_ms `{v}`"))?;
+                    if n == 0 {
+                        return Err("ttl_ms=0 would revoke the lease before the first command".into());
+                    }
+                    ttl_ms = Some(n);
+                    continue;
+                }
+                "fail" => {
+                    fail_state = Some(crate::device::FailState::parse(v).ok_or_else(|| {
+                        format!("unknown fail-state `{v}` (use hold, coast, or safe-park)")
+                    })?);
+                    continue;
+                }
+                _ => {}
             }
             let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad range `{v}` (use lo..hi)"))?;
             let lo: f64 = lo.trim().parse().map_err(|_| format!("bad bound `{lo}`"))?;
@@ -208,7 +245,31 @@ impl ActuatorEnvelope {
         if dims.is_empty() {
             return Err("an envelope with no bounded dimension bounds nothing".into());
         }
-        Ok(ActuatorEnvelope { device: device.to_string(), dims, rate_hz })
+        // The three dead-man terms are named individually in their refusals: an operator who
+        // forgot one should be told which one, not handed a syntax summary to diff by eye.
+        let heartbeat_ms = heartbeat_ms.ok_or(
+            "no `heartbeat_ms` — a device grant with no dead-man is not a grant (spec §5.2)",
+        )?;
+        let ttl_ms = ttl_ms
+            .ok_or("no `ttl_ms` — a lease with no end is a transfer of the device, not a loan")?;
+        let fail_state = fail_state.ok_or(
+            "no `fail=hold|coast|safe-park` — what this machine does when the software stops is \
+             not a decision the runtime may make for you",
+        )?;
+        if ttl_ms < heartbeat_ms {
+            return Err(format!(
+                "ttl_ms={ttl_ms} is shorter than heartbeat_ms={heartbeat_ms} — the lease would \
+                 expire before its first beat was ever due"
+            ));
+        }
+        Ok(ActuatorEnvelope {
+            device: device.to_string(),
+            dims,
+            rate_hz,
+            heartbeat_ms,
+            ttl_ms,
+            fail_state,
+        })
     }
 }
 

@@ -30,8 +30,9 @@ pub mod tree;
 pub mod validate;
 
 pub use audit::{
-    canonical_json, query, render_ts_utc, tail, verify, AuditEntry, AuditError, AuditLog,
-    AuditRecord, AuditSink, MemSink, QueryFilter, VerifiedStats, GENESIS_HASH, OBSERVABILITY_PHRASE,
+    canonical_json, content_hash, query, render_ts_utc, tail, verify, AuditEntry, AuditError,
+    AuditLog, AuditRecord, AuditSink, MemSink, QueryFilter, VerifiedStats, GENESIS_HASH,
+    OBSERVABILITY_PHRASE,
 };
 pub use authority::{attenuation_check, Authority, Scopes};
 pub use diag::Denial;

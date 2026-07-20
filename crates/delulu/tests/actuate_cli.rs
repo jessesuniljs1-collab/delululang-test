@@ -42,8 +42,11 @@ fn scratch(tag: &str) -> PathBuf {
 }
 
 /// The envelope granted to `arm0/elbow` throughout: two bounded dimensions, one of them with a
-/// negative lower bound (a joint that bends both ways is the ordinary case, not the exotic one).
-const ARM_GRANT: &str = "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40";
+/// negative lower bound (a joint that bends both ways is the ordinary case, not the exotic one),
+/// plus the dead-man terms 10f made mandatory. The heartbeat is long relative to these tests so
+/// nothing here races the watchdog — losing the lease is 10f's subject, not this file's.
+const ARM_GRANT: &str = "actuator=arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,\
+                         heartbeat_ms=60000,ttl_ms=60000,fail=safe-park";
 
 /// A program that sends one command and prints what came back. The command record is bound to a
 /// `let` first because record literals are deliberately not parsed in a `match` scrutinee.
@@ -60,6 +63,7 @@ fn arm_program(decl: &str, lit: &str) -> String {
          \x20       Ok(u) => c.println(\"COMMANDED\"),\n\
          \x20       Err(e) => match e {{\n\
          \x20           Envelope(reason) => c.println(\"REFUSED: \" + reason),\n\
+         \x20           LeaseRevoked(reason) => c.println(\"REVOKED: \" + reason),\n\
          \x20           NoDevice => c.println(\"NODEVICE\")\n\
          \x20       }}\n\
          \x20   }}\n\
@@ -188,7 +192,7 @@ fn minting_a_device_the_grant_never_named_is_dl0703() {
         "wrong-device",
         ELBOW_DECL,
         "Elbow { angle_deg: 12.5, velocity_dps: 4.0 }",
-        "actuator=arm1/gripper:width_mm=0..80",
+        "actuator=arm1/gripper:width_mm=0..80,heartbeat_ms=60000,ttl_ms=60000,fail=hold",
     );
     assert!(
         !o.status.success(),
@@ -219,9 +223,10 @@ fn an_actuate_program_with_no_actuator_grant_refuses_at_the_pre_flight() {
     );
 }
 
-/// Invariant 50: no fabricated measurements. The null adapter — all there is until 10f binds a
-/// simulator — answers `NoDevice`, never a plausible-looking number. A control loop that receives
-/// 0.0 from a sensor that isn't there will act on it.
+/// Invariant 50: no fabricated measurements. The null adapter — what a run gets when it binds no
+/// `--broker-profile` — answers `NoDevice`, never a plausible-looking number. A control loop that
+/// receives 0.0 from a sensor that isn't there will act on it. 10f gave sensors a simulator to
+/// read from and left this path untouched: absence still reads as absence.
 #[test]
 fn an_unbound_sensor_reads_no_device_never_a_fabricated_number() {
     let dir = scratch("sensor");
@@ -237,6 +242,7 @@ fn an_unbound_sensor_reads_no_device_never_a_fabricated_number() {
          \x20       Ok(v) => c.println(\"READ \" + str(v)),\n\
          \x20       Err(e) => match e {\n\
          \x20           Envelope(reason) => c.println(\"REFUSED: \" + reason),\n\
+         \x20           LeaseRevoked(reason) => c.println(\"REVOKED: \" + reason),\n\
          \x20           NoDevice => c.println(\"NODEVICE\")\n\
          \x20       }\n\
          \x20   }\n\

@@ -272,9 +272,12 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             Ok(Value::Int(lo + (next_rand() % (hi - lo) as u64) as i64))
         }
         (ResourceKind::Rand, "float") => Ok(Value::Float((next_rand() as f64) / (u64::MAX as f64))),
-        // Stage 10 (10e): the null sensor adapter. There is no real device behind the Stage-10e
-        // runtime (the reference simulator arrives in 10f), and a read that cannot observe anything
-        // says so honestly: `Err(NoDevice)` — never a fabricated measurement (invariant 50).
+        // Stage 10 (10e): the null sensor adapter — a read that cannot observe anything says so
+        // honestly: `Err(NoDevice)`, never a fabricated measurement (invariant 50). 10f gave the
+        // interpreter its own `Sensor` arm so a bound adapter can answer, and that arm returns
+        // exactly this when no adapter is attached. This one stays as the floor for any caller
+        // that reaches `call_cap_method` without a broker: the fallback for "no adapter" must be
+        // absence in every path that can produce a reading, not just the one we remembered.
         (ResourceKind::Sensor, "read") => Ok(Value::err(Value::variant("NoDevice", vec![]))),
         _ => Err(Fault::at("DL0907", format!("unknown capability method `{method}` (checker bug)"), span)),
     }

@@ -150,6 +150,10 @@ pub struct Interp {
     /// node ids. When set, each such argument's graph is verified unaliased at the boundary
     /// (DL1610 on violation — a compiler-bug detector, never the guarantee).
     debug_rcaps: Option<std::sync::Arc<std::collections::HashSet<NodeId>>>,
+    /// Stage 10 (10f, spec §5.2/§5.4): the device broker — dead-man leases plus whichever adapter
+    /// the run's `--broker-profile` selected. `None` is 10e's null-adapter behavior exactly: the
+    /// envelope still refuses, sensors still read `NoDevice`, no lease exists to lose.
+    devices: Option<std::sync::Arc<crate::device::DeviceBroker>>,
 }
 
 impl Interp {
@@ -213,6 +217,7 @@ impl Interp {
             current_self: RefCell::new(None),
             consts_ready: Cell::new(false),
             debug_rcaps: None,
+            devices: None,
         }
     }
 
@@ -437,6 +442,14 @@ impl Interp {
     /// (attenuation, `verify`, `Str`/`List` methods, `Root` capability minting) are never traced.
     pub fn with_trace(mut self, sink: TraceSink) -> Interp {
         self.trace = Some(sink);
+        self
+    }
+
+    /// Attach the device broker (Stage 10 phase 10f). Without it the physical surface behaves
+    /// exactly as 10e shipped it, which is the fallback a missing adapter deserves: refuse
+    /// commands the envelope cannot vouch for, and answer sensor reads with absence.
+    pub fn with_devices(mut self, broker: std::sync::Arc<crate::device::DeviceBroker>) -> Interp {
+        self.devices = Some(broker);
         self
     }
 
@@ -1022,6 +1035,9 @@ impl Interp {
             // Stage 10 (10e): `Cap[Actuator]` is handled here, not in `prim`, because an envelope
             // refusal must append its DL1904 record to the trace sink (the DL1305 pattern).
             Value::Cap(c) if c.kind == ResourceKind::Actuator => self.call_actuator(c, &name.name, &argvals, span),
+            // Stage 10 (10f): likewise routed here rather than through `prim`, because the reading
+            // comes from the run's bound adapter and `prim` has no way to reach it.
+            Value::Cap(c) if c.kind == ResourceKind::Sensor => self.call_sensor(c, &name.name, span),
             Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
             // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
@@ -1199,26 +1215,61 @@ impl Interp {
         let CapScope::Actuator(env) = &cap.scope else {
             return Err(Fault::at("DL0907", "Actuator capability without an envelope scope (wiring bug)", span));
         };
-        match envelope_check(env, args.first()) {
+        // The runtime half of the check (10e), against the capability's own scope.
+        if let Err(reason) = envelope_check(env, args.first()) {
+            self.trace_actuate_refusal(&env.device, "command.refused", &reason, span);
+            return Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])));
+        }
+        // The broker half (10f): the lease, the rate, and the envelope as the GRANT recorded it.
+        // A command that passed the check above can still die here, and that ordering is the
+        // point — the capability value is a copy of the authority, never the authority itself.
+        let Some(broker) = &self.devices else { return Ok(Value::ok(Value::Unit)) };
+        let fields = numeric_fields(args.first());
+        match broker.command(&env.device, &fields) {
             Ok(()) => Ok(Value::ok(Value::Unit)),
-            Err(reason) => {
-                self.trace_actuate_refusal(&env.device, &reason, span);
+            Err(crate::device::CommandRefusal::Envelope(reason)) => {
+                self.trace_actuate_refusal(&env.device, "command.refused", &reason, span);
                 Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])))
             }
+            Err(crate::device::CommandRefusal::Revoked(reason)) => {
+                self.trace_actuate_refusal(&env.device, "command.revoked", &reason, span);
+                Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(reason)])))
+            }
+        }
+    }
+
+    /// `Cap[Sensor].read()` (10e's shape, 10f's adapter). Absence still reads as absence — the
+    /// simulator answers only for devices it actually models, and everything else is `NoDevice`.
+    fn call_sensor(&self, cap: &Rc<CapVal>, method: &str, span: delulu_diag::Span) -> Result<Value, Fault> {
+        if method != "read" {
+            return Err(Fault::at("DL0907", format!("unknown Sensor method `{method}` (checker bug)"), span));
+        }
+        let CapScope::Sensor { device } = &cap.scope else {
+            return Err(Fault::at("DL0907", "Sensor capability without a device scope (wiring bug)", span));
+        };
+        match self.devices.as_ref().and_then(|b| b.read(device)) {
+            Some(x) => Ok(Value::ok(Value::Float(x))),
+            None => Ok(Value::err(Value::variant("NoDevice", vec![]))),
         }
     }
 
     /// Append the DL1904 refusal record. Separate from the ordinary `Actuate` dispatch record
     /// (which `trace_dispatch` already appended): an auditor reading the trace sees BOTH the
     /// attempt and its refusal, in order, with the reason in `detail`.
-    fn trace_actuate_refusal(&self, device: &str, reason: &str, span: delulu_diag::Span) {
+    fn trace_actuate_refusal(&self, device: &str, op: &str, reason: &str, span: delulu_diag::Span) {
         let Some(sink) = &self.trace else { return };
         sink.push(TraceRecord {
             seq: self.next_trace_seq(),
             effect: "Actuate".to_string(),
-            op: "command.refused".to_string(),
+            op: op.to_string(),
             cap_kind: "Actuator".to_string(),
-            detail: Some(format!("DL1904 {device}: {reason}")),
+            // DL1904 is the ENVELOPE refusal's code. A dead lease is a different event and must
+            // not borrow it: an auditor counting DL1904s is counting commands the envelope caught,
+            // not devices the operator lost.
+            detail: Some(match op {
+                "command.refused" => format!("DL1904 {device}: {reason}"),
+                _ => format!("{device}: {reason}"),
+            }),
             span: Some((span.file, span.start, span.end)),
             ..self.trace_attrib_record()
         });
@@ -1431,6 +1482,24 @@ fn envelope_check(env: &ActuatorEnvelope, cmd: Option<&Value>) -> Result<(), Str
         }
     }
     Ok(())
+}
+
+/// Flatten a command record to `(dimension, magnitude)` pairs for the broker. Only reached once
+/// `envelope_check` has already established that the command IS a record of numbers, so a
+/// non-numeric field here is impossible rather than dropped — but the `_ => {}` arm still refuses
+/// to invent a value for one, because a silently-omitted dimension is a dimension the broker
+/// would never check.
+fn numeric_fields(cmd: Option<&Value>) -> Vec<(String, f64)> {
+    let Some(Value::Record { fields, .. }) = cmd else { return Vec::new() };
+    let mut out = Vec::new();
+    for (fname, fval) in fields.borrow().iter() {
+        match fval {
+            Value::Int(i) => out.push((fname.clone(), *i as f64)),
+            Value::Float(f) => out.push((fname.clone(), *f)),
+            _ => {}
+        }
+    }
+    out
 }
 
 fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> Option<String> {

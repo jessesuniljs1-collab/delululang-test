@@ -27,13 +27,16 @@ fn angle(s: Cap[Sensor]) -> Result[Float, ActuateErr] ! {Read} {
   s.read()
 }
 
-// The two errors of the physical boundary, matched exhaustively: the envelope refused the
-// command, or no adapter was bound to the device at all.
+// The three errors of the physical boundary, matched exhaustively: the envelope refused the
+// command, the dead-man lease died and the device is gone (10f), or no adapter was bound to the
+// device at all. `LeaseRevoked` is a separate variant precisely so this match cannot treat losing
+// the machine as one more bad setpoint.
 fn why(r: Result[Unit, ActuateErr]) -> Str {
   match r {
     Ok(u) => "commanded",
     Err(e) => match e {
       Envelope(reason) => reason,
+      LeaseRevoked(reason) => reason,
       NoDevice => "no device"
     }
   }

@@ -499,6 +499,14 @@ fn header_line(day: &str) -> String {
     }))
 }
 
+/// The content hash of an arbitrary byte string, `blake3:<64 hex>`. Stage 10 phase 10f uses it
+/// for the sim-to-hardware artifact gate (spec §5.4, DL1905): the bytes that were exercised in
+/// simulation are the bytes a hardware grant is checked against. Exposed here rather than
+/// re-derived at the call site so every hash in the system comes from one implementation.
+pub fn content_hash(bytes: &[u8]) -> String {
+    format!("blake3:{}", blake3::hash(bytes).to_hex())
+}
+
 /// `hash = blake3( prev_hash_ascii_bytes ‖ canonical_body_utf8_bytes )`, lowercase hex.
 fn chain_hash(prev_hash: &str, canonical_body: &str) -> String {
     let mut hasher = blake3::Hasher::new();

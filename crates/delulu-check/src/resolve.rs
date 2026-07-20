@@ -195,7 +195,11 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     register_plugin_prelude(&mut table);
     // Stage 10 (10e): `ActuateErr` — appended LAST, mirroring `program.rs` exactly (the
     // two-paths order law).
-    register_prelude_type(&mut table, "ActuateErr", &[("Envelope", &["Str"]), ("NoDevice", &[])]);
+    register_prelude_type(
+        &mut table,
+        "ActuateErr",
+        &[("Envelope", &["Str"]), ("LeaseRevoked", &["Str"]), ("NoDevice", &[])],
+    );
 
     // First pass: type names (so signatures can forward-reference them).
     for item in &module.items {
