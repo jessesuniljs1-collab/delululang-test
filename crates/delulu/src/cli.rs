@@ -545,6 +545,7 @@ pub fn run(args: &[String]) -> i32 {
         "sign" => crate::signing::cmd_sign(rest),
         "verify-sig" => crate::signing::cmd_verify_sig(rest),
         "publish" => crate::signing::cmd_publish(rest, package_authority_value),
+        "deploy" => crate::deploy::cmd_deploy(rest, package_authority_value),
         "add" => crate::signing::cmd_add(rest),
         "login" => crate::signing::cmd_login(rest),
         "build" => cmd_build(rest),
@@ -562,6 +563,7 @@ pub fn run(args: &[String]) -> i32 {
         // Hidden: the process-isolation foreign worker (spec §5 phase 5h), spawned by the host, not a
         // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
         s if s == crate::foreign_worker::WORKER_SUBCOMMAND => crate::foreign_worker::run_worker(rest),
+        "fleet" => crate::fleet::cmd_fleet(rest),
         "secrets" => cmd_secrets(rest),
         "locale" => cmd_locale(rest),
         "explain" => cmd_explain(rest),

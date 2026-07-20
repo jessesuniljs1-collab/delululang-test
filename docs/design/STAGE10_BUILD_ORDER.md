@@ -430,6 +430,83 @@ checked by re-fetching two of the saved files directly from `github.com/usnistgo
 confirming the bytes and git blob SHA1s matched, independently of anything the agent asserted about
 its own work.
 
+**D16 — Cloud and fleets (10j): a plan is an authority manifest, a fleet update is the same hash
+gate one level up — and the first phase built by two agent PAIRS instead of two agents.** Seven
+sub-rulings. (a) **The environment profile is not a new format.** `delulu deploy plan --service
+NAME=DIR --env ENV.toml` parses `ENV.toml` with the SAME `delulu_runtime::parse_manifest` a
+package's own `delulu.toml` already uses — an environment profile is an authority manifest for a
+*place a program runs*, not a format that needed its own parser. Each service's authority is
+computed the SAME way `delulu authority <pkg-dir>` computes it (the existing `pub(crate)
+package_authority_value` closure, injected into `cmd_deploy` exactly the way `cmd_publish` already
+receives it — no `cli.rs` visibility was widened; the closure-injection pattern this codebase
+already had was the right tool, not a reason to invent one). (b) **DL1909 refuses the WHOLE plan,
+never partially**, naming the exceeding service and effect by name — approving every service
+except the one that widened would deploy something nobody checked against the profile, which
+defeats computing the answer before anything runs (invariant 53). A plain `Diagnostic::error`,
+matching DL1905's real precedent exactly: `Repair`'s `authority_widening`/`requires_human` fields
+carry byte-offset edits into `.delulu` SOURCE, and there is no source span that would widen a TOML
+ceiling — the "a human decides" idea lives in prose, as it already does for DL1905, not in a
+struct field that does not fit. (c) **`delulu fleet update` reuses DL1905, not a new code** — spec
+§9.3 names it explicitly as "the approved-hash rule (DL1905) generalized," and a fleet member's
+sign-off and an actuator's are the identical question asked twice: did a human approve exactly
+these bytes? A second code would be two names for one rule. The reuse is real, not just a shared
+number: `fleet.rs` calls the SAME `delulu_broker::content_hash` and reads the SAME
+`delulu_runtime::Approval` record 10f already built, and DL1905's `codes.rs` explanation was
+extended additively (the device-case paragraph untouched, a new paragraph naming the fleet call
+site) rather than duplicated. (d) **`--previous` is unconditionally required, on every invocation,
+not only ones expected to fail** — the design choice this phase's own demonstration caught for
+real: the first `run-demo.sh` draft omitted it on three of four passes, on the reasonable-looking
+assumption that a rollback target is only needed when a rollback might happen. It is required
+because "rollback artifacts are pinned at rollout start" (spec §9.3) is a statement about
+*ordering* — deciding what to roll back to after a failure has already happened is deciding it too
+late, and a target that is only sometimes supplied is 10f's `rate_hz` lesson again: a bound nobody
+enforces is a comfort, not a control. (e) **The staged rollout is a pure state machine
+(`run_rollout`), independent of any file, hash, or CLI flag** — it takes a health-check closure and
+a journal closure and knows only members, so the safety property ("no member after a health
+failure is ever staged") is tested by inspecting the JOURNAL, not the return value alone; a bug
+that kept staging after a failure would still correctly return `RolledBack`, and only the journal
+would catch it. (f) **First delegation to agent PAIRS, not single agents, per an explicit
+broadened instruction** (10i delegated one agent per task; this phase's instruction was "multiple
+agents for EACH task"). Two tasks, two agents apiece: a builder plus an independently-working
+counterpart that could not create a file conflict with the builder because it never touched the
+builder's files — an adversarial test-writer for `deploy plan` (wrote 14 tests against the fixed
+contract BEFORE the implementation existed, confirmed by its own static read of `cli.rs` showing no
+`deploy` arm yet, verified after landing as a check against a vacuous pass rather than tuned to
+match) and a demo/record author for `fleet update` (built real fixtures — including REAL content
+hashes obtained via the already-shipped `--signoff` machinery, never invented ones — against the
+same fixed contract, correctly identified every value it could not yet know as an explicit
+placeholder). Both `cli.rs` and `codes.rs` took one small, independent edit from each side of a
+pair; both coexisted with zero real conflict, confirmed by reading the merged diff before either
+pair's second agent even reported in. Every agent's work was independently re-verified before
+landing — every test re-run from a clean build myself, both builders' claims about coexisting file
+edits confirmed by reading the actual diffs, and the demo agent's reported contract mismatch
+reproduced firsthand (`run-demo.sh` genuinely failed exactly as described) before the three-line
+fix was applied. (g) **Two integration fixes, both small, neither round-tripped through another
+agent.** The `--previous` omission in `run-demo.sh` (sub-ruling d) — the builder agent correctly
+diagnosed the exact cause and correctly declined to edit a file that was not its own; the head chef
+applied the three-line fix directly once both agents had reported. And a rendering inconsistency
+between the two new commands' refusals: `deploy.rs` used the real `delulu_diag::render_human`
+renderer for DL1909 (both `render_human` and `SourceMap` are genuinely public — no injection
+needed), while `fleet.rs` had built a bespoke `eprintln!` for DL1905 believing the real renderer
+was unreachable without widening `cli.rs`'s private `print_diagnostics`. It was already reachable;
+`fleet.rs`'s refusal now renders through the identical `render_human(&d, &SourceMap::new())` call
+`deploy.rs` uses, so the two sibling commands' refusals are visually consistent rather than each
+inventing its own format — confirmed with the real fleet-update drill's own output, not just a
+unit test, showing the renderer's `explain: delulu explain E-DL1905` footer for the first time.
+Measured (Windows, n=20, whole-process wall clock): all four demo passes — a clean rollout, a
+rollback, and both DL1905 refusals — cluster at 67–104 ms with **no separable cost between
+accepting and refusing**, unlike 10h's compute dispatch (refusing ~8× the cost) or 10g's actuator
+commands (refusing the same cost as accepting): a differential attempt (`--members 1` vs. `--members
+50`) came back as pure noise (−450 µs to +430 µs, straddling zero), meaning whatever this drill's
+own logic costs per member is too small to clear the floor `delulu`'s process startup already pays
+at these `--members` counts — stated as a bound on what this measurement can show, not stretched
+into a precision it does not have (`measurements/fleet-update/RECORD.md`). Named, not built:
+capability scopes and foreign holes are not compared against the environment profile, only effects
+— spec §9.2 describes the full authority answer as all three; this command checks the one that
+`Manifest.effects`/`authority_of`'s existing plumbing already gave a clean, reusable path to,
+and the narrower scope is stated in `deploy.rs`'s own module doc and the DL1909 explain text
+rather than implied as covered.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -445,7 +522,7 @@ its own work.
 | 10g ✅ | D5/DD3 | The arm demonstration + the satellite scenario (both broker roles, one host, simulated link) | Criterion 4's four behaviors measured; criterion 10's satellite semantics witnessed; recordings state sim honestly (addendum §2.5 note verbatim) |
 | 10h ✅ | F1/F2 | Vendor-neutral compute interface + in-tree CPU reference adapter; `Cap[Compute]`; DL1907/DL1911; kernels-are-data laundering tests | Criterion 7 minus the hardware adapter (F3 may defer per invariant-45-style honesty); dispatch carries `ForeignCall`; authority shows the outside-the-proof line |
 | 10i ✅ | G | Crypto-agile envelopes → hybrid ML-DSA/ML-KEM per D5 → KAT validation; DL1908/DL1910 | Criterion 8 or the D5 wait, stated |
-| 10j | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
+| 10j ✅ | H | `delulu deploy plan`, environment profiles, DL1909; fleet-update drill (staged, hash-gated, rollback) | Criterion 9 |
 | 10k | C | Advisory feed + DL1903 + `--deny-advisories`; LTS/support-matrix pages; co-evolution policy | Criterion 5's machinery (the timed LTS cycle itself needs calendar time — recorded honestly) |
 | 10l | A1/A4 | Optimizing tier + threads — or their honest deferrals (D4) | Criterion 1/3 or deferral notes published |
 

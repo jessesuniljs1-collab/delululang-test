@@ -8,6 +8,8 @@ mod broker_ipc;
 mod broker_transport;
 mod brokerd;
 mod cli;
+mod deploy;
+mod fleet;
 mod foreign_worker;
 mod locale;
 mod lsp;

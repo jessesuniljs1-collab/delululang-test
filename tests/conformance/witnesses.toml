@@ -2567,3 +2567,21 @@ anchor = "ref.diag.DL1910"
 file = "crates/delulu/tests/pqc_cli.rs"
 test = "sign_hybrid_without_unstable_refuses_and_writes_no_signature_file"
 kind = "negative"
+
+# ---- Stage 10 phase 10j: cloud/fleets (Track H, spec §9, invariant 53).
+# DL1909's positive is the run where the whole-deployment plan is seen to be APPROVED — a gate
+# witnessed only by its refusals is indistinguishable from a gate that is simply shut (the
+# DL1905/DL1907 precedent). DL1905 itself gets no new witness pair here: it is the SAME anchor
+# 10f already covers, reused rather than duplicated for the fleet call site (ruling D16b).
+
+[[witness]]
+anchor = "ref.diag.DL1909"
+file = "crates/delulu/tests/deploy_cli.rs"
+test = "a_plan_within_the_ceiling_is_approved"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1909"
+file = "crates/delulu/tests/deploy_cli.rs"
+test = "a_service_exceeding_the_ceiling_is_refused_by_name"
+kind = "negative"
