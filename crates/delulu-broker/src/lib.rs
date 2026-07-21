@@ -8,6 +8,8 @@
 //!
 //! Layout:
 //! - [`authority`] — phase 5a: the `⊑` attenuation lattice and the never-widening intersection.
+//! - [`device_scope`] — RFC 0001 F1 (D12e): the **device** dimension and its interval lattice, so a
+//!   delegation can say "you may fly this corridor only" and not merely "you may actuate".
 //! - [`tree`] — phase 5b: the in-memory grant tree (issue/attenuate/revoke/inspect/tree).
 //! - [`validate`] — phase 5c: the synchronous/epoch validation classes + revocation epochs.
 //! - [`audit`] — phase 5d: the append-only, hash-chained audit log (blake3) + `verify`/`tail`/`query`.
@@ -20,6 +22,7 @@ mod path;
 
 pub mod audit;
 pub mod authority;
+pub mod device_scope;
 pub mod diag;
 pub mod guard;
 pub mod ids;
@@ -35,6 +38,7 @@ pub use audit::{
     OBSERVABILITY_PHRASE,
 };
 pub use authority::{attenuation_check, Authority, Scopes};
+pub use device_scope::DeviceScope;
 pub use diag::Denial;
 pub use guard::{
     generate_owner_code, GuardClass, GuardPolicy, GuardRequest, GuardRule, GuardState, GuardSubset,

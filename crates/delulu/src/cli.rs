@@ -673,7 +673,8 @@ fn usage() -> &'static str {
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] | status | stop | rotate-key\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--ttl 1h] [--multi] [--owner CODE]  (prints a lease token)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--multi] [--owner CODE]  (prints a lease token)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
@@ -3535,6 +3536,34 @@ fn revoke_device_nodes(state_dir: &std::path::Path, ids: &[String]) {
     }
 }
 
+/// Render a runtime [`ActuatorEnvelope`] into the canonical device-grant string the broker parses
+/// (RFC 0001 F1).
+///
+/// This string is the contract between two crates that cannot share a type: `delulu-broker` depends
+/// only on `delulu-diag`/`delulu-check` (crate ruling 1), so it cannot see `ActuatorEnvelope`, and
+/// the runtime does not depend on the broker's `DeviceScope`. Two parsers for one grammar is a
+/// drift risk, and the mitigation is mechanical rather than cultural:
+/// `device_grant_strings_round_trip` in `tests/actuate_cli.rs` renders every envelope this function
+/// can produce, parses it back with `delulu_broker::device_scope::parse`, and compares field by
+/// field. If the grammars ever diverge, that test fails rather than a device silently losing a
+/// bound.
+///
+/// Dimensions are emitted in sorted order so the string is byte-canonical regardless of the order
+/// the human wrote them at the prompt.
+fn device_grant_string(env: &delulu_runtime::value::ActuatorEnvelope) -> String {
+    let mut dims: Vec<(&str, f64, f64)> =
+        env.dims.iter().map(|(d, lo, hi)| (d.as_str(), *lo, *hi)).collect();
+    dims.sort_by(|a, b| a.0.cmp(b.0));
+    let mut parts: Vec<String> = dims.iter().map(|(d, lo, hi)| format!("{d}={lo}..{hi}")).collect();
+    if let Some(hz) = env.rate_hz {
+        parts.push(format!("rate_hz={hz}"));
+    }
+    parts.push(format!("heartbeat_ms={}", env.heartbeat_ms));
+    parts.push(format!("ttl_ms={}", env.ttl_ms));
+    parts.push(format!("fail={}", env.fail_state.name()));
+    format!("{}:{}", env.device, parts.join(","))
+}
+
 fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_ipc::AuthoritySpec {
     let root = grants.build_root();
     let mut effects: BTreeSet<&'static str> = BTreeSet::new();
@@ -3568,6 +3597,12 @@ fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_i
     if !grants.actuators.is_empty() {
         effects.insert("Actuate");
     }
+    // RFC 0001 F1 (D12e): the envelope now travels WITH the effect. Before this, the node carried
+    // `Actuate` and nothing else, so the broker could answer only "may this node command anything?"
+    // — and `validate.rs` accepted whatever device path arrived. The grant tree can now say which
+    // device, and how far.
+    let mut device: Vec<String> = grants.actuators.iter().map(device_grant_string).collect();
+    device.sort();
     let mut secret_names: Vec<String> = grants.secrets.keys().cloned().collect();
     secret_names.sort();
     crate::broker_ipc::AuthoritySpec {
@@ -3583,6 +3618,7 @@ fn authority_spec_from_grants(grants: &Grants, program: &str) -> crate::broker_i
             libs
         },
         foreign_python: grants.foreign_python.clone(),
+        device,
         holder_kind: "process".to_string(),
         holder_desc: program.to_string(),
         ttl_millis: None,
@@ -3615,10 +3651,25 @@ fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: HashMap<Stri
         // dimension yet (build-order D6 — the lattice dimension lands WITH the first native
         // tier in 10l, never after it), so the leased slice is always denied here. Fail closed.
         exec_native: false,
-        // Same fail-closed rule for physical devices (10e): the broker gains its
-        // actuator/sensor dimensions with the dead-man machinery in 10f — until then a lease
-        // confers no physical authority, period.
-        actuators: Vec::new(),
+        // RFC 0001 F1 (D12e): a lease now DOES confer physical authority — but only the authority
+        // the delegating side actually bounded. Each entry is a full envelope minted by whoever
+        // delegated this node, `⊑`-checked at every hop of the tree on the way down, so a holder
+        // receives a corridor rather than a licence. This is the mechanism the UAS lost-link pattern
+        // needs (addendum §2.2): the mission grant and the lost-link grant are two delegations of
+        // the same device, the second a strict attenuation of the first.
+        //
+        // Skip branch: an entry that does not parse is DROPPED, and dropping is the safe direction —
+        // the actuator is then absent, so `root.actuator(…)` refuses at the mint (DL0703) before any
+        // command is issued. A device this side cannot read the bounds of is a device it must not
+        // drive.
+        actuators: info
+            .device
+            .iter()
+            .filter_map(|s| delulu_runtime::value::ActuatorEnvelope::parse(s).ok())
+            .collect(),
+        // Sensors are NOT covered by F1 and the distinction is real, not an oversight: a sensor read
+        // is `Read` under a sensor scope (spec §5.1), and `Scopes` has no sensor dimension. A lease
+        // still confers no sensor, and `--lease` still refuses a local `--grant sensor=` by name.
         sensors: Vec::new(),
         // And the same for accelerators (10h). The reason is sharper here than the note above:
         // 10g established that a grant node cannot express a device ENVELOPE at all (D12e), so a
@@ -3771,7 +3822,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
         eprintln!(
             "error: `grants` needs a subcommand: list | tree | inspect <g_ID> | revoke <g_ID> | \
-             delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--ttl 1h] [--multi]"
+             delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--device DEV:..] [--ttl 1h] [--multi]"
         );
         return 2;
     };
@@ -3968,6 +4019,9 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
     let (mut secrets, mut declassify) = (Vec::new(), Vec::new());
     let (mut foreign_c, mut foreign_python) = (Vec::new(), Vec::new());
+    // RFC 0001 F1 (D12e): the dimension that lets a delegation say "you may fly this corridor only"
+    // rather than merely "you may actuate".
+    let mut device: Vec<String> = Vec::new();
     let mut ttl: Option<String> = None;
     let mut parent: Option<String> = None;
     let mut multi = false;
@@ -4001,6 +4055,8 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             foreign_c.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--foreign-python") {
             foreign_python.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--device") {
+            device.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
             ttl = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--parent") {
@@ -4024,6 +4080,27 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             return 2;
         }
     }
+    // A malformed device envelope must not silently vanish either, and for a device the stakes are
+    // higher than a typo'd effect: a dropped envelope is a bound nobody enforces. Parse each one
+    // here, report the parser's own message, and re-render from the parsed value so what reaches
+    // the broker is byte-canonical regardless of how the human ordered the dimensions.
+    let device = {
+        let mut out = Vec::with_capacity(device.len());
+        for d in &device {
+            match delulu_broker::device_scope::parse(d) {
+                Ok(parsed) => out.push(parsed.to_grant_string()),
+                Err(e) => {
+                    eprintln!(
+                        "error: bad --device `{d}`: {e}\n  \
+                         form: DEVICE:dim=lo..hi[,...][,rate_hz=N],heartbeat_ms=N,ttl_ms=N,fail=hold|coast|safe-park"
+                    );
+                    return 2;
+                }
+            }
+        }
+        out.sort();
+        out
+    };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
     // normalized strings the embedded RootVal carries") — so the broker's path lattice sees exactly
@@ -4062,6 +4139,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 declassify: declassify.clone(),
                 foreign_c: foreign_c.clone(),
                 foreign_python: foreign_python.clone(),
+                device: device.clone(),
                 holder_kind: "human".to_string(),
                 holder_desc: "delulu grants delegate (root)".to_string(),
                 ttl_millis: None,
@@ -4086,6 +4164,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         declassify,
         foreign_c,
         foreign_python,
+        device,
         holder_kind: "delegate".to_string(),
         holder_desc,
         ttl_millis,
@@ -4921,13 +5000,30 @@ fn cmd_run(rest: &[String]) -> i32 {
         // yet carry an ENVELOPE (`Scopes` has no actuator dimension), so there is no way for the
         // delegating side to say *how far* the holder may move a machine. Rather than run with the
         // device silently absent, say which grant was refused and why.
-        if !grants.actuators.is_empty() || !grants.sensors.is_empty() {
+        // Two different refusals now, because the two cases stopped having the same reason.
+        //
+        // An actuator IS expressible in a grant node since RFC 0001 F1, so the refusal is no longer
+        // "this cannot be bounded" — it is "you do not get to bound it yourself." A holder that
+        // could hand itself a local envelope would be choosing its own corridor, which is precisely
+        // the authority the delegating side is supposed to hold.
+        if !grants.actuators.is_empty() {
             eprintln!(
-                "error: a `--lease` run cannot take a local `--grant actuator=`/`sensor=`: the \
-                 delegated node carries the authority to actuate, but a device ENVELOPE is not yet \
-                 expressible in a grant node, so the delegating side could not bound it. Run the \
-                 device program under `--broker daemon` with its own device grants instead \
-                 (Stage 10 build order, ruling D12e)."
+                "error: a `--lease` run cannot take a local `--grant actuator=`: its device \
+                 authority comes FROM the delegation, bounded by whoever delegated it. Put the \
+                 envelope on the delegation instead:\n  \
+                 delulu grants delegate --effects Actuate --device \
+                 'arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold'"
+            );
+            return 2;
+        }
+        // A sensor still has no scope dimension at all, so this half of the old refusal stands
+        // unchanged, with its original reason (build-order D12e, narrowed to sensors).
+        if !grants.sensors.is_empty() {
+            eprintln!(
+                "error: a `--lease` run cannot take a local `--grant sensor=`: a sensor read is \
+                 `Read` under a sensor scope, and `Scopes` has no sensor dimension yet, so the \
+                 delegating side could not bound it. Run the program under `--broker daemon` with \
+                 its own sensor grants instead (Stage 10 build order, ruling D12e)."
             );
             return 2;
         }

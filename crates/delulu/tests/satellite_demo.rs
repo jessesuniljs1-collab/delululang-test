@@ -170,33 +170,40 @@ fn ground_re_contact_re_delegates_and_the_spacecraft_is_commandable_again() {
     }
 }
 
-/// The second named gap, enforced rather than documented: a delegated node carries the authority
-/// to actuate but cannot carry an ENVELOPE, so `--lease` refuses a local device grant and says why.
+/// A `--lease` run refuses a local device grant BY NAME rather than silently dropping it.
 ///
 /// This is a regression test for a real fail-open shape. The lease path validates local grants by
 /// enumerating the kinds it forbids — and every grant kind invented after that list was written
 /// fell through the `else` and was silently DISCARDED. `actuator=` and `sensor=` were exactly
 /// that: the operator typed a device grant, was told nothing, and the program died at the mint
 /// with `DL0703: actuator was not granted` — a diagnostic blaming the program for the CLI having
-/// thrown the grant away.
+/// thrown the grant away. That shape is what this test exists to keep dead.
+///
+/// **Updated by RFC 0001 F1 (D12e).** Both kinds are still refused up front, but they no longer
+/// share a reason, and the test now pins each one's own:
+///
+/// - `actuator=` — an envelope IS expressible in a grant node since F1, so the refusal is no longer
+///   "nobody could bound this". It is "you do not get to bound it yourself": a holder handing
+///   itself a local corridor would be exercising the delegating side's authority. The delegated
+///   envelope is what the run flies under (`device_delegation_cli.rs` witnesses that path).
+/// - `sensor=` — unchanged, with the original reason. `Scopes` still has no sensor dimension, so a
+///   delegating side genuinely cannot bound a sensor yet.
 ///
 /// No daemon is spawned: the refusal happens during argument validation, before the redeem.
 #[test]
 fn a_lease_run_refuses_a_local_device_grant_by_name_instead_of_dropping_it() {
-    for grant in [HGA, "sensor=sat0/sun-angle"] {
+    // (grant, the phrase that must appear, the reason it must give)
+    for (grant, names, why) in [
+        (HGA, "--grant actuator=", "comes FROM the delegation"),
+        ("sensor=sat0/sun-angle", "--grant sensor=", "no sensor dimension"),
+    ] {
         let o = delulu(&[
             "run", &program(), "--lease", "dlt1_not-a-real-token", "--grant", grant, "--no-prompt",
         ]);
         let err = stderr(&o);
         assert_eq!(o.status.code(), Some(2), "a refused argument is exit 2:\n{err}");
-        assert!(
-            err.contains("cannot take a local `--grant actuator=`/`sensor=`"),
-            "the refusal must name the device grant it is refusing:\n{err}"
-        );
-        assert!(
-            err.to_lowercase().contains("envelope"),
-            "and say WHY — a node cannot carry an envelope, so nobody could bound it:\n{err}"
-        );
+        assert!(err.contains(names), "the refusal must name the device grant it is refusing:\n{err}");
+        assert!(err.contains(why), "…and give the reason that is actually true today:\n{err}");
         // It must fail on the GRANT, not later on the bogus token: a refusal that only appeared
         // once the token was rejected would still be dropping device grants on the valid path.
         assert!(

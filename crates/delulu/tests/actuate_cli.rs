@@ -271,3 +271,100 @@ fn an_unbound_sensor_reads_no_device_never_a_fabricated_number() {
     );
     assert!(err.contains("arm0/angle"), "the read names its device: {err}");
 }
+
+// ===================================================================================================
+// RFC 0001 phase F1 (build-order D12e) — the device scope dimension crosses the crate boundary.
+//
+// `delulu-broker` depends on neither `delulu-runtime` nor vice versa (crate ruling 1), so the
+// canonical device-grant STRING is the contract between them and each side parses it with its own
+// parser. Two parsers for one grammar is a drift risk; these tests are the mechanical pin, and this
+// crate is where both parsers are visible at once.
+// ===================================================================================================
+
+/// Every envelope the runtime can parse must render to a string the broker parses back to the SAME
+/// authority. If the grammars ever diverge, this fails — rather than a device quietly losing a bound
+/// on its way into the grant tree.
+#[test]
+fn device_grant_strings_round_trip_between_the_runtime_and_broker_parsers() {
+    // Spanning the grammar: negative bounds, fractional bounds, an optional rate, several
+    // dimensions in deliberately unsorted order, and each fail-state.
+    let specs = [
+        "arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold",
+        "arm0/wrist:torque_nm=0..2.5,angle_deg=-1.5..1.5,rate_hz=50,heartbeat_ms=100,ttl_ms=1000,fail=coast",
+        "sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=safe-park",
+        "battery0/bms:charge_a=0..12,soc_pct=15..90,discharge_a=0..40,heartbeat_ms=5000,ttl_ms=600000,fail=hold",
+    ];
+    for spec in specs {
+        let rt = delulu_runtime::value::ActuatorEnvelope::parse(spec)
+            .unwrap_or_else(|e| panic!("runtime parse of `{spec}` failed: {e}"));
+        let br = delulu_broker::device_scope::parse(spec)
+            .unwrap_or_else(|e| panic!("broker parse of `{spec}` failed: {e}"));
+
+        // The two parsers agree on every field they both carry.
+        assert_eq!(rt.device, br.device, "device name: {spec}");
+        assert_eq!(rt.heartbeat_ms, br.heartbeat_ms, "heartbeat_ms: {spec}");
+        assert_eq!(rt.ttl_ms, br.ttl_ms, "ttl_ms: {spec}");
+        assert_eq!(rt.rate_hz, br.rate_hz, "rate_hz: {spec}");
+        assert_eq!(rt.fail_state.name(), br.fail, "fail-state: {spec}");
+        assert_eq!(rt.dims.len(), br.dims.len(), "dimension count: {spec}");
+        for (d, lo, hi) in &rt.dims {
+            assert_eq!(
+                br.dims.get(d),
+                Some(&(*lo, *hi)),
+                "dimension `{d}` disagrees between the parsers: {spec}"
+            );
+        }
+        // And the broker's canonical rendering re-parses to the same thing on BOTH sides, so the
+        // string that actually travels to the grant tree is a fixed point.
+        let canon = br.to_grant_string();
+        assert_eq!(delulu_broker::device_scope::parse(&canon).unwrap(), br, "broker round-trip: {canon}");
+        let rt2 = delulu_runtime::value::ActuatorEnvelope::parse(&canon)
+            .unwrap_or_else(|e| panic!("runtime cannot re-read the canonical form `{canon}`: {e}"));
+        assert_eq!(rt2.device, rt.device);
+        assert_eq!((rt2.heartbeat_ms, rt2.ttl_ms), (rt.heartbeat_ms, rt.ttl_ms));
+        assert_eq!(rt2.dims.len(), rt.dims.len(), "canonical form keeps every dimension: {canon}");
+    }
+}
+
+/// The skip branch for `spec_to_authority`'s `filter_map`: an unparseable device grant string is
+/// DROPPED rather than failing the conversion. Dropping must be the *safe* direction — a device
+/// absent from the map is a device nobody granted — so this pins that a garbled envelope produces a
+/// refusal, never a widening.
+#[test]
+fn a_malformed_device_grant_string_refuses_rather_than_widening() {
+    use delulu_broker::{Authority, Op, Scopes};
+    // Every one of these is rejected by the broker parser; none may become "unbounded".
+    let malformed = [
+        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000",   // no fail-state
+        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,fail=hold",      // no ttl
+        "arm0/elbow:heartbeat_ms=200,ttl_ms=60000,fail=hold",           // bounds nothing
+        "arm0/elbow:angle_deg=NaN..95,heartbeat_ms=200,ttl_ms=1,fail=hold", // non-finite bound
+        "arm0/elbow:angle_deg=95..-30,heartbeat_ms=200,ttl_ms=60000,fail=hold", // inverted
+        "arm0/elbow:angle_deg=-30..95,heartbeat_ms=60000,ttl_ms=200,fail=hold", // ttl < heartbeat
+    ];
+    for spec in malformed {
+        assert!(
+            delulu_broker::device_scope::parse(spec).is_err(),
+            "`{spec}` must not parse — if it ever does, this test is guarding nothing"
+        );
+        // Exactly what `spec_to_authority` does with an unparseable entry: drop it.
+        let device: std::collections::BTreeMap<String, delulu_broker::DeviceScope> =
+            [spec].iter().filter_map(|s| delulu_broker::device_scope::parse(s).ok()).map(|d| (d.device.clone(), d)).collect();
+        assert!(device.is_empty(), "the drop happened: {spec}");
+
+        // …and the consequence is a REFUSAL at the first command, not an allow.
+        let mut b = delulu_broker::Broker::new();
+        let effects = [delulu_check::Effect::core_from_name("Actuate").unwrap()];
+        let node = b.issue(
+            delulu_broker::Holder::new("process", "device program", "pid:1"),
+            Authority::new(effects, Scopes { device, ..Default::default() }),
+            None,
+        );
+        let d = b.check(&node, Op::Actuate, Some("arm0/elbow"));
+        assert!(
+            d.denial().is_some(),
+            "a dropped envelope must refuse the device, never leave it unbounded: {spec}"
+        );
+        assert_eq!(d.denial().unwrap().code(), "DL0904");
+    }
+}

@@ -360,6 +360,7 @@ fn authority_to_spec(a: &Authority) -> AuthoritySpec {
         declassify: v(&s.declassify),
         foreign_c: v(&s.foreign_c),
         foreign_python: v(&s.foreign_python),
+        device: s.device.values().map(|d| d.to_grant_string()).collect(),
         holder_kind: String::new(),
         holder_desc: String::new(),
         ttl_millis: None,

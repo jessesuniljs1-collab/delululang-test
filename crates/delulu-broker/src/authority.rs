@@ -5,10 +5,11 @@
 //! exact repair carries (spec §8) — and it is *never wider than either side*, which is the property
 //! that makes attenuation sound: a repair can only ever narrow a request, never widen it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use delulu_check::Effect;
 
+use crate::device_scope::{self, DeviceScope};
 use crate::path;
 
 /// The scope data carried by a grant (spec §3.1 `scopes`). Every dimension is a `BTreeSet<String>`
@@ -19,6 +20,9 @@ use crate::path;
 /// - `net` / `secrets` / `declassify` / `foreign_c` / `foreign_python` — EXACT-STRING name-set
 ///   subset. No pattern implication (`numpy.*` ⊒ `numpy.linalg`) in v0.5: conservative is sound.
 ///   Pattern-aware subsumption is a possible post-1.0 refinement.
+/// - `device` — RFC 0001 F1: exact device name plus **interval containment** on the envelope (the
+///   [`crate::device_scope`] lattice). Device names are exact-only for the same reason the name
+///   dimensions are: conservative is sound, and widening later is additive while narrowing is not.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Scopes {
     pub fs_read: BTreeSet<String>,
@@ -28,6 +32,10 @@ pub struct Scopes {
     pub declassify: BTreeSet<String>,
     pub foreign_c: BTreeSet<String>,
     pub foreign_python: BTreeSet<String>,
+    /// `device path -> granted envelope`. A `BTreeMap` (not a set) because one device has one
+    /// envelope per grant: two envelopes for the same device would be an ambiguity the enforcement
+    /// path would have to resolve, and resolving it silently is how a widening gets in.
+    pub device: BTreeMap<String, DeviceScope>,
 }
 
 /// A grant's authority: an effect set plus per-dimension scopes (spec §3.1 `authority`).
@@ -50,18 +58,27 @@ impl Authority {
         let s = &self.scopes;
         // Keys inserted in sorted order so output is byte-canonical even if serde_json is ever
         // built with `preserve_order`.
-        serde_json::json!({
-            "effects": effects,
-            "scopes": {
-                "declassify": to_vec(&s.declassify),
-                "fs.read": to_vec(&s.fs_read),
-                "fs.write": to_vec(&s.fs_write),
-                "foreign.c": to_vec(&s.foreign_c),
-                "foreign.python": to_vec(&s.foreign_python),
-                "net": to_vec(&s.net),
-                "secrets": to_vec(&s.secrets),
-            }
-        })
+        let mut scopes = serde_json::json!({
+            "declassify": to_vec(&s.declassify),
+            "fs.read": to_vec(&s.fs_read),
+            "fs.write": to_vec(&s.fs_write),
+            "foreign.c": to_vec(&s.foreign_c),
+            "foreign.python": to_vec(&s.foreign_python),
+            "net": to_vec(&s.net),
+            "secrets": to_vec(&s.secrets),
+        });
+        // `device` is emitted ONLY when non-empty, unlike the seven dimensions above which always
+        // emit (possibly empty) arrays. This is deliberate and is a compatibility decision, not an
+        // inconsistency: this value is embedded in the `authority` field of hash-chained audit
+        // records, so always-emitting `"device": []` would change the canonical JSON — and thus the
+        // chain hash — of every authority that has no device scope, including every record already
+        // written. Omitting when empty follows the same discipline `AuditRecord::body_value` already
+        // uses for absent optionals, and keeps existing records byte-identical.
+        if !s.device.is_empty() {
+            let devices: Vec<String> = s.device.values().map(|d| d.to_grant_string()).collect();
+            scopes.as_object_mut().expect("json! built an object").insert("device".into(), serde_json::json!(devices));
+        }
+        serde_json::json!({ "effects": effects, "scopes": scopes })
     }
 
     /// A compact one-line rendering for diagnostic messages.
@@ -81,6 +98,10 @@ impl Authority {
             if !dim.is_empty() {
                 parts.push(format!("{label}=[{}]", to_vec(dim).join(",")));
             }
+        }
+        if !s.device.is_empty() {
+            let devices: Vec<String> = s.device.values().map(|d| d.to_grant_string()).collect();
+            parts.push(format!("device=[{}]", devices.join(" ")));
         }
         parts.join(" ")
     }
@@ -102,6 +123,7 @@ impl Authority {
                     &self.scopes.foreign_python,
                     &other.scopes.foreign_python,
                 ),
+                device: device_scope::intersect_device_sets(&self.scopes.device, &other.scopes.device),
             },
         }
     }
@@ -133,7 +155,8 @@ pub fn attenuation_check(child: &Authority, parent: &Authority) -> Result<(), Au
         && child.scopes.secrets.is_subset(&parent.scopes.secrets)
         && child.scopes.declassify.is_subset(&parent.scopes.declassify)
         && child.scopes.foreign_c.is_subset(&parent.scopes.foreign_c)
-        && child.scopes.foreign_python.is_subset(&parent.scopes.foreign_python);
+        && child.scopes.foreign_python.is_subset(&parent.scopes.foreign_python)
+        && device_scope::all_within(&child.scopes.device, &parent.scopes.device);
     if ok {
         Ok(())
     } else {

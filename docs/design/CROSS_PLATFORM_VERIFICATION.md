@@ -105,6 +105,15 @@ D19a–e.
   release (the tests still assert the *pattern*, not a cycle count). The wall-clock dead-man remains
   the default and the only real-time guarantee; stepping is a determinism tool for demonstrations,
   refused on any non-sim profile.
+- **The device scope dimension — RESOLVED (D21, RFC 0001 F1), re-verified on both platforms
+  2026-07-22.** `delulu_broker::Scopes` had no device dimension, so a delegation could say "you may
+  actuate" but not "you may fly this corridor only" (D12e). It now carries one, with an interval
+  lattice. Re-verified sequentially and isolated: **Windows** 89 suites / 0 failed, clippy 65/0 (the
+  exact pre-F1 baseline — ~600 new lines, zero new warnings), coverage 100%, reference in sync, fmt
+  0-change, python-less clean; **Linux** (WSL, ext4, isolated `CARGO_TARGET_DIR`) 89 suites / 0
+  failed, clippy 66/0, every gate exit 0. **macOS unchanged and still not run**: the new module
+  (`device_scope.rs`) is pure `std` with no `#[cfg]` and no OS call, so the code both platforms run
+  green *is* the macOS path — an argument, not an execution, and not counted as one.
 - **`broker_unreachable_is_dl1401_fast`** asserts a 10 s wall-clock "fail fast" budget; it passes in
   isolation but can flake under pathological concurrent load (a starved scheduler, not a hang). A
   monotonic-deadline assertion less sensitive to scheduling would harden it.

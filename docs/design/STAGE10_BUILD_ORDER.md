@@ -738,6 +738,91 @@ tests witness the stepped clock's determinism, its simulated heartbeat, and its 
 stepped clock is arithmetic rather than wall-clock. macOS stays analyzed-not-run (no Apple hardware,
 per `CROSS_PLATFORM_VERIFICATION.md`), a status D20 neither improves nor worsens.
 
+**D21 — D12e is discharged: `Scopes` gains a `device` dimension, so a delegation can say "you may
+slew ±5°" and not merely "you may actuate". Shipped as RFC 0001 phase F1, ahead of that RFC's
+comment period — a process deviation recorded here rather than hidden.** D12e deferred this with a
+stated condition, not an indefinite "later": extending the `⊑` lattice and the wire protocol is
+"the most safety-critical lattice in the system", and doing it "late in a demonstrations phase would
+buy a shallow version of the one thing that must not be shallow." That condition is now met — this
+is not a demonstrations phase, and the work carries its own witnesses. Ruled in seven parts.
+
+(a) **The subset relation is the opposite of the obvious guess, and that is the whole risk.** An
+envelope's dimension list is a **whitelist**: `envelope_check` walks the *command's* fields and
+refuses any field the envelope does not name ("the envelope cannot vouch for what it never
+bounded", `value.rs`). So **more dimensions is WIDER** — each one admits a command shape that was
+refused before — and a child naming a dimension its parent lacks is a widening, refused. A
+reasonable implementer reading "constraints" instead of "whitelist" would have inverted this and
+produced a silent widening. It is stated in the module docs next to the code that enforces it, and
+`dropping_a_dimension_narrows_and_adding_one_widens` pins both directions.
+
+(b) **Every other term tightens in the direction that costs the holder authority.** `rate_hz`: a
+bounded parent may not delegate to an unbounded child. `heartbeat_ms`: child `≤` parent, because a
+*smaller* heartbeat is stricter. `ttl_ms`: child `≤` parent. `fail`: exact match only —
+`hold`/`coast`/`safe-park` have no safety order, since which is safer is device-dependent, so there
+is no minimum to take and conservative is sound. The meet preserves `ttl_ms >= heartbeat_ms`
+automatically (the side owning the smaller ttl has its own heartbeat below it); that is proved in a
+comment and checked anyway, dropping the device if it were ever violated.
+
+(c) **The latent trap that was actually there, and is now closed.** `Op::Actuate` has been sending
+the device path to the broker on **every actuator command since 10g** (`interp.rs` passes
+`env.device` as the check arg), where `validate.rs` accepted it via `_ => true` — an arm whose
+comment still read *"reserved: no scope argument to validate"*, written before 10g activated the
+op. This was **not a live fail-open**: `Scopes` had no device dimension to check against, and the
+numeric envelope is genuinely enforced runtime-side. It was a rule waiting to die in a fall-through,
+of exactly the shape this project has been bitten by three times. The wildcard is now an
+**exhaustive match**, so a future `Op` forces a decision instead of defaulting to allow.
+
+(d) **The fix is pinned by a witness that was OBSERVED to fail against the old code**, not merely
+asserted to. `Op::Actuate` was temporarily reverted to `true`, and
+`actuate_on_a_device_the_node_was_never_granted_is_refused` and
+`the_actuate_effect_alone_no_longer_commands_every_device` both failed; the third new test
+(attenuation) correctly still passed, being a different path. A regression test nobody has watched
+fail is a test nobody knows is connected.
+
+(e) **Two parsers for one grammar, pinned mechanically rather than culturally.** `delulu-broker`
+depends on neither `delulu-runtime` nor vice versa (crate ruling 1), so the canonical grant STRING
+is the contract and each side parses it independently.
+`device_grant_strings_round_trip_between_the_runtime_and_broker_parsers` renders every shape the
+grammar admits, parses it with both, and compares field by field — including that the runtime can
+re-read the broker's canonical rendering. Drift fails a test instead of silently costing a bound.
+**New refusal at parse: non-finite bounds.** `"NaN".parse::<f64>()` succeeds in Rust, and a NaN
+bound would both defeat every comparison and break the reflexivity `DeviceScope`'s `Eq` promises —
+the refusal and that `impl` are one decision, not two.
+
+(f) **A lease now confers physical authority — only the authority the delegating side bounded.**
+`grants_from_lease` builds actuators from the node's own device scopes, so `run --lease` flies the
+corridor it was delegated. The old blanket refusal splits: `--grant actuator=` is still refused, but
+the reason changed from "nobody could bound this" to "you do not get to bound it *yourself*", and
+`--grant sensor=` keeps the original reason unchanged because `Scopes` still has **no sensor
+dimension** (a sensor read is `Read` under a sensor scope). The addendum §2.2 UAS two-grant
+lost-link pattern is now witnessed end to end in `device_delegation_cli.rs`: a mission grant and a
+strictly-attenuated lost-link grant over the same device, the same program flying both, the wide
+deflection refused under the narrow grant, and a *widened* second grant refused at delegation time
+(DL0802) rather than at use. **No new diagnostic code**: an ungranted device is `OutOfScope` in
+dimension `device` → DL0904, and a widening is DL0802 carrying the never-widening intersection.
+
+(g) **The process deviation, stated plainly.** `rfcs/README.md` requires an RFC with a **≥ 14-day**
+comment period for any change to "effect/authority behaviour", and says the period "does not shrink
+because a release is near". Adding a dimension to the `⊑` lattice is squarely that, and
+`STAGE10_AUTONOMY_ADDENDUM.md` §2.2 explicitly called D12e **RFC-gated**. RFC 0001 exists and
+scopes this as phase F1, but it is a **draft with no sponsor and no comment period served** — an
+AI-authored RFC may not name its own sponsor. This work shipped on the owner's direct instruction,
+which is authority over this repository but is *not* the same thing as the comment period, and the
+project's own rule is that a deadline is not a reason to skip the part where people disagree with
+you. Recorded as a deviation, not reframed as compliance. What would make it right: a named sponsor
+signs RFC 0001, the period runs, and **if the RFC is amended or rejected, F1 changes with it** —
+the code is not grandfathered by having landed first. Byte-compatibility was preserved deliberately
+so that reversal stays cheap: `device` is omitted from `Authority::to_json` when empty, so every
+authority without a device scope hashes exactly as before in the audit chain.
+
+**Verified (both runnable platforms, sequentially and isolated).** Windows: `cargo test --workspace`
+89 suites / 0 failed, clippy **65/0** — the exact pre-F1 baseline, so ~600 new lines added zero
+warnings — coverage 100%, `--check-reference` in sync, `fmt --check` 0 would change (7 examples, 10
+book samples), python-less build clean. Linux (WSL, ext4, isolated target dir): 89 suites / 0
+failed, clippy **66/0** (its own baseline), every gate exit 0. macOS remains analyzed-not-run: the
+new module is pure `std` with no `#[cfg]` and no OS call, so the code both platforms run green is
+the macOS path — which is an argument, not a run, and is not counted as one.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates

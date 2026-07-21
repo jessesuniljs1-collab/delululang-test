@@ -1,6 +1,12 @@
 # RFC 0001 — Broker federation: a grant tree that spans machines
 
-- **Status:** draft
+- **Status:** draft — **but phase F1 is already IMPLEMENTED and shipped** (2026-07-22, build-order
+  ruling **D21**), on the owner's direct instruction and **ahead of this RFC's comment period**.
+  That is a deviation from `rfcs/README.md`'s process, not a satisfaction of it: an AI-authored RFC
+  may not name its own sponsor, so no period has begun. It is recorded in D21(g) rather than
+  reframed. **If this RFC is amended or rejected, F1 changes with it** — landing first does not
+  grandfather it, and byte-compatibility was preserved deliberately (see §4.3) to keep reversal
+  cheap. F2–F6 remain unbuilt and unapproved.
 - **Author(s):** Claude Opus 4.8 (AI-authored)
 - **Sponsor:** *(unfilled — an AI-authored RFC may not name its own sponsor; requires a named human
   who is accountable, per `CONTRIBUTING.md` §4. Until this line is filled, this RFC cannot open for
@@ -227,7 +233,9 @@ Start **exact-path only** for device names (no `sat0/*` globbing), following the
 `numpy.* ⊉ numpy.linalg` precedent. Conservative is sound; widening later is additive, and
 narrowing later is not.
 
-**Definition of done for F1** — narrow, because §2.2 showed the use-side is already wired:
+**Definition of done for F1** — narrow, because §2.2 showed the use-side is already wired. *(All
+five were met on 2026-07-22; item 5's witness was observed to fail against the pre-F1 code before
+the fix was restored, rather than assumed to. See build-order D21.)*
 
 1. `Scopes` carries `device`; `attenuation_check` gains one conjunct; the meet gains one arm.
 2. `cli.rs` carries device paths + envelopes into `AuthoritySpec` (today it inserts only the
@@ -351,7 +359,7 @@ returned success for an unsigned artifact on its record. Every branch below answ
 | Phase | Content | Ships alone? | Risk |
 |---|---|---|---|
 | **F0** | Owner decisions (§8) — not code | — | — |
-| **F1** | Device scope dimension + interval lattice (D12e) | **yes** | medium |
+| ~~**F1**~~ | ~~Device scope dimension + interval lattice (D12e)~~ — **SHIPPED 2026-07-22, ruling D21** | **yes** | medium |
 | **F2** | Grant certificate: format, sign, chain-verify, domain separator | no (needs F1 to be useful) | **high — security-critical** |
 | **F3** | Subordinate broker: adopt a chain as a local root; trust-anchor config | no | **high — new enforcement domain** |
 | **F4** | Uplink lease, contact receipt, published revocation latency | no | medium |

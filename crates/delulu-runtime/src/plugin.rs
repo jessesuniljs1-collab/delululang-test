@@ -82,6 +82,9 @@ impl Grant {
                 declassify: self.declassify.iter().cloned().collect(),
                 foreign_c: Default::default(),
                 foreign_python: Default::default(),
+                // A plugin grant confers no device authority: a catalog plugin is not a thing that
+                // may command a machine, and an empty map is the fail-closed reading.
+                device: Default::default(),
             },
         }
     }
@@ -201,6 +204,9 @@ impl PluginArtifact {
                 declassify: list("declassify").into_iter().collect(),
                 foreign_c: Default::default(),
                 foreign_python: Default::default(),
+                // A plugin grant confers no device authority: a catalog plugin is not a thing that
+                // may command a machine, and an empty map is the fail-closed reading.
+                device: Default::default(),
             },
         }
     }

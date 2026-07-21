@@ -33,6 +33,16 @@ pub struct AuthoritySpec {
     pub declassify: Vec<String>,
     pub foreign_c: Vec<String>,
     pub foreign_python: Vec<String>,
+    /// RFC 0001 F1 (D12e): granted device envelopes, each in the canonical grant form
+    /// `DEVICE:dim=lo..hi,...,heartbeat_ms=N,ttl_ms=N,fail=S`.
+    ///
+    /// The **string** is the contract between the crates, not a shared type: `delulu-broker`
+    /// depends on neither `delulu-runtime` nor vice versa, so both sides parse the same text with
+    /// their own parser and `device_grant_strings_round_trip` pins them against each other.
+    /// `#[serde(default)]` so a peer that predates this field decodes as "no device scopes" —
+    /// which is the fail-closed reading (no device granted), not a permissive one.
+    #[serde(default)]
+    pub device: Vec<String>,
     pub holder_kind: String,
     pub holder_desc: String,
     /// Absolute epoch-millis TTL deadline, or `None` for no expiry.
@@ -65,6 +75,9 @@ pub struct NodeInfo {
     pub declassify: Vec<String>,
     pub foreign_c: Vec<String>,
     pub foreign_python: Vec<String>,
+    /// Granted device envelopes in canonical grant form (RFC 0001 F1). See [`AuthoritySpec::device`].
+    #[serde(default)]
+    pub device: Vec<String>,
 }
 
 /// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
@@ -111,6 +124,7 @@ impl NodeInfo {
             declassify: self.declassify.clone(),
             foreign_c: self.foreign_c.clone(),
             foreign_python: self.foreign_python.clone(),
+            device: self.device.clone(),
             holder_kind: String::new(),
             holder_desc: String::new(),
             ttl_millis: None,

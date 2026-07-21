@@ -118,6 +118,7 @@ impl Op {
             Op::Net => "net",
             Op::Declassify => "declassify",
             Op::ForeignBind => "foreign.c",
+            Op::Actuate => "device",
             _ => "-",
         }
     }
@@ -191,8 +192,17 @@ fn validate(node_id: &GrantId, eff: EffState, authority: &Authority, op: Op, arg
             Op::Net => authority.scopes.net.contains(arg),
             Op::Declassify => authority.scopes.declassify.contains(arg),
             Op::ForeignBind => authority.scopes.foreign_c.contains(arg),
-            // Clock/Rand/Console/reserved: no scope argument to validate.
-            _ => true,
+            // RFC 0001 F1 (D12e). Until this arm existed, `Op::Actuate` fell through to `_ => true`
+            // below — the device path has been arriving here on EVERY actuator command since 10g
+            // activated Actuate (`interp.rs` sends `env.device` as the arg), and it was accepted
+            // unconditionally by an arm whose comment still said "reserved". That was not a live
+            // fail-open, because `Scopes` carried no device dimension to check against and the
+            // numeric envelope is genuinely enforced runtime-side. It was, exactly, a rule waiting
+            // to die in a fall-through. This arm answers the device IDENTITY question; the
+            // magnitudes never reach this layer, and `envelope_check` bounds those where they do.
+            Op::Actuate => crate::device_scope::grants_device(&authority.scopes.device, arg),
+            // Clock/Rand/Console and the reserved PluginLoad variant take no scope argument.
+            Op::Clock | Op::Rand | Op::Console | Op::PluginLoad => true,
         };
         if !ok {
             return Err(Denial::OutOfScope {
@@ -389,6 +399,88 @@ mod tests {
         for op in [Op::FsRead, Op::Clock, Op::Rand, Op::Console] {
             assert_eq!(op.class(), OpClass::Epoch, "{op:?} is epoch");
         }
+    }
+
+    /// Build an authority holding `Actuate` over exactly the named device grants.
+    fn device_auth(specs: &[&str]) -> Authority {
+        let device = specs
+            .iter()
+            .map(|s| crate::device_scope::parse(s).expect("test grant parses"))
+            .map(|d| (d.device.clone(), d))
+            .collect();
+        Authority::new(eff(&["Actuate"]), Scopes { device, ..Default::default() })
+    }
+
+    /// **The regression witness for RFC 0001 F1 / D12e.**
+    ///
+    /// This test FAILS against the previous code, where `Op::Actuate` fell through to `_ => true`
+    /// and every device path that arrived was accepted. It is the whole reason the arm exists, and
+    /// it is written as a `check` on live tree state because that is the path a real command takes
+    /// (`Actuate` is synchronous-class: one broker round-trip per command).
+    #[test]
+    fn actuate_on_a_device_the_node_was_never_granted_is_refused() {
+        let clock = Rc::new(ManualClock::new(1000));
+        let mut b = broker_with_clock(clock);
+        let node = b.issue(
+            holder(),
+            device_auth(&["arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold"]),
+            None,
+        );
+        assert!(b.check(&node, Op::Actuate, Some("arm0/elbow")).is_allow(), "the granted device commands");
+
+        let d = b.check(&node, Op::Actuate, Some("arm0/wrist"));
+        let denial = d.denial().expect("a device nobody granted must be refused, not defaulted to allow");
+        assert_eq!(denial.code(), "DL0904");
+        match denial {
+            Denial::OutOfScope { dimension, arg, .. } => {
+                assert_eq!(*dimension, "device", "the refusal names the dimension it failed in");
+                assert_eq!(arg, "arm0/wrist");
+            }
+            other => panic!("expected an out-of-scope denial, got {other:?}"),
+        }
+    }
+
+    /// Holding `Effect::Actuate` is necessary but no longer sufficient: the effect answers "may this
+    /// node command machines at all", the scope answers "which one". Before F1 only the first
+    /// question existed, so a node with the effect could command anything the runtime handed it.
+    #[test]
+    fn the_actuate_effect_alone_no_longer_commands_every_device() {
+        let clock = Rc::new(ManualClock::new(1000));
+        let mut b = broker_with_clock(clock);
+        let node = b.issue(holder(), Authority::new(eff(&["Actuate"]), Scopes::default()), None);
+        assert!(
+            b.check(&node, Op::Actuate, Some("arm0/elbow")).denial().is_some(),
+            "Actuate with an empty device scope grants no device"
+        );
+    }
+
+    /// Attenuation carries the envelope now, so a delegated child is bounded where its parent was.
+    /// The `⊑` failure returns the never-widening intersection, exactly as every other dimension does.
+    #[test]
+    fn a_child_cannot_widen_the_envelope_it_was_delegated() {
+        let clock = Rc::new(ManualClock::new(1000));
+        let mut b = broker_with_clock(clock);
+        let parent = b.issue(
+            holder(),
+            device_auth(&["sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]),
+            None,
+        );
+        // The autonomy-grant shape from the satellite profile: a child may narrow the box…
+        let narrower =
+            device_auth(&["sat0/wheels:slew_deg=-0.2..0.2,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
+        assert!(b.attenuate(&parent, narrower, holder(), None).is_ok(), "narrowing the box attenuates");
+
+        // …and may not widen it, however interesting circumstances become.
+        let wider =
+            device_auth(&["sat0/wheels:slew_deg=-40..40,heartbeat_ms=1000,ttl_ms=600000,fail=hold"]);
+        let err = b.attenuate(&parent, wider, holder(), None).unwrap_err();
+        assert_eq!(err.code(), "DL0802");
+        let inter = err.intersection().expect("DL0802 carries the intersection");
+        assert_eq!(
+            inter.scopes.device.get("sat0/wheels").map(|d| d.dims.get("slew_deg").copied()),
+            Some(Some((-0.5, 0.5))),
+            "the repair narrows to the parent's box, never the child's request"
+        );
     }
 
     #[test]

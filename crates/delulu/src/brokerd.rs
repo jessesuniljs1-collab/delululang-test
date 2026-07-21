@@ -192,6 +192,19 @@ pub(crate) fn spec_to_authority(spec: &AuthoritySpec) -> Authority {
             declassify: spec.declassify.iter().cloned().collect(),
             foreign_c: spec.foreign_c.iter().cloned().collect(),
             foreign_python: spec.foreign_python.iter().cloned().collect(),
+            // An unparseable device grant is DROPPED, exactly as `effects` above drops an
+            // unrecognized effect name. Both drops go the same, safe way: a device that is not in
+            // the map is not granted, so the first command against it is refused (DL0904). The
+            // alternative — a fallible conversion — would put a `Result` on nine call sites,
+            // several of which only render a node for display, to report a case the CLI cannot
+            // produce (it builds these strings from an already-parsed envelope). Pinned by
+            // `a_malformed_device_grant_string_refuses_rather_than_widening`.
+            device: spec
+                .device
+                .iter()
+                .filter_map(|s| delulu_broker::device_scope::parse(s).ok())
+                .map(|d| (d.device.clone(), d))
+                .collect(),
         },
     )
 }
@@ -235,6 +248,7 @@ fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo 
         declassify: names(&n.authority.scopes.declassify),
         foreign_c: names(&n.authority.scopes.foreign_c),
         foreign_python: names(&n.authority.scopes.foreign_python),
+        device: n.authority.scopes.device.values().map(|d| d.to_grant_string()).collect(),
     }
 }
 

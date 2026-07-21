@@ -139,15 +139,26 @@ return-to-launch corridor only). Link loss is lease death; the autopilot's decla
 engages under the narrower grant. The aircraft never has to *decide* what it may do when alone;
 it was told, mechanically, before takeoff.
 
-> **Gap (named 10g, honesty review; build-order D12e).** The two-grant pattern above needs a
-> delegation that carries a device *envelope*, and today it cannot. `delulu_broker::Scopes` has
-> dimensions for files, network, secrets and foreign libraries and **none for a device**, so a
-> delegating party can say "you may actuate" but not "you may fly this corridor only". Both grants
-> above are expressible as *device grants at the holder*; what is not yet expressible is one party
-> handing another a **bounded** one. Until that lands, the attenuation is enforced where the
-> program runs rather than where the mission was uploaded — which is the wrong place for this
-> domain, and the reason `run --lease` now refuses a local device grant by name instead of
-> silently dropping it. RFC-gated, alongside §2.5's broker federation.
+> **Gap CLOSED (was: named 10g, honesty review; build-order D12e — discharged by D21).** The
+> two-grant pattern above needs a delegation that carries a device *envelope*, and until RFC 0001
+> phase F1 it could not: `delulu_broker::Scopes` had dimensions for files, network, secrets and
+> foreign libraries and **none for a device**, so a delegating party could say "you may actuate" but
+> not "you may fly this corridor only". `Scopes` now carries a `device` dimension with an interval
+> lattice, `run --lease` derives its actuators **from the delegated node**, and the pattern above is
+> witnessed end to end in `crates/delulu/tests/device_delegation_cli.rs` — mission grant, strictly
+> attenuated lost-link grant, the same program flying both, and a widened second grant refused at
+> delegation time (DL0802) rather than at use. The attenuation is now enforced where the mission was
+> uploaded, which is where this domain needs it.
+>
+> **Three things this does NOT close, stated so the closure is not read wider than it is.**
+> (1) **Sensors are still unbounded by delegation** — a sensor read is `Read` under a sensor scope
+> and `Scopes` has no sensor dimension, so `--lease` still refuses a local `--grant sensor=` with
+> the original reason. (2) **This is single-machine.** The delegation and the holder share one
+> broker; handing a bounded grant *across a link* is §2.5's federation, still unbuilt. For a
+> spacecraft that distinction is the crux, not a detail. (3) **The RFC's comment period was never
+> served** — F1 shipped on the owner's instruction while RFC 0001 is still an unsponsored draft.
+> Build-order D21(g) records that deviation, and if the RFC is amended or rejected, F1 changes with
+> it.
 
 ### 2.3 Spacecraft and satellites — the contact window is a lease
 
