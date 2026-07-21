@@ -33,4 +33,14 @@ head, and every rule the checker must reason about is a rule that can have a fai
 
 ## Open RFCs
 
-*None. The 1.0 core is as specified, and nothing is deprecated at release (`STABILITY.md` §3).*
+*None.* The 1.0 core is as specified, and nothing is deprecated at release (`STABILITY.md` §3). An
+RFC is **open** only once a sponsor has signed it and the comment clock has started.
+
+## Drafts (not open — no comment period has begun)
+
+| RFC | Title | Blocked on |
+|---|---|---|
+| [0001](0001-broker-federation.md) | Broker federation: a grant tree that spans machines | **a sponsor** (§4 of `CONTRIBUTING.md` — an AI-authored RFC may not name its own), then an owner decision on whether to build before a hardware adapter exists |
+
+Closes `STAGE10_AUTONOMY_ADDENDUM.md` §2.5 and subsumes build-order D12e. Nothing in it is
+implemented, and nothing in it may be described as shipped.
