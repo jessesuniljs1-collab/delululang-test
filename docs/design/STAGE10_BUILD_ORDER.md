@@ -699,6 +699,45 @@ RECORD.md already said. Ticking the sim's watchdog on the sim's logical clock wo
 demo from interpreter speed entirely; it is a larger change to the lease/sim boundary, logged here
 as future work, not smuggled into a test-timing patch.
 
+**D20 — The simulator's dead-man now ticks on a logical clock (finishing D19e's deferral): a
+demonstration replays identically because its timing is a function of the command sequence, not of
+interpreter speed.** D19e named this and left it as future work; the owner asked for it finished.
+Ruled in five parts. (a) **A new clock mode, scoped to the simulator and opt-in.** `device.rs`
+gains `ClockMode::{Wall, Stepped { step_us }}`. `Wall` is unchanged real time — every hardware
+profile and every existing dead-man/e-stop test takes it byte-for-byte (the 17 device unit tests
+pass untouched, because `DeviceBroker::new`/`with_authority_watch` still construct `Wall`).
+`Stepped` advances a simulated-microsecond counter by a fixed step on each device interaction and
+sweeps expiry SYNCHRONOUSLY at that interaction. It is reachable only through the new `with_config`
+constructor, which the CLI resolves solely for `--broker-profile sim`; `--sim-step` on any other
+profile is refused (exit 2), because a hardware dead-man is a real-time promise and must never be
+quietly stepped. (b) **The honest limit is in the code and a test, not just the prose.** A stepped
+clock advances only on interaction, so a program that STOPS interacting stops the clock and its
+lease does not expire — `stepped_mode_does_not_model_the_wedged_program_only_a_wall_clock_can_catch`
+asserts exactly that. The wedged-controller guarantee (a looping or blocked program losing its
+actuator in real time) is `Wall`'s alone, and the module docs and this ruling say so rather than let
+"deterministic sim" imply a safety property it does not carry. (c) **One arithmetic, two clocks.**
+Heartbeat-before-TTL lives in a single `due()` helper shared by the wall-clock watchdog and the
+stepped sweep, so the two clocks cannot drift in how they decide a lease has died; the watchdog
+SKIPS heartbeat/TTL under `Stepped` (the sweep owns it) but still runs the operator e-stop probe, so
+a Guard-driven revoke reaches the device in either mode. `overdue_us` and the engage latency become
+simulated under `Stepped` (0 engage, exact overdue), so even the trace's numbers reproduce.
+(d) **Proven by the property that motivated it.** The satellite demo under `--sim-step 50` is
+byte-identical across a debug build and a release build — stdout AND the effect trace — despite the
+debug interpreter costing ~230 ms/cycle against release's ~37 ms; `hga_commanded × step` is constant
+across steps 25/50/100/200 and the HGA is revoked exactly one step past its TTL, so TTL enforcement
+is exact, not approximate (the wide slew is refused interp-side before it reaches the broker, so a
+cycle advances the clock by its two accepted interactions). `satellite_demo.rs`, `run-demo.sh` and
+`RECORD.md` adopt `--sim-step 50` and the recording is regenerated from a real run.
+(e) **`delulu authority` and the Guard are untouched.** This changes only the device broker's lease
+*clock*; the authority/effect computation, the grant tree, the ⊑ lattice, the audit chain, and the
+Guard's custody validation are not in the change and their suites are unaffected — scope confirmed by
+the owner mid-build. Coverage unchanged (no new diagnostics, no anchors); three new device unit
+tests witness the stepped clock's determinism, its simulated heartbeat, and its honest limit.
+**Portability:** `device.rs` carries no `#[cfg]` and no OS call — pure `std` (`AtomicU64`, `Instant`,
+`Mutex`) — so the code Windows and Linux both run green is byte-for-byte the macOS path, and the
+stepped clock is arithmetic rather than wall-clock. macOS stays analyzed-not-run (no Apple hardware,
+per `CROSS_PLATFORM_VERIFICATION.md`), a status D20 neither improves nor worsens.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -757,7 +796,9 @@ Windows and on Linux (WSL), corrected three supply-chain-honesty defects in the 
 lockfile (discharging D14d), and fixed a criterion-10 timing fragility that had made the satellite
 test pass only on fast (release) builds — it revoked its own leases `missed-heartbeat` in an
 unoptimized `cargo test`. Criterion 10 remains **MET** and is now robust in debug; the "1098-0-4"
-figure above was a fast-build snapshot. See D19.
+figure above was a fast-build snapshot. See D19. **D20** then finished D19e's deferral: the sim
+dead-man ticks on a logical clock (`--sim-step`), so the satellite demo replays byte-identically
+across debug and release; the wall-clock dead-man (the real-time guarantee) is unchanged.
 
 ## 5. Diagnostics budget
 

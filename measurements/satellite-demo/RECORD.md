@@ -51,14 +51,14 @@ told. **Nothing in it polls for loss of signal, checks a clock, or handles a "yo
 autonomous" event** — a spacecraft that must be *told* it has lost the ground has already assumed
 the one thing it cannot assume.
 
-Observed (this machine, release build, 100 cycles):
+Observed under `--sim-step 50` — **deterministic, byte-identical in debug and release**, 100 cycles:
 
 ```
 === PASS 1 — acquisition of signal, then LOS mid-pass ===
-  hga  commanded: 29   revoked: 71   no-device: 0
+  hga  commanded: 10   revoked: 90   no-device: 0
   wheels commanded: 100   wide slew refused: 100
-  loss of signal at output line 119
-  lease revoked (ttl-expired), heartbeat_ms=1000, ttl_ms=1000, held 14629 µs past its ttl
+  loss of signal at output line 43
+  lease revoked (ttl-expired), heartbeat_ms=1000, ttl_ms=1000, held 50000 µs past its ttl
   hga REVOKED: the lease on `sat0/hga` was revoked (ttl-expired); the `safe-park` fail-state is engaged
 ```
 
@@ -67,9 +67,14 @@ Read the second row carefully. **The wheels never stop**, before or after LOS �
 100 cycles**, including every cycle after the ground is gone. Losing supervision is precisely when
 a system must not acquire authority.
 
-The exact cycle at which LOS falls is machine-dependent — it is wall-clock against a TTL — so the
-tests assert the *pattern* (commanded before, never commanded after, cause is the TTL) and never a
-cycle count.
+Under `--sim-step` the lease clock advances by simulated time per device interaction, so the exact
+cycle at which LOS falls is now **deterministic** — identical in debug, release, and under load
+(ruling D20). The HGA is commanded up to the interaction where simulated time reaches its TTL and
+revoked on the very next one (`held 50000 µs past its ttl` is exactly one 50 ms step). The tests
+still assert the *pattern* (commanded before, never commanded after, cause is the TTL) rather than a
+hard cycle count — the pattern is what the scenario means — but the determinism is what lets the
+recording above reproduce byte-for-byte on any machine. (Without `--sim-step` the lease clock is
+wall-clock and the cycle is machine-dependent; the D19 heartbeat margin keeps it correct there too.)
 
 ## Re-contact
 
@@ -98,7 +103,11 @@ heartbeat was actually *shorter* than a debug cycle and revoked the lease `misse
 its TTL was ever due — passing only on faster (release) runs. At `1000 ms` the beat window clears
 the debug cycle ~4× over, so LOS is the TTL in every build. Because `ttl_ms >= heartbeat_ms` is
 enforced, the HGA's TTL rose with its heartbeat; `1000 ms` still closes the window mid-pass. See
-ruling D19e.
+ruling D19e. D20 then removed the wall-clock dependence entirely: under `--sim-step` the heartbeat
+and TTL are counted in *simulated* time advanced per device interaction, so the margin is exact
+rather than merely generous and the whole pass replays identically regardless of build or load — a
+determinism tool for the demonstration, never a change to the real-time dead-man, which stays on the
+wall clock (`ClockMode::Wall`) for any hardware run.
 
 ## Reproducing
 

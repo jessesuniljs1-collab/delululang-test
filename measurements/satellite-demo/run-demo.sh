@@ -59,7 +59,7 @@ report() {
 echo
 echo "=== PASS 1 — acquisition of signal, then LOS mid-pass ==========================="
 out1=$("$DELULU" run "$here/sat-pass.delulu" --grant console --grant "$HGA" --grant "$WHEELS" \
-  --broker-profile sim --trace-effects --no-prompt 2> "$here/.pass1.err")
+  --broker-profile sim --sim-step 50 --trace-effects --no-prompt 2> "$here/.pass1.err")
 report "pass1" "$out1"
 grep -o 'lease revoked ([^)]*)[^"]*' "$here/.pass1.err" | head -1 | sed 's/^/  /'
 grep -m1 'hga REVOKED' <<<"$out1" | sed 's/^/  /'
@@ -67,7 +67,7 @@ grep -m1 'hga REVOKED' <<<"$out1" | sed 's/^/  /'
 echo
 echo "=== PASS 2 — re-contact: a NEW delegation, a new lease =========================="
 out2=$("$DELULU" run "$here/sat-pass.delulu" --grant console --grant "$HGA" --grant "$WHEELS" \
-  --broker-profile sim --trace-effects --no-prompt 2> "$here/.pass2.err")
+  --broker-profile sim --sim-step 50 --trace-effects --no-prompt 2> "$here/.pass2.err")
 report "pass2" "$out2"
 echo "  the HGA commanded again under the new lease, then expired again on its own."
 

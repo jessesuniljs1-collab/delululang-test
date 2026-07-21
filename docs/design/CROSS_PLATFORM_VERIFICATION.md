@@ -98,10 +98,13 @@ D19a–e.
 
 **Named, not fixed (future work):**
 
-- **The sim watchdog is wall-clock, not logical-clock.** `--broker-profile sim` is deterministic in
-  its device readback (seeded) but its lease *timing* runs on real milliseconds, so demo LOS timing
-  is machine-dependent (the tests assert the *pattern*, never a cycle count). Ticking the watchdog on
-  the sim's own clock would decouple the demos from interpreter speed entirely.
+- **The sim watchdog wall-clock coupling — RESOLVED (D20).** `--broker-profile sim` was
+  deterministic in its device readback (seeded) but its lease *timing* ran on real milliseconds, so
+  demo LOS timing was machine-dependent. `--sim-step <ms>` now advances the lease clock by simulated
+  time per device interaction, so the satellite demo replays byte-identically across debug and
+  release (the tests still assert the *pattern*, not a cycle count). The wall-clock dead-man remains
+  the default and the only real-time guarantee; stepping is a determinism tool for demonstrations,
+  refused on any non-sim profile.
 - **`broker_unreachable_is_dl1401_fast`** asserts a 10 s wall-clock "fail fast" budget; it passes in
   isolation but can flake under pathological concurrent load (a starved scheduler, not a hang). A
   monotonic-deadline assertion less sensitive to scheduling would harden it.

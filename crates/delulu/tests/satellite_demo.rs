@@ -66,7 +66,11 @@ const WHEELS: &str =
 fn pass() -> Output {
     delulu(&[
         "run", &program(), "--grant", "console", "--grant", HGA, "--grant", WHEELS,
-        "--broker-profile", "sim", "--trace-effects", "--no-prompt",
+        // `--sim-step 50` (D20) drives the dead-man lease clock off the command sequence — 50 ms of
+        // simulated time per device interaction — instead of wall-clock. LOS falls on the same cycle
+        // whether this is a debug or release build, so the assertions below are about the scenario,
+        // not the machine. The D19 heartbeat margin still holds without it; this makes it exact.
+        "--broker-profile", "sim", "--sim-step", "50", "--trace-effects", "--no-prompt",
     ])
 }
 

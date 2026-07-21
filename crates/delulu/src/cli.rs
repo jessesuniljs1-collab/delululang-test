@@ -270,6 +270,12 @@ struct Opts {
     /// this run's actuators and sensors are bound to. Absent = the null adapter (10e behavior:
     /// envelopes still refuse, sensors still read `NoDevice`).
     broker_profile: Option<String>,
+    /// `--sim-step <ms>` (build-order D20): under `--broker-profile sim`, advance the dead-man
+    /// lease clock by this many SIMULATED milliseconds per device interaction (command, read, or
+    /// beat) instead of wall-clock time. Makes lease timing — loss-of-signal, heartbeat — a
+    /// deterministic function of the command sequence, identical across debug/release/load. Only
+    /// meaningful with `sim`; the wall clock (its real-time dead-man) is the default.
+    sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
     signoff: Option<String>,
@@ -316,6 +322,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         lease: None,
         sign: None,
         broker_profile: None,
+        sim_step: None,
         signoff: None,
         approved: None,
         deny_advisories: false,
@@ -363,6 +370,12 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--broker-profile" => {
                 if i + 1 < rest.len() {
                     opts.broker_profile = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--sim-step" => {
+                if i + 1 < rest.len() {
+                    opts.sim_step = rest[i + 1].parse().ok();
                     i += 1;
                 }
             }
@@ -641,8 +654,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -4751,6 +4765,27 @@ fn cmd_run(rest: &[String]) -> i32 {
         Ok(p) => p,
         Err(code) => return code,
     };
+    // D20: the deterministic simulator clock. Only meaningful under `sim`, where it replaces the
+    // wall-clock dead-man with a step-per-interaction clock so a demonstration's timing is a
+    // function of the command sequence, not of interpreter speed. Refused loudly elsewhere: a
+    // hardware run's dead-man is a real-time promise and must never be quietly stepped.
+    let device_clock = match opts.sim_step {
+        None => delulu_runtime::ClockMode::Wall,
+        Some(0) => {
+            eprintln!("error: --sim-step needs a positive number of simulated milliseconds");
+            return 2;
+        }
+        Some(ms) => {
+            if !matches!(device_profile, delulu_runtime::Profile::Sim { .. }) {
+                eprintln!(
+                    "error: --sim-step is only meaningful with --broker-profile sim; the wall-clock \
+                     dead-man is a real-time guarantee and is not stepped"
+                );
+                return 2;
+            }
+            delulu_runtime::ClockMode::Stepped { step_us: ms.saturating_mul(1000) }
+        }
+    };
 
 
     // A `.dwx` is a pre-built, authority-carrying artifact — re-verify and run it directly.
@@ -5228,11 +5263,12 @@ fn cmd_run(rest: &[String]) -> i32 {
     let devices = if grants.actuators.is_empty() && grants.sensors.is_empty() {
         None
     } else {
-        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_authority_watch(
+        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_config(
             device_profile.clone(),
             &grants.actuators,
             &grants.sensors,
             authority_probe,
+            device_clock,
         ));
         interp = interp.with_devices(b.clone());
         Some(b)

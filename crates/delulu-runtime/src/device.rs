@@ -32,7 +32,7 @@
 //! physics engine, and no output of this module may be described as one.
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -81,6 +81,28 @@ pub enum Profile {
     /// A hardware adapter, named. No adapter ships in-tree (see `DeviceBroker::new`), and the
     /// profile exists so the artifact-hash gate has something real to gate.
     Hw { adapter: String },
+}
+
+/// How the dead-man lease clock advances (build-order D20).
+///
+/// `Wall` is real time, and it is the dead-man's actual guarantee: a program that stops beating
+/// loses its actuator after `heartbeat_ms` of WALL-CLOCK silence — whether it is wedged, looping,
+/// or paused at a breakpoint. Every hardware profile uses it, and it is the only mode in which
+/// "the program stopped, so the machine stopped" is a real-time promise. The watchdog thread owns
+/// expiry here.
+///
+/// `Stepped` is for the reference simulator only: the lease clock advances by a fixed amount of
+/// SIMULATED time per device interaction (command, read, or beat), and expiry is swept
+/// synchronously at each interaction. The interaction on which a lease dies is then a deterministic
+/// function of the COMMAND SEQUENCE, not of how fast the interpreter runs between commands — so a
+/// sim demonstration replays identically in a debug build, a release build, or under load. The
+/// honest cost, stated where it is chosen: a program that stops interacting stops the clock, so
+/// `Stepped` does NOT model the wedged-program dead-man — that guarantee is real-time and belongs
+/// to `Wall`. `Stepped` is a determinism tool for demonstrations, never a safety mechanism.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClockMode {
+    Wall,
+    Stepped { step_us: u64 },
 }
 
 /// One thing that happened to a device, for the effect trace. The watchdog runs on its own thread
@@ -151,12 +173,14 @@ pub struct Revocation {
 }
 
 /// The per-device lease state. `heartbeat_ms`/`ttl_ms`/`fail_state` come from the grant and never
-/// change; everything else is the running dead-man.
+/// change; everything else is the running dead-man. Timestamps are microseconds on the broker's
+/// clock (`BrokerInner::now_us`) — real elapsed time in `Wall`, simulated in `Stepped` — so the
+/// same arithmetic serves both without the dead-man logic knowing which clock it is on.
 struct LeaseState {
     env: ActuatorEnvelope,
-    granted_at: Instant,
-    last_beat: Instant,
-    last_command: Option<Instant>,
+    granted_at_us: u64,
+    last_beat_us: u64,
+    last_command_us: Option<u64>,
     revoked: Option<Revocation>,
 }
 
@@ -179,10 +203,24 @@ struct Sim {
 
 struct BrokerInner {
     profile: Profile,
+    clock: ClockMode,
+    /// Simulated microseconds, advanced per device interaction in `Stepped` mode; unread in `Wall`.
+    virtual_us: AtomicU64,
     leases: Mutex<BTreeMap<String, LeaseState>>,
     sim: Mutex<Sim>,
     journal: Mutex<Vec<DeviceEvent>>,
     t0: Instant,
+}
+
+impl BrokerInner {
+    /// "Now", in microseconds, on whichever clock this broker runs: real elapsed since `t0` in
+    /// `Wall`, the simulated counter in `Stepped`. Every heartbeat/TTL comparison goes through here.
+    fn now_us(&self) -> u64 {
+        match self.clock {
+            ClockMode::Wall => self.t0.elapsed().as_micros() as u64,
+            ClockMode::Stepped { .. } => self.virtual_us.load(Ordering::SeqCst),
+        }
+    }
 }
 
 /// The device broker for one run. Owns the leases, the watchdog thread, and the adapter.
@@ -207,9 +245,10 @@ pub enum CommandRefusal {
 
 impl DeviceBroker {
     /// Build the broker for a run and start its watchdog. `envelopes` are the granted actuator
-    /// envelopes; `sensors` the granted sensor device names.
+    /// envelopes; `sensors` the granted sensor device names. Wall-clock dead-man — the default, and
+    /// the only mode that carries a real-time guarantee.
     pub fn new(profile: Profile, envelopes: &[ActuatorEnvelope], sensors: &[String]) -> DeviceBroker {
-        DeviceBroker::with_authority_watch(profile, envelopes, sensors, None)
+        DeviceBroker::with_config(profile, envelopes, sensors, None, ClockMode::Wall)
     }
 
     /// The same broker, plus a probe against the grant tree (10g). This is the operator e-stop:
@@ -222,6 +261,20 @@ impl DeviceBroker {
         sensors: &[String],
         authority: Option<AuthorityProbe>,
     ) -> DeviceBroker {
+        DeviceBroker::with_config(profile, envelopes, sensors, authority, ClockMode::Wall)
+    }
+
+    /// The full constructor: authority probe AND an explicit clock (D20). `ClockMode::Wall` is real
+    /// time — every hardware run and every wall-clock dead-man test takes this path, unchanged.
+    /// `ClockMode::Stepped` is the deterministic simulator clock, resolved by the CLI only under
+    /// `Profile::Sim`.
+    pub fn with_config(
+        profile: Profile,
+        envelopes: &[ActuatorEnvelope],
+        sensors: &[String],
+        authority: Option<AuthorityProbe>,
+        clock: ClockMode,
+    ) -> DeviceBroker {
         let now = Instant::now();
         let mut leases = BTreeMap::new();
         let mut devices = BTreeMap::new();
@@ -233,13 +286,15 @@ impl DeviceBroker {
                 dev.pos.insert(dim.clone(), park_point(*lo, *hi));
             }
             devices.insert(env.device.clone(), dev);
+            // Both clocks read 0 at construction (t0 == now; the simulated counter starts at 0), so
+            // the lease is born beaten and its TTL begins counting from this instant on either.
             leases.insert(
                 env.device.clone(),
                 LeaseState {
                     env: env.clone(),
-                    granted_at: now,
-                    last_beat: now,
-                    last_command: None,
+                    granted_at_us: 0,
+                    last_beat_us: 0,
+                    last_command_us: None,
                     revoked: None,
                 },
             );
@@ -250,6 +305,8 @@ impl DeviceBroker {
         };
         let inner = Arc::new(BrokerInner {
             profile,
+            clock,
+            virtual_us: AtomicU64::new(0),
             leases: Mutex::new(leases),
             sim: Mutex::new(Sim { seed, devices, reads: BTreeMap::new() }),
             journal: Mutex::new(Vec::new()),
@@ -274,6 +331,10 @@ impl DeviceBroker {
     /// must not be able to hide behind a well-formed command, and an operator watching the trace
     /// must see "you do not hold this device" rather than "your torque is 0.1 too high".
     pub fn command(&self, device: &str, fields: &[(String, f64)]) -> Result<(), CommandRefusal> {
+        // In stepped mode this advances the simulated clock one interaction and revokes any lease
+        // now past its heartbeat or TTL — BEFORE this command is judged — so the command that
+        // crosses a deadline is a deterministic function of the sequence. A no-op under `Wall`.
+        step_and_sweep(&self.inner);
         let mut leases = self.inner.leases.lock().unwrap();
         let Some(lease) = leases.get_mut(device) else {
             // A device the broker never leased. Fail closed: the interpreter should not be able to
@@ -287,20 +348,19 @@ impl DeviceBroker {
                 lease.env.fail_state.name()
             )));
         }
-        let now = Instant::now();
+        let now = self.inner.now_us();
         // `rate_hz` becomes real here (build-order D10f closes its own gap): a command arriving
         // sooner than the granted period is refused, because a rate bound nobody enforces is a
-        // comfort, not a control.
+        // comfort, not a control. Measured on the broker clock, so a stepped sim rate-limits in
+        // simulated time exactly as a wall run does in real time.
         if let Some(hz) = lease.env.rate_hz {
             if hz > 0 {
-                let period = Duration::from_micros(1_000_000 / hz as u64);
-                if let Some(prev) = lease.last_command {
-                    let since = now.saturating_duration_since(prev);
-                    if since < period {
+                let period_us = 1_000_000 / hz as u64;
+                if let Some(prev) = lease.last_command_us {
+                    let since_us = now.saturating_sub(prev);
+                    if since_us < period_us {
                         return Err(CommandRefusal::Envelope(format!(
-                            "`{device}` is granted at most {hz} Hz; this command arrived {} µs after the last (minimum {} µs)",
-                            since.as_micros(),
-                            period.as_micros()
+                            "`{device}` is granted at most {hz} Hz; this command arrived {since_us} µs after the last (minimum {period_us} µs)"
                         )));
                     }
                 }
@@ -319,14 +379,18 @@ impl DeviceBroker {
                 }
             }
         }
-        lease.last_command = Some(now);
-        lease.last_beat = now;
+        lease.last_command_us = Some(now);
+        lease.last_beat_us = now;
         Ok(())
     }
 
     /// Read a sensor. `None` means "no device" — invariant 50's whole point: an absent measurement
     /// is absent, never a plausible-looking number a control loop would act on.
     pub fn read(&self, device: &str) -> Option<f64> {
+        // A read is a device interaction too: in stepped mode it advances the simulated clock and
+        // sweeps expiry, so a control loop that only reads — never beating its actuator — still
+        // loses that actuator on schedule, deterministically. A no-op under `Wall`.
+        step_and_sweep(&self.inner);
         match &self.inner.profile {
             Profile::Null | Profile::Hw { .. } => None,
             Profile::Sim { .. } => {
@@ -359,10 +423,13 @@ impl DeviceBroker {
     /// Beat every live lease. Used at quiescence-adjacent points where the runtime knows the
     /// program is healthy but may not be touching a device this instant.
     pub fn beat_all(&self) {
-        let now = Instant::now();
+        // A quiescence beat is an interaction: advance and sweep first (so a TTL that already came
+        // due is honored, not beaten past), then refresh every LIVE lease's beat.
+        step_and_sweep(&self.inner);
+        let now = self.inner.now_us();
         for lease in self.inner.leases.lock().unwrap().values_mut() {
             if lease.revoked.is_none() {
-                lease.last_beat = now;
+                lease.last_beat_us = now;
             }
         }
     }
@@ -425,7 +492,6 @@ fn spawn_watchdog(
     Some(std::thread::spawn(move || {
         while !stop.load(Ordering::SeqCst) {
             std::thread::sleep(tick);
-            let now = Instant::now();
             // The e-stop, checked BEFORE the heartbeat sweep so that a run whose authority is gone
             // is never credited with a beat it has no right to. `Dead` covers "revoked", "expired"
             // and "the broker did not answer" alike — see `AuthorityState`.
@@ -451,32 +517,66 @@ fn spawn_watchdog(
                     revoke_lease(&inner, &device, lease, RevokeCause::Operator, 0, Some(&why));
                 }
             }
-            let mut leases = inner.leases.lock().unwrap();
-            let devices: Vec<String> = leases.keys().cloned().collect();
-            for device in devices {
-                let Some(lease) = leases.get_mut(&device) else { continue };
-                if lease.revoked.is_some() {
-                    continue;
+            // Heartbeat/TTL is the watchdog's job ONLY on the wall clock. Under a stepped sim the
+            // lease clock advances on interactions and expiry is swept synchronously there
+            // (`step_and_sweep`), so the watchdog leaves it be — a stepped run's timing owes nothing
+            // to this thread's scheduling.
+            if matches!(inner.clock, ClockMode::Wall) {
+                let now_us = inner.now_us();
+                let mut leases = inner.leases.lock().unwrap();
+                let devices: Vec<String> = leases.keys().cloned().collect();
+                for device in devices {
+                    let Some(lease) = leases.get_mut(&device) else { continue };
+                    if lease.revoked.is_some() {
+                        continue;
+                    }
+                    let Some((cause, overdue)) = due(lease, now_us) else { continue };
+                    revoke_lease(&inner, &device, lease, cause, overdue, None);
                 }
-                let since_beat = now.saturating_duration_since(lease.last_beat);
-                let alive = now.saturating_duration_since(lease.granted_at);
-                let (cause, overdue) = if since_beat > Duration::from_millis(lease.env.heartbeat_ms) {
-                    (
-                        RevokeCause::MissedHeartbeat,
-                        (since_beat - Duration::from_millis(lease.env.heartbeat_ms)).as_micros() as u64,
-                    )
-                } else if alive > Duration::from_millis(lease.env.ttl_ms) {
-                    (
-                        RevokeCause::TtlExpired,
-                        (alive - Duration::from_millis(lease.env.ttl_ms)).as_micros() as u64,
-                    )
-                } else {
-                    continue;
-                };
-                revoke_lease(&inner, &device, lease, cause, overdue, None);
             }
         }
     }))
+}
+
+/// Is this lease past a deadline at `now_us`? Returns the cause and how far past, in microseconds.
+/// The single source of truth for "when does a lease die," shared by the wall-clock watchdog and
+/// the stepped synchronous sweep so the two clocks apply identical arithmetic — heartbeat before
+/// TTL, because a missed beat is the more urgent fact and `overdue_us` means a different thing in
+/// each (`revoke_lease`'s journal keeps them distinct).
+fn due(lease: &LeaseState, now_us: u64) -> Option<(RevokeCause, u64)> {
+    let since_beat = now_us.saturating_sub(lease.last_beat_us);
+    let alive = now_us.saturating_sub(lease.granted_at_us);
+    let hb_us = lease.env.heartbeat_ms.saturating_mul(1000);
+    let ttl_us = lease.env.ttl_ms.saturating_mul(1000);
+    if since_beat > hb_us {
+        Some((RevokeCause::MissedHeartbeat, since_beat - hb_us))
+    } else if alive > ttl_us {
+        Some((RevokeCause::TtlExpired, alive - ttl_us))
+    } else {
+        None
+    }
+}
+
+/// Stepped mode's clock tick: advance the simulated clock one interaction, then revoke any lease
+/// now past a deadline — synchronously, on the caller's thread. A no-op in `Wall`, where the
+/// watchdog owns expiry against real time. This is what makes a sim demonstration replay
+/// identically regardless of build speed: the interaction on which a lease dies is fixed by the
+/// command sequence, not by how fast the interpreter runs between interactions or when a background
+/// thread happens to wake.
+fn step_and_sweep(inner: &Arc<BrokerInner>) {
+    let ClockMode::Stepped { step_us } = inner.clock else { return };
+    inner.virtual_us.fetch_add(step_us, Ordering::SeqCst);
+    let now_us = inner.virtual_us.load(Ordering::SeqCst);
+    let mut leases = inner.leases.lock().unwrap();
+    let devices: Vec<String> = leases.keys().cloned().collect();
+    for device in devices {
+        let Some(lease) = leases.get_mut(&device) else { continue };
+        if lease.revoked.is_some() {
+            continue;
+        }
+        let Some((cause, overdue)) = due(lease, now_us) else { continue };
+        revoke_lease(inner, &device, lease, cause, overdue, None);
+    }
 }
 
 /// Revoke one lease and engage its fail-state, measuring the part of the latency the broker owns.
@@ -512,9 +612,16 @@ fn revoke_lease(
             }
         }
     }
-    let engage_us = Instant::now().saturating_duration_since(detected).as_micros() as u64;
+    // Engage latency is a real measurement in `Wall`; in `Stepped` no simulated time passes during
+    // a synchronous sweep, so the fail-state engages at the same simulated instant it is detected —
+    // reporting a wall-clock micro-jitter would make the one number meant to be reproducible, not.
+    let engage_us = match inner.clock {
+        ClockMode::Wall => Instant::now().saturating_duration_since(detected).as_micros() as u64,
+        ClockMode::Stepped { .. } => 0,
+    };
     lease.revoked = Some(Revocation { cause, overdue_us, engage_us });
-    let at_ms = detected.saturating_duration_since(inner.t0).as_millis() as u64;
+    // Ordering stamp on the broker's own clock: real ms since start, or simulated ms.
+    let at_ms = inner.now_us() / 1000;
     let mut journal = inner.journal.lock().unwrap();
     journal.push(DeviceEvent {
         op: "lease.revoked".to_string(),
@@ -1045,5 +1152,101 @@ mod tests {
         let back = Approval::parse(&a.to_json()).expect("round-trips");
         assert_eq!(back.hash, a.hash);
         assert_eq!(back.artifact, "arm.delulu");
+    }
+
+    // ----- D20: the stepped simulator clock -------------------------------------------------------
+
+    /// The point of the stepped clock: lease timing is a deterministic function of the command
+    /// SEQUENCE, not of how fast the interpreter runs. The TTL fires at the same command count
+    /// whether the caller sleeps between commands or not — and it fires as `ttl-expired`, not
+    /// `missed-heartbeat`, because a lease beaten on every interaction never misses a beat. This is
+    /// the exact property the satellite demo needs to replay identically in debug and release.
+    #[test]
+    fn a_stepped_clock_is_deterministic_in_command_count_and_wall_time_independent() {
+        let run = |sleep: Option<Duration>| -> (usize, Option<RevokeCause>) {
+            // Heartbeat huge (every command beats, so it is never missed), TTL 1000 ms, 100 ms/op.
+            let e = env("arm0/elbow", 1_000_000, 1000);
+            let b = DeviceBroker::with_config(
+                Profile::Sim { seed: 1 },
+                std::slice::from_ref(&e),
+                &[],
+                None,
+                ClockMode::Stepped { step_us: 100_000 },
+            );
+            let mut count = 0usize;
+            for _ in 0..100 {
+                let r = b.command("arm0/elbow", &[("angle_deg".to_string(), 1.0)]);
+                count += 1;
+                if r.is_err() {
+                    break;
+                }
+                if let Some(d) = sleep {
+                    std::thread::sleep(d);
+                }
+            }
+            let cause = b.revocation("arm0/elbow").map(|r| r.cause);
+            b.shutdown();
+            (count, cause)
+        };
+        let fast = run(None);
+        let slow = run(Some(Duration::from_millis(12)));
+        assert_eq!(fast, slow, "wall-clock sleep between commands must not change the outcome");
+        // 1000 ms TTL at 100 ms/op: simulated time crosses the TTL on the 11th interaction.
+        assert_eq!(fast.0, 11, "the TTL is a function of the op count, deterministically");
+        assert_eq!(fast.1, Some(RevokeCause::TtlExpired), "beaten every op, so it dies by TTL not beat");
+    }
+
+    /// The heartbeat is measured in simulated time too: a granted actuator that is never commanded
+    /// (only its mirror sensor read) is never beaten, and simulated time from those reads carries
+    /// it past `heartbeat_ms` — deterministically, with no watchdog thread and no wall-clock wait.
+    #[test]
+    fn a_stepped_clock_heartbeat_fires_when_interaction_outpaces_the_beat() {
+        let e = env("arm0/elbow", 300, 60_000); // hb 300 ms, ttl 60 s
+        let sensors = vec!["arm0/elbow#angle_deg".to_string()];
+        let b = DeviceBroker::with_config(
+            Profile::Sim { seed: 1 },
+            std::slice::from_ref(&e),
+            &sensors,
+            None,
+            ClockMode::Stepped { step_us: 100_000 }, // 100 ms/op
+        );
+        // Never command the elbow — only read its mirror. Each read advances 100 ms of sim time;
+        // once the beat is more than 300 ms stale the lease dies, on the read that crosses.
+        let mut count = 0usize;
+        for _ in 0..10 {
+            let _ = b.read("arm0/elbow#angle_deg");
+            count += 1;
+            if b.revocation("arm0/elbow").is_some() {
+                break;
+            }
+        }
+        let r = b.revocation("arm0/elbow").expect("an unbeaten lease dies on the heartbeat in sim time");
+        assert_eq!(r.cause, RevokeCause::MissedHeartbeat);
+        assert_eq!(count, 4, "300 ms heartbeat at 100 ms/read: the 4th read crosses it");
+        b.shutdown();
+    }
+
+    /// The honest limit of stepped mode, tested so it cannot be mistaken for the real dead-man: a
+    /// program that STOPS interacting stops the simulated clock, so its lease does NOT expire.
+    /// Stepped mode reproduces a demonstration deterministically; the wall-clock guarantee that a
+    /// wedged controller loses its actuator is `ClockMode::Wall`, exercised by the tests above.
+    #[test]
+    fn stepped_mode_does_not_model_the_wedged_program_only_a_wall_clock_can_catch() {
+        let e = env("arm0/elbow", 40, 60); // tiny hb + ttl: instant death on a wall clock
+        let b = DeviceBroker::with_config(
+            Profile::Sim { seed: 1 },
+            std::slice::from_ref(&e),
+            &[],
+            None,
+            ClockMode::Stepped { step_us: 1000 },
+        );
+        b.command("arm0/elbow", &[("angle_deg".to_string(), 5.0)]).expect("in-envelope");
+        // The "program" wedges: no further interaction. Real time passes; simulated time does not.
+        std::thread::sleep(Duration::from_millis(300)); // >> hb and ttl in wall ms
+        assert!(
+            b.revocation("arm0/elbow").is_none(),
+            "stepped mode advances only on interaction — a wedged program is a WALL-clock concern (D20)"
+        );
+        b.shutdown();
     }
 }

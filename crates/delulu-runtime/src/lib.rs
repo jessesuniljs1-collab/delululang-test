@@ -20,8 +20,8 @@ pub mod value;
 pub use broker::{parse_manifest, Grants, Manifest};
 pub use custody::{Custody, CustodyDecision, CustodyDenial, EmbeddedCustody, Liveness, Op};
 pub use device::{
-    Approval, AuthorityProbe, AuthorityState, DeviceBroker, DeviceEvent, FailState, Profile,
-    RevokeCause,
+    Approval, AuthorityProbe, AuthorityState, ClockMode, DeviceBroker, DeviceEvent, FailState,
+    Profile, RevokeCause,
 };
 pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
 pub use interp::Interp;
