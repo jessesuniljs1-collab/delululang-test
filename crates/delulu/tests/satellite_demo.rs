@@ -43,14 +43,25 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).to_string()
 }
 
-/// The ground-delegated authority for one pass. `ttl_ms` IS the contact window. The heartbeat is
-/// generous relative to the program's cycle time, so a missed beat cannot masquerade as LOS — the
-/// test below asserts the cause, not merely that something died.
+/// The ground-delegated authority for one pass. `ttl_ms` IS the contact window: LOS is this TTL
+/// expiring, so the heartbeat must be long enough that a missed beat can never masquerade as LOS.
+/// The margin is sized against the SLOW path, not the fast one: `cargo test` builds unoptimized,
+/// where one `fib`-bearing cycle of `sat-pass.delulu` costs ~230 ms on the reference machine — so
+/// the pre-D19 `heartbeat_ms=200` was actually SHORTER than a debug cycle and revoked the lease
+/// `missed-heartbeat` before its TTL ever came due, failing this test nondeterministically (it
+/// passed only when the interpreter happened to keep pace, e.g. a release build or a lucky run).
+/// `heartbeat_ms = ttl_ms = 1000` puts the beat window ~4x above the debug cycle: the HGA is beaten
+/// every cycle (so `since_beat` stays small) and expires cleanly on its TTL — in debug and release
+/// alike. `ttl_ms` (1000) still sits well under even the fast release run (~3.8 s at ~37 ms/cycle),
+/// so LOS still falls mid-pass. Sized against the debug path deliberately — see ruling D19e.
+/// (`ttl_ms >= heartbeat_ms` is a hard parse rule: a lease that would expire before its first beat
+/// was due is refused, which is why raising the heartbeat raises the TTL with it.)
 const HGA: &str =
-    "actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=200,ttl_ms=250,fail=safe-park";
-/// The pre-attenuated autonomy grant: a narrow box, and a TTL that outlives the pass.
+    "actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=1000,ttl_ms=1000,fail=safe-park";
+/// The pre-attenuated autonomy grant: a narrow box, and a TTL that outlives the pass. Its heartbeat
+/// matches its TTL, so no amount of compute between cycles can revoke it — it ends only with the run.
 const WHEELS: &str =
-    "actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=200,ttl_ms=600000,fail=hold";
+    "actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=600000,ttl_ms=600000,fail=hold";
 
 fn pass() -> Output {
     delulu(&[

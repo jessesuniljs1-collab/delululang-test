@@ -11,7 +11,7 @@ the stage specs assume (Stage-1 spec §9.2). The moves in §3 were executed at r
 ```
 DeluluLang/
 ├── Cargo.toml                      # Rust workspace root (members grow per stage)
-├── Cargo.lock                      # committed from Stage 2 (reproducible builds)
+├── Cargo.lock                      # committed for reproducible builds (tracked 2026-07-21, D19c)
 ├── README.md                       # project front door
 ├── .gitignore
 │

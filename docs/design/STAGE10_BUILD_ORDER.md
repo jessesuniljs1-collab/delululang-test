@@ -615,6 +615,90 @@ unchanged at 307.** A deferral phase mints no codes, and the optimizing-tier pin
 preserving (differential-witnessed), so there is no witness churn and no floor move. Clippy baseline
 unchanged. (f) **This closes the last phase; Stage 10 close-out (§4 below, spec §11) opens.**
 
+**D19 — Post-close-out production-readiness pass (2026-07-21): cross-platform verification,
+supply-chain honesty, the lockfile decision the owner reserved, and a criterion-10 acceptance test
+that only passed on fast builds.** Stage 10 was CLOSED on 2026-07-20 (§4). This ruling records a
+follow-on pass the owner requested — "test and verify everything, make it production-ready, across
+Linux/Windows/macOS" — numbered into the same ledger rather than editing the sealed phases, per the
+S9-D21 precedent (errata is a new ruling, never a rewrite). The full local CI-gate replay ran
+natively on Windows and on Linux via WSL against an ext4 working-tree copy with an isolated target
+dir; macOS remains static-analysis-only (no Apple hardware — stated, not implied). Built by Opus
+4.8; the two decisions touching owner-reserved policy (c) and sealed acceptance evidence (e) were
+put to the owner and taken by them, not made unilaterally. Five sub-rulings.
+
+(a) **`broker_transport::state_hash` is gated `#[cfg(windows)]`.** The FNV-1a path hash names the
+Windows named pipe (`\\.\pipe\delulu-broker-<hash>`); the Unix `imp` derives its socket path
+directly and never calls it. Ungated it was a `dead_code` warning on Linux/macOS only —
+grep-verified to have exactly one caller, inside `#[cfg(windows)] mod imp`, so the gate cannot break
+another platform. Not a build failure (CI runs no `-D warnings` and no `clippy` gate) — hygiene, and
+named as hygiene, not a fixed breakage. Linux `clippy --all-targets` drops 67→66 with zero
+`state_hash` mentions; Windows holds at 65.
+
+(b) **The SBOM listed a dependency it does not build and omitted two it does — and the test that
+should have caught it was fool's-gold.** `docs/release/SBOM-1.0.json` named `wasm-encoder 0.252.0`
+(a transitive copy pulled by wasmtime) while `delulu-wasm` declares `0.221` (resolved `0.221.3`) —
+the entry now names the copy the workspace actually declares, the transitive copies noted. It
+omitted `ml-dsa 0.1.1` and `ml-kem 0.3.2` entirely — both DIRECT dependencies of `delulu-runtime`
+(D14c), both linked, exactly the "omission is worse than none because it will be trusted" case the
+SBOM's own note warns of. Added. The regression: `release.rs::the_sbom_lists_the_real_dependencies`
+asserted a hardcoded 6-crate subset that did not include the PQC crates added later, so the checker
+could not see the omission it exists to catch — the skip-branch failure in a test, not a rule. The
+required set now includes `wasm-encoder`, `ml-dsa`, `ml-kem` (house rule 3, applied to a test).
+
+(c) **`Cargo.lock` is now committed, discharging D14d — the owner's decision, made.** D14d
+recommended committing the lockfile ("this workspace ships a binary and a signed release artifact")
+but flagged it "for the owner rather than done unilaterally," because it changes repo-wide
+`.gitignore` policy. The owner chose to commit it. Two of the repo's own documents already ASSUMED a
+committed lock and were therefore false: `docs/REPOSITORY_STRUCTURE.md` listed `Cargo.lock` as
+"committed from Stage 2," and the SBOM note referenced "the committed Cargo.lock" — so this
+reconciles the repo with what it already claimed rather than introducing a new policy. `.gitignore`
+loses the `Cargo.lock` line (with an inline note that the tracking is deliberate); the structure doc
+is corrected to the true date (tracked 2026-07-21, not "from Stage 2" — an aspirational comment that
+was never true is not left standing). **The honesty boundary, stated:** the committed lock is the
+CURRENT resolution and pins every future build; it was captured post-release and is NOT a
+retroactive certificate for the already-signed 1.0.0 `.dwx`, signed 2026-07-20 before any lock was
+tracked. The SBOM's direct-dep versions all appear in the committed lock (rustc is pinned, the PQC
+crates are `=`-pinned, nothing was `cargo update`d between release and now), so the lock documents
+that build rather than certifying it — a distinction the record keeps rather than blurs.
+
+(d) **`.gitattributes` makes the LF invariant enforced instead of lucky.** `git ls-files --eol`
+reported 472/472 tracked text files already stored LF, zero CRLF, with only the signed `.dwx`/`.sig`
+as `-text` (git's own content auto-detection). Adding `* text=auto eol=lf` renormalizes nothing
+(proven: the eol audit, and `git add --renormalize .` stages only `.gitattributes` itself) and
+closes a real latent hazard the cross-platform audit surfaced — a CRLF reaching the lexer's raw
+block-comment slice and leaking into `delulu fmt`'s "canonical" output, which the fmt gate requires
+to be byte-identical across platforms. The signed artifacts are pinned `-text` so no future
+`core.autocrlf` or git version can normalize the bytes a signature is a statement about.
+
+(e) **Criterion 10's satellite test passed only on fast builds — the close-out figure rested on
+that, and it is fixed now, not explained away.** `cargo test --workspace` (the primary CI gate)
+builds unoptimized, and in a debug build one `fib(21)`-bearing cycle of `sat-pass.delulu` costs
+~230 ms on the reference machine while the HGA grant set `heartbeat_ms=200` — so the beat, which
+"rides device activity" (D11c: each command beats the lease), was DUE more often than a debug cycle
+could send it, and the dead-man watchdog correctly revoked a compute-stalled controller as
+`missed-heartbeat`, the exact mechanism `satellite_demo.rs` asserts must NOT be the cause (LOS must
+be `ttl-expired`). Measured: release 37 ms/cycle → the demo behaves as designed (100/100 wheels,
+clean TTL LOS); debug 228–232 ms/cycle → 1–2 wheels commands, everything else revoked. It even
+inverts under load — a starved watchdog thread revokes LESS — which is why the same test passed in
+the first (concurrent-load) run and failed in isolation. So the close-out's "criterion 10 MET /
+1098-0-4" was recorded on a run where debug timing happened to keep pace; it was never robust.
+**The fix is the raise-heartbeat option the owner chose, sized against the slow path:**
+`heartbeat_ms=ttl_ms=1000` for the HGA (the beat window now clears the debug cycle ~4x; the HGA is
+beaten every cycle so `since_beat` stays small and the lease ends on its TTL, in debug and release
+alike; `ttl=1000 ms` stays well under even the fast release run so LOS still falls mid-pass) and
+`heartbeat_ms=ttl_ms=600000` for the wheels (no compute gap can revoke the autonomy grant). Raising
+the heartbeat forced the TTL up with it, because `ttl_ms >= heartbeat_ms` is a hard parse rule
+(`value.rs`: a lease that expired before its first beat was due is refused) — the contact window is
+now 1000 ms of simulated pass, semantically unchanged. Verified: `cargo test --test satellite_demo`
+4/4, three runs; the raw program 6/6 deterministic in debug plus release; `run-demo.sh` and
+`RECORD.md` updated to the same values with `RECORD.md`'s "Observed" block regenerated from a real
+release run. **The deeper finding, named not fixed:** the dead-man watchdog uses WALL-CLOCK time
+even under `--broker-profile sim`, so that profile is deterministic in its device readback (seeded)
+but NOT in its lease timing — "the exact cycle at which LOS falls is machine-dependent," as
+RECORD.md already said. Ticking the sim's watchdog on the sim's logical clock would decouple the
+demo from interpreter speed entirely; it is a larger change to the lease/sim boundary, logged here
+as future work, not smuggled into a test-timing patch.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -667,6 +751,13 @@ recorded, never faked.
 (1), 1 gates-met-with-the-D5-wait (8), 1 mechanism-met-timed-cycle-pending (5), 1 PENDING-ADOPTION
 (6), and criterion 11 signed off. Nothing failed silently; every gap is a named, ruled, published
 deferral or an honest wait on the real world.
+
+**Post-close-out (2026-07-21):** a production-readiness pass (**D19**) re-ran the gates natively on
+Windows and on Linux (WSL), corrected three supply-chain-honesty defects in the SBOM, committed the
+lockfile (discharging D14d), and fixed a criterion-10 timing fragility that had made the satellite
+test pass only on fast (release) builds — it revoked its own leases `missed-heartbeat` in an
+unoptimized `cargo test`. Criterion 10 remains **MET** and is now robust in debug; the "1098-0-4"
+figure above was a fast-build snapshot. See D19.
 
 ## 5. Diagnostics budget
 

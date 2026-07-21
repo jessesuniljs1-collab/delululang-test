@@ -182,8 +182,16 @@ fn the_sbom_lists_the_real_dependencies() {
     let names: Vec<&str> =
         components.iter().filter_map(|c| c["name"].as_str()).collect();
 
-    // Every third-party crate the workspace actually depends on must appear.
-    for dep in ["serde", "serde_json", "toml", "wasmtime", "ed25519-dalek", "getrandom"] {
+    // Every third-party crate the workspace actually depends on must appear. This list is a floor,
+    // not the full closure — but it must name every crate whose omission would be a *silent* lie.
+    // `ml-dsa`/`ml-kem` (the PQC deps added in D14c) and `wasm-encoder` were missing from this list
+    // for exactly that reason: the SBOM had dropped or misnamed all three and the check could not
+    // tell, because it only looked for crates it already knew about. A checker that cannot see the
+    // omission it exists to catch is worse than none. (Post-1.0 production-readiness pass, D19.)
+    for dep in [
+        "serde", "serde_json", "toml", "wasmtime", "wasm-encoder", "ed25519-dalek", "getrandom",
+        "ml-dsa", "ml-kem",
+    ] {
         assert!(
             names.contains(&dep),
             "the SBOM omits `{dep}`, which the workspace links — an incomplete SBOM is worse than \

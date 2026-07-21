@@ -38,11 +38,14 @@ DELULU="$root/target/release/delulu"
 [ -x "$DELULU" ] || DELULU="$root/target/release/delulu.exe"
 export DELULU_NO_FIRST_RUN=1
 
-# The contact window IS the ttl. The heartbeat is shorter than the window, because a spacecraft
-# under active ground control is commanding continuously; a lease whose ttl were shorter than its
-# heartbeat is refused outright (it would expire before its first beat was due).
-HGA="actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=200,ttl_ms=250,fail=safe-park"
-WHEELS="actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=200,ttl_ms=600000,fail=hold"
+# The contact window IS the ttl. The heartbeat is sized ABOVE the program's slowest cycle so the
+# lease can only end by its TTL running out, never by a beat the interpreter was too slow to send:
+# an unoptimized (`cargo test`) cycle of sat-pass.delulu costs ~230 ms, so a 1000 ms heartbeat has
+# ~4x of headroom in debug and vastly more in this release build. `ttl_ms >= heartbeat_ms` is a hard
+# rule (a lease that expired before its first beat was due is refused), so the HGA's ttl rises with
+# its heartbeat; 1000 ms still closes the window mid-pass in both build modes. See ruling D19e.
+HGA="actuator=sat0/hga:slew_deg=-45..45,heartbeat_ms=1000,ttl_ms=1000,fail=safe-park"
+WHEELS="actuator=sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=600000,ttl_ms=600000,fail=hold"
 
 report() {
   local label="$1" out="$2"

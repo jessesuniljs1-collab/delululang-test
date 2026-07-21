@@ -17,6 +17,11 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 
 /// A short, stable 64-bit hash of the canonical state-dir path — the per-instance transport suffix.
+///
+/// Windows-only: the Unix `imp` derives its socket path directly from the state dir, so this hash
+/// has no caller off Windows. Gating it keeps the Linux/macOS build warning-clean (a dead private
+/// fn is a `clippy` finding) rather than carrying a symbol no platform but one ever names.
+#[cfg(windows)]
 fn state_hash(state_dir: &Path) -> u64 {
     let canon = std::fs::canonicalize(state_dir).unwrap_or_else(|_| state_dir.to_path_buf());
     let s = canon.to_string_lossy().to_lowercase();

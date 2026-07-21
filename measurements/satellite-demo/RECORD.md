@@ -42,9 +42,9 @@ this way for sixty years; what Stage 10 adds is that it is now mechanical rather
 One program, one continuous run, holding two subsystems under two different grants:
 
 - `sat0/hga` — the ground-delegated authority for this pass. Wide (±45° slew),
-  `ttl_ms = 250`, `fail = safe-park`.
-- `sat0/wheels` — the pre-attenuated autonomy grant. Narrow (±0.5°), `ttl_ms = 600000`,
-  `fail = hold`.
+  `heartbeat_ms = ttl_ms = 1000`, `fail = safe-park`.
+- `sat0/wheels` — the pre-attenuated autonomy grant. Narrow (±0.5°),
+  `heartbeat_ms = ttl_ms = 600000`, `fail = hold`.
 
 The program does not know which is which. It commands both on every cycle and reports what it is
 told. **Nothing in it polls for loss of signal, checks a clock, or handles a "you are now
@@ -55,10 +55,10 @@ Observed (this machine, release build, 100 cycles):
 
 ```
 === PASS 1 — acquisition of signal, then LOS mid-pass ===
-  hga  commanded: 17   revoked: 83   no-device: 0
+  hga  commanded: 29   revoked: 71   no-device: 0
   wheels commanded: 100   wide slew refused: 100
-  loss of signal at output line 71
-  lease revoked (ttl-expired), heartbeat_ms=200, ttl_ms=250, held 5127 µs past its ttl
+  loss of signal at output line 119
+  lease revoked (ttl-expired), heartbeat_ms=1000, ttl_ms=1000, held 14629 µs past its ttl
   hga REVOKED: the lease on `sat0/hga` was revoked (ttl-expired); the `safe-park` fail-state is engaged
 ```
 
@@ -89,10 +89,16 @@ expiring. The autonomy grant still works, so the run is not simply broken.
 Without this control, "the HGA stopped working" would be equally consistent with the ground grant
 never having done anything at all.
 
-Likewise, the HGA's heartbeat (200 ms) is longer than the program's cycle time, and the test
-asserts `missed-heartbeat` never appears. A program that simply stopped beating would also lose
-the HGA and would look identical in the output. The scenario has to prove it is demonstrating the
-*contact window* and not the dead-man.
+Likewise, the HGA's heartbeat (`1000 ms`) is sized comfortably ABOVE the program's slowest cycle,
+and the test asserts `missed-heartbeat` never appears. This proves the scenario is demonstrating
+the *contact window* (the TTL) and not the dead-man — a program that simply stopped beating would
+also lose the HGA and look identical. It is also what makes the test build-independent: `cargo
+test` runs unoptimized, where one `fib`-bearing cycle costs ~230 ms, so the pre-D19 `200 ms`
+heartbeat was actually *shorter* than a debug cycle and revoked the lease `missed-heartbeat` before
+its TTL was ever due — passing only on faster (release) runs. At `1000 ms` the beat window clears
+the debug cycle ~4× over, so LOS is the TTL in every build. Because `ttl_ms >= heartbeat_ms` is
+enforced, the HGA's TTL rose with its heartbeat; `1000 ms` still closes the window mid-pass. See
+ruling D19e.
 
 ## Reproducing
 

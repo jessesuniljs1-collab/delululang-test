@@ -1,0 +1,13 @@
+# Line-ending determinism (post-1.0 production-readiness pass, ruling D19d).
+# Every tracked text file was already stored LF at adoption — `git ls-files --eol` reported
+# 472/472 LF, zero CRLF — so this changes no committed bytes; it makes that LF invariant
+# ENFORCED rather than an accident of each contributor's core.autocrlf. The concrete hazard it
+# closes: a CRLF reaching the lexer's raw block-comment slice and leaking into `delulu fmt`'s
+# "canonical" output, which the fmt gate requires to be byte-identical across platforms.
+* text=auto eol=lf
+
+# The signed release artifacts are bytes, not text. A signature is a statement about exact bytes,
+# so nothing may normalize them. Git already auto-detects them as binary; pin it so no future
+# core.autocrlf setting or git version can reclassify and corrupt an artifact or its signature.
+*.dwx -text
+*.sig -text

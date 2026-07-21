@@ -25,7 +25,7 @@
     { "type": "library", "name": "serde_json", "version": "1.0.150", "purl": "pkg:cargo/serde_json@1.0.150", "description": "The machine surface: diagnostics, authority reports, the registry index" },
     { "type": "library", "name": "toml", "version": "0.8.23", "purl": "pkg:cargo/toml@0.8.23", "description": "delulu.toml manifests. Parsed as a pure function of text — no code runs at resolution time" },
     { "type": "library", "name": "wasmtime", "version": "27.0.0", "purl": "pkg:cargo/wasmtime@27.0.0", "description": "The WASM engine. The containment floor for Contained plugins" },
-    { "type": "library", "name": "wasm-encoder", "version": "0.252.0", "purl": "pkg:cargo/wasm-encoder@0.252.0", "description": "WASM codegen for --target wasm" },
+    { "type": "library", "name": "wasm-encoder", "version": "0.221.3", "purl": "pkg:cargo/wasm-encoder@0.221.3", "description": "WASM codegen for --target wasm (delulu-wasm declares 0.221; resolved 0.221.3). The tree also carries transitive 0.219.2/0.252.0 copies from wasmtime; this entry is the one the workspace itself declares" },
     { "type": "library", "name": "ed25519-dalek", "version": "2.2.0", "purl": "pkg:cargo/ed25519-dalek@2.2.0", "description": "Artifact and plugin signatures, and the broker's lease tokens" },
     { "type": "library", "name": "getrandom", "version": "0.3.4", "purl": "pkg:cargo/getrandom@0.3.4", "description": "OS randomness: signing seeds, registry tokens, guard owner codes" },
     { "type": "library", "name": "blake3", "version": "1.8.5", "purl": "pkg:cargo/blake3@1.8.5", "description": "Content hashes for the lockfile and the audit chain" },
@@ -35,6 +35,8 @@
     { "type": "library", "name": "pyo3", "version": "0.25.1", "purl": "pkg:cargo/pyo3@0.25.1", "description": "Embedded CPython. Optional — the Python-less build is a first-class citizen" },
     { "type": "library", "name": "anyhow", "version": "1.0.103", "purl": "pkg:cargo/anyhow@1.0.103", "description": "Error plumbing in the host tooling" },
     { "type": "library", "name": "libc", "version": "0.2.186", "purl": "pkg:cargo/libc@0.2.186", "description": "Platform syscalls for the isolation profiles" },
-    { "type": "library", "name": "windows-sys", "version": "0.61.2", "purl": "pkg:cargo/windows-sys@0.61.2", "description": "Windows platform APIs" }
+    { "type": "library", "name": "windows-sys", "version": "0.61.2", "purl": "pkg:cargo/windows-sys@0.61.2", "description": "Windows platform APIs" },
+    { "type": "library", "name": "ml-dsa", "version": "0.1.1", "purl": "pkg:cargo/ml-dsa@0.1.1", "description": "ML-DSA / FIPS 204 post-quantum signatures (delulu-runtime, pinned =0.1.1). Unaudited by its authors; every invocation without --unstable refuses (DL1910)" },
+    { "type": "library", "name": "ml-kem", "version": "0.3.2", "purl": "pkg:cargo/ml-kem@0.3.2", "description": "ML-KEM / FIPS 203 key encapsulation (delulu-runtime, pinned =0.3.2). Linked but with no caller yet (D15d); listed because it is in the build" }
   ]
 }
