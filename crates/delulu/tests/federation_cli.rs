@@ -31,7 +31,9 @@
 //! What it still does NOT witness, so the closure is not read wider than it is: both processes run
 //! on one machine, the "link" is a filesystem copy, and there is no radio, no latency, and no
 //! partition except the one these tests create by letting time pass. Real deployment additionally
-//! needs a hardware adapter (none ships in-tree) and certification regimes this project does not
+//! needs a hardware driver (D23 shipped the adapter *mechanism* — a subprocess line protocol — but
+//! no driver for any real device ships in-tree, so every device here is the simulator) and
+//! certification regimes this project does not
 //! control — `STAGE10_AUTONOMY_ADDENDUM.md` §3/§4 state both, and they are unchanged by this work.
 
 use std::path::{Path, PathBuf};

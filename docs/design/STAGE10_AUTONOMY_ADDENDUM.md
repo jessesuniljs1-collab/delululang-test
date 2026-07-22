@@ -268,7 +268,11 @@ latency budgets, and anything with a deadline measured in microseconds lives bel
   federation (§2.5), and certification regimes this project does not control.
   *(Update 2026-07-22: broker federation is now **built** — §2.5, build-order D22 — so it has moved
   off this list. **Everything else in this sentence still stands**, and hardware is the one that
-  matters most: no adapter ships in-tree, so every device in every demonstration is simulated.
+  matters most. *(Update 2026-07-22, build-order D23: the adapter **mechanism** now exists — an
+  operator-supplied subprocess speaking a line protocol, so a command can reach code outside
+  DeluluLang. **No driver for any real device ships in-tree**, every device in every demonstration
+  here is still the in-tree simulator, and D23 is explicitly NOT the signed Verified-class plugin
+  spec §5.4 describes. What shipped is the socket a driver plugs into.)*
   Federation removed a blocker; it did not remove the hardware, the partners, or the regimes.)*
 - **"Key pillar of a safe and secure autonomous future" is the destination, not a deliverable.**
   The deliverables are the steps that can be witnessed: envelopes that refuse, leases that die,

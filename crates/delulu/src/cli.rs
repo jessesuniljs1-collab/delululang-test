@@ -6202,8 +6202,14 @@ const DEFAULT_SIM_SEED: u64 = 0xDE1;
 ///   - no sign-off record at all → REFUSED. "I could not tell" is the skip branch, and the skip
 ///     branch says no. A gate that opens when it cannot find its evidence is not a gate.
 ///   - a sign-off for different bytes → DL1905, `requires_human: true`.
-///   - a matching sign-off → the gate PASSES, and the run then stops for the honest reason that
-///     no hardware adapter ships in-tree.
+///   - a matching sign-off → the gate PASSES, and the run proceeds only if a driver was actually
+///     named with `--adapter-cmd` (RFC 0001 dish 3, build-order D23). Without one it stops, because
+///     a `hw:` run that commanded nothing while reporting success would be a lie.
+///
+/// Note the distinction D23 introduced and every surface must keep: this tree ships the **adapter
+/// mechanism** — a subprocess line protocol — and **no driver for any real device**. So a `hw:` run
+/// can now reach code outside DeluluLang, and still nothing physical moves unless an operator
+/// supplies a driver that touches hardware.
 fn resolve_device_profile(file: &str, opts: &Opts) -> Result<delulu_runtime::Profile, i32> {
     let Some(spec) = opts.broker_profile.as_deref() else {
         return Ok(delulu_runtime::Profile::Null);
