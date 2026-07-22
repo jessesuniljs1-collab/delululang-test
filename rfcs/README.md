@@ -33,14 +33,16 @@ head, and every rule the checker must reason about is a rule that can have a fai
 
 ## Open RFCs
 
-*None.* The 1.0 core is as specified, and nothing is deprecated at release (`STABILITY.md` §3). An
-RFC is **open** only once a sponsor has signed it and the comment clock has started.
+| RFC | Title | Sponsor | Opened | Comment closes |
+|---|---|---|---|---|
+| [0001](0001-broker-federation.md) | Broker federation: a grant tree that spans machines | Jesse Sunil | 2026-07-22 | **2026-08-05** |
 
-## Drafts (not open — no comment period has begun)
+Closes `STAGE10_AUTONOMY_ADDENDUM.md` §2.5 and subsumes build-order D12e.
 
-| RFC | Title | Blocked on |
-|---|---|---|
-| [0001](0001-broker-federation.md) | Broker federation: a grant tree that spans machines | **a sponsor** (§4 of `CONTRIBUTING.md` — an AI-authored RFC may not name its own), then an owner decision on whether to build before a hardware adapter exists |
-
-Closes `STAGE10_AUTONOMY_ADDENDUM.md` §2.5 and subsumes build-order D12e. Nothing in it is
-implemented, and nothing in it may be described as shipped.
+**Implementation status, stated plainly** (the RFC's own status line carries the long form):
+phase **F1** (the device scope dimension) **shipped on 2026-07-22 *before* this RFC had a sponsor or
+a comment period at all** — build-order ruling **D21(g)** records that deviation and it is not
+reframed as compliance. Phases **F2–F6** are being built **concurrently with** the open comment
+period at the sponsor's direction, which is a smaller deviation but still one. For every phase the
+commitment is the same: **if this RFC is amended or rejected at the close, the code changes with
+it.** Nothing is grandfathered by having landed first.

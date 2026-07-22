@@ -2603,3 +2603,55 @@ anchor = "ref.diag.DL1909"
 file = "crates/delulu/tests/deploy_cli.rs"
 test = "a_service_exceeding_the_ceiling_is_refused_by_name"
 kind = "negative"
+
+# ----- RFC 0001 phase F2: grant certificates (broker federation) -------------------------------
+# Negative witnesses: the chain verifier refusing, one per failure class. Positive witnesses: a
+# well-formed chain that verifies and yields the LEAF's authority, producing none of these codes.
+
+[[witness]]
+anchor = "ref.diag.DL1415"
+file = "crates/delulu-broker/src/cert.rs"
+test = "an_unknown_anchor_is_refused_never_assumed"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1415"
+file = "crates/delulu-broker/src/cert.rs"
+test = "a_well_formed_chain_verifies_and_yields_the_leafs_authority"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1416"
+file = "crates/delulu-broker/src/cert.rs"
+test = "a_widening_hop_is_refused_with_the_never_widening_intersection"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1416"
+file = "crates/delulu-broker/src/cert.rs"
+test = "a_well_formed_chain_verifies_and_yields_the_leafs_authority"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1417"
+file = "crates/delulu-broker/src/cert.rs"
+test = "the_validity_window_is_checked_at_every_hop"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1417"
+file = "crates/delulu-broker/src/cert.rs"
+test = "a_well_formed_chain_verifies_and_yields_the_leafs_authority"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1418"
+file = "crates/delulu-broker/src/cert.rs"
+test = "an_unrecognized_scope_dimension_refuses_the_whole_certificate"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1418"
+file = "crates/delulu-broker/src/cert.rs"
+test = "a_well_formed_chain_verifies_and_yields_the_leafs_authority"
+kind = "positive"

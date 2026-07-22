@@ -1,6 +1,7 @@
 # RFC 0001 — Broker federation: a grant tree that spans machines
 
-- **Status:** draft — **but phase F1 is already IMPLEMENTED and shipped** (2026-07-22, build-order
+- **Status:** **comment** (opened 2026-07-22, closes 2026-08-05) — **and phase F1 is already
+  IMPLEMENTED and shipped** (2026-07-22, build-order
   ruling **D21**), on the owner's direct instruction and **ahead of this RFC's comment period**.
   That is a deviation from `rfcs/README.md`'s process, not a satisfaction of it: an AI-authored RFC
   may not name its own sponsor, so no period has begun. It is recorded in D21(g) rather than
@@ -8,11 +9,23 @@
   grandfather it, and byte-compatibility was preserved deliberately (see §4.3) to keep reversal
   cheap. F2–F6 remain unbuilt and unapproved.
 - **Author(s):** Claude Opus 4.8 (AI-authored)
-- **Sponsor:** *(unfilled — an AI-authored RFC may not name its own sponsor; requires a named human
-  who is accountable, per `CONTRIBUTING.md` §4. Until this line is filled, this RFC cannot open for
-  comment.)*
-- **Opened:** 2026-07-22 *(draft written; the comment clock starts when a sponsor signs, not now)*
-- **Comment period closes:** *(sponsor-set, ≥ 14 days after opening)*
+- **Sponsor:** **Jesse Sunil** — accepted the sponsor role 2026-07-22 (`CONTRIBUTING.md` §4: a named
+  human who is accountable). The author is an AI and may not sponsor its own RFC.
+- **Opened:** 2026-07-22 *(the comment clock starts here — the sponsor's signature, not the draft)*
+- **Comment period closes:** 2026-08-05 *(14 days; `rfcs/README.md`: it does not shrink)*
+
+> **What sponsorship does and does not fix — stated so it cannot be read as more than it is.**
+> It makes the RFC *properly sponsored and open*, and it is what lets F2+ proceed in-process. It
+> does **not** retroactively give phase **F1** a comment period: F1 shipped on 2026-07-22 before any
+> period existed, and build-order **D21(g)** keeps that on the record as history.
+>
+> It also does not make implementation-during-the-period the same as implementation-after-it.
+> `rfcs/README.md` says *accepted* RFCs are implemented; F2–F6 are being built **concurrently with**
+> the open period at the sponsor's direction. That is a smaller deviation than F1's — the RFC is
+> sponsored, open, and can still be argued with — but it is a deviation, and it is named here rather
+> than smoothed over. **The standing commitment is the same for every phase: if this RFC is amended
+> or rejected at the close, the code changes with it.** No phase is grandfathered by having landed
+> first, and each is built to keep reversal cheap.
 - **Touches Constitution §1 / §2 / §5.14 honesty limits:** **yes** — the broker's threat model
   changes from "OS-authenticated same user" to "a signed credential from another trust domain."
   §6 is therefore mandatory and is written below.

@@ -138,6 +138,11 @@ registry! {
     "DL1412" => "guard request denied (carries the principal's comment verbatim)",
     "DL1413" => "guard sealed refusal — not runtime-approvable; bypass does not lift it",
     "DL1414" => "guard owner code missing or invalid — admin verb refused",
+    // Grant certificates (RFC 0001 phase F2, broker federation). Contiguous from DL1415.
+    "DL1415" => "grant certificate chain does not verify to a configured trust anchor",
+    "DL1416" => "grant certificate hop is not an attenuation of its issuer (carries the intersection)",
+    "DL1417" => "grant certificate is outside its validity window",
+    "DL1418" => "grant certificate refused: unsupported algorithm/dimension, or malformed",
 
     // DL15xx — runtime plugins (Stage 6 "Live", spec §7). DL0801/DL0803 (reserved in Stage 1)
     // activate alongside these. DL1508 is a build-order-recorded addition (deviation 2): the spec
@@ -994,6 +999,58 @@ pub fn code_explain(code: &str) -> Option<String> {
                  DELULU_GUARD_OWNER environment variable. If you lost it, restart the broker and \
                  capture the fresh one. See `delulu explain E-GUARD`.\n\n{GUARD_CAVEAT}"
             ))
+        }
+        "DL1415" => {
+            return Some(
+                "A grant certificate chain did not verify to a configured trust anchor. One \
+                 question, several ways to fail it: the first certificate's issuer is not an \
+                 anchor this verifier was configured with; a signature does not verify over the \
+                 certificate's own bytes; a signature is valid but was made by a key OTHER than \
+                 the one the certificate names as issuer (a valid signature by the wrong key is a \
+                 forgery, not an authorization); the chain does not link (a `parent` that is not \
+                 the preceding certificate's fingerprint); or a party that does not hold the \
+                 delegation tried to issue onward. The message says which.\n\nAn unknown issuer is \
+                 refused, never assumed trustworthy because it is well-formed."
+                    .to_string(),
+            )
+        }
+        "DL1416" => {
+            return Some(
+                "A hop in a grant certificate chain is not an attenuation (`⊑`) of the \
+                 certificate that issued it — it asked for authority its issuer does not hold. \
+                 Like DL0802 for a local delegation, the refusal carries the never-widening \
+                 INTERSECTION: the most that hop could legitimately carry. Re-issue the \
+                 certificate with at most that authority.\n\nFederation introduces no new \
+                 authority mathematics: this is the same `⊑` lattice a local `delulu grants \
+                 delegate` is checked against, run once per hop of the chain."
+                    .to_string(),
+            )
+        }
+        "DL1417" => {
+            return Some(
+                "A grant certificate was presented outside its `not_before`/`not_after` window. \
+                 The window is checked at EVERY hop of a chain, so a chain is only as live as its \
+                 shortest link — a long-lived root does not extend a short-lived leaf.\n\nIf your \
+                 clock is the thing that is wrong, note the deliberate asymmetry: authority may \
+                 SHRINK under clock uncertainty and may never be extended by it. A vehicle whose \
+                 clock is wrong loses authority early rather than late."
+                    .to_string(),
+            )
+        }
+        "DL1418" => {
+            return Some(
+                "A grant certificate was refused because this build cannot fully understand it: \
+                 an unimplemented signature algorithm, an unknown effect name, an unknown scope \
+                 dimension, or bytes that are not a well-formed certificate.\n\nThe certificate is \
+                 refused WHOLE rather than honored in part, and that is the important half. \
+                 `docs/for-agents.md` tells consumers to ignore unknown fields — correct for a \
+                 reporting surface, catastrophic for an authority: a dimension a verifier cannot \
+                 see is a dimension it cannot enforce, so ignoring it would silently WIDEN the \
+                 grant. Likewise an algorithm this build cannot verify is refused rather than \
+                 treated as unsigned; verifying is a trust decision, so refusing to verify must \
+                 refuse the trust."
+                    .to_string(),
+            )
         }
         "DL1902" => "A bounded mailbox was full and the `drop-new` overflow policy dropped the \
              message — and because the program runs in abort mode, the drop is an error rather \

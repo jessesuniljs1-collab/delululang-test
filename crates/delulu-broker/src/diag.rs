@@ -54,6 +54,30 @@ pub enum Denial {
     /// signed by a rotated-away key, a malformed token, an unknown bound node, or a second
     /// redemption of a single-use token. `requires_human: true` (spec §8) — re-mint via `delegate`.
     TokenInvalid { detail: String },
+    // ----- RFC 0001 F2: grant certificates (federation). DL1401–DL1414 were taken. -------------
+    /// DL1415 — a certificate chain does not verify to a configured trust anchor: an unknown
+    /// issuer, a signature that does not verify, a signature by a key other than the named issuer,
+    /// a chain that does not link, or a non-holder issuing onward. All one code because they are
+    /// one question — *is this chain rooted in something we trust?* — and the `detail` says which.
+    CertUntrusted { detail: String },
+    /// DL1416 — a hop in a certificate chain is not `⊑` its parent. Carries the never-widening
+    /// intersection, exactly as DL0802 does for a local delegation; `index` is the failing hop.
+    CertAttenuation {
+        index: usize,
+        requested: Box<Authority>,
+        intersection: Box<Authority>,
+    },
+    /// DL1417 — a certificate is outside its `not_before`/`not_after` window. Checked per hop: a
+    /// chain is only as live as its shortest link.
+    CertExpired { not_before: i64, not_after: i64, now_millis: i64 },
+    /// DL1418 — this build cannot fully understand the certificate: an unimplemented signature
+    /// algorithm, an unknown effect, or an unknown scope dimension. **Refused whole, never honored
+    /// in part** — an authority dimension a verifier cannot see is one it cannot enforce, so
+    /// ignoring it would silently widen the grant (RFC 0001 §4.9.3).
+    CertUnsupported { detail: String },
+    /// DL1418 — a certificate that is not well-formed at all. Shares the code with
+    /// [`Denial::CertUnsupported`] because both mean "this build will not act on these bytes".
+    CertMalformed { detail: String },
     /// DL1410 — the Guard: a delegated node used guarded authority with no permit. Carries the
     /// matched rule and (in the message) the exact `delulu guard request …` escalation command.
     GuardBlocked { node: GrantId, rule: String },
@@ -84,6 +108,10 @@ impl Denial {
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
             Denial::TokenInvalid { .. } => "DL1407",
+            Denial::CertUntrusted { .. } => "DL1415",
+            Denial::CertAttenuation { .. } => "DL1416",
+            Denial::CertExpired { .. } => "DL1417",
+            Denial::CertUnsupported { .. } | Denial::CertMalformed { .. } => "DL1418",
             Denial::GuardBlocked { .. } | Denial::GuardMintBlocked { .. } => "DL1410",
             Denial::GuardPending { .. } => "DL1411",
             Denial::GuardDenied { .. } => "DL1412",
@@ -192,6 +220,29 @@ impl Denial {
                     target.as_str()
                 ),
             ),
+            Denial::CertUntrusted { detail } => Diagnostic::error(
+                "DL1415",
+                format!("grant certificate chain does not verify to a trust anchor: {detail}"),
+            ),
+            Denial::CertAttenuation { index, requested, intersection } => Diagnostic::error(
+                "DL1416",
+                format!(
+                    "grant certificate {index} is not an attenuation of its issuer: requested \
+                     `{}`, but the most that hop can carry is `{}`",
+                    requested.render_compact(),
+                    intersection.render_compact()
+                ),
+            ),
+            Denial::CertExpired { not_before, not_after, now_millis } => Diagnostic::error(
+                "DL1417",
+                format!(
+                    "grant certificate is outside its validity window [{not_before}, {not_after}) \
+                     at {now_millis} ms — a chain is only as live as its shortest hop"
+                ),
+            ),
+            Denial::CertUnsupported { detail } | Denial::CertMalformed { detail } => {
+                Diagnostic::error("DL1418", format!("grant certificate refused: {detail}"))
+            }
             Denial::UnknownNode { node } => Diagnostic::error(
                 "DL0904",
                 format!("no such lease `{}` (fail closed)", node.as_str()),

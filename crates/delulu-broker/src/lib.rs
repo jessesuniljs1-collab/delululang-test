@@ -22,6 +22,7 @@ mod path;
 
 pub mod audit;
 pub mod authority;
+pub mod cert;
 pub mod device_scope;
 pub mod diag;
 pub mod guard;
