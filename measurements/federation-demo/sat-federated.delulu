@@ -1,0 +1,382 @@
+// The federated satellite demonstration (RFC 0001 F6): a spacecraft that loses the ground because
+// it SET, not because a timer fired.
+//
+// This program does three things, in one file because `delulu run` resolves imports only for a
+// built package and a demonstration a reader cannot read end to end is not a demonstration:
+//
+//   1. Implements the arithmetic it needs — sqrt, sin, cos, asin — from `+ - * /` alone.
+//   2. Propagates a circular LEO orbit with J2 secular nodal regression, and computes the
+//      elevation of the spacecraft above a ground station's horizon.
+//   3. Flies a control loop: point the high-gain antenna at the station while it is in view, keep
+//      the momentum wheels inside their box always, and report what the broker allowed.
+//
+// ---------------------------------------------------------------------------------------------
+// HONESTY, first, because a realistic-looking simulator is more dangerous than an obviously-toy
+// one — it invites belief.
+//
+//   * This is an UNVALIDATED MODEL written by the same project that wrote the thing under test.
+//     It has never been checked against an operational ephemeris.
+//   * Circular orbits only — eccentricity is not modelled, so there is no Kepler solver.
+//   * J2 SECULAR only (nodal regression). No higher geopotential, no drag, no solar radiation
+//     pressure, no third-body, no eclipse, no thermal, no attitude dynamics.
+//   * A spherical Earth for look angles, while J2 oblateness IS modelled in the orbit. That
+//     inconsistency is deliberate for tractability and costs a fraction of a degree of elevation.
+//   * **None of this validates DeluluLang's authority claims.** The custody mechanism is entirely
+//     indifferent to whether the plant model is a toy or NASA-grade. Better physics buys realistic
+//     envelope, rate and lease PARAMETERS, and an LOS caused by geometry. It buys nothing about
+//     whether authority is correctly bounded — that is what the tests are for.
+//
+// The `selfcheck` output exists so a reader can verify the mathematics against a table rather than
+// trusting it: sin/cos at known angles, and an orbital period against the closed form.
+// ---------------------------------------------------------------------------------------------
+//
+// WHY THE MATH IS HAND-BUILT. DeluluLang's primitive table has arithmetic and comparison and no
+// transcendental functions (`crates/delulu-check/src/prim_table.rs`). Trigonometry would otherwise
+// mean `foreign "c"` — the ForeignCall effect plus a granted binary path. Everything below is
+// therefore EFFECT-FREE: not one navigation function carries an effect row, so a spacecraft's
+// entire orbit determination is computed by code holding no capabilities at all. Only the four
+// functions at the bottom that talk to the console and the actuators carry `! {Write, Actuate}`.
+module sat
+
+type Slew {
+    slew_deg: Float,
+}
+
+// ----- constants (WGS-84 / IERS conventional values) ---------------------------------------------
+fn re_km() -> Float {
+    6378.137  // Earth equatorial radius, km
+}
+
+fn mu() -> Float {
+    398600.4418  // gravitational parameter, km^3/s^2
+}
+
+fn j2() -> Float {
+    0.00108262668  // second zonal harmonic
+}
+
+fn omega_earth() -> Float {
+    0.000072921159  // Earth rotation rate, rad/s
+}
+
+fn pi() -> Float {
+    3.141592653589793
+}
+
+fn two_pi() -> Float {
+    6.283185307179586
+}
+
+fn half_pi() -> Float {
+    1.5707963267948966
+}
+
+fn deg_per_rad() -> Float {
+    57.29577951308232
+}
+
+fn deg(d: Float) -> Float {
+    d / deg_per_rad()
+}
+
+// ----- elementary functions, from arithmetic alone -----------------------------------------------
+fn abs(x: Float) -> Float {
+    if x < 0.0 { 0.0 - x } else { x }
+}
+
+// Floor toward negative infinity. `int()` truncates toward zero, so negatives need correcting.
+fn floor(x: Float) -> Float {
+    let t = float(int(x))
+    if t > x { t - 1.0 } else { t }
+}
+
+// Newton-Raphson: x <- (x + a/x)/2. Quadratic convergence, so 24 steps is far past machine
+// precision for any magnitude here. Non-positive input returns 0.0 rather than diverging.
+fn sqrt_iter(a: Float, x: Float, n: Int) -> Float {
+    if n <= 0 { x } else { sqrt_iter(a, (x + a / x) / 2.0, n - 1) }
+}
+
+fn sqrt(a: Float) -> Float {
+    if a <= 0.0 { 0.0 } else { sqrt_iter(a, a / 2.0 + 0.5, 24) }
+}
+
+fn wrap_2pi(x: Float) -> Float {
+    x - two_pi() * floor(x / two_pi())
+}
+
+fn wrap_pi(x: Float) -> Float {
+    let r = wrap_2pi(x)
+    if r > pi() { r - two_pi() } else { r }
+}
+
+// Taylor sine on [-pi/2, pi/2], to x^19. The first dropped term is x^21/21!, below 1e-16 there.
+// Written as successive ratios so no factorial constant has to be typed correctly.
+fn sin_small(x: Float) -> Float {
+    let x2 = x * x
+    let t1 = x
+    let t3 = t1 * x2 / 6.0
+    let t5 = t3 * x2 / 20.0
+    let t7 = t5 * x2 / 42.0
+    let t9 = t7 * x2 / 72.0
+    let t11 = t9 * x2 / 110.0
+    let t13 = t11 * x2 / 156.0
+    let t15 = t13 * x2 / 210.0
+    let t17 = t15 * x2 / 272.0
+    let t19 = t17 * x2 / 342.0
+    t1 - t3 + t5 - t7 + t9 - t11 + t13 - t15 + t17 - t19
+}
+
+// sin over the whole line: reduce to [-pi, pi], then fold into [-pi/2, pi/2] by sin(x) = sin(pi-x).
+fn sin(x: Float) -> Float {
+    let r = wrap_pi(x)
+    if r > half_pi() {
+        sin_small(pi() - r)
+    } else {
+        if r < 0.0 - half_pi() { sin_small(0.0 - pi() - r) } else { sin_small(r) }
+    }
+}
+
+// cos via the shift identity, so there is exactly one folding rule that can be got wrong.
+fn cos(x: Float) -> Float {
+    sin(x + half_pi())
+}
+
+// arcsine by Newton on sin(y) = v, started at y = v. Clamped, so a rounding overshoot past +-1
+// cannot escape, and guarded against a vanishing derivative near the poles.
+fn asin_iter(v: Float, y: Float, n: Int) -> Float {
+    if n <= 0 {
+        y
+    } else {
+        let c = cos(y)
+        if abs(c) < 0.000001 { y } else { asin_iter(v, y - (sin(y) - v) / c, n - 1) }
+    }
+}
+
+fn asin(v: Float) -> Float {
+    if v >= 1.0 {
+        half_pi()
+    } else {
+        if v <= 0.0 - 1.0 { 0.0 - half_pi() } else { asin_iter(v, v, 40) }
+    }
+}
+
+// ----- the orbit ---------------------------------------------------------------------------------
+fn semi_major(alt_km: Float) -> Float {
+    re_km() + alt_km
+}
+
+// Mean motion, rad/s: n = sqrt(mu / a^3).
+fn mean_motion(a: Float) -> Float {
+    sqrt(mu() / (a * a * a))
+}
+
+fn period_s(a: Float) -> Float {
+    two_pi() / mean_motion(a)
+}
+
+// J2 secular nodal regression, rad/s, circular orbit:
+//   d(RAAN)/dt = -1.5 * n * J2 * (Re/a)^2 * cos(i)
+// Negative for prograde orbits — which is exactly what makes sun-synchronous orbits possible.
+fn raan_rate(a: Float, inc: Float) -> Float {
+    let ratio = re_km() / a
+    0.0 - 1.5 * mean_motion(a) * j2() * ratio * ratio * cos(inc)
+}
+
+// Satellite ECI position, km. Circular: argument of latitude u = u0 + n*t, node regressing per J2.
+fn sat_x(a: Float, inc: Float, raan0: Float, u0: Float, t: Float) -> Float {
+    let u = u0 + mean_motion(a) * t
+    let o = raan0 + raan_rate(a, inc) * t
+    a * (cos(o) * cos(u) - sin(o) * sin(u) * cos(inc))
+}
+
+fn sat_y(a: Float, inc: Float, raan0: Float, u0: Float, t: Float) -> Float {
+    let u = u0 + mean_motion(a) * t
+    let o = raan0 + raan_rate(a, inc) * t
+    a * (sin(o) * cos(u) + cos(o) * sin(u) * cos(inc))
+}
+
+fn sat_z(a: Float, inc: Float, u0: Float, t: Float) -> Float {
+    let u = u0 + mean_motion(a) * t
+    a * sin(u) * sin(inc)
+}
+
+// Ground station ECI position, km, on a spherical Earth rotating at omega_earth.
+fn stn_x(lat: Float, lon0: Float, t: Float) -> Float {
+    re_km() * cos(lat) * cos(lon0 + omega_earth() * t)
+}
+
+fn stn_y(lat: Float, lon0: Float, t: Float) -> Float {
+    re_km() * cos(lat) * sin(lon0 + omega_earth() * t)
+}
+
+fn stn_z(lat: Float) -> Float {
+    re_km() * sin(lat)
+}
+
+// Elevation above the station's local horizon, radians.
+//
+// On a spherical Earth the station's local "up" IS its position unit vector, so
+// sin(elevation) = dot(up, range_hat). Negative means below the horizon: no line of sight.
+fn elevation_rad(
+    alt: Float,
+    inc: Float,
+    raan0: Float,
+    u0: Float,
+    lat: Float,
+    lon0: Float,
+    t: Float,
+) -> Float {
+    let a = semi_major(alt)
+    let rx = sat_x(a, inc, raan0, u0, t) - stn_x(lat, lon0, t)
+    let ry = sat_y(a, inc, raan0, u0, t) - stn_y(lat, lon0, t)
+    let rz = sat_z(a, inc, u0, t) - stn_z(lat)
+    let gx = stn_x(lat, lon0, t)
+    let gy = stn_y(lat, lon0, t)
+    let gz = stn_z(lat)
+    let rn = sqrt(rx * rx + ry * ry + rz * rz)
+    let gn = sqrt(gx * gx + gy * gy + gz * gz)
+    if rn <= 0.0 {
+        0.0
+    } else {
+        if gn <= 0.0 { 0.0 } else { asin((rx * gx + ry * gy + rz * gz) / (rn * gn)) }
+    }
+}
+
+fn elevation_deg(
+    alt: Float,
+    inc: Float,
+    raan0: Float,
+    u0: Float,
+    lat: Float,
+    lon0: Float,
+    t: Float,
+) -> Float {
+    elevation_rad(alt, inc, raan0, u0, lat, lon0, t) * deg_per_rad()
+}
+
+fn range_km(
+    alt: Float,
+    inc: Float,
+    raan0: Float,
+    u0: Float,
+    lat: Float,
+    lon0: Float,
+    t: Float,
+) -> Float {
+    let a = semi_major(alt)
+    let rx = sat_x(a, inc, raan0, u0, t) - stn_x(lat, lon0, t)
+    let ry = sat_y(a, inc, raan0, u0, t) - stn_y(lat, lon0, t)
+    let rz = sat_z(a, inc, u0, t) - stn_z(lat)
+    sqrt(rx * rx + ry * ry + rz * rz)
+}
+
+// ----- this scenario's numbers -------------------------------------------------------------------
+//
+// An ISS-like orbit over a mid-latitude station. `u0` is chosen so the pass is in progress at t=0,
+// which is what a contact window looks like from the spacecraft's side.
+fn alt() -> Float {
+    420.0  // km, ISS-like
+}
+
+fn inc() -> Float {
+    deg(51.64)  // ISS inclination
+}
+
+fn raan0() -> Float {
+    deg(0.0 - 49.3)
+}
+
+fn u0() -> Float {
+    deg(52.0)
+}
+
+fn stn_lat() -> Float {
+    deg(48.0)  // a mid-latitude ground station
+}
+
+fn stn_lon() -> Float {
+    deg(11.0)
+}
+
+fn mask_deg() -> Float {
+    5.0  // the horizon mask: below this, no usable link
+}
+
+fn elev_at(t: Float) -> Float {
+    elevation_deg(alt(), inc(), raan0(), u0(), stn_lat(), stn_lon(), t)
+}
+
+fn rng_at(t: Float) -> Float {
+    range_km(alt(), inc(), raan0(), u0(), stn_lat(), stn_lon(), t)
+}
+
+// ----- effectful surface: everything below here holds capabilities --------------------------------
+fn say(who: Str, r: Result[Unit, ActuateErr]) -> Str {
+    match r {
+        Ok(u) => who + " COMMANDED"
+        Err(e) => match e { Envelope(reason) => who + " REFUSED", LeaseRevoked(reason) => who + " REVOKED", NoDevice => who + " NODEVICE" }
+    }
+}
+
+// The mathematics, printed so a reader can check it against a table instead of trusting it.
+fn selfcheck(c: Cap[Console]) -> Unit ! {Write} {
+    c.println("-- self-check (verify these against any table) --")
+    c.println("sqrt(2)        = " + str(sqrt(2.0)) + "   expect 1.4142135623730951")
+    c.println("sin(pi/6)      = " + str(sin(pi() / 6.0)) + "   expect 0.5")
+    c.println("cos(pi/3)      = " + str(cos(pi() / 3.0)) + "   expect 0.5")
+    c.println("sin(pi)        = " + str(sin(pi())) + "   expect ~0")
+    c.println("asin(0.5)*deg  = " + str(asin(0.5) * deg_per_rad()) + "   expect 30")
+    c.println("period (min)   = " + str(period_s(semi_major(alt())) / 60.0) + "   ISS is ~92.9")
+    let drift = raan_rate(semi_major(alt()), inc()) * deg_per_rad() * 86400.0
+    c.println("nodal drift    = " + str(drift) + " deg/day   expect ~-5")
+}
+
+// One control cycle at simulated time `t` seconds.
+//
+// The antenna is commanded to the elevation the geometry says the station is at. When the station
+// is below the mask there is no contact — and the program does not "handle" that: it simply
+// commands what the geometry gives it and reports what custody allowed. A spacecraft that must be
+// TOLD it has lost the ground has already assumed the one thing it cannot assume.
+fn cycle(
+    c: Cap[Console],
+    hga: Cap[Actuator],
+    wheels: Cap[Actuator],
+    t: Float,
+) -> Unit ! {Actuate, Write} {
+    let e = elev_at(t)
+    let r = rng_at(t)
+    // Momentum management runs always, inside its own small box.
+    let w = say("wheels", wheels.command(Slew { slew_deg: 0.2 }))
+    // The antenna tracks the station. Below the mask, point at the horizon and expect nothing.
+    let target = if e > mask_deg() { e } else { 0.0 }
+    let h = say("hga", hga.command(Slew { slew_deg: target }))
+    let vis = if e > mask_deg() { "VISIBLE" } else { "below-mask" }
+    let pos = "t=" + str(int(t)) + "s elev=" + str(int(e)) + "deg range=" + str(int(r)) + "km "
+    c.println(pos + vis + " | " + h + " | " + w)
+}
+
+fn fly(
+    c: Cap[Console],
+    hga: Cap[Actuator],
+    wheels: Cap[Actuator],
+    t: Float,
+    step: Float,
+    n: Int,
+) -> Int ! {Actuate, Write} {
+    if n <= 0 {
+        0
+    } else {
+        cycle(c, hga, wheels, t)
+        fly(c, hga, wheels, t + step, step, n - 1)
+    }
+}
+
+fn main(root: Root) ! {Actuate, Write} {
+    let c = root.console()
+    selfcheck(c)
+    c.println("-- pass profile (60 s steps) --")
+    let hga = root.actuator("sat0/hga")
+    let wheels = root.actuator("sat0/wheels")
+    let done = fly(c, hga, wheels, 0.0, 60.0, 12)
+    c.println("DONE")
+}

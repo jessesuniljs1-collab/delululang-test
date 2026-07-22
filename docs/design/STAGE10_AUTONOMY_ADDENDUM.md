@@ -190,7 +190,33 @@ devices are grandchildren. Revoking one robot kills exactly its subtree; revokin
 everything; no robot can reach a sibling's devices, mechanically. Identical mechanics whether the
 orchestrator is a warehouse dispatcher or an AI planner — no code path inspects which.
 
-### 2.5 The named gap — broker federation (the one mechanism these profiles need that does not exist)
+### 2.5 Broker federation — **BUILT** (RFC 0001 F2–F5, build-order D22). Was: the named gap.
+
+> **Status, 2026-07-22.** The mechanism described below now exists and is witnessed end to end in
+> `crates/delulu/tests/federation_cli.rs`: two brokers, two independent ed25519 identities, **no
+> shared secret**, and a credential that crosses as a **file** — the broker still never opens a
+> network socket. A ground station mints a bounded device grant offline, the vehicle verifies it to
+> a configured trust anchor and adopts it as a **local root**, and `Actuate` then round-trips to
+> *that* broker synchronously at full speed. The link is never in the command path.
+>
+> The four hard problems this section named, and where each landed:
+>
+> | Problem | Resolution |
+> |---|---|
+> | An offline credential | `dlcert1` grant certificate: carries its authority, asymmetrically signed, chain-verified by the **existing** `⊑` lattice at every hop |
+> | A second enforcement domain | `Broker::adopt` mints a local root; the vehicle's broker is a real broker, not a cache |
+> | Revocation across a partition | **It cannot cross one.** The uplink lease (`uplink_ttl_ms` + signed contact receipts) makes expiry the bound instead: silence *shrinks* authority |
+> | Two audit chains | Cross-linked by hash, **never merged** — merging is impossible without invalidating every hash after the splice |
+>
+> **What is still true and unchanged.** Both brokers run on one machine and the "link" is a
+> filesystem copy: there is no radio, no latency, and no partition except one a test creates by
+> letting time pass. **No hardware adapter ships in-tree**, so every device is still simulated.
+> Certification remains **none** (§3), and the WCET/hard-real-time refusals stand. Federation makes
+> a real deployment possible to *design*; it does not make one *done*. Criterion 10's satellite
+> demonstration still runs both roles in one host and still says so — it was never re-labelled.
+
+The original statement of the gap follows, unedited, because a closed gap read in its own words is
+worth more than a summary of it:
 
 The satellite and fleet models above imply a grant tree that **spans machines**: a ground
 segment's broker delegating a subtree to a spacecraft across an intermittent link; a fleet node
@@ -240,6 +266,10 @@ latency budgets, and anything with a deadline measured in microseconds lives bel
   satellite simulation criterion 10 exercises, and the recorded demonstrations — honest about
   being simulation. Real vehicles, aircraft, and spacecraft involve partners, hardware, broker
   federation (§2.5), and certification regimes this project does not control.
+  *(Update 2026-07-22: broker federation is now **built** — §2.5, build-order D22 — so it has moved
+  off this list. **Everything else in this sentence still stands**, and hardware is the one that
+  matters most: no adapter ships in-tree, so every device in every demonstration is simulated.
+  Federation removed a blocker; it did not remove the hardware, the partners, or the regimes.)*
 - **"Key pillar of a safe and secure autonomous future" is the destination, not a deliverable.**
   The deliverables are the steps that can be witnessed: envelopes that refuse, leases that die,
   fail-states that engage, hashes that gate, and audit chains that answer "who commanded that?"

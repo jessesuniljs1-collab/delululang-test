@@ -105,6 +105,17 @@ D19a–e.
   release (the tests still assert the *pattern*, not a cycle count). The wall-clock dead-man remains
   the default and the only real-time guarantee; stepping is a determinism tool for demonstrations,
   refused on any non-sim profile.
+- **Broker federation — RESOLVED (D22, RFC 0001 F2–F6), verified on both platforms 2026-07-22.**
+  `STAGE10_AUTONOMY_ADDENDUM.md` §2.5 named it "a prerequisite for any real deployment in this
+  addendum's domains". A grant tree now spans machines: two brokers, two ed25519 identities, no
+  shared secret, and a credential that crosses as a **file** — the broker still opens no socket, so
+  `broker_transport.rs`'s same-user guarantee is untouched because nothing was added to that
+  transport. Verified sequentially and isolated: **Windows** 91 suites / 0 failed, 0 build warnings,
+  clippy 65/0 (the exact pre-federation baseline across ~2,600 added lines), coverage 100%,
+  reference in sync, fmt 0-change, python-less clean; **Linux** (WSL, ext4, isolated
+  `CARGO_TARGET_DIR`) 90 suites / 0 failed, clippy 66/0, every gate exit 0. **macOS unchanged and
+  still not run**: `cert.rs` and `device_scope.rs` carry no `#[cfg]` and no OS call, so the code
+  both platforms run green *is* the macOS path — an argument, not an execution.
 - **The device scope dimension — RESOLVED (D21, RFC 0001 F1), re-verified on both platforms
   2026-07-22.** `delulu_broker::Scopes` had no device dimension, so a delegation could say "you may
   actuate" but not "you may fly this corridor only" (D12e). It now carries one, with an interval

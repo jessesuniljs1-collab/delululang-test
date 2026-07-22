@@ -823,6 +823,114 @@ failed, clippy **66/0** (its own baseline), every gate exit 0. macOS remains ana
 new module is pure `std` with no `#[cfg]` and no OS call, so the code both platforms run green is
 the macOS path — which is an argument, not a run, and is not counted as one.
 
+**D22 — Broker federation ships (RFC 0001 F2–F5): a grant tree that spans machines, closing
+addendum §2.5. The broker still never opens a network socket, and two real defects were found and
+closed on the way.** §2.5 called federation "a prerequisite for any real deployment in this
+addendum's domains" and RFC-gated it; RFC 0001 is now sponsored (Jesse Sunil, comment period
+2026-07-22 → 2026-08-05) and F2–F5 were built **during** that open period at the sponsor's
+direction — a smaller deviation than D21(g)'s but still one, recorded in the RFC, `rfcs/README.md`,
+and here. Ruled in nine parts.
+
+(a) **The credential is an artifact, not a connection.** Federation is mediated by three signed,
+self-contained documents the operator's *existing* link carries — grant certificate (`dlcert1`),
+contact receipt (`dlrcpt1`), audit bundle (`dlbundle1`). No async runtime, no listener, and
+`broker_transport.rs`'s "OS-authenticated same user" guarantee is left exactly as it was, because
+nothing was added to that transport. DeluluLang does not own the radio, and this is why it does not
+have to.
+
+(b) **A lease token could not have been stretched to do this**, and the reason is structural rather
+than a matter of effort: `Token` carries **no authority bytes** (only a reference into the minting
+broker's `HashMap`) and is MAC'd with a **symmetric** key, so any party able to verify is able to
+mint. Sharing that key between ground and vehicle is the first thing anyone proposes and the worst
+option available — one captured vehicle key would mint ground authority.
+
+(c) **Federation introduces no new authority mathematics.** A chain is verified by running the
+existing `attenuation_check` at every hop. There is deliberately no second `⊑` implementation; a
+second one is a second place for the rule to die. This is the property to protect through review.
+
+(d) **Cryptography is injected, never re-implemented.** `delulu-broker` depends only on
+`delulu-diag`/`delulu-check` (crate ruling 1), so it declares a `SignatureVerifier` trait and the
+`delulu` crate supplies ed25519 from the runtime's adopted `ed25519-dalek` — the same idiom as
+`IdSource`/`ClockSource`. `verify()` returns **the signer's public key rather than a bool**, because
+"this signature is valid" and "the named issuer signed this" are different claims and conflating
+them accepts a validly-signed forgery. Post-quantum inherits `pqc.rs`'s DL1910 refusal rather than
+carving an exception: an `ml-dsa-65` certificate is refused, never treated as unsigned.
+
+(e) **The sharpest skip branch in the design, implemented and tested.** An unknown scope dimension
+or unknown effect **refuses the whole certificate** (DL1418). `docs/for-agents.md` tells consumers
+to *ignore unknown fields* — correct for a reporting surface, catastrophic for an authority: a
+dimension a verifier cannot see is one it cannot enforce, so ignoring it silently **widens** the
+grant. The two rules must be stated together wherever either is stated, or one will be applied to
+the other's domain. Likewise an algorithm this build cannot verify is refused rather than treated as
+unsigned — verifying is a trust decision, so refusing to verify must refuse the trust.
+
+(f) **Revocation cannot cross a partition; expiry can — so expiry is the mechanism.** A certificate
+may carry `uplink_ttl_ms`, and the holder runs only that long without a signed contact receipt. A
+30-day mission certificate with a one-hour uplink term is revocable in an hour instead of
+un-revocable for 30 days. Receipts are bound to one certificate fingerprint (so a receipt for a
+harmless grant cannot be moved onto a powerful one), must be signed by an **anchor** (so a vehicle
+cannot renew its own lease), may never push a lease past the certificate window (proof of contact is
+not a grant of authority), and extend **monotonically** (so replaying a stale receipt is a harmless
+no-op rather than a way to strip a vehicle of authority — shortening is `revoke`'s job).
+
+(g) **TWO REAL DEFECTS, both found by asking whether the mechanism could be defeated.**
+
+  1. **Replay could undo a revocation.** Nothing stopped adopting the same certificate twice, so
+     `grants revoke` on an adopted node — the only tool an operator has while the link is up — was
+     defeated by re-presenting the credential. A chain may now be adopted **once per broker
+     lifetime**, which is exactly the scope of the revocation it protects (the tree is in memory, so
+     a restart clears both together and legitimate post-restart recovery still works).
+  2. **A subtree could outlive its root's lease.** `attenuate_core` checked that a parent was live
+     at creation and bounded a child's authority by `⊑` — but never bounded the child's *deadline*,
+     and `effective_state` judged a single node. A holder could therefore delegate itself a child
+     with `ttl_millis: None` and keep commanding after its own lease died. Locally that was a latent
+     wrong; under federation it is fatal, because the uplink lease is the only bound that survives a
+     partition and **the party it bounds is precisely the party that can mint children**. Fixed by
+     inheriting expiry (`effective_state_inherited` walks to the root), routed through every
+     enforcement *and* reporting path so an operator is shown what the broker would decide.
+     Inheriting at read time rather than clamping at write time is deliberate: a contact receipt
+     extends the root and the whole subtree must come with it.
+
+  Both fixes are pinned by witnesses **observed to fail** against the old code, not merely asserted
+  to. For (2), `node_view` was temporarily reverted to per-node expiry and exactly the two new tests
+  failed while the other twenty-two passed.
+
+(h) **Audit chains are cross-linked, never merged — because merging is impossible, not merely
+undesirable.** A chain is `blake3(prev_hash ‖ record)` over one broker's monotone `seq`; splicing
+two would invalidate every hash after the splice, so a "merged" log would be a lie or a rewrite, and
+this is the one artifact whose value is that it is neither. The receiver writes one `reconcile`
+record naming the bundle's digest, range, and the sender's head — **the mechanism already in the
+tree**, where a new day file's first record carries the previous file's last hash. **A tampered
+bundle is an INCIDENT, not a denial** (exit 1, recorded, withdraws nothing): the log is
+observability, not enforcement, and making reconciliation gate operation would quietly convert it
+into an enforcement input. `seq` is per-broker, so a combined timeline is not a global order and the
+success line says so.
+
+(i) **What this does NOT close, so the closure is not read wider than it is.** Both brokers run on
+one machine and the "link" is a filesystem copy — there is no radio, no latency, and no partition
+except one the tests create by letting time pass. **No hardware adapter ships in-tree**, so every
+device is still simulated. Multi-hop depth > 1 is expressible and exercised at depth 2, no further.
+Sensors still have no scope dimension. Certification is unchanged and remains **none** (addendum §3),
+and the WCET/hard-real-time refusals stand. Federation makes a real deployment *possible* to
+design; it does not make one *done*.
+
+**Diagnostics:** DL1415 (chain does not verify to an anchor), DL1416 (a hop is not `⊑`, carrying the
+intersection), DL1417 (outside the validity window), DL1418 (unsupported algorithm/dimension, or
+malformed). Each has an explain body and **both** an accepting and a rejecting conformance witness —
+the `--coverage` gate refused them until they did, exactly as the RFC predicted. **No code was added
+for the uplink lease or for bundle failure**: the uplink lease *is* the node TTL, so an expired
+uplink is the ordinary DL1402 swept by machinery that already exists, and a bad bundle is the
+existing DL1405. The RFC had penciled in DL1419/DL1420; not adding them is the better answer, since
+a parallel expiry path would have been a second place for liveness to be wrong.
+
+**Verified (both runnable platforms, sequentially and isolated).** Windows: `cargo test --workspace`
+90 suites / 0 failed, 0 build warnings, clippy **65/0** — the exact pre-federation baseline across
+roughly 2,600 added lines — coverage 100%, `--check-reference` in sync, `fmt --check` 0 would
+change, python-less build clean. Linux (WSL, ext4, isolated target dir): recorded in
+`CROSS_PLATFORM_VERIFICATION.md`. macOS remains analyzed-not-run: `cert.rs` and `device_scope.rs`
+carry no `#[cfg]` and no OS call, so the code both platforms run green is the macOS path — an
+argument, not an execution, and not counted as one.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
