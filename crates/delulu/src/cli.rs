@@ -275,6 +275,9 @@ struct Opts {
     /// beat) instead of wall-clock time. Makes lease timing — loss-of-signal, heartbeat — a
     /// deterministic function of the command sequence, identical across debug/release/load. Only
     /// meaningful with `sim`; the wall clock (its real-time dead-man) is the default.
+    /// `--adapter-cmd <command>`: the hardware driver to run under a `hw:` profile (RFC 0001 dish
+    /// 3). Its absence under `hw:` is a REFUSAL at the first command, never a silent no-op.
+    adapter_cmd: Option<String>,
     sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -322,6 +325,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         lease: None,
         sign: None,
         broker_profile: None,
+        adapter_cmd: None,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -370,6 +374,12 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--broker-profile" => {
                 if i + 1 < rest.len() {
                     opts.broker_profile = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--adapter-cmd" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_cmd = Some(rest[i + 1].clone());
                     i += 1;
                 }
             }
@@ -5885,12 +5895,37 @@ fn cmd_run(rest: &[String]) -> i32 {
     let devices = if grants.actuators.is_empty() && grants.sensors.is_empty() {
         None
     } else {
-        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_config(
+        // RFC 0001 dish 3: under `hw:` the driver is a separate process. It is spawned HERE,
+        // after the DL1905 approval gate above has already refused an unapproved artifact — so a
+        // hardware driver is never started for bytes a human did not sign off on.
+        let hw_adapter = match (&device_profile, &opts.adapter_cmd) {
+            (delulu_runtime::Profile::Hw { adapter }, Some(cmd)) => {
+                let mut parts = cmd.split_whitespace();
+                let Some(prog) = parts.next() else {
+                    eprintln!("error: --adapter-cmd is empty");
+                    return 2;
+                };
+                let args: Vec<String> = parts.map(str::to_string).collect();
+                match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        // Fail closed and BEFORE `main`: a run that could not start its driver must
+                        // not begin, or the program would discover the machine is unreachable
+                        // partway through a motion.
+                        eprintln!("error: {e}");
+                        return 1;
+                    }
+                }
+            }
+            _ => None,
+        };
+        let b = std::sync::Arc::new(delulu_runtime::DeviceBroker::with_adapter(
             device_profile.clone(),
             &grants.actuators,
             &grants.sensors,
             authority_probe,
             device_clock,
+            hw_adapter,
         ));
         interp = interp.with_devices(b.clone());
         Some(b)
@@ -6236,18 +6271,42 @@ fn resolve_device_profile(file: &str, opts: &Opts) -> Result<delulu_runtime::Pro
         print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
         return Err(1);
     }
-    // Gate passed — and then the honest wall. Hardware adapters are Verified-class Stage-6
-    // plugins (spec §5.4) and none ships in this tree; saying so beats pretending.
     eprintln!(
         "device sign-off: OK — `{file}` matches the artifact approved under `{}` ({})",
         approval.profile, approval.hash
     );
-    eprintln!(
-        "error: no hardware device adapter named `{adapter}` is available in this build — \
-         hardware adapters are Verified-class plugins with `require_signed: true` (spec §5.4), \
-         and none ships in-tree. Run under `--broker-profile sim`."
-    );
-    Err(2)
+    // Gate passed. What may run now depends on whether a driver was actually supplied.
+    //
+    // RFC 0001 dish 3 attached the FIRST real adapter: an operator-supplied subprocess speaking a
+    // line protocol (`delulu_runtime::adapter`). That is deliberately NOT the mechanism spec §5.4
+    // anticipated — §5.4 describes Verified-class Stage-6 plugins with `require_signed: true`, and
+    // none of those ships in-tree either. The difference is worth stating rather than blurring,
+    // because the two buy different things:
+    //
+    //   * A signed Verified plugin would give SUPPLY-CHAIN assurance — you would know who wrote the
+    //     driver, and the loader would refuse an unsigned one.
+    //   * `--adapter-cmd` gives ISOLATION and reach — the driver is a separate process, so it
+    //     cannot corrupt the runtime, and it can be any program on the machine (a serial bridge, a
+    //     CAN gateway, a vendor SDK shim). It carries NO signature check whatever.
+    //
+    // So: DL1905 approves the ARTIFACT — the DeluluLang program's exact bytes — and says nothing
+    // about the driver. The operator chooses the driver by typing this flag, and the operator is
+    // inside the trust boundary (spec §10). What still holds regardless of the driver is the part
+    // that matters for custody: the envelope is enforced host-side BEFORE any byte reaches it, so
+    // a driver can refuse more and can never permit more. What the driver then does with a
+    // permitted command is below the boundary, exactly as invariant 52 says the hardware safety
+    // chain must be — it has to work with DeluluLang absent.
+    if opts.adapter_cmd.is_none() {
+        eprintln!(
+            "error: `--broker-profile hw:{adapter}` needs a driver — pass `--adapter-cmd <command>` \
+             naming the process that speaks the device protocol (CMD/READ over stdio; see \
+             `delulu_runtime::adapter`). No driver ships in-tree for any hardware, and none is \
+             invented here: a `hw:` run that commanded nothing while reporting success would be a \
+             lie. To exercise the program without hardware, use `--broker-profile sim`."
+        );
+        return Err(2);
+    }
+    Ok(delulu_runtime::Profile::Hw { adapter: adapter.to_string() })
 }
 
 /// Write the sim sign-off record (spec §5.4).

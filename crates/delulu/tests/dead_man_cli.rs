@@ -405,7 +405,15 @@ fn an_artifact_edited_after_signoff_is_refused_dl1905() {
 
 /// The passing branch, which has to exist or the two refusals above prove only that the gate is
 /// shut. A matching sign-off gets THROUGH the gate — and then the run stops for a completely
-/// different and honestly-stated reason: no hardware adapter ships in this tree.
+/// different and honestly-stated reason.
+///
+/// **Updated by RFC 0001 dish 3 (build-order D23).** That reason used to be "no hardware adapter
+/// ships in this tree", which was true when `Profile::Hw` had nothing behind it. There is now a
+/// real adapter — an operator-supplied subprocess — so the honest wall moved: a `hw:` run stops
+/// because no **driver was named**, and the fix is `--adapter-cmd`. The shape of the assertion is
+/// deliberately unchanged: the gate is seen to PASS, and the run still refuses rather than
+/// pretending to have commanded a machine. `hw_adapter_cli.rs` covers the case where a driver IS
+/// supplied.
 #[test]
 fn a_matching_signoff_passes_the_gate_and_then_stops_for_want_of_an_adapter() {
     let (f, approval) = sim_signoff("hw-match");
@@ -428,10 +436,15 @@ fn a_matching_signoff_passes_the_gate_and_then_stops_for_want_of_an_adapter() {
     );
     assert!(!err.contains("DL1905"), "a matching artifact is not a DL1905: {err}");
     assert!(
-        err.contains("no hardware device adapter named `acme-arm`"),
-        "and then the honest wall, named: {err}"
+        err.contains("--adapter-cmd") && err.contains("hw:acme-arm"),
+        "and then the honest wall, naming the profile and what it lacks: {err}"
     );
-    assert!(!o.status.success(), "an unavailable adapter is still a refusal");
+    assert!(
+        err.contains("would be a lie"),
+        "…and why silence is not an option: a hw run that commanded nothing while reporting \
+         success is the worst failure mode available here: {err}"
+    );
+    assert!(!o.status.success(), "a hardware profile with no driver is still a refusal");
 }
 
 /// Sign-off is evidence of a clean simulation, so a faulted run must not produce one. Approving

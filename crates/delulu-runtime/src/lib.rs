@@ -7,6 +7,7 @@ pub mod broker;
 pub mod compute;
 pub mod cycles;
 pub mod custody;
+pub mod adapter;
 pub mod device;
 pub mod foreign;
 pub mod interp;

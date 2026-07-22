@@ -210,6 +210,10 @@ struct BrokerInner {
     sim: Mutex<Sim>,
     journal: Mutex<Vec<DeviceEvent>>,
     t0: Instant,
+    /// The hardware adapter, under `Profile::Hw` only (RFC 0001 dish 3). `None` everywhere else —
+    /// and `None` under `Hw` too if the CLI was not told which driver to run, in which case a
+    /// command REFUSES rather than pretending to have reached a machine.
+    adapter: Mutex<Option<crate::adapter::ProcessAdapter>>,
 }
 
 impl BrokerInner {
@@ -275,6 +279,23 @@ impl DeviceBroker {
         authority: Option<AuthorityProbe>,
         clock: ClockMode,
     ) -> DeviceBroker {
+        DeviceBroker::with_adapter(profile, envelopes, sensors, authority, clock, None)
+    }
+
+    /// The full constructor, with a hardware adapter attached (RFC 0001 dish 3).
+    ///
+    /// `adapter` is `Some` only under [`Profile::Hw`], and only when the CLI was told which driver
+    /// to run. Under `Hw` with no adapter every command REFUSES — a hardware profile that silently
+    /// commanded nothing would be the most dangerous possible default, because the program would
+    /// report success while the machine never moved.
+    pub fn with_adapter(
+        profile: Profile,
+        envelopes: &[ActuatorEnvelope],
+        sensors: &[String],
+        authority: Option<AuthorityProbe>,
+        clock: ClockMode,
+        adapter: Option<crate::adapter::ProcessAdapter>,
+    ) -> DeviceBroker {
         let now = Instant::now();
         let mut leases = BTreeMap::new();
         let mut devices = BTreeMap::new();
@@ -311,6 +332,7 @@ impl DeviceBroker {
             sim: Mutex::new(Sim { seed, devices, reads: BTreeMap::new() }),
             journal: Mutex::new(Vec::new()),
             t0: now,
+            adapter: Mutex::new(adapter),
         });
         for s in sensors {
             inner.sim.lock().unwrap().reads.insert(s.clone(), 0);
@@ -369,7 +391,32 @@ impl DeviceBroker {
         // The broker's own envelope check, against the grant rather than the capability value.
         envelope_check(&lease.env, fields).map_err(CommandRefusal::Envelope)?;
 
-        // Accepted. Dispatch to the adapter, then beat — an accepted command IS a sign of life.
+        // Accepted BY THE GRANT. Only now may the command leave this process.
+        //
+        // The ordering is the whole point of having an adapter at all (RFC 0001 dish 3): the
+        // envelope was checked above, against the grant, before one byte reached vendor code. An
+        // adapter can therefore refuse MORE — a hard stop, a thermal limit, a fault — and can never
+        // permit more, whatever it replies. D11e observed that host-side and adapter-side checks
+        // used to live in one process, making this "structural rehearsal"; with a subprocess the
+        // split is real.
+        if matches!(self.inner.profile, Profile::Hw { .. }) {
+            let mut slot = self.inner.adapter.lock().unwrap();
+            let Some(ad) = slot.as_mut() else {
+                // A hardware profile with no driver attached must not look like success. A program
+                // told "COMMANDED" while nothing moved is the worst failure mode available here.
+                return Err(CommandRefusal::Revoked(format!(
+                    "no hardware adapter is attached for `{device}` — pass `--adapter-cmd` \
+                     (a `hw:` profile that commanded nothing while reporting success would be a lie)"
+                )));
+            };
+            if let Err(e) = ad.command(device, fields) {
+                // Every adapter failure is a refusal, reported as a VALUE like every other
+                // actuation refusal (10e's law): a driver fault must not kill a supervisor that is
+                // still holding three other arms. The dead-man governs what happens next — this
+                // command did not beat, so silence from here on engages the declared fail-state.
+                return Err(CommandRefusal::Envelope(format!("`{device}`: {e}")));
+            }
+        }
         if matches!(self.inner.profile, Profile::Sim { .. }) {
             let mut sim = self.inner.sim.lock().unwrap();
             if let Some(dev) = sim.devices.get_mut(device) {
@@ -392,7 +439,19 @@ impl DeviceBroker {
         // loses that actuator on schedule, deterministically. A no-op under `Wall`.
         step_and_sweep(&self.inner);
         match &self.inner.profile {
-            Profile::Null | Profile::Hw { .. } => None,
+            Profile::Null => None,
+            // A real sensor read, over the adapter (RFC 0001 dish 3). Every failure returns `None`
+            // — invariant 50: an absent measurement is absent, never a plausible-looking number a
+            // control loop would act on. The adapter itself distinguishes "no such device" from "I
+            // could not tell" and poisons itself on the latter, so a broken driver stops answering
+            // rather than answering wrongly.
+            Profile::Hw { .. } => {
+                let mut slot = self.inner.adapter.lock().unwrap();
+                match slot.as_mut() {
+                    None => None,
+                    Some(ad) => ad.read(device).unwrap_or(None),
+                }
+            }
             Profile::Sim { .. } => {
                 let mut sim = self.inner.sim.lock().unwrap();
                 // A sensor named `ACTUATOR#DIM` mirrors that actuator's simulated position — the

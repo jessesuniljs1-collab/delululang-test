@@ -931,6 +931,72 @@ change, python-less build clean. Linux (WSL, ext4, isolated target dir): recorde
 carry no `#[cfg]` and no OS call, so the code both platforms run green is the macOS path — an
 argument, not an execution, and not counted as one.
 
+**D23 — The first real hardware adapter: `Profile::Hw` stops being a gate with nothing behind it.
+An operator-supplied SUBPROCESS, not the signed plugin spec §5.4 anticipated — and the difference
+is stated rather than blurred.** Ruled in six parts.
+
+(a) **A subprocess is the right first adapter, and the reasoning is not "it was easier".** The
+property that matters for custody is not "did a servo move" but **does the command leave
+DeluluLang's guarantee**. A subprocess crosses exactly that boundary: the bytes go to code this
+project did not write, cannot type-check, and must not trust. Every architectural question worth
+answering — envelope enforcement before dispatch, a hung driver not wedging the control loop, a
+lying driver unable to widen anything — is fully in play and testable without a laboratory. It is
+also how drivers actually attach in the field (a serial bridge, a CAN gateway, a ROS node, a vendor
+SDK shim); writing serial framing into the runtime would have picked one bus and one vendor, while a
+process boundary picks none.
+
+(b) **This is NOT what spec §5.4 described, and the gap is a real one.** §5.4 says hardware adapters
+are Verified-class Stage-6 plugins with `require_signed: true`. That would buy **supply-chain
+assurance** — you would know who wrote the driver, and the loader would refuse an unsigned one.
+`--adapter-cmd` buys **isolation and reach** instead: a separate process that cannot corrupt the
+runtime and can be any program on the machine. It carries **no signature check whatever**. The two
+are complementary, not substitutes, and no material may describe this as satisfying §5.4. What
+DL1905 approves is the **artifact** — the DeluluLang program's exact bytes — and it says nothing
+about the driver. The operator chooses the driver by typing the flag, and the operator is inside the
+trust boundary (spec §10). The signed-plugin path remains unbuilt and remains named.
+
+(c) **The ordering is the whole point, and it is proven by evidence DeluluLang cannot see.** The
+envelope is checked host-side, against the grant, **before one byte reaches the driver**. A driver
+can therefore refuse *more* — a hard stop, a thermal limit, a fault — and can never permit more,
+whatever it replies. D11e observed that host-side and adapter-side checks lived in one process,
+making the ordering "structural rehearsal"; with a subprocess the split is real. The test that
+establishes it reads **the driver's own log**: a program commanding 12° (in envelope) and 999° (out)
+produces exactly **one** line in that log. From inside DeluluLang "refused before dispatch" and
+"dispatched and rejected" look identical; the log is the only place the difference is visible.
+
+(d) **Four fail-closed rules, each with a witness.** A reply that is not exactly `OK` is a protocol
+error, never acceptance (`"ok"`, `"OKAY"`, `"ACK"`, `"true"`, `"1"`, `""` all tested). A silent
+driver times out on a deadline rather than wedging the loop — blocking stdio has no portable
+deadline, so a reader thread feeds an `mpsc` channel and the exchange uses `recv_timeout`: std only,
+no async runtime, the same thread-plus-channel shape the dead-man watchdog already uses. **A failed
+adapter stays failed** (poisoned), because once framing is in doubt a late reply would be read as
+the answer to the *next* command — which is how a robot executes yesterday's instruction. A garbled
+or non-finite sensor reading is an error, never a `None` and never a number: invariant 50 means a
+broken driver must not be mistaken for an unplugged sensor, since those call for different
+responses.
+
+(e) **A `hw:` profile with no driver REFUSES.** Not a silent no-op: a program told "COMMANDED" while
+the machine never moved is the worst failure mode available here. Likewise a driver that will not
+start fails the run **before `main`**, rather than letting the program discover the machine is
+unreachable partway through a motion. And no driver is spawned at all until DL1905 has passed, so a
+hardware process is never started for bytes a human did not sign off on — tested by asserting the
+driver's log does not exist.
+
+(f) **What has NOT changed.** No driver for any real device ships in-tree, and every demonstration
+in this repository still commands the in-tree simulator. `STAGE10_AUTONOMY_ADDENDUM.md` §4's "no
+hardware ships in Stage 10" stands, as does §3's certification claim of **none**. This ships the
+socket a driver plugs into, not the driver — and running the adapter against a shell script proves
+the socket works, not that anything physical moved. Invariant 52 is untouched: the hardware safety
+chain must still function with DeluluLang absent, and what a driver does with a *permitted* command
+remains below the boundary.
+
+**Verified (Windows):** 92 suites / 0 failed, 0 build warnings; clippy **65/0** — still the exact
+baseline; coverage 100%; `--check-reference` in sync; fmt 0-change; python-less clean. A pre-existing
+test (`a_matching_signoff_passes_the_gate_and_then_stops_for_want_of_an_adapter`) pinned the old "no
+adapter ships in this build" wall and correctly failed; it was updated to pin the *new* honest wall
+(`--adapter-cmd` is missing) rather than weakened — the gate is still seen to pass, and the run still
+refuses rather than pretending.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
