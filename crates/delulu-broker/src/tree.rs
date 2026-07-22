@@ -110,10 +110,11 @@ pub struct Broker {
     /// Nonces of single-use tokens already redeemed (phase 5e). A second redemption of a single-use
     /// token whose nonce is here is DL1407. `--multi` tokens are neither checked nor recorded here.
     redeemed: HashSet<String>,
-    /// Fingerprints of grant-certificate chains already adopted (RFC 0001 F3). Closes a
-    /// revocation-evasion path: without it, `grants revoke` on an adopted node could be undone by
-    /// simply presenting the same certificate again.
-    adopted: HashSet<String>,
+    /// Fingerprint → the local node it was adopted as (RFC 0001 F3/F4). Serves two jobs: it closes
+    /// a revocation-evasion path (without it, `grants revoke` on an adopted node could be undone by
+    /// simply presenting the same certificate again), and it is how a contact receipt finds the node
+    /// it renews.
+    adopted: HashMap<String, (GrantId, Option<i64>)>,
     /// The Guard (Stage 5 chunk 6): policy, permits, pending requests, bypass flag, owner code —
     /// all daemon-memory only (the CLI injects a persisted policy + the print-once owner code). A
     /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
@@ -156,7 +157,7 @@ impl Broker {
             sink: None,
             key: None,
             redeemed: HashSet::new(),
-            adopted: HashSet::new(),
+            adopted: HashMap::new(),
             guard: crate::guard::GuardState::new(),
         }
     }
@@ -251,15 +252,42 @@ impl Broker {
         self.redeemed.insert(nonce.to_string());
     }
 
-    /// Has this certificate chain already been adopted in THIS broker's lifetime (RFC 0001 F3)?
-    pub(crate) fn is_adopted(&self, fingerprint: &str) -> bool {
-        self.adopted.contains(fingerprint)
+    /// The node a certificate chain was adopted as, if it was (RFC 0001 F3/F4). Scoped to the
+    /// process lifetime on purpose — see [`Broker::adopt`] for why that is both sufficient and
+    /// necessary.
+    /// Returns the node and the certificate window it was adopted under — the ceiling a contact
+    /// receipt may not lift. Kept together with the node so a caller cannot supply the wrong one.
+    pub(crate) fn adopted_node(&self, fingerprint: &str) -> Option<&(GrantId, Option<i64>)> {
+        self.adopted.get(fingerprint)
     }
 
-    /// Record a certificate chain as adopted. Scoped to the process lifetime on purpose — see
-    /// [`Broker::adopt`] for why that is both sufficient and necessary.
-    pub(crate) fn mark_adopted(&mut self, fingerprint: &str) {
-        self.adopted.insert(fingerprint.to_string());
+    /// Record a certificate chain as adopted: which node carries it, and its outer window.
+    pub(crate) fn mark_adopted(&mut self, fingerprint: &str, node: &GrantId, window: Option<i64>) {
+        self.adopted.insert(fingerprint.to_string(), (node.clone(), window));
+    }
+
+    /// Which local node an adopted certificate became — for reporting a renewal back to an
+    /// operator. Read-only; the window stays private because only [`crate::cert`] may apply it.
+    pub fn adopted_node_public(&self, fingerprint: &str) -> Option<&GrantId> {
+        self.adopted.get(fingerprint).map(|(id, _)| id)
+    }
+
+    /// Move a node's TTL deadline **forward only** (RFC 0001 F4's contact receipt).
+    ///
+    /// Monotone by construction: a receipt can extend a lease and can never shorten one, so
+    /// replaying an old receipt is a harmless no-op rather than a way to strip authority from a
+    /// vehicle. Shortening is `revoke`'s job, and it is a different, audited operation.
+    /// Returns the deadline in force afterwards.
+    pub(crate) fn extend_ttl(&mut self, id: &GrantId, deadline: i64) -> Option<i64> {
+        let n = self.nodes.get_mut(id)?;
+        let now = match n.ttl_millis {
+            Some(t) if t >= deadline => t,
+            _ => {
+                n.ttl_millis = Some(deadline);
+                deadline
+            }
+        };
+        Some(now)
     }
 
     /// Bind a node's holder `peer` to the redeeming party (phase 5e). Storage/display ONLY — never a
@@ -397,15 +425,17 @@ impl Broker {
         ttl_millis: Option<i64>,
     ) -> (u64, Result<GrantId, Denial>) {
         let now = self.now();
-        let parent_node = match self.nodes.get(parent) {
-            Some(n) => n,
-            None => {
-                let seq = self.take_seq(); // the deny still consumes a seq
-                return (seq, Err(Denial::UnknownNode { node: parent.clone() }));
-            }
-        };
-        // Fail closed: no child may be born under a dead parent.
-        match effective_state(parent_node, now) {
+        if !self.nodes.contains_key(parent) {
+            let seq = self.take_seq(); // the deny still consumes a seq
+            return (seq, Err(Denial::UnknownNode { node: parent.clone() }));
+        }
+        // Fail closed: no child may be born under a dead parent — or under a dead ANCESTOR, which
+        // is a different question once expiry is inherited (RFC 0001 F4).
+        let parent_eff = self
+            .effective_state_inherited(parent, now)
+            .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
+        let parent_node = self.nodes.get(parent).expect("presence checked immediately above");
+        match parent_eff {
             EffState::Revoked { by_seq } => {
                 let seq = self.take_seq();
                 return (seq, Err(Denial::Revoked { node: parent.clone(), by_seq }));
@@ -519,7 +549,44 @@ impl Broker {
 
     /// The effective state of a node right now, folding revocation and TTL against the clock.
     pub fn effective_state(&self, id: &GrantId) -> Option<EffState> {
-        self.nodes.get(id).map(|n| effective_state(n, self.now()))
+        // Inherited, so what an operator is SHOWN matches what the enforcement path decides. A
+        // report that says "live" about a node the broker would refuse is worse than no report.
+        self.effective_state_inherited(id, self.now())
+    }
+
+    /// The effective state of `id` **including its ancestors**: a node is live only if every node
+    /// on the path to the root is live.
+    ///
+    /// # Why this walk exists (RFC 0001 F4, and a real hole it closes)
+    ///
+    /// [`effective_state`] judges one node. Revocation is transitive *at write time* (`revoke`
+    /// marks the whole subtree), so that path was already covered — but **TTL expiry was not**, and
+    /// `attenuate` bounds a child's authority by `⊑` without bounding its *deadline*. A holder
+    /// could therefore delegate itself a child with `ttl_millis: None` and keep commanding after
+    /// its own lease died.
+    ///
+    /// Locally that was a latent wrong; under federation it is load-bearing. The uplink lease
+    /// (F4) is the only bound that survives a partition, and the party it bounds — the vehicle —
+    /// is precisely the party that can mint children. A subtree that can outlive its root is a
+    /// federated grant that cannot be timed out.
+    ///
+    /// Inheriting at *read* time rather than clamping at *write* time is deliberate: a contact
+    /// receipt EXTENDS an adopted root's deadline, and the whole subtree must come with it.
+    /// Clamping at creation would leave children dying at a deadline their parent no longer has.
+    pub(crate) fn effective_state_inherited(&self, id: &GrantId, now: i64) -> Option<EffState> {
+        let mut cur = Some(id.clone());
+        // Parents always point at an already-existing node and ids are never reused, so a cycle is
+        // unreachable; the bound is cheap insurance that fails CLOSED rather than spinning.
+        for _ in 0..1024 {
+            let Some(cid) = cur else { return Some(EffState::Live) };
+            let n = self.nodes.get(&cid)?;
+            match effective_state(n, now) {
+                EffState::Live => {}
+                dead => return Some(dead),
+            }
+            cur = n.parent.clone();
+        }
+        Some(EffState::Expired { ttl_millis: 0, now_millis: now })
     }
 
     /// Number of nodes in the tree (for tests).

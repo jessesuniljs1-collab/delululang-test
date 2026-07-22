@@ -104,6 +104,7 @@ mod tests {
             not_before: 0,
             not_after: 10_000,
             nonce: "0011".into(),
+            uplink_ttl_ms: None,
             authority: a,
             sig: Vec::new(),
         };

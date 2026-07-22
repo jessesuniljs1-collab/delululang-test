@@ -3994,10 +3994,12 @@ fn cmd_grants(rest: &[String]) -> i32 {
         "certify" => cmd_grants_certify(args, json),
         "pubkey" => cmd_grants_pubkey(args, json),
         "adopt" => cmd_grants_adopt(args, &state_dir, json),
+        "receipt" => cmd_grants_receipt(args, json),
+        "renew" => cmd_grants_renew(args, &state_dir, json),
         other => {
             eprintln!(
                 "error: unknown grants subcommand `{other}` \
-                 (list | tree | inspect | revoke | delegate | certify | adopt | pubkey)"
+                 (list | tree | inspect | revoke | delegate | certify | adopt | renew | receipt | pubkey)"
             );
             2
         }
@@ -4083,6 +4085,9 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
     let mut device: Vec<String> = Vec::new();
     let (mut subject, mut ttl, mut key, mut parent_cert, mut out) = (None, None, None, None, None);
+    // RFC 0001 F4: how long the holder may run WITHOUT a contact receipt. Absent = the
+    // certificate's own window is the only bound.
+    let mut uplink_ttl: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
@@ -4102,6 +4107,8 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             subject = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
             ttl = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--uplink-ttl") {
+            uplink_ttl = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--key") {
             key = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--parent-cert") {
@@ -4196,6 +4203,16 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             }
         }
     };
+    let uplink_ttl_ms = match &uplink_ttl {
+        None => None,
+        Some(s) => match parse_ttl_millis(s) {
+            Some(d) => Some(d as u64),
+            None => {
+                eprintln!("error: bad --uplink-ttl `{s}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+                return 2;
+            }
+        },
+    };
     let now = now_millis();
     let authority = delulu_broker::Authority::new(
         effects.iter().filter_map(|e| Effect::core_from_name(e)),
@@ -4228,6 +4245,7 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
         not_before: now,
         not_after: now + ttl_ms,
         nonce: crate::cert_crypto::fresh_nonce(),
+        uplink_ttl_ms,
         authority,
         sig: Vec::new(),
     };
@@ -4258,6 +4276,164 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
         print!("{wire}");
     }
     0
+}
+
+/// `delulu grants receipt --for FINGERPRINT --ttl 1h [--key F] [--out F]`
+///
+/// RFC 0001 F4 — the ground mints a **contact receipt**: proof it was in contact, and nothing more.
+/// It grants no authority; it only lets an already-adopted credential keep running for another
+/// uplink term. Offline, like `certify`.
+fn cmd_grants_receipt(args: &[String], json: bool) -> i32 {
+    let (mut for_fp, mut ttl, mut key, mut out) = (None, None, None, None);
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--json" {
+        } else if let Some(v) = flag_value(args, &mut i, "--for") {
+            for_fp = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
+            ttl = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--key") {
+            key = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--out") {
+            out = Some(v);
+        } else {
+            eprintln!("error: unknown `grants receipt` argument `{a}`");
+            return 2;
+        }
+        i += 1;
+    }
+    let Some(for_fp) = for_fp else {
+        eprintln!(
+            "error: `grants receipt` needs --for FINGERPRINT (the certificate being renewed; \
+             `grants certify --json` prints it, and `grants adopt` echoes it)"
+        );
+        return 2;
+    };
+    let Some(ttl_str) = ttl else {
+        eprintln!("error: `grants receipt` needs --ttl (how long until the next contact is due)");
+        return 2;
+    };
+    let Some(ttl_ms) = parse_ttl_millis(&ttl_str) else {
+        eprintln!("error: bad --ttl `{ttl_str}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+        return 2;
+    };
+    let Some(path) = grant_key_path(key.as_deref()) else {
+        eprintln!("error: cannot resolve the key path (no HOME/USERPROFILE) — pass --key FILE");
+        return 2;
+    };
+    let seed = match delulu_broker::load_or_create_key(&path) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: cannot load or create the grant key at {}: {e}", path.display());
+            return 2;
+        }
+    };
+    let mut r = delulu_broker::cert::Receipt {
+        alg: crate::cert_crypto::ALG_ED25519.to_string(),
+        issuer: crate::cert_crypto::public_key_hex(&seed),
+        certificate: for_fp,
+        not_after: now_millis() + ttl_ms,
+        nonce: crate::cert_crypto::fresh_nonce(),
+        sig: Vec::new(),
+    };
+    r.sig = crate::cert_crypto::sign(&seed, &r.signing_bytes());
+    let wire = r.to_wire();
+    if let Some(f) = &out {
+        if let Err(e) = std::fs::write(f, &wire) {
+            eprintln!("error: cannot write {f}: {e}");
+            return 2;
+        }
+    }
+    if json {
+        let report = serde_json::json!({
+            "command": "grants receipt", "schema": 1,
+            "issuer": r.issuer, "certificate": r.certificate,
+            "not_after": r.not_after, "receipt": wire,
+        });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    } else if out.is_some() {
+        eprintln!("wrote {} — next contact due by {}", out.as_deref().unwrap_or(""), delulu_broker::render_ts_utc(r.not_after));
+    } else {
+        print!("{wire}");
+    }
+    0
+}
+
+/// `delulu grants renew <receipt-file> [--anchor HEX]... [--anchors-file F]`
+///
+/// The vehicle applies a contact receipt. Extension is **monotone**: a receipt can push the uplink
+/// lease forward and can never pull it back, so replaying a stale one is a harmless no-op rather
+/// than a way to strip a vehicle of authority. Shortening is `grants revoke`'s job.
+fn cmd_grants_renew(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    let mut file: Option<String> = None;
+    let mut anchors: Vec<String> = Vec::new();
+    let mut anchors_file: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--json" {
+        } else if let Some(_v) = flag_value(args, &mut i, "--state-dir") {
+        } else if let Some(v) = flag_value(args, &mut i, "--anchor") {
+            anchors.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--anchors-file") {
+            anchors_file = Some(v);
+        } else if a.starts_with("--") {
+            eprintln!("error: unknown `grants renew` argument `{a}`");
+            return 2;
+        } else {
+            file = Some(a.to_string());
+        }
+        i += 1;
+    }
+    let Some(file) = file else {
+        eprintln!("error: `grants renew` needs a receipt file");
+        return 2;
+    };
+    let anchors_path =
+        anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
+    if let Ok(text) = std::fs::read_to_string(&anchors_path) {
+        for line in text.lines() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            if !line.is_empty() {
+                anchors.push(line.to_string());
+            }
+        }
+    }
+    if anchors.is_empty() {
+        eprintln!(
+            "error: no trust anchors — a receipt must be signed by a key you configured.\n  \
+             Pass --anchor <hex>, or list one key per line in {}",
+            anchors_path.display()
+        );
+        return 2;
+    }
+    let receipt = match std::fs::read_to_string(&file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: cannot read {file}: {e}");
+            return 2;
+        }
+    };
+    match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Renew { receipt, anchors }, json) {
+        Ok(crate::broker_ipc::Response::Renewed { node, ttl_millis }) => {
+            if json {
+                let report = serde_json::json!({
+                    "command": "grants renew", "schema": 1, "node": node, "ttl_millis": ttl_millis,
+                });
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else {
+                println!("{node}");
+                eprintln!("uplink lease now runs to {}", delulu_broker::render_ts_utc(ttl_millis));
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected renew response: {other:?}");
+            2
+        }
+        Err(code) => code,
+    }
 }
 
 /// `delulu grants adopt <cert-file>... [--anchor HEX]... [--anchors-file F]`

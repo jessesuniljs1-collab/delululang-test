@@ -337,8 +337,13 @@ fn handle(
                 Some(d) => (deny_response(&d), false),
                 None => {
                     let anchors: std::collections::BTreeSet<String> = anchors.iter().cloned().collect();
-                    let holder = delulu_broker::Holder::new("federated", "adopted grant certificate", "chain");
                     let fingerprint = certs.last().map(|c| c.fingerprint()).unwrap_or_default();
+                    // The fingerprint rides in `holder.peer` — descriptive metadata, displayed and
+                    // never switched on (criterion 9). Without it a vehicle could not answer "which
+                    // credential is this authority?", and an operator with a contact receipt would
+                    // have no way to find the node it renews. `grants inspect` shows it.
+                    let holder =
+                        delulu_broker::Holder::new("federated", "adopted grant certificate", &fingerprint);
                     match broker.adopt(&certs, &anchors, &crate::cert_crypto::Ed25519Verifier, holder) {
                         Ok(id) => {
                             let ttl_millis = broker.inspect(&id).and_then(|n| n.ttl_millis);
@@ -349,6 +354,23 @@ fn handle(
                 }
             }
         }
+        ReqBody::Renew { receipt, anchors } => match delulu_broker::cert::parse_receipt(&receipt) {
+            Err(d) => (deny_response(&d), false),
+            Ok(r) => {
+                let anchors: std::collections::BTreeSet<String> = anchors.iter().cloned().collect();
+                let cert = r.certificate.clone();
+                match broker.renew(&r, &anchors, &crate::cert_crypto::Ed25519Verifier) {
+                    Ok(ttl_millis) => {
+                        let node = broker
+                            .adopted_node_public(&cert)
+                            .map(|id| id.to_string())
+                            .unwrap_or_default();
+                        (Response::Renewed { node, ttl_millis }, false)
+                    }
+                    Err(d) => (deny_response(&d), false),
+                }
+            }
+        },
         ReqBody::Revoke { caller, target } => {
             let caller = GrantId::from_trusted(caller);
             let target = GrantId::from_trusted(target);

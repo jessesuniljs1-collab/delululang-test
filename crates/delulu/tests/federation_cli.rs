@@ -1,4 +1,4 @@
-//! RFC 0001 phases F2/F3 — **broker federation, end to end through the real binary.**
+//! RFC 0001 phases F2/F3/F4 — **broker federation, end to end through the real binary.**
 //!
 //! This is federation's one process-spawning test (the per-phase 5f rule). Everything else about
 //! certificates is unit-tested in `delulu-broker/src/cert.rs` and `delulu/src/cert_crypto.rs`.
@@ -19,10 +19,14 @@
 //! - **The vehicle's broker is a real broker**, not a cache. After adoption, `Actuate` round-trips
 //!   to it locally and synchronously, and the link is never in the command path.
 //!
+//! - **An outage costs the vehicle its actuator** (F4). The uplink lease is the dead-man principle
+//!   applied to a link: a long-lived certificate with a short uplink term is bounded by the short
+//!   one, so silence *shrinks* authority and only a signed contact receipt renews it.
+//!
 //! What it still does NOT witness, so the closure is not read wider than it is: both processes run
 //! on one machine, the "link" is a filesystem copy, and there is no radio, no latency, and no
-//! partition except the one the test creates by not copying a file. F4 (the uplink lease) and F5
-//! (audit reconciliation) are what make an outage mean something.
+//! partition except the one these tests create by letting time pass. F5 (audit reconciliation) is
+//! what lets the ground find out afterwards what the vehicle did while it was alone.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -345,4 +349,131 @@ fn the_ground_side_mints_credentials_with_no_broker_running() {
     let o = f.certify(&["--subject", &f.vehicle_pub, "--effects", "Actuate", "--key", &f.gk()]);
     assert_eq!(o.status.code(), Some(2), "--ttl is mandatory");
     assert!(stderr(&o).contains("ONLY bound that"), "and the reason is stated: {}", stderr(&o));
+}
+
+// ===================================================================================================
+// RFC 0001 phase F4 — the uplink lease. Revocation cannot cross a partition; expiry can.
+// ===================================================================================================
+
+/// **The property the whole phase exists for.** A long-lived certificate with a short uplink term
+/// is bounded by the SHORT one, so a vehicle that stops hearing from the ground loses the actuator
+/// on a schedule — without anyone sending a message, because at loss-of-signal there is nobody to
+/// send one.
+///
+/// Timings are deliberately loose (a sub-second lease, a multi-second wait) because this asserts a
+/// PATTERN — commanded, then not — never a cycle count. The D19 lesson: a timing test that only
+/// passes on a fast build is a test that has not been run.
+#[test]
+fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
+    let f = setup("uplink");
+
+    // A one-hour grant that may only run 800 ms without hearing from the ground.
+    let o = f.certify(&[
+        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
+        "--ttl", "1h", "--uplink-ttl", "800ms", "--key", &f.gk(), "--out", "m.dlcert",
+    ]);
+    assert!(o.status.success(), "certify: {}", stderr(&o));
+    let text = std::fs::read_to_string(f.cwd.join("m.dlcert")).unwrap();
+    assert!(text.contains("uplink_ttl_ms: 800"), "the uplink term rides in the credential:\n{text}");
+
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    let o = f.vehicle(&["grants", "adopt", "m.dlcert", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "adopt: {}", stderr(&o));
+    let node = stdout(&o).trim().to_string();
+
+    // The vehicle can say WHICH credential it holds — without this, an operator with a contact
+    // receipt would have no way to find the node it renews.
+    let inspect = stdout(&f.vehicle(&["grants", "inspect", &node]));
+    let fingerprint = inspect
+        .split('[')
+        .nth(1)
+        .and_then(|s| s.split(']').next())
+        .expect("the holder line carries the certificate fingerprint")
+        .to_string();
+    assert_eq!(fingerprint.len(), 64, "a fingerprint is 32 bytes of hex: {inspect}");
+
+    // A child delegated with NO deadline of its own — the escape a per-node expiry rule would have
+    // allowed, and the reason expiry is inherited.
+    let o = f.vehicle(&[
+        "grants", "delegate", "--parent", &node, "--effects", "Actuate,Write",
+        "--device", HGA, "--multi", "--json",
+    ]);
+    assert!(o.status.success(), "delegate: {}", stderr(&o));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let token = v["token"].as_str().unwrap().to_string();
+
+    // In contact: the antenna moves.
+    let o = f.vehicle(&["run", "sat.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(stdout(&o).contains("point COMMANDED"), "in contact, it points:\n{}", stdout(&o));
+
+    // ----- loss of signal: nothing is sent, nobody is told, time simply passes ------------------
+    std::thread::sleep(std::time::Duration::from_millis(2500));
+
+    let o = f.vehicle(&["run", "sat.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    let combined = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(
+        !combined.contains("point COMMANDED"),
+        "after the uplink lease dies the antenna must NOT move — a child with no deadline of its \
+         own must not outlive its root's lease:\n{combined}"
+    );
+    assert!(
+        combined.contains("DL1402"),
+        "and the reason is an expired lease, by code:\n{combined}"
+    );
+
+    // ----- re-contact: one receipt on the ROOT restores the whole subtree ----------------------
+    let o = delulu(&f.cwd, None, &[
+        "grants", "receipt", "--for", &fingerprint, "--ttl", "1h", "--key", &f.gk(), "--out", "r1.dlrcpt",
+    ]);
+    assert!(o.status.success(), "receipt: {}", stderr(&o));
+    let o = f.vehicle(&["grants", "renew", "r1.dlrcpt", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "renew: {}", stderr(&o));
+
+    let o = f.vehicle(&["run", "sat.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let out = stdout(&o);
+    assert!(out.contains("point COMMANDED"), "contact restored the subtree, not just the root:\n{out}");
+    assert!(out.contains("slam REFUSED"), "and the corridor still bounds it:\n{out}");
+}
+
+/// A receipt proves contact. It is not a grant, and it is bound to one credential.
+#[test]
+fn a_contact_receipt_grants_nothing_by_itself() {
+    let f = setup("receipt");
+    let o = f.certify(&[
+        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
+        "--ttl", "1h", "--uplink-ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+    let o = f.vehicle(&["grants", "adopt", "m.dlcert", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let node = stdout(&o).trim().to_string();
+    let inspect = stdout(&f.vehicle(&["grants", "inspect", &node]));
+    let fp = inspect.split('[').nth(1).and_then(|s| s.split(']').next()).unwrap().to_string();
+
+    // A receipt for a credential this broker does not hold is refused — so a receipt for a
+    // harmless grant cannot be replayed onto a powerful one.
+    let o = delulu(&f.cwd, None, &[
+        "grants", "receipt", "--for", &"a".repeat(64), "--ttl", "1h", "--key", &f.gk(), "--out", "wrong.dlrcpt",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["grants", "renew", "wrong.dlrcpt", "--anchor", &f.ground_pub]);
+    assert!(!o.status.success(), "a receipt naming an unheld credential must not apply");
+    assert!(stderr(&o).contains("no adopted certificate"), "{}", stderr(&o));
+
+    // A receipt signed by a key that is not an anchor is refused.
+    let o = delulu(&f.cwd, None, &[
+        "grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &f.vk(), "--out", "self.dlrcpt",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["grants", "renew", "self.dlrcpt", "--anchor", &f.ground_pub]);
+    assert!(!o.status.success(), "a vehicle must not be able to renew its own lease");
+    assert!(stderr(&o).contains("DL1415"), "{}", stderr(&o));
 }

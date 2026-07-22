@@ -103,6 +103,14 @@ pub struct Certificate {
     pub not_before: i64,
     pub not_after: i64,
     pub nonce: String,
+    /// RFC 0001 F4 — **the uplink lease**: how long the holder may run without a fresh
+    /// [`Receipt`]. `None` means the certificate's own window is the only bound.
+    ///
+    /// This is the dead-man principle applied to a link. A 30-day mission certificate with no
+    /// uplink term is un-revocable for 30 days across a partition, because revocation cannot cross
+    /// one; the same certificate with `uplink_ttl_ms = 1h` bounds that to an hour. **Silence
+    /// shrinks authority**, which makes the safe direction the default one.
+    pub uplink_ttl_ms: Option<u64>,
     pub authority: Authority,
     /// The detached signature bytes over [`Certificate::signing_bytes`].
     pub sig: Vec<u8>,
@@ -131,7 +139,7 @@ impl Certificate {
     }
 
     fn body_value(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut m = serde_json::json!({
             "alg": self.alg,
             "authority": self.authority.to_json(),
             "issuer": self.issuer,
@@ -140,7 +148,13 @@ impl Certificate {
             "nonce": self.nonce,
             "parent": self.parent,
             "subject": self.subject,
-        })
+        });
+        // Emitted only when present, so a certificate minted before F4 existed hashes and verifies
+        // exactly as it did — the same additive discipline `Authority::to_json` uses for `device`.
+        if let Some(u) = self.uplink_ttl_ms {
+            m.as_object_mut().expect("json! built an object").insert("uplink_ttl_ms".into(), serde_json::json!(u));
+        }
+        m
     }
 
     /// Render to the wire form. Round-trips with [`parse`].
@@ -155,6 +169,9 @@ impl Certificate {
         s.push_str(&format!("not_before: {}\n", self.not_before));
         s.push_str(&format!("not_after: {}\n", self.not_after));
         s.push_str(&format!("nonce: {}\n", self.nonce));
+        if let Some(u) = self.uplink_ttl_ms {
+            s.push_str(&format!("uplink_ttl_ms: {u}\n"));
+        }
         s.push_str(&format!("authority: {}\n", canonical_json(&self.authority.to_json())));
         s.push_str(&format!("sig: {}\n", to_hex(&self.sig)));
         s
@@ -198,6 +215,10 @@ pub fn parse(text: &str) -> Result<Certificate, Denial> {
         not_before: num("not_before")?,
         not_after: num("not_after")?,
         nonce: get("nonce")?,
+        uplink_ttl_ms: match f.get("uplink_ttl_ms") {
+            None => None,
+            Some(v) => Some(v.parse::<u64>().map_err(|_| bad("uplink_ttl_ms is not a positive integer"))?),
+        },
         authority,
         sig: from_hex(&get("sig")?).ok_or_else(|| bad("sig is not hex"))?,
     })
@@ -392,6 +413,93 @@ pub fn verify_chain(
 }
 
 // ===================================================================================================
+// RFC 0001 phase F4 — the contact receipt: the ONLY thing that extends vehicle authority.
+// ===================================================================================================
+
+/// The receipt wire magic.
+pub const RECEIPT_MAGIC: &str = "dlrcpt1";
+
+/// The domain separator for contact receipts. Distinct from [`GRANT_CTX`] so a receipt can never be
+/// replayed as a grant, nor a grant as a receipt — they are signed by the same keys.
+pub const RECEIPT_CTX: &[u8] = b"delulu-receipt-v1";
+
+/// A **contact receipt**: proof, signed by the issuer, that the ground was in contact.
+///
+/// It grants nothing by itself. It only says "this certificate's holder was reachable, and may run
+/// until `not_after`". That asymmetry is the point: authority *decays* with silence and is *renewed*
+/// by contact, so losing the link can only ever reduce what a vehicle may do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Receipt {
+    pub alg: String,
+    pub issuer: String,
+    /// The [`Certificate::fingerprint`] this receipt renews. Binding to a specific credential is
+    /// what stops a receipt for a harmless grant being replayed onto a powerful one.
+    pub certificate: String,
+    pub not_after: i64,
+    pub nonce: String,
+    pub sig: Vec<u8>,
+}
+
+impl Receipt {
+    pub fn signing_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::from(RECEIPT_CTX);
+        out.push(b'\n');
+        let body = serde_json::json!({
+            "alg": self.alg,
+            "certificate": self.certificate,
+            "issuer": self.issuer,
+            "nonce": self.nonce,
+            "not_after": self.not_after,
+        });
+        out.extend_from_slice(canonical_json(&body).as_bytes());
+        out
+    }
+
+    pub fn to_wire(&self) -> String {
+        format!(
+            "{RECEIPT_MAGIC}\nalg: {}\nissuer: {}\ncertificate: {}\nnot_after: {}\nnonce: {}\nsig: {}\n",
+            self.alg,
+            self.issuer,
+            self.certificate,
+            self.not_after,
+            self.nonce,
+            to_hex(&self.sig)
+        )
+    }
+}
+
+/// Parse a receipt's wire form. Fail-closed at every branch.
+pub fn parse_receipt(text: &str) -> Result<Receipt, Denial> {
+    let bad = |m: &str| Denial::CertMalformed { detail: m.to_string() };
+    let mut lines = text.lines();
+    match lines.next().map(str::trim) {
+        Some(RECEIPT_MAGIC) => {}
+        Some(other) => return Err(bad(&format!("not a contact receipt (magic `{other}`)"))),
+        None => return Err(bad("empty input")),
+    }
+    let mut f: BTreeMap<&str, &str> = BTreeMap::new();
+    for line in lines {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let (k, v) = line.split_once(':').ok_or_else(|| bad(&format!("bad line `{line}`")))?;
+        f.insert(k.trim(), v.trim());
+    }
+    let get = |k: &str| -> Result<String, Denial> {
+        f.get(k).map(|s| s.to_string()).ok_or_else(|| bad(&format!("missing field `{k}`")))
+    };
+    Ok(Receipt {
+        alg: get("alg")?,
+        issuer: get("issuer")?,
+        certificate: get("certificate")?,
+        not_after: get("not_after")?.parse().map_err(|_| bad("not_after is not an integer"))?,
+        nonce: get("nonce")?,
+        sig: from_hex(&get("sig")?).ok_or_else(|| bad("sig is not hex"))?,
+    })
+}
+
+// ===================================================================================================
 // RFC 0001 phase F3 — the subordinate broker: adopting a chain as a local root.
 // ===================================================================================================
 
@@ -433,7 +541,7 @@ impl crate::tree::Broker {
         let authority = verify_chain(chain, anchors, verifier, now)?;
         let leaf = chain.last().expect("verify_chain rejects an empty chain");
         let fingerprint = leaf.fingerprint();
-        if self.is_adopted(&fingerprint) {
+        if self.adopted_node(&fingerprint).is_some() {
             let seq = self.consume_seq();
             self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
             return Err(Denial::CertUntrusted {
@@ -446,9 +554,20 @@ impl crate::tree::Broker {
         }
         // The shortest hop wins. Using the leaf's window alone would let a short-lived root be
         // outlived by the authority it delegated, which is precisely backwards.
-        let ttl_millis = chain.iter().map(|c| c.not_after).min();
-        self.mark_adopted(&fingerprint);
+        let window = chain.iter().map(|c| c.not_after).min();
+        // F4: the uplink lease. The tightest uplink term anywhere in the chain applies, and it is
+        // measured from NOW — the moment of adoption is the moment of contact. A vehicle that never
+        // hears again loses authority after that term even though the certificate itself is valid
+        // for far longer, which is the entire point: revocation cannot cross a partition, so the
+        // bound that survives one has to be time.
+        let uplink = chain.iter().filter_map(|c| c.uplink_ttl_ms).min();
+        let ttl_millis = match (window, uplink) {
+            (w, None) => w,
+            (None, Some(u)) => Some(now.saturating_add(u as i64)),
+            (Some(w), Some(u)) => Some(w.min(now.saturating_add(u as i64))),
+        };
         let node = self.issue(holder, authority, ttl_millis);
+        self.mark_adopted(&fingerprint, &node, window);
         let seq = self.consume_seq();
         self.record_op(
             seq,
@@ -460,6 +579,81 @@ impl crate::tree::Broker {
             None,
         );
         Ok(node)
+    }
+
+    /// Apply a **contact receipt**, extending an adopted node's uplink lease (RFC 0001 F4).
+    ///
+    /// The certificate window the node was adopted under is remembered by the broker and is the
+    /// ceiling a receipt may not lift — a receipt proves contact, not authority. Keeping it here
+    /// rather than taking it as an argument removes the chance of a caller supplying the wrong one.
+    /// Returns the deadline in force afterwards.
+    ///
+    /// Deliberately NOT a new enforcement path: the uplink lease *is* the node's TTL, swept by the
+    /// same machinery every other grant uses, so an expired uplink is the ordinary `DL1402` with
+    /// the ordinary remedy shape. Adding a parallel expiry mechanism would have meant a second
+    /// place for liveness to be wrong.
+    pub fn renew(
+        &mut self,
+        receipt: &Receipt,
+        anchors: &BTreeSet<String>,
+        verifier: &dyn SignatureVerifier,
+    ) -> Result<i64, Denial> {
+        if !verifier.supports(&receipt.alg) {
+            return Err(Denial::CertUnsupported {
+                detail: format!(
+                    "contact receipt is signed with `{}`, which this build cannot verify",
+                    receipt.alg
+                ),
+            });
+        }
+        let signer = verifier.verify(&receipt.alg, &receipt.signing_bytes(), &receipt.sig).ok_or_else(
+            || Denial::CertUntrusted { detail: "contact receipt signature does not verify".into() },
+        )?;
+        if signer != receipt.issuer {
+            return Err(Denial::CertUntrusted {
+                detail: format!(
+                    "contact receipt names issuer `{}` but was signed by `{signer}`",
+                    receipt.issuer
+                ),
+            });
+        }
+        if !anchors.contains(&receipt.issuer) {
+            return Err(Denial::CertUntrusted {
+                detail: format!(
+                    "contact receipt issuer `{}` is not a configured trust anchor",
+                    receipt.issuer
+                ),
+            });
+        }
+        // The receipt names the credential it renews, so a receipt for a harmless grant cannot be
+        // replayed onto a powerful one.
+        let Some((node, window)) = self.adopted_node(&receipt.certificate).cloned() else {
+            return Err(Denial::CertUntrusted {
+                detail: format!(
+                    "no adopted certificate `{}` — a receipt renews a specific credential, and this \
+                     broker holds no such one",
+                    receipt.certificate
+                ),
+            });
+        };
+        // A receipt proves contact; it does not enlarge the grant. The certificate's own window is
+        // still the ceiling.
+        let deadline = match window {
+            Some(w) => receipt.not_after.min(w),
+            None => receipt.not_after,
+        };
+        let in_force = self.extend_ttl(&node, deadline).ok_or(Denial::UnknownNode { node: node.clone() })?;
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "renew",
+            Some(node.as_str().to_string()),
+            Some(receipt.certificate.clone()),
+            None,
+            "allow",
+            None,
+        );
+        Ok(in_force)
     }
 }
 
@@ -533,6 +727,17 @@ mod tests {
 
     /// Build and sign a certificate with the fake signer.
     fn cert(issuer: &str, subject: &str, parent: &str, a: Authority, window: (i64, i64)) -> Certificate {
+        cert_uplink(issuer, subject, parent, a, window, None)
+    }
+
+    fn cert_uplink(
+        issuer: &str,
+        subject: &str,
+        parent: &str,
+        a: Authority,
+        window: (i64, i64),
+        uplink_ttl_ms: Option<u64>,
+    ) -> Certificate {
         let mut c = Certificate {
             alg: "test-sig".into(),
             issuer: issuer.into(),
@@ -541,11 +746,25 @@ mod tests {
             not_before: window.0,
             not_after: window.1,
             nonce: "abcd".into(),
+            uplink_ttl_ms,
             authority: a,
             sig: Vec::new(),
         };
         c.sig = fake_sign(issuer, &c.signing_bytes());
         c
+    }
+
+    fn receipt(issuer: &str, certificate: &str, not_after: i64) -> Receipt {
+        let mut r = Receipt {
+            alg: "test-sig".into(),
+            issuer: issuer.into(),
+            certificate: certificate.into(),
+            not_after,
+            nonce: "beef".into(),
+            sig: Vec::new(),
+        };
+        r.sig = fake_sign(issuer, &r.signing_bytes());
+        r
     }
 
     const WIDE: &str = "sat0/hga:slew_deg=-45..45,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park";
@@ -690,10 +909,17 @@ mod tests {
     // ----- F3: adoption ---------------------------------------------------------------------
 
     fn broker_at(now: i64) -> crate::tree::Broker {
-        crate::tree::Broker::with_sources(
+        broker_clocked(now).0
+    }
+
+    /// A broker plus a handle to its clock, so a test can advance time with no sleeps.
+    fn broker_clocked(now: i64) -> (crate::tree::Broker, std::rc::Rc<crate::time::ManualClock>) {
+        let clock = std::rc::Rc::new(crate::time::ManualClock::new(now));
+        let b = crate::tree::Broker::with_sources(
             Box::new(crate::ids::SeqIdSource::new()),
-            Box::new(crate::time::ManualClock::new(now)),
-        )
+            Box::new(clock.clone()),
+        );
+        (b, clock)
     }
     fn holder() -> crate::tree::Holder {
         crate::tree::Holder::new("process", "vehicle", "local")
@@ -766,6 +992,191 @@ mod tests {
         );
         // Empty chain grants nothing.
         assert!(broker_at(500).adopt(&[], &anchors(&["ground"]), &FakeVerifier, holder()).is_err());
+    }
+
+    // ----- F4: the uplink lease --------------------------------------------------------------
+
+    /// The point of the whole phase: a long-lived certificate with a short uplink term is bounded
+    /// by the SHORT one. Without this, a 30-day mission grant is un-revocable for 30 days across a
+    /// partition, because revocation cannot cross one.
+    #[test]
+    fn the_uplink_lease_bounds_a_long_lived_certificate() {
+        let long_window = (0, 30_000_000);
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), long_window, Some(1_000));
+        let mut b = broker_at(500);
+        let node = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(
+            b.inspect(&node).unwrap().ttl_millis,
+            Some(1_500),
+            "now + uplink_ttl, not the certificate's own far-off expiry"
+        );
+    }
+
+    #[test]
+    fn with_no_uplink_term_the_certificate_window_is_the_only_bound() {
+        let mut b = broker_at(500);
+        let node = b.adopt(&ground_to_vehicle(), &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(10_000), "F3 behaviour, preserved");
+    }
+
+    #[test]
+    fn the_tightest_uplink_term_anywhere_in_the_chain_applies() {
+        let root = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 90_000), Some(5_000));
+        let leaf = cert_uplink(
+            "vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 90_000), Some(2_000),
+        );
+        let mut b = broker_at(1_000);
+        let node = b.adopt(&[root, leaf], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(3_000), "1000 + the tighter 2000");
+    }
+
+    /// Contact renews; silence does not. And a receipt may never push a lease past the certificate
+    /// window it renews — proof of contact is not a grant of authority.
+    #[test]
+    fn a_contact_receipt_extends_the_lease_but_never_past_the_certificate() {
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 8_000), Some(1_000));
+
+        let fp = c.fingerprint();
+        let mut b = broker_at(500);
+        let node = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(1_500));
+
+        // Contact: the lease moves forward.
+        let got = b
+            .renew(&receipt("ground", &fp, 4_000), &anchors(&["ground"]), &FakeVerifier)
+            .expect("a valid receipt renews");
+        assert_eq!(got, 4_000);
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(4_000));
+
+        // A receipt that reaches past the certificate is CLAMPED to it, not honoured.
+        let got = b
+            .renew(&receipt("ground", &fp, 999_999), &anchors(&["ground"]), &FakeVerifier)
+            .unwrap();
+        assert_eq!(got, 8_000, "the certificate window is the ceiling a receipt cannot lift");
+    }
+
+    /// Replaying an old receipt must be a harmless no-op — never a way to strip authority from a
+    /// vehicle. Extension is monotone; shortening is `revoke`'s job.
+    #[test]
+    fn replaying_an_old_receipt_cannot_shorten_a_lease() {
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 9_000), Some(1_000));
+        let fp = c.fingerprint();
+        let mut b = broker_at(500);
+        let node = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        b.renew(&receipt("ground", &fp, 6_000), &anchors(&["ground"]), &FakeVerifier).unwrap();
+        // An attacker replays a stale receipt with an earlier deadline.
+        let got = b
+            .renew(&receipt("ground", &fp, 2_000), &anchors(&["ground"]), &FakeVerifier)
+            .unwrap();
+        assert_eq!(got, 6_000, "the lease did not move backwards");
+        assert_eq!(b.inspect(&node).unwrap().ttl_millis, Some(6_000));
+    }
+
+    /// **The hole F4 would have had, and the witness that keeps it shut.**
+    ///
+    /// `attenuate` bounds a child's authority by `⊑` but does NOT bound its deadline, and
+    /// `effective_state` judges one node. So a holder could delegate itself a child with no TTL and
+    /// keep commanding after its own lease died. Locally that is a latent wrong; under federation
+    /// it is fatal — the uplink lease is the only bound that survives a partition, and the party it
+    /// bounds is precisely the party that can mint children.
+    ///
+    /// Fails against per-node expiry; passes with inherited expiry.
+    #[test]
+    fn a_child_cannot_outlive_the_expired_uplink_lease_of_its_parent() {
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 90_000), Some(1_000));
+        let (mut b, clock) = broker_clocked(500);
+        let root = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(b.inspect(&root).unwrap().ttl_millis, Some(1_500));
+
+        // The vehicle delegates itself a child with NO deadline of its own — the escape attempt.
+        let child = b
+            .attenuate(&root, auth(&["Actuate"], &[WIDE]), holder(), None)
+            .expect("delegating within the lease is legitimate");
+        assert!(b.inspect(&child).unwrap().ttl_millis.is_none(), "the child carries no TTL itself");
+        assert!(b.check(&child, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow());
+
+        // Time passes with no contact. The root's uplink lease dies…
+        clock.set(2_000);
+        assert!(matches!(b.effective_state(&root), Some(crate::tree::EffState::Expired { .. })), "root expired");
+        // …and the child must die WITH it, or the uplink lease bounds nothing.
+        let d = b.check(&child, crate::validate::Op::Actuate, Some("sat0/hga"));
+        let denial = d.denial().expect("a child must not outlive its root's lease");
+        assert_eq!(denial.code(), "DL1402");
+        assert!(
+            matches!(b.effective_state(&child), Some(crate::tree::EffState::Expired { .. })),
+            "and the operator is SHOWN the same answer the enforcement path gives"
+        );
+        // A grandchild cannot be born under the dead ancestry either.
+        assert!(b.attenuate(&child, auth(&["Actuate"], &[WIDE]), holder(), None).is_err());
+    }
+
+    /// A contact receipt revives the whole subtree, not just the root — which is why expiry is
+    /// inherited at READ time rather than clamped into children at write time.
+    #[test]
+    fn renewing_the_root_lease_carries_the_whole_subtree_with_it() {
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 90_000), Some(1_000));
+        let fp = c.fingerprint();
+        let (mut b, clock) = broker_clocked(500);
+        let root = b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        let child = b.attenuate(&root, auth(&["Actuate"], &[WIDE]), holder(), None).unwrap();
+
+        clock.set(2_000);
+        assert!(b.check(&child, crate::validate::Op::Actuate, Some("sat0/hga")).denial().is_some());
+
+        // Contact re-established: one receipt on the ROOT restores the child too.
+        b.renew(&receipt("ground", &fp, 50_000), &anchors(&["ground"]), &FakeVerifier).unwrap();
+        assert!(
+            b.check(&child, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow(),
+            "the subtree comes back with its root"
+        );
+    }
+
+    #[test]
+    fn a_receipt_is_refused_unless_it_verifies_to_an_anchor_and_names_a_held_certificate() {
+        let c = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 9_000), Some(1_000));
+        let fp = c.fingerprint();
+        let mut b = broker_at(500);
+        b.adopt(&[c], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        let a = anchors(&["ground"]);
+
+        // Signed by someone who is not an anchor.
+        let err = b.renew(&receipt("impostor", &fp, 5_000), &a, &FakeVerifier).unwrap_err();
+        assert_eq!(err.code(), "DL1415");
+        // Signature does not match the named issuer.
+        let mut forged = receipt("ground", &fp, 5_000);
+        forged.sig = fake_sign("impostor", &forged.signing_bytes());
+        assert_eq!(b.renew(&forged, &a, &FakeVerifier).unwrap_err().code(), "DL1415");
+        // A receipt for a credential this broker does not hold.
+        let err = b.renew(&receipt("ground", &"f".repeat(64), 5_000), &a, &FakeVerifier).unwrap_err();
+        assert!(format!("{err:?}").contains("no adopted certificate"));
+        // An algorithm this build cannot verify.
+        let mut alien = receipt("ground", &fp, 5_000);
+        alien.alg = "ml-dsa-65".into();
+        assert_eq!(b.renew(&alien, &a, &FakeVerifier).unwrap_err().code(), "DL1418");
+    }
+
+    /// A receipt and a grant are signed by the same keys, so their domain separators must differ or
+    /// one would be replayable as the other.
+    #[test]
+    fn receipts_and_grants_are_domain_separated_from_each_other() {
+        assert_ne!(RECEIPT_CTX, GRANT_CTX);
+        let r = receipt("ground", &"a".repeat(64), 1);
+        assert!(r.signing_bytes().starts_with(RECEIPT_CTX));
+        let back = parse_receipt(&r.to_wire()).expect("round-trips");
+        assert_eq!(back, r);
+        assert!(parse_receipt("dlcert1\nalg: x\n").is_err(), "a certificate is not a receipt");
+    }
+
+    /// A certificate minted before F4 existed must still verify byte-for-byte: the new field is
+    /// omitted when absent, exactly as `Authority::to_json` omits an empty `device`.
+    #[test]
+    fn the_uplink_field_is_omitted_when_absent_so_older_certificates_are_unchanged() {
+        let c = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000));
+        assert!(!c.to_wire().contains("uplink_ttl_ms"), "absent means absent, not `0`");
+        assert!(verify_chain(&[c], &anchors(&["ground"]), &FakeVerifier, 500).is_ok());
+        let with = cert_uplink("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000), Some(7));
+        assert!(with.to_wire().contains("uplink_ttl_ms: 7"));
+        assert_eq!(parse(&with.to_wire()).unwrap(), with, "and it round-trips");
     }
 
     #[test]

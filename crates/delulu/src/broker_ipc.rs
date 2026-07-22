@@ -156,6 +156,8 @@ pub enum ReqBody {
     /// the wire text of each certificate, root-most first; `anchors` are the hex public keys this
     /// broker will trust to issue. Additive `broker/1` variant (both ends are one binary).
     Adopt { chain: Vec<String>, anchors: Vec<String> },
+    /// RFC 0001 F4: apply a contact receipt, extending an adopted node's uplink lease. Additive.
+    Renew { receipt: String, anchors: Vec<String> },
     /// Revoke `target` on behalf of `caller` (transitive).
     Revoke { caller: String, target: String },
     /// Per-use validation of a synchronous-class op (spec §4.4).
@@ -229,6 +231,8 @@ pub enum Response {
     /// leaf fingerprint (the vehicle's own answer to "where did this authority come from?") and the
     /// adopted TTL, which is the shortest hop's expiry.
     Adopted { node: String, fingerprint: String, ttl_millis: Option<i64> },
+    /// `Renew` reply (RFC 0001 F4): the uplink-lease deadline now in force.
+    Renewed { node: String, ttl_millis: i64 },
     Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
     /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that

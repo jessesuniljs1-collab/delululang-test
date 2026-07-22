@@ -14,7 +14,7 @@
 use crate::authority::Authority;
 use crate::diag::Denial;
 use crate::guard::GuardVerdict;
-use crate::tree::{effective_state, Broker, EffState, GrantId};
+use crate::tree::{Broker, EffState, GrantId};
 use delulu_check::Effect;
 
 /// The validation class of an op (spec §4.1).
@@ -309,7 +309,14 @@ impl Broker {
         let now = self.effective_now();
         let nodes = self
             .iter_nodes()
-            .map(|n| (n.id.clone(), SnapNode { eff: effective_state(n, now), authority: n.authority.clone() }))
+            .map(|n| {
+                // Same inherited rule as the live path, so an epoch-class op cannot survive on a
+                // stale view of an ancestry that has since expired.
+                let eff = self
+                    .effective_state_inherited(&n.id, now)
+                    .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now });
+                (n.id.clone(), SnapNode { eff, authority: n.authority.clone() })
+            })
             .collect();
         Snapshot { epoch: self.epoch(), nodes }
     }
@@ -364,7 +371,11 @@ impl Snapshot {
 
 impl Broker {
     fn node_view(&self, id: &GrantId, now: i64) -> Option<(EffState, Authority)> {
-        self.inspect(id).map(|n| (effective_state(n, now), n.authority.clone()))
+        // INHERITED, not per-node: a node is live only if its whole ancestry is. See
+        // `Broker::effective_state_inherited` — a subtree that could outlive its root would make a
+        // federated uplink lease (RFC 0001 F4) impossible to time out.
+        let eff = self.effective_state_inherited(id, now)?;
+        self.inspect(id).map(|n| (eff, n.authority.clone()))
     }
 }
 
