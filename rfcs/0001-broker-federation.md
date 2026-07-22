@@ -373,11 +373,29 @@ returned success for an unsigned artifact on its record. Every branch below answ
 |---|---|---|---|
 | **F0** | Owner decisions (§8) — not code | — | — |
 | ~~**F1**~~ | ~~Device scope dimension + interval lattice (D12e)~~ — **SHIPPED 2026-07-22, ruling D21** | **yes** | medium |
-| **F2** | Grant certificate: format, sign, chain-verify, domain separator | no (needs F1 to be useful) | **high — security-critical** |
-| **F3** | Subordinate broker: adopt a chain as a local root; trust-anchor config | no | **high — new enforcement domain** |
-| **F4** | Uplink lease, contact receipt, published revocation latency | no | medium |
-| **F5** | Audit bundle, `origin` field, `reconcile` record | no | medium |
-| **F6** | Two-process demo over a link with a real outage + honesty review | no | low |
+| ~~**F2**~~ | ~~Grant certificate: format, sign, chain-verify, domain separator~~ — **SHIPPED, D22** | no | **high — security-critical** |
+| ~~**F3**~~ | ~~Subordinate broker: adopt a chain as a local root; trust-anchor config~~ — **SHIPPED, D22** | no | **high — new enforcement domain** |
+| ~~**F4**~~ | ~~Uplink lease, contact receipt, published revocation latency~~ — **SHIPPED, D22** | no | medium |
+| ~~**F5**~~ | ~~Audit bundle, `reconcile` record~~ — **SHIPPED, D22** | no | medium |
+| ~~**F6**~~ | ~~Two-process demo over a link with a real outage + honesty review~~ — **SHIPPED, D22** | no | low |
+
+**Two things this plan got wrong, recorded because a plan that is never marked up teaches nothing:**
+
+1. **F5's `origin` field was never needed.** The plan assumed federated records would have to name
+   their originating broker. They do not: each broker keeps its own chain and the receiver writes one
+   `reconcile` record naming the *other* chain's digest, so provenance lives in the cross-link rather
+   than in every row. Fewer fields, no change to the record shape, and existing hashes untouched.
+2. **DL1419 and DL1420 were penciled in and should not have been.** The uplink lease *is* the node
+   TTL, so an expired uplink is the ordinary DL1402 swept by machinery that already exists and is
+   already tested; a bad audit bundle is the existing DL1405. Adding codes would have meant a second
+   liveness path — a second place for the rule to be wrong — in exchange for nothing.
+
+**And two defects the plan did not foresee**, both found by asking whether the mechanism could be
+defeated rather than whether it worked, both closed with witnesses *observed* to fail against the old
+code: certificate **replay could undo a revocation** (fixed: one adoption per broker lifetime), and a
+delegated child **could outlive its parent's expired uplink lease** (fixed: expiry is inherited up
+the ancestry). The second is the more serious — the party the uplink lease bounds is exactly the
+party that can mint children. See D22(g).
 
 **F1 is the recommendation to do first regardless of whether F2–F6 are ever approved.** It closes a
 named gap, unblocks a documented domain pattern, requires no threat-model change, and is the only
