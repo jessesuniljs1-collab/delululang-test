@@ -105,6 +105,16 @@ D19a–e.
   release (the tests still assert the *pattern*, not a cycle count). The wall-clock dead-man remains
   the default and the only real-time guarantee; stepping is a determinism tool for demonstrations,
   refused on any non-sim profile.
+- **The first hardware adapter — SHIPPED (D23), verified on both platforms 2026-07-22.**
+  `Profile::Hw` no longer has nothing behind it: an operator-supplied subprocess speaks a line
+  protocol over stdio. **Portability note that matters here more than elsewhere**: the adapter uses
+  only `std::process` and `std::sync::mpsc` — no `#[cfg]`, no platform API — but its *tests* need a
+  scriptable shell, so they use PowerShell on Windows and `sh` elsewhere. Both ship with the OS and
+  both take the script as one argument, so nothing depends on shell quoting surviving `Command`.
+  That is the only place in this project where a test forks by platform, and it is the tests
+  forking, not the code. **This is still not hardware**: no driver for any real device ships
+  in-tree, and running the adapter against a shell script proves the socket works, not that anything
+  physical moved.
 - **Broker federation — RESOLVED (D22, RFC 0001 F2–F6), verified on both platforms 2026-07-22.**
   `STAGE10_AUTONOMY_ADDENDUM.md` §2.5 named it "a prerequisite for any real deployment in this
   addendum's domains". A grant tree now spans machines: two brokers, two ed25519 identities, no
