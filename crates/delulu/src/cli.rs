@@ -6690,7 +6690,7 @@ fn audit_record_json(r: &delulu_broker::AuditRecord) -> Json {
 
 fn cmd_audit(rest: &[String]) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
-        eprintln!("error: `audit` needs a subcommand: tail [N] | query [--node g_ID] [--action A] [--effect E] | verify");
+        eprintln!("error: `audit` needs a subcommand: tail [N] | query [--node g_ID] [--action A] [--effect E] | verify | bundle [--out F] | reconcile <FILE> [--expect-start HASH]");
         return 2;
     };
     let args = &rest[1..];
@@ -6700,6 +6700,10 @@ fn cmd_audit(rest: &[String]) -> i32 {
     let mut dir_flag: Option<String> = None;
     let mut filter = delulu_broker::QueryFilter::default();
     let mut tail_n: usize = 10;
+    // RFC 0001 F5 — reconciliation.
+    let mut bundle_out: Option<String> = None;
+    let mut bundle_in: Option<String> = None;
+    let mut expect_start: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -6711,6 +6715,25 @@ fn cmd_audit(rest: &[String]) -> i32 {
                 }
             }
             s if s.starts_with("--dir=") => dir_flag = Some(s["--dir=".len()..].to_string()),
+            "--out" => {
+                if i + 1 < args.len() {
+                    bundle_out = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--out=") => bundle_out = Some(s["--out=".len()..].to_string()),
+            // The head the incoming segment must chain onto. Omitting it accepts any starting
+            // point, which is only right for a FIRST contact: without it a dropped middle segment
+            // would go unnoticed, and that is the property a sequence of bundles exists to have.
+            "--expect-start" => {
+                if i + 1 < args.len() {
+                    expect_start = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--expect-start=") => {
+                expect_start = Some(s["--expect-start=".len()..].to_string())
+            }
             "--node" => {
                 if i + 1 < args.len() {
                     filter.node = Some(args[i + 1].clone());
@@ -6735,6 +6758,10 @@ fn cmd_audit(rest: &[String]) -> i32 {
             s if !s.starts_with('-') && s.chars().all(|c| c.is_ascii_digit()) => {
                 tail_n = s.parse().unwrap_or(10);
             }
+            // A non-numeric positional is `reconcile`'s bundle file. Only the FIRST is taken:
+            // reconciling two bundles in one command would need two cross-link records, and
+            // silently using the last one would drop a segment.
+            s if !s.starts_with('-') && bundle_in.is_none() => bundle_in = Some(s.to_string()),
             _ => {}
         }
         i += 1;
@@ -6777,6 +6804,142 @@ fn cmd_audit(rest: &[String]) -> i32 {
             }
             0
         }
+        // ----- RFC 0001 F5: audit reconciliation ------------------------------------------------
+        // `bundle` is the VEHICLE side (export a transcript); `reconcile` is the GROUND side
+        // (verify it, and record the cross-link in its OWN chain). The two chains are never merged
+        // — see `delulu_broker::audit::Bundle` for why that is impossible rather than merely
+        // undesirable.
+        "bundle" => match delulu_broker::audit::bundle(&dir) {
+            Ok(b) => {
+                let summary = match b.verify(Some(delulu_broker::GENESIS_HASH)) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: this broker's own chain does not verify: {e}");
+                        return 1;
+                    }
+                };
+                let wire = b.to_wire();
+                if let Some(f) = &bundle_out {
+                    if let Err(e) = std::fs::write(f, &wire) {
+                        eprintln!("error: cannot write {f}: {e}");
+                        return 2;
+                    }
+                }
+                if json {
+                    let report = json!({
+                        "command": "audit", "subcommand": "bundle",
+                        "digest": summary.digest, "records": summary.records,
+                        "first_seq": summary.first_seq, "last_seq": summary.last_seq,
+                        "head": summary.head,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
+                } else if bundle_out.is_some() {
+                    eprintln!(
+                        "wrote {} — {} record(s), seq {}..{}, digest {}",
+                        bundle_out.as_deref().unwrap_or(""),
+                        summary.records,
+                        summary.first_seq,
+                        summary.last_seq,
+                        &summary.digest[..16]
+                    );
+                } else {
+                    print!("{wire}");
+                }
+                0
+            }
+            Err(e) => {
+                eprintln!("error: cannot read audit log at `{}`: {e}", dir.display());
+                2
+            }
+        },
+        "reconcile" => {
+            let Some(path) = bundle_in else {
+                eprintln!("error: `audit reconcile` needs a bundle file (from `audit bundle --out`)");
+                return 2;
+            };
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("error: cannot read {path}: {e}");
+                    return 2;
+                }
+            };
+            // A bundle that does not verify is an INCIDENT, not a denial. The log is observability,
+            // not enforcement (spec §7, playbook trap 6): this reports and records, and nothing
+            // here may ever gate a vehicle's ability to operate. Exit 1 says "look at this", not
+            // "authority withdrawn".
+            let (summary, problem) = match delulu_broker::audit::parse_bundle(&text)
+                .and_then(|b| b.verify(expect_start.as_deref()))
+            {
+                Ok(s) => (Some(s), None),
+                Err(e) => (None, Some(e.to_string())),
+            };
+            let mut log = match delulu_broker::AuditLog::open(&dir) {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("error: cannot open this broker's audit log at `{}`: {e}", dir.display());
+                    return 2;
+                }
+            };
+            // The cross-link goes in THIS chain: one `reconcile` record naming the other chain's
+            // digest and range. Exactly the mechanism a new day file already uses to link to the
+            // previous day's head — generalized across brokers instead of days.
+            let target = match &summary {
+                Some(s) => format!("{} seq {}..{} head {}", s.digest, s.first_seq, s.last_seq, s.head),
+                None => format!("UNVERIFIED bundle from {path}"),
+            };
+            // Continue THIS chain's numbering. `verify` checks hashes and prev-links rather than
+            // seq monotonicity, so a fixed 0 would still verify — and two reconciliations would
+            // then both claim seq 0, which is exactly the kind of quietly-wrong record an audit log
+            // exists not to contain.
+            let next_seq = delulu_broker::tail(&dir, 1).ok().and_then(|v| v.last().map(|r| r.seq + 1)).unwrap_or(1);
+            let entry = delulu_broker::AuditEntry {
+                seq: next_seq,
+                ts: now_millis(),
+                actor_node: None,
+                action: "reconcile".to_string(),
+                target: Some(target),
+                authority: None,
+                span: None,
+                decision: if problem.is_some() { "deny" } else { "allow" }.to_string(),
+            };
+            use delulu_broker::AuditSink as _;
+            if let Err(e) = log.append(entry) {
+                eprintln!("error: cannot append the reconcile record: {e}");
+                return 2;
+            }
+            match (&summary, &problem) {
+                (Some(s), _) => {
+                    if json {
+                        let report = json!({
+                            "command": "audit", "subcommand": "reconcile", "ok": true,
+                            "digest": s.digest, "records": s.records,
+                            "first_seq": s.first_seq, "last_seq": s.last_seq, "head": s.head,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
+                    } else {
+                        ok_line!(
+                            "ok: reconciled {} record(s), seq {}..{} — cross-linked in this chain \
+                             (the two chains are NOT merged; `seq` is per-broker, so a combined \
+                             timeline is not a global order)",
+                            s.records,
+                            s.first_seq,
+                            s.last_seq
+                        );
+                    }
+                    0
+                }
+                (None, Some(p)) => {
+                    eprintln!(
+                        "INCIDENT: the audit bundle did not verify: {p}\n  \
+                         Recorded in this chain as a failed reconciliation. This does NOT withdraw \
+                         any authority — the audit log is observability, not enforcement."
+                    );
+                    1
+                }
+                (None, None) => unreachable!("verify returns Ok or Err"),
+            }
+        }
         "verify" => match delulu_broker::verify(&dir) {
             Ok(stats) => {
                 if json {
@@ -6815,7 +6978,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
             }
         },
         other => {
-            eprintln!("error: unknown audit subcommand `{other}` (tail | query | verify)");
+            eprintln!("error: unknown audit subcommand `{other}` (tail | query | verify | bundle | reconcile)");
             2
         }
     }

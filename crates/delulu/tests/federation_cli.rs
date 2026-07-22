@@ -1,4 +1,4 @@
-//! RFC 0001 phases F2/F3/F4 — **broker federation, end to end through the real binary.**
+//! RFC 0001 phases F2–F5 — **broker federation, end to end through the real binary.**
 //!
 //! This is federation's one process-spawning test (the per-phase 5f rule). Everything else about
 //! certificates is unit-tested in `delulu-broker/src/cert.rs` and `delulu/src/cert_crypto.rs`.
@@ -23,10 +23,16 @@
 //!   applied to a link: a long-lived certificate with a short uplink term is bounded by the short
 //!   one, so silence *shrinks* authority and only a signed contact receipt renews it.
 //!
+//! - **The ground finds out afterwards what the vehicle did alone** (F5), without either side
+//!   pretending the two logs are one log. Two self-verifying chains joined by a hash reference —
+//!   the mechanism a new day file already uses to link to the previous day, generalized across
+//!   brokers instead of days.
+//!
 //! What it still does NOT witness, so the closure is not read wider than it is: both processes run
 //! on one machine, the "link" is a filesystem copy, and there is no radio, no latency, and no
-//! partition except the one these tests create by letting time pass. F5 (audit reconciliation) is
-//! what lets the ground find out afterwards what the vehicle did while it was alone.
+//! partition except the one these tests create by letting time pass. Real deployment additionally
+//! needs a hardware adapter (none ships in-tree) and certification regimes this project does not
+//! control — `STAGE10_AUTONOMY_ADDENDUM.md` §3/§4 state both, and they are unchanged by this work.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -476,4 +482,153 @@ fn a_contact_receipt_grants_nothing_by_itself() {
     let o = f.vehicle(&["grants", "renew", "self.dlrcpt", "--anchor", &f.ground_pub]);
     assert!(!o.status.success(), "a vehicle must not be able to renew its own lease");
     assert!(stderr(&o).contains("DL1415"), "{}", stderr(&o));
+}
+
+// ===================================================================================================
+// RFC 0001 phase F5 — audit reconciliation. Two chains, cross-linked, never merged.
+// ===================================================================================================
+
+/// The ground finds out afterwards what the vehicle did while it was alone — without either side
+/// pretending the two logs are one log.
+///
+/// A chain is `blake3(prev_hash ‖ record)` over one broker's monotone `seq`, so splicing two would
+/// invalidate every hash after the splice. A "merged" log would be a lie or a rewrite, and this is
+/// the one artifact whose entire value is that it is neither.
+#[test]
+fn the_vehicles_chain_reconciles_into_the_grounds_without_merging() {
+    let f = setup("reconcile");
+    let vehicle_audit = f.state.join("audit");
+    let ground_audit = f.cwd.join("ground-audit");
+
+    // ----- the vehicle does some work, alone -----------------------------------------------------
+    let o = f.certify(&[
+        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
+        "--ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    {
+        let _guard = DaemonGuard { state: f.state.clone() };
+        let o = f.vehicle(&["grants", "adopt", "m.dlcert", "--anchor", &f.ground_pub]);
+        assert!(o.status.success(), "{}", stderr(&o));
+        let node = stdout(&o).trim().to_string();
+        let o = f.vehicle(&[
+            "grants", "delegate", "--parent", &node, "--effects", "Actuate,Write",
+            "--device", HGA, "--multi", "--json",
+        ]);
+        assert!(o.status.success(), "{}", stderr(&o));
+        let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+        let token = v["token"].as_str().unwrap().to_string();
+        let o = f.vehicle(&["run", "sat.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
+        assert!(o.status.success(), "{}", stderr(&o));
+    } // daemon stops here, flushing its chain
+
+    let va = vehicle_audit.to_string_lossy().to_string();
+    let ga = ground_audit.to_string_lossy().to_string();
+
+    // The vehicle's own chain stands on its own.
+    let o = delulu(&f.cwd, None, &["audit", "verify", "--dir", &va]);
+    assert!(o.status.success(), "the vehicle chain must verify: {}", stderr(&o));
+
+    // ----- it exports a transcript ---------------------------------------------------------------
+    let o = delulu(&f.cwd, None, &["audit", "bundle", "--dir", &va, "--out", "v.bundle", "--json"]);
+    assert!(o.status.success(), "bundle: {}", stderr(&o));
+    let b: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("bundle --json");
+    let digest = b["digest"].as_str().unwrap().to_string();
+    let head = b["head"].as_str().unwrap().to_string();
+    assert!(b["records"].as_u64().unwrap() >= 3, "the vehicle logged real work: {b}");
+    let wire = std::fs::read_to_string(f.cwd.join("v.bundle")).unwrap();
+    assert!(wire.starts_with("dlbundle1\n"), "versioned magic: {:?}", &wire[..40.min(wire.len())]);
+
+    // ----- the ground reconciles it into ITS OWN chain -------------------------------------------
+    let o = delulu(&f.cwd, None, &["audit", "reconcile", "v.bundle", "--dir", &ga, "--json"]);
+    assert!(o.status.success(), "reconcile: {}", stderr(&o));
+    let r: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("reconcile --json");
+    assert_eq!(r["digest"].as_str().unwrap(), digest, "the cross-link names the bundle");
+    assert_eq!(r["head"].as_str().unwrap(), head, "and the sender head at that point");
+
+    // The ground chain contains ONE reconcile record naming the other chain — not the other
+    // chain's records.
+    let o = delulu(&f.cwd, None, &["audit", "tail", "10", "--dir", &ga, "--json"]);
+    let t: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let recs = t["records"].as_array().unwrap();
+    assert_eq!(recs.len(), 1, "one cross-link, not an import of {} records", b["records"]);
+    assert_eq!(recs[0]["action"].as_str().unwrap(), "reconcile");
+    assert!(recs[0]["target"].as_str().unwrap().contains(&digest), "it names the digest");
+
+    // Both chains still verify independently. That is the whole design: two self-verifying logs
+    // joined by a hash reference, exactly the way a new day file already links to the previous day.
+    assert!(delulu(&f.cwd, None, &["audit", "verify", "--dir", &ga]).status.success());
+    assert!(delulu(&f.cwd, None, &["audit", "verify", "--dir", &va]).status.success());
+
+    // A second reconciliation continues this chain's numbering rather than repeating a seq.
+    let o = delulu(&f.cwd, None, &["audit", "reconcile", "v.bundle", "--dir", &ga]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = delulu(&f.cwd, None, &["audit", "tail", "10", "--dir", &ga, "--json"]);
+    let t: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let recs = t["records"].as_array().unwrap();
+    assert_eq!(recs.len(), 2);
+    assert_ne!(recs[0]["seq"], recs[1]["seq"], "two reconciliations must not share a seq");
+    assert!(delulu(&f.cwd, None, &["audit", "verify", "--dir", &ga]).status.success());
+}
+
+/// **A tampered bundle is an INCIDENT, not a denial.**
+///
+/// The audit log is observability, not enforcement (spec §7, playbook trap 6). A bundle that does
+/// not verify must be reported loudly and recorded — and must never gate a vehicle's ability to
+/// operate. Getting this backwards would quietly convert the log into an enforcement input, which
+/// is the rule this project keeps most carefully.
+#[test]
+fn a_tampered_bundle_is_reported_and_recorded_but_denies_nothing() {
+    let f = setup("tamper");
+    let ga = f.cwd.join("ground-audit").to_string_lossy().to_string();
+
+    // Build a real bundle from a real chain.
+    let o = f.certify(&[
+        "--subject", &f.vehicle_pub, "--effects", "Actuate", "--device", HGA,
+        "--ttl", "1h", "--key", &f.gk(), "--out", "m.dlcert",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    {
+        let _guard = DaemonGuard { state: f.state.clone() };
+        assert!(f.vehicle(&["grants", "adopt", "m.dlcert", "--anchor", &f.ground_pub]).status.success());
+    }
+    let va = f.state.join("audit").to_string_lossy().to_string();
+    let o = delulu(&f.cwd, None, &["audit", "bundle", "--dir", &va, "--out", "v.bundle"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+
+    // Alter one record's decision from allow to deny — a plausible cover-up.
+    let good = std::fs::read_to_string(f.cwd.join("v.bundle")).unwrap();
+    let bad = good.replacen("\"decision\":\"allow\"", "\"decision\":\"deny\"", 1);
+    assert_ne!(bad, good, "the substitution must actually apply");
+    std::fs::write(f.cwd.join("bad.bundle"), &bad).unwrap();
+
+    let o = delulu(&f.cwd, None, &["audit", "reconcile", "bad.bundle", "--dir", &ga]);
+    assert_eq!(o.status.code(), Some(1), "a failed reconciliation is exit 1 — look at this");
+    let err = stderr(&o);
+    assert!(err.contains("INCIDENT"), "it is reported as an incident: {err}");
+    assert!(
+        err.contains("does NOT withdraw any authority") && err.contains("observability, not enforcement"),
+        "and says so, because the log must never become an enforcement input: {err}"
+    );
+
+    // The failure is RECORDED in the ground chain, and that chain still verifies.
+    let o = delulu(&f.cwd, None, &["audit", "tail", "5", "--dir", &ga, "--json"]);
+    let t: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let recs = t["records"].as_array().unwrap();
+    assert_eq!(recs.len(), 1, "the attempt is on the record");
+    assert_eq!(recs[0]["decision"].as_str().unwrap(), "deny", "recorded as a failed reconciliation");
+    assert!(recs[0]["target"].as_str().unwrap().contains("UNVERIFIED"), "{:?}", recs[0]);
+    assert!(delulu(&f.cwd, None, &["audit", "verify", "--dir", &ga]).status.success());
+
+    // And a dropped middle segment is caught when the expected start is supplied — which is why
+    // omitting `--expect-start` is only right for a first contact.
+    let o = delulu(&f.cwd, None, &[
+        "audit", "reconcile", "v.bundle", "--dir", &ga, "--expect-start", &"9".repeat(64),
+    ]);
+    assert_eq!(o.status.code(), Some(1), "a segment that does not chain onto the expected head");
+    assert!(stderr(&o).contains("does not chain onto"), "{}", stderr(&o));
 }

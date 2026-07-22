@@ -408,6 +408,142 @@ pub fn query(dir: impl AsRef<Path>, filter: &QueryFilter) -> Result<Vec<AuditRec
     Ok(all.into_iter().filter(|r| filter.matches(r)).collect())
 }
 
+// ----- RFC 0001 phase F5: audit reconciliation ---------------------------------------------------
+
+/// The bundle wire magic. A bundle is a *transcript*, never a second chain.
+pub const BUNDLE_MAGIC: &str = "dlbundle1";
+
+/// What a verified [`Bundle`] proved, for the `reconcile` record the receiver writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BundleSummary {
+    /// The bundle's own content hash — the value the receiver's chain records as a cross-link.
+    pub digest: String,
+    pub records: usize,
+    pub first_seq: u64,
+    pub last_seq: u64,
+    /// The head hash of the sender's chain at the end of this segment.
+    pub head: String,
+}
+
+/// A transcript of another broker's audit segment.
+///
+/// # Why chains are cross-linked and never merged
+///
+/// A chain is `hash = blake3(prev_hash ‖ canonical_record)` over one broker's monotone `seq`. Two
+/// brokers produce two chains, and splicing them would invalidate every hash after the splice
+/// point — so a "merged" log would either be a lie or a rewrite, and this is the one artifact whose
+/// entire value is that it is neither.
+///
+/// Instead each broker keeps its own chain and the receiver records a `reconcile` entry naming the
+/// bundle's digest and seq range. **The mechanism is already in the tree**: a new day file's first
+/// record carries the previous file's last hash as its `prev_hash`, so day files are already
+/// cross-linked rather than concatenated. This generalizes that across brokers instead of days.
+///
+/// Two honesty properties, both load-bearing:
+///
+/// - **`seq` is per-broker.** Records from two brokers are NOT globally ordered, and any tool that
+///   renders a combined timeline has to say so.
+/// - **Verification failure is an INCIDENT, not a denial.** The log is observability, not
+///   enforcement (spec §7, playbook trap 6). A bundle that does not verify is reported and
+///   recorded; it never blocks a vehicle from operating. Making reconciliation gate anything would
+///   quietly convert the audit log into an enforcement input, which is exactly the rule this
+///   project keeps.
+pub struct Bundle {
+    pub records: Vec<AuditRecord>,
+}
+
+impl Bundle {
+    /// Serialize as a bundle document: the magic, then each record's canonical line.
+    pub fn to_wire(&self) -> String {
+        let mut s = String::from(BUNDLE_MAGIC);
+        s.push('\n');
+        for r in &self.records {
+            s.push_str(&r.to_line());
+            s.push('\n');
+        }
+        s
+    }
+
+    /// The bundle's content hash — `blake3` over the canonical lines, independent of the framing.
+    pub fn digest(&self) -> String {
+        let mut h = blake3::Hasher::new();
+        for r in &self.records {
+            h.update(r.to_line().as_bytes());
+            h.update(b"\n");
+        }
+        h.finalize().to_hex().to_string()
+    }
+
+    /// Re-verify the bundle's internal chain: every record's hash recomputed from its own body, and
+    /// every `prev_hash` matching the previous record's `hash`.
+    ///
+    /// `expected_start` is the hash the segment must chain onto — [`GENESIS_HASH`] for a sender's
+    /// first-ever segment, or the head recorded by the previous reconciliation. Passing `None`
+    /// accepts any starting point and is only appropriate for a first contact; a caller that knows
+    /// the previous head and does not pass it has thrown away the property that makes a *sequence*
+    /// of bundles tamper-evident (a dropped middle segment would go unnoticed).
+    pub fn verify(&self, expected_start: Option<&str>) -> Result<BundleSummary, AuditError> {
+        if self.records.is_empty() {
+            return Err(AuditError::corrupt(0, "bundle contains no records"));
+        }
+        let mut prev = expected_start.map(str::to_string);
+        for r in &self.records {
+            if let Some(p) = &prev {
+                if &r.prev_hash != p {
+                    return Err(AuditError::corrupt(
+                        r.seq,
+                        format!(
+                            "prev_hash `{}` does not chain onto `{p}` — a segment is missing, \
+                             reordered, or altered",
+                            r.prev_hash
+                        ),
+                    ));
+                }
+            }
+            let recomputed = chain_hash(&r.prev_hash, &canonical_json(&r.body_value()));
+            if recomputed != r.hash {
+                return Err(AuditError::corrupt(r.seq, "record hash does not match its own body (tampered)"));
+            }
+            prev = Some(r.hash.clone());
+        }
+        Ok(BundleSummary {
+            digest: self.digest(),
+            records: self.records.len(),
+            first_seq: self.records[0].seq,
+            last_seq: self.records[self.records.len() - 1].seq,
+            head: self.records[self.records.len() - 1].hash.clone(),
+        })
+    }
+}
+
+/// Parse a bundle document. A malformed line is a hard error: a transcript this build can only
+/// partly read is a transcript it must not summarize.
+pub fn parse_bundle(text: &str) -> Result<Bundle, AuditError> {
+    let mut lines = text.lines();
+    match lines.next().map(str::trim) {
+        Some(BUNDLE_MAGIC) => {}
+        other => return Err(AuditError::corrupt(0, format!("not an audit bundle (magic {other:?})"))),
+    }
+    let mut records = Vec::new();
+    for (i, line) in lines.enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let v: Value = serde_json::from_str(line)
+            .map_err(|e| AuditError::corrupt(i as u64, format!("line {i} is not JSON: {e}")))?;
+        let r = AuditRecord::from_value(&v)
+            .ok_or_else(|| AuditError::corrupt(i as u64, format!("line {i} is not a record")))?;
+        records.push(r);
+    }
+    Ok(Bundle { records })
+}
+
+/// Read every record in `dir` as a [`Bundle`] — the sender's side of reconciliation.
+pub fn bundle(dir: impl AsRef<Path>) -> Result<Bundle, AuditError> {
+    Ok(Bundle { records: read_all_records(dir.as_ref())? })
+}
+
 // ----- internals ---------------------------------------------------------------------------------
 
 /// Read every record (skipping headers) across sorted day files, in order. Does NOT verify the chain
