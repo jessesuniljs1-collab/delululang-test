@@ -391,6 +391,78 @@ pub fn verify_chain(
     Ok(chain[chain.len() - 1].authority.clone())
 }
 
+// ===================================================================================================
+// RFC 0001 phase F3 — the subordinate broker: adopting a chain as a local root.
+// ===================================================================================================
+
+impl crate::tree::Broker {
+    /// **Adopt** a verified certificate chain as a local root node (RFC 0001 F3).
+    ///
+    /// This is what makes a vehicle's broker a *real* broker rather than a cache. After adoption
+    /// the node lives in this tree with this tree's rules: `Actuate` round-trips to it locally and
+    /// synchronously at full speed, `grants revoke` reaches it, the Guard applies, and the audit
+    /// chain records it. **The link is never in the command path.**
+    ///
+    /// Three properties are enforced here rather than left to the caller:
+    ///
+    /// 1. **The node's TTL is the MINIMUM `not_after` across the whole chain**, not the leaf's. A
+    ///    chain is only as live as its shortest hop, and expiry is the only bound that survives a
+    ///    partition — so the credential's expiry becomes the node's expiry, enforced by the same
+    ///    TTL machinery every other grant uses. This is what makes "revocation degrades to lease
+    ///    TTL across a partition" (RFC §4.5) a mechanism rather than a promise.
+    /// 2. **A chain may be adopted only ONCE per broker lifetime.** Without this, `grants revoke`
+    ///    on an adopted node is undone by presenting the same certificate again — a
+    ///    revocation-evasion path, and a serious one, since revocation is the only tool an operator
+    ///    has while the link is up. The scope is the process lifetime because that is exactly the
+    ///    scope of the revocation it protects: this broker's tree is in memory, so a restart clears
+    ///    both together and a legitimate post-restart re-adoption still works.
+    /// 3. **The adoption is audited with the chain's fingerprint**, so the vehicle's own log answers
+    ///    "where did this authority come from?" without reference to the ground's log.
+    ///
+    /// The returned node is a root *locally* and bounded *globally*: nothing about holding it lets
+    /// the holder exceed what the ground signed, because the authority stored is exactly what
+    /// [`verify_chain`] returned.
+    pub fn adopt(
+        &mut self,
+        chain: &[Certificate],
+        anchors: &BTreeSet<String>,
+        verifier: &dyn SignatureVerifier,
+        holder: crate::tree::Holder,
+    ) -> Result<crate::tree::GrantId, Denial> {
+        let now = self.effective_now();
+        let authority = verify_chain(chain, anchors, verifier, now)?;
+        let leaf = chain.last().expect("verify_chain rejects an empty chain");
+        let fingerprint = leaf.fingerprint();
+        if self.is_adopted(&fingerprint) {
+            let seq = self.consume_seq();
+            self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
+            return Err(Denial::CertUntrusted {
+                detail: format!(
+                    "certificate `{fingerprint}` has already been adopted by this broker. A second \
+                     adoption is refused because it would restore authority an operator may have \
+                     revoked — re-presenting a credential must not undo a revocation"
+                ),
+            });
+        }
+        // The shortest hop wins. Using the leaf's window alone would let a short-lived root be
+        // outlived by the authority it delegated, which is precisely backwards.
+        let ttl_millis = chain.iter().map(|c| c.not_after).min();
+        self.mark_adopted(&fingerprint);
+        let node = self.issue(holder, authority, ttl_millis);
+        let seq = self.consume_seq();
+        self.record_op(
+            seq,
+            "adopt",
+            Some(node.as_str().to_string()),
+            Some(fingerprint),
+            None,
+            "allow",
+            None,
+        );
+        Ok(node)
+    }
+}
+
 fn to_hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut s = String::with_capacity(bytes.len() * 2);
@@ -613,6 +685,87 @@ mod tests {
         // …and for a stray top-level key, which could be anything.
         let json = serde_json::json!({ "effects": [], "scopes": {}, "override": true });
         assert_eq!(authority_from_json(&json).unwrap_err().code(), "DL1418");
+    }
+
+    // ----- F3: adoption ---------------------------------------------------------------------
+
+    fn broker_at(now: i64) -> crate::tree::Broker {
+        crate::tree::Broker::with_sources(
+            Box::new(crate::ids::SeqIdSource::new()),
+            Box::new(crate::time::ManualClock::new(now)),
+        )
+    }
+    fn holder() -> crate::tree::Holder {
+        crate::tree::Holder::new("process", "vehicle", "local")
+    }
+
+    #[test]
+    fn adopting_a_chain_creates_a_local_root_holding_exactly_the_leafs_authority() {
+        let mut b = broker_at(500);
+        let chain = ground_to_vehicle();
+        let node = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).expect("adopts");
+        let stored = b.inspect(&node).expect("the node is in the local tree");
+        assert!(stored.parent.is_none(), "it is a ROOT locally…");
+        assert_eq!(
+            stored.authority.scopes.device.get("sat0/hga").and_then(|d| d.dims.get("slew_deg").copied()),
+            Some((-5.0, 5.0)),
+            "…and bounded globally by what the ground signed"
+        );
+        // And it behaves like any other node: the local Actuate check runs against it, at full
+        // speed, with no link in the path.
+        assert!(b.check(&node, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow());
+        assert!(
+            b.check(&node, crate::validate::Op::Actuate, Some("sat0/thruster")).denial().is_some(),
+            "a device the certificate never granted is refused locally"
+        );
+    }
+
+    /// The TTL is the SHORTEST hop's, not the leaf's. A short-lived root must not be outlived by
+    /// the authority it delegated.
+    #[test]
+    fn the_adopted_ttl_is_the_shortest_hop_in_the_chain() {
+        let root = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 2_000));
+        let leaf = cert("vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 9_000));
+        let mut b = broker_at(500);
+        let node = b.adopt(&[root, leaf], &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert_eq!(
+            b.inspect(&node).unwrap().ttl_millis,
+            Some(2_000),
+            "the root's earlier expiry bounds the adopted node"
+        );
+    }
+
+    /// **Revocation must not be undoable by replay.** Without single-adoption, an operator's
+    /// `grants revoke` — the only tool they have while the link is up — is defeated by presenting
+    /// the same certificate again.
+    #[test]
+    fn a_certificate_cannot_be_adopted_twice_so_replay_cannot_undo_a_revocation() {
+        let mut b = broker_at(500);
+        let chain = ground_to_vehicle();
+        let node = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        b.revoke(&node, &node).expect("the operator revokes it");
+        assert!(b.check(&node, crate::validate::Op::Actuate, Some("sat0/hga")).denial().is_some());
+
+        let err = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+        assert_eq!(err.code(), "DL1415");
+        assert!(format!("{err:?}").contains("already been adopted"));
+    }
+
+    #[test]
+    fn adoption_refuses_exactly_what_chain_verification_refuses() {
+        let chain = ground_to_vehicle();
+        // Unknown anchor.
+        assert!(broker_at(500).adopt(&chain, &anchors(&["nobody"]), &FakeVerifier, holder()).is_err());
+        // Outside the window: the broker's OWN clock decides, not the presenter's.
+        assert_eq!(
+            broker_at(50_000)
+                .adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder())
+                .unwrap_err()
+                .code(),
+            "DL1417"
+        );
+        // Empty chain grants nothing.
+        assert!(broker_at(500).adopt(&[], &anchors(&["ground"]), &FakeVerifier, holder()).is_err());
     }
 
     #[test]

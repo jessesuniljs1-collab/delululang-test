@@ -152,6 +152,10 @@ pub enum ReqBody {
     Delegate { parent: String, authority: AuthoritySpec, multi: bool, owner: Option<String> },
     /// Redeem a token, binding it to `peer`.
     Redeem { token: String, peer: String },
+    /// RFC 0001 F3: verify a grant-certificate chain and adopt it as a LOCAL ROOT node. `chain` is
+    /// the wire text of each certificate, root-most first; `anchors` are the hex public keys this
+    /// broker will trust to issue. Additive `broker/1` variant (both ends are one binary).
+    Adopt { chain: Vec<String>, anchors: Vec<String> },
     /// Revoke `target` on behalf of `caller` (transitive).
     Revoke { caller: String, target: String },
     /// Per-use validation of a synchronous-class op (spec §4.4).
@@ -221,6 +225,10 @@ pub enum Response {
     Issued { node: String },
     Delegated { node: String, token: String },
     Redeemed { node: String },
+    /// `Adopt` reply (RFC 0001 F3): the local root minted from a verified chain, plus the chain's
+    /// leaf fingerprint (the vehicle's own answer to "where did this authority come from?") and the
+    /// adopted TTL, which is the shortest hop's expiry.
+    Adopted { node: String, fingerprint: String, ttl_millis: Option<i64> },
     Revoked { by_seq: u64, epoch: u64, newly_revoked: Vec<String> },
     /// A per-use decision (synchronous-class). `allow=false` carries the denial code/message.
     /// `warn` (Stage 5 chunk 6) is an agent-side note for a `warn`-tier or bypassed-guarded use that

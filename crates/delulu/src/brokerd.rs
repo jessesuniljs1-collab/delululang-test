@@ -320,6 +320,35 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::Adopt { chain, anchors } => {
+            // Parse first: a malformed certificate is DL1418 and never reaches the tree.
+            let mut certs = Vec::with_capacity(chain.len());
+            let mut parse_err = None;
+            for text in &chain {
+                match delulu_broker::cert::parse(text) {
+                    Ok(c) => certs.push(c),
+                    Err(d) => {
+                        parse_err = Some(d);
+                        break;
+                    }
+                }
+            }
+            match parse_err {
+                Some(d) => (deny_response(&d), false),
+                None => {
+                    let anchors: std::collections::BTreeSet<String> = anchors.iter().cloned().collect();
+                    let holder = delulu_broker::Holder::new("federated", "adopted grant certificate", "chain");
+                    let fingerprint = certs.last().map(|c| c.fingerprint()).unwrap_or_default();
+                    match broker.adopt(&certs, &anchors, &crate::cert_crypto::Ed25519Verifier, holder) {
+                        Ok(id) => {
+                            let ttl_millis = broker.inspect(&id).and_then(|n| n.ttl_millis);
+                            (Response::Adopted { node: id.to_string(), fingerprint, ttl_millis }, false)
+                        }
+                        Err(d) => (deny_response(&d), false),
+                    }
+                }
+            }
+        }
         ReqBody::Revoke { caller, target } => {
             let caller = GrantId::from_trusted(caller);
             let target = GrantId::from_trusted(target);

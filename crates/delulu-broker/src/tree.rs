@@ -110,6 +110,10 @@ pub struct Broker {
     /// Nonces of single-use tokens already redeemed (phase 5e). A second redemption of a single-use
     /// token whose nonce is here is DL1407. `--multi` tokens are neither checked nor recorded here.
     redeemed: HashSet<String>,
+    /// Fingerprints of grant-certificate chains already adopted (RFC 0001 F3). Closes a
+    /// revocation-evasion path: without it, `grants revoke` on an adopted node could be undone by
+    /// simply presenting the same certificate again.
+    adopted: HashSet<String>,
     /// The Guard (Stage 5 chunk 6): policy, permits, pending requests, bypass flag, owner code —
     /// all daemon-memory only (the CLI injects a persisted policy + the print-once owner code). A
     /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
@@ -152,6 +156,7 @@ impl Broker {
             sink: None,
             key: None,
             redeemed: HashSet::new(),
+            adopted: HashSet::new(),
             guard: crate::guard::GuardState::new(),
         }
     }
@@ -244,6 +249,17 @@ impl Broker {
     /// Record a token nonce as redeemed (single-use tracking, phase 5e).
     pub(crate) fn mark_redeemed(&mut self, nonce: &str) {
         self.redeemed.insert(nonce.to_string());
+    }
+
+    /// Has this certificate chain already been adopted in THIS broker's lifetime (RFC 0001 F3)?
+    pub(crate) fn is_adopted(&self, fingerprint: &str) -> bool {
+        self.adopted.contains(fingerprint)
+    }
+
+    /// Record a certificate chain as adopted. Scoped to the process lifetime on purpose — see
+    /// [`Broker::adopt`] for why that is both sufficient and necessary.
+    pub(crate) fn mark_adopted(&mut self, fingerprint: &str) {
+        self.adopted.insert(fingerprint.to_string());
     }
 
     /// Bind a node's holder `peer` to the redeeming party (phase 5e). Storage/display ONLY — never a

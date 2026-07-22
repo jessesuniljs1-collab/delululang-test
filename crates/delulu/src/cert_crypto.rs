@@ -14,18 +14,6 @@
 //! REFUSES with DL1418 instead of treating an unverifiable signature as unsigned. The
 //! self-describing `alg` field is what makes adding it later a format-compatible change.
 
-// Built before its consumer, deliberately and temporarily. RFC 0001 phase **F3** (the subordinate
-// broker) is what calls this from the binary; F2's deliverable is the format plus a *proven* real
-// backend, and proving it needs the tests below, which do exercise every item here. The same
-// pattern is already in the tree where a mechanism must exist before the thing it governs —
-// `Profile::Hw` exists "so the artifact-hash gate has something real to gate", and `exec_native` is
-// "the leash built before the animal".
-//
-// This `allow` is scoped to this module and is expected to be DELETED by F3. If F3 lands and these
-// are still unused, that is a finding, not a formality: it would mean the subordinate broker is
-// verifying certificates some other way.
-#![allow(dead_code)]
-
 use delulu_broker::cert::SignatureVerifier;
 
 /// The algorithm name a certificate must carry for this backend to verify it.
@@ -58,6 +46,20 @@ impl SignatureVerifier for Ed25519Verifier {
 /// form the verifier above expects. `seed` is the issuer's private key seed.
 pub fn sign(seed: &[u8; 32], msg: &[u8]) -> Vec<u8> {
     delulu_runtime::plugin::sign_detached(seed, msg)
+}
+
+/// A fresh 128-bit random nonce, hex. Two certificates with otherwise identical fields still
+/// fingerprint differently, so re-issuing a grant produces a distinguishable credential rather than
+/// one that collides with the certificate it replaces — which matters because a fingerprint is what
+/// the single-adoption rule keys on.
+pub fn fresh_nonce() -> String {
+    let mut b = [0u8; 16];
+    getrandom::fill(&mut b).expect("OS randomness (getrandom) unavailable");
+    b.iter().fold(String::with_capacity(32), |mut s, x| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 
 /// The hex public key corresponding to a private seed — an issuer's identity, as it appears in a

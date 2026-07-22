@@ -53,6 +53,13 @@ pub(crate) fn static_code(code: &str) -> &'static str {
         "DL1412" => "DL1412",
         "DL1413" => "DL1413",
         "DL1414" => "DL1414",
+        // Grant certificates (RFC 0001 F2/F3). Without these the fallback below would report a
+        // certificate refusal as "broker unreachable" — an operator would go looking for a dead
+        // daemon while the real answer was that the credential did not verify.
+        "DL1415" => "DL1415",
+        "DL1416" => "DL1416",
+        "DL1417" => "DL1417",
+        "DL1418" => "DL1418",
         _ => "DL1401",
     }
 }

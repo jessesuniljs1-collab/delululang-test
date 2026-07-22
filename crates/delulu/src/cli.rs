@@ -675,6 +675,8 @@ fn usage() -> &'static str {
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--multi] [--owner CODE]  (prints a lease token)\n\
+     \x20 delulu grants    certify --subject HEX --effects E,.. [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
@@ -3822,6 +3824,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
         eprintln!(
             "error: `grants` needs a subcommand: list | tree | inspect <g_ID> | revoke <g_ID> | \
+             certify | adopt | pubkey | \
              delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--device DEV:..] [--ttl 1h] [--multi]"
         );
         return 2;
@@ -3986,10 +3989,372 @@ fn cmd_grants(rest: &[String]) -> i32 {
             0
         }
         "delegate" => cmd_grants_delegate(args, &state_dir, json),
+        // RFC 0001 F3 — federation. `certify` and `pubkey` are the GROUND side (offline, no
+        // daemon); `adopt` is the VEHICLE side.
+        "certify" => cmd_grants_certify(args, json),
+        "pubkey" => cmd_grants_pubkey(args, json),
+        "adopt" => cmd_grants_adopt(args, &state_dir, json),
         other => {
-            eprintln!("error: unknown grants subcommand `{other}` (list | tree | inspect | revoke | delegate)");
+            eprintln!(
+                "error: unknown grants subcommand `{other}` \
+                 (list | tree | inspect | revoke | delegate | certify | adopt | pubkey)"
+            );
             2
         }
+    }
+}
+
+// ===================================================================================================
+// RFC 0001 phase F3 — the federation verbs.
+//
+// The broker NEVER opens a network socket (RFC §1). These three commands read and write
+// self-contained signed documents; carrying them across a link is the operator's existing
+// business — a pass, a file drop, a store-and-forward queue. DeluluLang does not own the radio.
+// ===================================================================================================
+
+/// `--name value` or `--name=value` (both accepted, like the shared `parse_opts`). Shared by every
+/// `grants` subcommand that parses its own flags.
+fn flag_value(args: &[String], i: &mut usize, name: &str) -> Option<String> {
+    let a = &args[*i];
+    if let Some(v) = a.strip_prefix(name) {
+        if let Some(v) = v.strip_prefix('=') {
+            return Some(v.to_string());
+        }
+    }
+    if a == name && *i + 1 < args.len() {
+        *i += 1;
+        return Some(args[*i].clone());
+    }
+    None
+}
+
+/// Resolve the grant signing-key path. The library never chooses a path (broker ruling 2); this is
+/// the CLI's decision, alongside `~/.delulu/broker.key`.
+fn grant_key_path(explicit: Option<&str>) -> Option<std::path::PathBuf> {
+    match explicit {
+        Some(p) => Some(std::path::PathBuf::from(p)),
+        None => crate::brokerd::resolve_state_dir(None).map(|d| d.join("grant.key")),
+    }
+}
+
+/// `delulu grants pubkey [--key FILE]` — print the public identity of a signing key.
+///
+/// This is the value that goes in a peer's trust-anchor list and in a certificate's `subject`. It
+/// is deliberately its own command: an operator should be able to answer "what am I trusting?"
+/// without minting anything.
+fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
+    let mut key: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(v) = flag_value(args, &mut i, "--key") {
+            key = Some(v);
+        }
+        i += 1;
+    }
+    let Some(path) = grant_key_path(key.as_deref()) else {
+        eprintln!("error: cannot resolve the key path (no HOME/USERPROFILE) — pass --key FILE");
+        return 2;
+    };
+    let seed = match delulu_broker::load_or_create_key(&path) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: cannot load or create the grant key at {}: {e}", path.display());
+            return 2;
+        }
+    };
+    let hex = crate::cert_crypto::public_key_hex(&seed);
+    if json {
+        let report = serde_json::json!({ "command": "grants pubkey", "schema": 1, "pubkey": hex });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    } else {
+        println!("{hex}");
+    }
+    0
+}
+
+/// `delulu grants certify --subject HEX --effects E,.. [--device D].. --ttl 1h [--key F]
+/// [--parent-cert F] [--out F]`
+///
+/// Mint one grant certificate. **Offline by design** — no daemon, no tree, no network. The ground
+/// segment can run this on an air-gapped machine and hand the result to a spacecraft over whatever
+/// link exists.
+fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
+    let mut effects: Vec<String> = Vec::new();
+    let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
+    let mut device: Vec<String> = Vec::new();
+    let (mut subject, mut ttl, mut key, mut parent_cert, mut out) = (None, None, None, None, None);
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--json" {
+            // handled by the caller
+        } else if let Some(v) = flag_value(args, &mut i, "--effects") {
+            effects.extend(v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+        } else if let Some(v) = flag_value(args, &mut i, "--device") {
+            device.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--fs-read") {
+            fs_read.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--fs-write") {
+            fs_write.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--net") {
+            net.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--subject") {
+            subject = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
+            ttl = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--key") {
+            key = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--parent-cert") {
+            parent_cert = Some(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--out") {
+            out = Some(v);
+        } else {
+            eprintln!("error: unknown `grants certify` argument `{a}`");
+            return 2;
+        }
+        i += 1;
+    }
+    let Some(subject) = subject else {
+        eprintln!(
+            "error: `grants certify` needs --subject HEX (the holder's public key; get it with \
+             `delulu grants pubkey` on that machine)"
+        );
+        return 2;
+    };
+    let Some(ttl_str) = ttl else {
+        eprintln!(
+            "error: `grants certify` needs --ttl (e.g. 20m for a contact window). A certificate \
+             with no expiry cannot be revoked across a partition, and expiry is the ONLY bound that \
+             survives one"
+        );
+        return 2;
+    };
+    let Some(ttl_ms) = parse_ttl_millis(&ttl_str) else {
+        eprintln!("error: bad --ttl `{ttl_str}` (use e.g. 500ms, 90s, 30m, 1h, 2d)");
+        return 2;
+    };
+    for e in &effects {
+        if Effect::core_from_name(e).is_none() {
+            eprintln!("error: unknown effect `{e}`");
+            return 2;
+        }
+    }
+    // Canonicalize device envelopes through the broker's parser, reporting its message verbatim —
+    // the same discipline `grants delegate --device` uses.
+    let mut device_canon = Vec::with_capacity(device.len());
+    for d in &device {
+        match delulu_broker::device_scope::parse(d) {
+            Ok(p) => device_canon.push(p),
+            Err(e) => {
+                eprintln!("error: bad --device `{d}`: {e}");
+                return 2;
+            }
+        }
+    }
+    let Some(path) = grant_key_path(key.as_deref()) else {
+        eprintln!("error: cannot resolve the key path (no HOME/USERPROFILE) — pass --key FILE");
+        return 2;
+    };
+    let seed = match delulu_broker::load_or_create_key(&path) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("error: cannot load or create the grant key at {}: {e}", path.display());
+            return 2;
+        }
+    };
+    // Chain onto a parent certificate, or anchor. When chaining, the parent is READ AND VERIFIED
+    // structurally here so an operator finds out now — not on the vehicle — that they signed with
+    // the wrong key or asked for more than they hold.
+    let (parent_link, parent_authority) = match &parent_cert {
+        None => (delulu_broker::cert::ANCHOR.to_string(), None),
+        Some(f) => {
+            let text = match std::fs::read_to_string(f) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("error: cannot read --parent-cert {f}: {e}");
+                    return 2;
+                }
+            };
+            match delulu_broker::cert::parse(&text) {
+                Ok(p) => {
+                    let me = crate::cert_crypto::public_key_hex(&seed);
+                    if p.subject != me {
+                        eprintln!(
+                            "error: --parent-cert was delegated to `{}`, but this key is `{me}`. \
+                             Only the holder may delegate onward, so the vehicle would refuse this \
+                             chain (DL1415). Sign with the key the parent names as its subject.",
+                            p.subject
+                        );
+                        return 2;
+                    }
+                    (p.fingerprint(), Some(p.authority))
+                }
+                Err(d) => {
+                    eprintln!("error: --parent-cert does not parse: {}", d.to_diagnostic().message);
+                    return 2;
+                }
+            }
+        }
+    };
+    let now = now_millis();
+    let authority = delulu_broker::Authority::new(
+        effects.iter().filter_map(|e| Effect::core_from_name(e)),
+        delulu_broker::Scopes {
+            fs_read: fs_read.into_iter().collect(),
+            fs_write: fs_write.into_iter().collect(),
+            net: net.into_iter().collect(),
+            device: device_canon.into_iter().map(|d| (d.device.clone(), d)).collect(),
+            ..Default::default()
+        },
+    );
+    // Catch a widening at MINT time rather than letting the holder discover it at use time. The
+    // vehicle would refuse it anyway (DL1416) — but by then it is out of contact.
+    if let Some(pa) = &parent_authority {
+        if let Err(intersection) = delulu_broker::attenuation_check(&authority, pa) {
+            eprintln!(
+                "error: this certificate asks for more than --parent-cert holds, so the vehicle \
+                 would refuse the chain (DL1416).\n  requested: {}\n  most it can carry: {}",
+                authority.render_compact(),
+                intersection.render_compact()
+            );
+            return 2;
+        }
+    }
+    let mut c = delulu_broker::cert::Certificate {
+        alg: crate::cert_crypto::ALG_ED25519.to_string(),
+        issuer: crate::cert_crypto::public_key_hex(&seed),
+        subject,
+        parent: parent_link,
+        not_before: now,
+        not_after: now + ttl_ms,
+        nonce: crate::cert_crypto::fresh_nonce(),
+        authority,
+        sig: Vec::new(),
+    };
+    c.sig = crate::cert_crypto::sign(&seed, &c.signing_bytes());
+    let wire = c.to_wire();
+    if let Some(f) = &out {
+        if let Err(e) = std::fs::write(f, &wire) {
+            eprintln!("error: cannot write {f}: {e}");
+            return 2;
+        }
+    }
+    if json {
+        let report = serde_json::json!({
+            "command": "grants certify",
+            "schema": 1,
+            "issuer": c.issuer,
+            "subject": c.subject,
+            "fingerprint": c.fingerprint(),
+            "not_after": c.not_after,
+            "certificate": wire,
+        });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    } else if out.is_some() {
+        eprintln!("wrote {} ({} bytes)", out.as_deref().unwrap_or(""), wire.len());
+        eprintln!("fingerprint: {}", c.fingerprint());
+        eprintln!("expires:     {}", delulu_broker::render_ts_utc(c.not_after));
+    } else {
+        print!("{wire}");
+    }
+    0
+}
+
+/// `delulu grants adopt <cert-file>... [--anchor HEX]... [--anchors-file F]`
+///
+/// The vehicle side: verify a chain and adopt it as a LOCAL ROOT. After this the on-vehicle broker
+/// is a real broker — `Actuate` round-trips to it locally at full speed, `grants revoke` reaches
+/// it, and no link sits in the command path.
+fn cmd_grants_adopt(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
+    let mut files: Vec<String> = Vec::new();
+    let mut anchors: Vec<String> = Vec::new();
+    let mut anchors_file: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--json" {
+        } else if let Some(_v) = flag_value(args, &mut i, "--state-dir") {
+        } else if let Some(v) = flag_value(args, &mut i, "--anchor") {
+            anchors.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--anchors-file") {
+            anchors_file = Some(v);
+        } else if a.starts_with("--") {
+            eprintln!("error: unknown `grants adopt` argument `{a}`");
+            return 2;
+        } else {
+            files.push(a.to_string());
+        }
+        i += 1;
+    }
+    if files.is_empty() {
+        eprintln!(
+            "error: `grants adopt` needs at least one certificate file, root-most FIRST \
+             (delulu grants adopt ground.dlcert vehicle.dlcert --anchor <hex>)"
+        );
+        return 2;
+    }
+    // Anchors may also live in a file, one hex key per line, `#` comments allowed. The default is
+    // `<state-dir>/anchors`; an absent file is NOT an error but an EMPTY anchor set, which trusts
+    // nothing — the fail-closed reading.
+    let anchors_path =
+        anchors_file.map(std::path::PathBuf::from).unwrap_or_else(|| state_dir.join("anchors"));
+    if let Ok(text) = std::fs::read_to_string(&anchors_path) {
+        for line in text.lines() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            if !line.is_empty() {
+                anchors.push(line.to_string());
+            }
+        }
+    }
+    if anchors.is_empty() {
+        eprintln!(
+            "error: no trust anchors. A chain must be rooted in a key you configured — an unknown \
+             issuer is refused, never assumed trustworthy for being well-formed.\n  \
+             Pass --anchor <hex>, or list one key per line in {}",
+            anchors_path.display()
+        );
+        return 2;
+    }
+    let mut chain = Vec::with_capacity(files.len());
+    for f in &files {
+        match std::fs::read_to_string(f) {
+            Ok(t) => chain.push(t),
+            Err(e) => {
+                eprintln!("error: cannot read {f}: {e}");
+                return 2;
+            }
+        }
+    }
+    match grants_rpc(state_dir, crate::broker_ipc::ReqBody::Adopt { chain, anchors }, json) {
+        Ok(crate::broker_ipc::Response::Adopted { node, fingerprint, ttl_millis }) => {
+            if json {
+                let report = serde_json::json!({
+                    "command": "grants adopt",
+                    "schema": 1,
+                    "node": node,
+                    "fingerprint": fingerprint,
+                    "ttl_millis": ttl_millis,
+                });
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else {
+                println!("{node}");
+                eprintln!("adopted:  {fingerprint}");
+                match ttl_millis {
+                    Some(t) => eprintln!(
+                        "expires:  {} (the shortest hop in the chain — and, across a partition, \
+                         the ONLY bound left)",
+                        delulu_broker::render_ts_utc(t)
+                    ),
+                    None => eprintln!("expires:  never"),
+                }
+            }
+            0
+        }
+        Ok(other) => {
+            eprintln!("error: unexpected adopt response: {other:?}");
+            2
+        }
+        Err(code) => code,
     }
 }
 
@@ -3999,21 +4364,6 @@ fn cmd_grants(rest: &[String]) -> i32 {
 /// command line is the human action at the top of the tree (spec §3.1).
 fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool) -> i32 {
     use crate::broker_ipc::{AuthoritySpec, ReqBody, Response};
-
-    /// `--name value` or `--name=value` (both accepted, like the shared `parse_opts`).
-    fn flag_value(args: &[String], i: &mut usize, name: &str) -> Option<String> {
-        let a = &args[*i];
-        if let Some(v) = a.strip_prefix(name) {
-            if let Some(v) = v.strip_prefix('=') {
-                return Some(v.to_string());
-            }
-        }
-        if a == name && *i + 1 < args.len() {
-            *i += 1;
-            return Some(args[*i].clone());
-        }
-        None
-    }
 
     let mut effects: Vec<String> = Vec::new();
     let (mut fs_read, mut fs_write, mut net) = (Vec::new(), Vec::new(), Vec::new());
