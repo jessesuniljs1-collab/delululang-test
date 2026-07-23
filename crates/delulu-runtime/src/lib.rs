@@ -66,6 +66,47 @@ mod tests {
     }
 
 
+    // ----- named functions as values (HARDENING_CAMPAIGN C13) ---------------
+    //
+    // The checker types `apply(double, 21)` correctly — row polymorphism exists precisely so
+    // that it can — and a LAMBDA in that position always worked. Only a *named* function was
+    // missing from `eval_var`, so the program checked clean and then faulted at runtime with
+    // "unbound name `double`". `run()` above asserts the program checks first, so each of
+    // these tests is exactly the check-passes-but-runtime-fails shape the defect had.
+
+    #[test]
+    fn a_named_function_passed_as_a_value_is_callable() {
+        let g = Grants { console: true, ..Default::default() };
+        let out = run(
+            "module m\nfn double(n: Int) -> Int { n * 2 }\nfn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e { f(x) }\nfn main(root: Root) ! {Write} { let c = root.console()\n c.println(str(apply(double, 21))) }\n",
+            g,
+        );
+        assert!(out.is_ok(), "a named function used as a value must be callable: {:?}", out.err());
+    }
+
+    #[test]
+    fn a_named_function_works_as_a_map_callback() {
+        let g = Grants { console: true, ..Default::default() };
+        let out = run(
+            "module m\nfn triple(n: Int) -> Int { n * 3 }\nfn main(root: Root) ! {Write} { let c = root.console()\n let xs: val List[Int] = [1, 2, 3]\n let ys = xs.map(triple)\n c.println(str(ys.len())) }\n",
+            g,
+        );
+        assert!(out.is_ok(), "a named function must work as a callback: {:?}", out.err());
+    }
+
+    #[test]
+    fn a_function_value_sees_the_same_globals_a_direct_call_would() {
+        // The closure built for a named function closes over the globals, so calling it
+        // through a value and calling it by name must be the same computation — including
+        // its reach to other top-level functions and constants.
+        let g = Grants { console: true, ..Default::default() };
+        let out = run(
+            "module m\nlet BUMP: Int = 10\nfn helper(n: Int) -> Int { n + BUMP }\nfn outer(n: Int) -> Int { helper(n) * 2 }\nfn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e { f(x) }\nfn main(root: Root) ! {Write} { let c = root.console()\n let direct = outer(1)\n let indirect = apply(outer, 1)\n assert_eq(direct, indirect)\n c.println(str(indirect)) }\n",
+            g,
+        );
+        assert!(out.is_ok(), "value-call and name-call must agree: {:?}", out.err());
+    }
+
     #[test]
     fn runs_pure_arithmetic_and_returns_unit() {
         let mut g = Grants::default();

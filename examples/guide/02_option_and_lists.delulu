@@ -1,0 +1,76 @@
+module guide.lists
+
+// Lists are indexed with `get`, and `get` is TOTAL: it returns `Option[T]`, never a
+// crash and never a silent wrong answer. There is no way to index a list unsafely,
+// so the "index out of bounds" class of bug does not exist here.
+// The standard shape: match the Option and decide what absence means.
+fn at_or(xs: List[Int], i: Int, fallback: Int) -> Int {
+    match xs.get(i) {
+        Some(v) => v
+        None => fallback
+    }
+}
+
+fn sum(xs: List[Int]) -> Int {
+    var total = 0
+    var i = 0
+    while i < xs.len() {
+        total = total + at_or(xs, i, 0)
+        i = i + 1
+    }
+    total
+}
+
+fn largest(xs: List[Int]) -> Option[Int] {
+    if xs.len() == 0 {
+        None
+    } else {
+        var best = at_or(xs, 0, 0)
+        var i = 1
+        while i < xs.len() {
+            let v = at_or(xs, i, best)
+            if v > best {
+                best = v
+            } else {
+                best = best
+            }
+            i = i + 1
+        }
+        Some(best)
+    }
+}
+
+// `push` MUTATES the list in place and yields `Unit` — it is a statement, not an
+// expression. Note the binding is `let`, not `var`: the list cell is what changes,
+// not which list the name refers to. A `var` list is `val` (immutable, shareable)
+// and pushing to it is DL1603.
+// There is no `()` unit literal, so an "else do nothing" branch is written by
+// leaving the `else` off entirely: an `if` with no `else` is a statement.
+fn evens_up_to(n: Int) -> List[Int] {
+    let out = []
+    var i = 0
+    while i <= n {
+        if i % 2 == 0 { out.push(i) }
+        i = i + 1
+    }
+    out
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    // Reference capabilities (Stage 7). A plain `let xs = [...]` is `ref`: mutable and
+    // local to this frame. A parameter declared without a prefix is `val`: immutable and
+    // freely shareable. Passing `ref` where `val` is wanted is DL1603 — so a list you only
+    // ever read is declared `val`, which is also what lets it cross to another actor
+    // safely. The other direction works too: declare the parameter `ref List[Int]` when
+    // the function is meant to receive a mutable list.
+    let xs: val List[Int] = [5, 3, 9, 1, 7]
+    out.println("sum     = " + str(sum(xs)))
+    out.println("evens   = " + str(evens_up_to(10).len()))
+    match largest(xs) {
+        Some(m) => out.println("largest = " + str(m))
+        None => out.println("largest = (empty list)")
+    }
+    // Out of range is not an error — it is `None`, and you decide what it means.
+    out.println("xs[99]  = " + str(at_or(xs, 99, -1)))
+}

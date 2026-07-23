@@ -1,0 +1,52 @@
+module guide.errors
+
+// DeluluLang has no exceptions. A function that can fail says so in its return type,
+// and the caller must deal with it. There is no invisible control flow, which is what
+// keeps the effect row an honest summary of what a call can do.
+//
+// `Result[T, E]` is the shape; `Ok(v)` and `Err(e)` are its two variants. The error
+// type is an ordinary sum, so a caller can `match` on WHY something failed instead of
+// picking apart a message string.
+type ParseErr = Empty | NotANumber(Str)
+
+// Named `to_int`, not `parse_int`: `parse_int` is a prelude builtin, and redefining a
+// builtin is DL0302 — calls would resolve to the builtin and never to your function.
+//
+// It also shows the common conversion. The builtin answers `Option[Int]` — "a number
+// or not" — and this wraps that into a `Result` that says which failure happened.
+fn to_int(s: Str) -> Result[Int, ParseErr] {
+    if s.len() == 0 {
+        Err(Empty)
+    } else {
+        match parse_int(s) {
+            Some(n) => Ok(n)
+            None => Err(NotANumber(s))
+        }
+    }
+}
+
+fn describe(s: Str) -> Str {
+    match to_int(s) {
+        Ok(n) => "parsed " + str(n)
+        Err(e) => match e { Empty => "empty input", NotANumber(bad) => "not a number: " + bad }
+    }
+}
+
+// `?` propagates an `Err` to the caller unchanged. It works only where the error types
+// already line up — there is no implicit conversion, because a silent error conversion
+// is exactly the kind of invisible behaviour this language refuses.
+//
+// Note the error type: filesystem calls fail with `IoErr`, network calls fail with
+// `NetErr`. Different sums, different variants, and `?` will not bridge them for you.
+fn read_two(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+    let a = fs.read_text("a.txt")?
+    let b = fs.read_text("b.txt")?
+    Ok(a + b)
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    out.println(describe("407"))
+    out.println(describe(""))
+    out.println(describe("40x"))
+}

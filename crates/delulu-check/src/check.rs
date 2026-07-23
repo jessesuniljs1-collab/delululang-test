@@ -18,6 +18,18 @@ use crate::resolve::{DeclTable, FnSig, GKind, TypeDefKind};
 use crate::ty::{Effect, ResourceKind, Row, RowVar, Type, TypeDefId};
 use crate::unify::{InferCtx, UnifyError};
 
+/// The prelude's free builtins (§11) — every name `check_builtin_call` intercepts, plus `None`,
+/// which is intercepted as a bare name.
+///
+/// These are resolved at the call site BEFORE user scope. A module that declares
+/// `fn parse_int(...)` therefore had its definition accepted and every call to it silently
+/// routed to the builtin instead, and the only symptom was a type error at the call site
+/// naming a type the author never wrote. `resolve.rs` refuses the redefinition (DL0302) so the
+/// collision is reported where it is caused. See `HARDENING_CAMPAIGN.md` C11.
+pub const PRELUDE_BUILTINS: &[&str] =
+    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "range", "push"];
+
+
 /// What the checker learned about one function, for the authority report and reachability.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FnFacts {
@@ -317,7 +329,14 @@ impl<'a> Checker<'a> {
     // ===== function checking ==============================================
 
     fn check_fn(&mut self, f: &FnDecl) {
-        let sig = self.table.fns.get(&f.name.name).expect("fn in table").clone();
+        // A function is absent from the table only when `resolve` refused to register it and
+        // already said why — a name that collides with a prelude builtin, today. Returning is
+        // correct: there is no signature to check against, and the reason is already reported.
+        // This was an `expect("fn in table")`, i.e. a host panic one skipped registration away,
+        // and a host panic is never an acceptable answer to a bad program (Stage 9, D15).
+        let Some(sig) = self.table.fns.get(&f.name.name).cloned() else {
+            return;
+        };
         let genv = self.make_genv(&sig);
 
         // Lower the signature.
@@ -1107,6 +1126,9 @@ impl<'a> Checker<'a> {
     }
 
     /// Prelude constructors and free builtins (§11). Returns None if `name` is not a builtin.
+    ///
+    /// Every name here is intercepted at the CALL site before user scope is consulted, which is
+    /// why `PRELUDE_BUILTINS` exists and why redefining one is refused at the declaration.
     fn check_builtin_call(&mut self, name: &str, args: &[Expr], span: Span, ctx: &mut FnCtx) -> Option<(Type, RowAcc)> {
         let mut acc = RowAcc::default();
         let check_args = |slf: &mut Self, ctx: &mut FnCtx, acc: &mut RowAcc| -> Vec<Type> {

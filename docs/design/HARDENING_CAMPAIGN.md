@@ -69,11 +69,18 @@ deviations.
 | C1 | Stage 1 — two unbounded parser loops | **high** (availability) | **CLOSED** — D24 |
 | C2 | CLI — `--json` emits no object on a read failure | medium (machine contract) | OPEN |
 | C3 | Stage 1 — bidirectional-override source is accepted silently | medium (review integrity) | OPEN |
-| C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | OPEN |
-| C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | OPEN |
-| C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | OPEN |
+| C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | **CLOSED** — D25 |
+| C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | **CLOSED** — D25 |
+| C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | **CLOSED** — D25 |
 | C7 | The capability corpus is 8 programs; `tier4-multimodule` has none | medium (evidence) | OPEN |
-| C8 | The interpreter's recursion bound is fixed at 10,000 and appears in no user-facing document | medium (usability) | OPEN |
+| C8 | The interpreter's recursion bound is fixed at 10,000 and appears in no user-facing document | medium (usability) | **CLOSED** (documented) — D25 |
+| C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | OPEN — owner decision |
+| C10 | Runtime — DL0703 refused without naming the grant that would fix it | medium (usability) | **CLOSED** — D25 |
+| C11 | Checker — a user function silently loses to a same-named prelude builtin | **high** (correctness) | **CLOSED** — D25 |
+| C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | OPEN |
+| C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
+| C14 | `DL0907`'s registry text is narrower than the conditions that raise it | low (accuracy) | OPEN |
+| C15 | `delulu fmt` deletes the blank line between two comment paragraphs before an item | medium (fidelity) | OPEN — P9 |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -318,6 +325,115 @@ clamping form is what most languages do. But a negative index reaching `slice` p
 plausible-looking answer instead of a signal, in a language that chose the opposite convention one
 method earlier. Settling this is a design decision, not a bug fix, and it is recorded here for
 that decision rather than being changed unilaterally.
+
+### C9 · There is no LICENSE — OPEN, and it is the owner's decision
+
+No `LICENSE` file exists, and `Cargo.toml` declares no `license` field. Under default copyright
+that means **all rights reserved**: nobody but the copyright holder may use, copy, modify, or
+distribute this code. Measured against the campaign's own objective — that anyone should be able
+to download, build, install, and use DeluluLang in production — this is the single hardest
+blocker, and no amount of engineering moves it.
+
+It is recorded and deliberately **not fixed**. Choosing a licence is a legal commitment with real
+consequences (patent grants, copyleft reach, contributor terms) and it belongs to the copyright
+holder alone. The README now states the situation plainly instead of leaving a reader to discover
+it. Related and smaller: `Cargo.toml` names a `repository` URL that is not published, because this
+project is never pushed by owner policy; the README no longer implies a download exists.
+
+### C11 · A user function silently loses to a same-named prelude builtin — CLOSED (D25)
+
+Found by writing a guide, not by reading code. A program declaring `fn parse_int(s: Str) ->
+Result[Int, ParseErr]` **checked clean in isolation**. Every *call* to it silently resolved to the
+prelude builtin `parse_int`, which returns `Option[Int]`, so the only symptom was a type error at
+a **call site**, naming `Option` — a type the author never wrote — for a function they had
+declared as returning `Result`. Nothing anywhere named the collision.
+
+That is the worst shape a diagnostic can take: correct, distant, and about the wrong thing. It
+took a dozen bisection steps to find in a codebase already well understood; a newcomer would
+simply conclude the language was broken.
+
+Builtins are intercepted at the call site before user scope, so the fix refuses the declaration
+(`DL0302`, an existing code — no new code, so the machine surface and the stability contract are
+untouched) and says why: *"calls resolve to the builtin before user scope, so this definition
+would never be called — rename it."* Refusing is the right resolution rather than letting the
+user's definition win, which would make a call mean different things in different modules.
+
+**A latent host panic came out with it.** `check_fn` looked its signature up with
+`.expect("fn in table")`. Refusing to register a name therefore turned a bad program into a
+process crash — the invariant "every `Item::Fn` is in the table" was held by nothing but
+`resolve.rs` never skipping registration, and the very first skip found it. It now returns
+gracefully, because resolve has already reported the reason. A host panic is never an acceptable
+answer to a bad program (Stage 9, D15, made the same point about DL0905).
+
+**Witnesses.** Three, in `crates/delulu-check/src/lib.rs`. The definitional refusal; a loop
+asserting every name in `PRELUDE_BUILTINS` is refused *without panicking*; and a drift guard
+asserting `PRELUDE_BUILTINS` equals the set of names `check_builtin_call` actually intercepts —
+because a name in one list and not the other is either un-refusable or un-callable, which is the
+defect this pair exists to prevent.
+
+### C13 · A named function used as a value checks clean and faults at runtime — CLOSED (D25)
+
+`apply(double, 21)` — the canonical row-polymorphism example, and the shape of every higher-order
+call — **type-checks correctly and then dies at runtime** with `DL0907: unbound name 'double'`.
+A *lambda* in the same position always worked; only a named top-level function was missing from
+`eval_var`, which resolved local bindings and capitalized nullary variants and then gave up.
+
+This is a checker/runtime divergence, the most serious class in this campaign so far: the type
+system accepted a program the interpreter could not execute. Row polymorphism exists specifically
+to make higher-order code expressible, and `SOUNDNESS_AUDIT.md` §C examines function values as
+values and concludes the channel is closed — the analysis is right about the *types* and the
+runtime simply did not implement the case.
+
+**Why nobody noticed, which is the more important finding.** `docs/book/samples/04_row_polymorphism.delulu`
+has exactly this shape. It is covered by `criterion7_every_book_sample_checks_clean`, which
+*checks* every sample on every CI run — and never runs one. The sample also has no `fn main`, so
+it could not have been run without being rewritten. A gate that only checks proves the program is
+well-typed and says nothing about whether it works.
+
+**Fix.** A named function now evaluates to a closure over the globals — precisely the environment
+`call_fn` builds for a direct call — so calling it through a value and calling it by name are the
+same computation.
+
+**Gate.** A new `crates/delulu/tests/examples_run.rs` adds the missing half: every shipped example
+checks clean, **and** every one with a `fn main` is run, asserting it never fails with `DL0907` —
+the code the runtime raises when the checker let something through. The assertion is deliberately
+narrow: other runtime outcomes (an ungranted capability, a missing file) are legitimate and the
+test says nothing about them. Verified by removing the fix and observing the gate fail by name,
+along with all three unit witnesses, then restoring it.
+
+### C12 · `DL0401` prints type variables where the names are known — OPEN
+
+Passing a `Cap[Http]` result to a function declared `Result[Str, IoErr]` reports:
+
+```
+expected `Result[Str, T0]`, found `Result[Str, T1]`
+```
+
+The real answer is `IoErr` versus `NetErr`, and the checker knows both — `T0` and `T1` are
+internal identifiers for builtin sums that the type printer does not resolve back to names. The
+diagnostic is accurate and useless: it names the shape of the disagreement and hides its content.
+
+### C15 · The formatter merges comment paragraphs — OPEN (deferred to P9)
+
+`delulu fmt` deletes the blank line separating two comment blocks that precede an item:
+
+```delulu
+// A file-level note about the whole module.
+// It is its own paragraph.
+
+// A note about THIS function specifically.
+fn f() -> Int { 1 }
+```
+
+becomes a single five-line block with no separation between the module-level note and the
+function-level one. "One canonical style, zero options" is a good decision and this is not an
+argument against it — but canonicalization should not destroy authored structure, and every
+comparable formatter (rustfmt, gofmt, prettier, black) preserves blank lines between comment
+paragraphs. Found while writing `examples/guide/`, where it forced comments to be restructured
+around the tool rather than for the reader.
+
+Deferred to P9 (Stage 8, Surface) rather than fixed here: changing canonical output means
+re-formatting the shipped corpus and re-establishing `fmt`'s laws, which deserves its own pass.
 
 ## 4. Phase plan
 

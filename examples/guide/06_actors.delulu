@@ -1,0 +1,53 @@
+module guide.actors
+
+// An actor owns its state. Nothing outside can reach in: a reference to an actor is
+// `tag`, which lets you send to it and read nothing at all. That is what makes data
+// races impossible rather than merely discouraged.
+actor Worker {
+    var done: Int
+    var id: Int
+
+    new(worker_id: Int) {
+        self.id = worker_id
+        self.done = 0
+    }
+
+    // `be` declares a BEHAVIOR: an asynchronous message handler. It has no return type
+    // — a send yields `Unit` immediately at the call site, and the work happens later.
+    be job(n: Int) {
+        self.done = self.done + n
+    }
+
+    // A plain `fn` inside an actor is a synchronous private helper.
+    fn total() -> Int {
+        self.done
+    }
+}
+
+actor Supervisor {
+    var dispatched: Int
+
+    new() {
+        self.dispatched = 0
+    }
+
+    // THE RULE THAT IS EASY TO MISS: sending to another actor is an EFFECT. A behavior
+    // that sends must declare `! {Async}`, exactly like any other effect in any other
+    // function. Leave it off and this is DL0501 — the row did not admit what the body
+    // does. Concurrency is not a separate, parallel system here; it rides the same
+    // effect rows as everything else (constitution invariant 12).
+    be dispatch(w: tag Worker, n: Int) ! {Async} {
+        self.dispatched = self.dispatched + 1
+        w.job(n)
+    }
+}
+
+fn main(root: Root) ! {Async} {
+    let sup = spawn Supervisor()
+    var i = 0
+    while i < 4 {
+        let w = spawn Worker(i)
+        sup.dispatch(w, i * 10)
+        i = i + 1
+    }
+}

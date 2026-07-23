@@ -2,7 +2,13 @@
 
 **Status:** Living. This document is the map of the repository. It matches the workspace layout
 the stage specs assume (Stage-1 spec §9.2). The moves in §3 were executed at repo initialization
-(2026-07-05); §1–§2 describe the target structure the build grows into.
+(2026-07-05).
+
+**Re-synchronized 2026-07-24** against the actual tree (`HARDENING_CAMPAIGN.md` C5). Between
+Stage 1 and Stage 10 this file had drifted in both directions: it drew directories that were never
+built and omitted most of what the later stages added. §1 below is now what is *there*, not what
+was once planned. Anything aspirational is marked as such inline — a map that mixes the two
+silently is worse than no map.
 
 ---
 
@@ -32,6 +38,11 @@ DeluluLang/
 │   ├── delulu-atlas/               # [Stage 8, early] the Atlas: typed deterministic code+authority
 │   │   │                           #   graph from compiler facts (atlas/1, digest, query verbs)
 │   │   └── src/{lib,model,build,render,query,formats}.rs
+│   ├── delulu-wasm/                # [Stage 3] the WASM backend: .dwx emission, engine parity
+│   ├── delulu-registry/            # [Stage 2/9] index lines, resolution, server-side authority
+│   ├── delulu-conform/             # [Stage 9] the conformance runner: --coverage, --check-reference
+│   ├── delulu-measure/             # [Stage 9] the measurement harness behind measurements/
+│   ├── delulu-fuzz/                # [Stage 9] fuzz targets for the front end
 │   └── delulu/                     # [Stage 1] the `delulu` CLI: check | run | repl | authority
 │       ├── src/{main,cli,repl}.rs  # + [Stage 5] broker_ipc, brokerd, broker_client,
 │       │                           #   broker_transport, foreign_worker, microvm (Linux)
@@ -39,16 +50,22 @@ DeluluLang/
 │                                   #   foreign_worker, microvm_criterion8, guard_cli, guard_e2e,
 │                                   #   palette_cli, atlas_cli, atlas_e2e, …
 │
-├── stdlib/                         # [Stage 1+] the DeluluLang standard library, in DeluluLang
-│   └── std/{core,fs,net,io}.delulu # (Stage 1 surface is tiny; §11 of the Stage-1 spec)
+│                                   # NOTE: there is NO `stdlib/` directory and NO standard
+│                                   # library written in DeluluLang. Earlier revisions of this
+│                                   # file drew `stdlib/std/{core,fs,net,io}.delulu`; it was
+│                                   # never built. The available surface is the PRIMITIVE TABLE
+│                                   # (`docs/reference/primitives.md`) plus the prelude builtins.
 │
 ├── examples/                       # runnable .delulu programs (demo.delulu is the reference)
+│   └── guide/                      # the samples docs/GETTING_STARTED.md is built from; a gate
+│                                   #   checks each one AND runs it (crates/delulu/tests/examples_run.rs)
 │
 ├── tests/                          # cross-crate test corpora, driven by the `delulu` binary
+│   │                               # (the SOUNDNESS_AUDIT F-1…F-6 / R-7 rejection tests are NOT
+│   │                               #  here — they live in crates/delulu-check/tests/laundering.rs)
 │   ├── conformance/                # Stage-9 coverage law: ≥1 accepting + ≥1 rejecting per rule
 │   │   ├── accept/                 # programs that must check clean (+ expected authority JSON)
 │   │   └── reject/                 # programs that must fail (+ expected DLxxxx code/span/repair)
-│   ├── laundering/                 # SOUNDNESS_AUDIT.md F-1…F-6, R-7 — permanent rejection tests
 │   └── corpus/                     # coding-capability tiers (simple → security-expert)
 │       ├── tier1-simple/
 │       ├── tier2-dsa/
@@ -59,10 +76,20 @@ DeluluLang/
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config
 │   └── vscode/
 │
+├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
+├── release-artifacts/              # [Stage 9] built release outputs
+├── SECURITY.md                     # reporting policy + rehearsed patch runbook
+├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
+├── .github/workflows/              # the three-OS CI matrix (NEVER executed — repo is not pushed)
+│
 ├── measurements/                   # [Stage 9] the published proof (studies A/B/C), reproducible
+│   └── METHODOLOGY.md              # how every published number was produced
 │
 └── docs/
     ├── REPOSITORY_STRUCTURE.md     # this file
+    ├── GETTING_STARTED.md          # install → first program → real programs (the entry path)
+    ├── for-agents.md               # the one page an agent harness should pin
+    ├── editors.md                  # editor/LSP setup
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
     │   ├── SOUNDNESS_AUDIT.md
@@ -82,6 +109,8 @@ DeluluLang/
     │   ├── README.md, en-US.md, delulu-slang.md       # complete (reference base + shipped voice)
     │   └── zh-CN, ja-JP, ko-KR, hi-IN, ar-SA, fr-FR, de-DE, es-ES, pt-BR (.md)  # starters, decisions locked
     ├── reference/                  # [Stage 9] generated-in-part language reference
+    ├── release/                    # [Stage 9] announcement, checklist, SBOM, provenance, support matrix
+    ├── security/                   # security drill records
     └── book/                       # the Delulu Book — THE_DELULULANG_BOOK.md (first complete edition)
 ```
 
@@ -128,7 +157,9 @@ New at root/created: `Cargo.toml`, `README.md`, `.gitignore`, `crates/`, `tests/
 - **Design docs** → `docs/design/` (normative specs) — never in the crate tree.
 - **Compiler/runtime code** → `crates/<name>/src/` — one crate per pipeline concern (§9.2).
 - **DeluluLang programs** used as tests → `tests/**` (checked by the `delulu` binary, not `cargo`).
-- **DeluluLang programs** for humans to read/run → `examples/`.
-- **The standard library** (written in DeluluLang) → `stdlib/std/`.
+- **DeluluLang programs** for humans to read/run → `examples/`; teaching samples referenced by
+  `docs/GETTING_STARTED.md` → `examples/guide/`, where a gate both checks and runs them.
+- **There is no standard library.** The callable surface is the primitive table plus the prelude
+  builtins; see `docs/reference/primitives.md`.
 - A code range (`DLxxxx`) is allocated in exactly one stage and never reused; the registry lives
   in `crates/delulu-diag/src/codes.rs` and grows per stage.

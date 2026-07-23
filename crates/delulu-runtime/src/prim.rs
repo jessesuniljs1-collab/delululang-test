@@ -65,13 +65,20 @@ fn host_allowed(url: &str, allow: &[String]) -> bool {
 // ----- Root: mint capabilities (attenuation — no effect) -------------------
 
 pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
-    let refused = |what: &str| Fault::at("DL0703", format!("`{what}` was not granted to this program"), span);
+    // DL0703 is the first error nearly every newcomer meets: zero ambient authority means the
+    // very first program that prints anything fails until a human grants the console. The
+    // refusal is correct and is the point of the language — but a refusal that does not say
+    // what to type teaches nothing, so every message below names the exact grant. (Prose only:
+    // the code, the span, and the `--json` envelope are unchanged, per `for-agents.md`.)
+    let refused = |what: &str, grant: &str| {
+        Fault::at("DL0703", format!("`{what}` was not granted to this program — pass `--grant {grant}`"), span)
+    };
     match method {
         "console" => {
             if root.console {
                 Ok(cap(ResourceKind::Console, CapScope::Console))
             } else {
-                Err(refused("console"))
+                Err(refused("console", "console"))
             }
         }
         "fs_read" => {
@@ -79,7 +86,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             match root.fs_read.iter().find(|granted| want.starts_with(granted.as_path())) {
                 Some(_) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false })),
-                None => Err(Fault::at("DL0703", format!("filesystem read of `{p}` was not granted"), span)),
+                None => Err(Fault::at("DL0703", format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"), span)),
             }
         }
         "fs_write" => {
@@ -87,7 +94,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             match root.fs_write.iter().find(|granted| want.starts_with(granted.as_path())) {
                 Some(_) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true })),
-                None => Err(Fault::at("DL0703", format!("filesystem write of `{p}` was not granted"), span)),
+                None => Err(Fault::at("DL0703", format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"), span)),
             }
         }
         "http" => {
@@ -95,21 +102,21 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             if hosts.iter().all(|h| root.net.iter().any(|g| g == h)) {
                 Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts }))
             } else {
-                Err(refused("network host"))
+                Err(refused("network host", "net=HOST"))
             }
         }
         "clock" => {
             if root.clock {
                 Ok(cap(ResourceKind::Clock, CapScope::Clock))
             } else {
-                Err(refused("clock"))
+                Err(refused("clock", "clock"))
             }
         }
         "rand" => {
             if root.rand {
                 Ok(cap(ResourceKind::Rand, CapScope::Rand))
             } else {
-                Err(refused("rand"))
+                Err(refused("rand", "rand"))
             }
         }
         "declassify" => {
@@ -117,7 +124,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 let names = root.secrets.keys().cloned().collect();
                 Ok(cap(ResourceKind::Declassify, CapScope::Declassify { names }))
             } else {
-                Err(refused("declassify"))
+                Err(refused("declassify", "declassify"))
             }
         }
         "secret" => {
@@ -129,7 +136,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             }
             match root.secrets.get(&name) {
                 Some(v) => Ok(Value::Secret(Rc::new(SecretVal::new(v.clone())))),
-                None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted"), span)),
+                None => Err(Fault::at("DL0703", format!("secret `{name}` was not granted — pass `--grant secret:{name}=VALUE` (or `secret:{name}=env:VAR`)"), span)),
             }
         }
         "foreign_load" => {
@@ -163,7 +170,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let d = str_arg(args, 0, span)?;
             match root.actuators.iter().find(|e| e.device == d) {
                 Some(e) => Ok(cap(ResourceKind::Actuator, CapScope::Actuator(e.clone()))),
-                None => Err(Fault::at("DL0703", format!("actuator `{d}` was not granted"), span)),
+                None => Err(Fault::at("DL0703", format!("actuator `{d}` was not granted — pass `--grant \"actuator={d}:DIM=LO..HI\"` with the envelope this machine may move in"), span)),
             }
         }
         "sensor" => {
@@ -171,7 +178,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             if root.sensors.iter().any(|s| s == &d) {
                 Ok(cap(ResourceKind::Sensor, CapScope::Sensor { device: d }))
             } else {
-                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted"), span))
+                Err(Fault::at("DL0703", format!("sensor `{d}` was not granted — pass `--grant sensor={d}`"), span))
             }
         }
         // Stage 10 (10h): the same shape for an accelerator. Deriving the handle is pure; the
@@ -180,7 +187,7 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             let d = str_arg(args, 0, span)?;
             match root.computes.iter().find(|e| e.device == d) {
                 Some(e) => Ok(cap(ResourceKind::Compute, CapScope::Compute(e.clone()))),
-                None => Err(Fault::at("DL0703", format!("compute device `{d}` was not granted"), span)),
+                None => Err(Fault::at("DL0703", format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"), span)),
             }
         }
         "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),

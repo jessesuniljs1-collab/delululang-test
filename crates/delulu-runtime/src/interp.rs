@@ -839,6 +839,26 @@ impl Interp {
         if name.chars().next().is_some_and(char::is_uppercase) {
             return Ok(Value::variant(name, vec![]));
         }
+        // A top-level function used AS A VALUE — `apply(double, 21)`, `xs.map(double)`.
+        //
+        // The checker types this fine (that is the whole point of row polymorphism), and a
+        // lambda in the same position has always worked; only a *named* function was missing
+        // here, so every such program checked clean and then faulted at runtime with "unbound
+        // name". The reference sample for row polymorphism is one of these, and it went
+        // unnoticed because the Book's samples were checked and never run.
+        //
+        // A named function closes over the globals — exactly the environment `call_fn` builds
+        // for a direct call — so calling it through this value and calling it by name are the
+        // same computation. See `HARDENING_CAMPAIGN.md` C13.
+        if let Some(f) = self.funcs.get(name) {
+            let v = Value::Closure(Rc::new(Closure {
+                params: f.params.iter().map(|p| p.name.name.clone()).collect(),
+                body: f.body.clone(),
+                env: Scope::child(&self.globals),
+            }));
+            self.note_alloc(&v);
+            return Ok(v);
+        }
         Err(Escape::Fault(Fault::at("DL0907", format!("unbound name `{name}`"), span)))
     }
 

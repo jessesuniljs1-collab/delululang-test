@@ -305,6 +305,10 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     for item in &module.items {
         match item {
             Item::Fn(f) => {
+                if let Some(d) = shadows_a_builtin("function", &f.name) {
+                    diags.push(d);
+                    continue;
+                }
                 if table.fns.contains_key(&f.name.name) || table.consts.contains_key(&f.name.name) {
                     diags.push(dup("value", &f.name));
                     continue;
@@ -327,6 +331,10 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
                 );
             }
             Item::Const(c) => {
+                if let Some(d) = shadows_a_builtin("constant", &c.name) {
+                    diags.push(d);
+                    continue;
+                }
                 if table.fns.contains_key(&c.name.name) || table.consts.contains_key(&c.name.name) {
                     diags.push(dup("value", &c.name));
                     continue;
@@ -446,6 +454,33 @@ fn gen_names(gs: &[Ident]) -> Vec<String> {
 fn dup(what: &str, name: &Ident) -> Diagnostic {
     Diagnostic::error("DL0302", format!("duplicate {what} definition `{}`", name.name))
         .with_span(name.span, "already defined")
+}
+
+/// Refuse a declaration that reuses a prelude builtin's name (DL0302).
+///
+/// Builtins are resolved at the CALL site before user scope, so without this the declaration
+/// was accepted and then never called: every call went to the builtin. The author saw a type
+/// error at some *other* line, mentioning a type they never wrote (`Option` for a function they
+/// declared as returning `Result`), with nothing anywhere naming the collision. That is the
+/// worst shape a diagnostic can take — correct, distant, and about the wrong thing.
+///
+/// Refusing is the right resolution rather than letting the user's definition win: a call would
+/// otherwise mean different things depending on which module it appears in. See
+/// `HARDENING_CAMPAIGN.md` C11.
+fn shadows_a_builtin(what: &str, name: &Ident) -> Option<Diagnostic> {
+    if !crate::check::PRELUDE_BUILTINS.contains(&name.name.as_str()) {
+        return None;
+    }
+    Some(
+        Diagnostic::error(
+            "DL0302",
+            format!("`{}` is a prelude builtin and cannot be redefined as a {what}", name.name),
+        )
+        .with_span(
+            name.span,
+            "calls resolve to the builtin before user scope, so this definition would never be called — rename it",
+        ),
+    )
 }
 
 /// Classify a function's generics (DL0410 if a name is used as both a type and a row).

@@ -1,0 +1,61 @@
+module guide.capabilities
+
+// The part newcomers guess wrong most often: an EFFECT and a RESOURCE KIND are two
+// different vocabularies, and they do not share names.
+//
+//   `Net` is an EFFECT       — it goes in the row:  ! {Net}
+//   `Http` is a RESOURCE KIND — it goes in the type: Cap[Http]
+//
+// Writing `Cap[Net]` is DL0307. The split is deliberate (constitution invariant 6):
+// the row proves what KIND of thing a function can do and is checked at compile time;
+// the capability's scope decides WHICH file or host and is checked when it runs.
+// Nothing here claims a compile-time guarantee about a specific path or hostname,
+// because the language cannot prove one without dependent types — and saying so
+// would be a claim it refuses to make.
+// Reading: effect `Read`, resource kind `FsRead`.
+// (Named `read_config`, not `load`: `load` is a prelude builtin — see 03_errors.)
+fn read_config(reader: Cap[FsRead], path: Str) -> Result[Str, IoErr] ! {Read} {
+    reader.read_text(path)
+}
+
+// Writing: effect `Write`, resource kind `FsWrite`.
+fn save(writer: Cap[FsWrite], path: Str, body: Str) -> Result[Unit, IoErr] ! {Write} {
+    writer.write_text(path, body)
+}
+
+// Network: effect `Net`, resource kind `Http`. Note the error type: filesystem calls
+// fail with `IoErr`, network calls fail with `NetErr`. They are different sums with
+// different variants, and `?` will not silently bridge them.
+fn fetch(client: Cap[Http], url: Str) -> Result[Str, NetErr] ! {Net} {
+    client.get(url)
+}
+
+// A secret has no string form, no equality, and no way out except `expose` — which
+// needs Cap[Declassify] and carries the `Declassify` effect, so "this function can
+// reveal a secret" is visible in its type. `verify` is the constant-time comparison
+// you almost always want instead.
+fn password_matches(held: Secret[Str], attempt: Secret[Str]) -> Bool {
+    held.verify(attempt)
+}
+
+fn main(root: Root) ! {Net, Read, Write} {
+    let out = root.console()
+    // Minting a capability is PURE — deriving the handle performs no effect. Using it
+    // does. That is why `main` declares Read, Write, and Net but this block alone
+    // would need no row at all.
+    let reader = root.fs_read("./config")
+    let writer = root.fs_write("./out")
+    let client = root.http(["example.com"])
+    match read_config(reader, "./config/app.txt") {
+        Ok(text) => out.println("config: " + text)
+        Err(e) => out.println("no config")
+    }
+    match save(writer, "./out/log.txt", "started") {
+        Ok(u) => out.println("wrote log")
+        Err(e) => out.println("could not write")
+    }
+    match fetch(client, "https://example.com/health") {
+        Ok(body) => out.println("fetched " + str(body.len()) + " bytes")
+        Err(e) => out.println("fetch failed")
+    }
+}

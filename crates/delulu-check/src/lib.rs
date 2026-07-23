@@ -94,6 +94,76 @@ mod tests {
             .collect()
     }
 
+    // ----- prelude-builtin collisions (HARDENING_CAMPAIGN C11) ---------------
+
+    #[test]
+    fn a_function_named_after_a_prelude_builtin_is_refused_at_its_definition() {
+        // Before: this checked CLEAN in isolation. The definition was accepted and every call
+        // to it silently resolved to the builtin instead, so the only symptom was a type error
+        // at a call site naming `Option` — a type the author never wrote — for a function
+        // declared to return `Result`. Nothing anywhere named the collision.
+        let c = check(
+            "module m\ntype E = Bad\nfn parse_int(s: Str) -> Result[Int, E] { Ok(1) }\nfn use_it(s: Str) -> Int { match parse_int(s) { Ok(n) => n, Err(e) => 0 } }\n",
+        );
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.is_error() && d.code == "DL0302")
+            .expect("expected DL0302 at the definition");
+        assert!(d.message.contains("prelude builtin"), "the message must name the cause: {d:?}");
+    }
+
+    #[test]
+    fn a_refused_builtin_name_does_not_panic_the_checker() {
+        // `check_fn` looked its signature up with `.expect("fn in table")`. Refusing to register
+        // a name therefore turned a bad program into a HOST PANIC, one skipped registration
+        // away at all times. A host panic is never an acceptable answer to a bad program.
+        for name in crate::check::PRELUDE_BUILTINS {
+            let src = format!("module m\nfn {name}(x: Int) -> Int {{ x }}\n");
+            let c = check(&src);
+            assert!(c.has_errors(), "`{name}` must be refused as a declared name");
+            assert!(
+                c.diagnostics.iter().any(|d| d.code == "DL0302"),
+                "`{name}` should be DL0302, got {:?}",
+                c.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn the_builtin_list_matches_the_names_the_checker_actually_intercepts() {
+        // The drift guard. `PRELUDE_BUILTINS` is the refusal list; `check_builtin_call` is the
+        // interception list. If a builtin is added to one and not the other, a name becomes
+        // silently un-callable again — which is the exact defect this pair of lists exists to
+        // prevent. `None` is intercepted as a bare name rather than a call, so it is the one
+        // entry that legitimately does not appear as a call arm.
+        let src = include_str!("check.rs");
+        let start = src.find("fn check_builtin_call").expect("check_builtin_call exists");
+        let body = &src[start..];
+        let end = body.find("\n            _ => None,").expect("the builtin match ends with a `_` arm");
+        let mut intercepted: Vec<&str> = Vec::new();
+        for line in body[..end].lines() {
+            let t = line.trim_start();
+            if let Some(rest) = t.strip_prefix('"') {
+                if let Some(q) = rest.find('"') {
+                    if rest[q..].trim_start_matches('"').trim_start().starts_with("=>") {
+                        intercepted.push(&rest[..q]);
+                    }
+                }
+            }
+        }
+        intercepted.sort_unstable();
+        intercepted.dedup();
+        let mut declared: Vec<&str> =
+            crate::check::PRELUDE_BUILTINS.iter().copied().filter(|n| *n != "None").collect();
+        declared.sort_unstable();
+        assert_eq!(
+            intercepted, declared,
+            "PRELUDE_BUILTINS and the names `check_builtin_call` intercepts have diverged. \
+             Any name in one and not the other is either un-refusable or un-callable."
+        );
+    }
+
     #[test]
     fn pure_function_checks_clean_and_is_pure() {
         let c = check("module m\nfn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\n");

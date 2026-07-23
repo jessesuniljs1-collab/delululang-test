@@ -1,0 +1,47 @@
+module guide.effects
+
+// The row `! {…}` after a signature is the function's promise about what it may do.
+// Omit it and the function is PURE — it may perform no effect at all, and the compiler
+// proves it rather than trusting a comment.
+// No row. This function cannot read a file, reach the network, or tell the time.
+fn normalize(name: Str) -> Str {
+    name.trim()
+}
+
+// A row of exactly what it does. The `Cap[Console]` parameter is the permission;
+// the row is the disclosure. You need both: a capability you never declared is
+// unusable, and a row you cannot back with a capability is a lie the checker catches.
+fn greet(out: Cap[Console], name: Str) ! {Write} {
+    out.println("hello, " + normalize(name))
+}
+
+// Effects accumulate up the call graph. `banner` performs no effect of its own, but it
+// calls `greet`, so it must declare `Write` too. Every caller inherits, all the way to
+// `main` — which is why `delulu authority` can compute the whole program's authority.
+fn banner(out: Cap[Console]) ! {Write} {
+    greet(out, "world")
+    greet(out, "delulu")
+}
+
+// ROW POLYMORPHISM. `e` is a row variable: `apply` has EXACTLY the row of the function
+// it is handed — no more, no less. A pure callback keeps `apply` pure; an effectful one
+// makes it effectful. Without this, every higher-order function would have to assume the
+// worst and the whole system would be unusable.
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+    f(x)
+}
+
+fn double(n: Int) -> Int {
+    n * 2
+}
+
+// `apply(double, 21)` is pure, so this function needs no row at all.
+fn pure_use() -> Int {
+    apply(double, 21)
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    banner(out)
+    out.println("apply = " + str(pure_use()))
+}

@@ -1,0 +1,49 @@
+module guide.types
+
+// DeluluLang has two ways to declare a type, and the second one is the one every
+// program needs first.
+// A RECORD groups fields. Braces, `name: Type`, comma-separated.
+type Point {
+    x: Float,
+    y: Float,
+}
+
+// A SUM lists alternatives. `=` and `|`, NOT braces — this is the shape most
+// newcomers guess wrong. A variant may carry data or carry nothing.
+type Shape = Circle(Float) | Rect(Float, Float) | Empty
+
+// Sums are recursive, which is what makes trees, lists, and syntax nodes possible.
+type Tree = Leaf | Node(Tree, Int, Tree)
+
+// `match` takes a sum apart. The checker proves the match is exhaustive: leave a
+// variant out and you get DL0407 before the program ever runs.
+fn area(s: Shape) -> Float {
+    match s {
+        Circle(r) => 3.14159 * r * r
+        Rect(w, h) => w * h
+        Empty => 0.0
+    }
+}
+
+fn insert(t: Tree, x: Int) -> Tree {
+    match t {
+        Leaf => Node(Leaf, x, Leaf)
+        Node(l, v, r) => if x < v { Node(insert(l, x), v, r) } else { Node(l, v, insert(r, x)) }
+    }
+}
+
+fn size(t: Tree) -> Int {
+    match t {
+        Leaf => 0
+        Node(l, v, r) => 1 + size(l) + size(r)
+    }
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    out.println("area  = " + str(area(Rect(3.0, 4.0))))
+    let t = insert(insert(insert(Leaf, 5), 2), 8)
+    out.println("size  = " + str(size(t)))
+    let p = Point { x: 1.5, y: 2.5 }
+    out.println("point = " + str(p.x) + ", " + str(p.y))
+}

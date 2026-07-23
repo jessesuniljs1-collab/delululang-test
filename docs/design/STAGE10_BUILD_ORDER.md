@@ -1040,6 +1040,67 @@ assignment in a block. **No diagnostic code was added or changed**: DL0201 and D
 identities, so the machine surface is untouched and the stability contract is not engaged. Prose is
 explicitly not the contract (`for-agents.md`), which is what makes this improvement free.
 
+**D25 — The front door is rebuilt, and writing the guide found two real defects the whole test
+suite could not: a user function silently losing to a builtin, and a named function that
+type-checks as a value and cannot be called.** Hardening campaign P1 (`HARDENING_CAMPAIGN.md`
+C4–C6, C8, C10–C13). Ruled in six parts.
+
+(a) **The documentation was the primary defect surface, and the evidence is not an opinion.** The
+P0 sweep wrote one honest program per domain using only what the Book, samples, examples, and
+reference teach. Most did not compile, every failure looked like a language limitation, and **none
+of them was** — sum types are `type T = A | B(X)`, `List.get` returns `Option[T]`, a behavior that
+sends declares `! {Async}`, `Net` is an effect while `Http` is a resource kind. Rewritten against
+the real surface the same programs check clean and run. The project had tested its documentation
+for **accuracy** and never for **sufficiency**: every claim in it is true, and a developer cannot
+get from them to a working program.
+
+(b) **RULED: a teaching sample is not documentation until a gate runs it.** `book.rs` already
+holds the right principle — "a tutorial whose examples do not compile teaches people something
+false" — and implements half of it. Checking proves a program is *well-typed*; it says nothing
+about whether it *works*, and the gap is not hypothetical: the reference row-polymorphism sample
+checks clean and cannot run, and additionally has no `fn main`, so running it was never possible.
+`crates/delulu/tests/examples_run.rs` adds the missing half over `examples/` and `examples/guide/`:
+every file checks clean, and every file with a `main` is run and must not fail with **DL0907**, the
+code the runtime raises when the checker let something through. The assertion is deliberately
+narrow — an ungranted capability or a missing file is a legitimate outcome and the gate says
+nothing about those.
+
+(c) **C13 is a checker/runtime divergence and is the most serious defect of the campaign so far.**
+`apply(double, 21)` type-checks — row polymorphism exists so that it can — and faults at runtime
+with "unbound name `double`". A lambda in that position always worked; only a *named* top-level
+function was missing from `eval_var`. `SOUNDNESS_AUDIT.md` §C examines function values and closes
+the channel correctly: the analysis was right about the types and the interpreter simply had no
+case. A named function now evaluates to a closure over the globals — exactly the environment
+`call_fn` builds for a direct call — so calling by value and calling by name are one computation.
+Verified by removing the fix and observing the new gate fail by name, together with all three unit
+witnesses, then restoring it.
+
+(d) **C11's fix refuses rather than shadows, and dislodged a latent host panic.** A user
+`fn parse_int` was accepted and every call to it silently resolved to the builtin, so the only
+symptom was a type error at a *call site* naming a type the author never wrote. Builtins are
+intercepted before user scope, so the declaration is now refused with **DL0302 — an existing code**,
+which keeps the machine surface and the stability contract untouched. Refusing beats letting the
+user's definition win: otherwise a call would mean different things in different modules. Out with
+it came `check_fn`'s `.expect("fn in table")` — the invariant "every `Item::Fn` is in the table"
+was held by nothing but resolve never skipping registration, and the first skip turned a bad
+program into a process crash. A host panic is never an acceptable answer to a bad program (the
+Stage-9 D15 lesson, restated).
+
+(e) **The README told a new reader the project was an unbuilt skeleton.** On a v1.0.0 tree with
+Stage 10 closed and 23 rulings it said *"Stage 1 ('Skeleton') — under construction"* and
+instructed `rustup default stable` against a pin that exists to make builds reproducible. It now
+states the real status, the platforms actually verified, that **macOS has never been executed**,
+that **no release binary or public repository exists** so you build from source, and that **there
+is no LICENSE** — so, by default copyright, nobody else may legally use any of this. That last one
+is recorded and **deliberately not fixed**: choosing a licence is a legal commitment belonging to
+the copyright holder alone, and it is the single hardest blocker to the campaign's own objective.
+
+(f) **DL0703 now names the flag.** Zero ambient authority means the first program anyone writes
+fails until a human grants the console — correct, and the entire point. But a refusal that does not
+say what to type teaches nothing, so all eleven refusal messages name the exact grant
+(`--grant console`, `--grant fs.read=./data`, `--grant secret:NAME=VALUE`, and the rest, echoing
+the actual path or device). Prose only: codes, spans, and the `--json` envelope are unchanged.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
