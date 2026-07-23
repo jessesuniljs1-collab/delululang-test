@@ -997,6 +997,49 @@ adapter ships in this build" wall and correctly failed; it was updated to pin th
 (`--adapter-cmd` is missing) rather than weakened — the gate is still seen to pass, and the run still
 refuses rather than pretending.
 
+**D24 — Two unbounded loops in the Stage-1 parser are closed, and the guard that both were missing
+now exists in exactly one place. The fix is for the class; the instances were symptoms.** Opens the
+hardening campaign (`HARDENING_CAMPAIGN.md` C1). Ruled in five parts.
+
+(a) **Both defects are real, were observed, and are reachable from code a person would type.**
+`match flag { true => n = 1 … }` — an arm body is an expression and assignment is a statement, so
+`parse_expr` stopped at `=` and nothing consumed it. The arm loop's condition was unchanged, so it
+ran again, pushing one more `Arm` each pass: **CPU pegged and resident memory 650 MB → 1.16 GB in
+three seconds**, sampled live, until the machine ran out. Separately, an `import` after the first
+item spins with **no** allocation — `parse_item` returns `None` without consuming and `recover_item`
+deliberately stops *at* `import` — so it pegs a core silently and forever, which is harder to
+notice than the one that eats the machine. Both reproduced at `rc=124` before the fix and terminate
+with a correct diagnostic after it.
+
+(b) **This is the skip-branch lesson, not a novel hazard.** The parser's author knew this failure
+mode precisely and defended against it **four separate times** with the same hand-written idiom
+(`let before = self.pos; …; if self.pos == before { self.bump(); }`) — in the foreign-block loop,
+the actor-body loop, the statement-block loop, and inside `recover_item`. The two loops that lacked
+it are exactly the two that hung. A rule that is known, written down, and applied by hand is a rule
+that will be omitted somewhere; the omission is the defect, not the ignorance.
+
+(c) **RULED: the guard is structural from here.** `Parser::parse_until` is now the only loop over a
+closing delimiter in the parser, and every brace-delimited list — statements, actor members,
+foreign functions, match arms, and the module's item list — goes through it. Progress is guaranteed
+by construction: a step that consumes nothing has one token consumed on its behalf, so iteration
+count is bounded by token count. It is no longer possible to *forget* the guard, because there is
+no longer a hand-written list loop to copy from.
+
+(d) **The enforcing witness fails rather than hangs.** A regression test for a hang is close to
+useless: reintroduce the bug and the test wedges CI instead of reporting. So the load-bearing
+witness is structural — `every_delimited_list_loop_goes_through_the_progress_guard` scans the
+parser source and asserts exactly one such loop exists. It earned its place on first run by
+catching an occurrence inside a comment that a manual `grep` over the same file had missed.
+
+(e) **Both diagnostics were sharpened, because both defects were reached by plausible code.**
+Generic messages are what made these expensive to diagnose: "expected `=>`, found `=`" points three
+tokens past the mistake, and "expected an item" is true of a perfectly well-formed `import` line.
+They now state the actual rule — an arm body is an expression; `import` belongs before the first
+item — and the arm case carries an exact repair (`brace-match-arm-assignment`) that wraps the
+assignment in a block. **No diagnostic code was added or changed**: DL0201 and DL0208 keep their
+identities, so the machine surface is untouched and the stability contract is not engaged. Prose is
+explicitly not the contract (`for-agents.md`), which is what makes this improvement free.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates

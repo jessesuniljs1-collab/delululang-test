@@ -248,6 +248,37 @@ impl Parser {
         }
     }
 
+    // ----- the guarded list loop -------------------------------------------
+
+    /// The parser's one loop construct for a brace-delimited list. Every such list goes
+    /// through here so the forward-progress guarantee cannot be forgotten at a new call site.
+    ///
+    /// Runs `step` until `close` or EOF, skipping stray terminators between elements. **If a
+    /// call to `step` consumes no token, this consumes one on its behalf.** That case is not
+    /// hypothetical: a failed `expect` reports its diagnostic and deliberately does *not*
+    /// advance, so any `step` that cannot handle the current token consumes nothing, and an
+    /// unguarded loop then spins on that token forever — pushing an element per iteration if
+    /// the caller collects one.
+    ///
+    /// The guard was written four separate times in this file, and the one loop that lacked it
+    /// (`match` arms) hung the checker on a six-line program at roughly 380 MB/s until the
+    /// machine ran out of memory. Centralizing it is the fix for the class, not the instance.
+    /// See `HARDENING_CAMPAIGN.md` C1.
+    fn parse_until(&mut self, close: &TokenKind, mut step: impl FnMut(&mut Self)) {
+        while !self.at(close) && !self.at_eof() {
+            if self.eat(&TokenKind::Term) {
+                continue;
+            }
+            let before = self.pos;
+            step(self);
+            if self.pos == before {
+                // No progress. `step` has already reported why; take the token so the loop
+                // is bounded by the token count and can never spin.
+                self.bump();
+            }
+        }
+    }
+
     // ----- module ----------------------------------------------------------
 
     fn parse_module(&mut self) -> Module {
@@ -280,21 +311,28 @@ impl Parser {
         }
 
         let mut items = Vec::new();
-        while !self.at_eof() {
-            // Skip statement terminators inserted after item-closing braces (§2.2).
-            if self.eat(&TokenKind::Term) {
-                continue;
-            }
-            match self.parse_item() {
-                Some(item) => items.push(item),
-                None => {
-                    if !self.at_eof() {
-                        self.error("DL0208", "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)", self.span(), "not an item");
-                        self.recover_item();
-                    }
+        // Guarded: `parse_item` returns `None` without consuming for any token that is not an
+        // item keyword, and `recover_item` deliberately stops *at* `import`/`pub` — so an
+        // `import` after the first item used to leave the position unchanged on every
+        // iteration and spin forever, burning a core with no allocation and no output.
+        self.parse_until(&TokenKind::Eof, |p| match p.parse_item() {
+            Some(item) => items.push(item),
+            None => {
+                if p.at(&TokenKind::KwImport) {
+                    // Say the actual rule. "expected an item" is true but sends the reader
+                    // looking for a typo in a line that is perfectly well-formed.
+                    p.error(
+                        "DL0208",
+                        "`import` must appear before the first item, directly under the `module` header",
+                        p.span(),
+                        "move this import up to the import section",
+                    );
+                } else if !p.at_eof() {
+                    p.error("DL0208", "expected an item (`fn`, `type`, `effect`, `actor`, `let`, or `pub`)", p.span(), "not an item");
                 }
+                p.recover_item();
             }
-        }
+        });
 
         Module { name, imports, items, attrs }
     }
@@ -555,19 +593,11 @@ impl Parser {
         // The block body: zero or more foreign functions.
         self.expect(TokenKind::LBrace);
         let mut fns = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            if self.eat(&TokenKind::Term) {
-                continue;
-            }
-            let before = self.pos;
-            if let Some(ff) = self.parse_foreign_fn() {
+        self.parse_until(&TokenKind::RBrace, |p| {
+            if let Some(ff) = p.parse_foreign_fn() {
                 fns.push(ff);
             }
-            if self.pos == before {
-                // No progress — force one to avoid an infinite loop.
-                self.bump();
-            }
-        }
+        });
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         self.expect_term();
@@ -627,56 +657,52 @@ impl Parser {
         let mut ctors: Vec<CtorDecl> = Vec::new();
         let mut behaviors = Vec::new();
         let mut fns = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            if self.eat(&TokenKind::Term) {
-                continue;
-            }
-            let before = self.pos;
-            match self.peek().clone() {
+        self.parse_until(&TokenKind::RBrace, |p| {
+            match p.peek().clone() {
                 TokenKind::KwLet | TokenKind::KwVar => {
-                    let mutable = matches!(self.peek(), TokenKind::KwVar);
-                    let fstart = self.span();
-                    self.bump();
-                    let fname = self.expect_decl_name();
-                    self.expect(TokenKind::Colon);
-                    let ty = self.parse_type();
-                    let span = fstart.to(self.prev_span());
+                    let mutable = matches!(p.peek(), TokenKind::KwVar);
+                    let fstart = p.span();
+                    p.bump();
+                    let fname = p.expect_decl_name();
+                    p.expect(TokenKind::Colon);
+                    let ty = p.parse_type();
+                    let span = fstart.to(p.prev_span());
                     // Grammar: fields carry no initializer — they are assigned in `new`.
-                    if self.at(&TokenKind::Eq) {
-                        self.error(
+                    if p.at(&TokenKind::Eq) {
+                        p.error(
                             "DL0201",
                             "actor fields have no initializer — assign them in `new`",
-                            self.span(),
+                            p.span(),
                             "remove the `= …` and initialize in the constructor",
                         );
-                        self.recover_stmt();
+                        p.recover_stmt();
                     } else {
-                        self.expect_term();
+                        p.expect_term();
                     }
                     fields.push(ActorField { mutable, name: fname, ty, span });
                 }
-                TokenKind::Ident(ref n) if n == "new" && matches!(self.peek_at(1), TokenKind::LParen) => {
-                    let cstart = self.span();
-                    self.bump(); // new
-                    let params = self.parse_params();
-                    let row = self.parse_opt_row();
-                    let body = self.parse_block();
-                    let span = cstart.to(self.prev_span());
-                    ctors.push(CtorDecl { params, row, body, id: self.node_id(), span });
+                TokenKind::Ident(ref n) if n == "new" && matches!(p.peek_at(1), TokenKind::LParen) => {
+                    let cstart = p.span();
+                    p.bump(); // new
+                    let params = p.parse_params();
+                    let row = p.parse_opt_row();
+                    let body = p.parse_block();
+                    let span = cstart.to(p.prev_span());
+                    ctors.push(CtorDecl { params, row, body, id: p.node_id(), span });
                 }
-                TokenKind::Ident(ref n) if n == "be" && matches!(self.peek_at(1), TokenKind::Ident(_)) => {
-                    let bstart = self.span();
-                    self.bump(); // be
-                    let bname = self.expect_decl_name();
-                    let params = self.parse_params();
+                TokenKind::Ident(ref n) if n == "be" && matches!(p.peek_at(1), TokenKind::Ident(_)) => {
+                    let bstart = p.span();
+                    p.bump(); // be
+                    let bname = p.expect_decl_name();
+                    let params = p.parse_params();
                     // Behaviors have no return type (spec §2): they yield `Unit` at the send
                     // site. DL1606 with the exact delete repair.
-                    if self.at(&TokenKind::Arrow) {
-                        let arrow = self.span();
-                        self.bump();
-                        let ty = self.parse_type();
+                    if p.at(&TokenKind::Arrow) {
+                        let arrow = p.span();
+                        p.bump();
+                        let ty = p.parse_type();
                         let bad = arrow.to(ty.span());
-                        self.diags.push(
+                        p.diags.push(
                             Diagnostic::error(
                                 "DL1606",
                                 format!(
@@ -699,34 +725,31 @@ impl Parser {
                             }),
                         );
                     }
-                    let row = self.parse_opt_row();
-                    let body = self.parse_block();
-                    let span = bstart.to(self.prev_span());
-                    behaviors.push(BehaviorDecl { name: bname, params, row, body, id: self.node_id(), span });
+                    let row = p.parse_opt_row();
+                    let body = p.parse_block();
+                    let span = bstart.to(p.prev_span());
+                    behaviors.push(BehaviorDecl { name: bname, params, row, body, id: p.node_id(), span });
                 }
                 TokenKind::KwFn => {
                     // Actor-member fns take no attributes in v1.x (the documented surface is
                     // `fn`/`actor` items and the module header); an `@` here falls to the
                     // unexpected-token arm below, which is the honest refusal.
-                    fns.push(self.parse_fn(false, Vec::new()));
+                    fns.push(p.parse_fn(false, Vec::new()));
                 }
                 other => {
-                    self.error(
+                    p.error(
                         "DL0201",
                         format!(
                             "expected an actor member (`let`/`var` field, `new`, `be`, or `fn`), found {}",
                             other.describe()
                         ),
-                        self.span(),
+                        p.span(),
                         "not an actor member",
                     );
-                    self.recover_stmt();
+                    p.recover_stmt();
                 }
             }
-            if self.pos == before {
-                self.bump();
-            }
-        }
+        });
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         let ctor = match ctors.len() {
@@ -1149,20 +1172,11 @@ impl Parser {
             return Block { stmts: Vec::new(), id: self.node_id(), span: start };
         }
         let mut stmts = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            // Skip stray terminators between statements.
-            if self.eat(&TokenKind::Term) {
-                continue;
-            }
-            let before = self.pos;
-            if let Some(s) = self.parse_stmt() {
+        self.parse_until(&TokenKind::RBrace, |p| {
+            if let Some(s) = p.parse_stmt() {
                 stmts.push(s);
             }
-            if self.pos == before {
-                // No progress — force one to avoid an infinite loop.
-                self.bump();
-            }
-        }
+        });
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         Block { stmts, id: self.node_id(), span }
@@ -1576,25 +1590,46 @@ impl Parser {
         let scrutinee = self.parse_expr_no_struct();
         self.expect(TokenKind::LBrace);
         let mut arms = Vec::new();
-        while !self.at(&TokenKind::RBrace) && !self.at_eof() {
-            if self.eat(&TokenKind::Term) {
-                continue;
-            }
-            let arm_start = self.span();
-            let pattern = self.parse_pattern();
-            self.expect(TokenKind::FatArrow);
-            let body = if self.at(&TokenKind::LBrace) {
-                Expr::Block(self.parse_block())
+        self.parse_until(&TokenKind::RBrace, |p| {
+            let arm_start = p.span();
+            let pattern = p.parse_pattern();
+            p.expect(TokenKind::FatArrow);
+            let body = if p.at(&TokenKind::LBrace) {
+                Expr::Block(p.parse_block())
             } else {
-                self.parse_expr()
+                p.parse_expr()
             };
-            let span = arm_start.to(self.prev_span());
+            // An arm body is an expression; assignment is a statement. `x => n = 1` therefore
+            // stops the expression parser dead at `=`, which nothing else consumes. Name the
+            // real rule and hand back the exact edit rather than leaving the reader with
+            // "expected `=>`, found `=`" three tokens away from the actual mistake.
+            if p.at(&TokenKind::Eq) {
+                let body_span = body.span();
+                p.bump(); // =
+                let rhs = p.parse_expr();
+                let bad = body_span.to(rhs.span());
+                p.diags.push(
+                    Diagnostic::error("DL0201", "a match arm's body is an expression — assignment is a statement")
+                        .with_span(bad, "wrap it in a block to assign here")
+                        .with_repair(Repair {
+                            id: "brace-match-arm-assignment",
+                            confidence: Confidence::Exact,
+                            authority_widening: false,
+                            requires_human: false,
+                            edits: vec![
+                                Edit { file: bad.file, start_byte: bad.start, end_byte: bad.start, insert: "{ ".into() },
+                                Edit { file: bad.file, start_byte: bad.end, end_byte: bad.end, insert: " }".into() },
+                            ],
+                        }),
+                );
+            }
+            let span = arm_start.to(p.prev_span());
             arms.push(Arm { pattern, body, span });
             // Arms separated by `,` or a terminator; tolerate both.
-            if !self.eat(&TokenKind::Comma) {
-                self.eat(&TokenKind::Term);
+            if !p.eat(&TokenKind::Comma) {
+                p.eat(&TokenKind::Term);
             }
-        }
+        });
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         Expr::Match { scrutinee: Box::new(scrutinee), arms, id: self.node_id(), span }
@@ -1690,6 +1725,59 @@ mod tests {
         let (m, d) = parse_src(src);
         assert!(d.is_empty(), "unexpected parse diagnostics: {d:?}");
         m
+    }
+
+    // ----- forward progress (HARDENING_CAMPAIGN C1) --------------------------
+    //
+    // Two parser loops could spin forever on well-formed-looking input. Both were reached
+    // from programs a person would plausibly type, and both survived v1.0.0 and the Stage-10
+    // close-out. The behavioural tests below pin the fixed outcome; the structural test is
+    // the one that matters most, because a reintroduced unguarded loop makes it FAIL rather
+    // than HANG — a hanging test tells CI nothing.
+
+    #[test]
+    fn an_assignment_in_a_match_arm_terminates_and_names_the_rule() {
+        // Before the fix: `parse_expr` stopped at `=`, nothing consumed it, and the arm loop
+        // pushed a fresh `Arm` per iteration — measured at ~380 MB/s until the machine died.
+        let (m, d) = parse_src("module m\nfn f(flag: Bool) {\n    var n = 0\n    match flag {\n        true => n = 1\n        false => n = 2\n    }\n}\n");
+        assert!(d.iter().any(|x| x.code == "DL0201"), "expected DL0201, got {d:?}");
+        assert!(
+            d.iter().any(|x| x.repairs.iter().any(|r| r.id == "brace-match-arm-assignment")),
+            "the repair that wraps the assignment in a block must be offered: {d:?}"
+        );
+        // Bounded output is the real assertion: the old loop produced arms without limit.
+        assert_eq!(m.items.len(), 1);
+    }
+
+    #[test]
+    fn an_import_after_an_item_terminates_and_names_the_rule() {
+        // Before the fix: `parse_item` returned None without consuming and `recover_item`
+        // stopped *at* `import`, so the position never moved. A pure spin — no allocation,
+        // no output, nothing to notice but a pegged core.
+        let (_m, d) = parse_src("module m\nfn f() {}\nimport b\n");
+        let hit = d.iter().find(|x| x.code == "DL0208").expect("expected DL0208");
+        assert!(
+            hit.message.contains("must appear before the first item"),
+            "the diagnostic should state the placement rule, not just 'expected an item': {hit:?}"
+        );
+    }
+
+    #[test]
+    fn every_delimited_list_loop_goes_through_the_progress_guard() {
+        // The guard was written by hand four times and forgotten once. It now lives in exactly
+        // one place, and this test is what keeps it there: a new hand-rolled loop over a
+        // closing delimiter is a loop whose progress nobody has argued for.
+        let src = include_str!("parser.rs");
+        // Split so the needle does not match itself — and keep the un-split form out of every
+        // comment in this file for the same reason.
+        let needle = concat!("while !self.", "at(");
+        let n = src.matches(needle).count();
+        assert_eq!(
+            n, 1,
+            "expected exactly one such loop (the one inside `parse_until`), found {n}. \
+             Route the new list through `parse_until` instead — an unguarded loop spins \
+             forever whenever `expect` fails, because a failed `expect` does not advance."
+        );
     }
 
     #[test]
