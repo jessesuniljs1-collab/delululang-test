@@ -71,6 +71,9 @@ deviations.
 | C3 | Stage 1 — bidirectional-override source is accepted silently | medium (review integrity) | OPEN |
 | C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | OPEN |
 | C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | OPEN |
+| C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | OPEN |
+| C7 | The capability corpus is 8 programs; `tier4-multimodule` has none | medium (evidence) | OPEN |
+| C8 | The interpreter's recursion bound is fixed at 10,000 and appears in no user-facing document | medium (usability) | OPEN |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -233,6 +236,88 @@ currently maps a different one.
 
 The map also predates the crates added after Stage 1: `delulu-wasm`, `delulu-fuzz`,
 `delulu-registry`, `delulu-conform`, and `delulu-measure` do not appear in the tree it draws.
+
+### C6 · The documented surface is a strict subset of the real one — OPEN
+
+**This is P0's headline finding, and it reframes the campaign.** The breadth sweep wrote one
+genuine program per domain — beginner, DSA, compiler, LLM client, robotics control loop, OS-style
+file walker, actor pool, SaaS backend — using only what the Book, the samples, the examples, and
+the reference teach. Most did not compile. Every failure looked like a language limitation. **Not
+one of them was.** In each case the language supported the construct perfectly well under a syntax
+or a rule that no user-facing document mentions:
+
+| What a reader writes from the docs | What the language actually wants | Where the real form appears |
+|---|---|---|
+| `type Tree { Leaf, Node(Tree, Int, Tree) }` | `type Tree = Leaf \| Node(Tree, Int, Tree)` | conformance corpus only |
+| `let v = xs.get(i)` then use `v` | `match xs.get(i) { Some(v) => …, None => … }` — `List.get` is total and returns `Option[T]` | conformance corpus only |
+| `be dispatch(w: tag Worker) { w.job(1) }` | `be dispatch(w: tag Worker) ! {Async} { … }` — sending from a behavior is an effect and must be declared | nowhere |
+| `net: Cap[Net]` | `Cap[Http]` — `Net` is the *effect*; `Http` is the *resource kind* | nowhere |
+
+Rewritten against the real surface, the same programs check clean, and the DSA program runs. So
+the capability is there and the wall is the documentation.
+
+That distinction matters for how this is fixed. Sum types are the language's central
+data-modelling construct — `match` on a sum is how every error in the language is handled — and
+they appear in **no** Book chapter, **no** sample, **no** example, and **no** reference page. They
+exist only in `tests/conformance/`, which is not a place a user reads. The effect/resource split
+(`Net` vs `Http`) is a genuinely subtle and *deliberate* piece of the design — constitution
+invariant 6, "kind is static, scope is runtime" — and a reader who guesses wrong gets DL0307 with
+no pointer to the rule they violated.
+
+The lesson generalizes past this list: **the project tested its documentation for accuracy and
+never for sufficiency.** Every documented claim is true. A developer cannot get from them to a
+working program.
+
+### C7 · The capability corpus is eight programs — OPEN
+
+`tests/corpus/` is described in `REPOSITORY_STRUCTURE.md` as "coding-capability tiers (simple →
+security-expert)". It contains **eight programs**: two simple, two DSA, one application, two
+security — and `tier4-multimodule/` holds a `NOTE.md` and **no program at all**. For a language
+proposing itself for robotics, satellites, SaaS backends, and enterprise systems, this is not
+enough evidence to support the proposal, independent of whether the language is capable.
+
+### C8 · The recursion bound is fixed at 10,000 and is undocumented — OPEN
+
+`MAX_DEPTH = 10_000` in `crates/delulu-runtime/src/interp.rs`. Exceeding it is **DL0905**, an
+honest named diagnostic with exit 1 and no host crash — the behaviour is correct and was
+deliberately fixed once already (Stage 9, D15, after a real host crash). Two things remain open:
+the bound is **not configurable**, and it is named in no user-facing document — only in build-order
+records, which are internal process history. A recursive descent over a 10,000-element structure is
+an ordinary thing to write; the author should be able to find the limit before meeting it.
+
+## 3.1 What held up under the sweep
+
+Recorded with the same weight as the defects, because a campaign that only lists failures
+misrepresents the system.
+
+- **Scaling is linear, with no O(n²) anywhere in `check`.** Measured on generated programs with
+  real dispatch chains and interdependent functions: 1,220 lines 0.20 s · 6,020 0.37 s · 12,020
+  0.60 s · 30,020 1.40 s · 60,020 2.75 s · **120,020 lines 5.75 s**, peak RSS 676 MB. That is a
+  **debug** binary; release was not measured, so these are upper bounds. The memory figure is worth
+  watching for constrained CI, and is the only scale number here that suggests future work.
+- **Arithmetic is checked, not wrapping.** Integer overflow on `+`, `-`, and `*` is **DL0901**;
+  division and modulo by zero are **DL0902**. Every case aborts with exit 1 and a named code. This
+  is a stronger default than C or than Rust in release mode.
+- **Deep recursion refuses honestly** — DL0905, exit 1, never a raw stack overflow (see C8).
+- **String indexing is character-based, not byte-based.** `"héllo".len()` is 5, `"🐦".len()` is 1,
+  `"日本語".slice(0,1)` is `"日"`. No slice can land mid-codepoint or produce invalid UTF-8 — an
+  entire class of crash is absent by construction.
+- **The parser is robust under abuse.** 20,000 top-level functions in 0.84 s; 3,000 nested blocks
+  in 3.1 s with no stack overflow; 2,000 nested generic types in 0.73 s; a 1 MB string literal in
+  0.27 s; a 100,000-token expression in 0.93 s. Non-ASCII identifiers are refused by DL0101, which
+  closes the confusable-identifier attack **by construction** rather than by a lint.
+- **Zero ambient authority is real and immediate.** Every sweep program that touched the console
+  failed at runtime with DL0703 until `--grant console` was passed. The central claim of the
+  language is enforced on the first program anyone writes.
+
+One inconsistency worth naming rather than filing as a defect: **out-of-range access is handled two
+different ways.** `List.get` is total and returns `Option[T]`, making failure visible and forcing
+the caller to decide. `Str.slice` silently clamps — `"abc".slice(0,99)` is `"abc"`, `"abc".slice(2,1)`
+is `""`, `"abc".slice(-1,2)` is `"ab"`. Both are defined, neither is undefined behaviour, and the
+clamping form is what most languages do. But a negative index reaching `slice` produces a
+plausible-looking answer instead of a signal, in a language that chose the opposite convention one
+method earlier. Settling this is a design decision, not a bug fix, and it is recorded here for
+that decision rather than being changed unilaterally.
 
 ## 4. Phase plan
 
