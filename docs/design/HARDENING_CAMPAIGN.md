@@ -83,6 +83,8 @@ deviations.
 | C15 | `delulu fmt` deletes the blank line between two comment paragraphs before an item | medium (fidelity) | OPEN — P9 |
 | C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
+| C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
+| C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | OPEN — owner-reserved (backcompat) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -507,6 +509,62 @@ wants real cycle detection in the resolver with its own diagnostic and witnesses
 as an honesty gap, not a defect. Rust emits a warning in this case; DeluluLang, whose posture is to
 say what it is doing, arguably should too. Low priority. (Note: `1e400` *without* a decimal point is
 a parse error, because a float literal requires the point — `1e400` lexes as `1` then `e400`.)
+
+### C18 · The semver-authority law was blind to secret-scope widening — CLOSED (D28)
+
+Stage 2's headline is a supply chain that *cannot lie*: "any authority widening requires a major
+version bump" (Constitution invariant 10), and `authority --diff` is the CI gate that surfaces a
+widening on a dependency upgrade. Both were blind to secrets.
+
+**The mechanism, confirmed by reading and then by witness.** Reading a secret — `root.secret("X")`
+— adds **no effect and no capability kind**; it only records the name in a `secret_names` set. The
+lock entry stored `effects`, `cap_kinds`, `net`, `fs_read`, `fs_write` — and **not** secrets. So
+`authority_widened` could not see a secret change, and neither could `authority --diff` (which
+diffs the same coarse fields). A dependency that read `TELEMETRY_TOKEN` in v1.0.0 and *also*
+`DB_PASSWORD` in v1.0.1 had byte-identical observable authority to both tools: the patch bump was
+waved through, and the new secret access was locked in silently. That is precisely the
+silent-widening invariant 10 exists to forbid, in the stage built to forbid it.
+
+**Fix (D28).** The lock entry gains a `secrets` field (the computed secret names), and
+`authority_widened`, the semver-authority law (DL1003), and `authority --diff` all treat a new
+secret name as a widening — like a new effect or host. Scoped deliberately: the `authority_hash`
+is **left** over effects+kinds, because folding secrets into it would change every existing hash
+and invalidate any committed lockfile (DL1002) — a format break, and backward compatibility is
+owner-reserved. A same-version secret change is still caught, because it changes the source and so
+the `content_hash` (DL1010). The security property — no silent secret widening across versions — is
+fully closed without a format break.
+
+**Witnesses.** Two, both observed to fail against the pre-fix code: a lock-level unit test
+(`a_new_secret_is_a_widening_and_needs_a_major_bump` — a patch bump with one new secret and
+otherwise identical authority is DL1003) and an end-to-end test that builds two real package
+versions differing only by a secret read, asserts their coarse authority is identical (why it was
+invisible) and their secret sets differ, and that `authority_widened` now sees it.
+
+### C19 · The pin and self-declaration do not enforce secrets — OPEN, owner-reserved
+
+Found while closing C18, and it is the **same blindness one layer earlier and more consequential**,
+because the pin is the *first* review gate:
+
+- **`check_self_authority` (DL1009)** forces a package to declare its `effects` in its manifest, but
+  does **not** require it to declare the secrets it reads. A package can `root.secret("DB_PASSWORD")`
+  with an empty `[authority] secrets` and check clean.
+- **`check_pins` / `scope_violations` (DL1001)** constrains a dependency's effects, `net`, and `fs`
+  against the consumer's pin, but **not** its secrets. A consumer cannot pin "this dependency may
+  read TELEMETRY and nothing else." `AuthoritySpec` already *has* a `secrets` field; it is simply
+  never checked.
+
+This is consistent with invariant 10 ("scopes"), and the fix (enforce computed `secrets ⊆
+manifest.secrets` for DL1009, and `dep.secrets ⊆ pin.secrets` for DL1001) is small and, verified
+against the corpus, breaks **nothing in-tree** — no existing package reads a secret at all, which is
+also why the gap was never noticed.
+
+**Why it is not fixed here.** Unlike C18, this changes what the *checker accepts*: a package that
+today reads an undeclared secret and checks clean would begin to error (DL1009), and a pin that
+does not list a dependency's secrets would begin to error (DL1001). That is a **backward-compatibility
+change to the language's acceptance behavior**, which the owner explicitly reserved. It is presented
+as a recommendation with the analysis above and held for Jesse's decision — the same discipline that
+governed licensing (C9). The recommendation is to make the change: it completes invariant 10 for
+secrets, matches how effects and `net`/`fs` are already treated, and costs nothing in-tree today.
 
 ## 4. Phase plan
 

@@ -857,6 +857,12 @@ fn render_row(r: &RowExpr) -> String {
 pub fn authority_canonical_json(auth: &PackageAuthority) -> String {
     let effects: Vec<String> = auth.effects.iter().cloned().collect();
     let kinds: Vec<String> = auth.cap_kinds.iter().cloned().collect();
+    // Deliberately effects+kinds only, matching this hash's documented meaning. Secrets are caught
+    // as a *widening* by the lock entry's `secrets` field (see `authority_widened`); they are NOT
+    // folded into this hash, because doing so would change every existing `authority_hash` and
+    // invalidate any lockfile on the next build (DL1002) — a format break, and backward
+    // compatibility is owner-reserved. A same-version secret change is still caught: the source
+    // changed, so `content_hash` moves and DL1010 fires. See HARDENING_CAMPAIGN C18.
     serde_json::json!({ "effects": effects, "cap_kinds": kinds }).to_string()
 }
 
@@ -880,6 +886,51 @@ mod tests {
         prog.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code.to_string()).collect()
     }
     const LIB: &str = "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\n";
+
+    #[test]
+    fn a_new_secret_read_is_seen_as_an_authority_widening() {
+        // HARDENING_CAMPAIGN C18, the end-to-end witness. Two versions of the same package that
+        // differ ONLY by which secrets they read. Reading a secret is pure — no effect, no
+        // capability kind — so the coarse authority (effects, cap_kinds) is byte-identical between
+        // them. Before secrets entered the lock entry, `authority_widened` therefore returned
+        // false here and `delulu lock` accepted the change on any bump: a dependency could begin
+        // reading a new secret silently. The two assertions below are the proof: the authority
+        // genuinely widened (the secret sets differ), and the lock now sees it.
+        let mk = |name: &str, body: &str| -> crate::lockfile::LockEntry {
+            let dir = scratch(name);
+            write(&dir, "delulu.toml", LIB);
+            write(&dir, "src/root.delulu", body);
+            let ws = resolve_workspace(&dir);
+            let prog = check_workspace(&ws);
+            assert!(err_codes(&prog).is_empty(), "{name} should check clean: {:?}", prog.diagnostics);
+            crate::lockfile::compute_entry(&ws, &prog, 0)
+        };
+        let v1 = mk(
+            "secret_v1",
+            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n",
+        );
+        let v2 = mk(
+            "secret_v2",
+            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n\
+             pub fn key2(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
+        );
+        // The coarse authority is identical — this is why the widening used to be invisible.
+        assert_eq!(v1.effects, v2.effects, "effects must be equal; the secret is the only change");
+        assert_eq!(v1.cap_kinds, v2.cap_kinds, "cap_kinds must be equal; the secret is the only change");
+        // But the authority genuinely widened, and the lock now records and detects it.
+        assert!(v2.secrets.contains(&"DB_PASSWORD".to_string()), "v2 reads a new secret");
+        assert!(!v1.secrets.contains(&"DB_PASSWORD".to_string()), "v1 does not read it");
+        assert!(
+            crate::lockfile::authority_widened(&v1, &v2),
+            "a package that begins reading a new secret has widened its authority"
+        );
+        // The authority_hash intentionally does NOT move on a secret change (it is effects+kinds by
+        // documented definition, and folding secrets in would invalidate existing lockfiles). The
+        // backstop for a same-version secret change is the content hash: the source changed, so it
+        // moves, and DL1010 fires. That is what makes the surgical widening fix safe.
+        assert_eq!(v1.authority_hash, v2.authority_hash, "the hash stays effects+kinds by design");
+        assert_ne!(v1.content_hash, v2.content_hash, "a secret change is a source change → content hash moves");
+    }
 
     #[test]
     fn pub_import_re_exports_transitively() {

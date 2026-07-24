@@ -214,9 +214,10 @@ name            = "webby"
 version         = "1.4.2"
 source          = "git+https://github.com/x/webby#9f2c41d"
 content_hash    = "blake3:af31…"        # over canonicalized source tree
-authority_hash  = "blake3:77b0…"        # over the canonical JSON of verified authority (§4.1)
+authority_hash  = "blake3:77b0…"        # over the canonical JSON of verified effects+kinds (§4.1)
 effects         = ["Net"]
 cap_kinds       = ["Http"]
+secrets         = ["API_KEY"]           # the secret names the package reads (hardening D28)
 scopes          = { net = ["api.example.com"] }
 api_row_hash    = "blake3:d10c…"        # over apiRows(P), canonical JSON
 accepted_by     = ""                     # non-empty iff --accept-authority was used, records flag+date
@@ -226,6 +227,15 @@ Rules: builds verify `content_hash` before anything else (mismatch: DL1010); the
 authority and compare to `authority_hash` (mismatch: DL1002 — this catches "same version string,
 different code"); `delulu.lock` is committed to VCS; `--locked` (default in CI mode) refuses any
 resolution not already in the lockfile (DL1011).
+
+The `secrets` field records which secret names the package reads (`root.secret("NAME")`). It is
+part of a package's authority — Constitution invariant 10 lists *scopes*, and a secret name is a
+scope — so the semver-authority law (§4.3) and `authority --diff` treat a **new secret name as a
+widening**, exactly like a new effect or a new host. Reading a secret adds no effect and no
+capability kind, so before this field existed a dependency could begin reading a new secret on a
+patch bump and neither review tool would notice (hardening D28). The `authority_hash` intentionally
+stays over effects+kinds only, matching its definition above; a secret change is still caught for
+the same version because it changes the source, and therefore the `content_hash` (DL1010).
 
 ---
 

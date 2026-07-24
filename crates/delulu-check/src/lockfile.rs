@@ -26,6 +26,13 @@ pub struct LockEntry {
     pub api_row_hash: String,
     pub effects: Vec<String>,
     pub cap_kinds: Vec<String>,
+    /// The names of the secrets this package reads (`root.secret("NAME")`). Part of the package's
+    /// authority (Constitution invariant 10 lists *scopes*, and a secret name is a scope), and
+    /// tracked here so the semver-authority law and `authority --diff` can see a secret-scope
+    /// widening. Reading a secret adds no effect and no capability kind, so without this field a
+    /// dependency could start reading a new secret on a patch bump and neither review tool would
+    /// notice — see HARDENING_CAMPAIGN C18.
+    pub secrets: Vec<String>,
     pub net: Vec<String>,
     pub fs_read: Vec<String>,
     pub fs_write: Vec<String>,
@@ -80,6 +87,7 @@ impl Lockfile {
                     api_row_hash: s("api_row_hash"),
                     effects: a("effects"),
                     cap_kinds: a("cap_kinds"),
+                    secrets: a("secrets"),
                     net: sc("net"),
                     fs_read: sc("fs.read"),
                     fs_write: sc("fs.write"),
@@ -106,6 +114,7 @@ impl Lockfile {
             out.push_str(&format!("api_row_hash   = {}\n", q(&p.api_row_hash)));
             out.push_str(&format!("effects        = {}\n", arr(&p.effects)));
             out.push_str(&format!("cap_kinds      = {}\n", arr(&p.cap_kinds)));
+            out.push_str(&format!("secrets        = {}\n", arr(&p.secrets)));
             out.push_str(&format!(
                 "scopes         = {{ net = {}, \"fs.read\" = {}, \"fs.write\" = {} }}\n",
                 arr(&p.net),
@@ -181,6 +190,7 @@ pub fn compute_entry(ws: &Workspace, program: &Program, pkg_idx: usize) -> LockE
         api_row_hash: h(api_row_dump(ws, pkg_idx).as_bytes()),
         effects: auth.effects.iter().cloned().collect(),
         cap_kinds: auth.cap_kinds.iter().cloned().collect(),
+        secrets: auth.secrets.iter().cloned().collect(),
         net: pkg.manifest.authority.net.clone(),
         fs_read: pkg.manifest.authority.fs_read.clone(),
         fs_write: pkg.manifest.authority.fs_write.clone(),
@@ -281,6 +291,10 @@ fn subset(a: &[String], b: &[String]) -> bool {
 pub fn authority_widened(old: &LockEntry, new: &LockEntry) -> bool {
     !subset(&new.effects, &old.effects)
         || !subset(&new.cap_kinds, &old.cap_kinds)
+        // A new secret name is a widening even though it adds no effect and no capability kind.
+        // Omitting this was the hole C18 closed: without it a dependency could begin reading a
+        // new secret on a patch bump and the semver-authority law would wave it through.
+        || !subset(&new.secrets, &old.secrets)
         || !subset(&new.net, &old.net)
         || !subset(&new.fs_read, &old.fs_read)
         || !subset(&new.fs_write, &old.fs_write)
@@ -355,6 +369,7 @@ mod tests {
                 api_row_hash: "blake3:d10c".into(),
                 effects: vec!["Net".into()],
                 cap_kinds: vec!["Http".into()],
+                secrets: vec!["API_KEY".into()],
                 net: vec!["api.example.com".into()],
                 fs_read: vec![],
                 fs_write: vec![],
@@ -387,6 +402,35 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].code, "DL1003");
         assert!(newlock.packages[0].accepted_by.is_empty());
+    }
+
+    #[test]
+    fn a_new_secret_is_a_widening_and_needs_a_major_bump() {
+        // HARDENING_CAMPAIGN C18. Reading a new secret adds no effect and no capability kind, so
+        // before secrets entered the lock entry this pair had IDENTICAL observable authority and
+        // the semver-authority law waved the patch bump through. Now it is DL1003 like any other
+        // widening. The effects and cap_kinds are equal on purpose — the secret set is the only
+        // thing that moves, which is exactly the case that used to be invisible.
+        let old = LockEntry {
+            name: "logger".into(),
+            version: "1.0.0".into(),
+            effects: vec!["Net".into()],
+            secrets: vec!["TELEMETRY_TOKEN".into()],
+            ..Default::default()
+        };
+        let new = LockEntry {
+            name: "logger".into(),
+            version: "1.0.1".into(), // a PATCH bump
+            effects: vec!["Net".into()],
+            secrets: vec!["TELEMETRY_TOKEN".into(), "DB_PASSWORD".into()],
+            ..Default::default()
+        };
+        assert!(authority_widened(&old, &new), "a new secret name must count as a widening");
+        let oldlock = Lockfile { version: 1, packages: vec![old] };
+        let mut newlock = Lockfile { version: 1, packages: vec![new] };
+        let diags = enforce_semver_law(&oldlock, &mut newlock, &[]);
+        assert_eq!(diags.len(), 1, "the patch-bump secret widening must be refused: {diags:?}");
+        assert_eq!(diags[0].code, "DL1003");
     }
 
     #[test]

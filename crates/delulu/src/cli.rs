@@ -2983,6 +2983,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
 
         let mut scope_obj = serde_json::Map::new();
         added_scope_field(&mut scope_obj, "cap_kinds", &old_e.cap_kinds, &new_e.cap_kinds);
+        added_scope_field(&mut scope_obj, "secrets", &old_e.secrets, &new_e.secrets);
         added_scope_field(&mut scope_obj, "net", &old_e.net, &new_e.net);
         added_scope_field(&mut scope_obj, "fs.read", &old_e.fs_read, &new_e.fs_read);
         added_scope_field(&mut scope_obj, "fs.write", &old_e.fs_write, &new_e.fs_write);

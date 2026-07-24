@@ -1164,6 +1164,41 @@ misled about what the original DeluluLang is or who created it.
 was recommended but flagged as the owner's call, and Jesse confirmed rename. A licensing decision
 resolved by an assistant's guess is precisely the kind of thing this ruling exists to prevent.
 
+**D28 — The supply chain could lie about secrets: the semver-authority law and `authority --diff`
+were blind to secret-scope widening. Closed, surgically, without a lockfile format break. A related
+deeper hole (the pin and self-declaration layers) is presented to the owner, not auto-fixed,
+because it changes acceptance behavior.** Hardening campaign P3 (`HARDENING_CAMPAIGN.md` C18/C19).
+Ruled in four parts.
+
+(a) **The hole was real and against invariant 10.** Reading a secret adds no effect and no
+capability kind — only a name — and the lock entry never recorded secret names. So `authority_widened`
+and `authority --diff` saw byte-identical authority across a version that quietly added a secret
+read, and `delulu lock` waved the patch bump through. Constitution invariant 10 lists *scopes* among
+what may not widen silently, and a secret name is a scope; Stage 2 is the stage that exists to make
+that true for the supply chain. Verified by two witnesses observed to fail against the pre-fix code.
+
+(b) **RULED: fix the widening detection, not the hash.** The lock entry gains a `secrets` field and
+the semver-authority law + `authority --diff` treat a new secret as a widening. The `authority_hash`
+is deliberately left over effects+kinds — its documented meaning — because folding secrets in would
+change every existing hash and fail any committed lockfile with DL1002 on the next build, and
+**backward compatibility is owner-reserved**. The security property closes anyway: a same-version
+secret change moves the `content_hash` and is caught by DL1010. Choosing the smaller change that
+still closes the hole is the point.
+
+(c) **The deeper layer (C19) is owner-reserved and was NOT auto-fixed.** `check_self_authority`
+(DL1009) does not require a package to declare the secrets it reads, and `check_pins` (DL1001) does
+not constrain a dependency's secrets against the consumer's pin — the same blindness at the first
+review gate. The fix is small and breaks nothing in-tree, but it changes what the **checker
+accepts** (a package reading an undeclared secret would begin to error), which is a
+backward-compatibility change the owner reserved. It is presented with full analysis and held —
+the licensing discipline (D27) applied to a language-behavior change. Recommendation on record: make
+it, because it completes invariant 10 for secrets.
+
+(d) **This is hardening, not redefinition.** Nothing about the authority lattice, the `⊑` relation,
+or the Guard changed. A dimension the model already contained (secrets, present in `PackageAuthority`
+and in `AuthoritySpec`) is now *checked* where it was computed-but-dropped. That is exactly the
+campaign's harden-never-redefine rule.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
