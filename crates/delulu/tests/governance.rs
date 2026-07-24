@@ -32,6 +32,31 @@ fn the_governance_artifacts_exist() {
     }
 }
 
+/// The licensing artifacts (D27) are load-bearing legal files: without them the project reverts to
+/// default copyright and nobody may use it. They must never silently vanish, and the machine-readable
+/// declaration must agree with the files — a `Cargo.toml` that claims MIT over an Apache LICENSE is a
+/// supply-chain lie the same way a wrong SBOM is.
+#[test]
+fn the_licensing_is_present_and_consistent() {
+    for f in ["LICENSE", "NOTICE", "TRADEMARK.md", "GOVERNANCE.md"] {
+        assert!(root().join(f).exists(), "{f} is required — its absence reverts the project to default copyright (D27)");
+    }
+    let license = read("LICENSE");
+    assert!(license.contains("Apache License") && license.contains("Version 2.0"), "LICENSE must be Apache-2.0");
+    assert!(license.contains("Jesse Sunil"), "the copyright holder must be named in LICENSE");
+    // The workspace manifest's machine-readable licence must match the file on disk.
+    assert!(
+        read("Cargo.toml").contains("license = \"Apache-2.0\""),
+        "Cargo.toml must declare the same licence the LICENSE file grants"
+    );
+    // NOTICE carries the attribution Apache §4(d) propagates; the trademark policy is the rename rule.
+    assert!(read("NOTICE").contains("Jesse Sunil"), "NOTICE must record the original creator");
+    assert!(
+        read("TRADEMARK.md").contains("different name"),
+        "the trademark policy must state the derivative-renaming rule (D27, reading A)"
+    );
+}
+
 /// SECURITY.md carries the substance, not just a heading: a disclosure window, a severity rubric
 /// with every level, and the runbook's phases.
 #[test]

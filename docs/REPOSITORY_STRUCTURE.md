@@ -19,6 +19,10 @@ DeluluLang/
 ├── Cargo.toml                      # Rust workspace root (members grow per stage)
 ├── Cargo.lock                      # committed for reproducible builds (tracked 2026-07-21, D19c)
 ├── README.md                       # project front door
+├── LICENSE                         # Apache-2.0 (the code), © Jesse Sunil (D27)
+├── NOTICE                          # attribution carried by every redistribution (Apache §4d)
+├── TRADEMARK.md                    # the DeluluLang NAME policy — derivatives rename (D27)
+├── GOVERNANCE.md                   # project governance; Jesse Sunil = lead
 ├── .gitignore
 │
 ├── crates/                         # the compiler & runtime, one crate per pipeline concern

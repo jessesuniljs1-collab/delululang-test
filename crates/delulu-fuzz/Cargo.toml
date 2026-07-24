@@ -3,6 +3,8 @@ name = "delulu-fuzz"
 description = "DeluluLang differential fuzz harness: generate programs, check them, and assert the runtime trace is a subset of the statically computed row (the Effect-Soundness theorem, fuzzed)"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [[bin]]
 name = "delulu-fuzz"

@@ -1132,6 +1132,38 @@ nothing, emits nothing), so the machine surface is unchanged for all non-attack 
 same judgement Rust made shipping the mitigation in a point release: refusing an attack is not a
 breaking change to any program a user should have been relying on.
 
+**D27 — DeluluLang is licensed: Apache-2.0 for the code, a trademark policy for the name, with
+Jesse Sunil permanently recorded as creator. This is the one ruling in the campaign made by the
+owner, not the kitchen.** Hardening campaign P1 finding C9. Owner-approved 2026-07-24.
+
+(a) **Licensing was owner-reserved and was treated that way.** The campaign's standing rule is that
+licensing, philosophy, governance, the public specification, and backward compatibility are never
+decided autonomously. C9 (no LICENSE → default copyright → nobody may legally use the project) was
+therefore presented as a recommendation and **held** until Jesse chose, even though it was the
+single largest adoption blocker. Recorded so the discipline is legible: the hardest blocker was left
+open on purpose rather than resolved without authority.
+
+(b) **RULED by the owner: Apache-2.0, and derivatives take a different name.** The two-tool
+structure — permissive code licence for the code, trademark policy for the name — is established
+practice (Rust, Python, Mozilla), so no legal language was invented. Apache-2.0 over MIT for two
+concrete reasons Jesse's goals required: its **§4(d) NOTICE mechanism** makes the creator
+attribution legally sticky through redistribution (MIT cannot force that), and its **explicit patent
+grant** matters for a language aimed at robotics and autonomous systems. Files: `LICENSE` (verbatim
+Apache text), `NOTICE`, `TRADEMARK.md` (different-name rule), `GOVERNANCE.md`; plus
+`license`/`authors` on all twelve crates and the project's own licence added to the SBOM component.
+
+(c) **The name is protected without restricting the code.** The Apache licence covers the code and
+grants no rights in the name; `TRADEMARK.md` governs the name. Anyone may use, modify, sell, and
+fork DeluluLang; a modified or derivative *language* must ship under a different name and not present
+itself as the original. This is exactly the constitution's no-discrimination stance — every user,
+human or AI, has the same freedom — with the one narrow protection Jesse reserved: that no one can be
+misled about what the original DeluluLang is or who created it.
+
+(d) **The genuine ambiguity was escalated, not guessed.** One sentence in the brief could have meant
+"rename derivatives" or "keep the name"; the honest reading (rename, consistent with name-protection)
+was recommended but flagged as the owner's call, and Jesse confirmed rename. A licensing decision
+resolved by an assistant's guess is precisely the kind of thing this ruling exists to prevent.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates

@@ -3,6 +3,8 @@ name = "delulu-check"
 description = "DeluluLang name resolution, type & effect/authority checker — the soundness core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }

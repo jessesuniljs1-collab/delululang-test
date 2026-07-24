@@ -74,7 +74,7 @@ deviations.
 | C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | **CLOSED** — D25 |
 | C7 | The capability corpus is 8 programs; `tier4-multimodule` has none | medium (evidence) | OPEN |
 | C8 | The interpreter's recursion bound is fixed at 10,000 and appears in no user-facing document | medium (usability) | **CLOSED** (documented) — D25 |
-| C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | OPEN — owner decision |
+| C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | **CLOSED** — D27 (owner-approved) |
 | C10 | Runtime — DL0703 refused without naming the grant that would fix it | medium (usability) | **CLOSED** — D25 |
 | C11 | Checker — a user function silently loses to a same-named prelude builtin | **high** (correctness) | **CLOSED** — D25 |
 | C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | OPEN |
@@ -349,19 +349,37 @@ plausible-looking answer instead of a signal, in a language that chose the oppos
 method earlier. Settling this is a design decision, not a bug fix, and it is recorded here for
 that decision rather than being changed unilaterally.
 
-### C9 · There is no LICENSE — OPEN, and it is the owner's decision
+### C9 · There is no LICENSE — CLOSED (D27, owner-approved)
 
-No `LICENSE` file exists, and `Cargo.toml` declares no `license` field. Under default copyright
-that means **all rights reserved**: nobody but the copyright holder may use, copy, modify, or
-distribute this code. Measured against the campaign's own objective — that anyone should be able
-to download, build, install, and use DeluluLang in production — this is the single hardest
-blocker, and no amount of engineering moves it.
+The state at the finding: no `LICENSE` file, and `Cargo.toml` declared no `license`. Under default
+copyright that means **all rights reserved** — nobody but the copyright holder could use, copy,
+modify, or distribute the code. Measured against the campaign's objective (anyone can download,
+build, install, and use DeluluLang), it was the single hardest blocker, and no engineering moved
+it. It was deliberately **not fixed unilaterally**: choosing a licence is a legal commitment
+belonging to the copyright holder alone, so it was presented as a recommendation and held.
 
-It is recorded and deliberately **not fixed**. Choosing a licence is a legal commitment with real
-consequences (patent grants, copyleft reach, contributor terms) and it belongs to the copyright
-holder alone. The README now states the situation plainly instead of leaving a reader to discover
-it. Related and smaller: `Cargo.toml` names a `repository` URL that is not published, because this
-project is never pushed by owner policy; the README no longer implies a download exists.
+**Resolution (owner-approved 2026-07-24).** Jesse chose **Apache-2.0 for the code** and, for
+derivatives, the **different-name** rule. The recommendation's two-tool split was adopted whole:
+
+- **`LICENSE`** — the verbatim Apache-2.0 text, copyright Jesse Sunil. Permissive: use, modify,
+  distribute, and sell, by anyone, commercially, with an explicit patent grant.
+- **`NOTICE`** — the attribution that Apache §4(d) forces every redistribution to carry, naming
+  Jesse Sunil as original creator; it may not be removed or altered.
+- **`TRADEMARK.md`** — the DeluluLang name is a mark. Truthful reference is always fine; a modified
+  or derivative language must ship under a **different name** and must not claim to be the original
+  or official DeluluLang. This protects the name **without** restricting the code — the Rust /
+  Python / Mozilla separation.
+- **`GOVERNANCE.md`** — names Jesse as project lead, ties changes to the RFC process, and binds
+  governance to the same honesty clauses as the code.
+- **Machine-readable:** `license = "Apache-2.0"` and `authors = ["Jesse Sunil"]` on every one of the
+  twelve crates (via `[workspace.package]` inheritance), and `licenses: [Apache-2.0]` added to the
+  SBOM's own component — because an SBOM that lists its dependencies' licences and omits its own is
+  exactly the kind of gap this project refuses.
+
+No legal language was invented: the Apache text is standard, and the trademark/governance policies
+are adapted from established open-source practice (`delulu-licensing-intent` memory records the
+mapping). The one genuine ambiguity in the brief — whether a derivative must rename or must keep the
+name — was **not guessed**; Jesse resolved it to rename.
 
 ### C11 · A user function silently loses to a same-named prelude builtin — CLOSED (D25)
 

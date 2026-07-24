@@ -7,7 +7,8 @@
       "type": "application",
       "name": "delulu",
       "version": "1.0.0",
-      "description": "The DeluluLang compiler, runtime, and toolchain"
+      "description": "The DeluluLang compiler, runtime, and toolchain",
+      "licenses": [ { "license": { "id": "Apache-2.0" } } ]
     },
     "properties": [
       {

@@ -24,6 +24,10 @@ members = [
 version = "1.0.0"
 edition = "2021"
 repository = "https://github.com/delulu-lang/delulu"
+# The code is Apache-2.0 (see LICENSE, NOTICE). The DeluluLang NAME is a trademark of Jesse Sunil
+# and is governed separately by TRADEMARK.md — the license covers the code, not the name.
+license = "Apache-2.0"
+authors = ["Jesse Sunil"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

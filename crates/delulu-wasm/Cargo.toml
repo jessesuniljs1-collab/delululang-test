@@ -3,6 +3,8 @@ name = "delulu-wasm"
 description = "DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and run them under an embedded, deny-by-default Wasmtime host"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }

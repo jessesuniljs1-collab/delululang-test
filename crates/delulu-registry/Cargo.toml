@@ -3,6 +3,8 @@ name = "delulu-registry"
 description = "The DeluluLang package registry (Stage 9): sparse index, publish API, server-side authority recomputation"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [[bin]]
 name = "delulu-registry"

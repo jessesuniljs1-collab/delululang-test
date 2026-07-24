@@ -35,7 +35,7 @@ What that does and does not mean:
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |
 | **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). |
-| **Not licensed yet** | **There is no LICENSE file**, so default copyright applies and no one else may legally use this. See [License](#license). |
+| **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
 
 An in-progress hardening campaign — testing every stage to failure and fixing what breaks — is
@@ -152,11 +152,19 @@ Three things worth knowing before you evaluate it:
 
 ## License
 
-**None yet.** No LICENSE file exists and `Cargo.toml` declares no license, so this code is under
-default copyright — all rights reserved — and no one but the copyright holder may use, copy, or
-distribute it. This is stated plainly because it is the single largest obstacle to the project's
-own stated goal of being something anyone can adopt, and it is a decision only the copyright
-holder can make.
+**Code: [Apache-2.0](LICENSE).** Free to use, modify, distribute, and sell — by anyone, human or
+AI, for any purpose, including commercially. The license carries an explicit patent grant and, via
+its `NOTICE` mechanism, keeps the authorship attribution attached through redistribution.
+
+**Name: a trademark of Jesse Sunil** ([TRADEMARK.md](TRADEMARK.md)). The Apache-2.0 license covers
+the *code*; it grants no rights in the *name*. You may build on, sell, and fork DeluluLang freely —
+but a modified or derivative language must ship under a **different name** and must not present
+itself as the original DeluluLang. This is the same separation Rust, Python, and Mozilla use: a
+permissive code license plus a trademark policy so no one can be misled about what the original is
+or who created it.
+
+**Creator:** Jesse Sunil, permanently recorded in [`NOTICE`](NOTICE). Project governance is in
+[`GOVERNANCE.md`](GOVERNANCE.md).
 
 ---
 
