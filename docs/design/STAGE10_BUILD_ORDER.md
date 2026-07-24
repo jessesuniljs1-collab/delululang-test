@@ -1101,6 +1101,37 @@ say what to type teaches nothing, so all eleven refusal messages name the exact 
 (`--grant console`, `--grant fs.read=./data`, `--grant secret:NAME=VALUE`, and the rest, echoing
 the actual path or device). Prose only: codes, spans, and the `--json` envelope are unchanged.
 
+**D26 — DeluluLang refuses Trojan Source: raw bidirectional control characters in source are an
+error (DL0107). The language whose purpose includes reviewing AI-written code will not accept
+source whose rendering can be inverted against its meaning.** Hardening campaign P2
+(`HARDENING_CAMPAIGN.md` C3). Ruled in four parts.
+
+(a) **This is the highest-value Stage-1 security property, not a lint.** A file with a U+202E
+override in a comment checked clean and could be made to *render* as the opposite of what it *runs*
+— the Trojan Source attack (CVE-2021-42574). For most languages that is a review nuisance; for one
+whose flagship use case is a human (or an AI) reviewing code another AI wrote, defeating review is
+the entire attack. So it is refused outright, matching Rust's deny-by-default, not warned about.
+
+(b) **RULED: DL0107 is authorized in the DL01xx lexer range** (this §5 requires a ruling for any
+new code; the D22 federation codes DL1415–DL1418 set the precedent that a new code lands in the
+range of the *subsystem* it belongs to, not mechanically in DL19xx). A bidi-control refusal is a
+lexical property, so DL0107 — the next free slot after DL0106 — is the consistent home. The three
+retired numbers (DL0503/DL0702/DL0906) remain retired; nothing is reused.
+
+(c) **The design is one scan of raw source, ahead of tokenizing.** The rule cannot die in a
+per-token branch that forgot it (the skip-branch discipline), and because it reads raw bytes the
+`\u{202e}` escape — ASCII in source, visible in review — is untouched, keeping the legitimate
+string-data case open. Raw right-to-left *letters* are never refused: the target is reordering
+*control* characters, and breaking Arabic or Hebrew string data would be its own discrimination,
+against the constitution's no-discrimination stance. All four properties are witnessed, and the
+reject file was seen to check clean on the pre-fix binary before it refused after.
+
+(d) **Stability.** A program carrying a raw bidi control is *touched* by this phase, so its channel
+changing is within the contract; every program without one lexes byte-identically (the scan finds
+nothing, emits nothing), so the machine surface is unchanged for all non-attack input. This is the
+same judgement Rust made shipping the mitigation in a point release: refusing an attack is not a
+breaking change to any program a user should have been relying on.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates
@@ -1167,3 +1198,8 @@ across debug and release; the wall-clock dead-man (the real-time guarantee) is u
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
 retired numbers (DL0503/DL0702/DL0906) are never reused (S9-D22).
+
+Post-close-out additions, each ruled above and allocated in its subsystem's range (not mechanically
+in DL19xx): **DL1415–DL1418** (broker/federation certs, D22); **DL0107** (lexer bidi-control
+refusal, D26). The subsystem-range convention keeps a code's number meaningful — a reader seeing
+`DL01xx` knows it is lexical without consulting a table.

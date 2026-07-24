@@ -73,6 +73,16 @@ COMMENT   = "//" to end of line | "/*" ... "*/" (nesting allowed) | "///" doc co
 Punctuation/operators (each a distinct token):
 `( ) { } [ ] , . : ; -> => ! ? | = == != < <= > >= + - * / % && || _ @`
 
+**Source hygiene (normative, hardening D26).** Identifiers are ASCII by construction (the `IDENT`
+production above), which forecloses homoglyph and invisible-character attacks on names. In addition,
+the lexer refuses any of the eleven Unicode **bidirectional control characters** (U+200E, U+200F,
+U+202A–U+202E, U+2066–U+2069) appearing as a raw code point anywhere in source — the "Trojan Source"
+class (CVE-2021-42574), where rendered text can be reordered against what the compiler reads. The
+diagnostic is **DL0107**, an error, not a warning: a language for reviewing AI-written code must not
+accept source whose rendering can be inverted against its meaning. The check reads *raw* bytes, so
+the escape `\u{202e}` — ASCII in source and visible to a reviewer — remains legal for string data,
+and right-to-left *letters* (which are not control characters) are never affected.
+
 ### 2.2 Statement termination (Go-style automatic insertion)
 
 The lexer inserts a statement terminator at a newline **iff** the previous token can end a

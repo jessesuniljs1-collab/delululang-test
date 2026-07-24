@@ -68,7 +68,7 @@ deviations.
 |---|---|---|---|
 | C1 | Stage 1 — two unbounded parser loops | **high** (availability) | **CLOSED** — D24 |
 | C2 | CLI — `--json` emits no object on a read failure | medium (machine contract) | OPEN |
-| C3 | Stage 1 — bidirectional-override source is accepted silently | medium (review integrity) | OPEN |
+| C3 | Stage 1 — bidirectional-override source is accepted silently | **high** (review integrity) | **CLOSED** — D26 |
 | C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | **CLOSED** — D25 |
 | C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | **CLOSED** — D25 |
 | C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | **CLOSED** — D25 |
@@ -81,6 +81,8 @@ deviations.
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
 | C14 | `DL0907`'s registry text is narrower than the conditions that raise it | low (accuracy) | OPEN |
 | C15 | `delulu fmt` deletes the blank line between two comment paragraphs before an item | medium (fidelity) | OPEN — P9 |
+| C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
+| C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -191,9 +193,9 @@ Two sub-questions to settle when this is fixed, not before:
    "your invocation was wrong; the program was never examined". The second clause is true; the
    first is arguable. Exit 2 for a *missing* file is clearly right, and consistency has value.
 
-### C3 · Bidirectional-override characters are accepted silently — OPEN
+### C3 · Bidirectional-override characters are accepted silently — CLOSED (D26)
 
-A source file containing U+202E RIGHT-TO-LEFT OVERRIDE inside a comment checks **clean, exit 0**.
+A source file containing U+202E RIGHT-TO-LEFT OVERRIDE inside a comment checked **clean, exit 0**.
 This is the Trojan Source class (CVE-2021-42574): the bytes a compiler parses and the glyphs a
 reviewer sees can be made to disagree, so a change can read as innocuous while doing something
 else. Rust, Go, and others made this deny-by-default after 2021.
@@ -202,7 +204,28 @@ The exposure here is narrower than in most languages — identifiers are ASCII-o
 attack cannot hide inside a name — which leaves comments and string literals. That is still the
 whole of it: this project's stated purpose includes *humans reviewing AI-written code*, and a file
 that renders differently than it parses attacks review directly. A language whose value proposition
-is legible authority should not accept source whose legibility can be inverted invisibly.
+is legible authority must not accept source whose legibility can be inverted invisibly. Raised from
+medium to **high** on that reasoning: for this language, defeating review is not a side effect, it
+is the whole attack.
+
+**Fix (`DL0107`).** The lexer refuses any of the eleven Unicode bidirectional control characters
+(the set Rust denies) as raw bytes anywhere in source. Two design choices make it durable:
+
+- **One scan, ahead of tokenizing, over the whole raw source.** The rule lives in exactly one
+  place and cannot die in a branch that forgot to check — the project's skip-branch discipline
+  applied to a security rule. Every entry point (check, run, fmt, authority) reaches it because
+  all of them lex.
+- **It scans raw bytes, so the escape survives.** `\u{202e}` is ASCII in source — visible to a
+  reviewer — and is left untouched, so a string that genuinely needs the code point can still have
+  it, explicitly and legibly. Raw RTL *letters* (Arabic, Hebrew) are never affected, because they
+  are not control characters; refusing them would break internationalized data, which would be its
+  own discrimination. Both properties are witnessed.
+
+**Witnesses.** In `crates/delulu-syntax/src/lexer.rs`: a raw override is DL0107; **all eleven**
+controls fire and each names its own code point in the message (a missing entry is a character the
+scan waves through); an escaped `\u{202e}` does **not** fire; RTL letters do **not** fire. Plus the
+conformance reject file `tests/conformance/reject/DL0107_bidi_override.delulu`. Verified against the
+old code: the reject file checks **clean** on the pre-fix binary and refuses after.
 
 ### C4 · The front door describes a project that no longer exists — OPEN
 
@@ -434,6 +457,38 @@ around the tool rather than for the reader.
 
 Deferred to P9 (Stage 8, Surface) rather than fixed here: changing canonical output means
 re-formatting the shipped corpus and re-establishing `fmt`'s laws, which deserves its own pass.
+
+### C16 · Cyclic type aliases are silently accepted — OPEN (P2 return)
+
+`type A = A`, and `type A = B; type B = A`, check **clean, exit 0**. A serious language rejects a
+cyclic type alias (Rust: "cycle detected when expanding type alias") because it names no ground
+type — nothing can ever have that type.
+
+**This was chased to a soundness verdict before being filed as hygiene, because the tempting
+assumption is that it's harmless.** Three things were verified against the current binary:
+
+- **It does not hang or overflow.** Cycles of length 1–4 terminate in well under a second; the
+  alias resolver is genuinely cycle-aware, not merely stack-bounded.
+- **It does not truncate deep chains unsoundly.** A **5,000-deep** non-cyclic alias chain
+  terminating in `Int` resolves fully — `fn f(x: A0) -> Str { x }` is correctly refused DL0401.
+  So the cycle handling is not a step-limit that could silently turn a deep-but-valid type into a
+  fresh variable that unifies with anything.
+- **It cannot launder an opaque type.** `type Sneaky = Sneaky; fn leak(s: Secret[Str]) -> Sneaky {
+  s }` is refused DL0602 — secrets never coerce, even through a cycle.
+
+So the exposure is exactly two hygiene defects, no soundness hole: `type A = A` should be a clear
+"cyclic type alias" diagnostic rather than a silent accept, and *using* a cyclic alias currently
+emits a confusing `expected T10, found T9` (the same type-variable-leak as C12) instead of naming
+the cycle. Deferred to a focused Stage-1 return rather than bolted onto the D26 commit, because it
+wants real cycle detection in the resolver with its own diagnostic and witnesses — not a patch.
+
+### C17 · A float literal that overflows to infinity is accepted silently — OPEN
+
+`1.0e400` checks clean and evaluates to `inf`. This matches C, JavaScript, and Rust (which produce
+`inf` for an over-range float literal), so it is defensible and is **not** a soundness issue — filed
+as an honesty gap, not a defect. Rust emits a warning in this case; DeluluLang, whose posture is to
+say what it is doing, arguably should too. Low priority. (Note: `1e400` *without* a decimal point is
+a parse error, because a float literal requires the point — `1e400` lexes as `1` then `e400`.)
 
 ## 4. Phase plan
 

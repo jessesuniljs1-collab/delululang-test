@@ -100,7 +100,7 @@ fn every_stage1_static_code_has_a_reject_case() {
         .collect();
 
     let required = [
-        "DL0106", "DL0204", "DL0206", "DL0301", "DL0302", "DL0305", "DL0306", "DL0307", "DL0401",
+        "DL0106", "DL0107", "DL0204", "DL0206", "DL0301", "DL0302", "DL0305", "DL0306", "DL0307", "DL0401",
         "DL0402", "DL0403", "DL0405", "DL0407", "DL0409", "DL0410", "DL0501", "DL0504", "DL0602",
         "DL0603", "DL0604", "DL0605",
     ];

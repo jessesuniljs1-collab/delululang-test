@@ -1,0 +1,10 @@
+module trojan
+
+// A witness for DL0107. The comment on the next line contains a raw RIGHT-TO-LEFT
+// OVERRIDE (U+202E, bytes E2 80 AE) between the words. Rendered in an editor it can be
+// made to read the opposite of what the code does — the Trojan Source attack. This file
+// exists only to prove the refusal fires; it is not meant to run.
+fn is_allowed(user_is_admin: Bool) -> Bool {
+    // deny if ‮ not admin
+    user_is_admin
+}

@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 139 of 139 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 140 of 140 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -20,6 +20,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0104` | invalid numeric literal | `ref.diag.DL0104` | covered |
 | `DL0105` | unterminated block comment | `ref.diag.DL0105` | covered |
 | `DL0106` | reserved word used as a declared name | `ref.diag.DL0106` | covered |
+| `DL0107` | bidirectional control character in source | `ref.diag.DL0107` | covered |
 | `DL0201` | expected a different token | `ref.diag.DL0201` | covered |
 | `DL0202` | expected an expression | `ref.diag.DL0202` | covered |
 | `DL0203` | expected a type | `ref.diag.DL0203` | covered |

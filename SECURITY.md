@@ -56,6 +56,12 @@ diagnostic is at least Medium, because callers lose the ability to distinguish f
 - Anything that makes the checker accept a program violating a rule in `docs/reference/`.
 - Any path where custody, signature, or lockfile verification **fails open**.
 - Any way to make a diagnostic disappear that should have fired.
+- **Anything that makes source render differently than it compiles.** Because a first-class use of
+  this language is a human or an AI *reviewing* code another AI wrote, an attack on the reviewer —
+  making the glyphs disagree with the tokens — is an attack on the guarantee. The lexer refuses
+  Unicode bidirectional control characters for this reason (DL0107, "Trojan Source", CVE-2021-42574;
+  identifiers are ASCII-only, which closes the homoglyph/invisible-character vector on names). A new
+  way to desynchronize rendering from meaning is in scope.
 
 ### 3.2 What is not a vulnerability
 

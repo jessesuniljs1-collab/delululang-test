@@ -24,6 +24,7 @@ registry! {
     "DL0104" => "invalid numeric literal",
     "DL0105" => "unterminated block comment",
     "DL0106" => "reserved word used as a declared name",
+    "DL0107" => "bidirectional control character in source",
 
     // DL02xx — parse
     "DL0201" => "expected a different token",
@@ -532,6 +533,14 @@ pub fn code_explain(code: &str) -> Option<String> {
              still legal as a member name after `.`, which is how `root.secret(…)` coexists with \
              `secret` being reserved. Reserving a word early is a promise that adding it later will \
              not break your code — the alternative is a breaking change dressed as a feature.",
+        "DL0107" => "A Unicode bidirectional control character was found in the raw source. These \
+             characters reorder how text RENDERS without changing how it LEXES, so a reviewer can \
+             be shown one program while the compiler reads another — the 'Trojan Source' attack \
+             (CVE-2021-42574). For a language whose purpose includes reviewing code an AI wrote, \
+             that is an attack on the reviewer, so it is refused rather than warned about. \
+             Identifiers are ASCII-only, so the character can only have come from a comment or a \
+             string. If a string genuinely needs the code point, write it as an escape (`\\u{202e}`), \
+             which is visible in review and accepted.",
 
         // ===== DL02xx — parsing ============================================
         "DL0201" => "The parser expected one specific token and found another. The message names \

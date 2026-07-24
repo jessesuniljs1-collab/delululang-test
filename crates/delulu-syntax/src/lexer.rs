@@ -7,6 +7,32 @@ use delulu_diag::{Diagnostic, FileId, Span};
 
 use crate::token::{keyword, Token, TokenKind};
 
+/// Unicode bidirectional formatting characters, which can reorder how source *renders* without
+/// changing how it *lexes* — the "Trojan Source" attack (CVE-2021-42574). In a language whose
+/// stated purpose includes humans reviewing AI-written code, a file that renders differently than
+/// it runs is an attack on the one control the reviewer has. So a raw occurrence of any of these,
+/// anywhere in source, is refused outright (DL0107).
+///
+/// Each is named, because a bare code point in a table is exactly the kind of thing a future
+/// reader cannot verify. The set is the eleven characters Rust denies for the same reason.
+/// Identifiers are already ASCII-only (DL0101 refuses the rest), so these can reach source *only*
+/// inside a comment or a string literal — which are precisely the attack's two vectors. A program
+/// that genuinely needs one of these code points in string *data* writes it as an escape
+/// (`\u{202e}`): plain ASCII in source, so visible to a reviewer and unaffected by this scan.
+const BIDI_CONTROLS: &[(char, &str)] = &[
+    ('\u{200E}', "LEFT-TO-RIGHT MARK"),
+    ('\u{200F}', "RIGHT-TO-LEFT MARK"),
+    ('\u{202A}', "LEFT-TO-RIGHT EMBEDDING"),
+    ('\u{202B}', "RIGHT-TO-LEFT EMBEDDING"),
+    ('\u{202C}', "POP DIRECTIONAL FORMATTING"),
+    ('\u{202D}', "LEFT-TO-RIGHT OVERRIDE"),
+    ('\u{202E}', "RIGHT-TO-LEFT OVERRIDE"),
+    ('\u{2066}', "LEFT-TO-RIGHT ISOLATE"),
+    ('\u{2067}', "RIGHT-TO-LEFT ISOLATE"),
+    ('\u{2068}', "FIRST STRONG ISOLATE"),
+    ('\u{2069}', "POP DIRECTIONAL ISOLATE"),
+];
+
 pub fn lex(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
     let (tokens, diags, _comments) = Lexer::new(file, src).run();
     (tokens, diags)
@@ -48,6 +74,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
+        // Security scan BEFORE tokenizing, over the whole raw source, so no per-token path can
+        // forget it — the rule lives in exactly one place and cannot die in a branch (the
+        // project's skip-branch discipline). See `BIDI_CONTROLS` and HARDENING_CAMPAIGN C3.
+        self.check_bidi_controls();
         while self.pos < self.src.len() {
             self.skip_trivia();
             if self.pos >= self.src.len() {
@@ -61,6 +91,29 @@ impl<'a> Lexer<'a> {
         let eof = self.src.len() as u32;
         self.tokens.push(Token { kind: TokenKind::Eof, span: Span::new(self.file, eof, eof) });
         (self.tokens, self.diags, self.comments)
+    }
+
+    /// Refuse raw bidirectional control characters anywhere in source (DL0107).
+    ///
+    /// One pass over the whole raw source. Because it scans raw bytes, an escaped control
+    /// (`\u{202e}`) is left alone — it is the ASCII sequence `\`,`u`,`{`,… in source, not the code
+    /// point — so the legitimate "I really do need this byte in a string" case stays open and
+    /// stays visible in review, while the raw-byte attack is refused. Runs once, ahead of the
+    /// tokenizer, and is therefore reached for every entry point (check, run, fmt, authority)
+    /// because all of them lex.
+    fn check_bidi_controls(&mut self) {
+        for (off, ch) in self.src.char_indices() {
+            if let Some((_, name)) = BIDI_CONTROLS.iter().find(|(c, _)| *c == ch) {
+                let span = Span::new(self.file, off as u32, (off + ch.len_utf8()) as u32);
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0107",
+                        format!("bidirectional control character U+{:04X} ({name}) in source", ch as u32),
+                    )
+                    .with_span(span, "this can make the code render differently than it runs — use the `\\u{…}` escape if a string truly needs it"),
+                );
+            }
+        }
     }
 
     /// Record a comment spanning `start..self.pos` for the formatter's side channel.
@@ -621,6 +674,52 @@ mod tests {
     fn unexpected_char_is_dl0101() {
         let (_, diags) = lex(0, "let x = #");
         assert_eq!(diags[0].code, "DL0101");
+    }
+
+    // ----- Trojan Source / bidi controls (HARDENING_CAMPAIGN C3, DL0107) ------
+
+    #[test]
+    fn a_raw_bidi_override_is_dl0107() {
+        // Before this rule the file below checked clean: the override lives in a comment, which
+        // the tokenizer skips wholesale, so nothing examined it. That is the Trojan Source attack.
+        let (_, diags) = lex(0, "module m\n// deny if \u{202e} not admin\nfn f() {}\n");
+        assert!(diags.iter().any(|d| d.code == "DL0107"), "expected DL0107, got {diags:?}");
+    }
+
+    #[test]
+    fn every_bidi_control_is_refused_by_name() {
+        // The whole set fires, and each carries its own code point in the message — so a reviewer
+        // reading the diagnostic learns exactly which character was hiding. A missing entry here
+        // is a character the scan would wave through.
+        for (ch, name) in BIDI_CONTROLS {
+            let src = format!("module m\n// x{ch}y\nfn f() {{}}\n");
+            let (_, diags) = lex(0, &src);
+            let hit = diags.iter().find(|d| d.code == "DL0107");
+            let hit = hit.unwrap_or_else(|| panic!("{name} (U+{:04X}) was not refused", *ch as u32));
+            assert!(
+                hit.message.contains(&format!("U+{:04X}", *ch as u32)),
+                "the message must name the code point: {}",
+                hit.message
+            );
+        }
+    }
+
+    #[test]
+    fn an_escaped_bidi_code_point_is_allowed() {
+        // The scan reads RAW source, so `\u{202e}` — which is ASCII in source and visible to a
+        // reviewer — is untouched. This is the escape hatch for the rare legitimate need, and it
+        // is exactly what keeps the rule from breaking string DATA that wants the code point.
+        let (_, diags) = lex(0, "module m\nfn f() -> Str { \"a\\u{202e}b\" }\n");
+        assert!(!diags.iter().any(|d| d.code == "DL0107"), "an escaped control must not fire DL0107: {diags:?}");
+    }
+
+    #[test]
+    fn right_to_left_letters_are_not_refused() {
+        // The refusal is about reordering CONTROL characters, not about right-to-left scripts.
+        // Arabic letters render correctly on their own and must stay legal, or the language cannot
+        // hold internationalized string data — which would be its own kind of discrimination.
+        let (_, diags) = lex(0, "module m\nfn f() -> Str { \"\u{0645}\u{0631}\u{062d}\u{0628}\u{0627}\" }\n");
+        assert!(!diags.iter().any(|d| d.code == "DL0107"), "RTL letters must not fire DL0107: {diags:?}");
     }
 
     #[test]
