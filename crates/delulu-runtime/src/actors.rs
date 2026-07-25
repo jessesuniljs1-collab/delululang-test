@@ -98,6 +98,17 @@ pub struct RootMsg {
     /// actor can hold but never widen.
     pub actuators: Vec<crate::value::ActuatorEnvelope>,
     pub sensors: Vec<String>,
+    /// Stage 10 (10h): compute envelopes, carried for the same reasons the actuator list is
+    /// (`HARDENING_CAMPAIGN.md` C35, ruling D46). `ComputeEnvelope` is plain data and `Send` by
+    /// construction, the envelope BOUNDS its holder rather than empowering them, and an actor cannot
+    /// widen one any more than it can widen an actuator envelope.
+    ///
+    /// This was withheld until the owner decided, and the argument that settled it is the asymmetry:
+    /// actuators cross, and actuation moves physical machines. Refusing the strictly less
+    /// consequential dimension while allowing the more consequential one was an omission from phase
+    /// 10h, not a safety position — the old comment here even justified withholding as "fail closed,
+    /// like the actuator list", next to the line where the actuator list crosses.
+    pub computes: Vec<crate::value::ComputeEnvelope>,
 }
 
 enum Job {
@@ -656,10 +667,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             broker_secrets: r.broker_secrets.clone(),
             actuators: r.actuators.clone(),
             sensors: r.sensors.clone(),
-            // NOTE: `r.computes` is deliberately NOT carried — see C35 and the
-            // `boundary_authority_tests` gate below, which fails if any other dimension goes missing.
-            // Withholding is the restrictive reading and is safe; carrying it would widen what an
-            // actor may do, which is a capability decision rather than a hardening fix.
+            computes: r.computes.clone(),
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // Foreign machinery is actor-pinned or v0.7-fenced at check time; reaching here
@@ -740,9 +748,9 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         MsgValue::SecretHandle(h) => Value::Secret(Rc::new(SecretVal::handle(h))),
         MsgValue::Root(r) => {
             let root = crate::value::RootVal {
-                // Actors get no compute devices: a worker thread cannot hold a device envelope
-                // this run's broker is bounding per-dispatch. Fail closed, like the actuator list.
-                computes: Vec::new(),
+                // Carried, like the actuator list beside it (D46): the envelope is what bounds the
+                // holder, and the broker still re-checks every dispatch against the grant.
+                computes: r.computes,
                 console: r.console,
                 fs_read: r.fs_read,
                 fs_write: r.fs_write,
@@ -819,13 +827,16 @@ mod boundary_authority_tests {
     ///
     /// **If this test fails, do not "fix" it by adding the field here.** Decide whether the dimension
     /// should cross an actor boundary, implement that decision, and only then update this list.
-    const WITHHELD_FROM_ACTORS: &[&str] = &[
-        // Stage 10 (10h) compute dispatch. `ComputeEnvelope` is plain data exactly like
-        // `ActuatorEnvelope`, so there is no technical obstacle to carrying it; it is withheld today
-        // because widening what an actor may do is a capability decision, not a hardening fix, and it
-        // is recorded as C35 awaiting that decision. Until then the restrictive reading stands.
-        "computes",
-    ];
+    /// Empty, and that is the answer rather than an oversight (ruling D46, closing C35): **every**
+    /// `RootVal` authority dimension now crosses an actor boundary. `computes` was the last holdout
+    /// and it is carried, because the envelope is what bounds its holder and actuators — which move
+    /// physical machines — already crossed.
+    ///
+    /// The gate below is the part that must not be removed just because this list is empty: it still
+    /// fails if a NEW dimension is added to `RootVal` and not carried, and it still fails if a name
+    /// listed here has since started crossing. An empty list means "nothing is withheld", which is a
+    /// claim that has to keep being true.
+    const WITHHELD_FROM_ACTORS: &[&str] = &[];
 
     fn declared_fields(source: &str, struct_name: &str) -> Vec<String> {
         let start = source
@@ -873,5 +884,37 @@ mod boundary_authority_tests {
             .filter(|w| msg_dims.iter().any(|m| m == *w))
             .collect();
         assert!(stale.is_empty(), "these are listed as withheld but now cross: {stale:?}");
+    }
+
+    /// The behavioural half of D46b: `computes` actually survives the round trip, rather than merely
+    /// being declared on both structs. A field can be present in `RootMsg` and still be dropped by a
+    /// conversion — the source scan above cannot see that, so this drives the real code.
+    #[test]
+    fn a_compute_envelope_survives_the_crossing_into_an_actor_and_back() {
+        use super::{msg_to_value, value_to_msg};
+        use crate::value::{ComputeEnvelope, RootVal, Value};
+        let env = ComputeEnvelope {
+            device: "gpu0".to_string(),
+            class: "gpu".to_string(),
+            adapter: "cpu-reference".to_string(),
+            memory_bytes: 1 << 20,
+            queue_depth: 4,
+            kernel_ms: (0.0, 50.0),
+            power_w: (0.0, 12.5),
+            formats: vec!["spirv".to_string()],
+            kernels: vec![("k".to_string(), "k.bin".to_string())],
+            waived: false,
+            attested: true,
+        };
+        let root = RootVal { computes: vec![env.clone()], ..Default::default() };
+        let crossed = value_to_msg(&Value::Root(std::rc::Rc::new(root)), None)
+            .expect("a Root is sendable by decision (invariant 36)");
+        let back = msg_to_value(crossed, &crate::value::Scope::root());
+        let Value::Root(r) = back else { panic!("a Root must come back as a Root") };
+        assert_eq!(r.computes.len(), 1, "the compute envelope must cross the boundary (C35/D46b)");
+        assert_eq!(r.computes[0].device, "gpu0");
+        assert_eq!(r.computes[0].memory_bytes, 1 << 20, "and arrive with its BOUNDS intact — the");
+        assert_eq!(r.computes[0].kernel_ms, (0.0, 50.0), "envelope is what limits the holder");
+        assert_eq!(r.computes[0].kernels.len(), 1, "including the enumerated kernel list");
     }
 }

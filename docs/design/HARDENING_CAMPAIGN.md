@@ -99,7 +99,7 @@ deviations.
 | C32 | **A 10 KB source file emitted 76 MB of diagnostics** — every diagnostic quoted its entire source line, times ~5000 errors | **high** (denial of service against the reader) | **CLOSED** — D38 |
 | C33 | `deploy` and `fleet` are working top-level subcommands that `--help` never listed; `deploy` also double-emitted JSON on refusal | medium (discoverability / machine contract) | **CLOSED** — D38 |
 | C34 | Stage 6 — a plugin manifest could declare `device`/`foreign_c`/`foreign_python` authority and have it **silently dropped**, advertising a ceiling the plugin can never have | medium (legibility — the C23 class, one level out) | **CLOSED** — D39 |
-| C35 | Stage 7 — a `Root` slice **silently loses `computes`** when it crosses an actor boundary; `RootMsg` is a hand-written enumeration that Stage 10 phase 10h did not extend | medium (silent narrowing — fail-closed but undecided) | **CLOSED** — D40 (gated + documented; carrying it is a capability decision for the owner) |
+| C35 | Stage 7 — a `Root` slice **silently loses `computes`** when it crosses an actor boundary; `RootMsg` is a hand-written enumeration that Stage 10 phase 10h did not extend | medium (silent narrowing — fail-closed but undecided) | **CLOSED** — D40 (gated + documented); the capability question itself CLOSED — D46b (it crosses) |
 | C36 | `atlas --format mermaid` is a module-level overview that did not say so — a reader could conclude a program has no functions or effects | medium (legibility of the authority graph) | **CLOSED** — D41 |
 | C37 | **The conformance coverage law proved a witness EXISTS, not that it exercises its anchor** — a rejecting witness repointed at an unrelated real test left coverage reporting 100% | **high** (the project's own proof of spec coverage) | **CLOSED** — D42 |
 | C38 | **An unsigned artifact and a badly-signed one both reported DL1705** on the detached path, contradicting the project's own ruled deviation 8 | medium (release integrity / machine contract) | **CLOSED** — D42 |
@@ -115,10 +115,11 @@ deviations.
 | C49 | **An empty `delulu.toml` crashed `build`/`check` with a Rust panic** — and the project's own no-panic gate could not see it, because the CLI runs on a worker thread whose panic is mapped to exit 2 ("internal"), not 101 | **high** (crash on the most ordinary beginner mistake; the crash gate was structurally blind) | **CLOSED** — D44 |
 | C50 | **`delulu authority` reported `summary.errors: 0` and exit 0 for a package `check` refuses** — the review surface never opened `delulu.toml` at all | **high** (the review surface asserting a package is clean when it is not) | **CLOSED** — D44 |
 | C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | **CLOSED** — D45 |
+| C53 | **An unused type alias is never resolved** — `type Meters = Metres` (a typo) checks clean, and the error only appears if and where the alias is used; in a library whose own code never uses it, the diagnostic lands on the consumer | medium (a declaration accepted and silently inert — the C11/C23 family) | OPEN — found in D46's migration check, queued for P15 |
 | C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
-| C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
-| C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | — | OPEN — owner-reserved (language surface) |
-| C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | OPEN — owner-reserved (safety policy) |
+| C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
+| C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
+| C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | **CLOSED** — D46c (no; the stricter reading, which is what the code already did) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -1562,6 +1563,32 @@ one it replaced.
 
 The findings came instead from asking a different question of the same inputs: not *does it crash*
 but **does it NOTICE**.
+
+### C53 · An unused type alias is never resolved — OPEN
+
+Found while checking D46a's migration path: what happens to `type E = A` written when a one-variant
+sum was meant? The alias target is not resolved at the declaration, so it checks clean:
+
+```
+type Meters = Metres          # a typo; checks clean, exit 0
+fn g(x: Meters) -> Int { 1 }  # DL0301 here, and only here
+```
+
+**Pre-existing, and D46a did not cause it** — verified by testing the two spellings that already
+reached the alias production before that ruling: `type X = (Nonexistent)` and
+`type Y = List[Nonexistent]` are both accepted too. What D46a changed is that one more spelling now
+reaches the same path, which is how it surfaced.
+
+This is the C11/C23 family: a declaration accepted and then silently inert, with the diagnostic
+appearing somewhere the author did not write. The library case is the sharp one — a package whose own
+code never uses the alias exports a broken type, and the error lands on a consumer who did not make
+the mistake.
+
+Not fixed here. The fix is to resolve an alias target at its declaration, and it has two hazards that
+deserve their own budget rather than the tail of a long phase: **forward references** (`type A = B`
+with `B` declared later must keep working) and **cycles** (`type A = A` is C16, still open, and an
+unbounded resolution walk would hang the compiler — the same trap that made D31's alias walk bounded
+at 32 hops). Queued for P15.
 
 ### C51 · The review surface could not review a real package — CLOSED (D45)
 

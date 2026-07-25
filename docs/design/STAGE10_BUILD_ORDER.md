@@ -1899,6 +1899,66 @@ fifteen tamperings accepted — a false catastrophe. `build` does not consult th
 does. Before reporting a surface as unprotected, confirm the command under test is the one making the
 guarantee.
 
+**D46 — The four owner-reserved questions, decided.** Jesse gave explicit authority to settle them
+("If there is a problem fix them chef, no need to wait for my approval or permission", 2026-07-26),
+naming C28, C35, C46 and C47b. They had been carried open across several phases precisely because
+each changes something reserved to the owner — the public grammar, what an actor may hold, a
+safety policy, and the language surface. Each is decided below with its reasoning, because a ruling
+whose argument is not written down is just a preference.
+
+(a) **C28 — `type A = B` is an ALIAS.** The right-hand side was read as a single-variant sum whenever
+it was a bare identifier, and every consequence was silent: `type Meters = Int` declared a constructor
+named `Int`, so `fn g() -> Meters { Int }` type-checked; a mistyped value reported `expected 'T9'`;
+and **no alias to a bare type name could be written at all**, since `type Meters = (Int)` —
+parenthesised — was the only spelling reaching the alias production.
+
+RULED: a variant list is signalled **syntactically and only** by `(` or `|` after the identifier.
+`type E = A | B` and `type P = Data(Int)` are sums; `type Meters = Int` is an alias; a single
+field-less variant is `type U = Nothing()`. The rule does not consult name resolution, so the grammar
+stays context-free — what makes a right-hand side a sum is a token, not whether some identifier
+happens to name an existing type. Every language with this syntax means "alias", which is what a
+reader means by it. **A search of the tree found zero single-variant field-less sums**, so nothing in
+this repository changes meaning.
+
+(b) **C35 — `computes` crosses an actor boundary.** `RootMsg` is a hand-enumerated copy of `RootVal`'s
+dimensions and phase 10h did not extend it, so a `Root` slice silently lost its compute grants at the
+boundary. D40 gated the silence; whether the dimension SHOULD cross was left open.
+
+RULED: it crosses. The argument that settles it is the asymmetry — **`actuators` and `sensors` already
+cross, and actuation moves physical machines.** Refusing the strictly less consequential dimension
+while permitting the more consequential one was an omission, not a safety position; the comment that
+justified withholding even read "fail closed, like the actuator list", on the line above where the
+actuator list crosses. `ComputeEnvelope` is plain data and `Send` by construction, the envelope BOUNDS
+its holder rather than empowering them, and the broker still re-checks every dispatch against the
+grant. `WITHHELD_FROM_ACTORS` is now **empty** — every `RootVal` dimension crosses — and the drift
+gate stays, because "nothing is withheld" is a claim that has to keep being true.
+
+(c) **C46 — a refused command does not prove liveness.** D43a made the stepped and wall clocks agree
+about a refused command costing time; whether a controller whose every setpoint is out of range should
+KEEP its machine was left to the owner.
+
+RULED toward the stricter reading, which is also what the code already did. A controller emitting only
+refused commands is not silent, but it **is** malfunctioning, and taking a machine away from a
+malfunctioning controller is what a dead-man exists for. The alternative would let a units bug hold an
+actuator indefinitely while never moving it correctly. No behaviour changes; what changes is that this
+is now a decision with a reason rather than an accident of implementation, and §5.2 says so.
+
+(d) **C47b — a multi-line bracketed list needs no trailing comma.** It was required, which is stricter
+than most languages, and the diagnostic a person met (`expected }`, caret after the last element,
+while `}` sat on the next line) did not teach the fix.
+
+RULED: all four spellings are accepted — one line or many, trailing comma or not — in every bracketed
+list. **This was never a design decision.** §2.2 inserts a `Term` at a newline only when the previous
+token can end a statement, and a comma cannot; so `a,\n)` always parsed and `a\n)` did not, purely
+because that single terminator was never skipped before the closing bracket. The fix is one skip in
+each of the nine list loops (`skip_terms_before_closer`), which is why the change is nine lines rather
+than a grammar redesign. `match` arms already accepted both forms, so this also removes an
+inconsistency between one list and every other.
+
+Witnesses for (a), (b) and (d) were observed failing against the pre-fix code with their exact
+payloads; (c) changes no behaviour and is carried by the existing dead-man tests. Full suite green on
+both platforms at the phase's baselines.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

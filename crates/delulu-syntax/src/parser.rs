@@ -852,6 +852,19 @@ impl Parser {
         );
     }
 
+    /// Inside a bracketed list, a newline before the closing bracket is whitespace, not a statement
+    /// terminator — so skip it (`HARDENING_CAMPAIGN.md` C47b).
+    ///
+    /// Only ONE position needs this, and the reason is worth recording because it made the fix nine
+    /// lines instead of thirty. §2.2 inserts a `Term` at a newline only when the previous token *can
+    /// end a statement*, and a comma cannot — which is exactly why a multi-line list WITH a trailing
+    /// comma already parsed. The stray `Term` appears in one place only: after the final element,
+    /// before the closer. So `a,\n)` was always fine and `a\n)` was not, and requiring that comma was
+    /// never a design decision — it was this token, unskipped.
+    fn skip_terms_before_closer(&mut self) {
+        while self.eat(&TokenKind::Term) {}
+    }
+
     fn parse_generics(&mut self) -> Vec<Ident> {
         let mut generics = Vec::new();
         if self.eat(&TokenKind::LBracket) {
@@ -863,6 +876,7 @@ impl Parser {
                     }
                 }
             }
+            self.skip_terms_before_closer();
             self.expect(TokenKind::RBracket);
         }
         generics
@@ -885,6 +899,7 @@ impl Parser {
                 }
             }
         }
+        self.skip_terms_before_closer();
         self.expect(TokenKind::RParen);
         params
     }
@@ -984,6 +999,7 @@ impl Parser {
                     }
                 }
             }
+            self.skip_terms_before_closer();
             self.expect(TokenKind::RBrace);
             TypeDeclKind::Record(fields)
         } else if self.eat(&TokenKind::Eq) {
@@ -1009,14 +1025,28 @@ impl Parser {
         TypeDecl { public, name, generics, kind, id: self.node_id(), span }
     }
 
-    /// A variant starts with a capitalized-or-any identifier optionally followed
-    /// by `(`; a sum has at least one, and multiple are `|`-separated. We treat
-    /// `Ident` or `Ident(` at the head, with a following `|` anywhere, as a sum;
-    /// otherwise the RHS is an alias. To keep this decidable, the rule is:
-    /// an identifier immediately followed by `(` or `|` (or end) is a variant list.
+    /// Is the RHS of `type X = …` a variant list rather than an alias?
+    ///
+    /// **A bare `type A = B` is an ALIAS** (`HARDENING_CAMPAIGN.md` C28). It used to be read as a
+    /// single-variant sum, because a lone identifier followed by a terminator matched here — and the
+    /// consequences were all silent. `type Meters = Int` made `Int` a *constructor*, so
+    /// `fn g() -> Meters { Int }` checked clean; a mistyped value reported `expected 'T9'`; and **no
+    /// alias to a bare type name could be written at all**, since `type Meters = (Int)` — parenthesised
+    /// — was the only spelling that reached the alias production. Every language with this syntax
+    /// (Rust, TypeScript, Haskell) means "alias", and that is what a reader means by it.
+    ///
+    /// So a variant list is now signalled syntactically and only by `(` or `|`:
+    ///
+    /// - `type E = A | B`   → sum (a `|` follows)
+    /// - `type P = Data(Int)` → sum, one variant carrying a field
+    /// - `type Meters = Int` → **alias**
+    ///
+    /// A single field-less variant is still expressible as `type E = A()`, which is unambiguous. The
+    /// decision no longer depends on name resolution, so the grammar stays context-free: what makes
+    /// this a sum is a token, not whether some identifier happens to name an existing type.
     fn looks_like_variant(&self) -> bool {
         matches!(self.peek(), TokenKind::Ident(_))
-            && matches!(self.peek_at(1), TokenKind::LParen | TokenKind::Pipe | TokenKind::Term | TokenKind::Eof)
+            && matches!(self.peek_at(1), TokenKind::LParen | TokenKind::Pipe)
     }
 
     fn parse_variant(&mut self) -> VariantDef {
@@ -1031,6 +1061,7 @@ impl Parser {
                     }
                 }
             }
+            self.skip_terms_before_closer();
             self.expect(TokenKind::RParen);
         }
         VariantDef { name, fields }
@@ -1102,6 +1133,7 @@ impl Parser {
                     }
                 }
             }
+            self.skip_terms_before_closer();
             self.expect(TokenKind::RParen);
             let ret = if self.eat(&TokenKind::Arrow) { Some(Box::new(self.parse_type())) } else { None };
             let row = self.parse_opt_row();
@@ -1125,6 +1157,7 @@ impl Parser {
                         }
                     }
                 }
+                self.skip_terms_before_closer();
                 self.expect(TokenKind::RBracket);
             }
             let span = start.to(self.prev_span());
@@ -1454,6 +1487,7 @@ impl Parser {
                 }
             }
         }
+        self.skip_terms_before_closer();
         self.expect(TokenKind::RParen);
         args
     }
@@ -1501,6 +1535,7 @@ impl Parser {
                         }
                     }
                 }
+                self.skip_terms_before_closer();
                 self.expect(TokenKind::RBracket);
                 let span = start.to(self.prev_span());
                 Expr::List { items, id: self.node_id(), span }
@@ -1541,6 +1576,7 @@ impl Parser {
                             }
                         }
                     }
+                    self.skip_terms_before_closer();
                     self.expect(TokenKind::RBrace);
                     let span = start.to(self.prev_span());
                     Expr::Record { path, fields, id: self.node_id(), span }
@@ -2179,5 +2215,123 @@ mod tests {
         assert_eq!(m.items.len(), 2);
         let Item::Fn(f) = &m.items[0] else { panic!() };
         assert_eq!(f.name.name, "test");
+    }
+}
+
+// ----- `type A = B` is an alias (C28, ruling D46a) -----------------------------------------
+
+/// The disambiguation is SYNTACTIC: a variant list is signalled by `(` or `|` and by nothing else.
+/// This used to resolve toward a single-variant sum, which made `type Meters = Int` declare a
+/// constructor named `Int` — so `fn g() -> Meters { Int }` type-checked — and made an alias to a
+/// bare type name unwritable except as `type Meters = (Int)`.
+#[cfg(test)]
+mod alias_vs_sum_tests {
+    use super::tests_support::*;
+
+    #[test]
+    fn a_bare_right_hand_side_is_an_alias_not_a_one_variant_sum() {
+        let m = parse_ok_src("module m\ntype Meters = Int\n");
+        assert!(is_alias(&m, "Meters"), "`type Meters = Int` must be an alias, not a sum");
+    }
+
+    #[test]
+    fn a_pipe_or_a_paren_still_makes_a_sum() {
+        let m = parse_ok_src("module m\ntype E = A | B\n");
+        assert!(is_sum(&m, "E"), "`|` signals a variant list");
+        let m = parse_ok_src("module m\ntype P = Data(Int)\n");
+        assert!(is_sum(&m, "P"), "`(` signals a variant list even with one variant");
+        // The escape hatch for a single field-less variant, which is unambiguous.
+        let m = parse_ok_src("module m\ntype U = Nothing()\n");
+        assert!(is_sum(&m, "U"), "`Nothing()` is a one-variant sum");
+    }
+
+    #[test]
+    fn a_generic_or_qualified_right_hand_side_is_still_an_alias() {
+        let m = parse_ok_src("module m\ntype Handle = List[Int]\n");
+        assert!(is_alias(&m, "Handle"), "`[` after the identifier was always an alias");
+        let m = parse_ok_src("module m\ntype Paren = (Int)\n");
+        assert!(is_alias(&m, "Paren"), "the parenthesised spelling keeps working");
+    }
+}
+
+// ----- a multi-line list needs no trailing comma (C47b, ruling D46d) -----------------------
+
+/// §2.2 inserts a `Term` at a newline only when the previous token can end a statement, and a comma
+/// cannot — which is why `a,\n)` always parsed while `a\n)` did not. One unskipped terminator, in
+/// nine bracketed lists. All four spellings must now parse in every one of them.
+#[cfg(test)]
+mod trailing_comma_tests {
+    use super::tests_support::*;
+
+    #[test]
+    fn every_bracketed_list_accepts_a_multi_line_form_without_a_trailing_comma() {
+        for (what, src) in [
+            ("record type body", "module m\ntype T {\n    a: Int,\n    b: Int\n}\n"),
+            ("fn params", "module m\nfn g(\n    a: Int,\n    b: Int\n) -> Int {\n    a + b\n}\n"),
+            ("generics", "module m\nfn g[\n    A,\n    B\n](x: Int) -> Int {\n    x\n}\n"),
+            ("variant fields", "module m\ntype P = Data(\n    Int,\n    Str\n)\n"),
+            ("generic type args", "module m\ntype H = Result[\n    Int,\n    Str\n]\n"),
+            (
+                "call args",
+                "module m\nfn h(a: Int, b: Int) -> Int {\n    a + b\n}\nfn g() -> Int {\n    h(\n        1,\n        2\n    )\n}\n",
+            ),
+            ("list literal", "module m\nfn g() -> List[Int] {\n    [\n        1,\n        2\n    ]\n}\n"),
+            (
+                "record literal",
+                "module m\ntype T { a: Int, b: Int }\nfn g() -> T {\n    T {\n        a: 1,\n        b: 2\n    }\n}\n",
+            ),
+        ] {
+            let (_, d) = parse_src_raw(src);
+            assert!(d.is_empty(), "{what}: a multi-line list without a trailing comma must parse: {d:?}");
+        }
+    }
+
+    #[test]
+    fn the_trailing_comma_forms_still_parse() {
+        for src in [
+            "module m\ntype T {\n    a: Int,\n    b: Int,\n}\n",
+            "module m\ntype T { a: Int, b: Int }\n",
+            "module m\ntype T { a: Int, b: Int, }\n",
+        ] {
+            let (_, d) = parse_src_raw(src);
+            assert!(d.is_empty(), "the other spellings must keep parsing: {d:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_support {
+    use crate::ast::{Module, TypeDeclKind};
+    use crate::lexer::lex;
+    use delulu_diag::Diagnostic;
+
+    pub fn parse_src_raw(src: &str) -> (Module, Vec<Diagnostic>) {
+        let (tokens, ldiags) = lex(0, src);
+        assert!(ldiags.is_empty(), "lex errors: {ldiags:?}");
+        super::parse(0, tokens)
+    }
+
+    pub fn parse_ok_src(src: &str) -> Module {
+        let (m, d) = parse_src_raw(src);
+        assert!(d.is_empty(), "unexpected parse diagnostics: {d:?}");
+        m
+    }
+
+    fn kind_of<'a>(m: &'a Module, name: &str) -> &'a TypeDeclKind {
+        m.items
+            .iter()
+            .find_map(|i| match i {
+                crate::ast::Item::Type(t) if t.name.name == name => Some(&t.kind),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("no type named `{name}`"))
+    }
+
+    pub fn is_alias(m: &Module, name: &str) -> bool {
+        matches!(kind_of(m, name), TypeDeclKind::Alias(_))
+    }
+
+    pub fn is_sum(m: &Module, name: &str) -> bool {
+        matches!(kind_of(m, name), TypeDeclKind::Sum(_))
     }
 }

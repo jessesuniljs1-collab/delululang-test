@@ -127,10 +127,8 @@ inserted terminator (§2.2).
 grammar has no `NEWLINE` terminal, but the language inserts terminators at line ends (§2.2), and that
 interacts with every comma-separated list inside brackets. The rule the implementation enforces:
 
-- A list written **on one line** may end with a comma or not; both are accepted.
-- A list that **spans lines** must have a comma after its final element. Without one, the inserted
-  terminator arrives where the closing bracket is expected and the list is refused (**DL0201**).
-- **`match` arms are the exception** and accept both forms across lines.
+- A list may end with a comma or not, **on one line or across lines** — all four spellings are
+  accepted, in every bracketed list (ruling D46d, closing C47b).
 
 This applies uniformly to record type bodies, record literals, parameter lists, argument lists and
 list literals. It is stated here because it is not derivable from the productions, and because
@@ -139,11 +137,12 @@ that omitted the trailing comma from `params` and `field_init` lists therefore c
 output of this project's own formatter, so an independent implementation written from §3 alone would
 have rejected every formatted file containing a wide list (`HARDENING_CAMPAIGN.md` C47).
 
-Recorded honestly rather than smoothed over: requiring the comma on multi-line lists is stricter than
-most languages, and the diagnostic a person meets — `expected }` with the caret after the last
-element, while `}` sits on the next line — does not teach the fix. Relaxing the parser to accept the
-comma-less multi-line form would change what compiles, so it is a language-surface decision and is
-recorded as such (C47b), not made here.
+A multi-line list without its trailing comma used to be refused (DL0201), which was stricter than most
+languages and produced a diagnostic that did not teach the fix — `expected }` with the caret after the
+last element, while `}` sat on the next line. It was never a design decision. §2.2 inserts a `Term` at
+a newline only when the previous token can end a statement, and a comma cannot; so `a,\n)` always
+parsed and `a\n)` did not, purely because that one terminator was never skipped before the closing
+bracket. It is now skipped, in all nine bracketed lists (ruling D46d).
 
 ```ebnf
 file          = module_decl , { import_decl } , { item } ;
@@ -231,26 +230,28 @@ lambda        = "fn" , "(" , [ params ] , ")" , [ "->" , type ] , [ effect_row ]
 
 #### 3.0.1 Two places this grammar needs a disambiguation rule
 
-**(1) `type A = B` is ambiguous, and the implementation resolves it toward the SUM reading.**
-`type Meters = Int` matches the sum alternative (one field-less variant named `Int`) *and* the alias
-alternative (an alias to the type `Int`). The grammar above does not say which, so this subsection
-records what the parser actually does, pending an owner decision (`HARDENING_CAMPAIGN.md` C28):
+**(1) `type A = B` is an ALIAS** (normative; ruling D46a, closing `HARDENING_CAMPAIGN.md` C28).
+`type Meters = Int` matches both the sum alternative (one field-less variant named `Int`) and the
+alias alternative, and the grammar alone does not say which. The rule is:
 
-> The parser prefers **sum** whenever the right-hand side is an `IDENT` followed by end-of-statement,
-> `|`, or `(` (`looks_like_variant`). Everything else reaches the **alias** production.
+> A variant list is signalled **syntactically, and only** by `(` or `|` following the identifier.
+> Everything else on the right-hand side of `=` is an alias.
 
-Consequences, all observable today and none of them obvious from the grammar:
+- `type E = A | B` — sum, because a `|` follows.
+- `type P = Data(Int)` — sum, one variant carrying a field.
+- `type Meters = Int` — **alias.**
+- A single field-less variant is written `type U = Nothing()`, which is unambiguous.
 
-- `type Meters = Int` declares a nominal sum whose single constructor is named `Int`. Therefore
-  `fn g() -> Meters { Int }` type-checks — the token `Int` in *expression* position constructs a
-  `Meters` — while `g(5)` does not, because a `Meters` is not an `Int`.
-- **An alias to a bare type name cannot be written.** `type Meters = (Int)` (parenthesised) is the
-  only spelling that reaches the alias production; `type Handle = List[Int]` reaches it because `[`
-  follows the identifier.
+The decision does not consult name resolution, so the grammar stays context-free: what makes a
+right-hand side a sum is a token, not whether some identifier happens to name an existing type.
 
-This is a known ambiguity in a normative document and is **not** settled here: choosing the rule
-changes which programs compile, which is reserved to the owner. It is documented rather than left
-implicit so that no reader has to discover it from a type error.
+It previously resolved toward SUM, and every consequence was silent. `type Meters = Int` declared a
+nominal sum whose single constructor was named `Int`, so `fn g() -> Meters { Int }` type-checked —
+the token `Int` in *expression* position constructed a `Meters` — a mistyped value reported
+`expected 'T9'`, and **no alias to a bare type name could be written at all**, since
+`type Meters = (Int)` (parenthesised) was the only spelling that reached the alias production. Every
+language with this syntax means "alias", which is also what a reader means by it. The change breaks
+no program in this repository: a search found zero single-variant field-less sums.
 
 **(2) Record literals in condition position** are already handled — see the restriction noted inline
 on `primary` above, resolved the way Rust resolves it.

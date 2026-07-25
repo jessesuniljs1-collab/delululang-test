@@ -215,9 +215,17 @@ must agree about when a machine stops moving, or a simulation cannot rehearse th
 When the sweep triggered by a refused attempt is what kills the lease, the holder is told it lost the
 device — that fact outranks the setpoint complaint that would otherwise have been reported.
 
-The dead-man defends against **silence, not malice**, and this section does not claim otherwise: a
-controller that keeps interacting keeps its lease however wrong its commands are, and operator
-revocation (§5.2's e-stop) is the answer to a program that is alive and misbehaving.
+**A refused command does not prove liveness** (normative; ruling D46c, closing C46). This was left
+open when D43a made the two clocks agree, because "should a controller whose every setpoint is out of
+range keep its machine?" is a safety-policy question rather than an implementation detail. It is
+settled toward the stricter reading, which is also what the code already did: a controller emitting
+only refused commands is not silent, but it *is* malfunctioning, and taking a machine away from a
+malfunctioning controller is what this mechanism exists for. The alternative — letting refusals beat
+the watchdog — would let a units bug hold an actuator indefinitely while never moving it correctly.
+
+The dead-man still defends against **silence, not malice**: a controller doing work the envelope
+permits keeps its lease however wrong that work is at a higher level, and operator revocation (§5.2's
+e-stop) remains the answer to a program that is alive and misbehaving.
 
 ### 5.2.1 The device grant grammar (normative; ruling D43b–d)
 

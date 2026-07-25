@@ -248,13 +248,19 @@ A `Root` sent to an actor is converted to a value-level slice (`RootMsg`), not s
 a fully owned structural value, so authority crosses as **data the receiver may hold and never widen**.
 
 Carried: `console`, `fs.read`, `fs.write`, `net`, `clock`, `rand`, `declassify`, secrets (local and
-broker), `foreign_load`, the Python import allowlist, actuator envelopes, and sensors.
+broker), `foreign_load`, the Python import allowlist, actuator envelopes, sensors, and compute
+envelopes. **Withheld: nothing** — every `RootVal` authority dimension crosses.
 
-**Withheld: `computes`** (compute-dispatch envelopes, Stage 10 phase 10h). An actor holding a Root slice
-cannot dispatch a compute kernel. This is the restrictive reading and it is fail-closed; it began as an
-omission rather than a decision (campaign C35, ruling D40) and is recorded as an open capability
-question rather than a settled design. A source-scanning gate in `delulu-runtime::actors` now fails the
-build if any *other* dimension goes missing, so the list cannot fall behind `RootVal` again in silence.
+`computes` (Stage 10 phase 10h) was the last holdout: it began as an omission rather than a decision,
+was gated and documented as such (campaign C35, ruling D40), and is now carried (ruling D46b). The
+argument that settled it is the asymmetry — actuator envelopes already crossed, and actuation moves
+physical machines, so refusing the strictly less consequential dimension while permitting the more
+consequential one was never a safety position. As with actuators, the envelope BOUNDS its holder
+rather than empowering them, and the broker re-checks every dispatch against the grant.
+
+A source-scanning gate in `delulu-runtime::actors` fails the build if any dimension goes missing, and
+it is kept precisely because the withheld list is now empty: "nothing is withheld" is a claim that has
+to keep being true as `RootVal` grows.
 
 ## 7. Interactions with prior stages (all normative)
 

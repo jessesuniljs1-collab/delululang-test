@@ -169,6 +169,29 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
+- **`type Meters = Int` is now an alias, not a one-variant sum.** The right-hand side of `type X = …`
+  was read as a sum whenever it was a bare identifier, which declared a *constructor* named `Int` —
+  so `fn g() -> Meters { Int }` type-checked — and meant **no alias to a bare type name could be
+  written at all** (`type Meters = (Int)`, parenthesised, was the only spelling that reached the alias
+  production). A variant list is now signalled syntactically and only by `(` or `|`: `type E = A | B`
+  and `type P = Data(Int)` are sums, a single field-less variant is `type U = Nothing()`, and
+  everything else is an alias. The rule does not consult name resolution, so the grammar stays
+  context-free. No program in this repository changes meaning. (C28, ruling D46a)
+
+  **Compatibility:** a `type E = A` intended as a one-variant sum now declares an alias to a type
+  named `A`, and errors if no such type exists. Write `type E = A()`.
+- **A multi-line list no longer needs a trailing comma.** All four spellings now parse — one line or
+  many, trailing comma or not — in every bracketed list: record type bodies, record literals,
+  parameter lists, argument lists, list literals, generics, generic arguments and variant fields.
+  This was never a design decision: a newline inserts a statement terminator only after a token that
+  can end a statement, and a comma cannot, so `a,\n)` always parsed while `a\n)` did not — one
+  terminator, unskipped before the closing bracket. `match` arms already accepted both forms, so this
+  also removes an inconsistency between one list and every other. (C47b, ruling D46d)
+- **A compute grant now survives crossing into an actor.** A `Root` slice silently lost its
+  `computes` at an actor boundary while `actuators` and `sensors` crossed — an omission from phase
+  10h rather than a safety position, since actuation moves physical machines and the compute envelope
+  bounds its holder exactly as an actuator envelope does. Every `Root` authority dimension now
+  crosses. (C35, ruling D46b)
 - **The normative grammar now describes the language the toolchain actually implements.** Every
   comma-separated bracketed list requires a trailing comma when it spans lines (`match` arms
   excepted), and §3 of the Stage-1 specification said the opposite in both directions at once: it
