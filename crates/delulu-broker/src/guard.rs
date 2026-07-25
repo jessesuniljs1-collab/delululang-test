@@ -69,6 +69,10 @@ pub enum GuardClass {
     Declassify,
     ForeignC,
     ForeignPython,
+    /// A physical device (RFC 0001 F1 / Stage 10 Track D). Added by campaign C31: `device` was the
+    /// only scope dimension with no guard class, so actuation could be gated all-or-nothing through
+    /// `effect:Actuate` but never per device — while every other axis supported per-item rules.
+    Device,
 }
 
 impl GuardClass {
@@ -82,6 +86,7 @@ impl GuardClass {
             GuardClass::Declassify => "declassify",
             GuardClass::ForeignC => "foreign_c",
             GuardClass::ForeignPython => "foreign_python",
+            GuardClass::Device => "device",
         }
     }
     pub fn from_wire(s: &str) -> Option<GuardClass> {
@@ -94,13 +99,20 @@ impl GuardClass {
             "declassify" => GuardClass::Declassify,
             "foreign_c" => GuardClass::ForeignC,
             "foreign_python" => GuardClass::ForeignPython,
+            "device" => GuardClass::Device,
             _ => return None,
         })
     }
 }
 
-/// The use-time axis class an op is gated on (`None` for classes with no per-use broker op — e.g.
-/// `secret`/`foreign_python` gate only at MINT time in v0.5; their use never crosses the broker).
+/// The use-time axis class an op is gated on. `None` means the axis has no per-use broker op —
+/// `secret` and `foreign_python` gate at MINT time only, because their use never crosses the broker.
+///
+/// **Exhaustive on purpose (campaign C31).** This match used to end in `_ => None`, and that catch-all
+/// is how `Op::Actuate` — commanding a physical device — ended up with no axis of its own: the variant
+/// was added, the arm moved, and the compiler had nothing to say. Ops that genuinely have no scope
+/// dimension are listed explicitly, so adding a new `Op` breaks this build and forces the question
+/// "what gates it?" to be answered by a person rather than by a wildcard.
 fn use_axis_class(op: Op) -> Option<GuardClass> {
     match op {
         Op::FsRead => Some(GuardClass::FsRead),
@@ -108,7 +120,13 @@ fn use_axis_class(op: Op) -> Option<GuardClass> {
         Op::Net => Some(GuardClass::Net),
         Op::Declassify => Some(GuardClass::Declassify),
         Op::ForeignBind => Some(GuardClass::ForeignC),
-        _ => None,
+        Op::Actuate => Some(GuardClass::Device),
+        // No scope dimension exists for these, so there is no per-item axis to gate on; the
+        // cross-cutting `effect` class still applies to every one of them.
+        Op::Clock | Op::Rand | Op::Console => None,
+        // Stage 6 plugin loading does not route through the broker's op check (it is gated by the
+        // plugin ceiling in `delulu-runtime::plugin`), so there is nothing to gate here yet.
+        Op::PluginLoad => None,
     }
 }
 
@@ -239,6 +257,16 @@ impl GuardPolicy {
                     if pattern_matches(&r.pattern, Some(item)) {
                         consider(r.tier, rule_label(r.class, &r.pattern));
                     }
+                }
+            }
+        }
+        // `device` is a BTreeMap (one envelope per device), so it cannot join the array above — which
+        // is exactly how it was missed when RFC 0001 F1 added it (campaign C31). Gate on the device
+        // NAME; the envelope itself is bounded by the `⊑` lattice, not by policy patterns.
+        for name in s.device.keys() {
+            for r in self.rules.iter().filter(|r| r.class == GuardClass::Device) {
+                if pattern_matches(&r.pattern, Some(name)) {
+                    consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
         }
@@ -965,6 +993,63 @@ mod tests {
             GuardVerdict::Block(d) => assert_eq!(d.code(), "DL1413"),
             _ => panic!("sealed must refuse even under bypass"),
         }
+    }
+
+    #[test]
+    fn a_single_device_can_be_sealed_by_name() {
+        // C31. `device` was the only scope dimension with no guard class. Actuation was still gated —
+        // through the cross-cutting `effect:Actuate` axis — but ONLY all-or-nothing, while every other
+        // axis took per-item rules (`net:api.example.com`, `secret:DB_PASSWORD`). For the one axis that
+        // moves physical hardware, that was the wrong asymmetry: an operator could not seal a thruster
+        // while leaving a status LED at `warn`.
+        //
+        // Two mechanical causes, both now closed: `tier_for_mint` walked a fixed `[…; 7]` array that
+        // could not fail to compile when RFC 0001 F1 added the 8th dimension, and `use_axis_class`
+        // ended in `_ => None`, so `Op::Actuate` was born ungated on its own axis and nothing said so.
+        let mut b = broker();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed)
+            .unwrap();
+
+        let scopes = || Scopes {
+            device: ["sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park",
+                "sat0/led:brightness=0..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park"]
+                .iter()
+                .map(|g| crate::device_scope::parse(g).expect("device grant parses"))
+                .map(|d| (d.device.clone(), d))
+                .collect(),
+            ..Default::default()
+        };
+        let root = b.issue(holder(), Authority::new(eff(&["Actuate"]), scopes()), None);
+        let child = b.attenuate(&root, Authority::new(eff(&["Actuate"]), scopes()), holder(), None).unwrap();
+
+        // The sealed device refuses at USE time, by name, even though the grant covers it.
+        match b.guard_verdict_use(&child, Op::Actuate, Some("sat0/thruster")) {
+            GuardVerdict::Block(d) => assert_eq!(d.code(), "DL1413", "sealed device must be DL1413"),
+            _ => panic!("the sealed device must be refused"),
+        }
+        // The device NOT named by the rule is unaffected — this is the granularity that was missing.
+        assert!(
+            !matches!(b.guard_verdict_use(&child, Op::Actuate, Some("sat0/led")), GuardVerdict::Block(_)),
+            "an unnamed device must not be swept up by another device's rule"
+        );
+    }
+
+    #[test]
+    fn minting_a_sealed_device_is_refused() {
+        // The mint half: a child requesting a sealed device cannot be minted without the owner code,
+        // exactly as for every other dimension. Before C31 this mint was invisible to the guard.
+        let mut b = broker();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Device, "sat0/thruster".into(), GuardTier::Sealed)
+            .unwrap();
+        let dev = |g: &str| {
+            let d = crate::device_scope::parse(g).expect("device grant parses");
+            Scopes { device: [(d.device.clone(), d)].into_iter().collect(), ..Default::default() }
+        };
+        let root = b.issue(holder(), Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-5..5,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park")), None);
+        let child_auth = Authority::new(eff(&["Actuate"]), dev("sat0/thruster:pitch=-1..1,heartbeat_ms=1000,ttl_ms=60000,fail=safe-park"));
+        let d = b.guard_check_mint(&child_auth, &root, None).unwrap_err();
+        assert_eq!(d.code(), "DL1413", "minting a sealed device must be refused");
+        assert!(d.to_diagnostic().message.contains("device:sat0/thruster"), "the rule must be named: {}", d.to_diagnostic().message);
     }
 
     #[test]

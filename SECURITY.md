@@ -67,6 +67,15 @@ diagnostic is at least Medium, because callers lose the ability to distinguish f
   review without ever failing. Redeclaring a builtin type or a core effect was exactly this and is now
   refused (DL0302 — `effect Write` used to leave every `! {Write}` meaning the real, filesystem-reaching
   `Write`). A new way to make a name resolve differently than it reads is in scope.
+- **Anything that makes the audit log lie, including by omission.** The log is observability, not
+  enforcement — it detects rather than prevents, and that is by design. But a read surface that
+  displays a tampered record as authentic, or silently drops a corrupted one from a listing, breaks the
+  only property the log has. Both were true until campaign C30; `tail`/`query` now verify the chain,
+  warn loudly, exit nonzero, and state that entries may be missing entirely.
+- **Any way a revoked or expired grant is treated as live** on any path — including paths that do not
+  themselves authorize anything. Redeeming a lease token for a revoked grant used to succeed and record
+  `decision: "allow"` (C29); enforcement refused the grant afterwards, so nothing was authorized, and
+  it was still a defect worth fixing because the log is read by people making decisions.
 - **Any way a `Secret[T]` becomes an ordinary value without `Cap[Declassify]`**, and any way a secret
   crosses the foreign boundary without passing `expose` (DL1301 fences the FFI signature, DL0602
   refuses the value, DL0604/DL0605 keep it unprintable and uncomparable). Note the *converse* is not a

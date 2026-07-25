@@ -112,7 +112,7 @@ creates root nodes (Constitution §5.16 law 4).
 | `issue` (CLI only) | creates a root-level node; interactive confirmation unless `--yes` in a TTY-less session is *refused* (root issuance is never headless-silent; CI uses pre-issued delegation tokens instead) |
 | `attenuate(parent_lease, authority)` | new child node iff `authority ⊑ parent` (DL0802 otherwise); returns lease |
 | `delegate(parent_lease, authority, ttl)` | attenuate + mint a **portable lease token** (HMAC-signed, single-redemption by default) for handing to another process — this is how an orchestrating LLM gives each parallel agent its slice |
-| `redeem(token)` | binds the token to the redeeming process; second redemption fails (DL1407) unless minted `--multi` |
+| `redeem(token)` | binds the token to the redeeming process; second redemption fails (DL1407) unless minted `--multi`. Refuses if the bound node is not live **including its ancestors** — revoked → DL1403, expired → DL1402 (campaign C29, ruling D36); the state check runs after the MAC and before any state is written, so a refused redemption mutates nothing |
 | `revoke(lease, node_id)` | allowed on the caller's node or any descendant; transitive; idempotent |
 | `check(lease, op, scope_args)` | the per-use validation (§4.4) |
 | `expose(lease, secret_ref)` | synchronous declassification; always audit-logged with the calling span |
@@ -220,6 +220,19 @@ is honest about weaker platforms.
 verify [--from N]`. Verification failure is DL1405 (`requires_human: true`, message states
 possible tamper). Rotation daily; heads cross-linked. The log is **observability, not
 enforcement** — stated in the file header line itself.
+
+**The read surfaces verify too (campaign C30, ruling D36).** `tail` and `query` verify the chain
+before displaying anything, then still display it — an operator investigating a tampered log is
+exactly the person who most needs to read it — behind a warning that the entries must not be trusted
+and that any record corrupted beyond parsing is **missing from the listing entirely**. Exit is nonzero
+so a script cannot treat a corrupt read as a clean one, and `--json` always carries `chain_verified`
+(plus `chain_error` when false) so a machine consumer never infers integrity from an absent field.
+
+This matters because of what the old behaviour was: reads validated nothing and silently skipped any
+unparseable line, so flipping one `decision` displayed the forged value with no warning, and
+corrupting one record removed it from every listing with no gap marker. "Observability, not
+enforcement" is a statement about what the log *prevents* — never a licence for the observation itself
+to be untrue.
 
 ## 8. Diagnostics (fresh range DL14xx; DL0802 activates)
 

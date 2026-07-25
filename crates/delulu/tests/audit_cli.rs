@@ -147,3 +147,86 @@ fn audit_needs_a_subcommand_and_rejects_unknown_ones() {
     assert_eq!(o.status.code(), Some(2));
     assert!(stderr(&o).contains("unknown audit subcommand"), "{}", stderr(&o));
 }
+
+// ----- C30: a read surface must not present a broken chain as authentic ------------------------
+
+/// Rewrite the (single) day file in `dir` by mapping every line through `f`.
+fn mangle_day_file(dir: &PathBuf, f: impl Fn(&str) -> String) {
+    let day = std::fs::read_dir(dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.extension().and_then(|s| s.to_str()) == Some("jsonl"))
+        .expect("a day file exists");
+    let text = std::fs::read_to_string(&day).unwrap();
+    let out: Vec<String> = text.lines().map(f).collect();
+    std::fs::write(&day, out.join("\n") + "\n").unwrap();
+}
+
+#[test]
+fn a_tampered_record_is_not_shown_as_authentic() {
+    // C30. `audit tail` read records without checking a single hash. Flipping a `decision` from
+    // "allow" to "deny" and leaving the hash alone produced a listing that displayed the FORGED
+    // value with no warning — on the one surface an operator uses after an incident. The chain
+    // verifier already detected this; nothing on the read path called it.
+    let dir = seeded_dir("c30_tamper");
+    mangle_day_file(&dir, |l| {
+        if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() }
+    });
+    let o = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
+    let err = stderr(&o);
+    assert!(err.contains("WARNING"), "a broken chain must warn loudly:\n{err}");
+    assert!(err.contains("MUST NOT be trusted"), "{err}");
+    assert_ne!(o.status.code(), Some(0), "a corrupt read must not exit 0");
+    // The records are still SHOWN — an operator investigating a tampered log needs to see it.
+    assert!(!stdout(&o).is_empty(), "records must still be displayed");
+}
+
+#[test]
+fn a_record_corrupted_beyond_parsing_does_not_vanish_silently() {
+    // The sharper half of C30. A record mangled into non-JSON was silently DROPPED from the
+    // listing: records 1, 2 and 4 were shown, 3 was simply absent, with no gap marker, no error,
+    // and no hint that the list was shorter than the log. That is an omission attack against the
+    // record of what happened, executed by corrupting one line.
+    let dir = seeded_dir("c30_omit");
+    let full = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
+    let before = stdout(&full).lines().count();
+    mangle_day_file(&dir, |l| {
+        if l.contains("\"seq\":3") { "{ not json".to_string() } else { l.to_string() }
+    });
+    let o = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap()]);
+    let after = stdout(&o).lines().count();
+    assert!(after < before, "the probe must actually drop a record ({before} -> {after})");
+    let err = stderr(&o);
+    assert!(err.contains("WARNING"), "the loss must be announced:\n{err}");
+    assert!(
+        err.contains("MISSING from this listing"),
+        "the warning must say entries may be missing entirely: {err}"
+    );
+    assert_ne!(o.status.code(), Some(0));
+}
+
+#[test]
+fn the_json_read_surface_always_states_whether_the_chain_verified() {
+    // A machine consumer must never have to infer integrity from the absence of a field, so
+    // `chain_verified` is present on every tail/query response — true on a clean log, false with
+    // `chain_error` beside it on a broken one.
+    let dir = seeded_dir("c30_json");
+    let clean = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap(), "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&clean)).expect("valid JSON");
+    assert_eq!(v["chain_verified"], Value::Bool(true), "{}", stdout(&clean));
+    assert!(v.get("chain_error").is_none(), "no error on a clean chain");
+
+    mangle_day_file(&dir, |l| {
+        if l.contains("\"seq\":2") { l.replace("\"allow\"", "\"deny\"") } else { l.to_string() }
+    });
+    let broken = delulu(&["audit", "tail", "--dir", dir.to_str().unwrap(), "--json"]);
+    let v2: Value = serde_json::from_str(&stdout(&broken)).expect("valid JSON even when broken");
+    assert_eq!(v2["chain_verified"], Value::Bool(false), "{}", stdout(&broken));
+    assert!(
+        v2["chain_error"].as_str().unwrap_or_default().contains("DL1405")
+            || v2["chain_error"].as_str().unwrap_or_default().contains("tamper"),
+        "the error must name the failure: {}",
+        stdout(&broken)
+    );
+}

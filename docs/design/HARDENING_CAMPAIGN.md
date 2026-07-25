@@ -93,6 +93,9 @@ deviations.
 | C25 | **The authority report holds every fact needed to see that a credential can leave the program, and never says so** | **high** (the commission's credential-exposure requirement) | **CLOSED** — D32 |
 | C26 | **A package whose sources are not under `src/` reports `built clean (0 module(s))` and exits 0** — nothing checked, success claimed | **high** (silent success) | **CLOSED** — D33 |
 | C27 | Naming a directory where a file belongs surfaced the raw OS error (`Access is denied. (os error 5)` on Windows) | medium (diagnostic confusion) | **CLOSED** — D33 |
+| C29 | **A lease token for a REVOKED grant redeemed successfully** — and for a revoked or expired *ancestor* too; the audit log recorded `decision: "allow"` for it | **high** (accountability / fail-open at the custody boundary) | **CLOSED** — D36 |
+| C30 | **`audit tail`/`query` displayed a tampered chain as authentic, and a corrupted record VANISHED from the listing** with no gap marker | **high** (accountability — the omission attack) | **CLOSED** — D36 |
+| C31 | **The `device` scope dimension had no Guard class** — actuation was gateable only all-or-nothing via `effect:Actuate`, on the one axis that moves hardware | **high** (safety granularity) | **CLOSED** — D37 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -804,6 +807,87 @@ mistake is natural — `build` and `plugin build` take directories, so `run`/`ch
 like they should — and the message was actively misleading, sending the reader after an ACL that was
 never involved. It was also platform-dependent (Linux says `Is a directory`). One fix in the shared
 `load` helper covers every file-taking command, names the mistake, and points at `delulu build`.
+
+### C29 · A token for a revoked grant redeemed successfully — CLOSED (D36)
+
+`Broker::redeem` verified the MAC over the whole payload, confirmed the bound node still existed, and
+checked the token's own `exp_millis`. It never asked whether the node was **alive**. Four cases, run:
+
+| token for | before | after |
+|---|---|---|
+| a **revoked** node | `Ok(node)` | `Err(Revoked)` |
+| a node whose own TTL passed | `Err(Expired)` | `Err(Expired)` |
+| a node under an **expired ancestor**, token minted with no deadline (`exp = i64::MAX`) | `Ok(node)` | `Err(Expired)` |
+| a node under a **revoked ancestor** | `Ok(node)` | `Err(Revoked)` |
+
+Only the second was refused, and only incidentally — that token's deadline happened to mirror the
+node's TTL. There was no state check at all, so the third case was invisible by construction.
+
+**It was not privilege escalation, and saying otherwise would be wrong.** `validate` re-reads the
+effective state on every operation, so a redeemed dead node authorizes nothing. What it did do
+matters for a system whose product is accountability:
+
+- the redemption emitted an audit record reading **`decision: "allow"`** for a grant an operator had
+  explicitly killed — the log an investigator reads said the redemption was allowed;
+- `set_holder_peer` wrote the **redeemer's own text** onto the revoked node, so attacker-supplied
+  data landed in custody state after revocation;
+- the redeeming party was told it held a node it did not.
+
+Fixed with one call to `effective_state_inherited`, placed after the MAC check (never act on
+unauthenticated data) and **before** the nonce is burned or any state is written, so a refused
+redemption mutates nothing. Two witnesses, both observed failing against the old code.
+
+### C30 · The audit read surface presented a broken chain as authentic — CLOSED (D36)
+
+`delulu audit verify` recomputes every hash and every `prev_hash` link, across files, and refuses at
+the failing seq with DL1405. It works. **Nothing on the read path called it.** `tail` and `query` go
+through `read_all_records`, which validates nothing and — worse — `continue`s silently past any line
+that fails to parse.
+
+Demonstrated on a four-record chain:
+
+- **Tamper.** Flip one record's `decision` from `allow` to `deny`, leave its hash alone. `verify`
+  catches it (DL1405 at seq 2). `tail` printed four records **displaying the forged value**, with no
+  warning, on the one surface an operator uses after an incident.
+- **Omission.** Corrupt one record into non-JSON. `verify` catches it. `tail` printed **three**
+  records — `g_1`, `g_2`, `g_4` — and `g_3` was simply gone. No gap marker, no error, no hint that
+  the listing was shorter than the log. An entry can be removed from the record of what happened by
+  corrupting one line.
+
+Fixed by using the verifier that already existed: the read path verifies first, then **still shows
+the records** — an operator investigating a tampered log is precisely the person who most needs to
+read it — behind a warning that says the entries must not be trusted and that any record corrupted
+beyond parsing is missing entirely. Exit is nonzero so a script cannot mistake a corrupt read for a
+clean one, and `--json` always carries `chain_verified` (with `chain_error` when false) so a machine
+consumer never infers integrity from a field's absence.
+
+The audit log remains **observability, not enforcement** — it detects, it does not prevent. The point
+of the fix is that the observation must be honest about its own integrity.
+
+### C31 · The device dimension had no Guard class — CLOSED (D37)
+
+`Scopes` carries eight dimensions. The Guard enumerated seven.
+
+`tier_for_mint` walked a fixed `[(GuardClass, &BTreeSet<String>); 7]` array, and `use_axis_class`
+ended in `_ => None`. When RFC 0001 F1 added `device`, neither grew, and **neither could fail to
+compile** — the array is a literal, and the catch-all swallows any new `Op`. So `Op::Actuate`, which
+is active and round-trips per command, was born with no axis of its own.
+
+**Precisely what was and was not broken:** actuation was still gated, through the cross-cutting
+`effect:Actuate` rule, at both mint and use. It was never ungated. But `device` was the **only**
+authority axis with no per-item granularity: an operator could write `net:api.example.com`,
+`secret:DB_PASSWORD`, `fs_write:./out` — and for devices, only "all actuation" or "none". On the one
+axis in the system that moves physical hardware, you could not seal a thruster while leaving a status
+LED at `warn`.
+
+Fixed by adding `GuardClass::Device` (gating on the device name; the envelope itself is bounded by the
+`⊑` lattice, not by policy patterns), extending the mint walk, and mapping `Op::Actuate` to it.
+**No default rule was added** — that would change behaviour for existing device holders, and what
+tier physical actuation deserves is an operator's decision, not a library's.
+
+The class fix is the durable part: `use_axis_class` is now **exhaustive**, listing the ops that
+genuinely have no scope dimension. The next `Op` variant cannot be born ungated in silence — the
+build breaks until a person answers "what gates it?"
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

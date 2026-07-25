@@ -60,6 +60,26 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   grant `--grant declassify`. It reports capability, never behaviour, and names the safe case too. No
   authority semantics changed and `--json` is unchanged, because agents could already derive it.
   (C25, ruling D32)
+- **A lease token for a dead grant no longer redeems.** `redeem` verified the token's MAC, that the
+  bound node existed, and the token's own expiry — never whether the node was *alive*. A token for a
+  revoked node redeemed successfully, as did one under a revoked or expired ancestor. Enforcement
+  refused the grant afterwards so nothing was authorized, but the redemption wrote an audit record
+  reading `decision: "allow"` for a grant an operator had explicitly killed, and stamped the redeemer's
+  own text onto the revoked node. (C29, ruling D36)
+- **The audit read path no longer presents a broken chain as authentic.** `audit verify` checked every
+  hash and link; `audit tail`/`query` checked none. Flipping one record's `decision` displayed the
+  forged value with no warning, and corrupting one record into non-JSON made it **vanish from the
+  listing** — no gap marker, no error. Reads now verify first, still show the records (an operator
+  investigating a tampered log is who most needs to read them), warn that they must not be trusted, and
+  exit nonzero; `--json` always carries `chain_verified`. (C30, ruling D36)
+- **Delulu Guard gains a `device` class.** `Scopes` has eight dimensions and the Guard enumerated
+  seven, because `device` arrived later (RFC 0001 F1) and neither the fixed seven-element mint array
+  nor the `_ => None` op map grew with it — neither could fail to compile. Actuation was still gated
+  all-or-nothing via `effect:Actuate`, but `device` was the only authority axis with no per-item rules:
+  you could not seal a thruster while leaving a status LED at `warn`. Now `device:sat0/thruster →
+  sealed` works, with no default rule added (the tier physical actuation deserves is an operator's
+  call). `use_axis_class` is exhaustive, so the next op cannot be born ungated in silence.
+  (C31, ruling D37)
 - **Surface-syntax morphs — write DeluluLang's keywords in your own language, or an AI's.**
   `delulu morph list | info | check | render`, a `//! morph: <id>` file pragma read by `check`, `run`,
   `authority`, and `fmt`, and two working morphs: `morphs/zh-CN-keywords.toml` and

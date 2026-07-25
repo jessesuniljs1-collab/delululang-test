@@ -81,7 +81,7 @@ of rules:
 
 ```
 rule := <class>:<pattern> → <tier>
-class ∈ { effect, fs_read, fs_write, net, secret, declassify, foreign_c, foreign_python }
+class ∈ { effect, fs_read, fs_write, net, secret, declassify, foreign_c, foreign_python, device }
 pattern := same matcher vocabulary the broker already uses for that axis
            (path globs / host patterns / names / effect names; `*` = all)
 tier ∈ { warn, guarded, sealed }
@@ -107,6 +107,20 @@ foreign_python:*  → guarded   (same)
 Everything else defaults to no rule (grants alone bound it). `sealed` is empty by default —
 so out of the box, bypass mode really does skip everything, matching the Claude Code
 skip-permissions shape; `sealed` is opt-in principal hardening.
+
+**The `device` class** (added by campaign C31, ruling D37) gates one physical device by name:
+`device:sat0/thruster → sealed` while `device:sat0/led` stays unruled. It has **no default rule**,
+deliberately — adding one would change behaviour for existing device holders, and what tier physical
+actuation deserves is an operator's decision, not a library's.
+
+It was missing until C31, and the shape of the omission is worth recording because it is the kind
+that recurs. `device` arrived later than the other dimensions (RFC 0001 F1) and the two places that
+enumerate axes did not grow with it: `tier_for_mint` walked a fixed seven-element array, and
+`use_axis_class` ended in `_ => None`. Neither could fail to compile. Actuation was therefore still
+gated — the cross-cutting `effect:Actuate` rule always applied — but only ALL-OR-NOTHING, on the one
+axis in the system that moves physical hardware, while `net`, `secret`, and every other axis took
+per-item rules. `use_axis_class` is now exhaustive, so the next `Op` variant cannot be born ungated
+in silence: the build breaks until someone answers "what gates it?"
 
 ### 2.4 Enforcement points (broker-side, all of them)
 

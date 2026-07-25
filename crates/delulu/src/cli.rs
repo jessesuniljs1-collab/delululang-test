@@ -7158,11 +7158,41 @@ fn cmd_audit(rest: &[String]) -> i32 {
                     return 2;
                 }
             };
+            // Verify the chain before showing anything (`HARDENING_CAMPAIGN.md` C30).
+            //
+            // `tail` and `query` read records without checking a single hash, and this is the surface
+            // an operator uses after an incident. Two demonstrated consequences: a record whose
+            // `decision` was flipped from "allow" to "deny" was displayed with the forged value and
+            // no warning, and a record corrupted into non-JSON simply VANISHED from the output —
+            // records 1, 2, 4 shown, 3 gone, no gap marker, no error, no hint that the list was
+            // shorter than the log.
+            //
+            // The chain verifier already caught both cases. Nothing called it here. So the fix is not
+            // new machinery, it is using what exists: verify, then still SHOW the records — because
+            // an operator investigating a tampered log is exactly the person who most needs to read
+            // it — with a warning they cannot miss. The audit log remains "observability, not
+            // enforcement"; the point is that the observation must be truthful about its own
+            // integrity. Exit is nonzero so a script cannot treat a corrupt read as a clean one.
+            let integrity = delulu_broker::verify(&dir).err().map(|e| e.to_string());
             if json {
                 let arr: Vec<Json> = records.iter().map(audit_record_json).collect();
-                let report = json!({ "command": "audit", "subcommand": sub, "records": arr, "count": records.len() });
+                let mut report = json!({ "command": "audit", "subcommand": sub, "records": arr, "count": records.len() });
+                // Always present, so a machine consumer never has to infer integrity from absence.
+                let obj = report.as_object_mut().expect("json! built an object");
+                obj.insert("chain_verified".into(), json!(integrity.is_none()));
+                if let Some(detail) = &integrity {
+                    obj.insert("chain_error".into(), json!(detail));
+                }
                 println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
             } else {
+                if let Some(detail) = &integrity {
+                    eprintln!(
+                        "WARNING: the audit chain does NOT verify — {detail}\n\
+                         \x20        the records below are shown as found on disk and MUST NOT be trusted;\n\
+                         \x20        entries may have been altered, and any entry that was corrupted\n\
+                         \x20        beyond parsing is MISSING from this listing entirely"
+                    );
+                }
                 if records.is_empty() {
                     eprintln!("(no matching audit records under `{}`)", dir.display());
                 }
@@ -7170,7 +7200,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                     println!("{}", render_audit_record(r));
                 }
             }
-            0
+            i32::from(integrity.is_some())
         }
         // ----- RFC 0001 F5: audit reconciliation ------------------------------------------------
         // `bundle` is the VEHICLE side (export a transcript); `reconcile` is the GROUND side

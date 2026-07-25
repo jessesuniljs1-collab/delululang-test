@@ -901,4 +901,5 @@ mod tests {
         assert_eq!(by_effect.len(), 1, "only the issue record's authority carries Net");
         let _ = fs::remove_dir_all(&dir);
     }
+
 }

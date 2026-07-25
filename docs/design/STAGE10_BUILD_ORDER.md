@@ -1365,6 +1365,59 @@ property tests — the alias rule denies *structural* hazards rather than allowi
 because the point of the feature is that the surface belongs to whoever reads it. No token-savings
 number is claimed anywhere; savings are tokenizer-specific (Constitution §5.11).
 
+**D36 — A lease token for a dead grant no longer redeems, and the audit read path no longer presents
+a broken chain as authentic.** Hardening campaign P6 (`HARDENING_CAMPAIGN.md` C29, C30). Both findings
+are the same defect wearing two coats: the machinery to answer the question existed, and the code that
+needed the answer did not ask.
+
+(a) **C29 — `redeem` never asked whether the node was alive.** It verified the MAC over the whole
+payload, confirmed the node existed, and checked the token's own `exp_millis`. A token for a REVOKED
+node redeemed `Ok`; so did one under a revoked ancestor, and one under an *expired* ancestor whose
+token carried no deadline of its own. Only the case where the token's deadline happened to mirror the
+node's TTL was refused, incidentally rather than by design.
+
+Not privilege escalation — `validate` re-reads effective state per operation, so a redeemed dead node
+authorizes nothing — but for a system whose product is accountability the consequences are the point:
+the redemption wrote an audit record reading `decision: "allow"` for a grant an operator had killed,
+and `set_holder_peer` stamped the redeemer's own text onto the revoked node. RULED: call
+`effective_state_inherited` after the MAC check and before the nonce is burned or any state written,
+so a refused redemption mutates nothing. Revoked → DL1403, expired → DL1402, reusing the codes the
+enforcement path already uses.
+
+(b) **C30 — the audit READ path verified nothing.** `audit verify` recomputes every hash and link and
+refuses at the failing seq (DL1405); `tail`/`query` called none of it. A record whose `decision` was
+flipped displayed the forged value with no warning, and a record corrupted into non-JSON **vanished
+from the listing** — 1, 2, 4 shown, 3 gone, no gap marker. An entry can be erased from the record of
+what happened by corrupting one line.
+
+RULED: verify on read, then **still display** the records — an operator investigating a tampered log
+is exactly who most needs to read it — behind a warning that they must not be trusted and that
+anything corrupted beyond parsing is missing entirely. Nonzero exit so a script cannot treat a corrupt
+read as clean; `--json` always carries `chain_verified`, plus `chain_error` when false, so a machine
+never infers integrity from an absent field. The log stays **observability, not enforcement**; what
+changed is that the observation is honest about itself.
+
+**D37 — The Guard gains a `device` class, and its op→axis map is now exhaustive.** Hardening campaign
+P6 (`HARDENING_CAMPAIGN.md` C31).
+
+`Scopes` has eight dimensions; the Guard enumerated seven. `tier_for_mint` walked a fixed
+`[…; 7]` array and `use_axis_class` ended in `_ => None`, so when RFC 0001 F1 added `device` neither
+grew and **neither could fail to compile**. `Op::Actuate` — active, round-tripping per command — was
+born with no axis of its own.
+
+Stated precisely, because overstating it would be wrong: actuation was **still gated**, through the
+cross-cutting `effect:Actuate` rule, at mint and at use. What was missing is per-item granularity.
+`device` was the only authority axis without it — an operator could write `net:api.example.com` or
+`secret:DB_PASSWORD`, but for devices only "all actuation" or "none". On the one axis that moves
+physical hardware, a thruster could not be sealed while a status LED stayed at `warn`.
+
+RULED: add `GuardClass::Device`, gating on the device NAME (the envelope stays bounded by `⊑`, not by
+policy patterns); extend the mint walk to it; map `Op::Actuate` to it. **No default rule** — adding
+one would change behaviour for existing device holders, and the tier physical actuation deserves is an
+operator's decision, not a library's. And the durable half: `use_axis_class` is now **exhaustive**,
+naming the ops that genuinely have no scope dimension, so the next `Op` cannot be born ungated in
+silence — the build breaks until a person answers "what gates it?"
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which

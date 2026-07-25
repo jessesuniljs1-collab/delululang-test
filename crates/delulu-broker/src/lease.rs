@@ -29,7 +29,7 @@ use serde_json::{json, Value};
 use crate::audit::canonical_json;
 use crate::authority::Authority;
 use crate::diag::Denial;
-use crate::tree::{Broker, GrantId, Holder};
+use crate::tree::{Broker, EffState, GrantId, Holder};
 
 /// The token payload version this build mints and accepts.
 const TOKEN_V: u64 = 1;
@@ -109,7 +109,9 @@ impl Broker {
     }
 
     /// Redeem a token, binding its node to `peer_desc` (spec §3.2). Verifies the MAC (bad/garbled/
-    /// rotated-key/tampered → DL1407), checks expiry (→ DL1402), and enforces single-redemption
+    /// rotated-key/tampered → DL1407), then that the bound node is **still live including its
+    /// ancestors** (revoked → DL1403, expired → DL1402 — campaign C29), then the token's own expiry
+    /// (→ DL1402), and enforces single-redemption
     /// unless the token was minted `multi` (a second redemption → DL1407). Binding writes only
     /// `holder.peer` (display/storage — NEVER a decision input; criterion 9 stays green). Emits one
     /// `"redeem"` record (allow, or deny with `decision: "deny"` for a refused redemption).
@@ -182,8 +184,40 @@ impl Broker {
         if self.inspect(&node).is_none() {
             return Err(Denial::TokenInvalid { detail: "token references an unknown node".into() });
         }
-        // Expiry (DL1402), checked against the pluggable clock.
         let now = self.effective_now();
+        // The bound node must still be LIVE, ancestors included (HARDENING_CAMPAIGN C29).
+        //
+        // Until this check existed, `redeem` consulted the token's own `exp_millis` and the node's
+        // existence, and never the node's state. Three of four dead-grant cases therefore redeemed
+        // successfully: a REVOKED node, a node under a REVOKED ancestor, and a node under an EXPIRED
+        // ancestor (whose token, minted with no deadline of its own, carried `exp = i64::MAX`). Only
+        // the case where the token's deadline happened to mirror the node's own TTL was refused, and
+        // that was incidental rather than a check.
+        //
+        // It was never privilege escalation — `validate` re-reads the effective state on every
+        // operation, so a redeemed dead node authorizes nothing. What it did do is worse than it
+        // sounds for a system whose value is accountability: the redemption emitted an audit record
+        // reading `decision: "allow"` for a grant an operator had explicitly killed, and
+        // `set_holder_peer` wrote the redeemer's own description onto the revoked node. The log an
+        // investigator reads said "allowed", and attacker-supplied text landed in custody state
+        // after revocation. Refusing here costs one lookup and makes the log true.
+        //
+        // Placed before the nonce is burned and before any state is written, so a refused redemption
+        // mutates nothing.
+        match self
+            .effective_state_inherited(&node, now)
+            .unwrap_or(EffState::Expired { ttl_millis: 0, now_millis: now })
+        {
+            EffState::Revoked { by_seq } => {
+                return Err(Denial::Revoked { node: node.clone(), by_seq });
+            }
+            EffState::Expired { ttl_millis, now_millis } => {
+                return Err(Denial::Expired { node: node.clone(), ttl_millis, now_millis });
+            }
+            EffState::Live => {}
+        }
+        // The TOKEN's own expiry (DL1402) — a separate bound from the node's, and deliberately so: a
+        // short-lived token may be minted against a long-lived node.
         if now >= claims.exp_millis {
             return Err(Denial::Expired {
                 node: node.clone(),
@@ -481,5 +515,122 @@ mod tests {
         let k2 = load_or_create_key(&path).unwrap(); // reads the same key back
         assert_eq!(k1, k2);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_token_for_a_dead_grant_cannot_be_redeemed() {
+        // C29. `redeem` checked the token's own `exp_millis` and that the node still existed, and
+        // never the node's STATE. Three of these four cases returned Ok before the fix; only the
+        // second was refused, and only because that token's deadline happened to mirror the node's
+        // own TTL. Every one of them now refuses.
+        //
+        // The stake is not privilege — `validate` re-reads effective state on every operation, so a
+        // redeemed dead node authorizes nothing. The stake is the audit log: each of these emitted a
+        // record reading `decision: "allow"` for a grant an operator had explicitly revoked, and
+        // `set_holder_peer` wrote the redeemer's own text onto the dead node. For a system whose
+        // product is accountability, a log that says "allowed" about a killed grant is the defect.
+
+        // (1) the node itself was revoked
+        let clock = Rc::new(ManualClock::new(1_000));
+        let mut b = broker(clock.clone());
+        let root = root_with_readnet(&mut b);
+        let (child, token) = b
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .expect("delegate");
+        b.revoke(&root, &child).expect("revoke");
+        assert!(
+            matches!(b.redeem(&token, "peer"), Err(Denial::Revoked { .. })),
+            "a token for a revoked node must be refused"
+        );
+
+        // (2) the node's own TTL passed
+        let (_c2, t2) = b
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), Some(2_000), false)
+            .expect("delegate2");
+        clock.set(5_000);
+        assert!(matches!(b.redeem(&t2, "peer"), Err(Denial::Expired { .. })), "expired node");
+
+        // (3) an ANCESTOR expired, while the token itself has no deadline at all (exp = i64::MAX).
+        // This is the case the old code could not see by construction.
+        let clock3 = Rc::new(ManualClock::new(1_000));
+        let mut b3 = broker(clock3.clone());
+        let root3 = b3.issue(
+            holder(),
+            Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+            Some(2_000),
+        );
+        let (_c3, t3) = b3
+            .delegate(&root3, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .expect("delegate3");
+        clock3.set(9_000);
+        assert!(
+            matches!(b3.redeem(&t3, "peer"), Err(Denial::Expired { .. })),
+            "a token under an expired ancestor must be refused even with no deadline of its own"
+        );
+
+        // (4) an ancestor was revoked
+        let mut b4 = broker(Rc::new(ManualClock::new(1_000)));
+        let root4 = b4.issue(
+            holder(),
+            Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }),
+            None,
+        );
+        let (_c4, t4) = b4
+            .delegate(&root4, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .expect("delegate4");
+        b4.revoke(&root4, &root4).expect("revoke root");
+        assert!(
+            matches!(b4.redeem(&t4, "peer"), Err(Denial::Revoked { .. })),
+            "a token under a revoked ancestor must be refused"
+        );
+    }
+
+    #[test]
+    fn a_token_does_not_travel_between_brokers() {
+        // A lease token is a reference plus a MAC, and the MAC key is per-broker. Carrying a token to
+        // a different broker therefore fails at the MAC — before the payload is even read — which is
+        // what stops a token from being a bearer credential with global reach. (`with_key` here makes
+        // the two keys differ deterministically; in production each broker's key is OS-random.)
+        let mut a = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000)))
+            .with_key([1u8; 32]);
+        let root = root_with_readnet(&mut a);
+        let (_child, token) = a
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .expect("delegate");
+
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(ManualClock::new(1_000)))
+            .with_key([2u8; 32]);
+        // Give the second broker a node with the SAME id, so the failure cannot be "unknown node" —
+        // it has to be the MAC.
+        let _same_id = root_with_readnet(&mut b);
+        match b.redeem(&token, "peer") {
+            Err(Denial::TokenInvalid { detail }) => {
+                assert!(detail.contains("MAC"), "the refusal must be the MAC check, got: {detail}")
+            }
+            other => panic!("a foreign broker's token must be refused, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_refused_redemption_mutates_nothing() {
+        // The state-hygiene half of C29: the effective-state check runs BEFORE the nonce is burned
+        // and before `set_holder_peer`, so a refused redemption leaves the tree untouched — and in
+        // particular does not stamp an attacker-chosen peer description onto a revoked node.
+        let clock = Rc::new(ManualClock::new(1_000));
+        let mut b = broker(clock);
+        let root = root_with_readnet(&mut b);
+        let (child, token) = b
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .expect("delegate");
+        b.revoke(&root, &child).expect("revoke");
+        let before = b.outcome_json();
+        assert!(b.redeem(&token, "attacker-controlled-text").is_err());
+        assert_eq!(before, b.outcome_json(), "a refused redemption must not change custody state");
+        assert!(
+            !b.tree().contains("attacker-controlled-text"),
+            "the redeemer's text must not land on a revoked node:
+{}",
+            b.tree()
+        );
     }
 }
