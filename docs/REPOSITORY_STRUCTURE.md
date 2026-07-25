@@ -31,7 +31,8 @@ DeluluLang/
 │   │   └── src/{lib,span,source,codes,diagnostic,json,render,palette}.rs
 │   ├── delulu-syntax/              # tokens, lexer (Go-style termination), AST, error-recovering parser
 │   │   ├── Cargo.toml
-│   │   └── src/{lib,token,lexer,ast,parser}.rs
+│   │   └── src/{lib,token,lexer,ast,parser,fmt,grammar,morph}.rs
+│   │                               #   morph.rs [D35]: the canonical-form law for surface morphs
 │   ├── delulu-check/               # [Stage 1] resolve, types, rows, THE effect/authority checker
 │   │   └── src/{lib,resolve,types,row,unify,check,authority,secret}.rs
 │   ├── delulu-runtime/             # [Stage 1] values, capability table, interpreter, grant broker
@@ -59,6 +60,9 @@ DeluluLang/
 │                                   # file drew `stdlib/std/{core,fs,net,io}.delulu`; it was
 │                                   # never built. The available surface is the PRIMITIVE TABLE
 │                                   # (`docs/reference/primitives.md`) plus the prelude builtins.
+│
+├── morphs/                         # [D35] surface keyword morphs: zh-CN-keywords, compact-ai
+│                                   #   loaded by id from here, $DELULU_MORPH_PATH, or ~/.delulu/morphs
 │
 ├── examples/                       # runnable .delulu programs (demo.delulu is the reference)
 │   └── guide/                      # the samples docs/GETTING_STARTED.md is built from; a gate
@@ -104,7 +108,7 @@ DeluluLang/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs
     │   ├── LOCALIZATION_PLUGIN_GUIDE.md # human-language plugins: author/add/remove/edit (Fable 5)
     │   ├── SYNTAX_MORPH_SPEC.md         # keyword/char syntax skins, human + AI compact profiles
-    │   │                                #   SPEC ONLY — not implemented (finding C22)
+    │   │                                #   BUILT (D35): delulu-syntax/morph.rs + delulu morph
     │   ├── AI_NATIVE_DESIGN.md          # the machine-facing design + standing commitments
     │   ├── LANGUAGE_SPECIFICATION.md   # superseded early draft — kept for provenance
     │   └── DeluluLang_PROMPT.md        # Jesse's original vision — kept verbatim, never edited

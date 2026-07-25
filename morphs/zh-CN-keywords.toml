@@ -1,0 +1,34 @@
+# 中文关键字 — DeluluLang keywords in Simplified Chinese (Stage 8 §6.5).
+#
+# A morph changes the SURFACE only. The program is identical: same AST, same authority, same
+# content hash, same diagnostics. Identifiers, string literals, and comments are never morphed —
+# those are prose, and prose is the catalog system's domain (LOCALIZATION_PLUGIN_GUIDE.md).
+#
+# Glosses are in docs/lang/zh-CN.md. `true`/`false` are left canonical here deliberately: they are
+# literals a reader of any surface recognizes, and this table is meant to be conservative.
+
+[meta]
+morph   = "zh-CN-keywords"
+name    = "中文关键字 (Chinese keywords)"
+version = "1.0.0"
+kind    = "human"
+authors = ["DeluluLang project"]
+
+[keywords]
+fn      = "函数"
+let     = "令"
+var     = "变量"
+if      = "如果"
+else    = "否则"
+while   = "当"
+return  = "返回"
+match   = "匹配"
+module  = "模块"
+import  = "引入"
+pub     = "公开"
+type    = "类型"
+effect  = "效应"
+actor   = "参与者"
+spawn   = "生成"
+consume = "消耗"
+recover = "恢复"

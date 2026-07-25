@@ -44,6 +44,24 @@ pub fn lex_with_comments(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic
     Lexer::new(file, src).run()
 }
 
+/// Lex source written in a surface **morph** (Stage 8 §6.5): an alias at the start of a token
+/// becomes the canonical keyword token it stands for. `None` is exactly [`lex`].
+///
+/// This is the ONLY place in the toolchain where a non-canonical surface becomes tokens. Everything
+/// downstream — parser, checker, DIR, hashes, diagnostics, both engines — sees canonical tokens and
+/// cannot tell which surface produced them, which is the property that makes morphs safe to add to a
+/// language whose identity is computed from its source.
+pub fn lex_with_morph(
+    file: FileId,
+    src: &str,
+    morph: Option<&crate::morph::Morph>,
+) -> (Vec<Token>, Vec<Diagnostic>) {
+    let mut lx = Lexer::new(file, src);
+    lx.morph = morph;
+    let (tokens, diags, _comments) = lx.run();
+    (tokens, diags)
+}
+
 /// A source comment captured for the formatter (Stage 8, phase 8d). `text` is the raw
 /// slice INCLUDING its `//` or `/* */` markers; `own_line` is whether nothing but
 /// whitespace precedes it on its line (an own-line comment stays own-line when
@@ -62,6 +80,9 @@ struct Lexer<'a> {
     tokens: Vec<Token>,
     diags: Vec<Diagnostic>,
     comments: Vec<Comment>,
+    /// The active surface morph, if the file declares one (Stage 8 §6.5). `None` is canonical, and
+    /// canonical is what every entry point uses unless it deliberately opts in.
+    morph: Option<&'a crate::morph::Morph>,
 }
 
 impl<'a> Lexer<'a> {
@@ -70,7 +91,15 @@ impl<'a> Lexer<'a> {
         // -Encoding utf8` on Windows) prepend one, and it isn't source text. Only a *leading* BOM is
         // trivia; a U+FEFF elsewhere still lexes normally (and is rejected as an unexpected char).
         let pos = if src.starts_with('\u{feff}') { '\u{feff}'.len_utf8() } else { 0 };
-        Lexer { file, src, pos, tokens: Vec::new(), diags: Vec::new(), comments: Vec::new() }
+        Lexer {
+            file,
+            src,
+            pos,
+            tokens: Vec::new(),
+            diags: Vec::new(),
+            comments: Vec::new(),
+            morph: None,
+        }
     }
 
     fn run(mut self) -> (Vec<Token>, Vec<Diagnostic>, Vec<Comment>) {
@@ -114,6 +143,35 @@ impl<'a> Lexer<'a> {
                 );
             }
         }
+    }
+
+    /// If the active morph has an alias starting at `start`, consume it and push its keyword token.
+    ///
+    /// Aliases are tried longest-first (`Morph::aliases` guarantees the order), so with both `l` and
+    /// `lm` defined, `lm` cannot be mis-lexed as `l` followed by a stray `m`.
+    ///
+    /// The maximal-munch guard matters as much as the match: an alias that *ends* where an
+    /// identifier character continues is not an alias occurrence. Without it, the compact alias `f`
+    /// for `fn` would turn the identifier `foo` into `fn` followed by `oo`. The guard only applies
+    /// when the alias itself ends in an identifier character — a symbol or CJK alias cannot be the
+    /// prefix of an ASCII identifier, and identifiers here are ASCII-only.
+    fn try_morph_alias(&mut self, start: usize) -> bool {
+        let Some(m) = self.morph else { return false };
+        let rest = &self.src[start..];
+        for (alias, kind) in m.aliases() {
+            let Some(tail) = rest.strip_prefix(alias.as_str()) else { continue };
+            if alias.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+                if let Some(next) = tail.chars().next() {
+                    if next.is_ascii_alphanumeric() || next == '_' {
+                        continue;
+                    }
+                }
+            }
+            self.pos = start + alias.len();
+            self.push(kind.clone(), start);
+            return true;
+        }
+        false
     }
 
     /// Record a comment spanning `start..self.pos` for the formatter's side channel.
@@ -247,6 +305,14 @@ impl<'a> Lexer<'a> {
 
     fn scan_token(&mut self) {
         let start = self.pos;
+        // A surface morph's alias becomes the keyword token it stands for. Checked here, at the one
+        // point the lexer decides what token begins — and therefore AFTER trivia, so an alias
+        // appearing inside a comment or a string literal is never seen by this at all. That is what
+        // keeps "identifiers, strings, and comments are never morphed" a structural property rather
+        // than a rule someone has to remember.
+        if self.try_morph_alias(start) {
+            return;
+        }
         let c = match self.bump() {
             Some(c) => c,
             None => return,

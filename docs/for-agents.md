@@ -197,6 +197,27 @@ plugin inspection — if you see nondeterminism there, it is a bug.
 | `DELULU_HOME` | State directory (keys, credentials, locales). Isolate it per job. |
 | `DELULU_COLOR=never` / `NO_COLOR` | No ANSI. `--json` is never colored regardless. |
 | `DELULU_BROKER` | `embedded` or `daemon`. |
+| `DELULU_MORPH_PATH` | Where to find surface morphs, searched after `./morphs`. |
+
+## [agents.morphs] Surface morphs — your surface, if you measure a win
+
+A **morph** renames the language's keywords. `morphs/compact-ai.toml` ships as a short-alias profile
+(`F` for `fn`, `L` for `let`, …). `delulu morph render <file> --to compact-ai` converts a file;
+`--to-canonical` converts it back, byte-identically. A converted file carries `//! morph: <id>` on
+line 1 and `check`/`run`/`authority` read it directly.
+
+**Default to canonical, and here is the honest reason.** Canonical DeluluLang is already terse,
+regular, and ASCII-stable, and the machine envelope never passes through a morph at all — codes, JSON,
+spans, DIR, and every hash are computed on canonical, so a morph buys you nothing on the surfaces you
+actually parse. The only thing it can buy is tokenizer cost on the *source text*, and that is
+tokenizer-specific: **measure it with your own tokenizer before adopting one.** This project claims no
+number.
+
+If you author your own morph, the rules that will refuse it are worth knowing up front: an alias may
+not be another keyword's canonical spelling (DL1711 — `let = "fn"` would make the word `fn` mean
+`let`, which is a lie told to whoever reviews the file next, including you), two keywords may not
+share an alias (DL1710), and an alias must lex as exactly one token with no bidi controls (DL1712).
+Scripts and emoji are otherwise unrestricted.
 
 ## [agents.limits] What to tell your users honestly
 

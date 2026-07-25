@@ -1321,6 +1321,50 @@ dependency's secrets, previously checked clean and now errors. Nothing in-tree r
 *package* manifest, so the in-tree cost was zero, but downstream trees will see new errors — which is
 the point of the rule.
 
+**D35 — Surface-syntax morphs are built. A program's keywords may be Chinese, emoji, or a short-alias
+AI profile, and it is the same program.** Hardening campaign C22, built on the owner's instruction
+2026-07-25. `docs/design/SYNTAX_MORPH_SPEC.md` had been normative and unimplemented since Stage 8,
+with a header claiming otherwise (corrected first, in commit `5aea47d`; this ruling covers the build).
+
+(a) **The spec's own law had a hole, and it is the part worth remembering.** §1 required a morph to be
+bijective, single-token, and free of alias-vs-alias collisions. That permits `let = "fn"`: bijective,
+one token, renders and round-trips perfectly — and a file written in it uses the word `fn` to mean
+`let`. For a language whose premise is that a human or an AI can *review* code another AI wrote, a
+surface that lies to the reviewer is the same class of attack as the bidi controls D26 refuses. Ruled:
+**an alias may not be another keyword's canonical spelling (DL1711)**, added to the spec as rule 1a.
+Bidi controls inside an alias are refused on identical reasoning (DL1712).
+
+(b) **RULED: the parser does not resolve the pragma.** Resolving `//! morph: X` means reading a file
+off disk, and a parser that acquires filesystem authority from a comment in its own input is **ambient
+authority inside the compiler** — the exact thing this language exists to eliminate. `delulu-syntax`
+accepts an already-loaded `Morph` and never touches the filesystem; the CLI, which already holds that
+authority, does the lookup. This is why `morph_file.rs` lives in the `delulu` crate and not beside
+the law it loads.
+
+(c) **RULED: exactly two conversion points, and canonical byte offsets for spans.**
+`lexer::lex_with_morph` is the only place a non-canonical surface becomes tokens; the CLI's file
+loader normalizes a pragma-bearing file at the edge. Parser, checker, DIR, hashes, both engines, and
+every report see canonical and cannot distinguish surfaces — verified by asserting that a
+Chinese-keyword program's authority report is byte-identical to its canonical form's. Spans are
+canonical byte offsets exactly as §1 requires; rendering never adds or removes a line, so lines are
+exact, while a column within a converted line can shift by the keyword-length difference and the
+quoted snippet shows the canonical spelling. That trade is documented rather than hidden.
+
+(d) **Scope shipped is enumerated, not implied.** Built: the law and validation, both rendering
+directions, the lexer hook, the TOML format and search path, `delulu morph list|info|check|render`,
+pragma-aware `check`/`run`/`authority`/`fmt`, DL1710–DL1714, and two working morphs
+(`morphs/zh-CN-keywords.toml`, `morphs/compact-ai.toml`). **Not built:** `.dpx` plugin delivery,
+per-reader LSP view morphs, `fmt --to-morph` flags (`morph render` does that job), the `[style] morph`
+repo policy key, and morph-aware **package** builds — a package's `src/` must be canonical, which is
+what the spec itself recommends for shared projects.
+
+Evidence it is real rather than plumbed: a program whose keywords are Chinese prints
+`fib(10) = 55` through `delulu run`, its string literals and identifiers untouched, and converting
+back yields the original bytes. Emoji, Cyrillic, Greek, and mixed-script morphs round-trip in the
+property tests — the alias rule denies *structural* hazards rather than allowing a list of scripts,
+because the point of the feature is that the surface belongs to whoever reads it. No token-savings
+number is claimed anywhere; savings are tokenizer-specific (Constitution §5.11).
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which

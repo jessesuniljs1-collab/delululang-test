@@ -15,6 +15,7 @@ mod fleet;
 mod foreign_worker;
 mod locale;
 mod lsp;
+mod morph_file;
 mod signing;
 // Phase 5i: the microVM profile is Linux-first (spec §6); the probe/launch module compiles only
 // there. Every other platform refuses `--isolation microvm` with DL1408 in `cli.rs` (trap 8 —

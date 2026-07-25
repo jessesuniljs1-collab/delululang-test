@@ -600,10 +600,40 @@ Chinese, French, Hindi, Arabic — the packs exist as starting points; the machi
 changes. A malicious catalog could mislead a *reader*; it cannot alter a code, a repair, or a byte of
 JSON, because those aren't in a catalog's vocabulary.
 
-The programming language's own *keywords* can be re-skinned too — a separate mechanism (syntax morphs)
-that maps `fn` to `fonction` or `函数` for humans, or to a token-minimized alias for an AI that
-measures a win — always as a bijection to canonical form, so the artifact, the hash, and the compiler
-see one language. Your surface is your choice; the shared truth is canonical.
+### Keywords for humans, and for machines
+
+The programming language's own *keywords* can be re-skinned too — a separate mechanism, **syntax
+morphs** — mapping `fn` to `函数` for a human, or to a short alias for an AI that measured a win with
+its own tokenizer. It is a bijection to canonical form, so the artifact, the hash, and the compiler see
+one language:
+
+```sh
+delulu morph render hello.delulu --to zh-CN-keywords > hello.zh.delulu
+delulu run hello.zh.delulu --grant console        # the same program
+```
+
+```text
+//! morph: zh-CN-keywords
+模块 demo
+函数 main(root: Root) ! {Write} { 令 out = root.console()
+ out.println("hi") }
+```
+*(Fenced as `text`, not `delulu`: this is the same program rendered through a morph, not a canonical
+sample — and every `delulu`-fenced block in this Book is required to have a canonical sample file
+behind it that the compiler actually reads.)*
+
+Only keywords move. Identifiers, string literals, and comments are untouched — a morph is not a
+translator, and the machine envelope never passes through one: the authority report for that file is
+*byte-identical* to its canonical form's.
+
+There is one rule in the morph loader worth reading as a design lesson, because it was missing from the
+specification until someone tried to break it. A morph must be bijective — but bijectivity alone
+permits `let = "fn"`. That morph is perfectly reversible, every alias is one token, and a file written
+in it uses the word `fn` to mean `let`. It would render correctly, round-trip correctly, and lie to
+every human who read it. So an alias may not be another keyword's canonical spelling (DL1711), for the
+same reason invisible text-reordering characters are a hard error (Chapter 11): **in a language whose
+purpose is that code can be reviewed, deceiving the reviewer is the attack.** Your surface is your
+choice; misrepresenting the shared truth is not.
 
 This is the deepest design commitment in the book: DeluluLang does not make AI a second-class user of
 a human language, nor humans a second-class user of a machine language. **One law — authority. Two

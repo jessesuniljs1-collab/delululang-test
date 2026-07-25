@@ -1,0 +1,34 @@
+# A token-minimizing surface for AI systems (Stage 8 §6.5; SYNTAX_MORPH_SPEC.md).
+#
+# HONESTY CLAUSE, which is normative: token savings are tokenizer-specific. This file makes NO
+# claim about how many tokens it saves for any model. Measure it with your own tokenizer before
+# adopting it, and use canonical if you do not measure a win — canonical DeluluLang is already
+# designed to be terse and regular, and it is what every artifact, hash, and diagnostic uses.
+#
+# Aliases avoid every other keyword's spelling (DL1711) and are single tokens (DL1712).
+
+[meta]
+morph   = "compact-ai"
+name    = "Compact (AI / agent profile)"
+version = "1.0.0"
+kind    = "compact"
+authors = ["DeluluLang project"]
+
+[keywords]
+fn      = "F"
+let     = "L"
+var     = "V"
+if      = "I"
+else    = "E"
+while   = "W"
+return  = "R"
+match   = "M"
+module  = "MOD"
+import  = "USE"
+pub     = "P"
+type    = "T"
+effect  = "EF"
+actor   = "A"
+spawn   = "SP"
+consume = "CN"
+recover = "RC"

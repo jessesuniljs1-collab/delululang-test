@@ -1,14 +1,25 @@
 # DeluluLang — Syntax Morph Specification (surface-syntax plugins)
 
-**Status:** Design reference — **normative for the morph format and the canonical-form law, and NOT
-YET IMPLEMENTED.** No `delulu morph` verb, no morph loader, and no `--morph` flag exist in the
-toolchain as of v1.0.0; the string `morph` appears in no source file. An earlier revision of this
-header claimed "Implemented by: Stage 8 tooling", which was false — `STAGE8_SPECIFICATION.md` §6
-scheduled the `delulu morph` sibling of `delulu locale` as work to do "when building", and it was
-never built. Recorded as finding **C22** in `docs/design/HARDENING_CAMPAIGN.md`; implementation is
-scheduled there. Do not cite this document as evidence that surface-syntax plugins ship.
-**When implemented:** Stage 8 tooling (fmt/LSP integration; morphs are tooling, never semantics —
-invariant 38) with the plugin machinery of Stage 6. **Companion:**
+**Status:** Normative, and **IMPLEMENTED** — hardening ruling **D35**, finding C22.
+
+What ships: `crates/delulu-syntax/src/morph.rs` (the canonical-form law, validation, and both
+rendering directions), the lexer's alias hook (`lex_with_morph` — the one place a non-canonical
+surface becomes tokens), `crates/delulu/src/morph_file.rs` (the TOML format and the search path), and
+`delulu morph list | info | check | render`. A `//! morph: <id>` pragma makes a stored file readable
+by `check`, `run`, `authority`, and `fmt` directly. Two morphs ship as working examples:
+`morphs/zh-CN-keywords.toml` (Chinese keywords) and `morphs/compact-ai.toml` (a short-alias profile).
+Refusals are DL1710–DL1714.
+
+**What does NOT ship, stated plainly:** morphs delivered as `.dpx` plugins (`morph add/remove`
+lifecycle — §2's "Delivery" paragraph); per-reader LSP view morphs (§3's third bullet); `fmt`'s
+`--to-morph`/`--to-canonical` flags, whose job `delulu morph render` does instead; the `[style] morph`
+repo policy key (§3's last bullet); and morph-aware **package** builds — a package's `src/` must be
+canonical, which matches this spec's own recommendation for shared projects. Prior revisions of this
+header claimed the whole thing was "Implemented by: Stage 8 tooling" while none of it was; the list
+above is what a reader may rely on.
+
+**Implemented by:** Stage 8 tooling — morphs are tooling, never semantics (invariant 38).
+**Companion:**
 `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (human *prose* localization — a different mechanism),
 `docs/design/AI_NATIVE_DESIGN.md` (why AI defaults to canonical), `CONSTITUTION.md` §8.4/§8.5.
 
@@ -39,7 +50,19 @@ Anyone or any AI may author, add, edit, or remove a morph, exactly like a locale
 Consequences (each normative):
 1. **Bijective or rejected.** A morph maps each canonical keyword to exactly one alias and no two
    keywords to the same alias; aliases must be single lexer tokens and must not collide with each
-   other. Violation → the morph fails to load (DL17xx-class, exact colliding pair named).
+   other. Violation → the morph fails to load (DL1710/DL1712, exact colliding pair named).
+
+   **1a. No alias may be another keyword's canonical spelling** (DL1711). Added when this spec was
+   implemented, because the law as originally written did not forbid it and it is the worst thing a
+   morph can do: `let = "fn"` is bijective, its alias is a single token, it renders and round-trips
+   perfectly — and a file written in it uses the word `fn` to mean `let`. Since a first-class use of
+   this language is a human or an AI *reviewing* code another AI wrote, a surface that lies to the
+   reviewer is an attack on the guarantee, in exactly the sense that makes raw bidi controls a hard
+   error (DL0107). Bijectivity is about being able to render *back*; this rule is about the reader.
+
+   **1b. Only active keywords may be renamed** (DL1713). Contextual keywords (`foreign`, `lib`) are
+   lexed as identifiers and recognized positionally, so renaming them would be renaming an
+   identifier — forbidden by consequence 3 below. Reserved-but-inactive words have no token yet.
 2. **Storage is a project choice; identity is not.** A file may be *stored* in a morph (declared, §3)
    or in canonical; either way its canonical form — and therefore its content hash, its DIR, its
    authority — is identical. Two developers reading one file through different morphs are reading

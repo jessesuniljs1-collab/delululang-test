@@ -43,6 +43,10 @@ getrandom = "0.3"
 # Chunk 3 wire protocol (head-chef ruling 2): length-prefixed canonical CBOR frames. ciborium is
 # pure-Rust and serde-based, so the fixed-field request/response structs encode deterministically.
 ciborium = "0.2"
+# Surface morphs (Stage 8 §6.5): a morph is a TOML keyword table. Already the workspace's manifest
+# parser (delulu-check) and already an SBOM component — no new supply-chain surface, and the same
+# "parsed as a pure function of its text; no code runs at load time" property applies.
+toml = "0.8"
 
 # Windows named-pipe transport + peer identity (phase 5f), plus the foreign-worker Job Object
 # (phase 5h: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). windows-sys is already in the workspace dep tree

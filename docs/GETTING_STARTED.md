@@ -352,6 +352,7 @@ enforced, and easy to meet once you know it.
 | `DL0202` expected an expression, found `)` | There is no `()` literal. Drop the `else` instead. |
 | `DL0201` "a match arm's body is an expression" | Wrap an assignment in a block: `Some(d) => { acc = d }`. |
 | `DL0302` "is a prelude builtin" | You named a function `str`, `len`, `int`, `float`, `parse_int`, `range`, `push`, `load`, `assert`, `assert_eq`, `Ok`, `Err`, `Some`, or `None`. Rename it. |
+| `DL0302` "is a builtin type" / "is a core effect" | You wrote `type Int = …`, `type Cap = …`, `effect Write`, or similar. The name resolves to the builtin before your declaration, so the declaration would silently do nothing — it is refused instead of ignored. Rename it. |
 | `DL0307` "not a capability resource kind" | You wrote an effect name in `Cap[…]`. See §6. |
 | `DL0501` "performs effect Async" in a `be` | A behavior that sends to another actor must declare `! {Async}`. |
 | `DL0208` on a perfectly good `import` | Imports go before the first item. |
@@ -360,7 +361,47 @@ enforced, and easy to meet once you know it.
 | `DL0107` "bidirectional control character" | Your source (often pasted or AI-generated) contains an invisible text-reordering character that can make code render differently than it runs. It is refused, not warned. If a *string* truly needs the code point, write it as `\u{202e}`. |
 | Integer result is wrong | It is not — overflow is `DL0901` and aborts. Arithmetic is checked, not wrapping. |
 
-## 11. Where to go next
+## 11. Writing DeluluLang in your own keywords (optional)
+
+A **morph** renames the language's keywords at the surface. The program does not change: same AST,
+same authority, same content hash, byte-identical reports. Two ship as working examples —
+`morphs/zh-CN-keywords.toml` and `morphs/compact-ai.toml` (short aliases for token-hungry AI
+workflows).
+
+```sh
+delulu morph list                                   # what is installed
+delulu morph info zh-CN-keywords                    # the keyword table
+delulu morph render hello.delulu --to zh-CN-keywords > hello.zh.delulu
+delulu run hello.zh.delulu --grant console          # runs directly
+delulu morph render hello.zh.delulu --to-canonical  # and back, byte-identical
+```
+
+A rendered file carries `//! morph: <id>` on line 1, which is how `check`, `run`, `authority`, and
+`fmt` know how to read it. The result:
+
+```text
+//! morph: zh-CN-keywords
+模块 demo
+函数 main(root: Root) ! {Write} { 令 out = root.console()
+ out.println("hi") }
+```
+
+Three things to know before you use one:
+
+- **Only keywords move.** Identifiers, string literals, and comments are never morphed — those are
+  prose, and a morph is not a translator.
+- **Canonical is the shared truth.** A package's `src/` must be canonical, and diagnostics quote the
+  canonical spelling. If two people read one repo through different morphs, they are provably reading
+  the same program; canonical is the coordinate system that makes that true.
+- **No token-savings number is claimed.** `compact-ai` may or may not save tokens with *your*
+  tokenizer. Measure before adopting it; canonical is already terse.
+
+Writing your own morph is a TOML file with a `[keywords]` table — `delulu morph check <file>` validates
+it. It is refused if two keywords share an alias (DL1710), if an alias is another keyword's spelling
+(DL1711 — `let = "fn"` would make the word `fn` mean `let`), or if an alias is not a single token
+(DL1712).
+
+## 12. Where to go next
 
 - [The DeluluLang Book](book/THE_DELULULANG_BOOK.md) — 20 chapters. Chapter 6, *Reading Authority*,
   is the flagship skill; Chapter 11 is for reviewing AI-written code.

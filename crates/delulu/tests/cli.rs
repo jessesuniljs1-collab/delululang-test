@@ -648,3 +648,160 @@ fn naming_a_directory_where_a_file_belongs_says_so() {
     assert!(err.contains("delulu build"), "it must point at the command that does take a directory: {err}");
     assert!(!err.contains("os error"), "no raw OS error may leak into this message: {err}");
 }
+
+// ----- Surface morphs (Stage 8 §6.5; HARDENING_CAMPAIGN C22) ------------------------------------
+
+/// Write a morph file into a temp dir and point `DELULU_MORPH_PATH` at it.
+fn with_morph_dir(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let dir = std::env::temp_dir().join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (f, body) in files {
+        std::fs::write(dir.join(f), body).unwrap();
+    }
+    dir
+}
+
+fn delulu_with_morphs(dir: &std::path::Path, args: &[&str]) -> Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(args)
+        .env("DELULU_MORPH_PATH", dir)
+        .env("DELULU_NO_COLOR", "1")
+        .output()
+        .expect("delulu must run")
+}
+
+const ZH: &str = "[meta]\nmorph=\"zh\"\nname=\"zh\"\nversion=\"1.0.0\"\nkind=\"human\"\n\
+    [keywords]\nfn=\"函数\"\nlet=\"令\"\nif=\"如果\"\nelse=\"否则\"\nmodule=\"模块\"\n";
+
+#[test]
+fn a_program_written_in_a_morph_runs_and_prints_the_same_thing() {
+    // The whole feature in one test. A DeluluLang program whose keywords are Chinese is the SAME
+    // program: it runs, and it prints what its canonical form prints.
+    let dir = with_morph_dir("delulu_morph_run", &[("zh.toml", ZH)]);
+    let canonical = "module demo\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(\"hi\") }\n";
+    let cf = dir.join("canon.delulu");
+    std::fs::write(&cf, canonical).unwrap();
+
+    // Render to the morph, then run the rendered file directly.
+    let r = delulu_with_morphs(&dir, &["morph", "render", cf.to_str().unwrap(), "--to", "zh"]);
+    assert!(r.status.success(), "render failed: {}", stderr(&r));
+    let morphed = stdout(&r);
+    assert!(morphed.starts_with("//! morph: zh\n"), "must carry a pragma:\n{morphed}");
+    assert!(morphed.contains("函数 main"), "keywords must be morphed:\n{morphed}");
+    assert!(morphed.contains("\"hi\""), "a string literal is never morphed:\n{morphed}");
+    assert!(morphed.contains("root.console()"), "identifiers are never morphed:\n{morphed}");
+
+    let mf = dir.join("zh.delulu");
+    std::fs::write(&mf, &morphed).unwrap();
+    let o = delulu_with_morphs(&dir, &["run", mf.to_str().unwrap(), "--grant", "console"]);
+    assert!(o.status.success(), "the morphed program must run: {}", stderr(&o));
+    assert_eq!(stdout(&o).trim(), "hi");
+}
+
+#[test]
+fn a_morph_round_trip_is_byte_identical_and_the_authority_report_does_not_move() {
+    // The canonical-form law, end to end: converting there and back returns the original bytes, and
+    // the machine envelope (here, the authority report) cannot tell which surface was used.
+    let dir = with_morph_dir("delulu_morph_roundtrip", &[("zh.toml", ZH)]);
+    let canonical = "module demo\nfn main(root: Root) ! {Write} { let o = root.console()\n o.println(\"x\") }\n";
+    let cf = dir.join("canon.delulu");
+    std::fs::write(&cf, canonical).unwrap();
+
+    let r = delulu_with_morphs(&dir, &["morph", "render", cf.to_str().unwrap(), "--to", "zh"]);
+    let mf = dir.join("zh.delulu");
+    std::fs::write(&mf, stdout(&r)).unwrap();
+    let back = delulu_with_morphs(&dir, &["morph", "render", mf.to_str().unwrap(), "--to-canonical"]);
+    assert_eq!(stdout(&back), canonical, "round-trip must be byte-identical");
+
+    let a1 = delulu_with_morphs(&dir, &["authority", cf.to_str().unwrap()]);
+    let a2 = delulu_with_morphs(&dir, &["authority", mf.to_str().unwrap()]);
+    assert_eq!(
+        stdout(&a1),
+        stdout(&a2),
+        "the authority report must be morph-invariant — the surface is not part of the program"
+    );
+}
+
+#[test]
+fn a_morph_whose_alias_is_another_keyword_is_refused() {
+    // DL1711 — the review attack. This morph is bijective and its alias is a single token, and a
+    // file written in it uses the word `fn` to mean `let`: it would render and round-trip perfectly
+    // while misleading every human who read it. Bijectivity alone does not forbid this.
+    let dir = with_morph_dir(
+        "delulu_morph_liar",
+        &[("liar.toml", "[meta]\nmorph=\"liar\"\nkind=\"custom\"\n[keywords]\nlet=\"fn\"\n")],
+    );
+    let o = delulu_with_morphs(&dir, &["morph", "check", dir.join("liar.toml").to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1));
+    let err = stderr(&o);
+    assert!(err.contains("DL1711"), "{err}");
+    assert!(err.contains("misled"), "{err}");
+}
+
+#[test]
+fn a_morph_alias_may_not_carry_a_bidi_control_or_split_into_two_tokens() {
+    // DL1712, and the D26 discipline extended to morphs: an alias that renders differently than it
+    // lexes defeats the purpose of having a canonical form at all.
+    let dir = with_morph_dir(
+        "delulu_morph_bad_alias",
+        &[
+            ("bidi.toml", "[meta]\nmorph=\"bidi\"\nkind=\"custom\"\n[keywords]\nfn=\"a\u{202e}b\"\n"),
+            ("split.toml", "[meta]\nmorph=\"split\"\nkind=\"custom\"\n[keywords]\nfn=\"a b\"\n"),
+        ],
+    );
+    for f in ["bidi.toml", "split.toml"] {
+        let o = delulu_with_morphs(&dir, &["morph", "check", dir.join(f).to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(1), "{f}");
+        assert!(stderr(&o).contains("DL1712"), "{f}: {}", stderr(&o));
+    }
+}
+
+#[test]
+fn two_keywords_sharing_an_alias_is_refused() {
+    // DL1710 — without bijectivity, rendering back to canonical would have to guess.
+    let dir = with_morph_dir(
+        "delulu_morph_dup",
+        &[("dup.toml", "[meta]\nmorph=\"dup\"\nkind=\"custom\"\n[keywords]\nfn=\"x\"\nlet=\"x\"\n")],
+    );
+    let o = delulu_with_morphs(&dir, &["morph", "check", dir.join("dup.toml").to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(stderr(&o).contains("DL1710"), "{}", stderr(&o));
+}
+
+#[test]
+fn renaming_something_that_is_not_a_keyword_is_refused() {
+    // DL1713 — including the contextual keywords. `foreign` is lexed as an identifier, so renaming
+    // it would be renaming an identifier, which the canonical-form law forbids.
+    let dir = with_morph_dir(
+        "delulu_morph_notkw",
+        &[("nk.toml", "[meta]\nmorph=\"nk\"\nkind=\"custom\"\n[keywords]\nforeign=\"外部\"\n")],
+    );
+    let o = delulu_with_morphs(&dir, &["morph", "check", dir.join("nk.toml").to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(stderr(&o).contains("DL1713"), "{}", stderr(&o));
+}
+
+#[test]
+fn a_file_naming_an_uninstalled_morph_is_refused_not_guessed() {
+    // DL1714. Reading a morphed file as though it were canonical would produce a wall of unrelated
+    // syntax errors; silently succeeding on whatever happened to lex would be worse.
+    let dir = with_morph_dir("delulu_morph_missing", &[]);
+    let f = dir.join("ghost.delulu");
+    std::fs::write(&f, "//! morph: nope\nmodule m\nfn main(root: Root) { }\n").unwrap();
+    let o = delulu_with_morphs(&dir, &["check", f.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1));
+    let err = stderr(&o);
+    assert!(err.contains("DL1714"), "{err}");
+    assert!(err.contains("looked in"), "the message must say where it searched: {err}");
+}
+
+#[test]
+fn a_morph_id_may_not_escape_the_search_path() {
+    // A morph id becomes a filename. Refusing path-shaped ids is one line, and a toolchain that
+    // reads arbitrary paths on request is not one this language should ship.
+    let dir = with_morph_dir("delulu_morph_traversal", &[]);
+    let o = delulu_with_morphs(&dir, &["morph", "info", "../../etc/passwd"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(stderr(&o).contains("not a valid morph id"), "{}", stderr(&o));
+}

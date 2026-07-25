@@ -2661,3 +2661,68 @@ anchor = "ref.diag.DL1418"
 file = "crates/delulu-broker/src/cert.rs"
 test = "a_well_formed_chain_verifies_and_yields_the_leafs_authority"
 kind = "positive"
+
+# ----- Surface morphs (DL1710-DL1714, Stage 8 §6.5) -------------------------------------------
+# Negative witnesses: each refusal, proven to fire. Positive witnesses: a VALID morph loads and a
+# program written in it runs — proof the codes do not fire on good input, which invariant 42 wants
+# as much as the firing half (a diagnostic that always fires is as broken as one that never does).
+
+[[witness]]
+anchor = "ref.diag.DL1710"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "two_keywords_may_not_share_an_alias"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1710"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "a_valid_compact_morph_loads"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1711"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "an_alias_may_not_be_another_keywords_canonical_spelling"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1711"
+file = "crates/delulu/tests/cli.rs"
+test = "a_program_written_in_a_morph_runs_and_prints_the_same_thing"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1712"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "an_alias_must_be_a_single_token"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1712"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "a_chinese_keyword_morph_round_trips"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1713"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "a_morph_may_not_rename_something_that_is_not_a_keyword"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1713"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "an_emoji_morph_round_trips"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL1714"
+file = "crates/delulu/tests/cli.rs"
+test = "a_file_naming_an_uninstalled_morph_is_refused_not_guessed"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1714"
+file = "crates/delulu/tests/cli.rs"
+test = "a_morph_round_trip_is_byte_identical_and_the_authority_report_does_not_move"
+kind = "positive"

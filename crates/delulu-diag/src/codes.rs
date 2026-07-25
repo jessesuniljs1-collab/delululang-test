@@ -194,6 +194,13 @@ registry! {
     "DL1705" => "signature verification failed",
     "DL1706" => "registry index line invalid / semver-authority conflict at publish",
     "DL1707" => "assertion failed (a `test` assertion did not hold at runtime)",
+    // Surface morphs (DL1710–DL1714) — Stage 8 §6.5, SYNTAX_MORPH_SPEC.md. A sub-block rather
+    // than DL1708/1709 so a reader seeing DL171x knows it is the morph loader.
+    "DL1710" => "morph is not bijective (a keyword renamed twice, or two keywords sharing one alias)",
+    "DL1711" => "morph alias is another keyword's canonical spelling (the surface would mislead)",
+    "DL1712" => "morph alias is not a single valid token",
+    "DL1713" => "morph renames something that is not a renameable keyword",
+    "DL1714" => "the requested morph is not available",
     "DL1780" => "atlas refused: the program has check errors — fix them first (no partial graph)",
     "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
     "DL1790" => "invalid theme name or malformed theme.toml — using the `default` theme",
@@ -1246,6 +1253,36 @@ pub fn code_explain(code: &str) -> Option<String> {
              Assertions are pure prelude builtins — they add no effects to a row — and \
              `assert_eq` on an opaque type (Secret/Cap/Root…) is refused at check time (DL0605, \
              rule R-5): comparing secrets in tests is refused like everywhere else.",
+        "DL1710" => "A morph must be BIJECTIVE: each keyword has at most one alias, and no two \
+             keywords share an alias. Without that, rendering a morphed file back to canonical \
+             would have to guess which keyword an alias meant — and every hash, artifact, and \
+             diagnostic in this toolchain is computed on the canonical form, so guessing is not an \
+             option. The message names the exact colliding pair. See `SYNTAX_MORPH_SPEC.md` §1.",
+        "DL1711" => "A morph alias may not be another keyword's canonical spelling. `let = \"fn\"` \
+             is bijective and every alias is a single token, yet a file written in that morph uses \
+             the word `fn` to mean `let` — it renders correctly, round-trips correctly, and \
+             misleads every human who reads it. Since a first-class use of this language is a \
+             human or an AI REVIEWING code another AI wrote, a surface that lies to the reviewer is \
+             an attack on the guarantee, exactly like the bidi controls DL0107 refuses. Choose an \
+             alias that is not already a keyword.",
+        "DL1712" => "Every morph alias must lex as exactly ONE token. An alias containing \
+             whitespace, a comment delimiter, a quote, a statement separator, an escape, or a \
+             control character could END the keyword it stands for and begin something else — that \
+             is a morph restructuring a program rather than renaming its keywords, which the \
+             canonical-form law forbids. A leading digit is refused because it would lex as a \
+             number before any alias could match. Scripts and emoji are NOT restricted: the point \
+             of morphs is that the surface belongs to whoever reads it.",
+        "DL1713" => "A morph may only rename the language's active KEYWORDS. Contextual keywords \
+             (`foreign`, `lib`) are lexed as identifiers and recognized positionally, so renaming \
+             them would be renaming an identifier — and identifiers, string literals, and comments \
+             are never morphed (they are prose; the CATALOG system localizes prose). The message \
+             lists every renameable keyword. A typo here would otherwise leave you believing a \
+             rename took effect when nothing happened.",
+        "DL1714" => "The morph named by this file's `//! morph:` pragma, or by `--morph`, is not \
+             installed. Tools refuse rather than fall back to canonical: reading a morphed file as \
+             though it were canonical would produce a wall of unrelated syntax errors, and \
+             silently succeeding on the subset that happens to lex would be worse. Install the \
+             morph (`delulu morph add`) or convert the file (`delulu fmt --to-canonical`).",
         "DL1790" => "The requested color theme could not be used: either the theme NAME (from \
              `--theme`, `DELULU_THEME`, or `~/.delulu/theme.toml`) is not a built-in \
              (`default`/`bright`/`mono`), or the `theme.toml` file was malformed, or a `[roles]` \

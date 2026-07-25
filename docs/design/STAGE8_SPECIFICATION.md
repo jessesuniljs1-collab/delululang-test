@@ -164,9 +164,38 @@ Per-file override header (first item in a test file):
 > for this section's implementation); `docs/lang/<locale>.md` (per-language packs: en-US and
 > delulu-slang complete, 9 starters with decided terminology); `docs/design/SYNTAX_MORPH_SPEC.md`
 > (the *separate* mechanism for re-skinning the programming language's own keywords — including
-> AI token-minimizing profiles — via bijective morphs; plan a §6.5-style `delulu morph` sibling of
-> `delulu locale` when building); `docs/design/AI_NATIVE_DESIGN.md` (why the machine envelope stays
-> frozen under all of this).
+> AI token-minimizing profiles — via bijective morphs; **built, see §6.5 below**);
+> `docs/design/AI_NATIVE_DESIGN.md` (why the machine envelope stays frozen under all of this).
+
+### 6.5 Syntax morphs — the sibling of `delulu locale`
+
+A **catalog** localizes prose (§6.1–§6.4). A **morph** renames the language's own keywords. They are
+different mechanisms with the same shape, and the distinction is worth stating once: a catalog can
+never change what compiles, and a morph changes only how the same program is spelled.
+
+Normative details are in `docs/design/SYNTAX_MORPH_SPEC.md`. What this section pins for Stage 8:
+
+- **Surface:** `delulu morph list | info <id> | check <file.toml> | render <file> (--to <id> |
+  --to-canonical)`. A morph is a TOML keyword table found at `morphs/<id>.toml`,
+  `$DELULU_MORPH_PATH/<id>.toml`, or `~/.delulu/morphs/<id>.toml` — first hit wins. Nothing is
+  embedded in the binary, so a Chinese keyword morph and an AI's compact profile are equally
+  third-party: canonical is the shared coordinate system, not a privileged surface.
+- **Where the conversion happens:** exactly two places. `lex_with_morph` is the only point in the
+  toolchain where a non-canonical surface becomes tokens, and the CLI's file loader converts a
+  pragma-bearing file to canonical at the edge. Parser, checker, DIR, hashes, both engines, and every
+  report see canonical and cannot tell which surface produced it — which is what makes invariant 39
+  (a frozen machine envelope) hold under morphs as it does under locales.
+- **Spans:** canonical byte offsets, per §1's law. Morph rendering replaces keyword tokens in place
+  and never adds or removes a line, so a diagnostic's LINE is exact; a column inside a converted line
+  can shift by the keyword-length difference, and the quoted snippet shows the canonical spelling.
+  That is the documented trade for having one coordinate system.
+- **Packages stay canonical.** A morph applies to a single file read through its pragma; a package's
+  `src/` is not read through morphs. Package sources are shared artifacts, and the morph spec itself
+  recommends canonical for shared projects.
+- **Refusals:** DL1710 (not bijective), DL1711 (an alias is another keyword's canonical spelling —
+  added *by* the implementation, see the spec's §1a), DL1712 (alias is not one token, including bidi
+  controls), DL1713 (not a renameable keyword), DL1714 (morph not installed — never a silent
+  fallback to canonical).
 
 ### 6.1 Catalog format
 

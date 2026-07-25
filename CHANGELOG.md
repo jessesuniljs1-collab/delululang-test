@@ -60,6 +60,24 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   grant `--grant declassify`. It reports capability, never behaviour, and names the safe case too. No
   authority semantics changed and `--json` is unchanged, because agents could already derive it.
   (C25, ruling D32)
+- **Surface-syntax morphs — write DeluluLang's keywords in your own language, or an AI's.**
+  `delulu morph list | info | check | render`, a `//! morph: <id>` file pragma read by `check`, `run`,
+  `authority`, and `fmt`, and two working morphs: `morphs/zh-CN-keywords.toml` and
+  `morphs/compact-ai.toml`. A program whose keywords are `函数`/`令`/`如果` is the *same program* — same
+  AST, same authority, byte-identical reports — because conversion happens at exactly two edges and
+  everything downstream sees canonical. Chinese, emoji, Cyrillic, Greek, and mixed-script surfaces all
+  round-trip byte-identically. Identifiers, string literals, and comments are never morphed.
+
+  Refusals: **DL1710** (not bijective), **DL1711** (an alias is another keyword's canonical spelling),
+  **DL1712** (alias is not one token, including bidi controls), **DL1713** (not a renameable keyword),
+  **DL1714** (morph not installed — never a silent fallback). DL1711 did not exist in the spec's law:
+  `let = "fn"` satisfied every stated rule while producing a file where the word `fn` means `let`, and
+  a surface that lies to a reviewer is the same class of attack as a bidi control.
+
+  No token-savings number is claimed for the compact profile — savings are tokenizer-specific, so
+  measure with your own before adopting it. Not built, and listed in the spec header rather than
+  implied: plugin-delivered morphs, per-reader LSP view morphs, and morph-aware *package* builds (a
+  package's `src/` must be canonical). (C22, ruling D35)
 - **Licensing, and the terms of use.** `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`, and
   `GOVERNANCE.md`. Until this landed, default copyright meant nobody could legally use DeluluLang at
   all. Derivatives must use a different name; Jesse Sunil is the original creator. (C9, ruling D27)

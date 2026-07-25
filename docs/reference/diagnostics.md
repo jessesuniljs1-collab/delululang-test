@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 140 of 140 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 145 of 145 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -130,6 +130,11 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1705` | signature verification failed | `ref.diag.DL1705` | covered |
 | `DL1706` | registry index line invalid / semver-authority conflict at publish | `ref.diag.DL1706` | covered |
 | `DL1707` | assertion failed (a `test` assertion did not hold at runtime) | `ref.diag.DL1707` | covered |
+| `DL1710` | morph is not bijective (a keyword renamed twice, or two keywords sharing one alias) | `ref.diag.DL1710` | covered |
+| `DL1711` | morph alias is another keyword's canonical spelling (the surface would mislead) | `ref.diag.DL1711` | covered |
+| `DL1712` | morph alias is not a single valid token | `ref.diag.DL1712` | covered |
+| `DL1713` | morph renames something that is not a renameable keyword | `ref.diag.DL1713` | covered |
+| `DL1714` | the requested morph is not available | `ref.diag.DL1714` | covered |
 | `DL1780` | atlas refused: the program has check errors — fix them first (no partial graph) | `ref.diag.DL1780` | covered |
 | `DL1781` | custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it | `ref.diag.DL1781` | covered |
 | `DL1790` | invalid theme name or malformed theme.toml — using the `default` theme | `ref.diag.DL1790` | covered |

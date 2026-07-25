@@ -87,7 +87,7 @@ deviations.
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | **CLOSED** — D34 (owner approved 2026-07-25) |
 | C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
 | C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | OPEN |
-| C22 | **Stage 8 — the syntax-morph system is specified normatively and does not exist**; its spec claims to be implemented | **high** (doc contradiction / missing commissioned feature) | OPEN — spec header corrected, implementation scheduled |
+| C22 | **Stage 8 — the syntax-morph system is specified normatively and does not exist**; its spec claims to be implemented | **high** (doc contradiction / missing commissioned feature) | **CLOSED** — D35 (built 2026-07-25) |
 | C23 | **Every builtin type name and core effect name can be shadowed by a user declaration, and the shadow is silently inert** — including `Root`, `Cap`, `Secret`, `Plugin`, and `Write` | **high** (review integrity / authority legibility) | **CLOSED** — D30 |
 | C24 | Stage 4 — a type alias in a foreign signature was refused as "not marshallable" without saying it was an alias or what it aliased | medium (diagnostic quality) | **CLOSED** — D31 |
 | C25 | **The authority report holds every fact needed to see that a credential can leave the program, and never says so** | **high** (the commission's credential-exposure requirement) | **CLOSED** — D32 |
@@ -647,7 +647,7 @@ frames against a bound chosen for the *smallest* supported stack, or growing the
 (`stacker`). Both are runtime-architecture changes deserving their own pass; recorded here rather
 than bolted onto D29, which is about engine parity, not the interpreter's stack discipline.
 
-### C22 · The syntax-morph system is specified but absent — OPEN
+### C22 · The syntax-morph system was specified but absent — CLOSED (D35)
 
 `docs/design/SYNTAX_MORPH_SPEC.md` is a complete, normative specification of **surface-syntax
 plugins**: bijective token-level keyword remappings that let a human write DeluluLang with keywords
@@ -668,11 +668,39 @@ The defect recorded here is not "a planned feature is unbuilt" — that is legit
 would conclude the feature ships. Two documents in the same tree disagreed about whether a feature
 exists, and the code sided with the more pessimistic one.
 
-Corrected immediately: the spec header now states its status honestly and points at this finding.
-Implementing the morph system to that spec is scheduled as its own pass (Stage 8 / P9), because it is
-a feature build rather than a hardening fix, and because it carries a real security obligation — a
-keyword remapping is a homoglyph-adjacent attack surface, and it must land *with* the Trojan-Source
-discipline of D26 (raw bidi controls are DL0107) rather than around it.
+Corrected immediately: the spec header stated its status honestly and pointed at this finding.
+**Then built, on Jesse’s instruction (2026-07-25) — ruling D35.**
+
+The build found a hole in the spec’s own law, which is the part worth remembering. §1 required a
+morph to be bijective, single-token, and free of alias-vs-alias collisions — and that permits
+`let = "fn"`. Such a morph is bijective, its alias is one token, it renders and round-trips
+perfectly, and a file written in it uses the word `fn` to mean `let`. For a language whose premise is
+that a human or an AI can REVIEW code another AI wrote, a surface that lies to the reviewer is the
+same class of attack as the bidi controls D26 refuses. Closed as **DL1711**, and the spec’s §1 now
+carries it as rule 1a. Bidi controls inside an alias are refused for the same reason (DL1712).
+
+Two design decisions are load-bearing and were made deliberately:
+
+- **The parser does not resolve the pragma.** Resolving `//! morph: X` means reading a morph file off
+  disk, and a parser that acquires filesystem authority from a comment in its own input is ambient
+  authority inside the compiler — precisely what this language exists to eliminate. The lookup lives
+  in the CLI, which already has that authority; `delulu-syntax` takes an already-loaded `Morph`.
+- **Conversion happens in exactly two places.** `lex_with_morph` is the only point where a
+  non-canonical surface becomes tokens, and the CLI’s loader normalizes a pragma-bearing file at the
+  edge. Everything downstream — checker, DIR, hashes, both engines, every report — sees canonical and
+  cannot tell which surface produced it. Verified: the authority report for a Chinese-keyword program
+  is byte-identical to its canonical form’s.
+
+Proof it is real rather than plumbed: `fib(10) = 55`, printed by a program whose keywords are
+Chinese, run directly through `delulu run`. Round-trip is byte-identical, and the string literal and
+every identifier survive untouched. Emoji, Cyrillic, Greek, and mixed-script morphs round-trip in the
+property tests — the alias rule is a denylist of *structural* hazards, not an allowlist of scripts,
+because the point of the feature is that the surface belongs to whoever reads it.
+
+Scope shipped vs. deferred is enumerated in the spec header rather than blurred: `.dpx` plugin
+delivery, per-reader LSP view morphs, the `[style] morph` repo policy key, and morph-aware **package**
+builds are NOT built. A package’s `src/` must be canonical — which is what the spec itself
+recommends for shared projects.
 
 ### C23 · Builtin names were shadowable, and the shadow did nothing — CLOSED (D30)
 
@@ -835,5 +863,6 @@ Carried forward and restated so that no reader of this document alone concludes 
 **macOS has never been executed**, no driver for any real device ships in-tree, certification is
 **none** under every regime, `ForeignCall` remains an enumerated hole in the proof rather than a
 closed one, RFC 0001's comment period remains open until 2026-08-05 with two recorded process
-deviations against it, and **surface-syntax morphs do not exist** — only human-prose locales do
-(C22).
+deviations against it. **Surface-syntax morphs now exist (D35)** but only for single files read
+through a `//! morph:` pragma — package sources must be canonical, and plugin-delivered morphs and
+per-reader LSP view morphs are not built.

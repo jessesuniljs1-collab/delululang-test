@@ -609,6 +609,7 @@ pub fn run(args: &[String]) -> i32 {
         "fleet" => crate::fleet::cmd_fleet(rest),
         "secrets" => cmd_secrets(rest),
         "locale" => cmd_locale(rest),
+        "morph" => cmd_morph(rest),
         "explain" => cmd_explain(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
@@ -696,6 +697,8 @@ fn usage() -> &'static str {
      \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
+     \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\
      \x20 delulu keygen    [--name N]                          (mint an ed25519 signing key in ~/.delulu/keys)\n\
      \x20 delulu sign      <artifact> [--hybrid] [--unstable] | verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
@@ -1537,6 +1540,166 @@ fn cmd_locale(rest: &[String]) -> i32 {
     }
 }
 
+/// `delulu morph list | info <id> | check <file.toml> | render <file.delulu> --to <id>|--to-canonical`
+///
+/// Morphs are surfaces, not dialects (Stage 8 §6.5). `render` is the whole feature made visible: it
+/// converts a file between two surfaces of the same program, and `--to-canonical` is how anything
+/// morphed re-enters the part of the toolchain that only speaks canonical.
+fn cmd_morph(rest: &[String]) -> i32 {
+    let map = SourceMap::new();
+    let json = rest.iter().any(|a| a == "--json");
+    let refuse = |diags: Vec<Diagnostic>| -> i32 {
+        print_diagnostics("morph", &diags, &map, None, json);
+        1
+    };
+    match rest.first().map(String::as_str) {
+        Some("list") => {
+            let found = crate::morph_file::installed();
+            if json {
+                let arr: Vec<Json> = found
+                    .iter()
+                    .map(|(id, path)| {
+                        serde_json::json!({ "morph": id, "path": path.display().to_string() })
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "morphs": arr })).unwrap());
+                return 0;
+            }
+            if found.is_empty() {
+                println!("no morphs installed — canonical DeluluLang is the only surface");
+                println!(
+                    "  searched: {}",
+                    crate::morph_file::search_dirs()
+                        .iter()
+                        .map(|d| d.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return 0;
+            }
+            println!("installed morphs:");
+            for (id, path) in found {
+                match crate::morph_file::load(&id) {
+                    Ok(m) => println!("  {:<20} {:<8} {}  ({})", m.id, m.kind.name(), m.name, path.display()),
+                    Err(e) => println!("  {id:<20} INVALID  {}", e.0.first().map(|d| d.message.clone()).unwrap_or_default()),
+                }
+            }
+            0
+        }
+        Some("info") => {
+            let Some(id) = rest.get(1).filter(|a| !a.starts_with("--")) else {
+                eprintln!("error: `morph info` needs a morph id");
+                return 2;
+            };
+            let m = match crate::morph_file::load(id) {
+                Ok(m) => m,
+                Err(e) => return refuse(e.0),
+            };
+            if json {
+                let kw: Vec<Json> = m
+                    .entries()
+                    .map(|(c, a)| serde_json::json!({ "canonical": c, "alias": a }))
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "morph": m.id, "name": m.name, "version": m.version,
+                        "kind": m.kind.name(), "keywords": kw
+                    }))
+                    .unwrap()
+                );
+                return 0;
+            }
+            println!("morph {} ({}) — {}", m.id, m.kind.name(), m.name);
+            println!("  version: {}", m.version);
+            println!("  renames:");
+            for (canon, alias) in m.entries() {
+                println!("    {canon:<10} -> {alias}");
+            }
+            println!("  every other keyword keeps its canonical spelling; identifiers, strings, and");
+            println!("  comments are never morphed, and every hash is computed on the canonical form");
+            0
+        }
+        Some("check") => {
+            let Some(file) = rest.get(1).filter(|a| !a.starts_with("--")) else {
+                eprintln!("error: `morph check` needs a morph `.toml` file");
+                return 2;
+            };
+            match crate::morph_file::load_path(std::path::Path::new(file)) {
+                Ok(m) => {
+                    ok_line!("ok: morph `{}` is valid ({} keyword(s) renamed)", m.id, m.entries().count());
+                    0
+                }
+                Err(e) => refuse(e.0),
+            }
+        }
+        Some("render") => {
+            let Some(file) = rest.get(1).filter(|a| !a.starts_with("--")) else {
+                eprintln!("error: `morph render` needs a `.delulu` file");
+                return 2;
+            };
+            let to_canonical = rest.iter().any(|a| a == "--to-canonical");
+            let to = rest.iter().position(|a| a == "--to").and_then(|i| rest.get(i + 1)).cloned();
+            if to_canonical == to.is_some() {
+                eprintln!("error: `morph render` needs exactly one of `--to <id>` or `--to-canonical`");
+                return 2;
+            }
+            let Ok((smap, fid, src)) = load(file) else { return 2 };
+            let out = if to_canonical {
+                // The file's own pragma says which surface it is written in.
+                let Some(id) = delulu_syntax::morph::pragma_of(&src) else {
+                    eprintln!("error: `{file}` declares no `//! morph:` pragma — it is already canonical");
+                    return 2;
+                };
+                let m = match crate::morph_file::load(id) {
+                    Ok(m) => m,
+                    Err(e) => return refuse(e.0),
+                };
+                match m.to_canonical(fid, &src) {
+                    // Drop the pragma line: the output is canonical, and a stale pragma would make
+                    // every later tool read it through a morph it is no longer written in.
+                    Ok(text) => strip_morph_pragma(&text),
+                    Err(diags) => return refuse(diags),
+                }
+            } else {
+                let id = to.unwrap();
+                let m = match crate::morph_file::load(&id) {
+                    Ok(m) => m,
+                    Err(e) => return refuse(e.0),
+                };
+                if delulu_syntax::morph::pragma_of(&src).is_some() {
+                    eprintln!("error: `{file}` is already written in a morph — convert it to canonical first");
+                    return 2;
+                }
+                match m.render(fid, &src) {
+                    Ok(text) => format!("//! morph: {}\n{text}", m.id),
+                    Err(diags) => return refuse(diags),
+                }
+            };
+            let _ = smap;
+            print!("{out}");
+            0
+        }
+        _ => {
+            eprintln!(
+                "usage: delulu morph list | info <id> | check <file.toml> | render <file.delulu> (--to <id> | --to-canonical)"
+            );
+            2
+        }
+    }
+}
+
+/// Remove a leading `//! morph:` pragma line, for output that is canonical again.
+fn strip_morph_pragma(src: &str) -> String {
+    if delulu_syntax::morph::pragma_of(src).is_none() {
+        return src.to_string();
+    }
+    match src.find('\n') {
+        Some(i) => src[i + 1..].to_string(),
+        None => String::new(),
+    }
+}
+
 /// Read one `.delulu` source file named on the command line.
 ///
 /// The directory case is handled explicitly (`HARDENING_CAMPAIGN.md` C27). Passing a package
@@ -1559,6 +1722,46 @@ fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
     }
     match std::fs::read_to_string(file) {
         Ok(src) => {
+            // A `//! morph: <id>` pragma means this file is stored in a surface morph (Stage 8
+            // §6.5). Convert it to canonical HERE, at the toolchain's edge, and hand the canonical
+            // text to everything downstream — which is why no other command, checker, engine, or
+            // hash needs to know morphs exist.
+            //
+            // The source map gets the CANONICAL text, so spans and the snippets rendered from them
+            // agree with each other, and `--json` spans are canonical byte offsets exactly as the
+            // spec requires. Morph rendering replaces keyword tokens in place and never adds or
+            // removes a line, so line numbers are exact; a column inside a converted line can shift
+            // by the difference in keyword length, and a diagnostic quotes the canonical spelling
+            // rather than the alias the author typed. That is the documented trade, and it is the
+            // one the spec asks for ("spans in canonical byte offsets").
+            //
+            // Deliberately NOT done in `delulu_syntax::parse_file`: resolving a pragma means reading
+            // a morph file off disk, and a parser that acquires filesystem authority from a comment
+            // in its input is ambient authority inside the compiler — the exact thing this language
+            // exists to eliminate. The lookup belongs to the CLI, which already has that authority.
+            let src = match delulu_syntax::morph::pragma_of(&src) {
+                None => src,
+                Some(id) => {
+                    let m = match crate::morph_file::load(id) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            let map = SourceMap::new();
+                            print_diagnostics("morph", &e.0, &map, None, false);
+                            return Err(1);
+                        }
+                    };
+                    // Lex the file in its own surface to find the keywords, then write canonical.
+                    let mut probe = SourceMap::new();
+                    let pid = probe.add_file(file, src.clone());
+                    match m.to_canonical(pid, &src) {
+                        Ok(canonical) => canonical,
+                        Err(diags) => {
+                            print_diagnostics("morph", &diags, &probe, None, false);
+                            return Err(1);
+                        }
+                    }
+                }
+            };
             let mut map = SourceMap::new();
             let id = map.add_file(file, src.clone());
             Ok((map, id, src))
