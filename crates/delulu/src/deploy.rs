@@ -110,6 +110,7 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     if json {
         let services_json: Vec<Value> =
             reports.iter().map(|(name, effects)| json!({ "name": name, "effects": effects })).collect();
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({
@@ -132,6 +133,7 @@ fn report_check_failure(env_path: &str, name: &str, dir: &str, json: bool) -> i3
     let message =
         format!("service `{name}` ({dir}) does not check cleanly — fix its errors before it can be part of a deployment plan");
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({ "command": "deploy", "subcommand": "plan", "env": env_path, "approved": false, "error": message })
@@ -164,6 +166,7 @@ fn report_ceiling_violation(env_path: &str, violations: &[(String, Vec<String>)]
     );
     let d = Diagnostic::error("DL1909", message);
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({

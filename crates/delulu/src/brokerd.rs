@@ -793,6 +793,7 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
         "status" => match request(&state_dir, ReqBody::Status) {
             Ok(Response::Status { pid, nodes, epoch }) => {
                 if json {
+                    crate::cli::note_json_emitted();
                     println!("{}", serde_json::json!({ "running": true, "pid": pid, "nodes": nodes, "epoch": epoch, "custody": "daemon" }));
                 } else {
                     println!("broker running — pid {pid}, {nodes} node(s), epoch {epoch}, custody: daemon");
@@ -805,6 +806,7 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
             }
             Err(_) => {
                 if json {
+                    crate::cli::note_json_emitted();
                     println!("{}", serde_json::json!({ "running": false }));
                 } else {
                     println!("broker not running (state `{}`) — start it with `delulu broker start`", state_dir.display());
@@ -913,6 +915,7 @@ fn start_detached(state_dir: &Path, json: bool, bypass: bool) -> i32 {
             // PARENT to the user's terminal (never to broker.log, so the code stays off disk).
             let digest = parent_guard_digest(state_dir, bypass);
             if json {
+                crate::cli::note_json_emitted();
                 println!(
                     "{}",
                     serde_json::json!({

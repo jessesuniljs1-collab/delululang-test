@@ -314,6 +314,7 @@ fn cmd_fleet_update(rest: &[String]) -> i32 {
 fn refuse_dl1905(artifact: &str, message: String, json: bool) -> i32 {
     let d = Diagnostic::error("DL1905", message);
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({
@@ -361,6 +362,7 @@ fn print_rollout_summary(
         if let RolloutOutcome::RolledBack { at_member } = outcome {
             obj["failed_member"] = json!(at_member);
         }
+        crate::cli::note_json_emitted();
         println!("{obj}");
         return;
     }

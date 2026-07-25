@@ -107,6 +107,7 @@ pub fn cmd_keygen(rest: &[String]) -> i32 {
     let pub_path = key_path.with_extension("pub");
     let _ = std::fs::write(&pub_path, format!("{pubhex}\n"));
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({ "command": "keygen", "key": key_path.display().to_string(), "public_key": pubhex })
@@ -172,6 +173,7 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
         if hybrid {
             obj["algorithms"] = json!([delulu_runtime::pqc::ALG_ED25519, delulu_runtime::pqc::ALG_ML_DSA_65]);
         }
+        crate::cli::note_json_emitted();
         println!("{obj}");
     } else if hybrid {
         println!(
@@ -262,6 +264,7 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
                 obj["detail"] = json!(detail);
             }
         }
+        crate::cli::note_json_emitted();
         println!("{obj}");
     } else {
         match status {
@@ -279,6 +282,7 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
 /// {reason}` line, or the JSON equivalent with a `code` field.
 fn report_refusal(command: &str, artifact: &str, code: &str, reason: &str, json: bool) {
     if json {
+        crate::cli::note_json_emitted();
         println!("{}", json!({ "command": command, "artifact": artifact, "code": code, "error": reason }));
     } else {
         eprintln!("{code}: {artifact} — {reason}");
@@ -336,6 +340,7 @@ pub fn cmd_login(rest: &[String]) -> i32 {
 
     if json {
         // The token itself is deliberately absent from the output.
+        crate::cli::note_json_emitted();
         println!("{}", json!({ "command": "login", "registry": registry, "stored": path.display().to_string() }));
     } else {
         println!("login: token stored for {registry}");
@@ -435,6 +440,7 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     let have_token = registry.as_deref().map(|r| stored_token(r).is_some());
 
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({
@@ -482,6 +488,7 @@ pub fn cmd_add(rest: &[String]) -> i32 {
     let effects: Vec<&str> =
         line.get("effects").and_then(Value::as_array).map(|xs| xs.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
     if json {
+        crate::cli::note_json_emitted();
         println!(
             "{}",
             json!({ "command": "add", "name": pkg, "version": version, "authority": { "effects": effects }, "from": "index-line-only" })
@@ -521,6 +528,7 @@ fn read_index_line(index_dir: &str, name: &str) -> Option<Value> {
 
 fn report_publish(pkg: &str, code: &str, message: &str, json: bool) {
     if json {
+        crate::cli::note_json_emitted();
         println!("{}", json!({ "command": "publish", "package": pkg, "code": code, "error": message }));
     } else {
         eprintln!("{code}: {pkg} — {message}");

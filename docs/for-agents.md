@@ -53,6 +53,21 @@ Every `--json` command emits one object:
 - `schema` is versioned and **additive**. New fields may appear; existing ones will not change type
   or meaning. **Ignore unknown fields** — that is what makes the additive promise usable.
 - `summary.errors == 0` is the machine-readable definition of "this passed".
+- **Exactly one object, including on failure.** A usage or I/O error — a missing argument, an
+  unreadable path, a malformed flag — still emits one envelope, with `summary.errors = 1` and an
+  additive `error` object (`kind`, `exit`, `message`); the human-readable reason is on stderr. No DL
+  code is invented for these, because the code registry is a stable contract and a usage error is not
+  a language diagnostic, so `diagnostics` is `[]`.
+
+  This is gated, not merely promised: `crates/delulu/tests/json_contract.rs` sweeps every subcommand
+  against malformed-argument shapes and asserts stdout parses as **exactly one** JSON value. It was
+  added because the promise used to be false — most commands emitted nothing at all on failure
+  (campaign C2) — and because the first fix made two commands emit *two* objects, which a
+  "does it look like JSON?" check would have missed.
+- **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
+  diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
+  parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
+  stderr, which is a context-window attack whether or not anyone meant it as one.)
 
 ### [agents.locale-invariance] The machine surface is locale-invariant
 

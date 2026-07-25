@@ -540,7 +540,51 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     (file, opts)
 }
 
+/// The CLI entry point, and the one place that guarantees the `--json` contract.
+///
+/// `docs/for-agents.md` promises: *"Every `--json` command emits one object."* It did not. A usage or
+/// I/O error — a missing subcommand argument, an unreadable path, a malformed flag — printed a human
+/// sentence to stderr and exited 2 with **nothing at all on stdout**, across essentially every
+/// subcommand (`HARDENING_CAMPAIGN.md` C2). Any programmatic caller, whether that is a shell script,
+/// a CI job, or an agent, then has an exit code and no parseable answer.
+///
+/// The fix lives here rather than at the ~161 individual `return 2` sites for the reason that keeps
+/// coming up in this campaign: a rule enforced at every site is a rule the next site will forget.
+/// This wrapper cannot be bypassed by adding a subcommand.
+///
+/// Fires on any nonzero exit, gated on [`JSON_EMITTED`] so a path that already printed an envelope is
+/// never double-reported. Exit 1 needs it as much as exit 2 does: `explain` on an unknown code and
+/// `keygen` on a bad key path both failed with a bare stderr line. The invariant this enforces is
+/// "exactly one object", not "at least one" — the sweep in
+/// `crates/delulu/tests/json_contract.rs` parses stdout and counts, so a double-emit fails the build.
 pub fn run(args: &[String]) -> i32 {
+    let wants_json = args.iter().any(|a| a == "--json");
+    let code = run_inner(args);
+    if wants_json && code != 0 && !JSON_EMITTED.load(std::sync::atomic::Ordering::Relaxed) {
+        // No DL code is invented here. The registry is a stable contract and a usage error is not a
+        // language diagnostic, so `diagnostics` stays empty and the failure is reported in an
+        // additive `error` object. `summary.errors = 1` keeps the documented pass test
+        // (`summary.errors == 0`) correct for a caller that reads nothing else.
+        let command = args.iter().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
+        let envelope = json!({
+            "command": command,
+            "schema": 1,
+            "delulu_version": env!("CARGO_PKG_VERSION"),
+            "diagnostics": [],
+            "summary": { "errors": 1, "warnings": 0 },
+            "error": {
+                "kind": "usage",
+                "exit": 2,
+                "message": "the command could not run; the human-readable reason is on stderr"
+            }
+        });
+        note_json_emitted();
+        println!("{}", serde_json::to_string_pretty(&envelope).expect("the fallback envelope serializes"));
+    }
+    code
+}
+
+fn run_inner(args: &[String]) -> i32 {
     // Resolve the global color/theme surface once, and strip `--color`/`--theme` so the per-command
     // parsers never mistake their values for a positional. A malformed theme is a DL1790 warning
     // (never a hard failure — addendum §2.5).
@@ -706,6 +750,8 @@ fn usage() -> &'static str {
      \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu login     --registry URL --token VALUE        (store a scoped publish token; never echoed)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml   (check each service against the environment's authority ceiling; DL1909 when it exceeds)\n\
+     \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
@@ -909,6 +955,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
             "unchanged": unchanged,
             "refused": refused,
         });
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else if check {
         for f in &changed {
@@ -981,6 +1028,7 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
             "files_changed": changed,
             "renames": total_renames,
         });
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else if total_renames == 0 {
         println!("migrate 0.7: nothing to do ({} file(s) scanned)", files.len());
@@ -1281,6 +1329,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     };
 
     if json {
+        note_json_emitted();
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
@@ -1445,6 +1494,7 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 return 2;
             }
             if json {
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({
@@ -1520,6 +1570,7 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 }
             }
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "locale", "subcommand": "list", "locales": rows }));
             } else {
                 for r in &rows {
@@ -1562,6 +1613,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                         serde_json::json!({ "morph": id, "path": path.display().to_string() })
                     })
                     .collect();
+                note_json_emitted();
                 println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "morphs": arr })).unwrap());
                 return 0;
             }
@@ -1600,6 +1652,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                     .entries()
                     .map(|(c, a)| serde_json::json!({ "canonical": c, "alias": a }))
                     .collect();
+                note_json_emitted();
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&serde_json::json!({
@@ -1773,17 +1826,45 @@ fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
     }
 }
 
+/// Whether a `--json` envelope has already reached stdout in this process.
+///
+/// Read by [`run`] to decide whether a nonzero exit needs a fallback envelope — see the comment
+/// there for why an exit with no object at all is a contract break (`HARDENING_CAMPAIGN.md` C2).
+static JSON_EMITTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn note_json_emitted() {
+    JSON_EMITTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
     if json {
         // Machine channel: never colored (addendum §2.5 / criterion 8), never localized
         // (invariant 39 — the envelope API cannot even see a catalog).
+        note_json_emitted();
+        note_json_emitted();
         println!("{}", envelope_to_string(command, diags, authority, map));
     } else {
         let palette = palette_stderr();
         let catalog = crate::locale::active_catalog();
-        for d in diags {
+        // Cap the HUMAN render (`HARDENING_CAMPAIGN.md` C32). One malformed expression can produce
+        // thousands of diagnostics — `x.a.a.a…` 5000 deep is 5000 unknown-field errors — and past the
+        // first few dozen the list stops informing anyone: a human scrolls, an agent spends its
+        // context. The count is reported honestly rather than the tail being dropped in silence, and
+        // the FIRST diagnostics are kept because the later ones are usually consequences of them.
+        //
+        // The machine channel above is deliberately uncapped: `--json` is a contract to report every
+        // diagnostic, and a consumer that asked for all of them can page through them itself.
+        const MAX_HUMAN_DIAGNOSTICS: usize = 50;
+        for d in diags.iter().take(MAX_HUMAN_DIAGNOSTICS) {
             eprint!("{}", delulu_diag::render_human_localized(d, map, &palette, catalog));
             eprintln!();
+        }
+        if let Some(hidden) = diags.len().checked_sub(MAX_HUMAN_DIAGNOSTICS).filter(|n| *n > 0) {
+            eprintln!(
+                "note: {hidden} more diagnostic(s) not shown ({MAX_HUMAN_DIAGNOSTICS} of {} displayed) \
+                 — fix these first, or re-run with `--json` for the complete list",
+                diags.len()
+            );
         }
     }
 }
@@ -1865,6 +1946,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
     stamp_plugins(&mut report, &checked.module, &file, &map);
     stamp_native_emission(&mut report, &checked.module);
     if opts.json {
+        note_json_emitted();
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
     } else {
         print!("{}", render_authority(&report));
@@ -2409,6 +2491,7 @@ fn build_wasm_artifact(file: &str, opts: &Opts) -> i32 {
     }
     if opts.json {
         let report = json!({ "artifact": out_path, "bytes": dwx.len(), "authority": authority });
+        note_json_emitted();
         println!("{}", envelope_to_string("build", &[], Some(report), &map));
     } else {
         ok_line!(
@@ -2474,6 +2557,7 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
                 _ => None,
             };
             if opts.json {
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({
@@ -2649,6 +2733,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     }
     if opts.json {
         // Machine channel: never styled; deterministic (BTreeMap-ordered exports, sorted keys).
+        note_json_emitted();
         println!(
             "{}",
             json!({
@@ -2760,6 +2845,7 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
     let null = Json::Null;
     let get = |k: &str| dpx.manifest.get(k).unwrap_or(&null).clone();
     if opts.json {
+        note_json_emitted();
         println!(
             "{}",
             json!({
@@ -3165,6 +3251,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
         return 2;
     }
     if opts.json {
+        note_json_emitted();
         println!("{}", envelope_to_string("lock", &[], None, &ws.source_map));
     } else {
         ok_line!("ok: wrote {} ({} package(s))", lock_path.display(), newlock.packages.len());
@@ -3200,6 +3287,7 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
     stamp_foreign_isolation(&mut report, opts);
     stamp_isolation(&mut report, opts);
     if opts.json {
+        note_json_emitted();
         println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
     } else {
         print!("{}", render_authority(&report));
@@ -3312,6 +3400,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
     });
 
     if opts.json {
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).expect("diff report serializes"));
     } else {
         println!("Authority diff: {old_path} -> {new_arg}");
@@ -3447,6 +3536,7 @@ fn cmd_why(rest: &[String]) -> i32 {
 
     if !main_facts.effects.iter().any(|e| e.name() == effect_name) {
         if opts.json {
+            note_json_emitted();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": false, "path": [] }))
@@ -3490,6 +3580,7 @@ fn cmd_why(rest: &[String]) -> i32 {
     }
 
     if opts.json {
+        note_json_emitted();
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": true, "path": path_nodes }))
@@ -3549,6 +3640,7 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
             .unwrap_or_default();
         let declares = ceiling.iter().any(|e| e == effect_name);
         if opts.json {
+            note_json_emitted();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({
@@ -3600,6 +3692,7 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
         .find(|ex| dir.facts.get(*ex).is_some_and(|f| f.effects.iter().any(|e| e.name() == effect_name)));
     let Some(start) = start else {
         if opts.json {
+            note_json_emitted();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": false, "path": [] }))
@@ -3613,6 +3706,7 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
 
     let chain = plugin_why_chain(&dir.facts, start, effect_name);
     if opts.json {
+        note_json_emitted();
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": true, "path": chain }))
@@ -4189,6 +4283,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
             };
             if json {
                 let arr: Vec<Json> = nodes.iter().map(|n| serde_json::to_value(n).expect("node serializes")).collect();
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({ "command": "grants", "subcommand": "list", "count": nodes.len(), "nodes": arr })
@@ -4213,6 +4308,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "grants", "subcommand": "tree", "tree": text }));
             } else if text.is_empty() {
                 println!("(no grants — the tree is empty)");
@@ -4235,6 +4331,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({ "command": "grants", "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") })
@@ -4278,6 +4375,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({
@@ -4380,6 +4478,7 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     let hex = crate::cert_crypto::public_key_hex(&seed);
     if json {
         let report = serde_json::json!({ "command": "grants pubkey", "schema": 1, "pubkey": hex });
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else {
         println!("{hex}");
@@ -4580,6 +4679,7 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             "not_after": c.not_after,
             "certificate": wire,
         });
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else if out.is_some() {
         eprintln!("wrote {} ({} bytes)", out.as_deref().unwrap_or(""), wire.len());
@@ -4664,6 +4764,7 @@ fn cmd_grants_receipt(args: &[String], json: bool) -> i32 {
             "issuer": r.issuer, "certificate": r.certificate,
             "not_after": r.not_after, "receipt": wire,
         });
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else if out.is_some() {
         eprintln!("wrote {} — next contact due by {}", out.as_deref().unwrap_or(""), delulu_broker::render_ts_utc(r.not_after));
@@ -4734,6 +4835,7 @@ fn cmd_grants_renew(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 let report = serde_json::json!({
                     "command": "grants renew", "schema": 1, "node": node, "ttl_millis": ttl_millis,
                 });
+                note_json_emitted();
                 println!("{}", serde_json::to_string_pretty(&report).unwrap());
             } else {
                 println!("{node}");
@@ -4824,6 +4926,7 @@ fn cmd_grants_adopt(args: &[String], state_dir: &std::path::Path, json: bool) ->
                     "fingerprint": fingerprint,
                     "ttl_millis": ttl_millis,
                 });
+                note_json_emitted();
                 println!("{}", serde_json::to_string_pretty(&report).unwrap());
             } else {
                 println!("{node}");
@@ -5011,6 +5114,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     match grants_rpc(state_dir, ReqBody::Delegate { parent: parent.clone(), authority: child_spec, multi, owner }, json) {
         Ok(Response::Delegated { node, token }) => {
             if json {
+                note_json_emitted();
                 println!(
                     "{}",
                     json!({
@@ -5158,6 +5262,7 @@ fn cmd_guard_bypass(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 );
             }
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "guard", "subcommand": "bypass", "bypass": on }));
             } else if on {
                 ok_line!("ok: guard bypass ENABLED");
@@ -5247,6 +5352,7 @@ fn cmd_guard_request(args: &[String], state_dir: &std::path::Path, json: bool) -
     match guard_rpc(state_dir, ReqBody::GuardRequest { node, uses, why }, json) {
         Ok(Response::GuardRequested { id, deduped }) => {
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "guard", "subcommand": "request", "id": id, "deduped": deduped }));
             } else {
                 if deduped {
@@ -5283,6 +5389,7 @@ fn cmd_guard_pending(state_dir: &std::path::Path, json: bool) -> i32 {
             .iter()
             .map(|r| json!({ "id": r.id, "node": r.node, "uses": r.uses, "why": r.why, "created_millis": r.created_millis, "status": r.status }))
             .collect();
+        note_json_emitted();
         println!("{}", json!({ "command": "guard", "subcommand": "pending", "count": requests.len(), "requests": arr }));
     } else if requests.is_empty() {
         println!("(no guard requests)");
@@ -5327,6 +5434,7 @@ fn cmd_guard_approve(args: &[String], state_dir: &std::path::Path, json: bool) -
     match guard_rpc(state_dir, ReqBody::GuardApprove { owner, id: id.clone(), ttl_millis, uses: uses_n, comment }, json) {
         Ok(Response::GuardApproved { permit_id }) => {
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "guard", "subcommand": "approve", "request": id, "permit": permit_id }));
             } else {
                 ok_line!("ok: approved request {id} — minted permit {permit_id}");
@@ -5359,6 +5467,7 @@ fn cmd_guard_deny(args: &[String], state_dir: &std::path::Path, json: bool) -> i
     match guard_rpc(state_dir, ReqBody::GuardDeny { owner, id: id.clone(), comment }, json) {
         Ok(_) => {
             if json {
+                note_json_emitted();
                 println!("{}", json!({ "command": "guard", "subcommand": "deny", "request": id }));
             } else {
                 ok_line!("ok: denied request {id} (the agent's retry will carry your comment)");
@@ -5384,6 +5493,7 @@ fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -
         return match guard_rpc(state_dir, ReqBody::GuardPermitRevoke { owner, id: id.clone() }, json) {
             Ok(_) => {
                 if json {
+                    note_json_emitted();
                     println!("{}", json!({ "command": "guard", "subcommand": "permits revoke", "permit": id }));
                 } else {
                     ok_line!("ok: revoked permit {id}");
@@ -5406,6 +5516,7 @@ fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -
             .iter()
             .map(|p| json!({ "id": p.id, "node": p.node, "uses": p.uses, "remaining_uses": p.remaining_uses, "expires_millis": p.expires_millis }))
             .collect();
+        note_json_emitted();
         println!("{}", json!({ "command": "guard", "subcommand": "permits", "count": permits.len(), "permits": arr }));
     } else if permits.is_empty() {
         println!("(no permits)");
@@ -5429,6 +5540,7 @@ fn print_guard_status(resp: &crate::broker_ipc::Response, subcommand: &str, json
             .iter()
             .map(|r| json!({ "class": r.class, "pattern": r.pattern, "tier": r.tier }))
             .collect();
+        note_json_emitted();
         println!(
             "{}",
             json!({
@@ -5506,6 +5618,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             ) {
                 Ok(_) => {
                     if json {
+                        note_json_emitted();
                         println!("{}", json!({ "command": "guard", "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
                         ok_line!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
@@ -5534,6 +5647,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             ) {
                 Ok(_) => {
                     if json {
+                        note_json_emitted();
                         println!("{}", json!({ "command": "guard", "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
                         ok_line!("ok: guard policy unset `{class}:{pattern}`");
@@ -7183,6 +7297,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                 if let Some(detail) = &integrity {
                     obj.insert("chain_error".into(), json!(detail));
                 }
+                note_json_emitted();
                 println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
             } else {
                 if let Some(detail) = &integrity {
@@ -7230,6 +7345,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                         "first_seq": summary.first_seq, "last_seq": summary.last_seq,
                         "head": summary.head,
                     });
+                    note_json_emitted();
                     println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
                 } else if bundle_out.is_some() {
                     eprintln!(
@@ -7314,6 +7430,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                             "digest": s.digest, "records": s.records,
                             "first_seq": s.first_seq, "last_seq": s.last_seq, "head": s.head,
                         });
+                        note_json_emitted();
                         println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
                     } else {
                         ok_line!(
@@ -7349,6 +7466,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                         "records": stats.records,
                         "head": stats.head,
                     });
+                    note_json_emitted();
                     println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
                 } else {
                     ok_line!(
@@ -7702,6 +7820,7 @@ fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
     let a = &f.positionals[0];
     let b = if verb == "path" { Some(f.positionals[1].as_str()) } else { None };
     if f.json {
+        note_json_emitted();
         println!("{}", serde_json::to_string_pretty(&atlas.query_json(verb, a, b)).expect("query json"));
         return 0;
     }

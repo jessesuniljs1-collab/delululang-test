@@ -67,7 +67,7 @@ deviations.
 | # | Area | Severity | State |
 |---|---|---|---|
 | C1 | Stage 1 — two unbounded parser loops | **high** (availability) | **CLOSED** — D24 |
-| C2 | CLI — `--json` emits no object on a read failure | medium (machine contract) | OPEN |
+| C2 | **CLI — `--json` emitted NO object on failure, across essentially every subcommand** (filed as one case; it was the whole surface) | **high** (machine contract) | **CLOSED** — D38 |
 | C3 | Stage 1 — bidirectional-override source is accepted silently | **high** (review integrity) | **CLOSED** — D26 |
 | C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | **CLOSED** — D25 |
 | C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | **CLOSED** — D25 |
@@ -96,6 +96,8 @@ deviations.
 | C29 | **A lease token for a REVOKED grant redeemed successfully** — and for a revoked or expired *ancestor* too; the audit log recorded `decision: "allow"` for it | **high** (accountability / fail-open at the custody boundary) | **CLOSED** — D36 |
 | C30 | **`audit tail`/`query` displayed a tampered chain as authentic, and a corrupted record VANISHED from the listing** with no gap marker | **high** (accountability — the omission attack) | **CLOSED** — D36 |
 | C31 | **The `device` scope dimension had no Guard class** — actuation was gateable only all-or-nothing via `effect:Actuate`, on the one axis that moves hardware | **high** (safety granularity) | **CLOSED** — D37 |
+| C32 | **A 10 KB source file emitted 76 MB of diagnostics** — every diagnostic quoted its entire source line, times ~5000 errors | **high** (denial of service against the reader) | **CLOSED** — D38 |
+| C33 | `deploy` and `fleet` are working top-level subcommands that `--help` never listed; `deploy` also double-emitted JSON on refusal | medium (discoverability / machine contract) | **CLOSED** — D38 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -888,6 +890,62 @@ tier physical actuation deserves is an operator's decision, not a library's.
 The class fix is the durable part: `use_axis_class` is now **exhaustive**, listing the ops that
 genuinely have no scope dimension. The next `Op` variant cannot be born ungated in silence — the
 build breaks until a person answers "what gates it?"
+
+### C2 / C32 / C33 · The two front doors under load — CLOSED (D38)
+
+Commissioned as a crash hunt: *"test everything till it crashes and breaks, then fix it, then test
+again."* The framing correction that came with it matters and is recorded here because it shaped the
+work — **there is no discrimination between the surfaces**: a human may drive the CLI and an agent may
+drive the compiler, so both surfaces must be equally good for both audiences. A `--json` contract break
+is not "an AI problem" and a wall of unreadable stderr is not "a human problem".
+
+**What did not break.** Twenty-six hostile programs — 2000-deep parentheses, 1500-deep blocks,
+800-deep generic types, 20 000-term expressions, a 200 KB string literal, a 100 000-character
+identifier, 6000 functions, a 3000-field record, a 2000-variant match, unterminated strings and
+comments, embedded NUL bytes, an empty file, a BOM-only file — produced **no panic, no hang, no signal
+death**. The CLI sweep (every subcommand × malformed argument shapes, both output modes) produced
+none either. The front end is genuinely robust; that is worth stating as plainly as the defects.
+
+**C2 — `--json` emitted nothing at all on failure.** `docs/for-agents.md` promises *"Every `--json`
+command emits one object."* On a usage or I/O error — a missing argument, an unreadable path, a
+malformed flag — the CLI printed a human sentence to stderr and exited nonzero with **zero bytes on
+stdout**, on essentially every subcommand. The finding had been filed as one narrow case (a read
+failure); it was the entire surface. Any programmatic caller then has an exit code and nothing to
+parse.
+
+Fixed in `cli::run`, one wrapper around the whole dispatch, rather than at the ~161 individual
+`return 2` sites — for the reason this campaign keeps rediscovering: a rule enforced at every site is
+a rule the next site forgets. The fallback envelope carries the documented fields, sets
+`summary.errors = 1` so the documented pass test stays correct, and **invents no DL code**, because
+the registry is a stable contract and a usage error is not a language diagnostic.
+
+The gate is `crates/delulu/tests/json_contract.rs`, and it tests **exactly one** object rather than at
+least one — which is how it immediately caught the opposite defect in `delulu test`, and later in
+`deploy`, where a report was already being printed and the fallback added a second.
+
+**C32 — 76 MB of stderr from a 10 KB file.** `x.a.a.a…` 5000 deep is ~5000 unknown-field errors, and
+every diagnostic quoted its whole source line — which *is* the 10 KB chain — twice, once as text and
+once as an underline. Measured: 76,518,387 bytes, 14.2 seconds. This is D29's backtrace flood wearing
+a different costume, and the same reasoning applies: past some volume, output stops being a diagnostic
+and becomes a denial of service against whoever must read it, human or agent.
+
+Two bounds, both on the human channel only:
+
+- **Snippet window** (`delulu-diag`): a quoted line is cut to 160 characters around the span, marked
+  `...` on whichever side was elided, with the caret arithmetic corrected for the window and every
+  index char-based so a multi-byte character is never split. Lines at or under the limit — which is
+  every line in the corpus, the examples, and the Book — render byte-identically.
+- **Diagnostic cap** (CLI): at most 50 human-rendered diagnostics, then a note stating exactly how
+  many were withheld and how to get them all. The `--json` channel is deliberately uncapped: it is a
+  contract to report every diagnostic, and a consumer that asked for all of them can page itself.
+
+Result: **76,518,387 → 23,530 bytes** (3,252×), **14.2 s → 0.125 s**.
+
+**C33 — two commands nothing could find.** `deploy` and `fleet` dispatch and work, and `--help` listed
+neither. That is why the first CLI sweep missed them, and `deploy` was double-emitting JSON on its
+refusal paths — caught only because an older test happened to parse its output. Both are in `--help`
+now, and a gate asserts that every dispatched subcommand appears there, because **an undocumented
+command is a command nothing sweeps.**
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

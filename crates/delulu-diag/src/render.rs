@@ -32,6 +32,56 @@ pub fn render_human_with(d: &Diagnostic, map: &SourceMap, palette: &Palette) -> 
     render_human_localized(d, map, palette, None)
 }
 
+/// How many characters of a source line a diagnostic may quote.
+///
+/// Wide enough that every ordinary line is shown untouched — the reject corpus, the Book's samples,
+/// and the whole in-tree example set are well under it — and narrow enough that a pathological line
+/// cannot turn one diagnostic into a megabyte. 160 is the common terminal width doubled, so a windowed
+/// snippet still shows real context on both sides of the span.
+const MAX_SNIPPET_CHARS: usize = 160;
+
+/// The marker standing in for elided source. ASCII on purpose: this goes to stderr on every platform,
+/// including consoles whose code page would mangle `…`.
+const ELIDED: &str = "...";
+
+/// Window a source line around a span so the quoted snippet has a bounded width.
+///
+/// Returns `(snippet, caret_offset_in_snippet, clamped_underline_len)`. Lines at or under
+/// [`MAX_SNIPPET_CHARS`] are returned unchanged, so this is invisible for all ordinary source. Longer
+/// lines are cut to a window that keeps the span's start visible with context before it, marked with
+/// [`ELIDED`] on whichever side was cut.
+///
+/// Char-indexed throughout, never byte-indexed: a snippet that split a multi-byte character would be
+/// worse than the problem it solves.
+fn window_line(text: &str, start_col: usize, underline_len: usize) -> (String, usize, usize) {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= MAX_SNIPPET_CHARS {
+        return (text.to_string(), start_col, underline_len);
+    }
+    // Keep a third of the window as leading context, so the span is not flush against the left edge.
+    let lead = MAX_SNIPPET_CHARS / 3;
+    let mut ws = start_col.saturating_sub(lead);
+    if ws + MAX_SNIPPET_CHARS > chars.len() {
+        ws = chars.len().saturating_sub(MAX_SNIPPET_CHARS);
+    }
+    let we = (ws + MAX_SNIPPET_CHARS).min(chars.len());
+    let mut snippet = String::new();
+    if ws > 0 {
+        snippet.push_str(ELIDED);
+    }
+    snippet.extend(&chars[ws..we]);
+    if we < chars.len() {
+        snippet.push_str(ELIDED);
+    }
+    let prefix = if ws > 0 { ELIDED.chars().count() } else { 0 };
+    // The caret sits where the span starts *within the window*. A span starting before the window
+    // (possible when the line is cut from the left) pins to the window's first column.
+    let caret = start_col.saturating_sub(ws) + prefix;
+    // Never underline past the snippet's end.
+    let room = snippet.chars().count().saturating_sub(caret);
+    (snippet, caret, underline_len.min(room).max(1))
+}
+
 /// The locale-aware renderer (Stage 8, spec §6.1): with a catalog, the HEADER message renders
 /// from the catalog's template when the entry exists and every placeholder it uses has a value
 /// in `d.args` — otherwise (and always with `None`) the in-code en-US message stands. This is
@@ -65,19 +115,28 @@ pub fn render_human_localized(
         let arrow = if ls.secondary { "---" } else { "-->" };
         let _ = writeln!(out, "  {} {}:{}:{}", arrow, map.name(span.file), line, col);
 
-        let text = map.line_text(span.file, line);
+        let full_text = map.line_text(span.file, line);
         let gutter_w = line.to_string().len().max(2);
-        let _ = writeln!(out, "{:w$} |", "", w = gutter_w);
-        let _ = writeln!(out, "{:w$} | {}", line, text, w = gutter_w);
 
         // Underline: clamp to the first line of the span.
-        let line_start_col = (col - 1) as usize;
+        let full_start_col = (col - 1) as usize;
         let (end_line, end_col) = map.position(span.file, span.end);
-        let underline_len = if end_line == line && end_col > col {
+        let full_underline_len = if end_line == line && end_col > col {
             (end_col - col) as usize
         } else {
-            (text.chars().count().saturating_sub(line_start_col)).max(1)
+            (full_text.chars().count().saturating_sub(full_start_col)).max(1)
         };
+        // Show a WINDOW of the line, not the whole line (HARDENING_CAMPAIGN C32). A diagnostic that
+        // quotes its source line verbatim costs the length of that line, and nothing bounds a source
+        // line — so `x.a.a.a…` 5000 deep is one 10 KB line, each of its ~5000 errors quotes all
+        // 10 KB twice (text plus underline), and a 10 KB file emitted **76 MB** of stderr. That is
+        // the D29 backtrace flood in a different costume: not a diagnostic any more, but a denial of
+        // service against whoever has to read it, human or agent.
+        let (text, line_start_col, underline_len) =
+            window_line(full_text, full_start_col, full_underline_len);
+
+        let _ = writeln!(out, "{:w$} |", "", w = gutter_w);
+        let _ = writeln!(out, "{:w$} | {}", line, text, w = gutter_w);
         let marker = if ls.secondary { "-" } else { "^" };
         let span_role = if ls.secondary { Role::SpanSecondary } else { Role::SpanPrimary };
         let mut underline = String::new();

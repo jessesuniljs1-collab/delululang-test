@@ -1418,6 +1418,43 @@ operator's decision, not a library's. And the durable half: `use_axis_class` is 
 naming the ops that genuinely have no scope dimension, so the next `Op` cannot be born ungated in
 silence — the build breaks until a person answers "what gates it?"
 
+**D38 — The `--json` contract is enforced at one choke point, and diagnostic output is bounded.**
+Hardening campaign (`HARDENING_CAMPAIGN.md` C2, C32, C33), commissioned as a crash hunt across the
+compiler and the CLI with an explicit framing correction from the owner: **no discrimination between
+the surfaces** — a human may drive the CLI and an agent may drive the compiler, so a machine-contract
+break and an unreadable wall of stderr are the same class of defect, not one each.
+
+(a) **C2 — every `--json` command must emit one object, and on failure most emitted none.**
+`docs/for-agents.md` states the promise; a usage or I/O error broke it on essentially every
+subcommand, printing a human sentence to stderr and exiting nonzero with zero bytes on stdout.
+RULED: enforce it in `cli::run`, wrapping the whole dispatch, **not** at the ~161 `return 2` sites — a
+rule enforced per site is a rule the next site forgets. The fallback envelope carries the documented
+fields, sets `summary.errors = 1` so the documented pass test (`summary.errors == 0`) stays correct,
+and **invents no DL code**: the registry is a stable contract and a usage error is not a language
+diagnostic, so `diagnostics` stays empty and the reason goes in an additive `error` object.
+
+The gate tests **exactly one** object, not at least one, which is how it caught the mirror defect
+twice — `delulu test` and later `deploy` both already printed a report, so the fallback made two.
+
+(b) **C32 — a 10 KB file produced 76 MB of stderr.** Every diagnostic quoted its entire source line,
+and a 5000-deep field chain is one 10 KB line with ~5000 errors against it, each printing that line
+twice (text and underline). Measured 76,518,387 bytes in 14.2 s. Same class as D29's guest backtrace:
+past some volume, output is no longer a diagnostic but a denial of service against its reader.
+RULED: bound the **human** channel twice — a 160-character window around the span (char-indexed, `...`
+on the elided side, caret arithmetic corrected; lines under the limit render byte-identically) and a
+50-diagnostic cap with a note stating exactly how many were withheld. `--json` stays uncapped, because
+it is a contract to report every diagnostic. Result: 23,530 bytes in 0.125 s.
+
+(c) **C33 — `deploy` and `fleet` worked and `--help` listed neither.** That is why the first sweep
+missed them, and why `deploy`'s double-emit survived. Both are documented now, and a gate asserts every
+dispatched subcommand appears in `--help`: an undocumented command is a command nothing sweeps.
+
+**Also verified and worth recording as a negative result:** twenty-six hostile programs (2000-deep
+parens, 800-deep generic types, 20 000-term expressions, a 200 KB literal, a 100 000-character
+identifier, 6000 functions, a 3000-field record, unterminated literals, NUL bytes, empty and BOM-only
+files) and the full CLI × malformed-argument sweep produced **no panic, no hang, and no signal death**
+on either platform. The front end is robust; that deserves saying as plainly as the defects do.
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which

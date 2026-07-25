@@ -122,6 +122,24 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **`--json` now emits exactly one object, including on failure.** `docs/for-agents.md` promised
+  *"Every `--json` command emits one object"*; on a usage or I/O error — a missing argument, an
+  unreadable path, a malformed flag — essentially every subcommand printed a human sentence to stderr
+  and exited nonzero with **zero bytes on stdout**. Any programmatic caller got an exit code and nothing
+  to parse. Enforced now in one wrapper around the whole dispatch rather than at ~161 individual exit
+  sites, with a fallback envelope that sets `summary.errors = 1` and invents no DL code. The gate
+  asserts *exactly* one object, which is how it caught the mirror defect twice (`test` and `deploy`
+  already printed a report, so the fallback made two). (C2, ruling D38)
+- **A 10 KB source file no longer produces 76 MB of diagnostics.** Every diagnostic quoted its whole
+  source line, and a 5000-deep field chain is one 10 KB line with ~5000 errors against it — 76,518,387
+  bytes in 14.2 seconds. Quoted lines are now windowed to 160 characters around the span, and the human
+  render caps at 50 diagnostics with a note stating how many were withheld. `--json` stays uncapped
+  because it is a contract to report every diagnostic. Now 23,530 bytes in 0.125 s — a 3,252×
+  reduction. (C32, ruling D38)
+- **`deploy` and `fleet` are in `--help`.** Both were working top-level subcommands that `--help` never
+  listed, which is why a CLI sweep could not find them — and `deploy` was double-emitting JSON on its
+  refusal paths. A gate now asserts every dispatched subcommand appears in `--help`, because an
+  undocumented command is a command nothing sweeps. (C33, ruling D38)
 - **A build that checked nothing reported success.** A package whose sources sat beside `delulu.toml`
   instead of under `src/` printed `built clean (1 package(s), 0 module(s))` and exited 0 — a green
   build of an empty program, and a green CI gate with it. It now refuses, on the same posture as the
