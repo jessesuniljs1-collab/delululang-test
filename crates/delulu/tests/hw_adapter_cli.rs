@@ -246,3 +246,67 @@ fn a_driver_that_will_not_start_fails_the_run_before_main() {
         stdout(&o)
     );
 }
+
+// ----- adapter provenance (D52, closing the gap D23 named) --------------------------------------
+
+/// **A hardware driver's provenance is checked before it is spawned, and "cannot tell" never means
+/// "yes".** D23 shipped the adapter as an operator-supplied subprocess with no signature check at
+/// all — named honestly as a gap, but a gap: the envelope bounds what a driver may be *asked* to do
+/// and says nothing about where the driver came from.
+///
+/// Four branches, and the asymmetry between them is the ruling:
+///
+/// 1. signature present and INVALID  → refused, **regardless of the policy flag**
+/// 2. signature absent, no flag      → allowed, disclosed loudly
+/// 3. signature absent, flag given   → refused (DL1511)
+/// 4. first token is not a file      → not verifiable; disclosed, and refused under the flag
+///
+/// Branch 1 is the one a "not required, so don't check" reading would skip. Branch 4 is the one a
+/// careless implementation gets wrong: `--adapter-cmd "powershell -File drive.ps1"` names the
+/// INTERPRETER, so verifying the first token would vouch for the wrong bytes — and passing silently
+/// there would be worse than not checking at all, because it would look checked.
+#[test]
+fn an_adapter_with_a_bad_signature_is_refused_whatever_the_policy_says() {
+    let r = rig("sig", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    // A real file to stand in for a driver binary, with a signature that is present and wrong.
+    let drv = r.dir.join("driver.bin");
+    std::fs::write(&drv, b"not a real driver, but real bytes").unwrap();
+    std::fs::write(r.dir.join("driver.bin.sig"), vec![0u8; 96]).unwrap();
+    let drv_s = drv.display().to_string();
+
+    // 1. Present-but-invalid refuses even WITHOUT the flag — the branch that matters.
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s]);
+    assert!(!o.status.success(), "a signature that does not verify must refuse: {}", stdout(&o));
+    let err = stderr(&o);
+    assert!(
+        err.contains("DL1510") && err.contains("not the bytes that were signed"),
+        "the refusal names the fault as provenance, not policy: {err}"
+    );
+
+    // 2. No signature, no flag: allowed, but the run SAYS SO.
+    std::fs::remove_file(r.dir.join("driver.bin.sig")).unwrap();
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s]);
+    let err = stderr(&o);
+    assert!(err.contains("UNSIGNED"), "an unsigned driver is disclosed loudly: {err}");
+
+    // 3. No signature WITH the flag: refused.
+    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter", "--adapter-cmd", &drv_s]);
+    assert!(!o.status.success(), "--require-signed-adapter must refuse an unsigned driver");
+    assert!(stderr(&o).contains("DL1511"), "{}", stderr(&o));
+
+    // 4. An interpreter-hosted driver is NOT silently treated as verified.
+    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter", "--adapter-cmd", &r.adapter_cmd]);
+    assert!(
+        !o.status.success(),
+        "a command whose first token is not a file cannot be verified, and under the flag that must \
+         refuse rather than pass: {}",
+        stdout(&o)
+    );
+    assert!(
+        stderr(&o).contains("nothing to verify"),
+        "and it must say WHY it could not check, not merely that it refused: {}",
+        stderr(&o)
+    );
+}

@@ -278,6 +278,8 @@ struct Opts {
     /// `--adapter-cmd <command>`: the hardware driver to run under a `hw:` profile (RFC 0001 dish
     /// 3). Its absence under `hw:` is a REFUSAL at the first command, never a silent no-op.
     adapter_cmd: Option<String>,
+    /// `--require-signed-adapter`: refuse a hardware driver that carries no signature (D52).
+    require_signed_adapter: bool,
     sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -326,6 +328,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         sign: None,
         broker_profile: None,
         adapter_cmd: None,
+        require_signed_adapter: false,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -377,6 +380,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     i += 1;
                 }
             }
+            "--require-signed-adapter" => opts.require_signed_adapter = true,
+
             "--adapter-cmd" => {
                 if i + 1 < rest.len() {
                     opts.adapter_cmd = Some(rest[i + 1].clone());
@@ -721,7 +726,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905;\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-cmd CMD names the hw driver: a signature beside it that does NOT verify always refuses,\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and --require-signed-adapter refuses an unsigned one — D52)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -6417,6 +6424,10 @@ fn cmd_run(rest: &[String]) -> i32 {
                     return 2;
                 };
                 let args: Vec<String> = parts.map(str::to_string).collect();
+                // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
+                if let Err(code) = check_adapter_signature(prog, opts.require_signed_adapter) {
+                    return code;
+                }
                 match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
                     Ok(a) => Some(a),
                     Err(e) => {
@@ -8011,6 +8022,111 @@ fn repl_cmd(rest: &[String]) -> i32 {
 #[allow(dead_code)]
 fn _json_marker() -> Json {
     json!({})
+}
+
+/// Verify a hardware adapter's provenance before it is spawned (ruling D52, closing the gap D23
+/// named: "an operator-supplied SUBPROCESS with NO signature check").
+///
+/// The rule is the one Stage 6 already made for plugins, applied to drivers, and the asymmetry is the
+/// whole point:
+///
+/// - **A signature that is PRESENT but does not verify refuses the run, unconditionally** — whatever
+///   the policy flag says. This is the branch a "not required, so don't check" reading would skip,
+///   and it is the branch that matters: a signature that fails to verify means these are not the
+///   bytes someone signed, whether that is tampering, the wrong key, or a truncated file.
+/// - **A signature that is ABSENT is a policy question**, because requiring one everywhere would
+///   refuse every driver an operator builds locally. Absent is allowed by default and *disclosed
+///   loudly*; `--require-signed-adapter` turns it into a refusal.
+///
+/// What this does NOT do, stated so no one reads more into it: spec §5.4 describes Verified-class
+/// signed plugins loaded into the host, and this is still an operator-supplied subprocess. Signing
+/// buys provenance — "these are the bytes someone with this key vouched for" — it does not bound what
+/// the driver does once running. The envelope is what bounds that, enforced host-side before one byte
+/// reaches the driver, and it is unchanged.
+fn check_adapter_signature(prog: &str, require_signed: bool) -> Result<(), i32> {
+    // `--adapter-cmd` is a command line, and its first token is not always the driver: an
+    // interpreter-hosted driver (`powershell -File drive.ps1`, `python drive.py`) names the
+    // INTERPRETER here, and signing that would vouch for the wrong bytes entirely.
+    //
+    // So when the first token does not resolve to a readable file, this does not quietly pass —
+    // "the checker could not tell" must never read as "yes". It says what it could not verify, and
+    // under `--require-signed-adapter` it refuses. An operator who wants the guarantee points
+    // `--adapter-cmd` at the executable itself, or wraps the script so the signed artifact IS the
+    // first token.
+    if !std::path::Path::new(prog).is_file() {
+        if require_signed {
+            let d = Diagnostic::error(
+                "DL1511",
+                format!(
+                    "`--require-signed-adapter` was given, but `{prog}` is not a file this run can \
+                     read, so there is nothing to verify — an interpreter-hosted driver names the \
+                     interpreter here, not the driver. Point `--adapter-cmd` at the signed artifact \
+                     itself"
+                ),
+            );
+            eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+            return Err(1);
+        }
+        eprintln!(
+            "warning: hardware adapter `{prog}` is not a readable file (an interpreter-hosted \
+             driver names the interpreter, not the driver), so its provenance was NOT checked. \
+             Pass `--require-signed-adapter` to refuse this."
+        );
+        return Ok(());
+    }
+    let sig_path = format!("{prog}.sig");
+    let sig = match std::fs::read(&sig_path) {
+        Ok(s) => s,
+        Err(_) => {
+            if require_signed {
+                let d = Diagnostic::error(
+                    "DL1511",
+                    format!(
+                        "hardware adapter `{prog}` has no signature at `{sig_path}`, and \
+                         `--require-signed-adapter` was given — a driver commands physical machinery, \
+                         so its provenance is not something this run will assume"
+                    ),
+                );
+                eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+                return Err(1);
+            }
+            eprintln!(
+                "warning: hardware adapter `{prog}` is UNSIGNED (no `{sig_path}`) — its provenance is \
+                 unknown. Pass `--require-signed-adapter` to refuse this."
+            );
+            return Ok(());
+        }
+    };
+    let data = match std::fs::read(prog) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("error: cannot read hardware adapter `{prog}` to verify its signature: {e}");
+            return Err(2);
+        }
+    };
+    match delulu_runtime::pqc::verify(&data, &sig, delulu_runtime::pqc::Policy::AcceptClassical, false) {
+        delulu_runtime::pqc::Verdict::Valid { signer, .. } => {
+            eprintln!("adapter: `{prog}` signature verifies (signer {signer})");
+            Ok(())
+        }
+        // Present and bad: refused REGARDLESS of `require_signed`. Stage-6 deviation 8's rule.
+        delulu_runtime::pqc::Verdict::Invalid { reason } => {
+            let d = Diagnostic::error(
+                "DL1510",
+                format!(
+                    "hardware adapter `{prog}` carries a signature that does not verify: {reason} — \
+                     these are not the bytes that were signed, and the driver is not started"
+                ),
+            );
+            eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+            Err(1)
+        }
+        delulu_runtime::pqc::Verdict::Refused { code, reason } => {
+            let d = Diagnostic::error(code, format!("hardware adapter `{prog}`: {reason}"));
+            eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+            Err(1)
+        }
+    }
 }
 
 #[cfg(test)]

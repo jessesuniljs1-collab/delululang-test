@@ -2131,6 +2131,73 @@ sentence prohibiting the term**; all nine `measurements/` records now state when
 did not, including the one this campaign wrote, which had itself argued that a table should say when it
 was taken); and the performance clause is intact, with two new losses published under it (C55, C56).
 
+**D51 — The interpreter's depth bound is a contract with the host, not an undocumented requirement.**
+Closes `HARDENING_CAMPAIGN.md` C21, open since P4.
+
+The interpreter is a tree-walker: one DeluluLang call costs several native frames. `MAX_DEPTH = 10_000`
+is the bound that raises DL0905 — but only if the native stack outlasts it. `delulu`'s `main.rs`
+reserves 512 MiB for exactly that reason, so on the CLI deep recursion is a diagnostic. An **embedder**
+gets no such thread: on Rust's ~2 MiB default the bound is never reached and the process dies of
+`STATUS_STACK_OVERFLOW` instead — the host-crash class D15 fixed for the CLI, resurfacing for anyone
+using `delulu-runtime` as a library.
+
+RULED: the bound becomes part of the API. `DEFAULT_MAX_DEPTH` and `STACK_BYTES_PER_DEPTH` are public,
+and `Interp::with_max_depth(n)` lets an embedder choose a bound their stack can actually hold. The
+default is unchanged, so every existing entry point behaves exactly as before. The witness runs on a
+deliberately small thread and proves the guard fires there rather than the stack giving way.
+
+**The per-frame figure was measured, and the number C21 recorded is badly misleading.** Bracketed by
+moving the bound on an 8 MiB thread until it broke:
+
+| thread stack | bound | bytes/depth | result |
+|---|---|---|---|
+| 8 MiB | 500 | 16 KiB | `STATUS_STACK_OVERFLOW` |
+| 8 MiB | 200 | 40 KiB | `STATUS_STACK_OVERFLOW` |
+| 8 MiB | 100 | **80 KiB** | **DL0905, clean** |
+
+Those are **debug** figures — which is what an embedder's own tests run, and therefore the case that
+must not crash. Release is far cheaper: `main.rs`'s 512 MiB works out to about 52 KiB per unit and the
+release CLI reports DL0905 cleanly at 100,000 calls, so release fits inside the published budget
+automatically.
+
+C21 recorded "10,000 frames need **more than 16 MiB**". That is true, and it reads as though 16 MiB
+were nearly enough; the real debug cost is roughly an order of magnitude higher. **A first draft of
+`STACK_BYTES_PER_DEPTH` took the recorded figure literally, derived 2 KiB per unit, and would have
+advised an embedder into precisely the crash this contract exists to prevent.** The published constant
+is now the measured 80 KiB, and a test asserts the published budget covers what `main.rs` actually
+reserves — so the advice and the CLI cannot drift apart.
+
+**D52 — A hardware driver's provenance is checked before it is spawned.** Closes the gap D23 named
+("an operator-supplied SUBPROCESS with NO signature check").
+
+The envelope bounds what a driver may be *asked* to do — enforced host-side before one byte reaches
+it, proved from the driver's own log — and says nothing about where the driver came from. That gap was
+recorded honestly and left open. It is now closed in the sense that is available: provenance, not
+behaviour.
+
+RULED, four branches, and the asymmetry is the ruling:
+
+1. **A signature that is present and does not verify refuses the run, regardless of policy** (DL1510).
+   This is Stage-6 deviation 8's rule applied to drivers, and it is the branch a "not required, so
+   don't check" reading skips. A signature that fails to verify means these are not the bytes someone
+   signed — tampering, wrong key, or truncation, and the run does not get to guess which.
+2. **Absent is a policy question**, because requiring a signature everywhere would refuse every driver
+   an operator builds locally. Allowed by default, disclosed loudly.
+3. `--require-signed-adapter` turns absent into a refusal (DL1511).
+4. **When the first token of `--adapter-cmd` is not a readable file, the run says it could not check.**
+   An interpreter-hosted driver (`powershell -File drive.ps1`) names the *interpreter*, so verifying
+   the first token would vouch for the wrong bytes entirely — and passing silently there would be
+   worse than not checking at all, because it would look checked. Under the flag this refuses.
+
+Reuses the existing detached-signature machinery and the existing codes; **no new diagnostic number
+was minted**. Cryptography remains adopted, never hand-rolled.
+
+**What this deliberately does not claim.** Spec §5.4 describes Verified-class signed plugins loaded
+into the host; this is still an operator-supplied subprocess. Signing buys provenance — "an operator
+with this key vouched for these bytes" — and does not bound what the driver does once running. The
+envelope is what bounds that, and it is unchanged. The gap narrowed; it did not disappear, and
+`AUTHORITY_GUARD_CAPSTONE.md` §2 row 8 says so.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

@@ -25,7 +25,7 @@ pub use device::{
     Profile, RevokeCause,
 };
 pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
-pub use interp::Interp;
+pub use interp::{Interp, DEFAULT_MAX_DEPTH, STACK_BYTES_PER_DEPTH};
 pub use plugin::{
     cap_slice, kill_on_limit, load_prepare, load_verified, plugin_err_code, r_get_contained,
     public_key_hex, r_get_verified, sig_message, sign_detached, sign_plugin, step5_verified,

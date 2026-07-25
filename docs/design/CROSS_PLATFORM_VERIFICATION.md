@@ -221,3 +221,28 @@ never pushed. A declared matrix is not evidence.
 - **The performance clause is intact:** "competitive with C on hot paths, with safety C cannot offer …
   and only where a published benchmark shows it. Where DeluluLang loses, the table says so." Two new
   losses were published under exactly that rule this campaign (C55, C56).
+
+### macOS readiness, which is NOT macOS verification (2026-07-26)
+
+This is the one item of the three raised at close-out that **could not be done**, and the reason is not
+a decision: there is no Mac. What was done instead is an audit of what a macOS run would encounter —
+useful for whoever eventually has hardware, and worth nothing as evidence.
+
+Every platform-conditional path in the tree was enumerated and resolved for macOS:
+
+| Path | What macOS takes | Tested elsewhere? |
+|---|---|---|
+| `lease.rs`, `secrets.rs` — `cfg(unix)` / `cfg(not(unix))` | the **unix** branch | yes — Linux takes the same branch, and it is green |
+| `adapter.rs` — `cfg(windows)` / `cfg(not(windows))` | the **not-windows** branch | yes — same as Linux |
+| `cli.rs` microVM — `cfg(target_os = "linux")` | the **not-linux** branch: refuses with **DL1408** | yes — Windows takes the same refusal |
+| `foreign_worker.rs` — `cfg(target_os = "linux")` | the not-linux branch | yes — same as Windows |
+| `tests/cli.rs` FFI — three mutually exclusive arms | `cfg(target_os = "macos")`, naming `libm.dylib` | **no — this arm has never compiled or run anywhere** |
+
+So the structure is sound: the three FFI arms are mutually exclusive and cover all three platforms, so
+nothing collides, and every other conditional puts macOS on a branch Linux or Windows already exercises.
+**One arm — the `libm.dylib` FFI test — is macOS-exclusive and has never been executed by anyone.**
+
+**None of that is verification, and this section is not evidence that DeluluLang works on macOS.** It is
+a reading of the source. A path that *should* work and a path that *has been run* are different claims,
+and this project does not get to blur them merely because the reading was careful. Every macOS cell in
+§2 and §8 still reads **never run**, and will until someone runs it on a Mac.

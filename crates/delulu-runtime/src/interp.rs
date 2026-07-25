@@ -15,7 +15,45 @@ use crate::prim;
 use crate::trace::{self, TraceRecord, TraceSink};
 use crate::value::{ActuatorEnvelope, CapScope, CapVal, Closure, Env, Fault, Scope, SecretVal, Value};
 
-const MAX_DEPTH: u32 = 10_000;
+/// The default logical call-depth bound, and the native stack it assumes.
+///
+/// **This number is a contract with the host, not a free parameter** (`HARDENING_CAMPAIGN.md` C21,
+/// ruling D51). The interpreter is a tree-walker: one DeluluLang call costs several native frames,
+/// and a debug build's frames are large — 10,000 of them need **more than 16 MiB** of native stack,
+/// measured. `delulu`'s own `main.rs` therefore runs everything on a thread with 512 MiB reserved,
+/// so `MAX_DEPTH` is the limit that actually fires and deep recursion is DL0905 rather than a crash.
+///
+/// An **embedder** gets no such thread for free. Rust's default is about 2 MiB, which this bound
+/// overruns long before it triggers — so the guard never fires and the process dies of
+/// `STATUS_STACK_OVERFLOW`/SIGSEGV instead. That is the host-crash class D15 fixed for the CLI,
+/// resurfacing for anyone using `delulu-runtime` as a library.
+///
+/// The fix is to make the bound an explicit part of the API rather than an undocumented requirement:
+/// see [`Interp::with_max_depth`]. The default is unchanged, so the CLI behaves exactly as before.
+pub const DEFAULT_MAX_DEPTH: u32 = 10_000;
+
+/// Native stack to reserve **per unit of call depth**, for embedders sizing a thread.
+///
+/// **80 KiB, and the number is measured rather than derived.** Bracketed by running the guard on a
+/// deliberately small thread and moving the bound until it broke (ruling D51):
+///
+/// | thread stack | bound | bytes/depth | result |
+/// |---|---|---|---|
+/// | 8 MiB | 500 | 16 KiB | `STATUS_STACK_OVERFLOW` |
+/// | 8 MiB | 200 | 40 KiB | `STATUS_STACK_OVERFLOW` |
+/// | 8 MiB | 100 | **80 KiB** | **DL0905, clean** |
+///
+/// Those figures are a **debug** build, which is what an embedder's tests run and therefore the case
+/// that must not crash. A release build is far cheaper: `delulu`'s own `main.rs` reserves 512 MiB for
+/// [`DEFAULT_MAX_DEPTH`] — about 52 KiB per unit — and deep recursion on the release CLI reports
+/// DL0905 cleanly at 100,000 calls, so release fits inside that. Budget for debug and release is
+/// covered automatically.
+///
+/// **The figure C21 recorded — "10,000 frames need more than 16 MiB" — is true but reads as if 16 MiB
+/// were nearly enough.** It is a lower bound roughly an order of magnitude below the real cost, and a
+/// first draft of this constant took it literally and would have advised an embedder into exactly the
+/// crash this contract exists to prevent.
+pub const STACK_BYTES_PER_DEPTH: usize = 80 * 1024;
 
 /// Default best-effort step budget for a plugin run when `Limits::fuel == 0` (spec §4/§5.4). A
 /// bound, never "unlimited" — but generous, because the interpreter is a *courtesy* path, not the
@@ -100,6 +138,10 @@ pub struct Interp {
     consts: Vec<(String, Expr)>,
     globals: Env,
     depth: Cell<u32>,
+    /// The logical call-depth bound this interpreter enforces (DL0905). Defaults to
+    /// [`DEFAULT_MAX_DEPTH`]; an embedder on a small native stack lowers it via
+    /// [`Interp::with_max_depth`] so the guard fires before the stack runs out (C21/D51).
+    max_depth: u32,
     /// Stage 10 (10d): true while an actor turn executes — the ONLY time allocations are
     /// registered with the cycle collector. Main-thread programs never set it, so the Study-C
     /// perf surface pays one predictable branch per allocation and nothing else.
@@ -205,6 +247,7 @@ impl Interp {
             consts,
             globals: Scope::root(),
             depth: Cell::new(0),
+            max_depth: DEFAULT_MAX_DEPTH,
             in_turn: Cell::new(false),
             cycle: std::cell::RefCell::new(crate::cycles::Registry::default()),
             trace: None,
@@ -419,6 +462,24 @@ impl Interp {
         self
     }
 
+    /// Set the logical call-depth bound that raises DL0905 (C21, ruling D51).
+    ///
+    /// **Embedders on a small native stack must call this.** The interpreter is a tree-walker, so one
+    /// DeluluLang call costs several native frames; [`DEFAULT_MAX_DEPTH`] assumes the 512 MiB thread
+    /// `delulu`'s own `main.rs` creates. On Rust's ~2 MiB default thread stack that bound is never
+    /// reached — the process dies of a native stack overflow first, which is a host crash rather than
+    /// the diagnostic this guard exists to produce.
+    ///
+    /// Budget roughly [`STACK_BYTES_PER_DEPTH`] of stack per unit of depth, and more in a debug
+    /// build. A 2 MiB thread should use a bound around 1,000; the default suits 32 MiB and up.
+    ///
+    /// Builder style, additive, and the default is unchanged — every existing entry point behaves
+    /// exactly as before.
+    pub fn with_max_depth(mut self, max_depth: u32) -> Interp {
+        self.max_depth = max_depth.max(1);
+        self
+    }
+
     /// Route authority decisions through a custom [`Custody`] (Stage 5 phase 5f). The CLI attaches a
     /// `BrokerClientCustody` here for `--broker daemon`; the default is [`EmbeddedCustody`], so every
     /// existing entry point is unchanged (criterion 11). Builder style; additive.
@@ -552,7 +613,7 @@ impl Interp {
 
     fn enter(&self) -> R<()> {
         let d = self.depth.get() + 1;
-        if d > MAX_DEPTH {
+        if d > self.max_depth {
             return Err(Escape::Fault(Fault::new("DL0905", "recursion depth exceeded")));
         }
         self.depth.set(d);
@@ -1795,5 +1856,54 @@ fn foreign_err_value(e: &foreign::ForeignErr) -> Value {
         // a worker dies during the bind handshake it maps to the language's `Unavailable` variant (a
         // catchable "the library could not be made available"), keeping the language sum unchanged.
         WorkerDied(s) => Value::variant("Unavailable", vec![Value::str(format!("foreign worker died: {s}"))]),
+    }
+}
+
+#[cfg(test)]
+mod depth_contract_tests {
+    use super::*;
+
+    /// **The depth bound is an explicit contract, not an undocumented stack requirement** (C21/D51).
+    ///
+    /// The interpreter is a tree-walker, so one DeluluLang call costs several native frames and
+    /// `DEFAULT_MAX_DEPTH` needs more than 16 MiB of native stack. `delulu`'s `main.rs` provides 512
+    /// MiB, so on the CLI the guard is what fires and deep recursion is DL0905. An EMBEDDER gets no
+    /// such thread: on Rust's ~2 MiB default the bound is never reached and the process dies of a
+    /// native stack overflow instead — the host-crash class D15 fixed for the CLI, resurfacing for
+    /// anyone using this crate as a library.
+    ///
+    /// This test runs on a deliberately SMALL thread (1 MiB) with a bound chosen to fit it, and
+    /// proves the guard fires there. If the bound were still fixed at 10,000, this thread would abort
+    /// rather than fail — which is exactly why the knob exists.
+    #[test]
+    fn a_small_bound_fires_on_a_small_stack_instead_of_overflowing_it() {
+        let handle = std::thread::Builder::new()
+            .name("embedder-small-stack".into())
+            .stack_size(8 * 1024 * 1024) // 8 MiB
+            .spawn(|| {
+                let src = "module m\n\nfn down(n: Int) -> Int {\n    if n <= 0 { 0 } else { down(n - 1) + 1 }\n}\n\nfn main(root: Root) ! {} {\n    let x = down(100000)\n}\n";
+                let checked = delulu_check::check_source(0, src);
+                assert!(!checked.has_errors(), "the fixture must check: {:?}", checked.diagnostics);
+                // 200 is comfortably inside 1 MiB; the default 10,000 would not be.
+                let interp = Interp::new(&checked.module).with_max_depth(100);
+                let root = Value::Root(std::rc::Rc::new(crate::value::RootVal::default()));
+                let fault = interp.run_main(root).expect_err(
+                    "unbounded recursion must be refused, not run",
+                );
+                assert_eq!(fault.code, "DL0905", "the guard fires as a diagnostic: {fault:?}");
+            })
+            .expect("spawn");
+        handle.join().expect("the thread must FAIL CLEANLY, never abort on a stack overflow");
+    }
+
+    #[test]
+    fn the_default_is_unchanged_so_the_cli_behaves_exactly_as_before() {
+        assert_eq!(DEFAULT_MAX_DEPTH, 10_000);
+        // The published budget must cover what the CLI actually reserves for the default bound —
+        // 512 MiB — or an embedder following this crate's own advice would under-provision.
+        assert!(
+            STACK_BYTES_PER_DEPTH * DEFAULT_MAX_DEPTH as usize >= 512 * 1024 * 1024,
+            "the per-depth budget must cover the 512 MiB `main.rs` reserves for the default bound"
+        );
     }
 }

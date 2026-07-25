@@ -86,7 +86,7 @@ deviations.
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | **CLOSED** — D34 (owner approved 2026-07-25) |
 | C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
-| C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | OPEN |
+| C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | **CLOSED** — D51 (the bound is now API: `Interp::with_max_depth`; per-frame cost measured at 80 KiB debug) |
 | C22 | **Stage 8 — the syntax-morph system is specified normatively and does not exist**; its spec claims to be implemented | **high** (doc contradiction / missing commissioned feature) | **CLOSED** — D35 (built 2026-07-25) |
 | C23 | **Every builtin type name and core effect name can be shadowed by a user declaration, and the shadow is silently inert** — including `Root`, `Cap`, `Secret`, `Plugin`, and `Write` | **high** (review integrity / authority legibility) | **CLOSED** — D30 |
 | C24 | Stage 4 — a type alias in a foreign signature was refused as "not marshallable" without saying it was an alias or what it aliased | medium (diagnostic quality) | **CLOSED** — D31 |
@@ -1820,7 +1820,7 @@ per-reader LSP view morphs are not built.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **58 findings were filed. 53 are closed, 1 is a published limit, 3 are open with a
+capstone, and this. **58 findings were filed. 54 are closed, 1 is a published limit, 2 are open with a
 current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -1858,11 +1858,11 @@ phases on.)*
 - **C17 — a float literal that overflows to `inf` is accepted silently.** Re-verified: `1.0e400`
   prints `inf`, exit 0, no diagnostic. Still open, still low: it matches C and JavaScript, and the
   honest argument for changing it is legibility rather than correctness.
-- **C21 — the interpreter's `MAX_DEPTH` versus the host stack.** Refined by P14 rather than closed:
-  **the CLI is safe** — `main.rs` runs on a 512 MiB worker thread and deep recursion is DL0905, not a
-  crash, verified at 100,000 frames. What remains uncovered is a host **embedding** `delulu-runtime`
-  as a library on a small stack, where `MAX_DEPTH` may not be reachable before the native stack ends.
-  That is a library-contract question and it has no test.
+*(C21 appeared here when this section was first written and is now **closed** — see D51. The
+library-contract question it raised was answered: the depth bound is part of the API
+(`Interp::with_max_depth`), the per-frame stack cost is measured and published, and a witness runs the
+guard on a deliberately small thread. Left visible rather than deleted, because a close-out that
+silently loses an item it once listed is the kind of drift this campaign existed to stop.)*
 ### Published limit
 
 - **C55 — runtime record field access is O(record width).** Measured, linear rather than quadratic,

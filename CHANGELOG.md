@@ -25,6 +25,18 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **A hardware driver's provenance is checked before it is spawned.** The adapter shipped as an
+  operator-supplied subprocess with **no signature check** — named honestly as a gap, but a gap: the
+  envelope bounds what a driver may be *asked* to do and says nothing about where the driver came from.
+  Now a signature present beside the driver that **does not verify refuses the run regardless of
+  policy** (DL1510, the rule Stage 6 already made for plugins); an absent signature is disclosed loudly
+  and refusable with `--require-signed-adapter` (DL1511); and when `--adapter-cmd`'s first token is not
+  a readable file — an interpreter-hosted driver names the *interpreter*, not the driver — the run says
+  it could not check rather than passing silently, because a gate that looks checked and isn't is worse
+  than no gate.
+
+  Still true, and stated wherever the gate is: this is an operator-supplied subprocess, not spec §5.4's
+  Verified-class signed plugin. Signing buys **provenance**, not behaviour. (D52)
 - **A cyclic type alias no longer crashes the compiler.** `type A = A` plus a single use of `A` aborted
   the process with a stack overflow (`0xC00000FD`), as did `type A = B; type B = A`, `type A = List[A]`,
   `type A = iso A` and `type A = fn(A) -> Int` — a hard crash from three lines of ordinary source, and
@@ -240,6 +252,17 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **The interpreter's recursion bound is now part of the API, so embedding is a contract rather than a
+  trap.** `delulu-runtime` capped recursion at 10,000 calls and reported DL0905 — but only if the native
+  stack outlasted the bound. The `delulu` CLI reserves 512 MiB for exactly that reason; an embedder got
+  no such thread, so on Rust's ~2 MiB default the guard was never reached and the process died of a
+  stack overflow instead. `Interp::with_max_depth` lets an embedder pick a bound their stack can hold,
+  and `DEFAULT_MAX_DEPTH` / `STACK_BYTES_PER_DEPTH` publish the relationship. The default is unchanged.
+
+  The per-frame cost was measured rather than assumed: **80 KiB of native stack per unit of depth in a
+  debug build** (16 KiB and 40 KiB both overflow). The previously recorded figure — "10,000 frames need
+  more than 16 MiB" — is true but roughly an order of magnitude below the real cost, and taking it
+  literally would have advised an embedder into the crash this contract prevents. (C21, ruling D51)
 - **A type alias is now checked where it is written.** `type Meters = Metres` — a typo — used to check
   clean, with the "unknown type" error arriving only at a use site; in a library whose own code never
   uses the alias, that error landed on a consumer who did not make the mistake. Alias targets are now

@@ -121,9 +121,15 @@ The envelope is enforced **host-side, before one byte reaches vendor code** — 
 driver's own log: a program commanding 12° (in envelope) and 999° (out) leaves exactly **one** line in
 it. An adapter can refuse more and can never permit more.
 
-**The named gap, unchanged:** the adapter is an operator-supplied subprocess with **no signature
-check**, which is not what spec §5.4 describes (Verified-class signed plugins). It buys isolation and
-reach, not supply-chain assurance. No driver for any real device ships in-tree.
+**The gap D23 named is now narrowed, not gone (ruling D52).** A driver's provenance is checked
+before it is spawned: a signature that is present and does not verify refuses the run *regardless of
+policy* (DL1510), absent is disclosed loudly and refusable with `--require-signed-adapter` (DL1511),
+and when `--adapter-cmd`'s first token is not a readable file — an interpreter-hosted driver names the
+*interpreter* — the run says it could not check rather than passing silently.
+
+What remains true: this is still an operator-supplied subprocess, not spec §5.4's Verified-class
+signed plugin loaded into the host. Signing buys **provenance**, not behaviour — the envelope is what
+bounds behaviour. And **no driver for any real device ships in-tree.**
 
 ### 1.12 Runtime enforcement — HELD
 
@@ -223,9 +229,10 @@ Recorded so no reader mistakes the shape of the claim:
   The audit chain streams to day files; the trace does not.
 - **The interpreter's field access is O(record width)** (C55): measured, published, and a named limit
   rather than a defect.
-- **C21 remains open**: the interpreter's `MAX_DEPTH` cannot be reached on a small-stack *embedding*.
-  The CLI is safe — `main.rs` runs on a 512 MiB worker thread and deep recursion is DL0905, not a crash
-  — but a host embedding `delulu-runtime` as a library on a small stack is not covered.
+- **C21 is closed** (D51): the depth bound is now part of the API (`Interp::with_max_depth`), the
+  per-frame native stack cost is measured (80 KiB per unit of depth in a debug build) and published,
+  and the guard is witnessed firing on a deliberately small thread. An embedder that ignores the
+  contract can still under-provision — but it is now a contract rather than a trap.
 
 ---
 
