@@ -60,6 +60,24 @@ fn run(args: &[&str]) -> Output {
 
 /// How many complete JSON values `text` consists of. `0` for empty, `usize::MAX` for unparseable —
 /// distinguished so a failure message can say which of the two went wrong.
+/// Did this invocation crash? **Exit code alone cannot answer that**, and that is the whole reason a
+/// panic on an empty `delulu.toml` survived a breadth sweep, a front-door pass and a dedicated crash
+/// hunt (`HARDENING_CAMPAIGN.md` C49).
+///
+/// `main.rs` runs the entire CLI on a spawned thread with a 512 MiB stack, because a tree-walking
+/// interpreter on a 1 MiB main stack died of stack overflow before `MAX_DEPTH` could fire. When that
+/// worker panics, `main` joins it and returns **2** — deliberately, and documented: "exit codes are
+/// part of the stable contract: 0 ok / 1 diagnostics / 2 internal". A panic *is* an internal error,
+/// so 2 is the honest code and must not change.
+///
+/// But exit 2 is also what an ordinary usage error returns, so a sweep keying on 101 was blind to
+/// every crash in the work path — which is where all the work happens. The panic message itself is
+/// the only reliable signal, so that is what this checks.
+fn panicked(out: &Output) -> bool {
+    let blob = String::from_utf8_lossy(&out.stderr);
+    blob.contains("panicked at") || blob.contains("RUST_BACKTRACE")
+}
+
 fn count_json_values(text: &str) -> usize {
     let t = text.trim();
     if t.is_empty() {
@@ -141,9 +159,10 @@ fn no_invocation_panics_or_leaves_the_process_signalled() {
                 if json {
                     args.push("--json");
                 }
-                let code = run(&args).status.code().unwrap_or(-1);
-                if code == 101 || !(0..132).contains(&code) {
-                    bad.push(format!("{args:?} exited {code}"));
+                let out = run(&args);
+                let code = out.status.code().unwrap_or(-1);
+                if code == 101 || !(0..132).contains(&code) || panicked(&out) {
+                    bad.push(format!("{args:?} exited {code}{}", if panicked(&out) { " WITH A PANIC" } else { "" }));
                 }
             }
         }
@@ -165,5 +184,104 @@ fn every_dispatched_subcommand_is_documented_and_swept() {
     assert!(
         missing_from_help.is_empty(),
         "these subcommands exist but `--help` does not list them: {missing_from_help:?}"
+    );
+}
+
+// ----- the same contract over manifest CONTENT, not just argument shapes (C49) -------------------
+
+/// A `delulu.toml` is untrusted input in exactly the way a `.delulu` file is: it arrives from a repo
+/// someone else wrote, or from a beginner who just ran `touch delulu.toml`. The sweep above covers
+/// the shapes a caller gets wrong on the COMMAND LINE and never looked inside a package, so five
+/// manifest shapes crashed `delulu build` with a Rust panic — among them an empty file, a file that
+/// is not TOML, and one missing `[package]`.
+///
+/// The diagnostic was never the problem: DL1004 was computed correctly every time. The crash was in
+/// a *courtesy note* — C26/D33 added "no `.delulu` modules found under `<dir>`" to stop an empty
+/// package reporting success, and composing that message reached for the root package's directory in
+/// the one situation where resolution never recorded a root package. **A fix from an earlier phase
+/// of this campaign introduced the crash it is now guarded against**, which is the lesson worth
+/// keeping: a repair needs its own skip-branch analysis, and "what if there is nothing to name?" is
+/// one of them.
+///
+/// Note which verbs did and did not crash. `lock` and `authority` handled all five shapes with a
+/// diagnostic and exit 1; only `build`/`check` panicked. A rule that holds on two paths out of three
+/// holds nowhere (C23/D30).
+#[test]
+fn no_manifest_shape_makes_a_package_command_panic() {
+    let dir = std::env::temp_dir().join(format!("delulu-manifest-sweep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // Every one of these is a manifest a real person or tool produces.
+    let manifests: &[(&str, &str)] = &[
+        ("empty", ""),
+        ("not-toml", "this is not toml ][{\n"),
+        ("no-package-section", "[authority]\neffects = [\"Write\"]\n"),
+        ("no-name-key", "[package]\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n"),
+        ("no-version-key", "[package]\nname = \"app\"\n\n[authority]\neffects = []\n"),
+        // Valid TOML that the manifest reader does not understand: a dependency's authority given as
+        // a sub-table instead of the documented inline table.
+        (
+            "dep-authority-as-subsection",
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n\n\
+             [dependencies]\ndep = { path = \"../dep\" }\n\n[dependencies.dep.authority]\neffects = []\n",
+        ),
+        ("only-a-comment", "# nothing else\n"),
+        ("bom-only", "\u{feff}"),
+    ];
+
+    let mut bad: Vec<String> = Vec::new();
+    for (tag, manifest) in manifests {
+        // The app DEPENDS on a sibling package, and that detail is load-bearing: with no dependency
+        // the resolver still loads the entry module, `modules` is non-empty, and the note that used
+        // to panic is never reached. A first version of this test used a standalone package and
+        // passed against the unfixed code — witnessing nothing (the same trap C19 set in P5).
+        let case = dir.join(tag);
+        let pkg = case.join("app");
+        let dep = case.join("dep");
+        std::fs::create_dir_all(pkg.join("src")).unwrap();
+        std::fs::create_dir_all(dep.join("src")).unwrap();
+        std::fs::write(
+            dep.join("delulu.toml"),
+            "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dep.join("src").join("main.delulu"),
+            "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n",
+        )
+        .unwrap();
+        std::fs::write(pkg.join("delulu.toml"), manifest).unwrap();
+        std::fs::write(
+            pkg.join("src").join("main.delulu"),
+            "module app\n\nimport dep\n\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(str(v(1)))\n}\n",
+        )
+        .unwrap();
+
+        for verb in ["build", "check", "lock", "authority", "atlas"] {
+            for json in [false, true] {
+                let mut args: Vec<String> = vec![verb.to_string(), pkg.display().to_string()];
+                if json {
+                    args.push("--json".to_string());
+                }
+                let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+                let out = run(&refs);
+                let code = out.status.code().unwrap_or(-1);
+                if code == 101 || !(0..132).contains(&code) || panicked(&out) {
+                    let how = if panicked(&out) { "PANICKED" } else { "died" };
+                    bad.push(format!("`{verb}` {how} on the `{tag}` manifest (exit {code})"));
+                }
+                // A crash is not the only way to fail a user here: succeeding on an unreadable
+                // manifest would be worse. None of these may report success.
+                if code == 0 {
+                    bad.push(format!("`{verb}` REPORTED SUCCESS on the `{tag}` manifest"));
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        bad.is_empty(),
+        "an unreadable manifest must produce a diagnostic — never a panic, never success:\n  {}",
+        bad.join("\n  ")
     );
 }

@@ -1759,6 +1759,80 @@ is not a DoS — verification is sequential and dies at the first unanchored or 
 adoption is keyed per CERTIFICATE, so a subordinate broker may adopt two roots and each is separately
 bounded, revocable and audited; whether it SHOULD is federation policy, not a defect.
 
+**D44 — What size exposed: a grammar that could not describe its own formatter, a quadratic field
+lookup, a crash the crash-gate could not see, and a review surface that never read the manifest.**
+Hardening campaign P12 (`HARDENING_CAMPAIGN.md` C47–C51). Four sub-rulings closed, two questions
+raised.
+
+(a) **C47 — the normative grammar disagreed with the parser in BOTH directions.** Every
+comma-separated bracketed list requires a trailing comma when it spans lines (`match` arms excepted),
+and §3.0 said the opposite everywhere: `[ "," ]` where the parser demands one, and no trailing comma
+listed at all for `params`, call args, record literals and `list_lit` — which the parser accepts and
+which **`delulu fmt` emits**. An independent implementation written from §3 alone would have rejected
+every formatted file containing a wide list.
+
+RULED: the SPECIFICATION was wrong, and is corrected. §3.0 states the newline rule normatively — it
+cannot be derived from an EBNF with no `NEWLINE` terminal — and the four productions carry the
+`[ "," ]` the parser has always accepted. Whether the parser *should* require the comma on multi-line
+lists is a language-surface question (it is stricter than most languages, and the diagnostic does not
+teach the fix) and is **owner-reserved** as C47b.
+
+(b) **C48 — record field lookup was quadratic, behind a `.clone()`.** `field_type` cloned the whole
+type definition on every field access, so a function reading N fields of an N-field record deep-copied
+N² field entries: 632 ms to check one 2000-field record, against 173 ms for a 40,046-line file five
+times its size. Isolation separated the conflated variables — declaration alone flat, accesses alone
+flat, an N-term `+` chain flat, only the product exploding. The clone existed solely to release the
+borrow on `self.table` before `lower_type` takes `&mut self`.
+
+RULED: clone the one field's type expression and the generics, never the definition. **632 ms → ~42 ms
+at N=2000 (15×)**, 4× input now costing ~2.9× instead of 11×. The residual `find()` scan keeps the
+cost O(fields × accesses) with a small constant; it is **published with its measured curve** rather
+than implied away, and a name→index map is named as the next step.
+
+(c) **C49 — an empty `delulu.toml` panicked, and the no-panic gate was blind to it.** Five of twelve
+manifest shapes crashed `build`/`check` while `lock` and `authority` diagnosed all of them (C23/D30's
+"two paths out of four" again). **The crash came from a fix made earlier in this same campaign**:
+C26/D33's "no `.delulu` modules found under `<dir>`" note reaches for the root package's directory,
+and an unreadable manifest fails resolution before a root package exists. DL1004 was computed
+correctly every time — the tool crashed while being helpful about something else.
+
+RULED: `Workspace::root_pkg()` returns `Option`, so the crash cannot be reintroduced without the
+compiler forcing the empty case to be considered. And the gate is fixed, which matters more: `main.rs`
+runs the CLI on a 512 MiB-stack worker thread (so `MAX_DEPTH` fires before the native stack does) and
+maps a worker panic to exit **2** — deliberate, documented, and correct, since 2 is "internal". But
+`json_contract.rs` keyed its no-panic sweep on `code == 101`, so it could not see any crash in the
+path where all the work happens. Both sweeps now detect the panic message itself. **A repair needs its
+own skip-branch analysis; "what if there is nothing to name?" is one.**
+
+(d) **C50 — the review surface never opened the manifest.** `delulu authority <dir>` printed a
+confident report, `diagnostics: []`, `summary: {errors: 0}` and exit 0 for a package `check` refuses
+with DL1004, and the report was byte-identical to one for a well-formed manifest. `summary.errors: 0`
+was a false claim in a machine-readable field, on both surfaces, on the one command whose product is
+"what this program can do to your system".
+
+RULED: a PRESENT manifest is parsed and its diagnostics are unioned in. ABSENT stays legal —
+`authority` accepts a plain directory of modules (C26/D33) — and present-but-unreadable is refused,
+the same shape as Stage-6 deviation 8's present-but-invalid signature. Noted and NOT ruled: `authority`
+does not evaluate the manifest CEILING either, so a package violating its own declared authority still
+reports clean there (DL1009 is `check`'s). That is defensible division of labour, but it is the review
+surface, and it is flagged for an owner rather than decided.
+
+(e) **C51 — `authority` cannot review a package that has dependencies.** OPEN. It uses the
+single-package loader while `build`, `check`, `lock` and `authority --diff` resolve the graph, so
+every monorepo member fails with DL0303 while `build` on the same package succeeds. The fix is
+identified (resolve the workspace on this path too) and deliberately **not applied here**: it changes
+what the authority report CONTAINS for a whole class of packages, and that report is a published
+contract surface. Carried to P13.
+
+**Verified-and-held at scale (do not re-derive).** On a 40,046-line / 478 KB file, release, warm:
+`check` 173 ms; `atlas` 290–426 ms in every format with `digest` byte-stable across runs; `fmt` on
+30,009 lines 1,292 ms with its output still checking clean. Peak memory never exceeded 52 MB anywhere
+in the corpus. **D38's diagnostic cap holds exactly as designed**: 5,000 real errors render in 155 ms /
+14 KB with an honest note naming the 4,950 withheld, while `--json` stays uncapped at 5,000
+diagnostics in one object with a truthful `summary`. Monorepos hold: 50-deep dependency chains and
+200-package diamonds check, build and lock cleanly, and **lockfiles are byte-identical across repeated
+writes** at every size — the semver-authority law's determinism survives depth.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

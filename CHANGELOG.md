@@ -25,6 +25,23 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **An unreadable `delulu.toml` no longer crashes the build, and the crash gate can now see crashes
+  at all.** An empty manifest — the most ordinary beginner mistake there is — made `delulu build` and
+  `delulu check` panic, along with four other manifest shapes, while `lock` and `authority` diagnosed
+  every one of them correctly. The diagnostic (DL1004) was always computed; the crash was in a
+  *courtesy note* added by an earlier fix in this campaign (C26), which reached for the root package's
+  directory in the one situation where resolution never recorded a root package.
+
+  The larger repair is to the gate: the CLI runs on a worker thread with a 512 MiB stack, and `main`
+  maps a worker panic to exit **2** ("internal") — deliberate, documented, and correct. But the
+  no-panic sweep keyed on exit 101, so it was structurally blind to every crash in the path where all
+  the work happens. Both sweeps now detect the panic message itself. (C49, ruling D44c)
+- **`delulu authority` no longer reports a package as clean when it cannot read its manifest.** The
+  review surface — the one command whose product is "what this program can do to your system" —
+  printed a confident report with `diagnostics: []`, `summary: {errors: 0}` and exit 0 for a package
+  `check` refuses with DL1004, byte-identical to the report for a well-formed manifest. A present
+  manifest is now parsed and its diagnostics reported; an absent one is still fine, because
+  `authority` accepts a plain directory of modules. (C50, ruling D44d)
 - **A device envelope can no longer bound nothing while looking like a bound.** Both runtime envelope
   parsers accepted non-finite bounds, so `angle_deg=-inf..inf` admitted every command and
   `kernel_ms=0..inf` satisfied a *mandatory* term whose stated purpose is preventing "a kernel with no
@@ -138,6 +155,20 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
+- **The normative grammar now describes the language the toolchain actually implements.** Every
+  comma-separated bracketed list requires a trailing comma when it spans lines (`match` arms
+  excepted), and §3 of the Stage-1 specification said the opposite in both directions at once: it
+  marked the comma optional where the parser demands it, and omitted it entirely from parameter lists,
+  call arguments, record literals and list literals — which the parser accepts and which **`delulu
+  fmt` emits**. An independent implementation written from the specification would have rejected every
+  formatted file containing a wide list. The newline rule is now stated normatively, since an EBNF
+  with no `NEWLINE` terminal cannot express it. Whether the parser *should* require that comma is a
+  language-surface question and is left open. (C47, ruling D44a)
+- **Checking a record-heavy program is no longer quadratic.** A function reading N fields of an
+  N-field record deep-copied the whole type definition once per access — N² field-entry clones. One
+  2000-field record took **632 ms** to check, against 173 ms for a 40,046-line file five times its
+  size. Now ~42 ms, a 15× improvement, with the remaining O(fields × accesses) scan published with its
+  measured curve rather than left to be discovered. (C48, ruling D44b)
 - **An approved `deploy plan` now states which authority dimensions it compared.** The verdict said
   `approved — N service(s) within <env>'s authority ceiling` and `--json` said `"approved": true`, while
   the command compares the **effect** ceiling and nothing else — one authority dimension of nine, a

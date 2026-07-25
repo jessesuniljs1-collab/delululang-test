@@ -2003,18 +2003,34 @@ impl<'a> Checker<'a> {
                 self.cx.fresh_type()
             }
             Type::Record(id, args) => {
-                let def = self.table.type_def(id).clone();
-                if let TypeDefKind::Record(fields) = &def.kind {
-                    if let Some((_, ty)) = fields.iter().find(|(n, _)| *n == field.name) {
-                        let mut genv = Genv::default();
-                        for (g, a) in def.generics.iter().zip(&args) {
-                            genv.types.insert(g.clone(), a.clone());
-                        }
-                        return self.lower_type(&ty.clone(), &genv, &mut FnFacts::default());
+                // Clone ONLY the one field's type expression and the generics, never the whole
+                // definition. This is on the per-field-access path, so cloning the definition cost
+                // one deep copy of every field per access: a function reading N fields of an
+                // N-field record did N² field-entry clones, which at N=2000 was 632 ms of a 632 ms
+                // check (`HARDENING_CAMPAIGN.md` C48). The clone was here to release the borrow on
+                // `self.table` before `lower_type` takes `&mut self`; a scoped block does that
+                // without copying anything the caller does not need.
+                let found = {
+                    let def = self.table.type_def(id);
+                    match &def.kind {
+                        TypeDefKind::Record(fields) => fields
+                            .iter()
+                            .find(|(n, _)| *n == field.name)
+                            .map(|(_, ty)| (ty.clone(), def.generics.clone())),
+                        _ => None,
                     }
+                };
+                if let Some((ty, generics)) = found {
+                    let mut genv = Genv::default();
+                    for (g, a) in generics.iter().zip(&args) {
+                        genv.types.insert(g.clone(), a.clone());
+                    }
+                    return self.lower_type(&ty, &genv, &mut FnFacts::default());
                 }
+                // Only the failing path pays for the name, and only once.
+                let name = self.table.type_def(id).name.clone();
                 self.diags.push(
-                    Diagnostic::error("DL0405", format!("no field `{}` on `{}`", field.name, def.name))
+                    Diagnostic::error("DL0405", format!("no field `{}` on `{name}`", field.name))
                         .with_span(field.span, "unknown field"),
                 );
                 self.cx.fresh_type()

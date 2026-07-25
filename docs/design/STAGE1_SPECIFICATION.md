@@ -123,6 +123,28 @@ These live in an implicit prelude module, not the keyword table.
 `{X}` = zero or more, `[X]` = optional, `|` = alternative, terminals quoted. `term` is `;` or an
 inserted terminator (§2.2).
 
+**Trailing commas in bracketed lists — normative, and the EBNF below cannot express it.** This
+grammar has no `NEWLINE` terminal, but the language inserts terminators at line ends (§2.2), and that
+interacts with every comma-separated list inside brackets. The rule the implementation enforces:
+
+- A list written **on one line** may end with a comma or not; both are accepted.
+- A list that **spans lines** must have a comma after its final element. Without one, the inserted
+  terminator arrives where the closing bracket is expected and the list is refused (**DL0201**).
+- **`match` arms are the exception** and accept both forms across lines.
+
+This applies uniformly to record type bodies, record literals, parameter lists, argument lists and
+list literals. It is stated here because it is not derivable from the productions, and because
+`delulu fmt` — the canonical formatter — *emits* the multi-line form with a trailing comma. A grammar
+that omitted the trailing comma from `params` and `field_init` lists therefore could not describe the
+output of this project's own formatter, so an independent implementation written from §3 alone would
+have rejected every formatted file containing a wide list (`HARDENING_CAMPAIGN.md` C47).
+
+Recorded honestly rather than smoothed over: requiring the comma on multi-line lists is stricter than
+most languages, and the diagnostic a person meets — `expected }` with the caret after the last
+element, while `}` sits on the next line — does not teach the fix. Relaxing the parser to accept the
+comma-less multi-line form would change what compiles, so it is a language-surface decision and is
+recorded as such (C47b), not made here.
+
 ```ebnf
 file          = module_decl , { import_decl } , { item } ;
 module_decl   = "module" , path , term ;
@@ -137,7 +159,7 @@ generics      = "[" , IDENT , { "," , IDENT } , "]" ;      (* type vars and row 
                                                               bracket; a var used after "!" is a
                                                               row var — kinds are inferred and
                                                               must be consistent (DL0410) *)
-params        = param , { "," , param } ;
+params        = param , { "," , param } , [ "," ] ;
 param         = IDENT , ":" , type ;
 
 effect_row    = "!" , ( "{" [ effects ] "}" | IDENT ) ;
@@ -189,7 +211,7 @@ try           = "?" ;                                       (* Result propagatio
 
 primary       = INT | FLOAT | STRING | "true" | "false"
               | path                                        (* var, or variant like Some *)
-              | path , "{" , [ field_init , { "," , field_init } ] , "}"   (* record literal.
+              | path , "{" , [ field_init , { "," , field_init } , [ "," ] ] , "}"   (* record literal.
                      Restriction (implementation-forced): record literals are NOT parsed in
                      `if`/`while` conditions or `match` scrutinees — parenthesize there
                      (`if (P { x: 1 } == q) { … }`). This resolves the `path {` vs block
@@ -197,7 +219,7 @@ primary       = INT | FLOAT | STRING | "true" | "false"
               | "(" , expr , ")"
               | if_expr | match_expr | lambda | list_lit ;
 field_init    = IDENT , ":" , expr ;
-list_lit      = "[" , [ expr , { "," , expr } ] , "]" ;
+list_lit      = "[" , [ expr , { "," , expr } , [ "," ] ] , "]" ;
 if_expr       = "if" , expr , block , [ "else" , ( if_expr | block ) ] ;
 match_expr    = "match" , expr , "{" , arm , { "," , arm } , [ "," ] , "}" ;
 arm           = pattern , "=>" , ( expr | block ) ;

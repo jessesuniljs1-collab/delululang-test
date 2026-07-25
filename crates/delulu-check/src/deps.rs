@@ -60,8 +60,21 @@ impl Workspace {
         self.diagnostics.iter().any(|d| d.is_error())
     }
 
-    pub fn root_pkg(&self) -> &ResolvedPackage {
-        &self.packages[self.root]
+    /// The root package, if the graph resolved far enough to have one.
+    ///
+    /// `Option`, not a direct index, because `packages` is legitimately EMPTY whenever resolution
+    /// failed before it could record the root: an unreadable `delulu.toml` (empty file, no
+    /// `[package]` section, no `name` key, not TOML at all, or a dependency table this parser does
+    /// not understand) yields a workspace with zero packages and zero modules. This used to be
+    /// `&self.packages[self.root]`, and a caller that reached for the root's directory in order to
+    /// print a *helpful note* about the empty module list panicked instead
+    /// (`HARDENING_CAMPAIGN.md` C49). An empty `delulu.toml` is the most ordinary beginner mistake
+    /// there is, and it crashed the build with a Rust backtrace.
+    ///
+    /// Returning `Option` rather than fixing that one call site is deliberate: the next caller
+    /// cannot reintroduce the crash without the compiler making them think about the empty case.
+    pub fn root_pkg(&self) -> Option<&ResolvedPackage> {
+        self.packages.get(self.root)
     }
 
     /// The root package's entry module (the one declaring `fn main`), if any.

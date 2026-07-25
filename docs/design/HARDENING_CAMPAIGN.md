@@ -110,7 +110,13 @@ deviations.
 | C43 | **The cross-parser law was one-directional and example-based** — "runtime-accepts ⇒ broker-agrees" over four good specs — so it could see none of C40/C41/C42 | **high** (a law proving less than it claims) | **CLOSED** — D43 |
 | C44 | `module_requests_native`'s `_ => false` covers all three attribute-carrying AST structs today, with nothing stopping a fourth from carrying an unreported `@jit` | low (drift risk, not a live defect) | **CLOSED** — D43 (gated) |
 | C45 | An approved `deploy plan` said "within the authority ceiling" and `--json` said `"approved": true`, while comparing one authority dimension of nine | medium (a security verdict read as broader than it is) | **CLOSED** — D43 |
+| C47 | **The normative grammar cannot describe the output of the project's own formatter** — `fmt` emits trailing commas in param lists and record literals that §3 does not permit, and requires one on any multi-line list while §3 says it is optional | **high** (an independent implementation built from the spec would reject every formatted file) | **CLOSED** — D44 (grammar corrected); parser relaxation raised as C47b |
+| C48 | **Record field lookup cloned the whole type definition per access** — a function reading N fields of an N-field record did N² field-entry deep clones; 632 ms to check one 2000-field record | **high** (quadratic compile time on a realistic shape) | **CLOSED** — D44 (15× faster; residual curve measured and published) |
+| C49 | **An empty `delulu.toml` crashed `build`/`check` with a Rust panic** — and the project's own no-panic gate could not see it, because the CLI runs on a worker thread whose panic is mapped to exit 2 ("internal"), not 101 | **high** (crash on the most ordinary beginner mistake; the crash gate was structurally blind) | **CLOSED** — D44 |
+| C50 | **`delulu authority` reported `summary.errors: 0` and exit 0 for a package `check` refuses** — the review surface never opened `delulu.toml` at all | **high** (the review surface asserting a package is clean when it is not) | **CLOSED** — D44 |
+| C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | OPEN — fix identified, deferred to P13 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
+| C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | — | OPEN — owner-reserved (language surface) |
 | C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | OPEN — owner-reserved (safety policy) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -1395,6 +1401,165 @@ Noted, not a defect: **single adoption is keyed per certificate**, so a subordin
 chains from two different roots, each separately bounded, revocable and audited. The docstring's phrase
 "only ONCE per broker lifetime" describes the scope of the *memory*, not a one-chain-per-broker limit.
 Whether multi-root adoption should be permitted is federation policy, and so is not settled here.
+
+### 3.7 P12 — scale, and what size exposed
+
+Every earlier phase attacked one program or one hostile input. This one attacked SIZE, on the premise
+that a language nobody can use at 30k lines is not a production language. Corpora were generated, not
+hand-written, and varied by SHAPE as well as line count — wide (10,000 sibling functions), deep (5,000
+nested calls), one 30,000-statement function, 2,000 types, 4,000-field records, 1,000-arm matches,
+50-deep dependency chains and 200-package diamonds.
+
+**The headline is that the compiler scales and the tooling around it mostly does too.** Release, warm,
+on a 40,046-line / 478 KB file: `check` 173 ms, `atlas` 290–426 ms in every format, `fmt` on 30,009
+lines 1,292 ms and its output still checks. Peak memory never exceeded 52 MB anywhere in the corpus.
+Five thousand real errors in one file render in 155 ms / 14 KB because D38's 50-diagnostic cap holds
+exactly as designed, and `--json` stays deliberately uncapped at 5,000 diagnostics in one object.
+Lockfiles for a 50-deep chain are byte-identical across repeated writes. `atlas --format digest` is
+byte-stable across runs at scale.
+
+### C47 · The grammar could not describe the formatter's output — CLOSED (D44)
+
+Found while generating the corpus: a 100-field record written the ordinary multi-line way would not
+parse. The rule turned out to be one rule, not one bug — **every comma-separated bracketed list
+requires a trailing comma when it spans lines**, `match` arms excepted — and the normative grammar
+(§3.0) disagreed with the implementation in *both* directions at once:
+
+| construct | §3 says | multi-line, no trailing `,` | multi-line, trailing `,` |
+|---|---|---|---|
+| record type body | `[ "," ]` — optional | **DL0201** | ok |
+| record literal | no trailing `,` listed | **DL0201** | **ok** |
+| fn params | no trailing `,` listed | **DL0201** | **ok** |
+| call args | no trailing `,` listed | **DL0201** | **ok** |
+| list literal | no trailing `,` listed | **DL0201** | **ok** |
+| match arms | `[ "," ]` — optional | ok | ok |
+
+So the grammar permitted a form the parser refuses, *and* refused a form the parser accepts. The
+second half is the serious one, because **`delulu fmt` emits exactly what the grammar forbids**:
+formatting a wide record and a wide parameter list produces trailing commas in both. An independent
+implementation written from §3 alone would have rejected every formatted file containing a wide list —
+in a language whose stated ambition is other implementations.
+
+Fixed on the specification side, which is where the defect was: §3.0 now states the newline rule
+normatively (it is not derivable from an EBNF with no `NEWLINE` terminal), and `params`, `list_lit`
+and the record-literal production carry the `[ "," ]` the parser has always accepted. **Not fixed:
+whether the parser SHOULD require the comma.** It is stricter than most languages, the diagnostic a
+person meets is `expected }` with the caret after the last element while `}` sits on the next line,
+and relaxing it changes what compiles → C47b, owner-reserved.
+
+### C48 · A quadratic field lookup, hidden behind a `.clone()` — CLOSED (D44)
+
+`records_2000` took **516 ms** while `wide_10000` — five times the bytes, seven times the lines — took
+173 ms. Isolating the two conflated variables settled it in one table (release, warm, ms):
+
+| N | N-field type, 1 access | 2-field type, N accesses | N locals, N-term sum | **N fields, N accesses** |
+|---|---|---|---|---|
+| 250 | 18 | 14 | 18 | 18 |
+| 500 | 16 | 12 | 14 | **57** |
+| 1000 | 17 | 16 | 15 | **134** |
+| 2000 | 26 | 19 | 19 | **632** |
+
+Declaration alone is flat. Accesses alone are flat. An N-term `+` chain with no records is flat. Only
+the *product* explodes — the signature of per-access work proportional to field count.
+
+The cause was not the `find()` scan. `field_type` did `self.table.type_def(id).clone()` on **every
+field access**, deep-copying all N field entries each time, so a function reading N fields of an
+N-field record performed N² field clones. The clone existed only to release the borrow on
+`self.table` before `lower_type` takes `&mut self`; a scoped block that clones the one field's type
+expression and the generics does the same job. **632 ms → ~42 ms at N=2000, a 15× improvement**, and
+4× the input now costs ~2.9× the time instead of 11×.
+
+**The residual is real and is published rather than implied away.** The `find()` scan remains, so the
+cost is still O(fields × accesses) with a small constant. Attributed by measurement, not assumed — at
+N=4000 the declaration, access and expression shapes all grow linearly while only the product grows
+at 2.7× per doubling:
+
+| N | decl | access | chain | both |
+|---|---|---|---|---|
+| 2000 | 27 | 20 | 19 | 42 |
+| 4000 | 59 | 29 | 32 | **113** |
+
+A name→index map would make it O(1) and is the obvious next step; generated code from a protocol or
+database schema is where thousands of fields actually occur. Not done here: the cliff that made the
+shape unusable is gone, and adding a cache at the end of a long phase without room to verify it is how
+a fix becomes a defect.
+
+### C49 · An empty `delulu.toml` crashed the build — and the crash gate could not see it — CLOSED (D44)
+
+`delulu build` on a package whose manifest was empty, not TOML, missing `[package]`, or missing `name`
+panicked: `index out of bounds: the len is 0 but the index is 0`. Five of twelve manifest shapes
+crashed, on `build` and `check`, while **`lock` and `authority` diagnosed every one of them correctly
+with exit 1** — a rule holding on two paths out of four (C23/D30's pattern again).
+
+**The origin is worth stating plainly: a fix from an earlier phase of this campaign introduced it.**
+C26/D33 added the note *"no `.delulu` modules found under `<dir>`"* so that an empty package could not
+report success. Composing that message reaches for the root package's directory — and an unreadable
+manifest fails resolution *before* a root package is recorded, leaving `packages` empty and
+`modules` empty, so the note fires and the index panics. The diagnostic was never wrong: DL1004 was
+computed correctly every time. The tool crashed while being helpful about something else. A repair
+needs its own skip-branch analysis, and "what if there is nothing to name?" is one.
+
+`Workspace::root_pkg()` now returns `Option`, so the next caller cannot reintroduce the crash without
+the compiler making them consider the empty case.
+
+**The larger finding is why this survived P0's breadth sweep, P1's front door, and D38's dedicated
+crash hunt — all of which swept for crashes.** `main.rs` runs the whole CLI on a spawned thread with a
+512 MiB stack (so `MAX_DEPTH` fires before the native stack does), and when that worker panics `main`
+joins it and returns **2**, deliberately and documented: *"exit codes are part of the stable contract:
+0 ok / 1 diagnostics / 2 internal."* That is the honest code and it must not change. But exit 2 is
+also what an ordinary usage error returns, and `json_contract.rs`'s no-panic sweep keyed on
+`code == 101` — so **the gate that exists to catch crashes was blind to every crash in the path where
+all the work happens.** Both sweeps now detect the panic message itself.
+
+⚠ **Method note.** The first version of the manifest witness PASSED against the unfixed code, because
+its fixture had no dependency: with nothing to resolve the entry module still loads, `modules` is
+non-empty, and the panicking note is never reached. It witnessed nothing until the fixture gained a
+sibling dependency — the same trap C19 set in P5. Separately, two "no panic here" readings during the
+hunt were artifacts of `head -3`: the panic line sat below the diagnostic. **Do not conclude absence
+from truncated output.**
+
+### C50 · The review surface never opened the manifest — CLOSED (D44)
+
+`delulu authority <dir>` printed a confident report, `diagnostics: []`, `summary: {errors: 0}` and
+exit 0 for a package whose `delulu.toml` was empty — the same package `check` refuses with DL1004.
+The report was **byte-identical** to the report for a well-formed manifest, so a reader could not
+distinguish "I read your manifest" from "your manifest is unreadable and I ignored it". Both surfaces
+were silent, human and `--json` alike, so `summary.errors: 0` was a false claim in a
+machine-readable field on the one command whose entire product is *"what this program can do to your
+system"*.
+
+The cause: `load_package` walks `src/` and never opens the manifest, and `authority_package` consulted
+only the program's diagnostics. A present manifest is now parsed and its diagnostics unioned in.
+**Absent stays legal** — `authority` accepts a plain directory of modules (C26/D33 ruled on flat
+layouts) — but present-and-unreadable is refused, which is the same shape as Stage-6 deviation 8's
+present-but-invalid signature: a checker that shrugs at a claim it cannot check is the "when it cannot
+tell, it says yes" failure.
+
+Noted, not fixed, because it is a different question: `authority` does not evaluate the manifest
+CEILING either. A package whose code performs `Write` while its manifest declares `effects = []` gets
+a clean report and exit 0 from `authority`, and DL1009 from `check`. That is defensible — `authority`
+answers "what can this do", `check` answers "is this package well-formed" — but the review surface
+never mentioning that the package violates its own declaration is worth an owner's attention.
+
+### C51 · `authority` cannot review a package that has dependencies — OPEN
+
+On every generated monorepo, `build` succeeded and `authority` failed:
+
+```
+$ delulu build  mono/wide50/pkg1   →  ok: `pkg1` built clean (2 package(s), 2 module(s))
+$ delulu authority mono/wide50/pkg1 →  error[DL0303]: unknown module `pkg0` imported by `pkg1`
+```
+
+`authority_package` uses the single-package loader; `build`, `check`, `lock` and `authority --diff`
+all resolve the dependency graph. So the review surface is unusable for any package with a
+dependency — in a monorepo, nearly all of them — and the supply-chain question ("what does this
+dependency let my package do?") is precisely when it is wanted.
+
+The fix is identified: resolve the workspace on this path as its siblings do. It is **not** applied
+here. It changes what the authority report CONTAINS for a whole class of packages (module lists,
+effects contributed by dependencies), and that report is a published contract surface; making that
+change at the end of a long phase without budget to verify the report's content across cases is how a
+fix becomes a defect. Carried to P13 as the first item.
 
 ### C46 · Should a refused command prove liveness? — OPEN, owner-reserved
 

@@ -2999,12 +2999,18 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     // green build of an empty program. Same posture as `git_blocked` above, for the same reason: a
     // check that could not run must never report success. See `HARDENING_CAMPAIGN.md` C26.
     let no_modules = ws.modules.is_empty();
+    // The note needs the root package's directory, and there may not BE a root package: an
+    // unreadable manifest fails resolution before one is recorded, leaving zero packages and zero
+    // modules. That case already has its own diagnostic (and `failed` below is still true, so the
+    // exit stays non-zero) — what it must not do is panic while composing a courtesy note (C49).
     if no_modules && !opts.json {
-        eprintln!(
-            "note: no `.delulu` modules found under `{}` — a DeluluLang package keeps its sources \
-             in `src/`, so nothing was checked",
-            ws.root_pkg().dir.join("src").display()
-        );
+        if let Some(root) = ws.root_pkg() {
+            eprintln!(
+                "note: no `.delulu` modules found under `{}` — a DeluluLang package keeps its \
+                 sources in `src/`, so nothing was checked",
+                root.dir.join("src").display()
+            );
+        }
     }
     let failed = n > 0 || git_blocked || advisory_gate_note.is_some() || no_modules;
     // §5.5: `interface.json` is a build artifact, not a check artifact — only `build` writes it,
@@ -3017,9 +3023,12 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
             // `check` and `build` share this path but do different things — §5.5 is explicit that
             // only `build` writes `interface.json`. Saying "built clean" for a `check` claimed an
             // artifact step that never ran.
+            // Reachable only when nothing failed, which implies a root package was resolved — but
+            // the name is taken defensively all the same, because a success line is the last place
+            // that should be able to abort a run (C49).
             ok_line!(
                 "ok: `{}` {} clean ({} package(s), {} module(s); authority within manifest and pins)",
-                ws.root_pkg().name,
+                ws.root_pkg().map_or("<unnamed>", |p| p.name.as_str()),
                 if command == "build" { "built" } else { "checked" },
                 ws.packages.len(),
                 ws.modules.len()
@@ -3281,10 +3290,43 @@ pub(crate) fn package_authority_value(dir: &str) -> Option<Json> {
 }
 
 fn authority_package(dir: &str, opts: &Opts) -> i32 {
-    let pkg = load_package(dir);
+    let mut pkg = load_package(dir);
+    // A `delulu.toml` that is PRESENT must be readable. `load_package` only walks `src/` and never
+    // opens the manifest, so this command — the review surface, whose whole product is "what this
+    // program can do to your system" — printed a confident report, `diagnostics: []`,
+    // `summary.errors: 0` and exit 0 for a package `check` refuses with DL1004: an empty file, a
+    // file that is not TOML, one with no `[package]` section (C50).
+    //
+    // ABSENT is deliberately not an error: `authority` accepts a plain directory of modules, and
+    // C26/D33 already ruled on flat layouts. Present-and-unreadable is the different case, and it is
+    // the same shape as a present-but-invalid plugin signature (Stage-6 deviation 8) — a checker
+    // that shrugs at a claim it cannot check is the "when it cannot tell, it says yes" failure.
+    let manifest_path = std::path::Path::new(dir).join("delulu.toml");
+    if manifest_path.is_file() {
+        match std::fs::read_to_string(&manifest_path) {
+            Ok(text) => {
+                let file = pkg.source_map.add_file(manifest_path.display().to_string(), text.clone());
+                let (_, mdiags) = delulu_check::Manifest::parse(&text, file);
+                pkg.diagnostics.extend(mdiags);
+            }
+            Err(e) => pkg.diagnostics.push(Diagnostic::error(
+                "DL1004",
+                format!("cannot read manifest `{}`: {e}", manifest_path.display()),
+            )),
+        }
+    }
     let program = check_program(&pkg);
-    if errors(&program.diagnostics) > 0 {
-        print_diagnostics("authority", &program.diagnostics, &pkg.source_map, None, opts.json);
+    // The package's OWN diagnostics are unioned in, not just the program's. They were computed and
+    // then dropped, so `delulu authority` on a package whose `delulu.toml` is empty, not TOML, or
+    // missing `[package]` printed a confident report with `diagnostics: []`, `summary.errors: 0` and
+    // exit 0 — for a package `check` refuses with DL1004 (`HARDENING_CAMPAIGN.md` C50). This is the
+    // review surface: the one command whose entire product is "what this program can do to your
+    // system", asserting zero errors for a package that has them, on BOTH the human and `--json`
+    // surfaces. `cmd_authority_diff` already unions both lists for a directory; this path did not.
+    let mut diags: Vec<Diagnostic> = pkg.diagnostics.clone();
+    diags.extend(program.diagnostics.iter().cloned());
+    if errors(&diags) > 0 {
+        print_diagnostics("authority", &diags, &pkg.source_map, None, opts.json);
         return 1;
     }
     let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
@@ -7549,7 +7591,13 @@ fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32
             print_diagnostics("atlas", &diags, &ws.source_map, None, json);
             return Err(1);
         }
-        let root = ws.root_pkg().name.clone();
+        // Past the error gate above, so a root package exists; `?`-style handling rather than an
+        // index keeps `atlas` from being the next command to abort on an unreadable manifest (C49).
+        let Some(root) = ws.root_pkg().map(|p| p.name.clone()) else {
+            diags.push(atlas_refusal(1));
+            print_diagnostics("atlas", &diags, &ws.source_map, None, json);
+            return Err(1);
+        };
         let scopes = scopes_in_dir(std::path::Path::new(target));
         let authority = program_authority(&program, &root, &scopes);
         let modules: Vec<ModuleView> = ws
