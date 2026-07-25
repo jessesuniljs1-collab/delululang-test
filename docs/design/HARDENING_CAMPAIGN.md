@@ -98,6 +98,7 @@ deviations.
 | C31 | **The `device` scope dimension had no Guard class** — actuation was gateable only all-or-nothing via `effect:Actuate`, on the one axis that moves hardware | **high** (safety granularity) | **CLOSED** — D37 |
 | C32 | **A 10 KB source file emitted 76 MB of diagnostics** — every diagnostic quoted its entire source line, times ~5000 errors | **high** (denial of service against the reader) | **CLOSED** — D38 |
 | C33 | `deploy` and `fleet` are working top-level subcommands that `--help` never listed; `deploy` also double-emitted JSON on refusal | medium (discoverability / machine contract) | **CLOSED** — D38 |
+| C34 | Stage 6 — a plugin manifest could declare `device`/`foreign_c`/`foreign_python` authority and have it **silently dropped**, advertising a ceiling the plugin can never have | medium (legibility — the C23 class, one level out) | **CLOSED** — D39 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -946,6 +947,65 @@ neither. That is why the first CLI sweep missed them, and `deploy` was double-em
 refusal paths — caught only because an older test happened to parse its output. Both are in `--help`
 now, and a gate asserts that every dispatched subcommand appears there, because **an undocumented
 command is a command nothing sweeps.**
+
+### C34 · A plugin ceiling could advertise authority the model cannot confer — CLOSED (D39)
+
+Stage 6's adversarial pass, hunting P6's pattern deliberately: `Scopes` has eight dimensions and the
+places that enumerate them do not always follow.
+
+**What was wrong.** `Grant::to_authority` and `PluginArtifact::ceiling` both hard-code `device`,
+`foreign_c`, and `foreign_python` to empty — deliberately and correctly, since a plugin is not a thing
+that may command a machine or bind a native library. But *reading* a manifest that declared one of them
+simply dropped the declaration. Observed directly: a manifest declaring
+`device: ["arm0/elbow:pitch=-5..5,…"]`, `foreign_c: ["libm"]`, and effects `[Read, Actuate,
+ForeignCall]` produced a ceiling with **empty device and foreign scopes but all three effects intact**,
+and `step1_container_api` returned `Ok`. The artifact loaded clean while advertising a ceiling it did
+not have, so a reviewer of that manifest — or of `plugin verify`'s output — was told the plugin could
+reach a device it can never reach.
+
+Not exploitable, and that is worth stating precisely rather than inflating: the drop is *toward* less
+authority, and `cap_slice` gives an unlisted effect **no host import at all** (its `_ => {}` is
+fail-closed and says so), so a declared `Actuate` reaches nothing. The defect is legibility, which for
+this language is not a lesser property — it is the same finding as C23's inert declarations, and
+SECURITY.md §3.1 now scopes it in explicitly.
+
+Refused now at step 1 with DL1508, naming the dimension. An **empty** list stays legal: it claims
+nothing, and refusing it would break manifests that spell their dimensions out for documentation.
+
+**Deliberately NOT refused: an effect with no host import.** A ceiling may still name `Actuate` or
+`ForeignCall`. `cap_slice`'s comment marks Net/Declassify/Load/ForeignCall as having "no Contained host
+import in v0.6" — forward work, not an oversight — and refusing them today would prejudge it. The
+inertness is witnessed instead (`an_effect_with_no_host_import_reaches_nothing`).
+
+### 3.2 What Stage 6 got right, verified rather than assumed
+
+Recorded because a campaign that only lists defects gives a false picture of the code, and because
+re-deriving these costs a future session real time:
+
+- **One path to a loaded plugin's authority.** `grant.to_authority()` → `step3_ceiling` (which reuses
+  the broker's own `attenuation_check`, all nine dimensions in one conjunction) → `step4_holder` → the
+  `PreparedLoad`. The value in `PreparedLoad` is *exactly* the one that passed `⊑`; there is no
+  alternative constructor.
+- **The class is never inferred or substituted.** `step2_class` refuses any mismatch between declared
+  and requested (DL1508); a Verified request is never satisfied by a Contained artifact, and a Verified
+  plugin whose DIR is missing or fails replay is DL1504 with **no fallback to Contained**.
+- **Signatures: three cases, three outcomes, and no lenient path.** `Invalid` is matched *first and
+  unconditionally* — a present-but-invalid signature refuses **even when `require_signed` is false**,
+  which is exactly the skip-branch a "not required, so don't check" reading would have opened. Unsigned
+  under `require_signed` is a different code (DL1511) from badly-signed (DL1510), and the messages say
+  so. `verify_detached` documents the discipline outright: "the couldn't-tell cases each refuse
+  honestly (wrong length, bad key, non-verifying) — never silently treated as unsigned."
+- **Reload cannot swap authority.** A reload mints a *fresh* node, so an old reference can never be
+  re-bound to a plugin with different authority; an unknown node "confers nothing"; a limit kill drops
+  the instance *and* revokes its node in the same act; and if any load step fails, the node is revoked
+  and nothing is instantiated — no partial load.
+- **The `.dpx` reader was already hardened, and the sweep is real.** Every length goes through
+  `checked_add` plus a `<= bytes.len()` filter, so nothing allocates on a *declared* size; `read_uleb`
+  bounds its shift at 32 bits (no LEB bomb) and uses `get()?` (no panic); the section walk strictly
+  advances, so it cannot spin. An existing test already flips every single byte and truncates at every
+  offset. Added the one hostile shape that sweep structurally cannot reach — a **crafted** 5-byte ULEB
+  declaring 0xFFFF_FFFF, the classic allocation bomb — plus an unterminated ULEB and 64 zero-length
+  sections. All refuse from header arithmetic alone.
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

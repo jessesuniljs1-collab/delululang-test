@@ -372,6 +372,39 @@ pub fn step1_container_api(art: &PluginArtifact, supported_api: u32) -> Result<P
             ),
         ));
     }
+    // A ceiling may not declare a dimension the plugin model cannot confer (campaign C34).
+    //
+    // `Grant::to_authority` and `PluginArtifact::ceiling` both hard-code `device`, `foreign_c`, and
+    // `foreign_python` to empty — deliberately, and fail-closed: a plugin is not a thing that may
+    // command a machine or bind a native library. But *reading* a manifest that declares them simply
+    // dropped the declaration. The artifact then loaded clean while advertising a ceiling it did not
+    // have, and a reviewer of that manifest — or of `plugin verify`'s output — would be told the
+    // plugin may reach a device it can never reach.
+    //
+    // Refusing is the same resolution C23 reached for inert type and effect declarations, and the same
+    // one SECURITY.md §3.1 now scopes in: a declaration that is accepted and then means nothing
+    // misleads review without ever failing. Dropping silently is the one option that is both safe and
+    // dishonest, and this project does not get to pick that one.
+    if let Some(auth) = art.manifest.get("authority") {
+        for dim in ["device", "foreign_c", "foreign_python"] {
+            let declared = auth
+                .get(dim)
+                .and_then(|v| v.as_array())
+                .is_some_and(|xs| !xs.is_empty());
+            if declared {
+                return Err(LoadRefusal::new(
+                    "DL1508",
+                    format!(
+                        "plugin `{}` declares `authority.{dim}` — a plugin grant can never confer \
+                         {dim} authority, so this declaration would have no effect; remove it \
+                         (a plugin reaches devices and native libraries through neither its grant \
+                         nor its import slice)",
+                        art.name()
+                    ),
+                ));
+            }
+        }
+    }
     // Invariant 29: the class is *declared*. An unreadable declaration is refused, never guessed.
     PluginClass::from_name(&art.class).ok_or_else(|| {
         LoadRefusal::new(
@@ -2146,5 +2179,45 @@ mod tests {
             load_verified(&art, &grant(&[]), &mut c).is_ok(),
             "an invalid wasm cache must not fail a Verified load"
         );
+    }
+
+    #[test]
+    fn a_ceiling_may_not_declare_authority_a_plugin_can_never_have() {
+        // C34. `Grant::to_authority` and `ceiling()` both hard-code `device`, `foreign_c`, and
+        // `foreign_python` to empty — deliberately and fail-closed. But a manifest that DECLARED one
+        // of them had the declaration silently dropped, and the artifact loaded clean while
+        // advertising a ceiling it did not have. Anyone reading that manifest, or `plugin verify`'s
+        // output, was told the plugin could reach a device it can never reach.
+        //
+        // Same resolution as C23's inert type and effect declarations, and the same one SECURITY.md
+        // §3.1 scopes in: dropping silently is the one option that is both safe and dishonest.
+        for dim in ["device", "foreign_c", "foreign_python"] {
+            let mut art = artifact("contained", PLUGIN_API_SUPPORTED, &["Read"]);
+            art.manifest["authority"] = json!({ "effects": ["Read"], dim: ["something"] });
+            let refusal = step1_container_api(&art, PLUGIN_API_SUPPORTED)
+                .expect_err(&format!("declaring authority.{dim} must be refused"));
+            assert_eq!(refusal.code, "DL1508", "dimension {dim}");
+            assert!(refusal.message.contains(dim), "the refusal must name the dimension: {}", refusal.message);
+        }
+        // An EMPTY declaration is not a claim, so it stays legal — refusing it would break every
+        // manifest that spells its dimensions out for documentation.
+        let mut art = artifact("contained", PLUGIN_API_SUPPORTED, &["Read"]);
+        art.manifest["authority"] = json!({ "effects": ["Read"], "device": [], "foreign_c": [] });
+        assert!(step1_container_api(&art, PLUGIN_API_SUPPORTED).is_ok(), "an empty list claims nothing");
+    }
+
+    #[test]
+    fn an_effect_with_no_host_import_reaches_nothing() {
+        // The other half of the same question, and it needed checking rather than assuming: a plugin
+        // ceiling MAY still name `Actuate` or `ForeignCall`, because `cap_slice` gives an unlisted
+        // effect no import at all — its `_ => {}` is fail-closed by design and says so. So such an
+        // effect is inert rather than dangerous, and is left legal on purpose: the comment in
+        // `cap_slice` marks Net/Declassify/Load/ForeignCall as "no Contained host import in v0.6",
+        // i.e. forward work, and refusing them today would prejudge it.
+        let mut g = Grant { effects: vec!["Actuate".into(), "ForeignCall".into()], ..Grant::default() };
+        assert!(cap_slice(&g).is_empty(), "neither effect may confer any host import");
+        g.effects.push("Read".into());
+        let slice = cap_slice(&g);
+        assert_eq!(slice.len(), 1, "only Read has an import; the other two still confer nothing");
     }
 }

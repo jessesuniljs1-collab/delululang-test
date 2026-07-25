@@ -140,6 +140,13 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   listed, which is why a CLI sweep could not find them — and `deploy` was double-emitting JSON on its
   refusal paths. A gate now asserts every dispatched subcommand appears in `--help`, because an
   undocumented command is a command nothing sweeps. (C33, ruling D38)
+- **A plugin manifest can no longer declare authority the plugin model cannot confer.** `device`,
+  `foreign_c`, and `foreign_python` are hard-coded empty for plugins by design, but a manifest that
+  *declared* one had it silently dropped — so the artifact loaded clean while advertising a ceiling it
+  did not have, and anyone reading that manifest was told the plugin could reach a device it can never
+  reach. Refused now (**DL1508**), naming the dimension; an empty list stays legal because it claims
+  nothing. Not exploitable — the drop was toward less authority — but the same defect as C23's inert
+  declarations. (C34, ruling D39)
 - **A build that checked nothing reported success.** A package whose sources sat beside `delulu.toml`
   instead of under `src/` printed `built clean (1 package(s), 0 module(s))` and exited 0 — a green
   build of an empty program, and a green CI gate with it. It now refuses, on the same posture as the

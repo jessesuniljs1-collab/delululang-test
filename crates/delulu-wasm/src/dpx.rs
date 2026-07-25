@@ -615,6 +615,47 @@ mod tests {
     }
 
     #[test]
+    fn a_crafted_oversized_section_length_is_refused_without_allocating_it() {
+        // The one hostile shape the truncation/bit-flip sweep above structurally cannot reach: a
+        // *crafted* ULEB length. Flipping single bytes can only perturb a length within one byte's
+        // range, so a 5-byte ULEB declaring 0xFFFFFFFF has to be built deliberately.
+        //
+        // This is the classic allocation bomb — a 20-byte file that asks the reader to trust a 4 GiB
+        // length. The reader must refuse from the header arithmetic alone, never allocate on a
+        // declared size, and never panic. It is guarded by `checked_add` plus a `<= bytes.len()`
+        // filter; this test is the evidence rather than the claim. Byte arrays are built explicitly
+        // rather than written as escaped literals, so what the test feeds the parser is unambiguous.
+        const MAGIC: [u8; 8] = [0, 0x61, 0x73, 0x6d, 1, 0, 0, 0];
+
+        let mut art = MAGIC.to_vec();
+        art.push(0); // custom section id
+        art.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x0f]); // ULEB 0xFFFF_FFFF
+        art.extend_from_slice(b"tiny body");
+        match read_dpx(&art) {
+            Err(DpxError::Malformed(m)) => {
+                assert!(m.contains("past end"), "the refusal must name the reason, got: {m}")
+            }
+            other => panic!("a 4 GiB declared length must be refused from the header, got {other:?}"),
+        }
+
+        // A ULEB that never terminates: `read_uleb` bounds the shift at 32 bits, so this refuses
+        // rather than reading forever.
+        let mut never_ends = MAGIC.to_vec();
+        never_ends.push(0);
+        never_ends.extend_from_slice(&[0xff; 8]);
+        assert!(read_dpx(&never_ends).is_err(), "an unterminated ULEB must refuse");
+
+        // Zero-length sections must still advance the cursor — otherwise the section walk spins.
+        // Reaching the assertion at all is the real content of this case.
+        let mut zeros = MAGIC.to_vec();
+        for _ in 0..64 {
+            zeros.push(0); // custom section
+            zeros.push(0); // length 0
+        }
+        assert!(read_dpx(&zeros).is_err(), "no plugin section, and the walk must TERMINATE saying so");
+    }
+
+    #[test]
     fn the_engine_reads_an_artifact_into_the_loader_s_plain_data() {
         // The seam: delulu-wasm parses the container; delulu-runtime's loader consumes plain data.
         let dir = b"dir payload".to_vec();

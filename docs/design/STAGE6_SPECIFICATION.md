@@ -75,6 +75,11 @@ class = "verified"                   # "verified" | "contained"
 [plugin.authority]                   # hard ceiling, as fixed in Stage-1 §8.1
 effects  = ["Read"]
 requires = ["Cap[FsRead]"]
+# Scope dimensions a plugin ceiling MAY carry: fs_read, fs_write, net, secrets, declassify.
+# `device`, `foreign_c`, and `foreign_python` are REFUSED if declared non-empty (DL1508, ruling
+# D39): a plugin grant can never confer them — a plugin is not a thing that commands a machine or
+# binds a native library — so a declaration would be inert, and an inert declaration misleads
+# whoever reads the manifest next. An empty list stays legal; it claims nothing.
 
 [plugin.exports]
 summarize = "fn(Cap[FsRead], Str) -> Result[Str, IoErr] ! {Read}"

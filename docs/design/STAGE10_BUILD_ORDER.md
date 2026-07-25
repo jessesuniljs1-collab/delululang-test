@@ -1455,6 +1455,35 @@ identifier, 6000 functions, a 3000-field record, unterminated literals, NUL byte
 files) and the full CLI × malformed-argument sweep produced **no panic, no hang, and no signal death**
 on either platform. The front end is robust; that deserves saying as plainly as the defects do.
 
+**D39 — A plugin ceiling may not declare authority the plugin model cannot confer.** Hardening
+campaign P7 (`HARDENING_CAMPAIGN.md` C34).
+
+`Grant::to_authority` and `PluginArtifact::ceiling` hard-code `device`, `foreign_c`, and
+`foreign_python` to empty — deliberately: a plugin is not a thing that commands a machine or binds a
+native library. But a manifest that *declared* one of them had the declaration silently dropped, so the
+artifact loaded clean while advertising a ceiling it did not have. Verified by running it: a manifest
+declaring a device envelope and `foreign_c: ["libm"]` produced empty scopes, kept all three effects,
+and returned `Ok` from step 1.
+
+Not exploitable — the drop is toward *less* authority, and `cap_slice` gives an unlisted effect no host
+import at all. RULED anyway, on C23's reasoning and SECURITY.md §3.1: a declaration that is accepted
+and then means nothing misleads review without ever failing, and dropping it silently is the one option
+that is both safe and dishonest. DL1508 at step 1, naming the dimension; an **empty** list stays legal
+because it claims nothing.
+
+**Deliberately not ruled:** a ceiling may still name `Actuate` or `ForeignCall`. `cap_slice` marks
+those effects as having no Contained host import "in v0.6" — forward work — so refusing them today
+would prejudge it. Their inertness is witnessed instead.
+
+**Verified and unchanged, recorded so it is not re-derived:** one path to a loaded plugin's authority
+(`to_authority` → `step3_ceiling`'s `⊑` over all nine dimensions → `step4_holder`, the same value
+throughout); the class is never inferred or substituted and Verified never falls back to Contained
+(DL1504); an invalid signature refuses **unconditionally**, before `require_signed` is consulted, with
+unsigned-but-required a distinct code (DL1511 vs DL1510); a reload mints a fresh node so an
+unload/reload authority swap is impossible; and the `.dpx` reader allocates only on bytes actually
+present, bounds its ULEB shift, and strictly advances. The one hostile shape its existing bit-flip
+sweep cannot reach — a crafted 5-byte ULEB declaring 0xFFFF_FFFF — is now witnessed too.
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which
