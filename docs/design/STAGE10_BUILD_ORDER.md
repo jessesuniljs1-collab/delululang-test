@@ -1199,6 +1199,38 @@ or the Guard changed. A dimension the model already contained (secrets, present 
 and in `AuthoritySpec`) is now *checked* where it was computed-but-dropped. That is exactly the
 campaign's harden-never-redefine rule.
 
+**D29 — The two execution engines disagreed on faults, and a WASM trap flooded the terminal with a
+16,000-line backtrace. Engine parity (invariant 15) is now true for fault codes, and no trap ever
+dumps a backtrace.** Hardening campaign P4 (`HARDENING_CAMPAIGN.md` C20). Ruled in three parts.
+
+(a) **The divergence was real and the differential fuzz was structurally blind to it.** The same
+faulting program gave `DL0902`/`DL0901`/`DL0905` on the interpreter and a generic `DL0904` — plus,
+for deep recursion, **16,326 lines** of guest backtrace — on the WASM engine. Invariant 15 promised
+byte-identical stderr and identical exit codes; both were false for faults. The 50k-program
+differential harness missed it because it counts any `(Err, Err)` as agreement without comparing the
+faults. Root cause: the WASM run captured `e.to_string()` on the wasmtime error, which both appends
+the full backtrace and discards the structured trap.
+
+(b) **RULED: map the structured trap to the interpreter's code; never emit a backtrace.**
+`delulu_wasm::clean_trap` downcasts to `wasmtime::Trap` and maps the deterministic traps
+(`IntegerDivisionByZero → DL0902`, `IntegerOverflow`/overflow-`unreachable` → DL0901, `StackOverflow
+→ DL0905`, out-of-bounds → DL0903), returning a single clean line; unknown traps keep only their
+first line. The CLI's exit-code mapper reads the embedded code, so both engines now report the same
+code and exit for the same fault. One residual is documented, not hidden: `%`-by-zero and overflow
+both trap via `unreachable` and are indistinguishable from the trap alone, so `%`-by-zero is DL0901
+on WASM where the interpreter says DL0902.
+
+(c) **Invariant 15 was over-stated and is now precise.** "Byte-identical stderr" cannot hold when
+one engine faults inside the guest with no source span; the honest and enforceable contract is
+identical **stdout**, identical **exit codes**, and agreeing fault **codes** — which is what tooling
+and agents match on. The spec now says exactly that. This is tightening a guarantee to what is true
+and testable, not weakening it: the previous wording was a claim the code never kept.
+
+A separate finding surfaced writing the witness and is recorded as C21 (OPEN), not fixed here: the
+interpreter's `MAX_DEPTH = 10_000` guard overflows the *host* stack below ~20 MiB, so a small-stack
+embedding crashes before DL0905 fires. That is the interpreter's stack discipline, not engine
+parity, and wants its own pass.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates

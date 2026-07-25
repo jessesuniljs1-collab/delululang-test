@@ -43,8 +43,15 @@ All Stage-1/2 invariants hold. New:
     grant id + scope, identically to the interpreter's checks — same code path in
     `delulu-runtime`, linked by both engines, tested by identical traces.
 15. **Observable equivalence.** For every program in the conformance suite, interpreter and WASM
-    engines produce byte-identical stdout/stderr (modulo an engine tag in `--verbose`), identical
-    exit codes, and identical effect traces under fixed `--seed`/`--clock`.
+    engines produce byte-identical stdout, identical exit codes, and identical effect traces under
+    fixed `--seed`/`--clock`. **Faults agree on their diagnostic code** — a divide-by-zero is
+    `DL0902` on both, a stack overflow `DL0905` on both (hardening D29, `clean_trap`) — and neither
+    engine emits a guest backtrace. The *prose* of a fault message and its source span may still
+    differ between engines (the WASM run faults inside the guest, without the interpreter's source
+    location); the stable contract is the **code** and the **exit code**, which is what tooling and
+    agents match on. One documented residual: `%`-by-zero and overflow both trap via `unreachable`
+    in the codegen and are indistinguishable from the trap alone, so `%`-by-zero reports DL0901 on
+    the WASM engine where the interpreter reports DL0902.
 16. **Guest opacity of authority.** Capabilities and secrets are `externref` handles into host
     tables. Neither capability material nor secret bytes ever enter guest linear memory or guest
     GC structures, except a secret's bytes after a lawful `expose` (which returns a guest string —

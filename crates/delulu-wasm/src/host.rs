@@ -86,6 +86,41 @@ impl WasmError {
     }
 }
 
+/// Turn a wasmtime call error into a clean, single-line `Trap` detail — the interpreter's precise
+/// diagnostic code where the trap is deterministic, and **never** the guest backtrace.
+///
+/// Two problems this fixes (HARDENING_CAMPAIGN C20). First, `e.to_string()` on a wasmtime trap
+/// appends the FULL guest backtrace; for a deep-recursion `StackOverflow` that is one line per
+/// frame — tens of thousands of `<wasm function N>` lines that flood a terminal and drown an
+/// agent's output, where the interpreter prints a single `DL0905`. Second, the raw string discards
+/// the structured trap, so the interpreter's codes (DL0901 overflow, DL0902 divide-by-zero, DL0903
+/// out-of-bounds, DL0905 recursion) all collapsed to a generic DL0904 — breaking engine parity
+/// (invariant 15) for exactly the deterministic faults where parity is cheapest to keep. The code
+/// is embedded in the detail so the CLI's exit-code mapper reads it; the backtrace never is.
+pub(crate) fn clean_trap(e: &anyhow::Error) -> String {
+    use wasmtime::Trap;
+    let first_line = || e.to_string().lines().next().unwrap_or("wasm trap").to_string();
+    match e.downcast_ref::<Trap>() {
+        Some(t) => match t {
+            Trap::IntegerDivisionByZero => "DL0902: division by zero".to_string(),
+            // `i64.div_s` of INT_MIN/-1 traps as IntegerOverflow, which the interpreter reports as
+            // DL0901 (checked_div returns None) — so it maps to overflow, not divide-by-zero.
+            Trap::IntegerOverflow => "DL0901: integer overflow".to_string(),
+            Trap::StackOverflow => "DL0905: recursion depth exceeded (guest stack exhausted)".to_string(),
+            Trap::MemoryOutOfBounds | Trap::HeapMisaligned | Trap::TableOutOfBounds => {
+                "DL0903: memory access out of bounds".to_string()
+            }
+            // The codegen traps checked `+`,`-`,`*` overflow and `%` by zero / INT_MIN%-1 via
+            // `unreachable`. The interpreter reports overflow as DL0901 and rem-by-zero as DL0902;
+            // the two are indistinguishable from the trap alone, so the common case (overflow)
+            // wins and the residual is documented in C20.
+            Trap::UnreachableCodeReached => "DL0901: integer overflow".to_string(),
+            _ => first_line(),
+        },
+        None => first_line(),
+    }
+}
+
 /// Run an exported PURE function with i64 arguments (no imports, no ambient authority).
 pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmError> {
     let engine = optimizing_engine();
@@ -95,7 +130,7 @@ pub fn run_int_fn(wasm: &[u8], name: &str, args: &[i64]) -> Result<i64, WasmErro
     let func = instance.get_func(&mut store, name).ok_or_else(|| WasmError::NoExport(name.to_string()))?;
     let params: Vec<Val> = args.iter().map(|&a| Val::I64(a)).collect();
     let mut results = vec![Val::I64(0)];
-    func.call(&mut store, &params, &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
+    func.call(&mut store, &params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
     match results.first() {
         Some(Val::I64(n)) => Ok(*n),
         Some(Val::I32(n)) => Ok(*n as i64),
@@ -933,7 +968,7 @@ fn read_i64_args(caller: &mut Caller<'_, HostState>, ptr: i32, argc: i32) -> Opt
 
 fn finish(mut store: Store<HostState>, func: wasmtime::Func, params: &[Val]) -> Result<String, WasmError> {
     let mut results: [Val; 0] = [];
-    func.call(&mut store, params, &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
+    func.call(&mut store, params, &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
     let state = store.into_data();
     if let Some(reason) = state.refused {
         return Err(WasmError::Trap(reason));
@@ -1069,7 +1104,7 @@ pub fn run_main_actors(
     let main = instance.get_func(&mut store, "main").ok_or_else(|| WasmError::NoExport("main".to_string()))?;
     // `main`'s own turn: a trap here fails the whole run (it is not an actor turn — no poison).
     let mut results: [Val; 0] = [];
-    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| WasmError::Trap(e.to_string()))?;
+    main.call(&mut store, &[Val::I32(0)], &mut results).map_err(|e| WasmError::Trap(clean_trap(&e)))?;
     if let Some(reason) = store.data().refused.clone() {
         return Err(WasmError::Trap(reason));
     }

@@ -85,6 +85,8 @@ deviations.
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | OPEN — owner-reserved (backcompat) |
+| C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
+| C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | OPEN |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -565,6 +567,59 @@ change to the language's acceptance behavior**, which the owner explicitly reser
 as a recommendation with the analysis above and held for Jesse's decision — the same discipline that
 governed licensing (C9). The recommendation is to make the change: it completes invariant 10 for
 secrets, matches how effects and `net`/`fs` are already treated, and costs nothing in-tree today.
+
+### C20 · The two engines disagreed on faults, and WASM flooded on recursion — CLOSED (D29)
+
+Stage 3's promise (invariant 15) is that the interpreter and the WASM backend agree: same output,
+same exit, same fault. For *success* the 50k-program differential fuzz enforces it. For *faults* it
+did not, and the fuzz missed it because it classifies any `(Err, Err)` as agreement without
+checking the faults are the same.
+
+Run the same faulting program on both engines and a user saw two different things:
+
+| program | interpreter | WASM engine (before) |
+|---|---|---|
+| `7 / 0` | `error[DL0902]: division by zero` | `error[DL0904]: WASM trap … <backtrace>` |
+| `i64::MAX + 1` | `error[DL0901]: integer overflow` | `error[DL0904]: WASM trap … <backtrace>` |
+| deep recursion | `error[DL0905]: recursion depth exceeded` | `error[DL0904]` **+ 16,326 lines** of `<wasm function 8>`, one per frame |
+
+Two defects in one. The **codes diverged** — every deterministic fault collapsed to a generic
+`DL0904` on WASM, so an agent (the primary user, and the one most likely to read the code
+programmatically) could not tell divide-by-zero from overflow from recursion on the sandbox floor.
+And the **backtrace flooded**: a deep recursion emitted one `<wasm function N>` line per frame — over
+sixteen thousand lines where the interpreter prints one — drowning a terminal and any log or agent
+buffer downstream.
+
+Both had one root cause: the WASM run captured `e.to_string()` on the wasmtime error, which appends
+the full guest backtrace *and* discards the structured trap.
+
+**Fix (D29).** `delulu_wasm::clean_trap` downcasts to `wasmtime::Trap` and maps the deterministic
+traps to the interpreter's codes — `IntegerDivisionByZero → DL0902`, `IntegerOverflow → DL0901`,
+`StackOverflow → DL0905`, `MemoryOutOfBounds → DL0903`, the codegen's overflow `unreachable →
+DL0901` — and never includes the backtrace (unknown traps keep only the first line). The recursion
+flood collapses from 16,326 lines to one. One honest residual, documented: rem-by-zero and overflow
+both trap via `unreachable` and are indistinguishable from the trap alone, so rem-by-zero reports
+DL0901 on WASM where the interpreter says DL0902 — a single exotic case, named rather than hidden.
+
+**Witnesses** (`crates/delulu-wasm/tests/fault_parity.rs`), both observed to fail against the pre-fix
+code: the two engines report the same code for divide-by-zero and overflow, and a guest stack
+overflow is a single-line DL0905 with no backtrace.
+
+### C21 · The interpreter's recursion guard overflows the host stack on small stacks — OPEN
+
+Found while writing the C20 witness. The interpreter caps recursion at `MAX_DEPTH = 10_000` and then
+reports DL0905 — but a tree-walking interpreter frame is large in a debug build (measured: 10,000
+frames need **more than 16 MiB** of host stack). On the CLI's main thread this is fine, which is why
+`delulu run` on deep recursion gives a clean DL0905. But delulu-runtime embedded on a **worker
+thread** — Rust's default is ~2 MiB, and the test harness's threads overflowed even at 16 MiB —
+hits a hard host stack overflow (`STATUS_STACK_OVERFLOW`, SIGSEGV) *before* the guard fires. That is
+the "host crash on deep recursion" class Stage 9 (D15) fixed for the CLI, resurfacing for
+small-stack embeddings.
+
+The robust fix is a depth guard that does not depend on host-stack size — either counting logical
+frames against a bound chosen for the *smallest* supported stack, or growing the stack deliberately
+(`stacker`). Both are runtime-architecture changes deserving their own pass; recorded here rather
+than bolted onto D29, which is about engine parity, not the interpreter's stack discipline.
 
 ## 4. Phase plan
 

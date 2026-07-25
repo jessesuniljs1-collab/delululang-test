@@ -3453,12 +3453,22 @@ fn synth_single_program(checked: &Checked) -> Program {
 /// their code inline (DL0703 denied root slice, DL0903 out-of-bounds memory access, DL140x custody
 /// denials from the Stage-5 broker seam); anything else is a capability-scope violation (DL0904).
 fn wasm_fault_code(msg: &str) -> &'static str {
-    for code in ["DL0703", "DL0903", "DL1306", "DL1401", "DL1402", "DL1403"] {
+    // The deterministic arithmetic/recursion traps (DL0901/0902/0903/0905) are mapped from the
+    // structured wasmtime trap by `delulu_wasm::clean_trap` and embedded here, so the WASM engine
+    // reports the SAME code as the interpreter for the same fault (parity, invariant 15; C20). The
+    // DL07xx/DL13xx/DL14xx entries are host-side capability/custody denials whose reason strings
+    // already carry the code.
+    for code in [
+        "DL0703", "DL0901", "DL0902", "DL0903", "DL0905", "DL1306", "DL1401", "DL1402", "DL1403",
+    ] {
         if msg.contains(code) {
             // The registry stores codes as &'static str; return the matching literal.
             return match code {
                 "DL0703" => "DL0703",
+                "DL0901" => "DL0901",
+                "DL0902" => "DL0902",
                 "DL0903" => "DL0903",
+                "DL0905" => "DL0905",
                 "DL1306" => "DL1306",
                 "DL1401" => "DL1401",
                 "DL1402" => "DL1402",
