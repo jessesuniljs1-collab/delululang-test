@@ -656,6 +656,10 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             broker_secrets: r.broker_secrets.clone(),
             actuators: r.actuators.clone(),
             sensors: r.sensors.clone(),
+            // NOTE: `r.computes` is deliberately NOT carried — see C35 and the
+            // `boundary_authority_tests` gate below, which fails if any other dimension goes missing.
+            // Withholding is the restrictive reading and is safe; carrying it would widen what an
+            // actor may do, which is a capability decision rather than a hardening fix.
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
         // Foreign machinery is actor-pinned or v0.7-fenced at check time; reaching here
@@ -794,4 +798,80 @@ pub fn assert_unique_graph(v: &Value) -> Result<(), String> {
         }
     }
     walk(v, true, "arg")
+}
+
+#[cfg(test)]
+mod boundary_authority_tests {
+    /// Every authority dimension a `Root` carries must either CROSS an actor boundary or be listed
+    /// here as deliberately withheld. Nothing may be absent by accident.
+    ///
+    /// This exists because it already happened (`HARDENING_CAMPAIGN.md` C35). `RootMsg` is a
+    /// hand-written enumeration of `RootVal`'s dimensions, and Stage 10 phase 10h added `computes`
+    /// without extending it — while phase 10e's `actuators` and `sensors`, identical in shape and one
+    /// phase earlier, do cross. An actor holding a Root slice therefore loses compute authority
+    /// silently. That direction is fail-closed, so nothing is unsafe; what is wrong is that it was an
+    /// omission rather than a decision, and no test could tell the difference.
+    ///
+    /// So this test reads both struct definitions out of the source and compares them. It is an
+    /// unusual shape for a unit test, and it is the right one: Rust has no reflection, the two lists
+    /// are written by hand in different files, and the failure mode is silence. `delulu-conform`
+    /// already scans compiler source for the same reason.
+    ///
+    /// **If this test fails, do not "fix" it by adding the field here.** Decide whether the dimension
+    /// should cross an actor boundary, implement that decision, and only then update this list.
+    const WITHHELD_FROM_ACTORS: &[&str] = &[
+        // Stage 10 (10h) compute dispatch. `ComputeEnvelope` is plain data exactly like
+        // `ActuatorEnvelope`, so there is no technical obstacle to carrying it; it is withheld today
+        // because widening what an actor may do is a capability decision, not a hardening fix, and it
+        // is recorded as C35 awaiting that decision. Until then the restrictive reading stands.
+        "computes",
+    ];
+
+    fn declared_fields(source: &str, struct_name: &str) -> Vec<String> {
+        let start = source
+            .find(&format!("pub struct {struct_name} {{"))
+            .unwrap_or_else(|| panic!("`{struct_name}` must exist in the source"));
+        let end = source[start..].find("\n}").expect("the struct must terminate") + start;
+        source[start..end]
+            .lines()
+            .filter_map(|l| {
+                let l = l.trim();
+                let rest = l.strip_prefix("pub ")?;
+                let name = rest.split(':').next()?.trim();
+                (!name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                    .then(|| name.to_string())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_root_dimension_either_crosses_an_actor_boundary_or_is_listed_as_withheld() {
+        let root = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/value.rs"))
+            .expect("value.rs is committed");
+        let actors = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/actors.rs"))
+            .expect("actors.rs is committed");
+        let root_dims = declared_fields(&root, "RootVal");
+        let msg_dims = declared_fields(&actors, "RootMsg");
+        assert!(root_dims.len() > 10, "the RootVal scan found too few fields to be right: {root_dims:?}");
+
+        let missing: Vec<&String> = root_dims
+            .iter()
+            .filter(|d| !msg_dims.contains(d) && !WITHHELD_FROM_ACTORS.contains(&d.as_str()))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "these Root authority dimensions silently do not cross an actor boundary: {missing:?}\n\
+             Decide whether each SHOULD cross. If yes, carry it in `RootMsg` and in the conversion in \
+             `value_to_msg`. If no, add it to WITHHELD_FROM_ACTORS with the reason. Do not leave it \
+             absent by accident — that is exactly campaign finding C35."
+        );
+
+        // The list must not rot in the other direction either: a dimension that has since started
+        // crossing should be removed from the withheld list rather than left as a stale claim.
+        let stale: Vec<&&str> = WITHHELD_FROM_ACTORS
+            .iter()
+            .filter(|w| msg_dims.iter().any(|m| m == *w))
+            .collect();
+        assert!(stale.is_empty(), "these are listed as withheld but now cross: {stale:?}");
+    }
 }

@@ -1484,6 +1484,32 @@ unload/reload authority swap is impossible; and the `.dpx` reader allocates only
 present, bounds its ULEB shift, and strictly advances. The one hostile shape its existing bit-flip
 sweep cannot reach — a crafted 5-byte ULEB declaring 0xFFFF_FFFF — is now witnessed too.
 
+**D40 — Root authority may not narrow silently across an actor boundary.** Hardening campaign P8
+(`HARDENING_CAMPAIGN.md` C35).
+
+`RootMsg` is a hand-written enumeration of the dimensions a `Root` carries to an actor. Diffed against
+`RootVal`, exactly one is missing: **`computes`** (phase 10h). Phase 10e's `actuators`/`sensors` cross,
+and `ComputeEnvelope` is plain data of the same shape as `ActuatorEnvelope`, so there was no obstacle —
+10h simply did not extend the list. An actor holding a Root slice therefore loses compute authority, and
+nothing said so.
+
+RULED in two parts, because the two halves are different kinds of question:
+
+(a) **The silence is a defect and is fixed.** The conversion site names the omission, and a gate reads
+both struct definitions out of the source and fails if any `RootVal` dimension neither crosses nor
+appears in an explicit `WITHHELD_FROM_ACTORS` list — telling the maintainer to *decide*, not to append.
+It fails in the other direction too, so a stale "withheld" claim cannot outlive the fact. Rust has no
+reflection and the lists live in different files; `delulu-conform` already scans compiler source for
+exactly this reason.
+
+(b) **Whether `computes` SHOULD cross is not the kitchen's call.** Carrying it widens what an actor may
+do — a capability decision, not a hardening fix. The restrictive reading stands until the owner decides.
+Fail-closed is the safe default and this ruling keeps it.
+
+**The pattern this is the third instance of, named so it stops recurring:** a hand-maintained list of
+authority dimensions falls behind `Scopes` and nothing notices — C31's fixed `[…; 7]` guard array, C34's
+dropped plugin dimensions, and now C35's actor boundary. Every such list needs a gate.
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which

@@ -140,6 +140,13 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   listed, which is why a CLI sweep could not find them — and `deploy` was double-emitting JSON on its
   refusal paths. A gate now asserts every dispatched subcommand appears in `--help`, because an
   undocumented command is a command nothing sweeps. (C33, ruling D38)
+- **Root authority can no longer narrow silently across an actor boundary.** `RootMsg` is a
+  hand-written enumeration of what a `Root` carries to an actor, and Stage 10 phase 10h added
+  `computes` without extending it — so an actor holding a Root slice lost compute authority and nothing
+  said so. Fail-closed, but an omission rather than a decision. A gate now reads both struct definitions
+  from source and fails if any dimension neither crosses nor is explicitly listed as withheld, telling
+  the maintainer to *decide* rather than to append. Whether `computes` should cross is a capability
+  question left to the owner; the restrictive reading stands. (C35, ruling D40)
 - **A plugin manifest can no longer declare authority the plugin model cannot confer.** `device`,
   `foreign_c`, and `foreign_python` are hard-coded empty for plugins by design, but a manifest that
   *declared* one had it silently dropped — so the artifact loaded clean while advertising a ceiling it

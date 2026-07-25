@@ -241,6 +241,21 @@ system live). Supervision/restart is post-1.0.
 
 ---
 
+
+### Root across an actor boundary — the carried dimensions
+
+A `Root` sent to an actor is converted to a value-level slice (`RootMsg`), not shared: every message is
+a fully owned structural value, so authority crosses as **data the receiver may hold and never widen**.
+
+Carried: `console`, `fs.read`, `fs.write`, `net`, `clock`, `rand`, `declassify`, secrets (local and
+broker), `foreign_load`, the Python import allowlist, actuator envelopes, and sensors.
+
+**Withheld: `computes`** (compute-dispatch envelopes, Stage 10 phase 10h). An actor holding a Root slice
+cannot dispatch a compute kernel. This is the restrictive reading and it is fail-closed; it began as an
+omission rather than a decision (campaign C35, ruling D40) and is recorded as an open capability
+question rather than a settled design. A source-scanning gate in `delulu-runtime::actors` now fails the
+build if any *other* dimension goes missing, so the list cannot fall behind `RootVal` again in silence.
+
 ## 7. Interactions with prior stages (all normative)
 
 - **Plugins:** plugin function values are `val` (immutable handles; grant liveness is re-checked

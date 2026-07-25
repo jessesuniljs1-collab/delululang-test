@@ -99,6 +99,7 @@ deviations.
 | C32 | **A 10 KB source file emitted 76 MB of diagnostics** — every diagnostic quoted its entire source line, times ~5000 errors | **high** (denial of service against the reader) | **CLOSED** — D38 |
 | C33 | `deploy` and `fleet` are working top-level subcommands that `--help` never listed; `deploy` also double-emitted JSON on refusal | medium (discoverability / machine contract) | **CLOSED** — D38 |
 | C34 | Stage 6 — a plugin manifest could declare `device`/`foreign_c`/`foreign_python` authority and have it **silently dropped**, advertising a ceiling the plugin can never have | medium (legibility — the C23 class, one level out) | **CLOSED** — D39 |
+| C35 | Stage 7 — a `Root` slice **silently loses `computes`** when it crosses an actor boundary; `RootMsg` is a hand-written enumeration that Stage 10 phase 10h did not extend | medium (silent narrowing — fail-closed but undecided) | **CLOSED** — D40 (gated + documented; carrying it is a capability decision for the owner) |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -1006,6 +1007,64 @@ re-deriving these costs a future session real time:
   offset. Added the one hostile shape that sweep structurally cannot reach — a **crafted** 5-byte ULEB
   declaring 0xFFFF_FFFF, the classic allocation bomb — plus an unterminated ULEB and 64 zero-length
   sections. All refuse from header arithmetic alone.
+
+### C35 · Root authority silently narrows across an actor boundary — CLOSED (D40)
+
+`RootMsg` is a **hand-written enumeration** of the dimensions a `Root` carries when it is sent to an
+actor. Diffed against `RootVal` field by field, exactly one is missing: **`computes`**, Stage 10 phase
+10h's compute-dispatch grant. Phase 10e's `actuators` and `sensors` — one phase earlier, and
+`ComputeEnvelope` is plain data of exactly the same shape as `ActuatorEnvelope` — do cross.
+
+So an actor holding a Root slice loses compute authority, and nothing says so: a program that
+dispatches a kernel from `main` fails inside an actor, at run time, with a refusal about the device
+rather than an explanation about the boundary. The direction is **fail-closed**, so nothing here is
+unsafe. What is wrong is that it was an *omission rather than a decision*, and no test could tell those
+apart.
+
+**Not fixed by carrying it, deliberately.** Making `computes` cross would *widen* what an actor may do.
+That is a capability decision, not a hardening fix, and this campaign does not get to make it — the
+restrictive reading stands until the owner chooses. What is fixed is the part that is unambiguously
+wrong: the silence.
+
+- The conversion site now names the omission and points here.
+- A gate reads **both struct definitions out of the source** and fails if any `RootVal` dimension
+  neither crosses nor appears in an explicit `WITHHELD_FROM_ACTORS` list, with a message that tells a
+  maintainer to *decide* rather than to append. It also fails in the other direction, so a stale
+  "withheld" claim cannot outlive the fact. Verified by removing `computes` from the list and watching
+  it fire.
+
+Rust has no reflection and the two lists live in different files, so a source-scanning test is the only
+instrument that closes this class; `delulu-conform` already scans compiler source for the same reason.
+This is the third phase running in which the defect was a hand-maintained enumeration that a later
+dimension was added past (C31's fixed `[…; 7]` array, C34's dropped plugin dimensions, and now this) —
+the pattern is worth naming as such: **every hand-written list of authority dimensions needs a gate, or
+it will silently fall behind `Scopes`.**
+
+### 3.3 What Stage 7 got right, verified by execution
+
+The concurrency model held under every attack I could construct, and the skip-branch discipline is
+better here than anywhere else in the tree:
+
+- **Sendability refuses when it cannot tell.** `check_boundary_params`' `None` arm is an explicit
+  refusal — *"sendability could not be determined … a boundary guarantee is never guessed"* — and
+  `default_rcap` is exhaustive over every `Type` with `Type::Var(_) => return None` ("Undetermined:
+  never guess (kitchen rule)"), propagating undecidability out of composites rather than defaulting.
+  Tested: a `ref List`, a closure parameter, and a generic `T` all refuse (the last as *undecidable*);
+  `Cap`, `Secret`, and `Root` are sendable **by decision**, documented as unforgeable immutable handles
+  citing invariant 36, not by falling through a catch-all.
+- **`consume` is flow-sensitive on every shape.** A branch join, a loop-carried consume, a match arm,
+  and a straight-line double consume all produce DL1602 — the loop case with its own message ("by the
+  next loop iteration this binding is already dead"). `recover` reaching a non-sendable outer binding
+  is DL1605.
+- **The rcap deny properties hold.** Writing through `box`, calling a sync method on a `tag`, reading a
+  field through a `tag`, and capturing a `ref` in a `val` closure are all refused (DL1603/DL1604).
+- **Aliasing an `iso` is safe, and it is worth recording *why*, because it looks like a hole.**
+  `let alias = xs` is accepted, and after `c.take(consume xs)` the alias is still *readable*. It is not
+  a race: the alias degrades to a read-only view (mutating it is DL1604, sending it is DL1601), and
+  `MsgValue` — the wire form of every message — is a fully owned structural type with no `Rc` or
+  `RefCell` anywhere, so a send **deep-copies by construction**. The scheduler is genuinely
+  multi-threaded with each worker owning its actors' heaps outright and cells never crossing threads.
+  The alias therefore reads the sender's own data, which is coherent rather than unsound.
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 
