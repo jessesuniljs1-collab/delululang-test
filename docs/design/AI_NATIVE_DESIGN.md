@@ -55,7 +55,10 @@ Agents work in tight edit→check→repair loops. Every machine surface is shape
   across every human language and every syntax surface (Stage-8 invariant 39; `SYNTAX_MORPH_SPEC.md`
   §1). Fifty human languages and any number of keyword skins cost the AI side **zero** — nothing new
   to parse, no schema churn. The human side is richly localizable *because* the machine side is
-  frozen.
+  frozen. **Status, stated precisely:** the *locale* half is built and enforced (`delulu locale`,
+  `--locale`); the *morph* half is specified and **not yet implemented**, so its invariance is a
+  design commitment the toolchain has not yet had the chance to violate — see finding C22 in
+  `docs/design/HARDENING_CAMPAIGN.md`.
 - **`--json` / `--no-prompt` / env conventions and cold-start silence** — an agent runs `delulu`
   with no interactive surprise ever (Stage-8 invariant 40: `--json`/`CI`/non-TTY/`DELULU_NO_FIRST_RUN`
   each suppress the picker+welcome). `docs/for-agents.md` (Stage 9 §6) is the one page harnesses pin.

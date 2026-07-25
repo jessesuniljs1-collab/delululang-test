@@ -1,7 +1,13 @@
 # DeluluLang — Syntax Morph Specification (surface-syntax plugins)
 
-**Status:** Design reference (normative for the morph format and the canonical-form law).
-**Implemented by:** Stage 8 tooling (fmt/LSP integration; morphs are tooling, never semantics —
+**Status:** Design reference — **normative for the morph format and the canonical-form law, and NOT
+YET IMPLEMENTED.** No `delulu morph` verb, no morph loader, and no `--morph` flag exist in the
+toolchain as of v1.0.0; the string `morph` appears in no source file. An earlier revision of this
+header claimed "Implemented by: Stage 8 tooling", which was false — `STAGE8_SPECIFICATION.md` §6
+scheduled the `delulu morph` sibling of `delulu locale` as work to do "when building", and it was
+never built. Recorded as finding **C22** in `docs/design/HARDENING_CAMPAIGN.md`; implementation is
+scheduled there. Do not cite this document as evidence that surface-syntax plugins ship.
+**When implemented:** Stage 8 tooling (fmt/LSP integration; morphs are tooling, never semantics —
 invariant 38) with the plugin machinery of Stage 6. **Companion:**
 `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` (human *prose* localization — a different mechanism),
 `docs/design/AI_NATIVE_DESIGN.md` (why AI defaults to canonical), `CONSTITUTION.md` §8.4/§8.5.

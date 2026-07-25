@@ -103,6 +103,7 @@ DeluluLang/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs
     │   ├── LOCALIZATION_PLUGIN_GUIDE.md # human-language plugins: author/add/remove/edit (Fable 5)
     │   ├── SYNTAX_MORPH_SPEC.md         # keyword/char syntax skins, human + AI compact profiles
+    │   │                                #   SPEC ONLY — not implemented (finding C22)
     │   ├── AI_NATIVE_DESIGN.md          # the machine-facing design + standing commitments
     │   ├── LANGUAGE_SPECIFICATION.md   # superseded early draft — kept for provenance
     │   └── DeluluLang_PROMPT.md        # Jesse's original vision — kept verbatim, never edited

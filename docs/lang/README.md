@@ -1,8 +1,10 @@
 # DeluluLang Language Packs (`docs/lang/`)
 
 Each `<locale>.md` here is the **content source** an author (human or AI) turns into a message-catalog
-plugin (see `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`) and, optionally, a keyword syntax-morph (see
-`docs/design/SYNTAX_MORPH_SPEC.md`). A pack changes **human prose only** — never diagnostic codes,
+plugin (see `docs/design/LOCALIZATION_PLUGIN_GUIDE.md`) and, eventually, a keyword syntax-morph (see
+`docs/design/SYNTAX_MORPH_SPEC.md` — **specified but not yet implemented**; the keyword tables here
+are the content it will map from, not a feature you can use today: finding C22 in
+`docs/design/HARDENING_CAMPAIGN.md`). A pack changes **human prose only** — never diagnostic codes,
 JSON, spans, DIR, or anything a machine consumes (Stage-8 invariant 39).
 
 ## Priority / status

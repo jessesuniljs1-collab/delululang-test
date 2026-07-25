@@ -87,6 +87,7 @@ deviations.
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | OPEN — owner-reserved (backcompat) |
 | C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
 | C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | OPEN |
+| C22 | **Stage 8 — the syntax-morph system is specified normatively and does not exist**; its spec claims to be implemented | **high** (doc contradiction / missing commissioned feature) | OPEN — spec header corrected, implementation scheduled |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -621,7 +622,32 @@ frames against a bound chosen for the *smallest* supported stack, or growing the
 (`stacker`). Both are runtime-architecture changes deserving their own pass; recorded here rather
 than bolted onto D29, which is about engine parity, not the interpreter's stack discipline.
 
-## 4. Phase plan
+### C22 · The syntax-morph system is specified but absent — OPEN
+
+`docs/design/SYNTAX_MORPH_SPEC.md` is a complete, normative specification of **surface-syntax
+plugins**: bijective token-level keyword remappings that let a human write DeluluLang with keywords
+in their own language (`函数` for `fn`) and let an AI apply a token-minimizing profile, with the
+canonical form — and therefore every hash, artifact, and diagnostic envelope — unchanged. It defines
+the morph TOML format, the bijectivity law, storage pragmas, and a DL17xx refusal class.
+
+**None of it exists.** The string `morph` does not appear in a single `.rs` file in the workspace
+(only `polymorphism`/`monomorphic` match). There is no `delulu morph` verb, no morph loader, no
+`--morph` flag, no test. The sibling mechanism it is modelled on — *prose* localization — is fully
+built and shipped (`delulu locale add/remove/list`, `--locale`, catalog plugins pinned to
+verified-class with a zero-authority ceiling), which is precisely why the gap is easy to miss.
+
+The defect recorded here is not "a planned feature is unbuilt" — that is legitimate. It is the
+**contradiction**: the spec's own header said *"Implemented by: Stage 8 tooling"*, while
+`STAGE8_SPECIFICATION.md` §6's companion note says to *"plan a §6.5-style `delulu morph` sibling of
+`delulu locale` when building"* — future tense, never discharged. A reader of the morph spec alone
+would conclude the feature ships. Two documents in the same tree disagreed about whether a feature
+exists, and the code sided with the more pessimistic one.
+
+Corrected immediately: the spec header now states its status honestly and points at this finding.
+Implementing the morph system to that spec is scheduled as its own pass (Stage 8 / P9), because it is
+a feature build rather than a hardening fix, and because it carries a real security obligation — a
+keyword remapping is a homoglyph-adjacent attack surface, and it must land *with* the Trojan-Source
+discipline of D26 (raw bidi controls are DL0107) rather than around it.
 
 | # | Phase | Covers |
 |---|---|---|
@@ -642,5 +668,6 @@ durable record.
 Carried forward and restated so that no reader of this document alone concludes otherwise:
 **macOS has never been executed**, no driver for any real device ships in-tree, certification is
 **none** under every regime, `ForeignCall` remains an enumerated hole in the proof rather than a
-closed one, and RFC 0001's comment period remains open until 2026-08-05 with two recorded process
-deviations against it.
+closed one, RFC 0001's comment period remains open until 2026-08-05 with two recorded process
+deviations against it, and **surface-syntax morphs do not exist** — only human-prose locales do
+(C22).
