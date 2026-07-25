@@ -103,7 +103,15 @@ deviations.
 | C36 | `atlas --format mermaid` is a module-level overview that did not say so — a reader could conclude a program has no functions or effects | medium (legibility of the authority graph) | **CLOSED** — D41 |
 | C37 | **The conformance coverage law proved a witness EXISTS, not that it exercises its anchor** — a rejecting witness repointed at an unrelated real test left coverage reporting 100% | **high** (the project's own proof of spec coverage) | **CLOSED** — D42 |
 | C38 | **An unsigned artifact and a badly-signed one both reported DL1705** on the detached path, contradicting the project's own ruled deviation 8 | medium (release integrity / machine contract) | **CLOSED** — D42 |
+| C39 | **The stepped simulator's clock does not advance on a refused command**, so a dead-man revocation the wall clock produces cannot occur in simulation — and simulation is what `--signoff` approves for hardware | **high** (physical safety rehearsal / DL1905 evidence) | **CLOSED** — D43 |
+| C40 | **A term stated twice in an envelope was resolved silently, and the two parsers resolved dimensions in OPPOSITE directions** — appending a tighter bound recorded the tightening and did not apply it | **high** (physical envelope widening) | **CLOSED** — D43 |
+| C41 | **Both runtime envelope parsers accepted non-finite bounds** (`angle_deg=-inf..inf`, `kernel_ms=0..inf`) — an envelope that bounds nothing while satisfying every mandatory-term check | **high** (physical envelope vacuity) | **CLOSED** — D43 |
+| C42 | The broker accepted any `fail=` string including empty; the runtime accepts three — a device grant no program could ever mint, discovered in the field rather than at delegation | medium (operability of a safety term) | **CLOSED** — D43 |
+| C43 | **The cross-parser law was one-directional and example-based** — "runtime-accepts ⇒ broker-agrees" over four good specs — so it could see none of C40/C41/C42 | **high** (a law proving less than it claims) | **CLOSED** — D43 |
+| C44 | `module_requests_native`'s `_ => false` covers all three attribute-carrying AST structs today, with nothing stopping a fourth from carrying an unreported `@jit` | low (drift risk, not a live defect) | **CLOSED** — D43 (gated) |
+| C45 | An approved `deploy plan` said "within the authority ceiling" and `--json` said `"approved": true`, while comparing one authority dimension of nine | medium (a security verdict read as broader than it is) | **CLOSED** — D43 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
+| C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | OPEN — owner-reserved (safety policy) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -1208,6 +1216,198 @@ kept as the canonical example, and the generated reference was regenerated.
   right and the analysis was wrong.
 - **Every bad signature refuses**, on all six shapes tried, and hybrid policy refusals are a distinct
   code from verification failures.
+
+### C39 · A simulation that cannot run out of time — CLOSED (D43)
+
+The stepped clock (`--sim-step`, ruling D20) exists so a device demonstration replays identically
+regardless of build speed: simulated time advances one step per **device interaction** rather than by
+the wall. The interpreter, meanwhile, checks a command against the capability value's own envelope and
+returns early when it refuses — 10e's law, the command dies and never the process — so a refused
+command never reaches the broker.
+
+Put together, those two correct decisions produced this: **a program whose every command is refused
+froze simulated time and held its device for unbounded simulated duration.** Witness, same program and
+same grant, six out-of-envelope commands, `heartbeat_ms=1`:
+
+| clock | result |
+|---|---|
+| wall (`--broker-profile sim`) | `lease revoked (missed-heartbeat), beat overdue by 657 µs` |
+| stepped (`--sim-step 1000`) | six refusals, **no revocation** — 1000× the heartbeat, six times over |
+
+The divergence pointed the wrong way, and the reason it matters is the sign-off chain: **DL1905 refuses
+hardware unless a simulation of those exact artifact bytes was approved.** So the one environment that
+authorizes hardware could not exhibit a revocation that hardware would produce — and the fault class it
+could not rehearse is a controller whose every setpoint is out of range, which is precisely the
+malfunction a dead-man exists to take a machine away from. A units bug is the ordinary cause.
+
+**The fix does not touch the dead-man.** `due()` still decides when a lease dies, the wall-clock watchdog
+is unchanged, and a refused command still does not *beat* a lease — only an interaction that reached the
+broker ever did, and that is still true. What changed is that a refused attempt now costs the simulated
+time a real controller would have spent (`DeviceBroker::note_refused_attempt`), which is what the wall
+clock provides for free. If that sweep is what killed the lease, the lease is the reported fact: "you no
+longer hold this device" outranks "your setpoint was out of range", matching the ordering
+`DeviceBroker::command` already documented for the accepted path.
+
+Witnessed against the old code with the exact pre-fix payload (six `REFUSED`, no revocation), and the
+control — same all-refused program, heartbeat long enough to cover the run, device retained — passes
+against both old and new code, so it is not vacuous.
+
+**And the fix turned out to close a second defect on the WALL clock, which is the more broadly
+important of the two.** The ordering change means the lease is consulted before the envelope on the
+refusal path — so a program that has *already lost* its device to the watchdog and then sends an
+out-of-envelope command is told it lost the device. Before, it was told its setpoint was out of range.
+Witnessed on the wall clock with no `--sim-step` at all: a burn longer than the heartbeat between two
+out-of-envelope commands gives `after: REVOKED` now and gave `after: REFUSED` before, while the run
+summary said the lease was revoked either way.
+
+That is a real accountability defect in production, not a simulator artifact, and it defeats the
+distinction Stage 10 deliberately built: `Envelope` and `LeaseRevoked` are separate variants *because*
+"you clamp a bad setpoint and retry, and you STOP when you no longer hold the machine." A controller
+told `Envelope` clamps and retries against a machine it does not hold.
+
+Recorded honestly: this consequence was **not** predicted when the fix was designed. The first attempt
+to demonstrate it (six rapid refusals on the wall clock) showed no change at all, because all six
+commands completed before the watchdog's first tick — the observable difference needs real time to pass
+between commands. The prediction was wrong before it was right, and the witness is what settled it.
+
+### C40 · A term stated twice, resolved two different ways — CLOSED (D43)
+
+`authority.rs` already wrote the rule down: `Scopes::device` is a map keyed by device because "two
+envelopes for the same device would be an ambiguity the enforcement path would have to resolve, and
+resolving it silently is how a widening gets in." That reasoning was applied **per device** and never
+**per term inside one envelope** — and the two parsers for the one grant grammar resolved a repeated
+dimension in *opposite* directions:
+
+- `delulu_broker::device_scope::parse` → `BTreeMap::insert` → **last wins**
+- `ActuatorEnvelope::parse` → `Vec::push` + first-match in `envelope_check` → **first wins**
+
+So `angle_deg=-30..95,angle_deg=-1..1` meant `[-1, 1]` to the authority that is recorded, delegated,
+attenuated and audited, and `[-30, 95]` to the code that moves the machine. **The dangerous edit is the
+safe-looking one**: appending a tighter bound — the obvious way to tighten an envelope, and the obvious
+thing an agent does when asked to reduce a limit — recorded the tightening and did not apply it. Witness
+with a control: a command of 12° was accepted under `-30..95,-1..1` and refused under `-1..1` alone.
+
+Both parsers now refuse a repeated term, dimensions and fixed terms alike. Nothing legitimate states a
+bound twice, and an ambiguity about a physical bound is refused rather than resolved, because whichever
+way it is resolved, half the readers are wrong.
+
+Also verified and NOT a defect: two separate `--grant actuator=` flags for the same device are **met**,
+giving the tighter envelope in either order.
+
+### C41 · An envelope that bounds nothing — CLOSED (D43)
+
+`"inf".parse::<f64>()` and `"NaN".parse::<f64>()` both succeed. The broker has refused non-finite bounds
+since D12e and documents the refusal as load-bearing — it is what makes `DeviceScope`'s `impl Eq` sound.
+**Neither runtime parser had the check**, and the machine is moved from the runtime side:
+
+- `angle_deg=-inf..inf` — commanded 12° successfully; the envelope admits every finite value.
+- `kernel_ms=0..inf` — and here the gap is sharpest, because that term is mandatory with this stated
+  reason: *"a kernel with no time budget can occupy the device forever."* `0..inf` satisfies the
+  requirement while being exactly the unbounded budget the requirement exists to prevent.
+
+`NaN..NaN` was already harmless (every comparison against NaN is false, so it refused everything) —
+fail-closed by accident, not by design. Both parsers now refuse any non-finite bound.
+
+### C42 · A fail-state no program could mint — CLOSED (D43)
+
+`fail` was free text on the broker side and a closed three-variant enum on the runtime side. So
+`fail=hodl`, `fail=`, `fail=safe_park` and `fail=Hold` all produced a valid *grant* that the runtime
+would refuse to turn into a capability. Fail-closed, but at the wrong time and place: delegation happens
+in advance — in a certificate, a fleet plan, a CI config — and the refusal arrived when a robot tried to
+move. The canonical list now lives in `device_scope::FAIL_STATES`, in the lower crate (`delulu-runtime`
+depends on `delulu-broker`, not the reverse), so there is **one** list rather than two that can drift.
+
+### C43 · A cross-parser law that could not see any of this — CLOSED (D43)
+
+The existing pin read: *"Every envelope the runtime can parse must render to a string the broker parses
+back to the SAME authority"* — one-directional, and quantified over four hand-picked well-formed specs.
+C40, C41 and C42 all lived underneath it. This is the C37 defect in a different subsystem: **a law that
+proves less than it claims**, and the specific gap is the same shape — it checked agreement where both
+sides said yes, and never checked that they said yes and no in the same places.
+
+Replaced with a bidirectional law over a corpus that includes the hostile shapes: for every spec,
+`runtime_ok == broker_ok`, plus the corpus's own expected verdict, plus full field agreement wherever
+both accept. Each of C40/C41/C42 was observed failing it, in the correct direction —
+`runtime: accepted / broker: refused` for the non-finite and duplicate cases, and
+`runtime: refused / broker: accepted` for the fail-state.
+
+### C44 · The hint scan's catch-all — CLOSED (D43, gated)
+
+`module_requests_native` decides both whether the authority report carries a `native-emission` line and
+whether DL1906 warns. It walks `Item::Fn` and `Item::Actor` plus module attributes and ends in
+`_ => false`. That is **correct today** — those three are the only AST structs with an `attrs` field, so
+no other item *can* carry `@jit` — but a catch-all cannot fail to compile, so a future
+`TestDecl { attrs }` (`@ignore`, `@slow` are the obvious candidates) would carry a hint that neither
+surface mentions. This is the fifth instance of the recurring pattern; the gate reads `ast.rs` for
+structs declaring `pub attrs:` and fails in both directions, telling the maintainer to **decide** rather
+than to append. Verified non-vacuous by deleting the `Item::Actor` arm and watching it fail.
+
+### C45 · An approval that did not carry its own scope — CLOSED (D43)
+
+`deploy plan` compares the environment profile's **effect** ceiling and nothing else. `deploy.rs`'s header
+has always said so — "Recorded as a gap, not implied as covered" — but the verdict a reader acts on said
+`approved — N service(s) within <env>'s authority ceiling`, and `--json` said `"approved": true` with no
+scope at all. Nine authority dimensions exist; this compares one. A deployment gate is read by people and
+agents deciding whether to launch, far away from the source file that qualifies it — the same reasoning
+C36 applied to a mermaid graph pasted into a README. The verdict now says `EFFECT ceiling` and both
+surfaces carry `compared` / `not_compared` explicitly, the machine surface with the same facts as the
+human one.
+
+**Verified separately and not a defect: DL1909 cannot be bypassed by a bad profile.** An empty file,
+unparseable garbage, a mis-spelled `[authorities]` section, a singular `effect =` key, and a
+wrong-typed `effects = "Clock"` all yield a ceiling of *no effects at all* — every service refused. An
+unreadable profile is a plain exit-2 error, never an approval.
+
+### 3.6 What Stage 10 got right, verified by execution
+
+- **DL1909 cannot be bypassed by a bad environment profile.** Five hostile profiles — an empty file,
+  unparseable garbage, a mis-spelled `[authorities]` section, a singular `effect =` key, and a
+  wrong-typed `effects = "Clock"` — every one yields a ceiling of *no effects at all*, refusing every
+  service. An unreadable profile is a plain exit-2 error, never an approval. Fail-closed in every
+  direction tried.
+- **The `@jit` leash cannot be slipped.** Without the grant: DL1906 warns, the hint is ignored, the
+  program runs interpreted. The authority report carries a dedicated `native-emission: requested`
+  line in the human surface and `native_emission.via` in `--json`. With the grant, nothing native
+  exists to run. And **a lease can never confer it** — `exec_native: false` is hard-coded on the lease
+  path, so the leash holds across the federation boundary, not just locally.
+- **The device-scope lattice is the best-reasoned module in Stage 10.** The whitelist direction is
+  counter-intuitive (more dimensions is *wider*, because a dimension the envelope never bounded is a
+  command shape it refuses) and it is stated next to the code and tested from both sides. `meet` is
+  never wider than either input, drops non-overlapping dimensions rather than widening them, is
+  symmetric, and preserves `ttl ≥ heartbeat`. Inverted ranges, zero heartbeats, `ttl < heartbeat`,
+  missing mandatory terms and unknown devices are all refused.
+- **Multiple `--grant actuator=` flags for one device are MET, not last-wins.** Tried in both orders;
+  the tighter envelope wins either way. The per-device ambiguity `authority.rs` warns about is
+  genuinely handled — it was the per-*term* case inside one string that was not (C40).
+- **Certificate authority parsing refuses on "cannot tell".** An unknown authority key, an unknown
+  effect name, and an unknown scope dimension each refuse the certificate **whole**, with the reason in
+  the code: *"an authority dimension a verifier cannot see is one it cannot enforce, so ignoring it
+  would silently WIDEN the grant."* This is the recurring pattern answered correctly on the read side.
+- **A long forged certificate chain is not a denial of service.** Verification is sequential and dies
+  at the first hop that fails, and the anchor check is at hop 0 — so a million-certificate chain costs
+  one signature verification before refusal. An attacker who prepends a genuine anchored certificate
+  gets exactly two.
+- **The dead-man's wall clock was correct throughout.** It revokes on its own tick, names the cause and
+  the fail-state, reports `LeaseRevoked` distinctly from `Envelope`, and the control case (a healthy
+  loop) keeps its device. Exit status stays 0 — the command dies, never the process.
+
+Noted, not a defect: **single adoption is keyed per certificate**, so a subordinate broker may adopt
+chains from two different roots, each separately bounded, revocable and audited. The docstring's phrase
+"only ONCE per broker lifetime" describes the scope of the *memory*, not a one-chain-per-broker limit.
+Whether multi-root adoption should be permitted is federation policy, and so is not settled here.
+
+### C46 · Should a refused command prove liveness? — OPEN, owner-reserved
+
+C39 made the stepped clock charge a refused attempt the same simulated time the wall clock charges it,
+which is a fidelity fix and nothing more: both clocks now agree, and neither treats a refusal as a beat.
+
+The question underneath is not answered and is not the chef's to answer. The dead-man's documented remit
+is *"silence, not malice"*, and a program issuing refused commands is not silent — under both clocks it
+keeps its lease as long as it keeps interacting fast enough. But a controller whose every setpoint is out
+of envelope is malfunctioning, and taking a machine away from a malfunctioning controller is what this
+mechanism is for. Both readings are defensible, which is exactly why it must not be settled by an
+implementation detail. Whichever way it goes, it changes when a machine stops moving. **Present, don't
+decide.**
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

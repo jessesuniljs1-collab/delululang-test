@@ -147,3 +147,73 @@ fn the_manifest_declares_the_request_but_never_grants_it() {
          grant: {err2}"
     );
 }
+
+// ----- the drift gate for "which items can carry a hint" (C44) ----------------------------------
+
+/// Every struct in the AST that can carry `@` attributes. `module_requests_native` walks a
+/// hand-written subset of `Item` variants and ends in `_ => false`, so an item kind that gains an
+/// `attrs` field later would carry a `@jit` hint that the authority report never mentions AND that
+/// DL1906 never warns about — silently, because a catch-all cannot fail to compile.
+///
+/// This is the fourth instance of the pattern this campaign keeps finding (`HARDENING_CAMPAIGN.md`
+/// C31/C34/C35): *a hand-maintained list of authority-bearing things falls behind the type that
+/// defines them, and nothing notices.* Rust has no reflection over struct fields, so the gate reads
+/// the AST's own source — the same technique `delulu-conform` and the actor-boundary gate use.
+const ATTRIBUTE_CARRYING_AST_STRUCTS: &[&str] = &["Module", "FnDecl", "ActorDecl"];
+
+#[test]
+fn every_ast_item_that_can_carry_an_attribute_is_one_the_native_hint_scan_looks_at() {
+    let ast = std::fs::read_to_string(root().join("crates/delulu-syntax/src/ast.rs")).expect("read ast.rs");
+
+    // Which structs actually declare `pub attrs:`? Walk `pub struct NAME {` blocks and record the
+    // name of any whose body mentions the field before the next struct begins.
+    let mut found: Vec<String> = Vec::new();
+    let mut current: Option<String> = None;
+    for line in ast.lines() {
+        let t = line.trim_start();
+        if let Some(rest) = t.strip_prefix("pub struct ") {
+            current = rest.split(['<', ' ', '{', '(', ';']).next().map(str::to_string);
+        } else if t.starts_with("pub attrs:") {
+            if let Some(name) = current.take() {
+                found.push(name);
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+
+    let expected: Vec<String> = {
+        let mut v: Vec<String> = ATTRIBUTE_CARRYING_AST_STRUCTS.iter().map(|s| s.to_string()).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(
+        found, expected,
+        "the set of AST structs carrying `pub attrs:` has changed.\n\
+         This is a DECISION, not a list to append to: if the new item kind can carry `@jit`, extend \
+         `module_requests_native` in `crates/delulu/src/cli.rs` so the authority report and DL1906 \
+         both see it, THEN add it here. If it can only carry other attributes, say so here in a \
+         comment. What must not happen is a hint that runs unreported because a `_ => false` arm \
+         absorbed it."
+    );
+
+    // The behavioural half: the predicate must actually mention each carrier, so this gate fails if
+    // someone extends the AST and this list together while forgetting the predicate itself.
+    // Line endings are normalized: this tree is checked out CRLF on Windows and LF on Linux, and a
+    // gate that reads source must not be a gate that only holds on one platform.
+    let cli = std::fs::read_to_string(root().join("crates/delulu/src/cli.rs"))
+        .expect("read cli.rs")
+        .replace("\r\n", "\n");
+    let body = {
+        let at = cli.find("fn module_requests_native").expect("the predicate exists");
+        let end = cli[at..].find("\n}\n").expect("its body ends") + at;
+        &cli[at..end]
+    };
+    for (struct_name, needle) in [("Module", "module.attrs"), ("FnDecl", "Item::Fn"), ("ActorDecl", "Item::Actor")] {
+        assert!(
+            body.contains(needle),
+            "`{struct_name}` carries attributes but `module_requests_native` does not mention \
+             `{needle}` — a hint on it would be invisible to both the report and DL1906"
+        );
+    }
+}

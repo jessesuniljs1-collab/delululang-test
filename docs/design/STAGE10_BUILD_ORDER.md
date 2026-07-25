@@ -173,7 +173,11 @@ exhaustive against three, and a version watching only the table would have passe
 actor's turns are healthy"; this runtime beats a device's lease on every accepted operation
 against that device. The consequence is documented rather than hidden: a control loop must touch
 its device at least once per `heartbeat_ms`, which is the dead-man's contract and the reason
-`heartbeat_ms` is a per-device human decision. (d) **The watchdog is a thread that owes the
+`heartbeat_ms` is a per-device human decision. (**Refined by D43a**, which found what "touch" had to
+mean on the *stepped* clock: a REFUSED command correctly never beat the lease, but it also never
+advanced simulated time, so a program whose every command was refused held its device forever in
+simulation while losing it on the wall clock. This sentence was accurate about beats throughout; the
+gap was in the clock, not in the beat rule.) (d) **The watchdog is a thread that owes the
 program nothing.** A lease that expires only when the program asks whether it has expired is a
 comment, not a dead-man; so the revoke decision runs on its own tick and fires whether or not the
 interpreter executes another instruction. The safety half is witnessed too — a beaten lease is
@@ -1653,6 +1657,107 @@ unoptimized `cargo test`. Criterion 10 remains **MET** and is now robust in debu
 figure above was a fast-build snapshot. See D19. **D20** then finished D19e's deferral: the sim
 dead-man ticks on a logical clock (`--sim-step`), so the satellite demo replays byte-identically
 across debug and release; the wall-clock dead-man (the real-time guarantee) is unchanged.
+
+**D43 — A simulation that cannot run out of time, and an envelope grammar read two ways.**
+Hardening campaign P11 (`HARDENING_CAMPAIGN.md` C39–C45), the last per-stage pass and the one with
+physical stakes. Seven sub-rulings; the first two are the ones that moved a machine.
+
+(a) **C39 — the stepped clock did not charge a refused command.** `--sim-step` (D20) advances simulated
+time one step per *device interaction*, and the interpreter refuses an out-of-envelope command before the
+broker is reached (10e: the command dies, never the process). Two correct decisions composed into this: a
+program whose every command was refused **froze simulated time** and held its device forever, while the
+identical program and grant on the wall clock lost it to the watchdog — witnessed, `beat overdue by
+657 µs` against no revocation at all at 1000× the heartbeat, six times over.
+
+RULED: a refused attempt advances the logical clock and sweeps expiry
+(`DeviceBroker::note_refused_attempt`), and if that sweep kills the lease, the lease is the reported
+fact — "you no longer hold this device" outranks "your setpoint was out of range", the ordering
+`DeviceBroker::command` already documented for the accepted path. **The dead-man itself is untouched**:
+`due()` still decides when a lease dies, the wall-clock watchdog is unchanged, and a refused command
+still does not BEAT a lease. This is the simulator being made to owe the dead-man the time the wall clock
+owes it for free. It matters because **DL1905 refuses hardware without an approved simulation of those
+exact bytes** — so the environment that authorizes hardware could not rehearse the revocation hardware
+would produce, for exactly the fault class (every setpoint out of range, a units bug being the ordinary
+cause) that a dead-man exists to answer.
+
+**A second defect fell to the same ordering change, on the WALL clock, and it is the more broadly
+important one.** Consulting the lease before the envelope on the refusal path means a program that has
+already lost its device and then sends an out-of-envelope command is told it lost the DEVICE. Before, it
+was told its setpoint was out of range — defeating the distinction 10f deliberately built (D11b:
+`Envelope` and `LeaseRevoked` are separate variants because "you clamp a bad setpoint and retry, and you
+STOP when you no longer hold the machine"). A controller told `Envelope` clamps and retries against a
+machine it does not hold. Witnessed on the wall clock with no `--sim-step`: `after: REVOKED` now,
+`after: REFUSED` before, with the run summary reporting the revocation either way. This consequence was
+not predicted when the fix was designed and the first attempt to demonstrate it failed — six rapid
+refusals finish before the watchdog ticks — so the witness settled it, not the reasoning.
+
+Whether a refused command SHOULD prove liveness is a separate question and is **owner-reserved** (C46).
+The dead-man's documented remit is "silence, not malice"; a malfunctioning controller is not silent but
+is malfunctioning. Both readings are defensible, which is why an implementation detail must not settle
+it.
+
+(b) **C40 — a term stated twice was resolved silently, and the two parsers resolved it oppositely.**
+`authority.rs` already ruled this shape one level up: `Scopes::device` is keyed by device because "two
+envelopes for the same device would be an ambiguity the enforcement path would have to resolve, and
+resolving it silently is how a widening gets in." Applied per device, never per term. The broker kept the
+LAST occurrence (`BTreeMap::insert`), the runtime the FIRST (`Vec::push` + first-match), so
+`angle_deg=-30..95,angle_deg=-1..1` meant `[-1,1]` to the recorded authority and `[-30,95]` to the code
+that moves the machine. The dangerous edit is the safe-looking one: **appending a tighter bound recorded
+a tightening it did not apply.**
+
+RULED: both parsers refuse a repeated term, dimensions and fixed terms alike. Nothing legitimate states a
+bound twice. Multiple `--grant actuator=` flags for one device were checked separately and are correctly
+MET (the tighter envelope wins in either order) — the defect was inside one envelope string only.
+
+(c) **C41 — non-finite bounds.** The broker has refused them since D12e and documents the refusal as what
+makes `DeviceScope`'s `impl Eq` sound; neither runtime parser checked, and the machine is moved from the
+runtime side. `angle_deg=-inf..inf` commanded 12° successfully. `kernel_ms=0..inf` is the sharper case:
+that term is mandatory with the stated reason "a kernel with no time budget can occupy the device
+forever", and `0..inf` satisfies the requirement while being the unbounded budget it exists to prevent.
+RULED: refused in both runtime parsers, same wording as the broker. (`NaN..NaN` was already harmless —
+every comparison against NaN is false — but by accident, not by design.)
+
+(d) **C42 — the fail-state vocabulary.** `fail` was free text on the broker side and a closed enum on the
+runtime side, so `fail=hodl`, `fail=`, `fail=safe_park` and `fail=Hold` all produced a grant no program
+could mint — fail-closed, but discovered when a robot tried to move rather than at delegation. RULED: one
+canonical list, `device_scope::FAIL_STATES`, in the LOWER crate (`delulu-runtime` depends on
+`delulu-broker`, not the reverse), so there is one list rather than two that can drift.
+
+(e) **C43 — the law that could see none of (b), (c) or (d).** The existing pin read "every envelope the
+runtime can parse must render to a string the broker parses back to the SAME authority": one-directional,
+over four hand-picked good specs. This is D42(a)'s defect in another subsystem — **a law that proves less
+than it claims** — and the same shape, checking agreement only where both sides say yes. RULED: a
+bidirectional law over a corpus including the hostile shapes (`runtime_ok == broker_ok`, the corpus's own
+expected verdict, and full field agreement where both accept). Each of C40/C41/C42 was observed failing
+it in the correct direction.
+
+(f) **C44 — the hint scan's catch-all, gated.** `module_requests_native` drives both the authority
+report's `native-emission` line and DL1906, and ends in `_ => false`. Correct today — those three AST
+structs are the only ones with an `attrs` field — but a catch-all cannot fail to compile, and
+`@ignore`/`@slow` on tests are the obvious future additions. The **fourth** instance of the recurring
+pattern (D37/D39/D40): a hand-maintained list of authority-bearing things falling behind
+the type that defines them. RULED: a gate reads `ast.rs` for structs declaring `pub attrs:` and fails in
+both directions, instructing the maintainer to DECIDE rather than append.
+
+(g) **C45 — an approval that did not carry its own scope.** `deploy plan` compares the environment
+profile's EFFECT ceiling and nothing else; `deploy.rs`'s header always said so, but the verdict said
+"within `<env>`'s authority ceiling" and `--json` said `"approved": true` with no scope. Nine dimensions
+exist; this compares one. Same reasoning as D41's mermaid fix: the artifact travels away from the docs
+that qualify it. RULED: `EFFECT ceiling` in the verdict, plus `compared`/`not_compared` on BOTH surfaces
+— an agent reading `--json` gets what a human is told, per the no-discrimination rule. The verdict stays
+the last human line, because `deploy_plan_adversarial.rs` contracts that and CI logs rely on it.
+
+**Verified-and-held in Stage 10 (do not re-derive):** DL1909 cannot be bypassed by an empty,
+unparseable, mis-sectioned (`[authorities]`), mis-keyed (`effect =`) or wrong-typed (`effects = "Clock"`)
+profile — every one yields a ceiling of no effects at all and refuses every service; an unreadable
+profile is a plain exit-2 error, never an approval. The `@jit` leash holds: DL1906 warns, the hint is
+ignored, `native-emission` appears in both the human report and `--json`, and a lease can never confer it
+(`exec_native: false` is hard-coded on the lease path). Certificate authority parsing refuses an unknown
+authority key, effect name or scope dimension by refusing the certificate WHOLE, with the reason stated
+in the code: "an authority dimension a verifier cannot see is one it cannot enforce". A long forged chain
+is not a DoS — verification is sequential and dies at the first unanchored or unsigned hop. Single
+adoption is keyed per CERTIFICATE, so a subordinate broker may adopt two roots and each is separately
+bounded, revocable and audited; whether it SHOULD is federation policy, not a defect.
 
 ## 5. Diagnostics budget
 

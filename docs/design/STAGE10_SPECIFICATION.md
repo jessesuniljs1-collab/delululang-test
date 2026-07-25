@@ -206,6 +206,39 @@ adapter's mandated fail-state** engages (declared per device at grant time: `hol
 everything else, now with a measured latency budget: revoke-to-fail-state ≤ heartbeat_ms +
 adapter latency, published per adapter.
 
+**What beats a lease, and what merely costs it time (normative; ruling D43a).** Only an operation the
+broker *accepted* beats a lease. A refused command does not beat one — but it is still an
+interaction, and under the stepped clock (`--sim-step`, ruling D20) it advances simulated time exactly
+as an accepted one does. Without that, a program whose every command was refused froze simulated time
+and held its device indefinitely, while the same program on the wall clock lost it: the two clocks
+must agree about when a machine stops moving, or a simulation cannot rehearse the case that matters.
+When the sweep triggered by a refused attempt is what kills the lease, the holder is told it lost the
+device — that fact outranks the setpoint complaint that would otherwise have been reported.
+
+The dead-man defends against **silence, not malice**, and this section does not claim otherwise: a
+controller that keeps interacting keeps its lease however wrong its commands are, and operator
+revocation (§5.2's e-stop) is the answer to a program that is alive and misbehaving.
+
+### 5.2.1 The device grant grammar (normative; ruling D43b–d)
+
+`DEVICE:dim=lo..hi[,dim=lo..hi…][,rate_hz=N],heartbeat_ms=N,ttl_ms=N,fail=STATE`
+
+Two independent parsers read this one grammar — the broker's, which builds the authority that is
+recorded, delegated, attenuated and audited, and the runtime's, which builds the capability value
+enforced against each command. **They must accept and refuse exactly the same strings**, and that is a
+mechanically enforced law, not an aspiration: an envelope legal to one and not the other is either a
+grant no program can use or a bound no authority recorded. Three rules carry that:
+
+1. **Every bound is a finite real interval.** `inf`, `-inf`, `infinity` and `NaN` all parse as `f64`
+   in the host language and are all refused. An infinite bound admits every command while looking like
+   a bound, and a NaN bound makes every comparison in the lattice meaningless.
+2. **A term stated twice is refused, never resolved.** Not the first occurrence, not the last: an
+   ambiguity about a physical bound has no safe resolution, because whichever is chosen, a reader of
+   the other is wrong. This is the rule §3.1 already applies to two envelopes for one device, applied
+   to two statements of one term.
+3. **`fail` names one of exactly `hold`, `coast`, `safe-park`.** There is no default and no
+   near-match: what a machine does when authority ends is not something a parser may guess.
+
 ### 5.3 The honest boundary (normative, verbatim in docs)
 
 DeluluLang commands the **policy/command layer (1–100 Hz)**. Servo loops, torque control,

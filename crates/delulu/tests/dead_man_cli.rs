@@ -132,6 +132,161 @@ fn an_unknown_fail_state_is_refused_rather_than_interpreted() {
     );
 }
 
+// ----- the stepped clock owes the dead-man the same time the wall clock does (C39) --------------
+
+/// A program whose every command is out of envelope, so nothing it does ever reaches the broker.
+/// Six attempts, so a lease with any finite heartbeat is well past due by the end.
+fn all_refused_program() -> String {
+    let mut s = String::from(
+        "module m\n\n\
+         type Elbow { angle_deg: Float }\n\n\
+         fn shot(a: Cap[Actuator], c: Cap[Console], label: Str) -> Unit ! {Write, Actuate} {\n\
+         \x20   let r = a.command(Elbow { angle_deg: 999.0 })\n\
+         \x20   match r {\n\
+         \x20       Ok(u) => c.println(label + \": COMMANDED\"),\n\
+         \x20       Err(e) => match e {\n\
+         \x20           Envelope(reason) => c.println(label + \": REFUSED\"),\n\
+         \x20           LeaseRevoked(reason) => c.println(label + \": REVOKED\"),\n\
+         \x20           NoDevice => c.println(label + \": NODEVICE\")\n\
+         \x20       }\n\
+         \x20   }\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Actuate} {\n\
+         \x20   let c = root.console()\n\
+         \x20   let a = root.actuator(\"arm0/elbow\")\n",
+    );
+    for i in 1..=6 {
+        s.push_str(&format!("\x20   shot(a, c, \"{i}\")\n"));
+    }
+    s.push_str("}\n");
+    s
+}
+
+/// **The stepped simulator must lose a device exactly where the wall clock loses it.**
+///
+/// The capability-side envelope check refuses a bad command in the interpreter, before the broker is
+/// consulted — and the simulated clock advances only inside a broker interaction. So a program whose
+/// every command was refused used to freeze simulated time and hold its device for unbounded
+/// simulated duration, while the identical program and grant on the wall clock lost it to the
+/// watchdog. A refused command does not BEAT the lease (it never did); it now costs the same
+/// simulated time a real controller would have spent, which is what the wall clock provides for free.
+///
+/// Why this is worth a permanent test rather than a note: a simulation is what `--signoff` records
+/// approve for hardware (DL1905). If the simulator cannot exhibit a revocation that hardware would
+/// produce, the artifact that authorizes hardware is blind to exactly the malfunction — a controller
+/// whose every setpoint is out of range — that a dead-man exists to take a machine away from.
+#[test]
+fn a_controller_whose_every_command_is_refused_still_loses_its_device_in_simulation() {
+    let f = write_prog("all-refused-stepped", "arm.delulu", &all_refused_program());
+    // heartbeat 1 ms, and each interaction costs 1000 simulated ms — 1000x over, six times.
+    let o = delulu(&[
+        "run",
+        &f.to_string_lossy(),
+        "--grant",
+        "console",
+        "--grant",
+        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=1,ttl_ms=100000,fail=safe-park",
+        "--broker-profile",
+        "sim",
+        "--sim-step",
+        "1000",
+    ]);
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains("REVOKED"),
+        "six refused commands at 1000x the heartbeat must lose the lease under the stepped clock \
+         too — a simulator that cannot run out of time cannot rehearse a dead-man: {out}"
+    );
+    // And the fact is reported as losing the device, never as one more bad setpoint.
+    assert!(
+        !out.lines().last().is_some_and(|l| l.ends_with("REFUSED")),
+        "the last word must not be an envelope refusal once the lease is gone: {out}"
+    );
+}
+
+/// **A program that has LOST its device must not be told its setpoint was wrong.** On the wall clock,
+/// with the lease already revoked by the watchdog, an out-of-envelope command used to report
+/// `Envelope` — because the interpreter's own envelope check returned before the broker (and therefore
+/// the lease) was ever consulted. The program was told to clamp and retry a setpoint when the correct
+/// reaction was to stop.
+///
+/// This is the same ordering `DeviceBroker::command` documents for accepted commands — "a revoked lease
+/// must not be able to hide behind a well-formed command" — extended to the malformed ones. It is not
+/// a simulator concern: it is what a real controller is told in a real deployment, and it is the
+/// difference between the two `ActuateErr` variants that Stage 10 deliberately kept separate.
+#[test]
+fn losing_the_device_outranks_a_bad_setpoint_even_on_the_wall_clock() {
+    let prog = "module m\n\n\
+         type Elbow { angle_deg: Float }\n\n\
+         fn fib(n: Int) -> Int {\n\
+         \x20   if n < 2 { n } else { fib(n - 1) + fib(n - 2) }\n\
+         }\n\n\
+         fn say(r: Result[Unit, ActuateErr]) -> Str {\n\
+         \x20   match r {\n\
+         \x20       Ok(u) => \"COMMANDED\",\n\
+         \x20       Err(e) => match e {\n\
+         \x20           Envelope(reason) => \"REFUSED\",\n\
+         \x20           LeaseRevoked(reason) => \"REVOKED\",\n\
+         \x20           NoDevice => \"NODEVICE\"\n\
+         \x20       }\n\
+         \x20   }\n\
+         }\n\n\
+         fn main(root: Root) ! {Write, Actuate} {\n\
+         \x20   let c = root.console()\n\
+         \x20   let a = root.actuator(\"arm0/elbow\")\n\
+         \x20   c.println(\"first: \" + say(a.command(Elbow { angle_deg: 999.0 })))\n\
+         \x20   c.println(\"burned \" + str(fib(25)))\n\
+         \x20   c.println(\"after: \" + say(a.command(Elbow { angle_deg: 999.0 })))\n\
+         }\n";
+    let f = write_prog("lost-not-refused", "arm.delulu", prog);
+    let o = delulu(&[
+        "run",
+        &f.to_string_lossy(),
+        "--grant",
+        "console",
+        "--grant",
+        // Wall clock, deliberately: no `--sim-step`. The burn between the two commands outlasts the
+        // heartbeat, so the watchdog revokes on its own tick, exactly as in production.
+        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=50,ttl_ms=100000,fail=safe-park",
+        "--broker-profile",
+        "sim",
+    ]);
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("first: REFUSED"), "the first command is a plain envelope refusal: {out}");
+    assert!(
+        out.contains("after: REVOKED"),
+        "after the watchdog revoked the lease, a bad command must report losing the DEVICE, not the \
+         setpoint — the program's correct reaction is to stop, not to clamp and retry: {out}"
+    );
+}
+
+/// The control that makes the test above mean something: the SAME all-refused program, same stepped
+/// clock, with a heartbeat long enough to cover the run — and the device survives every refusal.
+/// Without this, "the lease was revoked" could just as well be "refusals now kill leases".
+#[test]
+fn refused_commands_do_not_by_themselves_cost_a_program_its_device() {
+    let f = write_prog("all-refused-healthy", "arm.delulu", &all_refused_program());
+    let o = delulu(&[
+        "run",
+        &f.to_string_lossy(),
+        "--grant",
+        "console",
+        "--grant",
+        "actuator=arm0/elbow:angle_deg=-30..95,heartbeat_ms=60000,ttl_ms=100000,fail=safe-park",
+        "--broker-profile",
+        "sim",
+        "--sim-step",
+        "10",
+    ]);
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        !out.contains("REVOKED"),
+        "a heartbeat that covers the run keeps the device even though every command is refused — \
+         the dead-man defends against silence, not against being wrong: {out}"
+    );
+    assert_eq!(out.matches("REFUSED").count(), 6, "all six refusals are still refusals: {out}");
+}
+
 // ----- law 2 and 3: the lease dies on its own, and losing it is its own error ------------------
 
 /// The phase's headline. Same program, same command, twice: the first is honored, then the

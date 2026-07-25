@@ -25,6 +25,37 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **A device envelope can no longer bound nothing while looking like a bound.** Both runtime envelope
+  parsers accepted non-finite bounds, so `angle_deg=-inf..inf` admitted every command and
+  `kernel_ms=0..inf` satisfied a *mandatory* term whose stated purpose is preventing "a kernel with no
+  time budget [that] can occupy the device forever". The broker had refused non-finite bounds since
+  D12e and documents that refusal as load-bearing; the machine is moved from the runtime side. (C41,
+  ruling D43c)
+- **A term stated twice in a device grant is refused, not resolved — and the two parsers no longer
+  disagree about which one wins.** `delulu-broker` kept the last occurrence and the runtime kept the
+  first, so `angle_deg=-30..95,angle_deg=-1..1` meant `[-1, 1]` to the recorded authority and
+  `[-30, 95]` to the code that moves the machine: **appending a tighter bound recorded a tightening it
+  did not apply.** The two parsers for this grammar are now pinned by a bidirectional law over a corpus
+  that includes the hostile shapes — the previous law was one-directional over four well-formed specs
+  and could see none of this. (C40/C43, ruling D43b/D43e)
+- **A simulation can now run out of time.** Under the stepped clock (`--sim-step`), a program whose
+  every command was refused froze simulated time and held its device indefinitely, because the
+  interpreter refuses an out-of-envelope command before the broker — the only thing that advances that
+  clock — is reached. The identical program and grant on the wall clock lost the device to the
+  watchdog. Since **DL1905 refuses hardware without an approved simulation of those exact bytes**, the
+  one environment that authorizes hardware could not rehearse a revocation hardware would produce, for
+  exactly the fault class a dead-man exists to answer. A refused attempt now costs the simulated time
+  the wall clock charges for free. **The dead-man itself is unchanged**: the same code decides when a
+  lease dies, the wall-clock watchdog is untouched, and a refused command still does not *beat* a
+  lease. (C39, ruling D43a)
+- **A device grant's `fail=` must name one of `hold`, `coast`, `safe-park`.** The broker accepted any
+  string, including empty, while the runtime accepted three — so `fail=hodl` produced a valid grant that
+  no program could ever mint, and an operator met the typo when a robot tried to move rather than at
+  delegation. One canonical list now lives in the lower crate. (C42, ruling D43d)
+
+  **Compatibility:** device grant strings with a non-finite bound, a repeated term, or an unrecognized
+  `fail=` state previously parsed on at least one side and now error on both. Nothing in-tree was
+  affected.
 - **Trojan Source is refused.** Raw Unicode bidirectional control characters in source are now a hard
   error, **DL0107** — the class of attack (CVE-2021-42574) where rendered text and compiled text
   disagree. The scan runs over raw bytes ahead of tokenizing, so the `\u{202e}` *escape* remains legal
@@ -107,6 +138,13 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
+- **An approved `deploy plan` now states which authority dimensions it compared.** The verdict said
+  `approved — N service(s) within <env>'s authority ceiling` and `--json` said `"approved": true`, while
+  the command compares the **effect** ceiling and nothing else — one authority dimension of nine, a
+  scope recorded honestly in the source since the command shipped but absent from the verdict a reader
+  acts on. Now `EFFECT ceiling`, with `compared` / `not_compared` on both the human and `--json`
+  surfaces so an agent is told what a human is told. The verdict remains the last human line. (C45,
+  ruling D43g)
 - **Both engines now report the same fault.** Divide-by-zero was `DL0902` on the interpreter and a
   generic `DL0904` on the WASM backend; overflow likewise; and a deep recursion printed **16,326
   lines** of guest backtrace instead of one `DL0905`. The differential fuzz harness had been blind to

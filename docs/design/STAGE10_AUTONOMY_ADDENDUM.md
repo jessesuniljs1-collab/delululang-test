@@ -32,6 +32,11 @@ per domain. Four mechanisms, all specified in the Stage-10 spec, generalize ever
    still-running* program keeps heartbeating — what bounds it is the independently enforced
    envelope and operator revocation, not the dead-man. The dead-man defends against silence, not
    malice, and no document in this project may conflate the two.)
+   Precisely, since the distinction is safety-critical (ruling D43a): only a command the broker
+   **accepted** beats a lease. A program whose commands are all refused by the envelope is not
+   silent, but it is not beating either — so it loses the device on schedule, under the stepped
+   simulation clock exactly as under the wall clock. "Still-running" in the parenthetical above
+   means *still doing work the envelope permits*, not merely still executing instructions.
 3. **Declared fail-states** — what the device does when authority is lost is declared at grant
    time, per device, and owned by the layer below DeluluLang.
 4. **The sim-to-real hash gate** (§5.4, invariant 48; DL1905) — what was simulated is what

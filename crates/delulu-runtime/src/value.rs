@@ -230,6 +230,16 @@ impl ComputeEnvelope {
             let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad `{k}` range `{v}` (use lo..hi)"))?;
             let lo: f64 = lo.trim().parse().map_err(|_| format!("bad `{k}` bound `{lo}`"))?;
             let hi: f64 = hi.trim().parse().map_err(|_| format!("bad `{k}` bound `{hi}`"))?;
+            // Same refusal, same reason as `ActuatorEnvelope::parse` (C41), and here the term's own
+            // mandatory-ness made the gap sharper: `kernel_ms` is required because "a kernel with no
+            // time budget can occupy the device forever", and `kernel_ms=0..inf` satisfied the
+            // requirement while being exactly the unbounded budget the requirement exists to prevent.
+            if !lo.is_finite() || !hi.is_finite() {
+                return Err(format!(
+                    "non-finite bound in `{k}={v}` — an envelope must be a real interval, and an \
+                     infinite one bounds nothing while looking like a bound"
+                ));
+            }
             if lo > hi {
                 return Err(format!("inverted range `{k}={lo}..{hi}`"));
             }
@@ -373,6 +383,13 @@ impl ActuatorEnvelope {
         let mut heartbeat_ms = None;
         let mut ttl_ms = None;
         let mut fail_state = None;
+        // Every term seen so far. A repeated term is refused rather than resolved — the broker's
+        // `device_scope::parse` states the full reasoning, and the two must agree because a grant and
+        // the capability value minted from it are the same envelope read twice (C40). This side kept
+        // the FIRST occurrence (`dims` is a `Vec` and `envelope_check` stops at the first match) while
+        // the broker kept the LAST, so appending a tighter bound tightened the record and not the
+        // machine.
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for part in rest.split(',') {
             let part = part.trim();
             if part.is_empty() {
@@ -380,6 +397,14 @@ impl ActuatorEnvelope {
             }
             let (k, v) = part.split_once('=').ok_or_else(|| format!("bad envelope part `{part}`"))?;
             let (k, v) = (k.trim(), v.trim());
+            if seen.contains(k) {
+                return Err(format!(
+                    "`{k}` appears twice in this envelope — a term stated twice is an ambiguity, and \
+                     an ambiguity about a physical bound is refused rather than resolved (state \
+                     `{k}` once)"
+                ));
+            }
+            seen.insert(k.to_string());
             match k {
                 "rate_hz" => {
                     rate_hz = Some(v.parse::<u32>().map_err(|_| format!("bad rate_hz `{v}`"))?);
@@ -412,6 +437,18 @@ impl ActuatorEnvelope {
             let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad range `{v}` (use lo..hi)"))?;
             let lo: f64 = lo.trim().parse().map_err(|_| format!("bad bound `{lo}`"))?;
             let hi: f64 = hi.trim().parse().map_err(|_| format!("bad bound `{hi}`"))?;
+            // `"inf".parse::<f64>()` and `"NaN".parse::<f64>()` both succeed, so this branch is
+            // reachable from any grant string. The broker has refused non-finite bounds since D12e
+            // and documents the refusal as load-bearing; this side did not, which made
+            // `angle_deg=-inf..inf` an envelope that passed every mandatory-term check while bounding
+            // nothing (C41). An envelope that bounds nothing is not an envelope, and the machine is
+            // moved from THIS side of the grammar.
+            if !lo.is_finite() || !hi.is_finite() {
+                return Err(format!(
+                    "non-finite bound in `{k}={v}` — an envelope must be a real interval, and an \
+                     infinite one bounds nothing while looking like a bound"
+                ));
+            }
             if lo > hi {
                 return Err(format!("inverted range `{k}={lo}..{hi}`"));
             }

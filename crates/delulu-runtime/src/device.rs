@@ -364,11 +364,7 @@ impl DeviceBroker {
             return Err(CommandRefusal::Revoked(format!("no lease for `{device}`")));
         };
         if let Some(r) = lease.revoked {
-            return Err(CommandRefusal::Revoked(format!(
-                "the lease on `{device}` was revoked ({}); the `{}` fail-state is engaged",
-                r.cause.name(),
-                lease.env.fail_state.name()
-            )));
+            return Err(CommandRefusal::Revoked(revoked_reason(device, r, lease)));
         }
         let now = self.inner.now_us();
         // `rate_hz` becomes real here (build-order D10f closes its own gap): a command arriving
@@ -429,6 +425,43 @@ impl DeviceBroker {
         lease.last_command_us = Some(now);
         lease.last_beat_us = now;
         Ok(())
+    }
+
+    /// Record that the holder ATTEMPTED a command that never reached this broker, and report whether
+    /// the lease died as a result. `Some(reason)` means the lease is gone; `None` means it is live.
+    ///
+    /// # Why a refused command still has to be an interaction (C39)
+    ///
+    /// The interpreter checks a command against the capability value's own envelope before this
+    /// broker is consulted, and returns early when it refuses (`interp.rs`, 10e's law: the command
+    /// dies, never the process). That early return cost something under BOTH clocks.
+    ///
+    /// Under [`ClockMode::Stepped`] it cost the dead-man everything: the simulated clock advances only
+    /// inside a device interaction, so a program whose every command was refused **froze simulated
+    /// time** and held its device forever, while the same program and grant on the wall clock lost it.
+    ///
+    /// Under [`ClockMode::Wall`] the watchdog still revoked on its own tick — but the program was told
+    /// the WRONG THING about it. An out-of-envelope command sent after the lease was already dead
+    /// reported `Envelope`, so a controller that had lost its machine was told to clamp its setpoint
+    /// and retry. That defeats the reason 10f split the two variants apart (D11b). Calling this before
+    /// reporting an envelope refusal fixes both, because the lease question is answered first either
+    /// way.
+    ///
+    /// That divergence pointed the wrong way. The stepped clock exists to make a simulation replay
+    /// deterministically, and a simulation is what `--signoff` records approve for hardware
+    /// (DL1905) — so the one environment that authorizes hardware could not exhibit a revocation
+    /// that real hardware would produce. A controller with a units bug, whose every setpoint is out
+    /// of envelope, is precisely the malfunction a dead-man exists to take a machine away from.
+    ///
+    /// Note what this does NOT change: `due()` still decides when a lease dies, the wall-clock
+    /// watchdog is untouched, and a refused command still does not BEAT the lease. Only an
+    /// interaction that reached this broker ever beat it, and that remains true — this makes a
+    /// refused attempt advance the clock, which is what the wall clock does for free.
+    pub fn note_refused_attempt(&self, device: &str) -> Option<String> {
+        step_and_sweep(&self.inner);
+        let leases = self.inner.leases.lock().unwrap();
+        let lease = leases.get(device)?;
+        lease.revoked.map(|r| revoked_reason(device, r, lease))
     }
 
     /// Read a sensor. `None` means "no device" — invariant 50's whole point: an absent measurement
@@ -595,6 +628,17 @@ fn spawn_watchdog(
             }
         }
     }))
+}
+
+/// The one wording for "you no longer hold this machine", shared by every path that has to say it —
+/// a command that arrived after revocation, and an attempt that was refused before it got here. Two
+/// spellings of the same fact would read to an operator like two different faults.
+fn revoked_reason(device: &str, r: Revocation, lease: &LeaseState) -> String {
+    format!(
+        "the lease on `{device}` was revoked ({}); the `{}` fail-state is engaged",
+        r.cause.name(),
+        lease.env.fail_state.name()
+    )
 }
 
 /// Is this lease past a deadline at `now_us`? Returns the cause and how far past, in microseconds.

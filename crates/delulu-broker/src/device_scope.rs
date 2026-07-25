@@ -37,8 +37,29 @@
 //! `"NaN".parse::<f64>()` succeeds in Rust. A NaN bound would make every comparison in this module
 //! meaningless and would break the reflexivity that [`DeviceScope`]'s `Eq` promises. [`parse`]
 //! therefore refuses any non-finite bound. Downstream that refusal is what makes `impl Eq` sound.
+//!
+//! # A term stated twice is refused, not resolved
+//!
+//! Two parsers read this one grammar (see [`parse`]'s contract) and they used to resolve a repeated
+//! term in OPPOSITE directions, which made `angle_deg=-30..95,angle_deg=-1..1` mean `[-1, 1]` to the
+//! authority and `[-30, 95]` to the code that moves the machine (`HARDENING_CAMPAIGN.md` C40). Both
+//! sides now refuse a repeat. The rule is the one [`crate::authority::Scopes`] already applied to
+//! whole devices, extended to the terms inside one envelope: an ambiguity about a physical bound is
+//! never resolved silently, because whichever way it is resolved, half the readers are wrong.
 
 use std::collections::{BTreeMap, BTreeSet};
+
+/// The fail-states a device grant may name, and the ONLY ones (spec §5.2).
+///
+/// This constant lives here — in the lower crate — rather than in the runtime that owns the
+/// `FailState` enum, because `delulu-runtime` depends on `delulu-broker` and not the reverse. One
+/// list referenced by both sides, instead of two lists that can drift. The campaign has repeatedly
+/// found the drifting-list shape in this tree (`HARDENING_CAMPAIGN.md` C31/C34/C35/C44); where a
+/// dependency edge exists, sharing one constant removes the possibility rather than gating it.
+///
+/// `fail` used to be a free-form `String` here while the runtime accepted exactly these three, so
+/// `fail=hodl` and `fail=` both produced a grant no program could ever mint (C42).
+pub const FAIL_STATES: &[&str] = &["hold", "coast", "safe-park"];
 
 /// One device's granted envelope: the authority-side twin of the runtime's `ActuatorEnvelope`.
 ///
@@ -102,6 +123,8 @@ pub fn parse(spec: &str) -> Result<DeviceScope, String> {
     let mut heartbeat_ms = None;
     let mut ttl_ms = None;
     let mut fail = None;
+    // Every term seen so far, dimensions and fixed terms alike — see the duplicate refusal below.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     for part in rest.split(',') {
         let part = part.trim();
         if part.is_empty() {
@@ -109,6 +132,22 @@ pub fn parse(spec: &str) -> Result<DeviceScope, String> {
         }
         let (k, v) = part.split_once('=').ok_or_else(|| format!("bad envelope part `{part}`"))?;
         let (k, v) = (k.trim(), v.trim());
+        // A term stated twice is an AMBIGUITY, and this module already refuses to resolve one of
+        // those silently: `Scopes::device` is a map keyed by device precisely because "two envelopes
+        // for the same device would be an ambiguity the enforcement path would have to resolve, and
+        // resolving it silently is how a widening gets in" (`authority.rs`). That reasoning was
+        // applied per DEVICE and never per TERM, and the cost was real (C40): the two parsers for
+        // this one grammar resolved a duplicate dimension in OPPOSITE directions — this side kept
+        // the last (`BTreeMap::insert` overwrites), the runtime kept the first (`Vec::push` and a
+        // first-match check) — so appending a tighter bound to an envelope recorded the tightening
+        // in the authority and did not apply it at the point that moves the machine.
+        if seen.contains(k) {
+            return Err(format!(
+                "`{k}` appears twice in this envelope — a term stated twice is an ambiguity, and an \
+                 ambiguity about a physical bound is refused rather than resolved (state `{k}` once)"
+            ));
+        }
+        seen.insert(k.to_string());
         match k {
             "rate_hz" => rate_hz = Some(v.parse::<u32>().map_err(|_| format!("bad rate_hz `{v}`"))?),
             "heartbeat_ms" => {
@@ -119,7 +158,20 @@ pub fn parse(spec: &str) -> Result<DeviceScope, String> {
                 heartbeat_ms = Some(n);
             }
             "ttl_ms" => ttl_ms = Some(v.parse::<u64>().map_err(|_| format!("bad ttl_ms `{v}`"))?),
-            "fail" => fail = Some(v.to_string()),
+            // Validated against [`FAIL_STATES`] rather than stored as free text. What a machine does
+            // when authority ends is a physical decision, and `fail=hodl` is not one of the three
+            // available answers — accepting it here produced a grant the runtime would refuse to
+            // mint, so the operator learned about the typo in the field instead of at delegation.
+            "fail" => {
+                if !FAIL_STATES.contains(&v) {
+                    return Err(format!(
+                        "unknown fail-state `{v}` (use {}) — what this machine does when authority \
+                         ends is not something this parser may guess",
+                        FAIL_STATES.join(", ")
+                    ));
+                }
+                fail = Some(v.to_string());
+            }
             _ => {
                 let (lo, hi) = v.split_once("..").ok_or_else(|| format!("bad range `{v}` for `{k}`"))?;
                 let lo: f64 = lo.trim().parse().map_err(|_| format!("bad low bound `{lo}` for `{k}`"))?;
@@ -389,6 +441,42 @@ mod tests {
         assert!(parse("d0:x=NaN..1,heartbeat_ms=1,ttl_ms=1,fail=hold").is_err());
         assert!(parse("d0:x=0..inf,heartbeat_ms=1,ttl_ms=1,fail=hold").is_err());
         assert!(parse("d0:x=5..1,heartbeat_ms=1,ttl_ms=1,fail=hold").is_err(), "lo > hi bounds nothing");
+    }
+
+    /// C40: a term stated twice is refused, not resolved. The dimension case is the one that cost
+    /// something — the two parsers for this grammar resolved it in opposite directions, so appending
+    /// a tighter bound recorded the tightening here and left the enforced envelope wide.
+    #[test]
+    fn a_term_stated_twice_is_refused_rather_than_resolved() {
+        for spec in [
+            "d0:x=-30..95,x=-1..1,heartbeat_ms=1,ttl_ms=1,fail=hold",
+            "d0:x=-1..1,x=-30..95,heartbeat_ms=1,ttl_ms=1,fail=hold",
+            "d0:x=0..1,heartbeat_ms=1,heartbeat_ms=60000,ttl_ms=60000,fail=hold",
+            "d0:x=0..1,heartbeat_ms=1,ttl_ms=1,ttl_ms=60000,fail=hold",
+            "d0:x=0..1,rate_hz=1,rate_hz=1000,heartbeat_ms=1,ttl_ms=1,fail=hold",
+            "d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hold,fail=coast",
+        ] {
+            let e = parse(spec).expect_err(&format!("`{spec}` states a term twice"));
+            assert!(e.contains("twice"), "the refusal says what is wrong: {e}");
+        }
+        // And a term stated once, in any order, is still fine — the rule is about repetition only.
+        assert!(parse("d0:y=0..1,x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hold").is_ok());
+    }
+
+    /// C42: `fail` is checked against [`FAIL_STATES`], not stored as free text. Accepting `fail=hodl`
+    /// here produced a grant the runtime would refuse to mint, so the operator met the typo in the
+    /// field rather than at delegation.
+    #[test]
+    fn only_the_three_canonical_fail_states_are_accepted() {
+        for name in FAIL_STATES {
+            let spec = format!("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail={name}");
+            assert_eq!(parse(&spec).unwrap().fail, *name, "`{name}` is canonical");
+        }
+        for bad in ["hodl", "", "safe_park", "Hold", "stop-i-guess"] {
+            let spec = format!("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail={bad}");
+            let e = parse(&spec).expect_err(&format!("`{bad}` is not a fail-state"));
+            assert!(e.contains("safe-park"), "the refusal names the legal vocabulary: {e}");
+        }
     }
 
     #[test]

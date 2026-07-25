@@ -1264,6 +1264,20 @@ impl Interp {
         };
         // The runtime half of the check (10e), against the capability's own scope.
         if let Err(reason) = envelope_check(env, args.first()) {
+            // A refused command is still an INTERACTION with the device, and the broker has to be
+            // told so even though nothing is being dispatched (C39). Under a stepped clock the
+            // simulated time a real controller would have burned here is burned here too, so a
+            // program whose every command is refused loses its device on the same schedule the wall
+            // clock would enforce — instead of freezing simulated time and holding the machine
+            // forever. If that sweep is what killed the lease, the lease is the more important fact:
+            // "you no longer hold this device" outranks "your setpoint was out of range", the same
+            // ordering `DeviceBroker::command` documents for the accepted path.
+            if let Some(broker) = &self.devices {
+                if let Some(revoked) = broker.note_refused_attempt(&env.device) {
+                    self.trace_actuate_refusal(&env.device, "command.revoked", &revoked, span);
+                    return Ok(Value::err(Value::variant("LeaseRevoked", vec![Value::str(revoked)])));
+                }
+            }
             self.trace_actuate_refusal(&env.device, "command.refused", &reason, span);
             return Ok(Value::err(Value::variant("Envelope", vec![Value::str(reason)])));
         }

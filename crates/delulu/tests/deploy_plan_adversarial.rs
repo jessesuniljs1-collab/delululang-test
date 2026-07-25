@@ -536,3 +536,45 @@ fn a_services_reported_effects_match_what_delulu_authority_reports_directly() {
          happen to agree on this one fixture's expectations"
     );
 }
+
+// ----- an approval carries its own scope (C45) ---------------------------------------------------
+
+/// **What `approved` means must travel with the approval.** `deploy plan` compares the EFFECT
+/// ceiling and nothing else — the module header has always said so — but the verdict itself said
+/// "within `<env>`'s authority ceiling", and `--json` said `"approved": true` with no scope at all.
+/// A deployment gate is read by people and agents deciding whether to launch; a verdict that omits
+/// what it did not check is read as covering everything. Nine authority dimensions exist and this
+/// compares one.
+///
+/// The rule is the one P9 drew for the mermaid renderer (C36): the artifact must describe its own
+/// scope, because it is read far away from the docs that qualify it.
+#[test]
+fn an_approved_plan_states_which_dimensions_it_compared_and_which_it_did_not() {
+    let root = scratch("approval-scope");
+    let svc = root.join("scoped");
+    write_service(&svc, "scoped", &["Write"]);
+    let env = write_env(&root, "env.toml", "[authority]\neffects = [\"Write\"]\n");
+
+    let human = plan(&[("scoped", svc.clone())], &env, false);
+    assert!(human.status.success(), "the fixture approves: {}", combined(&human));
+    let text = String::from_utf8_lossy(&human.stdout);
+    assert!(
+        text.contains("compared: effects") && text.contains("NOT compared"),
+        "the human verdict names its own scope: {text}"
+    );
+    assert!(
+        text.contains("capability scopes") && text.contains("foreign holes"),
+        "and names what it did NOT compare, specifically: {text}"
+    );
+
+    // The machine surface carries the SAME facts — Jesse's rule: no discrimination between surfaces,
+    // so an agent reading `--json` must not have to infer from prose what a human is told outright.
+    let machine = plan(&[("scoped", svc)], &env, true);
+    let v: Value = serde_json::from_slice(&machine.stdout).expect("deploy plan --json is valid JSON");
+    assert_eq!(v["approved"], serde_json::json!(true), "{v}");
+    assert_eq!(v["compared"], serde_json::json!(["effects"]), "the scope is machine-readable: {v}");
+    assert!(
+        v["not_compared"].as_array().is_some_and(|xs| xs.len() == 2),
+        "so is what was left out: {v}"
+    );
+}

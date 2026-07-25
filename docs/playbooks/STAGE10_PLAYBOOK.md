@@ -100,7 +100,11 @@ the runtime auto-heartbeats while the holding actor's turns are healthy; a misse
 revokes → the adapter's **mandated fail-state** engages (`hold`/`coast`/`safe-park`, declared per
 device at grant time). E-stop = `delulu grants revoke` on the actuator subtree (same mechanism as
 everything else), with a **published revoke-to-fail-state latency budget** (≤ heartbeat_ms + adapter
-latency).
+latency). Only a broker-**accepted** operation beats a lease; a refused command does not beat one but
+still costs the lease its time, under the stepped clock as much as the wall clock, so a simulation can
+rehearse a revocation that hardware would produce (ruling D43a). The grant grammar refuses three
+shapes that looked like bounds and were not: a non-finite bound, a term stated twice, and a `fail=`
+state outside `hold`/`coast`/`safe-park` (D43b–d, spec §5.2.1).
 **D3 — the honest boundary (verbatim in docs).** DeluluLang commands the **policy/command layer
 (1–100 Hz)**. Servo loops, torque control, electrical protection, and hard real-time run in
 firmware/RTOS *below the adapter* — DeluluLang sets *setpoints within envelopes*, does not close

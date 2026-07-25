@@ -751,7 +751,8 @@ fn usage() -> &'static str {
      \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu login     --registry URL --token VALUE        (store a scoped publish token; never echoed)\n\
-     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml   (check each service against the environment's authority ceiling; DL1909 when it exceeds)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
@@ -1973,6 +1974,11 @@ fn module_requests_native(module: &delulu_syntax::ast::Module) -> bool {
         || module.items.iter().any(|i| match i {
             Item::Fn(f) => jit(&f.attrs),
             Item::Actor(a) => jit(&a.attrs),
+            // Every other `Item` has no `attrs` field at all, so none of them can carry a hint. That
+            // is a fact about the AST, not a choice made here, and `jit_policy_cli.rs`'s
+            // `every_ast_item_that_can_carry_an_attribute_is_one_the_native_hint_scan_looks_at`
+            // reads `ast.rs` to keep it a fact — a `_ => false` that silently absorbs a new
+            // attribute-carrying item is exactly how a hint would run unreported (C44).
             _ => false,
         })
 }

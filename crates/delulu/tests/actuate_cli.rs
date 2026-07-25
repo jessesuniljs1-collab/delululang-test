@@ -326,6 +326,113 @@ fn device_grant_strings_round_trip_between_the_runtime_and_broker_parsers() {
     }
 }
 
+/// Every spec in this corpus, and whether a device grant may say it. Shared by the bidirectional
+/// agreement law below and by the per-shape refusals, so a shape can never be tested on one side of
+/// the grammar and forgotten on the other.
+///
+/// The hostile half exists because the round-trip law above could not see any of it: that law says
+/// "every envelope the RUNTIME can parse must render to a string the BROKER parses back the same",
+/// which is one-directional and quantified over four hand-picked good specs. Three real divergences
+/// lived underneath it (`HARDENING_CAMPAIGN.md` C40/C41/C42) — a law that proves less than it claims
+/// is the same defect P10 found in the conformance coverage gate, in a different subsystem.
+const ENVELOPE_CORPUS: &[(&str, bool, &str)] = &[
+    // ----- legal: the grammar's full span --------------------------------------------------------
+    ("arm0/elbow:angle_deg=-30..95,velocity_dps=0..40,heartbeat_ms=200,ttl_ms=60000,fail=hold", true, "several dims, negative bound"),
+    ("arm0/wrist:torque_nm=0..2.5,rate_hz=50,heartbeat_ms=100,ttl_ms=1000,fail=coast", true, "fractional bound, rate"),
+    ("sat0/wheels:slew_deg=-0.5..0.5,heartbeat_ms=1000,ttl_ms=600000,fail=safe-park", true, "safe-park"),
+    ("d0:x=0..0,heartbeat_ms=1,ttl_ms=1,fail=hold", true, "a single-point interval is a real interval"),
+    // ----- C41: a bound that is not a real number -------------------------------------------------
+    ("d0:x=0..inf,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C41 infinite upper bound"),
+    ("d0:x=-inf..inf,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C41 infinite both ways"),
+    ("d0:x=-infinity..infinity,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C41 spelled out"),
+    ("d0:x=NaN..1,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C41 NaN lower bound"),
+    ("d0:x=0..NaN,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C41 NaN upper bound"),
+    // ----- C40: a term stated twice ---------------------------------------------------------------
+    ("d0:x=-30..95,x=-1..1,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C40 dim twice, tighter second"),
+    ("d0:x=-1..1,x=-30..95,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C40 dim twice, wider second"),
+    ("d0:x=0..1,heartbeat_ms=1,heartbeat_ms=60000,ttl_ms=60000,fail=hold", false, "C40 heartbeat twice"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,ttl_ms=60000,fail=hold", false, "C40 ttl twice"),
+    ("d0:x=0..1,rate_hz=1,rate_hz=1000,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "C40 rate twice"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hold,fail=coast", false, "C40 fail twice"),
+    // ----- C42: a fail-state that is not one of the three -----------------------------------------
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hodl", false, "C42 typo"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=", false, "C42 empty"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=safe_park", false, "C42 underscore, not hyphen"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=Hold", false, "C42 wrong case"),
+    // ----- already refused by both before this pass; kept so the corpus is the whole contract -----
+    ("d0:x=0..1,ttl_ms=1,fail=hold", false, "no heartbeat"),
+    ("d0:x=0..1,heartbeat_ms=1,fail=hold", false, "no ttl"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1", false, "no fail-state"),
+    ("d0:heartbeat_ms=1,ttl_ms=1,fail=hold", false, "bounds nothing"),
+    ("d0:x=0..1,heartbeat_ms=0,ttl_ms=1,fail=hold", false, "zero heartbeat"),
+    ("d0:x=0..1,heartbeat_ms=10,ttl_ms=5,fail=hold", false, "ttl < heartbeat"),
+    ("d0:x=5..1,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "inverted"),
+    (":x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hold", false, "no device"),
+    ("d0:x=0..1,heartbeat_ms=1,ttl_ms=1,fail=hold,bogus", false, "a part with no `=`"),
+];
+
+/// **THE LAW, in the direction that matters.** The two parsers must accept and refuse the SAME
+/// strings — not merely agree on the ones they both accept.
+///
+/// A grant string is read twice: `delulu_broker::device_scope::parse` builds the authority that is
+/// recorded, delegated, attenuated and audited, and `ActuatorEnvelope::parse` builds the capability
+/// value the runtime enforces against a command. When the two disagree about what a string MEANS,
+/// the record and the machine part company; when they disagree about whether it is legal at all, an
+/// operator gets a grant no program can mint, or a program enforces a bound the authority never
+/// recorded. Neither is discoverable from one side, which is why this test lives in the `delulu`
+/// crate — the only place both parsers are visible at once.
+#[test]
+fn the_two_envelope_parsers_accept_and_refuse_exactly_the_same_strings() {
+    for (spec, legal, why) in ENVELOPE_CORPUS {
+        let rt = delulu_runtime::value::ActuatorEnvelope::parse(spec);
+        let br = delulu_broker::device_scope::parse(spec);
+        assert_eq!(
+            rt.is_ok(),
+            br.is_ok(),
+            "the parsers disagree about whether this is a legal envelope ({why}): `{spec}`\n  \
+             runtime: {}\n  broker:  {}",
+            rt.as_ref().map(|_| "accepted".to_string()).unwrap_or_else(|e| format!("refused — {e}")),
+            br.as_ref().map(|_| "accepted".to_string()).unwrap_or_else(|e| format!("refused — {e}")),
+        );
+        assert_eq!(
+            rt.is_ok(),
+            *legal,
+            "this corpus entry says `{spec}` should be {} ({why}), and both parsers say otherwise",
+            if *legal { "legal" } else { "refused" }
+        );
+        // And where both accept, every field they both carry must agree — the original law, kept.
+        if let (Ok(rt), Ok(br)) = (rt, br) {
+            assert_eq!(rt.device, br.device, "{spec}");
+            assert_eq!((rt.heartbeat_ms, rt.ttl_ms, rt.rate_hz), (br.heartbeat_ms, br.ttl_ms, br.rate_hz), "{spec}");
+            assert_eq!(rt.fail_state.name(), br.fail, "{spec}");
+            assert_eq!(rt.dims.len(), br.dims.len(), "dimension count: {spec}");
+            for (d, lo, hi) in &rt.dims {
+                assert_eq!(br.dims.get(d), Some(&(*lo, *hi)), "dimension `{d}`: {spec}");
+            }
+        }
+    }
+}
+
+/// The fail-state list is ONE list (`device_scope::FAIL_STATES`), and the runtime's `FailState` enum
+/// must round-trip exactly it — no more, no fewer. Rust has no reflection over enum variants, so
+/// this is the mechanical pin that stops a fourth state from being added to one side only.
+#[test]
+fn the_canonical_fail_state_list_is_exactly_what_the_runtime_implements() {
+    use delulu_runtime::FailState;
+    for name in delulu_broker::device_scope::FAIL_STATES {
+        let parsed = FailState::parse(name).unwrap_or_else(|| panic!("runtime cannot parse canonical fail-state `{name}`"));
+        assert_eq!(parsed.name(), *name, "`{name}` must round-trip through the runtime enum");
+    }
+    // The other direction: nothing outside the list parses. An exhaustive scan is impossible, so
+    // this covers the shapes a drifting implementation would actually produce.
+    for outside in ["", "hodl", "safe_park", "Hold", "park", "brake", "hold "] {
+        assert!(
+            FailState::parse(outside).is_none(),
+            "`{outside}` is not in FAIL_STATES but the runtime accepted it — the two lists have drifted"
+        );
+    }
+}
+
 /// The skip branch for `spec_to_authority`'s `filter_map`: an unparseable device grant string is
 /// DROPPED rather than failing the conversion. Dropping must be the *safe* direction — a device
 /// absent from the map is a device nobody granted — so this pins that a garbled envelope produces a

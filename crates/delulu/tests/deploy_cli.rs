@@ -140,9 +140,16 @@ fn a_plan_within_the_ceiling_is_approved() {
     );
     assert!(h.status.success(), "{}", stderr(&h));
     let text = stdout(&h);
+    // "EFFECT ceiling", not "authority ceiling": this command compares one authority dimension of
+    // nine, and the verdict now says which (C45). The wording is pinned exactly because it is the
+    // line a reader uses to decide whether a deployment is safe to launch.
     assert!(
-        text.contains(&format!("deploy plan: approved — 2 service(s) within {env_str}'s authority ceiling")),
+        text.contains(&format!("deploy plan: approved — 2 service(s) within {env_str}'s EFFECT ceiling")),
         "the exact approved summary line:\n{text}"
+    );
+    assert!(
+        text.contains("compared: effects; NOT compared:"),
+        "and the approval carries its own scope:\n{text}"
     );
 }
 

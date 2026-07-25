@@ -834,6 +834,27 @@ its actuators on schedule.
 > A lease that expires only when the program asks whether it has expired is not a dead-man switch.
 > It is a comment.
 
+Three more things the grant grammar will not let you write, each because it looked like a bound and
+was not:
+
+- **A bound must be a real interval.** `angle_deg=0..inf` is refused. Your host language happily
+  parses `inf` and `NaN` as floating-point numbers, and an infinite bound admits every command while
+  reading like a limit. The same rule refuses `kernel_ms=0..inf` on a compute grant — that term is
+  mandatory *because* a kernel with no time budget can occupy a device forever, and `0..inf` would
+  have satisfied the requirement while being exactly the thing it forbids.
+- **A term may not be stated twice.** `angle_deg=-30..95,angle_deg=-1..1` is refused rather than
+  resolved. This one is worth dwelling on, because the natural way to tighten an envelope is to append
+  the tighter bound — and there is no safe answer to which of two bounds wins. Whichever a parser
+  picks, someone reading the other one is wrong about what the machine will accept.
+- **`fail` names one of exactly three states.** `hold`, `coast`, `safe-park`. Not `safe_park`, not
+  `Hold`, not `hodl`. There is no near-match and no default: a typo here is a machine doing something
+  other than what you decided it should do when authority ends.
+
+A refused command, incidentally, does not count as a heartbeat — but it does count as *being alive*.
+Your program keeps its lease as long as it keeps interacting quickly enough, however wrong its
+setpoints are. The dead-man defends against **silence**, not against being wrong; revocation is the
+tool for a program that is alive and misbehaving.
+
 ### The e-stop is revocation
 
 An operator can stop a machine from another terminal:

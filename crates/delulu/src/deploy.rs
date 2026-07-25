@@ -22,6 +22,14 @@ use delulu_diag::{render_human, Diagnostic, SourceMap};
 use delulu_runtime::parse_manifest;
 use serde_json::{json, Value};
 
+/// The authority dimensions `deploy plan` actually compares against the environment profile, and the
+/// ones it does not. Named in the approval itself, not only in this module's header: a verdict that
+/// travels without its scope is read as covering everything, and this one covers one dimension of
+/// nine (`HARDENING_CAMPAIGN.md` C45).
+const COMPARED_DIMENSIONS: &[&str] = &["effects"];
+const UNCOMPARED_DIMENSIONS: &[&str] =
+    &["capability scopes (fs/net/secrets/declassify/device)", "foreign holes"];
+
 /// Dispatches `delulu deploy <subcommand>`. Only `plan` exists today.
 pub fn cmd_deploy(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>) -> i32 {
     let Some(sub) = rest.first().map(String::as_str) else {
@@ -116,13 +124,29 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
             json!({
                 "command": "deploy", "subcommand": "plan", "env": env_path, "approved": true,
                 "services": services_json,
+                // What the approval actually rests on. The module header has always recorded that
+                // this compares effects only; a caller reading `"approved": true` had no way to see
+                // it. An approval that does not carry its own scope is read as broader than it is —
+                // the C36 lesson (a mermaid graph away from its docs) applied to a security verdict.
+                "compared": COMPARED_DIMENSIONS, "not_compared": UNCOMPARED_DIMENSIONS,
             })
         );
     } else {
         for (name, effects) in &reports {
             println!("  {name}: {}", if effects.is_empty() { "pure".to_string() } else { format!("effects {effects:?}") });
         }
-        println!("deploy plan: approved — {} service(s) within {env_path}'s authority ceiling", reports.len());
+        // The scope goes ABOVE the verdict, deliberately: `deploy_plan_adversarial.rs` contracts that
+        // the last non-empty line is the verdict, which is what a human scanning a CI log and a
+        // script reading the tail both rely on. Qualifying a verdict must not displace it.
+        println!(
+            "  compared: {}; NOT compared: {} (spec §9.2 describes the full answer; see `delulu explain DL1909`)",
+            COMPARED_DIMENSIONS.join(", "),
+            UNCOMPARED_DIMENSIONS.join(", "),
+        );
+        println!(
+            "deploy plan: approved — {} service(s) within {env_path}'s EFFECT ceiling",
+            reports.len()
+        );
     }
     0
 }
