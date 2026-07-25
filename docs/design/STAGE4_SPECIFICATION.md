@@ -89,6 +89,22 @@ prelude types: `ForeignPtr` (opaque, R-5), `ForeignErr`, `PyErr` (sums in `std.f
   satisfy `M(τ)`: `M(Int) M(Float) M(Bool) M(Str) M(Unit) M(ForeignPtr)` and nothing else
   (DL1301, span on the offending type; the message names the rule and links E-DL1301). Function
   types are called out specially: DL1302 with the R-6a explanation.
+
+  **`M(τ)` matches by NAME, and type aliases are NOT expanded** (campaign C24, ruling D31). A foreign
+  signature must name a marshallable type directly: `type Meters = (Int)` is refused even though
+  `Meters` is an `Int` everywhere else in the language. This is deliberate and load-bearing rather
+  than a limitation to be relaxed later — the interpreter's `lower_foreign_sig` and the WASM host
+  share **one** lowering that maps signature types to marshalling kinds by name, and neither can see
+  the declaring module's aliases. Expanding aliases in the checker while the marshaller still matched
+  names would make the two disagree, and a marshaller that disagrees with the checker about a
+  parameter's kind is an ABI confusion, not a diagnostic. The refusal names the alias's target and
+  carries an Exact repair that writes it. An alias expanding to a function type reports **DL1302**,
+  not DL1301, because R-6a is about what the type means. The alias resolver walks a bounded chain
+  (32 hops) so that a cyclic alias cannot hang the compiler.
+
+  Reserved-name interaction: no `type`/`actor`/`foreign … lib` declaration may be named after a
+  builtin type (DL0302, Stage-1 §3.0.2), which is what stops `type Int = Secret[Str]` from making a
+  name-matched allowlist read as though a secret could cross.
 - **T-ForeignBind:** `root.foreign[M](load: Cap[ForeignLoad]) -> Result[M, ForeignErr]` — pure
   (binding is attenuation-like: deriving a handle is not an effect; *using* it is). Fails at
   runtime if the logical name `M` has no grant (DL1303) or a declared symbol is missing (DL1304 —
@@ -202,6 +218,36 @@ Constitution §5.12 degradation, stated where users will actually read it.
 
 `delulu why ForeignCall` works like any effect. Human-mode `delulu authority` prints foreign
 entries under a separator line: `-- outside the proof (contained at process level) --`.
+
+### 6.1 The credential-exposure line (campaign C25, ruling D32)
+
+Foreign reach plus `Declassify` is the combination that lets a credential leave the program, so the
+**human** report states that conclusion rather than leaving it to be assembled from three separate
+lines:
+
+```
+  secrets:      API_KEY
+  exposure:     API_KEY declassifiable -> foreign code (outside the proof), files/console
+                an exposed secret is an ordinary value; the language cannot follow it past `expose`
+```
+
+Normative details:
+
+- **Gated on `Declassify` ∈ effects AND at least one secret.** Every report for a program that cannot
+  call `expose` is byte-identical to before, including the pinned no-foreign report of §9 criterion 7.
+- **Egress is enumerated from facts, not guessed**: a non-empty `foreign_calls` (→ "foreign code
+  (outside the proof)"), `Net` (→ "the network"), `Write` (→ "files/console"). When `Declassify` is
+  present with none of these, the line says so — *"declassifiable, but this program has no egress in
+  its row"* — because a program that can expose a secret but cannot send it anywhere is genuinely
+  safer and the report should say that too.
+- **It reports capability, never behaviour.** `Declassify` in a row means `expose` *can* be called.
+  The report never claims a secret *was* exposed; that is a run-time fact, and the trace records it.
+- **The machine channel is unchanged, deliberately.** `--json` already carries `effects`, `secrets`,
+  and `foreign_calls`, so any agent could always derive this conclusion; only the human reader could
+  not. Adding a redundant JSON field would change a public schema to restate data it already contains.
+- **No authority semantics change.** No new refusal, no new effect, no change to any grant relation
+  or to `⊑`. This is a reporting addition and nothing more — which is why it was in scope for a
+  hardening pass at all.
 
 ---
 

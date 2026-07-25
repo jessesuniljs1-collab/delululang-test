@@ -273,6 +273,12 @@ pub fn check_workspace(ws: &Workspace) -> Program {
                     diagnostics.push(dup(&unit.name, "type", &td.name.name, td.span));
                     continue;
                 }
+                // C23: third and last construction path (the dependency graph). All three refuse
+                // identically — a rule that holds on two paths out of three holds nowhere.
+                if let Some(d) = crate::resolve::shadows_a_builtin_type("type", &td.name) {
+                    diagnostics.push(d);
+                    continue;
+                }
                 let id = TypeDefId(gtypes.len() as u32);
                 gtypes.push(TypeDef {
                     name: td.name.name.clone(),
@@ -318,7 +324,10 @@ pub fn check_workspace(ws: &Workspace) -> Program {
                     }
                     owned_consts[gi].push(ConstSig { name: c.name.name.clone(), ty: c.ty.clone() });
                 }
-                Item::Effect(e) => owned_effects[gi].push((e.name.name.clone(), e.public)),
+                Item::Effect(e) => match crate::resolve::shadows_a_core_effect(&e.name) {
+                    Some(d) => diagnostics.push(d), // C23, authority-bearing (see program.rs)
+                    None => owned_effects[gi].push((e.name.name.clone(), e.public)),
+                },
                 _ => {}
             }
         }
@@ -529,7 +538,15 @@ pub fn package_authority(ws: &Workspace, program: &Program, pkg_idx: usize) -> P
 
 // ===== DL1009: package self-authority check =====================================================
 
-/// Each package's computed authority must be within its own manifest's `[authority] effects`.
+/// Each package's computed authority must be within its own manifest's `[authority]` declaration —
+/// its `effects`, and (campaign C19, ruling D34) the `secrets` it reads.
+///
+/// The secret half was missing, and its absence was the same shape as C18 one layer down:
+/// `root.secret("X")` contributes **no effect and no capability kind**, only a name, so a package
+/// could read any secret it liked while its manifest declared none, and the effects-only check saw
+/// nothing wrong. The manifest is supposed to be a *ceiling* — Constitution invariant 10 counts
+/// scopes, not just effect kinds — so a dimension the ceiling does not mention is a dimension the
+/// ceiling does not bound. `package_authority` already computed `auth.secrets`; nothing consumed it.
 pub fn check_self_authority(ws: &Workspace, program: &Program) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for (idx, pkg) in ws.packages.iter().enumerate() {
@@ -543,6 +560,25 @@ pub fn check_self_authority(ws: &Workspace, program: &Program) -> Vec<Diagnostic
                         format!("package `{}` performs effect `{e}` not permitted by its authority manifest", pkg.name),
                     )
                     .with_span(pkg.manifest.effects_span(), format!("add `{e}` to `[authority] effects` in delulu.toml")),
+                );
+            }
+        }
+        let declared_secrets: HashSet<&str> =
+            pkg.manifest.authority.secrets.iter().map(|s| s.as_str()).collect();
+        for s in &auth.secrets {
+            if !declared_secrets.contains(s.as_str()) {
+                diags.push(
+                    Diagnostic::error(
+                        "DL1009",
+                        format!(
+                            "package `{}` reads secret `{s}` not permitted by its authority manifest",
+                            pkg.name
+                        ),
+                    )
+                    .with_span(
+                        pkg.manifest.secrets_span(),
+                        format!("add `\"{s}\"` to `[authority] secrets` in delulu.toml"),
+                    ),
                 );
             }
         }
@@ -749,6 +785,20 @@ fn scope_violations(pin: &AuthoritySpec, dep: &AuthoritySpec) -> Vec<String> {
             }
         }
     }
+    // Secrets (campaign C19, ruling D34). This dimension was absent while `AuthoritySpec` already
+    // carried the field: a dependency could read any secret it named and the pin said nothing,
+    // because a secret read contributes no effect and no capability kind for the coarser checks to
+    // catch. It follows the same convention as its siblings above — an EMPTY pin means the consumer
+    // did not constrain this dimension, exactly as an empty `net` pin does not constrain hosts.
+    // Names are compared exactly; there is no prefix or glob relation between secret names.
+    if !pin.secrets.is_empty() {
+        let pinned: HashSet<&str> = pin.secrets.iter().map(|s| s.as_str()).collect();
+        for s in &dep.secrets {
+            if !pinned.contains(s.as_str()) {
+                v.push(format!("secret `{s}` is not in the pinned secret set"));
+            }
+        }
+    }
     v
 }
 
@@ -930,6 +980,103 @@ mod tests {
         // moves, and DL1010 fires. That is what makes the surgical widening fix safe.
         assert_eq!(v1.authority_hash, v2.authority_hash, "the hash stays effects+kinds by design");
         assert_ne!(v1.content_hash, v2.content_hash, "a secret change is a source change → content hash moves");
+    }
+
+    // ----- C19 (ruling D34): the manifest and the pin now bound SECRETS, not just effects -------
+
+    #[test]
+    fn a_package_must_declare_the_secrets_it_reads() {
+        // C19, the self-authority half. `root.secret("X")` contributes no effect and no capability
+        // kind — only a name — so an effects-only ceiling check saw nothing wrong and a package
+        // could read any secret it liked while declaring none. The manifest is a CEILING, and a
+        // dimension the ceiling does not mention is a dimension it does not bound.
+        let dir = scratch("undeclared_secret");
+        write(&dir, "delulu.toml", LIB); // `[authority] effects=[]`, no `secrets` key at all
+        write(
+            &dir,
+            "src/root.delulu",
+            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
+        );
+        let ws = resolve_workspace(&dir);
+        let prog = check_workspace(&ws);
+        // `check_self_authority` is the ceiling gate the CLI composes (it is not part of
+        // `check_workspace`, which computes facts); call it the same way `delulu build` does.
+        let diags = check_self_authority(&ws, &prog);
+        let d = diags
+            .iter()
+            .find(|d| d.code == "DL1009")
+            .unwrap_or_else(|| panic!("expected DL1009, got {diags:?}"));
+        assert!(d.message.contains("DB_PASSWORD"), "the message must name the secret: {}", d.message);
+    }
+
+    #[test]
+    fn declaring_the_secret_is_enough_to_check_clean() {
+        // The accepting half — the ceiling bounds, it does not forbid.
+        let dir = scratch("declared_secret");
+        write(
+            &dir,
+            "delulu.toml",
+            "[package]\nname=\"p\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\nsecrets=[\"DB_PASSWORD\"]\n",
+        );
+        write(
+            &dir,
+            "src/root.delulu",
+            "module p\npub fn key(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
+        );
+        let ws = resolve_workspace(&dir);
+        let prog = check_workspace(&ws);
+        assert!(err_codes(&prog).is_empty(), "{:?}", prog.diagnostics);
+        assert!(check_self_authority(&ws, &prog).is_empty(), "a declared secret is within the ceiling");
+    }
+
+    #[test]
+    fn a_dependency_may_not_read_a_secret_outside_its_pin() {
+        // C19, the pin half. `AuthoritySpec` already carried a `secrets` field and
+        // `scope_violations` never looked at it, so a consumer who deliberately pinned WHICH secrets
+        // a dependency may read was not actually constrained — the pin was decoration.
+        let root = std::env::temp_dir().join("delulu_deps_test_secret_pin");
+        let _ = fs::remove_dir_all(&root);
+        let app = root.join("app");
+        let lib = root.join("lib");
+        fs::create_dir_all(app.join("src")).unwrap();
+        fs::create_dir_all(lib.join("src")).unwrap();
+        // The dependency reads TWO secrets and declares both (so DL1009 is satisfied).
+        write(
+            &lib,
+            "delulu.toml",
+            "[package]\nname=\"lib\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\nsecrets=[\"TELEMETRY_TOKEN\",\"DB_PASSWORD\"]\n",
+        );
+        write(
+            &lib,
+            "src/root.delulu",
+            "module lib\npub fn a(root: Root) -> Secret[Str] { root.secret(\"TELEMETRY_TOKEN\") }\n\
+             pub fn b(root: Root) -> Secret[Str] { root.secret(\"DB_PASSWORD\") }\n",
+        );
+        // The consumer pins it to ONE of them.
+        write(
+            &app,
+            "delulu.toml",
+            "[package]\nname=\"app\"\nversion=\"0.1.0\"\nkind=\"lib\"\n[authority]\neffects=[]\n\
+             [dependencies]\nlib = { path = \"../lib\", authority = { effects = [], secrets = [\"TELEMETRY_TOKEN\"] } }\n",
+        );
+        write(&app, "src/root.delulu", "module app\nimport lib\npub fn go() -> Int { 1 }\n");
+        let ws = resolve_workspace(&app);
+        let prog = check_workspace(&ws);
+        let diags = check_pins(&ws, &prog);
+        let d = diags
+            .iter()
+            .find(|d| d.code == "DL1001")
+            .unwrap_or_else(|| panic!("expected DL1001, got {diags:?}"));
+        assert!(
+            d.message.contains("DB_PASSWORD"),
+            "the message must name the secret outside the pin: {}",
+            d.message
+        );
+        assert!(
+            !d.message.contains("TELEMETRY_TOKEN"),
+            "the pinned secret is permitted and must not be reported: {}",
+            d.message
+        );
     }
 
     #[test]

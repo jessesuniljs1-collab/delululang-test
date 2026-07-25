@@ -219,6 +219,12 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
                 diags.push(dup("type", &td.name));
                 continue;
             }
+            // C23: a builtin type name is intercepted by `lower_type` before user scope, so
+            // registering this definition would leave it permanently unreachable.
+            if let Some(d) = shadows_a_builtin_type("type", &td.name) {
+                diags.push(d);
+                continue;
+            }
             let id = TypeDefId(table.types.len() as u32);
             let kind = match &td.kind {
                 TypeDeclKind::Record(fields) => TypeDefKind::Record(
@@ -240,6 +246,12 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
     // Effects.
     for item in &module.items {
         if let Item::Effect(ed) = item {
+            // C23: a core effect name is resolved by `lower_row` before `user_effects`, so this
+            // declaration would be inert — and effects are the authority axis.
+            if let Some(d) = shadows_a_core_effect(&ed.name) {
+                diags.push(d);
+                continue;
+            }
             if !table.user_effects.insert(ed.name.name.clone()) {
                 diags.push(dup("effect", &ed.name));
             }
@@ -253,6 +265,12 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
             let name = fd.name.name.clone();
             if table.type_ix.contains_key(&name) || table.foreigns.contains_key(&name) {
                 diags.push(dup("type", &fd.name));
+                continue;
+            }
+            // C23: the lib name joins the TYPE namespace, and `lower_type` matches builtins first —
+            // `foreign "c" lib Int` would produce a handle type no signature could ever name.
+            if let Some(d) = shadows_a_builtin_type("foreign lib", &fd.name) {
+                diags.push(d);
                 continue;
             }
             let fns = fd
@@ -295,6 +313,11 @@ pub fn resolve(module: &Module) -> (DeclTable, Vec<Diagnostic>) {
                 || table.actors.contains_key(&name)
             {
                 diags.push(dup("type", &a.name));
+                continue;
+            }
+            // C23: the actor name joins the TYPE namespace too, and is matched after the builtins.
+            if let Some(d) = shadows_a_builtin_type("actor", &a.name) {
+                diags.push(d);
                 continue;
             }
             table.actors.insert(name, actor_def_of(a));
@@ -479,6 +502,54 @@ fn shadows_a_builtin(what: &str, name: &Ident) -> Option<Diagnostic> {
         .with_span(
             name.span,
             "calls resolve to the builtin before user scope, so this definition would never be called — rename it",
+        ),
+    )
+}
+
+/// Refuse a type/actor/foreign-lib declaration that reuses a builtin TYPE name (DL0302, C23).
+///
+/// The type resolver matches `Int`, `Root`, `Cap`, `Secret`, … before it searches user scope, so
+/// such a declaration is not merely shadowed — it is *inert*. Accepting it means a source file can
+/// state `type Cap = Int` and be read, reasonably, as evidence that `Cap[FsRead]` denotes something
+/// the author defined. The declaration must fail where it is written.
+///
+/// Sibling of [`shadows_a_builtin`] (C11, the value namespace); same code, same reasoning, same
+/// resolution — refuse rather than pick a winner, because either winner makes one name mean two
+/// things depending on where it is read.
+pub(crate) fn shadows_a_builtin_type(what: &str, name: &Ident) -> Option<Diagnostic> {
+    if !crate::check::PRELUDE_TYPES.contains(&name.name.as_str()) {
+        return None;
+    }
+    Some(
+        Diagnostic::error(
+            "DL0302",
+            format!("`{}` is a builtin type and cannot be redefined as a {what}", name.name),
+        )
+        .with_span(
+            name.span,
+            "types resolve to the builtin before user scope, so this definition would never take effect — rename it",
+        ),
+    )
+}
+
+/// Refuse an `effect` declaration that reuses a CORE effect name (DL0302, C23).
+///
+/// `lower_row` resolves core effects before `user_effects`, so `effect Write` was inert in exactly
+/// the way [`shadows_a_builtin_type`] describes — with the added hazard that effects are the
+/// authority axis: the author believes they declared something private, while every `! {Write}` in
+/// the module continues to mean the effect that reaches the filesystem and the console.
+pub(crate) fn shadows_a_core_effect(name: &Ident) -> Option<Diagnostic> {
+    if !crate::check::CORE_EFFECT_NAMES.contains(&name.name.as_str()) {
+        return None;
+    }
+    Some(
+        Diagnostic::error(
+            "DL0302",
+            format!("`{}` is a core effect and cannot be redeclared", name.name),
+        )
+        .with_span(
+            name.span,
+            "rows resolve core effects before user effects, so this declaration would never take effect — rename it",
         ),
     )
 }

@@ -84,10 +84,16 @@ deviations.
 | C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
-| C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | OPEN — owner-reserved (backcompat) |
+| C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | **CLOSED** — D34 (owner approved 2026-07-25) |
 | C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
 | C21 | Runtime — the interpreter's `MAX_DEPTH=10000` overflows the host stack below ~20 MiB (small-stack embeddings) | medium (robustness) | OPEN |
 | C22 | **Stage 8 — the syntax-morph system is specified normatively and does not exist**; its spec claims to be implemented | **high** (doc contradiction / missing commissioned feature) | OPEN — spec header corrected, implementation scheduled |
+| C23 | **Every builtin type name and core effect name can be shadowed by a user declaration, and the shadow is silently inert** — including `Root`, `Cap`, `Secret`, `Plugin`, and `Write` | **high** (review integrity / authority legibility) | **CLOSED** — D30 |
+| C24 | Stage 4 — a type alias in a foreign signature was refused as "not marshallable" without saying it was an alias or what it aliased | medium (diagnostic quality) | **CLOSED** — D31 |
+| C25 | **The authority report holds every fact needed to see that a credential can leave the program, and never says so** | **high** (the commission's credential-exposure requirement) | **CLOSED** — D32 |
+| C26 | **A package whose sources are not under `src/` reports `built clean (0 module(s))` and exits 0** — nothing checked, success claimed | **high** (silent success) | **CLOSED** — D33 |
+| C27 | Naming a directory where a file belongs surfaced the raw OS error (`Access is denied. (os error 5)` on Windows) | medium (diagnostic confusion) | **CLOSED** — D33 |
+| C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -543,7 +549,7 @@ otherwise identical authority is DL1003) and an end-to-end test that builds two 
 versions differing only by a secret read, asserts their coarse authority is identical (why it was
 invisible) and their secret sets differ, and that `authority_widened` now sees it.
 
-### C19 · The pin and self-declaration do not enforce secrets — OPEN, owner-reserved
+### C19 · The pin and self-declaration do not enforce secrets — CLOSED (D34)
 
 Found while closing C18, and it is the **same blindness one layer earlier and more consequential**,
 because the pin is the *first* review gate:
@@ -561,13 +567,32 @@ manifest.secrets` for DL1009, and `dep.secrets ⊆ pin.secrets` for DL1001) is s
 against the corpus, breaks **nothing in-tree** — no existing package reads a secret at all, which is
 also why the gap was never noticed.
 
-**Why it is not fixed here.** Unlike C18, this changes what the *checker accepts*: a package that
-today reads an undeclared secret and checks clean would begin to error (DL1009), and a pin that
-does not list a dependency's secrets would begin to error (DL1001). That is a **backward-compatibility
-change to the language's acceptance behavior**, which the owner explicitly reserved. It is presented
-as a recommendation with the analysis above and held for Jesse's decision — the same discipline that
-governed licensing (C9). The recommendation is to make the change: it completes invariant 10 for
-secrets, matches how effects and `net`/`fs` are already treated, and costs nothing in-tree today.
+**Why it was held, and then made.** Unlike C18, this changes what the *checker accepts*: a package
+that read an undeclared secret and checked clean now errors (DL1009), and a pin that does not list a
+dependency's secrets now errors (DL1001). That is a **backward-compatibility change to acceptance
+behaviour**, which the owner explicitly reserved, so it was presented as a recommendation and held —
+the same discipline that governed licensing (C9). **Jesse approved it on 2026-07-25**; implemented as
+ruling **D34**.
+
+As built:
+
+- **DL1009** compares the package's computed `secrets` (already available from `package_authority`,
+  previously unread) against `[authority] secrets`, pointing at the `secrets` key — or, when the key
+  is absent, at the file start, which is where the fix goes.
+- **DL1001** adds a `secrets` dimension to `scope_violations`, following the **same convention as its
+  siblings**: an empty pin means the consumer did not constrain that dimension, exactly as an empty
+  `net` pin does not constrain hosts. Secret names compare exactly — there is no prefix or glob
+  relation between them, unlike paths.
+
+Two witnesses plus an accepting case (declaring the secret checks clean, because a ceiling bounds
+rather than forbids). Both refusal witnesses were confirmed against the pre-fix behaviour — the
+pre-fix code produced **no diagnostic at all** for either program, which is what made this a
+supply-chain gap rather than a diagnostic-quality one.
+
+*Implementation note worth keeping:* `check_self_authority` and `check_pins` are **not** part of
+`check_workspace` — the library computes facts and the CLI composes the gate (`cli.rs`, in both the
+check/build path and the lock path). A test that drives `check_workspace` alone will observe neither
+rule, which is exactly how the first drafts of these witnesses passed against broken code.
 
 ### C20 · The two engines disagreed on faults, and WASM flooded on recursion — CLOSED (D29)
 
@@ -648,6 +673,147 @@ Implementing the morph system to that spec is scheduled as its own pass (Stage 8
 a feature build rather than a hardening fix, and because it carries a real security obligation — a
 keyword remapping is a homoglyph-adjacent attack surface, and it must land *with* the Trojan-Source
 discipline of D26 (raw bidi controls are DL0107) rather than around it.
+
+### C23 · Builtin names were shadowable, and the shadow did nothing — CLOSED (D30)
+
+Found while attacking the Stage-4 marshallability fence, which is an allowlist matched **by name**
+(`Int | Float | Bool | Str | Unit | ForeignPtr`). The obvious attack on a name-matched allowlist is
+to make something else answer to one of those names, so: `type Int = Secret[Str]`, then a foreign
+signature naming `Int`. It **checked clean**.
+
+The exploit does not exist, and that matters as much as the defect. Both engines lower foreign
+signatures by NAME through one shared path (`lower_foreign_sig`, shared with the WASM host), and the
+call site types `Int` as the builtin, so the two sides agree and no secret ever crosses — verified
+directly: `lib.f(7)` still checks clean and passing a real `Secret[Str]` is still refused **DL0602**
+("secrets never coerce"). The end-to-end run confirms invariant 20 holds in practice: the only way a
+credential reaches C is the authorized `expose(Cap[Declassify])` route.
+
+What was actually broken is **review integrity**, which for this language is not a lesser property:
+
+- All **16** builtin type names were shadowable — `Int Float Bool Str Unit Root List Option Result
+  Secret Cap ForeignPtr PyObj Plugin Verified Contained` — and every shadow was *inert*, because
+  `lower_type` matches them before it searches user scope. No diagnostic, anywhere.
+- All **10** core effect names too (`Read Write Net Clock Rand Declassify ForeignCall Load Async
+  Actuate`), because `lower_row` resolves core effects before `user_effects`. **This is the
+  authority-bearing case**: an author who wrote `effect Write` believed they had declared something
+  private, while every `! {Write}` in the module continued to mean the effect that reaches the
+  filesystem and the console.
+- A `foreign … lib Int` block, and an actor of a builtin name, were accepted with handle types no
+  signature could ever name.
+
+A file containing `type Cap = Int` invited a reader — human or agent — to conclude that `Cap[FsRead]`
+denoted something the author defined. In a language whose premise is that a program's authority can
+be read off its source, a declaration that silently means nothing is the worst available outcome: it
+misleads review without ever failing. This is exactly C11 (a user `fn parse_int` lost silently to the
+prelude builtin) in the type and effect namespaces, and it was never closed there.
+
+Refused now at the definition site with DL0302, the same code and the same reasoning as C11 —
+refuse rather than pick a winner, because either winner makes one name mean two things depending on
+where it is read. Enforced on **all three** `DeclTable` construction paths (`resolve.rs` single
+module, `program.rs` package, `deps.rs` dependency graph); the package path was verified separately,
+because a rule that holds on two paths out of three holds nowhere.
+
+### C24 · A foreign signature's alias refusal did not mention the alias — CLOSED (D31)
+
+`type Meters = (Int)` in a foreign signature reported "type `Meters` cannot be marshalled … only
+Int, Float, Bool, Str, Unit, and ForeignPtr marshal" — true, and read as though the compiler had lost
+track of the fact that `Meters` *is* an `Int`.
+
+The fence still refuses it, deliberately and permanently: both engines lower foreign signatures by
+type name through one shared path that cannot see a module's aliases, so expanding the alias in the
+checker and not in the marshaller is precisely how ABI confusion begins. **Loosening the fence would
+have been the wrong fix** — the runtime would have marshalled `FKind::Unit` for `Meters` (the
+`unwrap_or` default), silently substituting a value. Instead the refusal now names the target and
+carries an Exact repair that writes it. An alias expanding to a function type is additionally
+re-classified from DL1301 to **DL1302**, because R-6a is about what the type *means*, and that one
+means a re-entry point into verified code.
+
+The alias walk is **bounded at 32 hops**. `type A = (A)` is accepted by the checker (C16), so an
+unbounded resolver here would have turned three lines of source into a hung compiler — a denial of
+service introduced *by the fix*. Its witness is part of the suite.
+
+### C25 · The report knew a credential could leave and never said so — CLOSED (D32)
+
+The commission requires that DeluluLang **tell** users when code exposes credentials. Tested against
+the real thing: a program that reads `root.secret("API_KEY")`, declassifies it, and passes it to
+`msvcrt.puts`. It ran, and `SUPERSECRET-abc123` was printed **by the C function**.
+
+Every gate behaved correctly — `Declassify` declared in the row, permitted by the manifest (an
+earlier attempt was refused DL0701 for omitting it), and granted explicitly by the human along with
+the secret's value. That is the design working: freedom with responsibility, and the authorized route
+is the only route.
+
+The defect was in the report a human reads *before* granting. It listed `effects: Declassify,
+ForeignCall, Write`, `secrets: API_KEY`, and `foreign: - c msvcrt [puts]` — three separate lines, all
+the facts, and never the sentence. The decision to type `--grant declassify` turns precisely on the
+join, so the report now states it:
+
+```
+  secrets:      API_KEY
+  exposure:     API_KEY declassifiable -> foreign code (outside the proof), files/console
+                an exposed secret is an ordinary value; the language cannot follow it past `expose`
+```
+
+It reports **capability, never behaviour** — `Declassify` in the row means `expose` *can* be called,
+not that it is — and it names the safe case honestly too ("declassifiable, but this program has no
+egress in its row"). Nothing about what the language permits changed: no new refusal, no change to
+any grant relation, no new authority concept. The machine channel is deliberately untouched, because
+`--json` already carries `effects`, `secrets`, and `foreign_calls`: an agent could always derive
+this conclusion, and only the human could not.
+
+### C26 / C27 · Silent success, and a raw OS error where a sentence belonged — CLOSED (D33)
+
+**C26.** A package whose sources sat beside `delulu.toml` instead of under `src/` printed
+`ok: built clean (1 package(s), 0 module(s))` and exited **0**. The toolchain looked in `<root>/src`,
+found nothing, checked nothing, and reported success — so the natural layout mistake produced a green
+build of an empty program, and a CI gate would have gone green with it. Refused now, on the same
+posture the deferred-git-dependency gate already used: a check that could not run must never report
+success. The closing line `0 error(s)` was fixed alongside it — it read as success beside a nonzero
+exit, and it affected the pre-existing git and advisory refusals too.
+
+**C27.** `delulu run <dir>` reported `error: cannot read <dir>: Access is denied. (os error 5)`. The
+mistake is natural — `build` and `plugin build` take directories, so `run`/`check`/`authority` look
+like they should — and the message was actively misleading, sending the reader after an ACL that was
+never involved. It was also platform-dependent (Linux says `Is a directory`). One fix in the shared
+`load` helper covers every file-taking command, names the mistake, and points at `delulu build`.
+
+### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
+
+The Stage-1 grammar says:
+
+```ebnf
+type_decl = "type" , IDENT , [ generics ] ,
+            ( "{" , field , { "," , field } , [ "," ] , "}"   (* record *)
+            | "=" , variant , { "|" , variant }               (* sum    *)
+            | "=" , type ) ;                                  (* alias  *)
+variant   = IDENT , [ "(" , type , { "," , type } , ")" ] ;
+```
+
+`type Meters = Int` matches **both** alternatives: a sum of one field-less variant named `Int`, and
+an alias to the type `Int`. The spec does not say which, and the parser decides silently —
+`looks_like_variant()` prefers the **sum** reading whenever the right-hand side is an identifier
+followed by end-of-statement, `|`, or `(`.
+
+The consequences are observable and were confirmed by running them:
+
+- `type Meters = Int` declares a nominal sum type whose constructor is named `Int`, so
+  `fn g() -> Meters { Int }` **checks clean** — the token `Int` in expression position now
+  constructs a `Meters`.
+- There is no way to write an alias to a bare type name at all. `type Meters = (Int)` — the
+  parenthesised form — is the only spelling that reaches the alias production.
+- A value that should have been a `Meters` reports `DL0401: argument type mismatch: expected 'T9',
+  found 'Int'` — naming an inference variable rather than the type the author wrote, which is finding
+  **C12** made materially worse by this ambiguity.
+
+**Choosing the disambiguation rule is a public-specification decision and is therefore reserved to
+the owner.** The two coherent resolutions are (a) a bare identifier means an **alias**, matching the
+near-universal convention, with single-variant sums requiring an explicit marker; or (b) keep the sum
+reading and **refuse the ambiguity**, requiring the author to disambiguate. Both change which
+programs are accepted, so neither may be adopted by the kitchen. Recorded here, with the behaviour
+documented in `STAGE1_SPECIFICATION.md` so the ambiguity is at least resolved *on paper* against what
+the implementation actually does.
+
+## 4. Phase plan
 
 | # | Phase | Covers |
 |---|---|---|

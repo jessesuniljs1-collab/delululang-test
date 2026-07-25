@@ -62,6 +62,15 @@ diagnostic is at least Medium, because callers lose the ability to distinguish f
   Unicode bidirectional control characters for this reason (DL0107, "Trojan Source", CVE-2021-42574;
   identifiers are ASCII-only, which closes the homoglyph/invisible-character vector on names). A new
   way to desynchronize rendering from meaning is in scope.
+- **Anything that makes a declaration mean something other than it appears to mean.** Same reasoning
+  one level up from glyphs: a declaration that is accepted and then silently has no effect misleads
+  review without ever failing. Redeclaring a builtin type or a core effect was exactly this and is now
+  refused (DL0302 — `effect Write` used to leave every `! {Write}` meaning the real, filesystem-reaching
+  `Write`). A new way to make a name resolve differently than it reads is in scope.
+- **Any way a `Secret[T]` becomes an ordinary value without `Cap[Declassify]`**, and any way a secret
+  crosses the foreign boundary without passing `expose` (DL1301 fences the FFI signature, DL0602
+  refuses the value, DL0604/DL0605 keep it unprintable and uncomparable). Note the *converse* is not a
+  vulnerability: see §3.2.
 
 ### 3.2 What is not a vulnerability
 
@@ -75,6 +84,12 @@ Stated so reporters do not spend their time:
 - **Performance.** Slow is not a vulnerability unless it is a usable denial of service.
 - **Isolation profiles being weaker on a platform that cannot host them** — provided the label says
   so. `DL1408` reporting a weaker fallback honestly is the system working.
+- **An authorized `expose` sending a credential anywhere it likes.** `expose(Cap[Declassify])` is the
+  sanctioned way to declassify a secret, and once exposed it is an ordinary `Str` the type system no
+  longer tracks. Reaching that point requires `Declassify` in the row, permission from the package
+  manifest, and an explicit human grant of both `declassify` and the secret's value — and
+  `delulu authority` now prints an `exposure:` line naming the secret and the egress it could take.
+  That chain working as designed is not a vulnerability; a way to *skip a link* in it is.
 
 ---
 

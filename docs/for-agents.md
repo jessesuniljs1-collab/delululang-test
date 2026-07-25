@@ -131,6 +131,26 @@ This is the identity claim in one command: **everything this program can do, com
 code**. If `effects` does not list it, the program cannot do it — with one honest exception,
 `foreign_calls`, which are holes in the proof and are enumerated as such rather than hidden.
 
+**Credential exposure — the join you are expected to make.** These fields are deliberately raw; the
+conclusion that matters is a join across three of them:
+
+> `Declassify` ∈ `effects` **and** `secrets` non-empty **and** egress reach
+> (`foreign_calls` non-empty, or `Net`, or `Write` ∈ `effects`)
+> ⟹ *a credential can leave this program.*
+
+`Declassify` means `expose(Cap[Declassify])` **can** be called — a capability, not an observed
+behaviour. Once a secret is exposed it is an ordinary `Str` and the type system stops tracking it, so
+this join is the last static point at which the question can be asked. Compute it before you accept a
+program, generate one, or grant `declassify`; the human-readable report prints the same conclusion as
+an `exposure:` line. (`STAGE4_SPECIFICATION.md` §6.1.)
+
+If you are **writing** DeluluLang rather than auditing it: a hardcoded credential in a string literal
+is not a secret and the language cannot know it was meant to be one. Secrets enter through
+`root.secret("NAME")`, whose value the human supplies at grant time. `Secret[T]` is opaque —
+`str(s)` is DL0604, `a == b` is DL0605, and it cannot cross the foreign boundary (DL1301) — so a
+credential you thread as a `Secret[T]` cannot be printed, logged, compared, or marshalled by accident,
+which is the property worth having in generated code.
+
 `delulu authority --diff <old.lock> <new.lock> --json` reports whether an upgrade widened
 authority. This is the check to run in CI on every dependency bump.
 

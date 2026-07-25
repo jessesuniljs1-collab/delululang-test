@@ -157,6 +157,13 @@ impl Manifest {
         key_span(&self.raw, self.file, "effects")
     }
 
+    /// Byte span of the `secrets` line under `[authority]` (for DL1009's secret half), or the file
+    /// start. A package that declares no `secrets` at all has no such line, and the span falls back
+    /// to the file start — which is the right place to point when the fix is to *add* the key.
+    pub fn secrets_span(&self) -> Span {
+        key_span(&self.raw, self.file, "secrets")
+    }
+
     /// Byte span of the `[package] language` line (for DL1802), or the file start.
     pub fn language_span(&self) -> Span {
         key_span(&self.raw, self.file, "language")

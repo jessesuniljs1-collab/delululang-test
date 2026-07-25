@@ -301,6 +301,19 @@ delulu check examples/greeter        # resolves deps, verifies pins AND authorit
 delulu authority examples/greeter    # the whole package's authority
 ```
 
+**Sources must live under `src/`.** A `.delulu` file sitting beside `delulu.toml` is not part of the
+package — the toolchain only looks in `src/`. `delulu build` refuses a package it found no modules in
+rather than reporting a clean build of nothing, so if you see
+
+```
+note: no `.delulu` modules found under <pkg>/src — a DeluluLang package keeps its sources in `src/`
+```
+
+move the file into `src/`. Note also which commands take which argument: `build`, `check`,
+`authority`, and `plugin build` accept a **package directory** (`check` and `authority` also accept a
+single file); `run` takes a **single file** only. Naming a directory where `run` expects a file says
+so and points you at `build`.
+
 The `[authority]` block is a **ceiling**. Code that exceeds what the manifest declares is an error,
 so a dependency cannot quietly grow new powers in a patch release — that is what
 `delulu authority --diff <old.lock> <new.lock>` is for, and it belongs in your CI.

@@ -174,12 +174,29 @@ effectful — its callers' rows account for callbacks, per T-Call and R-4).
 
 ### 4.2 Verification (build-time, per package)
 
-1. **Self check:** `row(P) ⊆ manifest(P).effects` and `kinds(P) ⊆ kinds(manifest(P))`, else
-   DL1009 (package exceeds own manifest; repair: widen manifest — `authority_widening: true`).
+1. **Self check:** `row(P) ⊆ manifest(P).effects` and `kinds(P) ⊆ kinds(manifest(P))` **and
+   `secrets(P) ⊆ manifest(P).secrets`**, else DL1009 (package exceeds own manifest; repair: widen
+   manifest — `authority_widening: true`).
 2. **Pin check:** for every dependency `D` of `P`:
    `verifiedAuthority(D) ⊑ pin(P → D)` (attenuation order from `SOUNDNESS_AUDIT.md` §A.3),
    else DL1001 (dep exceeds pin; span points at the pin *and* at the offending function in `D`,
-   using the `dep:` file prefix).
+   using the `dep:` file prefix). The compared dimensions are `effects`, `fs.read`, `fs.write`,
+   `net`, **and `secrets`**.
+
+**The secret dimension of both checks was added by hardening ruling D34** (campaign C19) and is the
+completion of invariant 10 for secrets. It needs stating explicitly because a secret read is
+*invisible* to the coarser dimensions: `root.secret("X")` contributes no effect and no capability
+kind, only a name, so before D34 a package could read any secret while declaring none, and a
+consumer's carefully written `secrets` pin constrained nothing at all.
+
+Two conventions carry over from the sibling dimensions rather than being invented for secrets:
+
+- **An empty pin list means "unconstrained", not "none permitted"** — exactly as an empty `net` pin
+  does not constrain hosts. A consumer who wants to forbid all secret reads must currently express
+  that by pinning the dependency's authority and reviewing the lockfile's `secrets` field; a
+  distinguished "deny all" spelling is not part of v1.
+- **Secret names compare exactly.** Unlike `fs.read`, there is no prefix or containment relation
+  between secret names — `DB` does not cover `DB_PASSWORD`.
 3. **Whole-program check (bin packages):** Stage-1 DL0701 unchanged, now over the full graph:
    `row(main) ⊆ manifest(root).effects`, and every granted scope covers the union of dependency
    scope requirements.
@@ -217,7 +234,8 @@ content_hash    = "blake3:af31…"        # over canonicalized source tree
 authority_hash  = "blake3:77b0…"        # over the canonical JSON of verified effects+kinds (§4.1)
 effects         = ["Net"]
 cap_kinds       = ["Http"]
-secrets         = ["API_KEY"]           # the secret names the package reads (hardening D28)
+secrets         = ["API_KEY"]           # the secret names the package reads (hardening D28;
+                                        #   also bounded by the manifest and pin — D34)
 scopes          = { net = ["api.example.com"] }
 api_row_hash    = "blake3:d10c…"        # over apiRows(P), canonical JSON
 accepted_by     = ""                     # non-empty iff --accept-authority was used, records flag+date

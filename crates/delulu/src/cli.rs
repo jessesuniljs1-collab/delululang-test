@@ -1537,7 +1537,26 @@ fn cmd_locale(rest: &[String]) -> i32 {
     }
 }
 
+/// Read one `.delulu` source file named on the command line.
+///
+/// The directory case is handled explicitly (`HARDENING_CAMPAIGN.md` C27). Passing a package
+/// directory to a file command is a natural mistake — `build` and `plugin build` take directories,
+/// so `run`/`check`/`authority` look like they should — and the OS error for reading a directory as
+/// a file is worse than useless: Windows reports `Access is denied. (os error 5)`, which reads as a
+/// permissions problem and sends the user hunting for an ACL that was never involved. Linux says
+/// `Is a directory`, so the misleading text was also platform-dependent. Name the real mistake and
+/// the command that does what they meant.
 fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
+    let path = std::path::Path::new(file);
+    if path.is_dir() {
+        eprintln!("error: `{file}` is a directory, and this command takes a single `.delulu` file");
+        if path.join("delulu.toml").is_file() {
+            eprintln!("note: it looks like a package — try `delulu build {file}`, or name a file such as `{}`", path.join("src").join("main.delulu").display());
+        } else {
+            eprintln!("note: name the file explicitly, e.g. `{}`", path.join("main.delulu").display());
+        }
+        return Err(2);
+    }
     match std::fs::read_to_string(file) {
         Ok(src) => {
             let mut map = SourceMap::new();
@@ -1958,6 +1977,51 @@ fn render_authority(report: &Json) -> String {
     }
     let secrets = strs(&report["secrets"]);
     let _ = writeln!(out, "  secrets:      {}", if secrets.is_empty() { "(none)".to_string() } else { secrets.join(", ") });
+    // The credential-exposure line (`HARDENING_CAMPAIGN.md` C25).
+    //
+    // Every fact needed to conclude "a credential can leave this program" was ALREADY in this
+    // report — `Declassify` on the effects line, the names on the secrets line, the reach on the
+    // foreign/effects lines — and the reader had to join three separate lines to see it. That is the
+    // wrong division of labour: this report exists to be read by a human (or an agent) deciding
+    // whether to type `--grant declassify`, and the decision turns precisely on the join. So the
+    // report states the conclusion.
+    //
+    // It reports CAPABILITY, never behaviour: `Declassify` in the row means `expose` *can* be
+    // called, not that it is. Nothing here changes what the language permits — no new refusal, no
+    // change to any grant relation — it is strictly a sentence about facts already computed. The
+    // machine channel is unchanged for the same reason: `--json` already carries `effects`,
+    // `secrets`, and `foreign_calls`, so an agent could always derive this; only the human could not.
+    if effects.iter().any(|e| e == "Declassify") && !secrets.is_empty() {
+        let foreign_reach = report["foreign_calls"].as_array().is_some_and(|a| !a.is_empty());
+        let mut reach: Vec<&str> = Vec::new();
+        if foreign_reach {
+            reach.push("foreign code (outside the proof)");
+        }
+        if effects.iter().any(|e| e == "Net") {
+            reach.push("the network");
+        }
+        if effects.iter().any(|e| e == "Write") {
+            reach.push("files/console");
+        }
+        if reach.is_empty() {
+            let _ = writeln!(
+                out,
+                "  exposure:     {} declassifiable, but this program has no egress in its row",
+                secrets.join(", ")
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "  exposure:     {} declassifiable -> {}",
+                secrets.join(", "),
+                reach.join(", ")
+            );
+            let _ = writeln!(
+                out,
+                "                an exposed secret is an ordinary value; the language cannot follow it past `expose`"
+            );
+        }
+    }
     let pure = strs(&report["pure_functions"]);
     let _ = writeln!(out, "  pure fns:     {}", if pure.is_empty() { "(none)".to_string() } else { pure.join(", ") });
     // Foreign code lives OUTSIDE the effect proof. With none declared, the report is byte-identical
@@ -2633,7 +2697,20 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
             eprintln!("note: {note}");
         }
     }
-    let failed = n > 0 || git_blocked || advisory_gate_note.is_some();
+    // A package with no modules used to report `built clean (1 package(s), 0 module(s))` and exit 0.
+    // The toolchain had looked in `<root>/src`, found nothing, checked nothing, and called it
+    // success — so a flat layout (sources beside `delulu.toml` instead of under `src/`) produced a
+    // green build of an empty program. Same posture as `git_blocked` above, for the same reason: a
+    // check that could not run must never report success. See `HARDENING_CAMPAIGN.md` C26.
+    let no_modules = ws.modules.is_empty();
+    if no_modules && !opts.json {
+        eprintln!(
+            "note: no `.delulu` modules found under `{}` — a DeluluLang package keeps its sources \
+             in `src/`, so nothing was checked",
+            ws.root_pkg().dir.join("src").display()
+        );
+    }
+    let failed = n > 0 || git_blocked || advisory_gate_note.is_some() || no_modules;
     // §5.5: `interface.json` is a build artifact, not a check artifact — only `build` writes it,
     // and only after a clean whole-graph check (never on a failed/diagnostic-bearing build).
     if command == "build" && !failed {
@@ -2641,14 +2718,26 @@ fn build_workspace(dir: &str, opts: &Opts, command: &str, locked: bool) -> i32 {
     }
     if !opts.json {
         if !failed {
+            // `check` and `build` share this path but do different things — §5.5 is explicit that
+            // only `build` writes `interface.json`. Saying "built clean" for a `check` claimed an
+            // artifact step that never ran.
             ok_line!(
-                "ok: `{}` built clean ({} package(s), {} module(s); authority within manifest and pins)",
+                "ok: `{}` {} clean ({} package(s), {} module(s); authority within manifest and pins)",
                 ws.root_pkg().name,
+                if command == "build" { "built" } else { "checked" },
                 ws.packages.len(),
                 ws.modules.len()
             );
-        } else {
+        } else if n > 0 {
             eprintln!("{n} error(s)");
+        } else {
+            // Refused with no diagnostic: a required gate could not RUN (git deps deferred, the
+            // advisory feed unreadable, or no modules found). The old closing line here was
+            // `0 error(s)`, which reads as success next to a nonzero exit — the note above carries
+            // the reason, so say that instead of counting errors that were never the problem.
+            eprintln!(
+                "refused: the source produced no errors, but a required check could not run (see the note above)"
+            );
         }
     }
     if failed {

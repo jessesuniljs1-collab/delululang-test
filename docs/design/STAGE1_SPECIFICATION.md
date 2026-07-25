@@ -207,6 +207,50 @@ pattern       = "_" | INT | STRING | "true" | "false"
 lambda        = "fn" , "(" , [ params ] , ")" , [ "->" , type ] , [ effect_row ] , block ;
 ```
 
+#### 3.0.1 Two places this grammar needs a disambiguation rule
+
+**(1) `type A = B` is ambiguous, and the implementation resolves it toward the SUM reading.**
+`type Meters = Int` matches the sum alternative (one field-less variant named `Int`) *and* the alias
+alternative (an alias to the type `Int`). The grammar above does not say which, so this subsection
+records what the parser actually does, pending an owner decision (`HARDENING_CAMPAIGN.md` C28):
+
+> The parser prefers **sum** whenever the right-hand side is an `IDENT` followed by end-of-statement,
+> `|`, or `(` (`looks_like_variant`). Everything else reaches the **alias** production.
+
+Consequences, all observable today and none of them obvious from the grammar:
+
+- `type Meters = Int` declares a nominal sum whose single constructor is named `Int`. Therefore
+  `fn g() -> Meters { Int }` type-checks — the token `Int` in *expression* position constructs a
+  `Meters` — while `g(5)` does not, because a `Meters` is not an `Int`.
+- **An alias to a bare type name cannot be written.** `type Meters = (Int)` (parenthesised) is the
+  only spelling that reaches the alias production; `type Handle = List[Int]` reaches it because `[`
+  follows the identifier.
+
+This is a known ambiguity in a normative document and is **not** settled here: choosing the rule
+changes which programs compile, which is reserved to the owner. It is documented rather than left
+implicit so that no reader has to discover it from a type error.
+
+**(2) Record literals in condition position** are already handled — see the restriction noted inline
+on `primary` above, resolved the way Rust resolves it.
+
+#### 3.0.2 Builtin names are reserved (DL0302)
+
+A declaration may not reuse a name the checker resolves **before** user scope, because such a
+declaration is accepted and then never takes effect. This covers three namespaces:
+
+| Namespace | Reserved names | Refused for |
+|---|---|---|
+| Types | `Int Float Bool Str Unit Root List Option Result Secret Cap ForeignPtr PyObj Plugin Verified Contained` | `type`, `actor`, `foreign … lib` (all three share the type namespace) |
+| Effects | `Read Write Net Clock Rand Declassify ForeignCall Load Async Actuate` | `effect` |
+| Values | the prelude builtins of §11 (`Ok`, `Err`, `str`, `parse_int`, …) | `fn`, `let` at module level |
+
+The reason is uniform: `lower_type` matches builtin type names, and `lower_row` matches core effect
+names, before consulting the module's declarations — so `type Cap = Int` and `effect Write` were
+previously accepted and *inert*, misleading every later reader of the file while never failing. The
+effect case is authority-bearing: an author who declared `effect Write` still had the real `Write`
+in every row. Refusing at the definition site is the only resolution that keeps one name meaning one
+thing everywhere it is read (`HARDENING_CAMPAIGN.md` C11, C23; ruling D30).
+
 ### 3.1 Reference program (the Stage-1 demo)
 
 Implementation-forced correction (2026-07-05): the earlier draft used `?` inside `main`, but

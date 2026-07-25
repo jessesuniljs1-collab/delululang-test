@@ -567,3 +567,84 @@ fn authority_isolation_label_is_honest_and_unknown_is_refused() {
     assert_eq!(o.status.code(), Some(2), "unknown profile is a usage error");
     assert!(stderr(&o).contains("none | process | microvm"), "{}", stderr(&o));
 }
+
+// ----- P5 (HARDENING_CAMPAIGN C25/C26/C27) -----------------------------------------------------
+
+#[test]
+fn the_authority_report_says_out_loud_that_a_credential_can_leave() {
+    // C25. Every fact was already in this report — `Declassify` on the effects line, the secret
+    // name on the secrets line, the lib on the foreign line — and the reader had to join three
+    // lines to see "this program can hand API_KEY to code outside the proof". This report exists to
+    // be read by whoever decides whether to type `--grant declassify`, and the decision turns
+    // precisely on that join, so the report states it.
+    let dir = std::env::temp_dir().join("delulu_cli_exposure_line");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = "module fdemo\n\
+        foreign \"c\" lib msvcrt { fn puts(s: Str) -> Int }\n\
+        fn compute(root: Root) -> Result[Int, ForeignErr] ! {ForeignCall, Declassify} { let load = root.foreign_load()\n \
+        let m: msvcrt = root.foreign(load)?\n let k = root.secret(\"API_KEY\")\n let d = root.declassify()\n \
+        Ok(m.puts(k.expose(d))) }\n\
+        fn main(root: Root) ! {ForeignCall, Write, Declassify} { let c = root.console()\n \
+        match compute(root) { Ok(_) => c.println(\"ok\"), Err(_) => c.println(\"bind failed\") } }\n";
+    let file = dir.join("main.delulu");
+    std::fs::write(&file, src).unwrap();
+    let o = delulu(&["authority", file.to_str().unwrap()]);
+    let out = stdout(&o);
+    assert!(out.contains("exposure:"), "the report must carry an exposure line:\n{out}");
+    assert!(out.contains("API_KEY declassifiable"), "it must name the secret:\n{out}");
+    assert!(
+        out.contains("foreign code (outside the proof)"),
+        "it must name foreign reach as the egress:\n{out}"
+    );
+}
+
+#[test]
+fn a_program_that_cannot_declassify_has_no_exposure_line() {
+    // The other half: the line is gated on `Declassify` being in the row, so every report for a
+    // program that cannot call `expose` is unchanged — including the byte-identical Stage-3 report
+    // pinned in `authority_without_foreign_is_byte_identical_to_stage3`, which lists a secret.
+    let o = delulu(&["authority", "examples/demo.delulu"]);
+    assert!(!stdout(&o).contains("exposure:"), "{}", stdout(&o));
+}
+
+#[test]
+fn a_package_with_no_modules_does_not_build_clean() {
+    // C26. A flat layout (sources beside `delulu.toml` instead of under `src/`) produced
+    // `built clean (1 package(s), 0 module(s))` and exit 0: the toolchain checked nothing and
+    // reported success. Same posture as a deferred git dependency — a check that could not run must
+    // never report success.
+    let dir = std::env::temp_dir().join("delulu_cli_zero_modules");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("delulu.toml"), "[package]\nname = \"empty\"\nversion = \"0.1.0\"\n").unwrap();
+    // A source file in the WRONG place — the natural mistake this refusal exists to catch.
+    std::fs::write(dir.join("main.delulu"), "module empty\nfn main(root: Root) { }\n").unwrap();
+    let o = delulu(&["build", dir.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "a zero-module build must fail:\n{}", stderr(&o));
+    let err = stderr(&o);
+    assert!(err.contains("no `.delulu` modules found"), "{err}");
+    assert!(err.contains("src/"), "the note must say where sources belong: {err}");
+    assert!(!stdout(&o).contains("built clean"), "{}", stdout(&o));
+    // And it must not close with `0 error(s)`, which read as success beside a nonzero exit.
+    assert!(!err.contains("0 error(s)"), "{err}");
+}
+
+#[test]
+fn naming_a_directory_where_a_file_belongs_says_so() {
+    // C27. Reading a directory as a file surfaced the raw OS error — on Windows
+    // `Access is denied. (os error 5)`, which reads as a permissions problem and sends the reader
+    // hunting for an ACL that was never involved; on Linux `Is a directory`. Different misleading
+    // text per platform, for the same mistake: `build` takes a directory, so `run` looks like it
+    // should too.
+    let dir = std::env::temp_dir().join("delulu_cli_dir_not_file");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("delulu.toml"), "[package]\nname = \"p\"\nversion = \"0.1.0\"\n").unwrap();
+    let o = delulu(&["run", dir.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "a usage mistake is exit 2");
+    let err = stderr(&o);
+    assert!(err.contains("is a directory"), "{err}");
+    assert!(err.contains("delulu build"), "it must point at the command that does take a directory: {err}");
+    assert!(!err.contains("os error"), "no raw OS error may leak into this message: {err}");
+}

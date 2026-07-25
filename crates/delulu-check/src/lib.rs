@@ -205,6 +205,107 @@ mod tests {
         assert!(e.contains(&"DL0605".to_string()), "{e:?}");
     }
 
+    // ----- C23: no declaration may shadow a builtin type or core effect ----
+    //
+    // Every one of these programs was ACCEPTED before the fix, and every one of them was inert:
+    // the declaration had no effect anywhere, and no diagnostic was produced at any line. The
+    // hazard is review, not execution — `type Cap = Int` in a source file invites a reader to
+    // believe `Cap[FsRead]` is a user type, in a language whose premise is that authority can be
+    // read off the source.
+
+    #[test]
+    fn every_builtin_type_name_is_refused_as_a_user_type() {
+        for name in crate::check::PRELUDE_TYPES {
+            let src = format!("module m\ntype {name} = Int\nfn g() -> Int {{ 1 }}\n");
+            let e = errors(&src);
+            assert!(
+                e.contains(&"DL0302".to_string()),
+                "`type {name} = Int` must be DL0302 — it would be silently inert, got {e:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_core_effect_name_is_refused_as_a_user_effect() {
+        // The authority-bearing half: `effect Write` left every `! {Write}` row meaning the CORE
+        // Write effect, so the author's "private" effect was the one that reaches the filesystem.
+        for name in crate::check::CORE_EFFECT_NAMES {
+            let src = format!("module m\neffect {name}\nfn g() -> Int {{ 1 }}\n");
+            let e = errors(&src);
+            assert!(
+                e.contains(&"DL0302".to_string()),
+                "`effect {name}` must be DL0302 — it would be silently inert, got {e:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_secret_alias_named_int_cannot_hide_inside_a_foreign_signature() {
+        // The program that started C23: `type Int = Secret[Str]` then a foreign signature naming
+        // `Int`. It checked CLEAN. Both engines lower foreign params by name, so no secret ever
+        // actually crossed (`DL0602` still refused the value, verified) — but the file read as
+        // though one could, and that is not a state this language may accept.
+        let e = errors(
+            "module m\ntype Int = Secret[Str]\nforeign \"c\" lib l { fn f(x: Int) -> Float }\n",
+        );
+        assert!(e.contains(&"DL0302".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn an_alias_in_a_foreign_signature_names_its_target_and_offers_the_edit() {
+        // C24. `type Meters = (Int)` is a genuine alias (the parenthesised form — see C28 for why
+        // the bare `type Meters = Int` is a single-variant SUM instead). The fence still refuses it,
+        // deliberately: both engines lower foreign signatures by type NAME through one shared path
+        // that cannot see module aliases, so expanding here and not there is how ABI confusion
+        // starts. What changed is that the refusal now names the target and hands over the edit,
+        // instead of claiming `Meters` is not a marshallable type when `Meters` IS an Int.
+        let c = check("module m\ntype Meters = (Int)\nforeign \"c\" lib l { fn f(x: Meters) -> Float }\n");
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL1301")
+            .unwrap_or_else(|| panic!("expected DL1301, got {:?}", c.diagnostics));
+        assert!(d.message.contains("alias for `Int`"), "must name the target: {}", d.message);
+        let r = d.repairs.first().expect("an exact repair must be offered");
+        assert_eq!(r.edits[0].insert, "Int", "the repair must write the underlying type");
+        // Criterion 3 still holds: no repair may launder a secret across the FFI.
+        for r in &d.repairs {
+            assert!(!r.id.contains("expose"));
+        }
+    }
+
+    #[test]
+    fn an_alias_for_a_function_type_is_the_no_callbacks_rule_not_a_marshalling_complaint() {
+        // C24. `type F = fn(Int) -> Int` used to report DL1301 ("F does not marshal") — true, and
+        // useless. R-6a is about what the type MEANS, and this one means a re-entry point into
+        // verified code, so it is DL1302 with the alias's expansion pointed at.
+        let c = check("module m\ntype F = fn(Int) -> Int\nforeign \"c\" lib l { fn f(cb: F) -> Int }\n");
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL1302")
+            .unwrap_or_else(|| panic!("expected DL1302, got {:?}", c.diagnostics));
+        assert!(d.message.contains("R-6a"), "{}", d.message);
+        assert!(d.repairs.is_empty(), "DL1302 is requires_human — no machine repairs");
+    }
+
+    #[test]
+    fn a_cyclic_alias_cannot_hang_the_foreign_fence() {
+        // The skip-branch case for C24's alias walk. `type A = A` is accepted by the checker (C16),
+        // so an unbounded resolver would turn three lines of source into a hung compiler. Bounded
+        // walk: this must return an error promptly, not spin.
+        let e = errors("module m\ntype A = (A)\nforeign \"c\" lib l { fn f(x: A) -> Int }\n");
+        assert!(e.contains(&"DL1301".to_string()), "{e:?}");
+    }
+
+    #[test]
+    fn a_foreign_lib_or_actor_may_not_take_a_builtin_type_name() {
+        // Both join the TYPE namespace and are matched AFTER the builtins, so the handle type
+        // would be unnameable — a block whose type no signature could ever mention.
+        let e = errors("module m\nforeign \"c\" lib Int { fn f(x: Int) -> Int }\n");
+        assert!(e.contains(&"DL0302".to_string()), "foreign lib named Int: {e:?}");
+    }
+
     // ----- Stage 4: the foreign marshallability fence (phase 4b) -----------
 
     #[test]

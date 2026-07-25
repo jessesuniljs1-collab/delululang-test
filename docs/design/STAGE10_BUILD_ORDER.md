@@ -1231,6 +1231,103 @@ interpreter's `MAX_DEPTH = 10_000` guard overflows the *host* stack below ~20 Mi
 embedding crashes before DL0905 fires. That is the interpreter's stack discipline, not engine
 parity, and wants its own pass.
 
+**D30 — No declaration may shadow a builtin type name or a core effect name. Sixteen type names and
+ten effect names were shadowable, and every shadow was silently inert.** Hardening campaign P5
+(`HARDENING_CAMPAIGN.md` C23).
+
+(a) **How it was found, and what it was not.** The Stage-4 marshallability fence is an allowlist
+matched by NAME, so the attack is to make something else answer to one of those names:
+`type Int = Secret[Str]` plus a foreign signature naming `Int` **checked clean**. It is not
+exploitable — both engines lower foreign signatures by name through one shared path
+(`lower_foreign_sig`), the call site types `Int` as the builtin, and a real `Secret[Str]` value is
+still refused DL0602 — verified by running it. Invariant 20 holds.
+
+(b) **What was actually broken was review integrity, and that is not a lesser property here.** All 16
+builtin type names (`Int … Contained`, including `Root`, `Cap`, `Secret`, `Plugin`) and all 10 core
+effect names were accepted as user declarations and then had no effect anywhere, because `lower_type`
+and `lower_row` match builtins before user scope. `effect Write` is the authority-bearing case: the
+author believed they had declared a private effect while every `! {Write}` still meant the one that
+reaches the filesystem. A source file could say `type Cap = Int` and mislead every later reader
+without ever failing — in a language whose premise is that authority is legible from source.
+
+(c) **RULED: refuse at the definition site, DL0302, on all three declaration-table paths.** Same code
+and same reasoning as C11's prelude-builtin refusal (S-D25): refuse rather than pick a winner,
+because either winner makes one name mean two things depending on where it is read. `resolve.rs`,
+`program.rs`, and `deps.rs` each enforce it, and the package path is separately witnessed — a rule
+that holds on two paths out of three holds nowhere. The name lists are single constants
+(`PRELUDE_TYPES`, `CORE_EFFECT_NAMES`) beside the matchers they mirror, walked by the tests.
+
+**Compatibility, stated plainly:** this refuses programs that previously compiled. Every such program
+contained a declaration that did nothing, so no working behaviour changes — but a tree containing one
+now fails, which is a real (and intended) break.
+
+**D31 — A foreign signature still refuses type aliases, and now says so usefully.** Hardening
+campaign P5 (`HARDENING_CAMPAIGN.md` C24). The fence is **deliberately** name-based and stays that
+way: both engines share one lowering that cannot see module aliases, so expanding an alias in the
+checker and not in the marshaller is how ABI confusion starts — the runtime would have marshalled
+`FKind::Unit` for `Meters`, silently substituting a value. Ruled: keep the refusal, name the alias's
+target, and attach an Exact repair writing it; re-classify an alias expanding to a function type from
+DL1301 to **DL1302**, since R-6a is about what the type means. The resolver walk is **bounded at 32
+hops** because `type A = (A)` is accepted (C16) and an unbounded walk would have introduced a hung
+compiler as part of the fix.
+
+**D32 — The authority report states the credential-exposure conclusion it already had the facts
+for.** Hardening campaign P5 (`HARDENING_CAMPAIGN.md` C25), discharging the commission's requirement
+that DeluluLang *tell* users when code exposes credentials. A program that declassifies `API_KEY` and
+hands it to `msvcrt.puts` was run end to end; the secret was printed by the C function, with every
+gate behaving correctly (row declared, manifest permitted, human granted). The gap was that the
+report read before granting listed `Declassify`, the secret name, and the foreign lib on three
+separate lines and never joined them.
+
+Ruled: a gated `exposure:` line, derived entirely from facts already computed. It reports
+**capability, not behaviour**; it names the safe case ("no egress in its row") as well as the unsafe
+one; and it changes **nothing** about what the language permits — no new refusal, no change to any
+grant relation, no new authority concept, so the Authority guardrail is untouched. The `--json`
+channel is deliberately unchanged: it already carries `effects`, `secrets`, and `foreign_calls`, so
+an agent could always derive this and only the human could not. Reports for programs without
+`Declassify` are byte-identical, including the pinned Stage-3 report.
+
+**D33 — A build that checked nothing no longer reports success, and a directory named where a file
+belongs gets a sentence instead of an OS error code.** Hardening campaign P5 (C26, C27). A package
+whose sources sat beside `delulu.toml` rather than under `src/` printed
+`built clean (1 package(s), 0 module(s))` and exited 0; it now refuses on the posture the deferred-git
+gate already used — a check that could not run must not report success — and the closing
+`0 error(s)` line (which read as success beside a nonzero exit, and affected the pre-existing git and
+advisory refusals too) now states the reason instead of counting errors that were never the problem.
+`delulu run <dir>` reported the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a
+directory` on Linux — misleading, and differently misleading per platform); one fix in the shared
+`load` helper covers every file-taking command and points at `delulu build`.
+
+**D34 — The manifest ceiling and the dependency pin now bound SECRETS, not just effects.** Hardening
+campaign P5 (`HARDENING_CAMPAIGN.md` C19), **owner-approved 2026-07-25** after being held as a
+backward-compatibility decision.
+
+The same blindness as D28, one layer earlier and more consequential, because the pin is the *first*
+review gate. `root.secret("X")` contributes no effect and no capability kind — only a name — so:
+`check_self_authority` (DL1009) let a package read any secret while declaring none, and
+`scope_violations` (DL1001) constrained a dependency's effects, `net`, and `fs` but never its secrets,
+so a consumer who pinned *which* secrets a dependency may read was not actually constrained. The pin
+was decoration. `AuthoritySpec` already carried the field and `package_authority` already computed the
+value; nothing read either.
+
+Ruled: enforce computed `secrets ⊆ manifest.secrets` (DL1009) and `dep.secrets ⊆ pin.secrets`
+(DL1001). The pin check follows the **same empty-means-unconstrained convention as its siblings** —
+inventing a stricter default for secrets alone would be surprising, and would be a second, unruled
+compatibility change riding along. Secret names compare exactly; unlike paths there is no prefix
+relation between them. This completes invariant 10 ("scopes") for the secret dimension.
+
+**Compatibility, stated plainly:** a package that read an undeclared secret, or a pin that omitted a
+dependency's secrets, previously checked clean and now errors. Nothing in-tree read a secret from a
+*package* manifest, so the in-tree cost was zero, but downstream trees will see new errors — which is
+the point of the rule.
+
+**Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
+resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
+alias to a bare type name can be written at all. Choosing the disambiguation rule changes which
+programs are accepted and is a **public-specification decision reserved to the owner** — recorded as
+C28 with both coherent options and a recommendation, and documented against actual behaviour in
+`STAGE1_SPECIFICATION.md` so the ambiguity is at least resolved on paper.
+
 *(Ledger grows as phases surface conflicts; nothing ships un-ruled.)*
 
 ## 3. Phase plan and gates

@@ -29,6 +29,39 @@ use crate::unify::{InferCtx, UnifyError};
 pub const PRELUDE_BUILTINS: &[&str] =
     &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "range", "push"];
 
+/// The builtin TYPE names [`Checker::lower_type`] intercepts before it ever consults user scope.
+///
+/// This list must stay in lockstep with the `match name.as_str()` arm in `lower_type`; the test
+/// `every_builtin_type_name_is_refused_as_a_user_type` walks this constant, and
+/// `no_builtin_type_name_resolves_to_a_user_definition` is the behavioural half.
+///
+/// Why refusing is the only honest answer (`HARDENING_CAMPAIGN.md` C23): a `type Int = Secret[Str]`
+/// declaration was *accepted* and then had no effect whatsoever, because `Int` is matched before
+/// `table.type_ix` is searched. The author got no diagnostic anywhere, and a later reader of that
+/// file — human or agent — would reasonably conclude `Int` meant a secret throughout. For a
+/// language whose entire premise is that a program's authority can be read off its source, a
+/// declaration that silently means nothing is the worst possible outcome: it misleads review
+/// without ever failing. `Root`, `Cap`, `Secret`, and `Plugin` are on this list, so the mislead
+/// lands squarely on the authority-bearing types.
+pub const PRELUDE_TYPES: &[&str] = &[
+    "Int", "Float", "Bool", "Str", "Unit", "Root", "List", "Option", "Result", "Secret", "Cap",
+    "ForeignPtr", "PyObj", "Plugin", "Verified", "Contained",
+];
+
+/// The core effect names [`Checker::lower_row`] intercepts before it consults `user_effects` —
+/// mirroring [`PRELUDE_TYPES`] for the effect namespace, and kept in lockstep with
+/// [`crate::ty::Effect::core_from_name`].
+///
+/// This is the C23 case that actually touches Authority. `effect Write` was accepted and did
+/// nothing: every `! {Write}` row still meant the CORE `Write` effect, so an author who believed
+/// they had declared a private effect had in fact written the one that grants filesystem and
+/// console reach — and the authority report could not tell the reader otherwise, because by the
+/// time it ran there was only ever one `Write`.
+pub const CORE_EFFECT_NAMES: &[&str] = &[
+    "Read", "Write", "Net", "Clock", "Rand", "Declassify", "ForeignCall", "Load", "Async",
+    "Actuate",
+];
+
 
 /// What the checker learned about one function, for the authority report and reachability.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -636,7 +669,57 @@ impl<'a> Checker<'a> {
             );
             return;
         }
+        // An alias standing in for a function type is still the no-callbacks rule: R-6a is about
+        // what the type MEANS, and `type F = fn(Int) -> Int` means a re-entry point. Reporting it as
+        // "F does not marshal" would be true and useless.
+        if let Some(fspan) = self.alias_chain_reaches_fn(t) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL1302",
+                    "a function-typed value cannot cross the foreign boundary — no callbacks, by rule R-6a",
+                )
+                .with_span(t.span(), "this alias expands to a function type")
+                .with_secondary_span(fspan, "the function type is declared here"),
+            );
+            return;
+        }
         if !is_marshallable_type_expr(t) {
+            // An alias whose expansion WOULD marshal is the confusing case (`HARDENING_CAMPAIGN.md`
+            // C24): `type Meters = Int` reads as an Int everywhere else in the language, so the bare
+            // "only Int, Float, … marshal" message looked like the compiler had lost track of what
+            // `Meters` was. Foreign signatures are matched by NAME, deliberately — the interpreter's
+            // `lower_foreign_sig` and the WASM host share exactly one lowering and neither can see
+            // this module's aliases, so expanding here and not there is how ABI confusion starts.
+            // Name the rule, and hand over the edit.
+            if let Some(target) = self.marshallable_alias_target(t) {
+                let span = t.span();
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL1301",
+                        format!(
+                            "`{}` is an alias for `{target}`, and a foreign signature must name the marshallable type directly",
+                            render_type_expr(t)
+                        ),
+                    )
+                    .with_span(
+                        span,
+                        format!("write `{target}` here — both engines marshal by type name through one shared path that cannot see module aliases"),
+                    )
+                    .with_repair(Repair {
+                        id: "name-the-marshallable-type",
+                        confidence: Confidence::Exact,
+                        authority_widening: false,
+                        requires_human: false,
+                        edits: vec![Edit {
+                            file: span.file,
+                            start_byte: span.start,
+                            end_byte: span.end,
+                            insert: target,
+                        }],
+                    }),
+                );
+                return;
+            }
             self.diags.push(
                 Diagnostic::error(
                     "DL1301",
@@ -648,6 +731,56 @@ impl<'a> Checker<'a> {
                 .with_span(t.span(), "only Int, Float, Bool, Str, Unit, and ForeignPtr marshal"),
             );
         }
+    }
+
+    /// Walk a single-segment alias chain and return the marshallable builtin it ultimately names.
+    ///
+    /// The walk is BOUNDED. `type A = A` is currently accepted by the checker
+    /// (`HARDENING_CAMPAIGN.md` C16, held to be a hygiene issue rather than a soundness one), so an
+    /// unbounded resolver here would turn that program into a hung compiler — a denial of service
+    /// reachable from three lines of source. 32 hops is far past any real alias chain.
+    fn marshallable_alias_target(&self, t: &TypeExpr) -> Option<String> {
+        let mut cur = t.clone();
+        for _ in 0..32 {
+            let TypeExpr::Named { path, args, .. } = &cur else { return None };
+            if path.segs.len() != 1 || !args.is_empty() {
+                return None;
+            }
+            let name = path.segs[0].name.clone();
+            if MARSHALLABLE_TYPE_NAMES.contains(&name.as_str()) {
+                return Some(name);
+            }
+            let &id = self.table.type_ix.get(&name)?;
+            match &self.table.type_def(id).kind {
+                TypeDefKind::Alias(inner) => cur = inner.clone(),
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// The span of the function type an alias chain expands to, if any (same bounded walk as
+    /// [`Self::marshallable_alias_target`], same reason).
+    fn alias_chain_reaches_fn(&self, t: &TypeExpr) -> Option<Span> {
+        let mut cur = t.clone();
+        for _ in 0..32 {
+            match &cur {
+                TypeExpr::Fn { span, .. } => return Some(*span),
+                TypeExpr::Named { path, args, .. } if path.segs.len() == 1 && args.is_empty() => {
+                    let name = &path.segs[0].name;
+                    if MARSHALLABLE_TYPE_NAMES.contains(&name.as_str()) {
+                        return None;
+                    }
+                    let &id = self.table.type_ix.get(name)?;
+                    match &self.table.type_def(id).kind {
+                        TypeDefKind::Alias(inner) => cur = inner.clone(),
+                        _ => return None,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        None
     }
 
     fn make_genv(&mut self, sig: &FnSig) -> Genv {
@@ -2589,15 +2722,18 @@ impl<'a> Checker<'a> {
 /// The marshallable allowlist for a foreign signature (T-ForeignSig): exactly
 /// `Int Float Bool Str Unit ForeignPtr`, with no type arguments. Everything else — `Secret[T]`,
 /// `Cap[R]`, `Root`, `Plugin[_]`, `PyObj`, a lib handle, `List[..]`, user types — is DL1301.
+/// `M(τ)`'s allowlist, by name — the ONE list. Both engines lower foreign signatures by type name
+/// (`delulu_runtime::interp::lower_foreign_sig`, shared with the WASM host), so this list and
+/// `FKind::from_type_name` are two halves of one rule and must never drift apart.
+pub const MARSHALLABLE_TYPE_NAMES: &[&str] =
+    &["Int", "Float", "Bool", "Str", "Unit", "ForeignPtr"];
+
 fn is_marshallable_type_expr(t: &TypeExpr) -> bool {
     match t {
         TypeExpr::Named { path, args, .. } => {
             args.is_empty()
                 && path.segs.len() == 1
-                && matches!(
-                    path.segs[0].name.as_str(),
-                    "Int" | "Float" | "Bool" | "Str" | "Unit" | "ForeignPtr"
-                )
+                && MARSHALLABLE_TYPE_NAMES.contains(&path.segs[0].name.as_str())
         }
         TypeExpr::Fn { .. } => false,
         // An rcap prefix never appears in a foreign signature (the FFI predates rcaps and

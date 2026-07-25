@@ -69,6 +69,13 @@ pub fn check_program(pkg: &Package) -> Program {
                     diagnostics.push(dup(&unit.name, "type", &td.name.name, td.span));
                     continue;
                 }
+                // C23: builtin type names are intercepted before user scope on EVERY path. The
+                // single-module path refuses in `resolve.rs`; the package path must refuse too, or
+                // the same inert declaration is accepted merely by living in a package.
+                if let Some(d) = crate::resolve::shadows_a_builtin_type("type", &td.name) {
+                    diagnostics.push(d);
+                    continue;
+                }
                 let id = TypeDefId(gtypes.len() as u32);
                 gtypes.push(TypeDef {
                     name: td.name.name.clone(),
@@ -117,7 +124,12 @@ pub fn check_program(pkg: &Package) -> Program {
                     }
                     consts.push(ConstSig { name: c.name.name.clone(), ty: c.ty.clone() });
                 }
-                Item::Effect(e) => effects.push((e.name.name.clone(), e.public)),
+                Item::Effect(e) => match crate::resolve::shadows_a_core_effect(&e.name) {
+                    // C23, the authority-bearing case: `effect Write` is inert because rows
+                    // resolve core effects first. Refused on the package path as well.
+                    Some(d) => diagnostics.push(d),
+                    None => effects.push((e.name.name.clone(), e.public)),
+                },
                 _ => {}
             }
         }

@@ -83,6 +83,7 @@ DeluluLang/
 ├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
+├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
 ├── .github/workflows/              # the three-OS CI matrix (NEVER executed — repo is not pushed)
 │
