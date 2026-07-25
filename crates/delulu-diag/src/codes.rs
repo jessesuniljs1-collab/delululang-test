@@ -41,7 +41,7 @@ registry! {
     "DL0301" => "unknown name",
     "DL0302" => "duplicate definition",
     "DL0303" => "unknown module in import",
-    "DL0304" => "import cycle",
+    "DL0304" => "a cycle in the declaration graph (imports, or type aliases)",
     "DL0305" => "module-level mutable state is forbidden",
     "DL0306" => "unknown effect name",
     "DL0307" => "not a capability resource kind",
@@ -591,9 +591,18 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0303" => "The imported module does not exist in this package or in any declared \
              dependency. Check the module name, and check that the package providing it is in \
              `[dependencies]` — access is not authority (§5.7), but you still need access.",
-        "DL0304" => "The imports form a cycle. Module graphs are acyclic so that initialization \
-             order and re-export resolution are well-defined. Break the cycle by moving the shared \
-             declarations into a module both sides import.",
+        "DL0304" => "A declaration graph that must be acyclic contains a cycle. Two graphs are \
+             covered here, because the reason is the same for both: resolution has to terminate. \
+             IMPORTS are acyclic so that initialization order and re-export resolution are \
+             well-defined — break the cycle by moving the shared declarations into a module both \
+             sides import. TYPE ALIASES are acyclic because an alias is expanded by substitution, so \
+             `type A = A`, `type A = B` with `type B = A`, and `type A = List[A]` all name a type \
+             whose expansion never finishes. Give the alias a target that eventually names a real \
+             type — or declare a record or a sum, which MAY be recursive, because those are nominal \
+             and are never expanded. This is an error at the declaration rather than a warning \
+             because a cyclic alias that was actually used overflowed the compiler's own stack \
+             (hardening C54): the crash arrived instead of a diagnostic, and it did so at whatever \
+             use site happened to be first.",
         "DL0305" => "Module-level MUTABLE state is forbidden. A `let` constant is fine; a `var` is \
              not. Shared mutable module state is ambient authority in disguise — it lets two \
              functions communicate through a channel that appears in neither of their signatures, \

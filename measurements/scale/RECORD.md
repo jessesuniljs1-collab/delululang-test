@@ -97,5 +97,65 @@ measured against: bounded for the human, complete for the machine.
 Depth costs linearly and breadth costs nothing for a leaf that does not depend on it — both correct.
 **Lockfile determinism holds at every size**, which is what the semver-authority law rests on.
 
-`delulu authority` is absent from that table because it **fails** on every package with a dependency
-(DL0303) while `build` on the same package succeeds — campaign finding C51, open.
+`delulu authority` is absent from that table because, when it was taken, it **failed** on every package
+with a dependency (DL0303) while `build` on the same package succeeded — campaign finding C51, since
+**closed** in P13 (ruling D45a): a `delulu.toml`'s presence now selects the resolving loader, so
+`authority` answers for a monorepo member. The row is left out rather than back-filled because these
+numbers were measured in one sitting and a table should say when it was taken, not be quietly patched.
+
+## Runtime: record field access is O(record width) per read (hardening P14, ruling D47c)
+
+The C48 fix was to the CHECKER's field lookup. The interpreter was checked for the same shape and does
+**not** have it — `Interp::field` clones only the value it finds, never the whole definition. It does
+scan the field list linearly, so a read costs time proportional to the record's WIDTH.
+
+Measured with total field reads held CONSTANT (~200,000) and only the record's width varying, so a
+flat row would mean width is free and a rising one is the scan itself. Release build, warm; the
+`check` column is subtracted from `run` because `delulu run` checks first.
+
+| fields | passes | field reads | check ms | run ms | µs per 1k reads |
+|---|---|---|---|---|---|
+| 50 | 4,000 | 200,000 | 44 | 77 | **165** |
+| 200 | 1,000 | 200,000 | 45 | 105 | **300** |
+| 800 | 250 | 200,000 | 59 | 373 | **1,570** |
+| 3,200 | 62 | 198,400 | 173 | 1,179 | **5,071** |
+
+A 64× wider record costs ~31× more per read: linear in width, as a scan implies.
+
+**This is published as a named limit rather than fixed, and the reasoning is on the record.** For the
+widths real programs use — five to twenty fields — a linear scan over a short `Vec` is not merely
+acceptable, it is the faster representation: no hashing, no indirection, and the whole record sits in
+cache. The cost only becomes visible on records wide enough to be unusual, and removing it means
+either a per-instance map (paying memory on *every* record, including the narrow ones that dominate)
+or resolving field indices statically through the DIR side tables. The second is the right fix and it
+is a real change, not a tidy-up; it is not being attempted at the tail of a phase.
+
+What makes this a limit and not a defect: it is linear, not quadratic, in the thing being varied, and
+the constant is small. Contrast C48, which was accidentally quadratic *and* allocated on every access
+— that was fixed. This is inherent to the representation and is therefore reported with a number, per
+the Constitution's own rule that where DeluluLang loses, the table says so.
+
+## Runtime memory: `--trace-effects` buffers the whole trace in RAM (hardening P14, finding C56)
+
+`TraceSink` is a `Vec<TraceRecord>` with no bound. Every traced effect is retained until the process
+exits, so memory grows linearly with the number of effects performed — not with the program's live
+data.
+
+| run | peak working set |
+|---|---|
+| 100,000 console writes | **6.7 MB** |
+| the same, under `--trace-effects` | **70.1 MB** |
+
+≈ 633 bytes retained per traced effect. At a thousand effects a second — an ordinary rate for the
+control loops Stage 10 exists to serve — that is roughly 2.3 GB per hour.
+
+**Open, not fixed here.** The trace is evidence and must stay complete, so the fix is not truncation
+by default; it is either streaming records out as they are produced (the audit chain already does
+exactly this, to day files) or bounding the buffer with an explicit notice of what was withheld (the
+D38 pattern for diagnostics). Streaming is the better answer and is not a small change: the actor
+runtime merges per-worker sinks at turn boundaries to stamp causality, so the ordering guarantees have
+to survive the move. Recorded with a number rather than attempted at the tail of a phase.
+
+Worth stating what this is not: `--trace-effects` is opt-in and off by default, so no production run
+pays it. What makes it worth a finding anyway is *which* runs turn it on — a long-lived controller
+being diagnosed in the field is precisely the case where hours of uptime meet a flag that never frees.

@@ -1959,6 +1959,70 @@ Witnesses for (a), (b) and (d) were observed failing against the pre-fix code wi
 payloads; (c) changes no behaviour and is carried by the existing dead-man tests. Full suite green on
 both platforms at the phase's baselines.
 
+**D47 — A type alias is validated where it is written, and a cyclic one can no longer crash the
+compiler.** Hardening campaign P14 (`HARDENING_CAMPAIGN.md` C53, C54; reshaping C16). Two sub-rulings
+and one published limit.
+
+(a) **C54 — a used cyclic alias aborted the compiler with a stack overflow.** `lower_type` expands an
+alias by recursing into its target, so a cycle is unbounded recursion. `type A = A` plus a single use
+of `A` died with `has overflowed its stack`, exit `0xC00000FD` — and so did `type A = B; type B = A`,
+`type A = List[A]`, `type A = iso A` and `type A = fn(A) -> Int`. A hard crash from three lines of
+ordinary source, and for anything that compiles code it did not write — an editor, a CI runner, a
+package registry — a denial of service.
+
+**This reshapes C16, and the correction is worth stating plainly.** P2 recorded cyclic aliases as
+*hygiene*, on the evidence that 5000-deep terminating chains resolve and that a secret cannot launder
+through a cycle. Both of those findings hold. What that pass never tested was a cycle that is actually
+USED — and the declaration alone is harmless precisely because nothing lowers it. The verdict was
+right about what it measured and wrong about the class.
+
+**Note what the crash was invisible to.** A stack overflow aborts the process without printing
+`panicked at`, so the no-panic sweeps — which match that message, exactly as D44c made them — could not
+see it. That is the third time a gate has been blind to the failure it exists to catch (D42a's coverage
+law, D44c's exit-code sweep, this). The lesson is not about any one gate: **ask what signal a gate keys
+on, and what failure produces a different signal.**
+
+RULED: `Checker::check_type_aliases` runs before anything lowers a type, detects cycles in the alias
+graph, and reports **DL0304** at each participating declaration, naming the chain (`A = B = C = A`) so
+a multi-step cycle is followable. `lower_type`'s alias arm consults the resulting set and refuses to
+expand a cyclic alias, which makes the crash structurally impossible rather than merely diagnosed.
+Only alias→alias edges are considered, and that is what keeps the graph small: a reference to a record
+or a sum terminates, because those are nominal and are never expanded — which is also why a recursive
+`type Node { next: Option[Node] }` and a recursive `type Tree = Leaf | Branch(Tree)` remain legal, and
+are tested as such.
+
+**DL0304 was generalized rather than a new code minted.** Its title becomes "a cycle in the declaration
+graph (imports, or type aliases)" and its explain body covers both, because the reason is identical in
+both: resolution has to terminate. Same discipline as DL1511 in D42b — reuse the code whose meaning
+matches, keep the subsystem range meaningful (DL03xx is resolution), and do not strand agents keying on
+numbers.
+
+(b) **C53 — an unused alias target was never resolved.** `type Meters = Metres` — a typo — checked
+clean, with DL0301 arriving only at a use site; in a library whose own code never uses the alias, that
+diagnostic landed on a consumer who did not make the mistake. The C11/C23 family: a declaration
+accepted and then silently inert.
+
+RULED: the same pass lowers each alias target, so an unresolvable name is reported at the declaration.
+It reuses the real resolver rather than duplicating its notion of which names exist — the alternative
+would have been a second list of builtin type names, which is the drift shape this campaign has closed
+four times. Forward references keep working because the pass runs after the whole module's type names
+are registered, and that is tested alongside a 200-deep terminating chain.
+
+(c) **Published limit, not a defect: runtime record field access is O(record width) per read.** The
+interpreter was checked for C48's clone-per-access shape and does **not** have it — `Interp::field`
+clones only the value it finds. It does scan linearly. Measured with total field reads held constant at
+~200,000 and only the width varying: **165 → 300 → 1,570 → 5,071 µs per 1k reads** at 50 → 200 → 800 →
+3,200 fields, i.e. linear in width.
+
+RULED: publish the number, do not change the representation. For the widths real programs use — five to
+twenty fields — a linear scan over a short `Vec` is the *faster* representation: no hashing, no
+indirection, the record in cache. Removing the cost means either a per-instance map (paying memory on
+every record, including the narrow ones that dominate) or resolving field indices statically through
+the DIR side tables; the second is the right fix and is a real change, not a tidy-up. It is linear, not
+quadratic, and the constant is small — the opposite of C48, which was accidentally quadratic *and*
+allocated on every access. Recorded in `measurements/scale/RECORD.md` under the Constitution's own rule
+that where DeluluLang loses, the table says so.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

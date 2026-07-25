@@ -25,6 +25,18 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **A cyclic type alias no longer crashes the compiler.** `type A = A` plus a single use of `A` aborted
+  the process with a stack overflow (`0xC00000FD`), as did `type A = B; type B = A`, `type A = List[A]`,
+  `type A = iso A` and `type A = fn(A) -> Int` — a hard crash from three lines of ordinary source, and
+  a denial of service for anything that compiles code it did not write. Cycles are now detected before
+  any type is lowered and refused at the declaration with **DL0304**, naming the chain; the expansion
+  path additionally refuses to recurse, so the crash is structurally impossible rather than merely
+  diagnosed. Recursive records and sums stay legal — those are nominal and are never expanded.
+
+  This corrects an earlier verdict rather than quietly superseding it: cyclic aliases had been recorded
+  as a hygiene issue on the evidence that long terminating chains resolve and that secrets cannot
+  launder through a cycle. Both remain true; what was never tested was a cycle that is actually *used*.
+  (C54/C16, ruling D47a)
 - **A `delulu.lock` can no longer misstate what a dependency does.** `build --locked` recomputed the
   content and authority hashes and compared them to the stored ones — but never checked the recorded
   `effects`, `cap_kinds`, `secrets` or scope lists, which are the fields a human opens a lockfile to
@@ -228,6 +240,11 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **A type alias is now checked where it is written.** `type Meters = Metres` — a typo — used to check
+  clean, with the "unknown type" error arriving only at a use site; in a library whose own code never
+  uses the alias, that error landed on a consumer who did not make the mistake. Alias targets are now
+  resolved at their declaration. Forward references still work (the pass runs once the whole module's
+  type names are known), and so do long chains and generic aliases. (C53, ruling D47b)
 - **`delulu authority` can now report on a package that has dependencies.** It ran the single-package
   loader while `build`, `check`, `lock` and `authority --diff` all resolve the dependency graph, so
   every package with a dependency was refused with DL0303 ("unknown module") while `build` on the same

@@ -81,7 +81,7 @@ deviations.
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
 | C14 | **`DL0907` was titled "match reached no arm" and is raised for a dozen unrelated conditions** — a reader hitting it for an unbound name was told something false about their program | medium (honesty) | **CLOSED** — D42 |
 | C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
-| C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
+| C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low as filed (hygiene) — **the severity was wrong**: P2 tested the declaration, never a USE, and a used cycle crashed the compiler (C54) | **CLOSED** — D47a, together with C54 |
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | **CLOSED** — D34 (owner approved 2026-07-25) |
@@ -115,7 +115,10 @@ deviations.
 | C49 | **An empty `delulu.toml` crashed `build`/`check` with a Rust panic** — and the project's own no-panic gate could not see it, because the CLI runs on a worker thread whose panic is mapped to exit 2 ("internal"), not 101 | **high** (crash on the most ordinary beginner mistake; the crash gate was structurally blind) | **CLOSED** — D44 |
 | C50 | **`delulu authority` reported `summary.errors: 0` and exit 0 for a package `check` refuses** — the review surface never opened `delulu.toml` at all | **high** (the review surface asserting a package is clean when it is not) | **CLOSED** — D44 |
 | C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | **CLOSED** — D45 |
-| C53 | **An unused type alias is never resolved** — `type Meters = Metres` (a typo) checks clean, and the error only appears if and where the alias is used; in a library whose own code never uses it, the diagnostic lands on the consumer | medium (a declaration accepted and silently inert — the C11/C23 family) | OPEN — found in D46's migration check, queued for P15 |
+| C53 | **An unused type alias is never resolved** — `type Meters = Metres` (a typo) checks clean, and the error only appears if and where the alias is used; in a library whose own code never uses it, the diagnostic lands on the consumer | medium (a declaration accepted and silently inert — the C11/C23 family) | **CLOSED** — D47b |
+| C54 | **A USED cyclic type alias aborted the compiler with a stack overflow** — `type A = A` plus one use died at `0xC00000FD`; the no-panic sweeps could not see it, because a stack overflow prints no `panicked at` | **high** (hard crash on ordinary input; DoS for anything compiling untrusted code) | **CLOSED** — D47a (reshapes C16) |
+| C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c (measured and published; linear, not quadratic) |
+| C56 | **`--trace-effects` buffers the entire trace in RAM** — 100k effects take peak memory from 6.7 MB to 70.1 MB (~633 B/record), unbounded; the audit chain already streams to day files, the trace does not | medium (opt-in flag, but the runs that enable it are the long-lived ones) | OPEN — measured and published, queued |
 | C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
@@ -1564,31 +1567,74 @@ one it replaced.
 The findings came instead from asking a different question of the same inputs: not *does it crash*
 but **does it NOTICE**.
 
-### C53 · An unused type alias is never resolved — OPEN
+### 3.9 P14 — runtime cost, and a crash the crash-gates could not see
 
-Found while checking D46a's migration path: what happens to `type E = A` written when a one-variant
-sum was meant? The alias target is not resolved at the declaration, so it checks clean:
+### C54 · A used cyclic type alias aborted the compiler — CLOSED (D47a), and it reshapes C16
+
+`lower_type` expands an alias by recursing into its target, so a cycle is unbounded recursion. Five
+shapes all died the same way as soon as the alias was USED:
 
 ```
-type Meters = Metres          # a typo; checks clean, exit 0
-fn g(x: Meters) -> Int { 1 }  # DL0301 here, and only here
+$ delulu check cyc.delulu          # type A = A ; fn f(x: A) -> Int { 1 }
+thread 'delulu-main' has overflowed its stack
+exit code: -1073741571             # 0xC00000FD = STATUS_STACK_OVERFLOW
 ```
 
-**Pre-existing, and D46a did not cause it** — verified by testing the two spellings that already
-reached the alias production before that ruling: `type X = (Nonexistent)` and
-`type Y = List[Nonexistent]` are both accepted too. What D46a changed is that one more spelling now
-reaches the same path, which is how it surfaced.
+`type A = A`, `type A = B; type B = A`, `type A = List[A]`, `type A = iso A`, `type A = fn(A) -> Int`.
+A hard crash from three lines of ordinary source — and for anything that compiles code it did not
+write (an editor, a CI runner, a registry) a denial of service.
 
-This is the C11/C23 family: a declaration accepted and then silently inert, with the diagnostic
-appearing somewhere the author did not write. The library case is the sharp one — a package whose own
-code never uses the alias exports a broken type, and the error lands on a consumer who did not make
-the mistake.
+**C16 was right about what it measured and wrong about the class.** P2 recorded cyclic aliases as
+hygiene on the evidence that 5000-deep terminating chains resolve and that a secret cannot launder
+through a cycle. Both still hold. What it never tested was a cycle that is USED — and the declaration
+alone is harmless precisely because nothing lowers it. C16 is closed here with its severity corrected
+rather than left standing as "low".
 
-Not fixed here. The fix is to resolve an alias target at its declaration, and it has two hazards that
-deserve their own budget rather than the tail of a long phase: **forward references** (`type A = B`
-with `B` declared later must keep working) and **cycles** (`type A = A` is C16, still open, and an
-unbounded resolution walk would hang the compiler — the same trap that made D31's alias walk bounded
-at 32 hops). Queued for P15.
+⚠ **And note what the crash was invisible to.** A stack overflow aborts without printing `panicked at`,
+so the no-panic sweeps — which match exactly that message, as D44c made them — could not see it. That
+is the **third** gate in this campaign blind to the failure it exists to catch: D42a's coverage law
+proved existence rather than exercise, D44c's sweep keyed on exit 101 while the CLI maps a worker panic
+to exit 2, and now a sweep that matches a panic message against a failure that produces none. The
+durable lesson is not about any one gate: **ask what signal a gate keys on, then ask what failure
+produces a different signal.**
+
+The fix runs before anything lowers a type, reports **DL0304** at each participating declaration with
+the chain named (`A = B = C = A`), and has `lower_type` refuse to expand a cyclic alias — so the crash
+is structurally impossible, not merely diagnosed. Only alias→alias edges are walked, which is what
+keeps a recursive `type Node { next: Option[Node] }` and a recursive `type Tree = Leaf | Branch(Tree)`
+legal: those are nominal and are never expanded. Both are tested.
+
+DL0304 was **generalized, not duplicated** — "a cycle in the declaration graph (imports, or type
+aliases)" — because the reason is identical in both graphs: resolution has to terminate. Same
+discipline as DL1511 in D42b.
+
+### C53 · An unused alias target was never resolved — CLOSED (D47b)
+
+`type Meters = Metres` checked clean; DL0301 arrived only at a use site, and in a library whose own
+code never uses the alias, on a consumer who did not make the mistake. Verified **pre-existing**, not
+caused by D46a: `type X = (Nonexistent)` and `type Y = List[Nonexistent]` were accepted too. The same
+pass now lowers each alias target at its declaration, reusing the real resolver rather than
+duplicating its notion of which names exist — the alternative was a second list of builtin type names,
+which is the drift shape this campaign has closed four times.
+
+### C55 · Runtime record field access is O(record width) — NAMED LIMIT (D47c)
+
+The interpreter was checked for C48's clone-per-access shape and does **not** have it: `Interp::field`
+clones only the value it finds. It does scan linearly. Measured with total field reads held constant
+at ~200,000 and only the width varying:
+
+| fields | µs per 1k reads |
+|---|---|
+| 50 | 165 |
+| 200 | 300 |
+| 800 | 1,570 |
+| 3,200 | 5,071 |
+
+Linear in width. **Published rather than fixed**, with the reasoning on the record: for the widths real
+programs use, a linear scan over a short `Vec` is the *faster* representation, and removing the cost
+means either a per-instance map (paying memory on every narrow record) or static field indices through
+the DIR. It is linear, not quadratic, and the constant is small — the opposite of C48, which was
+accidentally quadratic *and* allocated per access. Full table in `measurements/scale/RECORD.md`.
 
 ### C51 · The review surface could not review a real package — CLOSED (D45)
 

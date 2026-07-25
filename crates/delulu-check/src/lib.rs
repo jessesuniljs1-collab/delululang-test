@@ -1525,3 +1525,111 @@ mod tests {
         );
     }
 }
+
+// ----- type-alias declarations are validated where they are written (C53/C54, ruling D47) ------
+
+#[cfg(test)]
+mod alias_declaration_tests {
+    use super::check_source;
+
+    fn errors(src: &str) -> Vec<String> {
+        check_source(0, src)
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| d.code.to_string())
+            .collect()
+    }
+
+    const MAIN: &str = "\nfn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(\"x\")\n}\n";
+
+    /// **A cyclic alias must be REFUSED, not crash the compiler.**
+    ///
+    /// `lower_type` expands an alias by recursing into its target, so a cycle is unbounded recursion.
+    /// Each of these aborted the process with `has overflowed its stack` (exit `0xC00000FD`) as soon
+    /// as the alias was USED — a hard crash on three lines of ordinary source, and a denial of
+    /// service for anything that compiles code it did not write.
+    ///
+    /// Note what could not see it: a stack overflow aborts without printing `panicked at`, so the
+    /// no-panic sweeps that match that message (D44c) were blind to it. Third time a gate has missed
+    /// the failure it exists to catch.
+    #[test]
+    fn a_cyclic_type_alias_is_refused_at_its_declaration() {
+        for (what, src) in [
+            ("direct self-reference", "module m\ntype A = A\n"),
+            ("two-step cycle", "module m\ntype A = B\ntype B = A\n"),
+            ("three-step cycle", "module m\ntype A = B\ntype B = C\ntype C = A\n"),
+            ("cycle through a generic argument", "module m\ntype A = List[A]\n"),
+            ("cycle through a reference-capability wrapper", "module m\ntype A = iso A\n"),
+            ("cycle through a function type", "module m\ntype A = fn(A) -> Int\n"),
+        ] {
+            let decl_only = errors(&format!("{src}{MAIN}"));
+            assert!(
+                decl_only.contains(&"DL0304".to_string()),
+                "{what}: the cycle must be reported at the DECLARATION, even unused: {decl_only:?}"
+            );
+            // And with a use, which is the shape that used to crash rather than diagnose.
+            let used = errors(&format!("{src}\nfn f(x: A) -> Int {{ 1 }}\n{MAIN}"));
+            assert!(
+                used.contains(&"DL0304".to_string()),
+                "{what}: using it must still diagnose, never abort: {used:?}"
+            );
+        }
+    }
+
+    /// The other half: an alias target must RESOLVE where it is written. `type Meters = Metres` — a
+    /// typo — used to check clean, with DL0301 arriving only at a use site. In a library whose own
+    /// code never uses the alias, that diagnostic landed on a consumer who did not make the mistake.
+    #[test]
+    fn an_unused_alias_to_an_unknown_type_is_refused_at_its_declaration() {
+        for src in [
+            "module m\ntype Meters = Metres\n",
+            "module m\ntype X = (Nonexistent)\n",
+            "module m\ntype Y = List[Nonexistent]\n",
+            "module m\ntype Z = fn(Nonexistent) -> Int\n",
+        ] {
+            let got = errors(&format!("{src}{MAIN}"));
+            assert!(
+                got.contains(&"DL0301".to_string()),
+                "an unused alias to an unknown type must be refused where it is written: {got:?}\n{src}"
+            );
+        }
+    }
+
+    /// The cases the fix must NOT break, and the ones a naive cycle check would.
+    #[test]
+    fn forward_references_chains_and_recursive_nominals_still_work() {
+        // A forward reference: the alias is declared BEFORE its target. Resolution runs after the
+        // whole module's type names are known, so this has to keep working.
+        assert!(
+            errors(&format!("module m\ntype Early = Late\ntype Late {{ a: Int }}\nfn f(x: Early) -> Int {{ x.a }}\n{MAIN}"))
+                .is_empty(),
+            "an alias may name a type declared later in the module"
+        );
+        // A long terminating chain. C16 verified 5000 of these resolve; the cycle check must not
+        // mistake depth for a cycle.
+        let mut chain = String::from("module m\ntype A0 = Int\n");
+        for i in 1..200 {
+            chain.push_str(&format!("type A{i} = A{}\n", i - 1));
+        }
+        chain.push_str("fn f(x: A199) -> Int { x + 1 }\n");
+        assert!(errors(&format!("{chain}{MAIN}")).is_empty(), "a 200-deep terminating chain is legal");
+        // Generic aliases.
+        assert!(
+            errors(&format!("module m\ntype Pair[T] = List[T]\nfn f(x: Pair[Int]) -> Int {{ 1 }}\n{MAIN}")).is_empty(),
+            "a generic alias is legal"
+        );
+        // A RECURSIVE RECORD is legal and must not be confused with a cyclic alias: a record is
+        // nominal and is never expanded, so resolution terminates.
+        assert!(
+            errors(&format!("module m\ntype Node {{ next: Option[Node], v: Int }}\nfn f(n: Node) -> Int {{ n.v }}\n{MAIN}"))
+                .is_empty(),
+            "a recursive RECORD is legal — only aliases expand"
+        );
+        // And a sum likewise.
+        assert!(
+            errors(&format!("module m\ntype Tree = Leaf | Branch(Tree)\nfn f(t: Tree) -> Int {{ 1 }}\n{MAIN}")).is_empty(),
+            "a recursive SUM is legal for the same reason"
+        );
+    }
+}

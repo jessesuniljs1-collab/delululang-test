@@ -245,6 +245,22 @@ alias alternative, and the grammar alone does not say which. The rule is:
 The decision does not consult name resolution, so the grammar stays context-free: what makes a
 right-hand side a sum is a token, not whether some identifier happens to name an existing type.
 
+**An alias is validated at its declaration, and the alias graph is ACYCLIC** (normative; ruling D47).
+Two rules, checked before any type is lowered:
+
+1. **The target must resolve where it is written.** `type Meters = Metres` is DL0301 at the
+   declaration, not at some later use site — otherwise a library exports a broken type and the
+   diagnostic lands on a consumer who did not make the mistake.
+2. **An alias may not expand to itself**, directly or through any chain: `type A = A`,
+   `type A = B` with `type B = A`, and `type A = List[A]` are all **DL0304**. An alias is expanded by
+   substitution, so a cycle describes a type whose expansion never terminates; before this was
+   refused, such a program aborted the compiler's own stack rather than producing a diagnostic.
+
+**Records and sums MAY be recursive** — `type Node { next: Option[Node] }` and
+`type Tree = Leaf | Branch(Tree)` are legal and always were. They are nominal: a reference to one
+resolves to the type itself and is never expanded, so resolution terminates. Only aliases expand, so
+only aliases can cycle.
+
 It previously resolved toward SUM, and every consequence was silent. `type Meters = Int` declared a
 nominal sum whose single constructor was named `Int`, so `fn g() -> Meters { Int }` type-checked —
 the token `Int` in *expression* position constructed a `Meters` — a mistyped value reported

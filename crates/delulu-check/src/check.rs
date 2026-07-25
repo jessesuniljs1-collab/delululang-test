@@ -157,9 +157,15 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
+        cyclic_aliases: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
+    // BEFORE anything lowers a type: validate the alias declarations themselves. Cycles must be
+    // known first (`lower_type` expands an alias by recursing, so a cycle is a stack overflow, not a
+    // diagnostic), and an alias target must resolve where it is WRITTEN rather than only where it is
+    // used. See `check_type_aliases`.
+    checker.check_type_aliases(module);
     for item in &module.items {
         match item {
             Item::Fn(f) => checker.check_fn(f),
@@ -294,6 +300,10 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
+        // A plugin-manifest signature is lowered against the HOST's already-validated decl table, so
+        // no alias in scope here can be cyclic — `check_module` refused any that were. Empty is the
+        // correct value, not a shortcut.
+        cyclic_aliases: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
@@ -320,6 +330,12 @@ struct Checker<'a> {
     /// DIR §2.3 side tables, recorded raw (pre-substitution) during checking and resolved once at
     /// the end of `check_module`. `node_types_raw` holds each node's assigned type (possibly with
     /// inference variables); `node_row_accs` holds each node's raw effect accumulator.
+    /// Type aliases that participate in a cycle, by name. Populated once, before anything lowers a
+    /// type, by [`Checker::check_type_aliases`]. `lower_type`'s alias arm EXPANDS the target by
+    /// recursing, so a cycle there is unbounded recursion — `type A = A` plus one use of `A` aborted
+    /// the compiler with a stack overflow (`HARDENING_CAMPAIGN.md` C54). Consulting this set is what
+    /// makes that structurally impossible rather than merely diagnosed.
+    cyclic_aliases: std::collections::HashSet<String>,
     node_types_raw: HashMap<NodeId, Type>,
     node_row_accs: HashMap<NodeId, RowAcc>,
 }
@@ -735,10 +751,10 @@ impl<'a> Checker<'a> {
 
     /// Walk a single-segment alias chain and return the marshallable builtin it ultimately names.
     ///
-    /// The walk is BOUNDED. `type A = A` is currently accepted by the checker
-    /// (`HARDENING_CAMPAIGN.md` C16, held to be a hygiene issue rather than a soundness one), so an
-    /// unbounded resolver here would turn that program into a hung compiler — a denial of service
-    /// reachable from three lines of source. 32 hops is far past any real alias chain.
+    /// The walk is BOUNDED, and it is kept bounded even though `check_type_aliases` now refuses a
+    /// cyclic alias outright (C54): this runs on the foreign-signature path, the bound costs nothing,
+    /// and a resolver that cannot loop is worth more than one that relies on an earlier pass having
+    /// run. 32 hops is far past any real alias chain.
     fn marshallable_alias_target(&self, t: &TypeExpr) -> Option<String> {
         let mut cur = t.clone();
         for _ in 0..32 {
@@ -781,6 +797,126 @@ impl<'a> Checker<'a> {
             }
         }
         None
+    }
+
+    /// Validate every type ALIAS declaration, before any type is lowered. Two rules, in this order
+    /// because the second is unsafe without the first.
+    ///
+    /// **1. An alias chain may not cycle** (`HARDENING_CAMPAIGN.md` C54, reshaping C16). `lower_type`
+    /// expands an alias by recursing into its target, so a cycle is unbounded recursion. `type A = A`
+    /// with a single use of `A` aborted the compiler — `has overflowed its stack`, exit
+    /// `0xC00000FD` — and so did `type A = B; type B = A` and `type A = List[A]`. This was a hard
+    /// crash on ordinary input, which for anything that compiles code it did not write (an editor, a
+    /// CI runner, a registry) is a denial of service.
+    ///
+    /// C16 recorded cyclic aliases as *hygiene* on the evidence that 5000-deep terminating chains
+    /// resolve and secrets cannot launder through a cycle. Both of those hold. What that pass never
+    /// tested was a cycle that is actually USED, and the declaration alone is harmless precisely
+    /// because nothing lowers it. The verdict was right about what it measured and wrong about the
+    /// class.
+    ///
+    /// Note what the crash was invisible to: a stack overflow aborts the process without producing
+    /// `panicked at`, so the no-panic sweeps — which match that message (D44c) — could not see it.
+    /// That is the third time a gate has been blind to the failure it exists to catch.
+    ///
+    /// **Only alias→alias edges can cycle**, which is what makes the graph small: a reference to a
+    /// record or a sum terminates, because `lower_type` returns `Type::Record`/`Type::Sum` for those
+    /// without expanding anything.
+    ///
+    /// **2. An alias target must resolve where it is WRITTEN** (C53). `type Meters = Metres` — a
+    /// typo — used to check clean, with DL0301 arriving only at a use site; in a library whose own
+    /// code never uses the alias, the diagnostic landed on a consumer who did not make the mistake.
+    /// This is the C11/C23 family: a declaration accepted and then silently inert. Lowering the
+    /// target here reports it at the declaration, and reuses the real resolver rather than
+    /// duplicating its notion of what names exist.
+    fn check_type_aliases(&mut self, module: &Module) {
+        use delulu_syntax::ast::TypeDeclKind;
+
+        // The alias graph: alias name -> the alias names its target mentions, anywhere.
+        // "Anywhere" and not just at the head, because `type A = List[A]` recurses through an
+        // argument just as surely as `type A = A` recurses through the head.
+        let mut targets: Vec<(&Ident, &TypeExpr)> = Vec::new();
+        for item in &module.items {
+            if let Item::Type(td) = item {
+                if let TypeDeclKind::Alias(t) = &td.kind {
+                    targets.push((&td.name, t));
+                }
+            }
+        }
+        if targets.is_empty() {
+            return;
+        }
+        let is_alias = |name: &str| {
+            self.table
+                .type_ix
+                .get(name)
+                .is_some_and(|&id| matches!(self.table.type_def(id).kind, TypeDefKind::Alias(_)))
+        };
+        let mut edges: HashMap<String, Vec<String>> = HashMap::new();
+        for (name, t) in &targets {
+            let mut mentioned = Vec::new();
+            collect_named_types(t, &mut mentioned);
+            mentioned.retain(|n| is_alias(n));
+            edges.insert(name.name.clone(), mentioned);
+        }
+
+        // Depth-first cycle detection over that graph. `on_stack` is the current path, so any edge
+        // back into it closes a cycle — including a self-edge.
+        let mut cyclic: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (name, _) in &targets {
+            let mut on_stack: Vec<String> = Vec::new();
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            find_alias_cycle(&name.name, &edges, &mut on_stack, &mut seen, &mut cyclic);
+        }
+
+        // One diagnostic per declaration that participates, pointing at the declaration a reader can
+        // actually edit, and naming the chain so a multi-step cycle is followable.
+        for (name, _) in &targets {
+            if !cyclic.contains(&name.name) {
+                continue;
+            }
+            let mut chain = vec![name.name.clone()];
+            let mut cur = name.name.clone();
+            for _ in 0..32 {
+                let Some(next) = edges.get(&cur).and_then(|v| v.iter().find(|n| cyclic.contains(*n))) else {
+                    break;
+                };
+                if chain.len() > 1 && *next == chain[0] {
+                    chain.push(next.clone());
+                    break;
+                }
+                chain.push(next.clone());
+                cur = next.clone();
+            }
+            self.diags.push(
+                Diagnostic::error(
+                    "DL0304",
+                    format!(
+                        "type alias `{}` is part of a cycle ({}) — an alias must eventually name a \
+                         real type, and expanding this one would never terminate",
+                        name.name,
+                        chain.join(" = ")
+                    ),
+                )
+                .with_span(name.span, "this alias expands to itself"),
+            );
+        }
+        self.cyclic_aliases = cyclic;
+
+        // Now the targets can be lowered safely: `lower_type`'s alias arm consults
+        // `cyclic_aliases` and refuses to recurse, so the pass below cannot overflow.
+        for (name, t) in targets {
+            if self.cyclic_aliases.contains(&name.name) {
+                continue; // already reported; lowering adds nothing but noise
+            }
+            let mut genv = Genv::default();
+            if let Some(&id) = self.table.type_ix.get(&name.name) {
+                for g in self.table.type_def(id).generics.clone() {
+                    genv.types.insert(g, self.cx.fresh_type());
+                }
+            }
+            self.lower_type(t, &genv, &mut FnFacts::default());
+        }
     }
 
     fn make_genv(&mut self, sig: &FnSig) -> Genv {
@@ -2462,6 +2598,14 @@ impl<'a> Checker<'a> {
                         return match def.kind {
                             TypeDefKind::Record(_) => Type::Record(id, targs),
                             TypeDefKind::Sum(_) => Type::Sum(id, targs),
+                            // A cyclic alias is never expanded. Expanding one is unbounded recursion
+                            // and used to abort the compiler with a stack overflow (C54); the cycle
+                            // has already been reported at its declaration by `check_type_aliases`,
+                            // so this yields a fresh variable and lets checking continue rather than
+                            // reporting the same cycle once per use site.
+                            TypeDefKind::Alias(_) if self.cyclic_aliases.contains(name) => {
+                                self.cx.fresh_type()
+                            }
                             TypeDefKind::Alias(inner) => {
                                 let mut agenv = Genv::default();
                                 for (g, a) in def.generics.iter().zip(&targs) {
@@ -2977,4 +3121,59 @@ fn is_higher_order_method(recv: &Type, method: &str) -> bool {
         (recv, method),
         (Type::List(_), "map") | (Type::List(_), "filter") | (Type::Secret(_), "map")
     )
+}
+
+/// Every type name mentioned anywhere in a type expression, head or argument, in source order.
+/// Used by the alias-cycle check, which must see `A` inside `List[A]` as well as at the head.
+fn collect_named_types(t: &TypeExpr, out: &mut Vec<String>) {
+    match t {
+        TypeExpr::Named { path, args, .. } => {
+            if path.segs.len() == 1 {
+                out.push(path.segs[0].name.clone());
+            }
+            for a in args {
+                collect_named_types(a, out);
+            }
+        }
+        TypeExpr::Fn { params, ret, .. } => {
+            for p in params {
+                collect_named_types(p, out);
+            }
+            if let Some(r) = ret {
+                collect_named_types(r, out);
+            }
+        }
+        // A reference-capability wrapper (`iso T`, `val T`, …) still mentions `T`, and an alias can
+        // cycle through one.
+        TypeExpr::Rcap { inner, .. } => collect_named_types(inner, out),
+    }
+}
+
+/// Mark every alias reachable from `name` that lies on a cycle. `on_stack` is the current DFS path,
+/// so an edge back into it closes a cycle; `seen` keeps the walk linear in the graph's size.
+fn find_alias_cycle(
+    name: &str,
+    edges: &HashMap<String, Vec<String>>,
+    on_stack: &mut Vec<String>,
+    seen: &mut std::collections::HashSet<String>,
+    cyclic: &mut std::collections::HashSet<String>,
+) {
+    if let Some(at) = on_stack.iter().position(|n| n == name) {
+        // Everything from the first occurrence onward is on the cycle itself.
+        for n in &on_stack[at..] {
+            cyclic.insert(n.clone());
+        }
+        cyclic.insert(name.to_string());
+        return;
+    }
+    if !seen.insert(name.to_string()) {
+        return;
+    }
+    on_stack.push(name.to_string());
+    if let Some(next) = edges.get(name) {
+        for n in next {
+            find_alias_cycle(n, edges, on_stack, seen, cyclic);
+        }
+    }
+    on_stack.pop();
 }

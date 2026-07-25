@@ -33,7 +33,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0301` | unknown name | `ref.diag.DL0301` | covered |
 | `DL0302` | duplicate definition | `ref.diag.DL0302` | covered |
 | `DL0303` | unknown module in import | `ref.diag.DL0303` | covered |
-| `DL0304` | import cycle | `ref.diag.DL0304` | covered |
+| `DL0304` | a cycle in the declaration graph (imports, or type aliases) | `ref.diag.DL0304` | covered |
 | `DL0305` | module-level mutable state is forbidden | `ref.diag.DL0305` | covered |
 | `DL0306` | unknown effect name | `ref.diag.DL0306` | covered |
 | `DL0307` | not a capability resource kind | `ref.diag.DL0307` | covered |
