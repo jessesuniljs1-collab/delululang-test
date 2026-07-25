@@ -167,7 +167,7 @@ registry! {
     // different codes: DL1510 says "the signature does not verify"; DL1511 says "this grant requires
     // a signature and none is present". Reusing one code would make a message a lie (kitchen rule).
     "DL1510" => "plugin signature present but invalid (tampered content, wrong key, or malformed signature)",
-    "DL1511" => "plugin is unsigned but the grant requires a signature (require_signed)",
+    "DL1511" => "artifact is unsigned — it carries no signature at all (a DIFFERENT fault from one that fails to verify, DL1510/DL1705)",
 
     // DL16xx — actors and reference capabilities (Stage 7 "Concurrent", spec §10).
     // NOTE: there is deliberately NO DL1609 — the spec's table skips it (house rule mirroring
@@ -239,7 +239,7 @@ registry! {
     // the language (§5.8 — divergence is abort-class, results are values), so the code could
     // never fire. Freezing a code for a feature that does not exist strands agents keying off
     // it. The number is never reused; if a panic construct ever lands by RFC, it gets a new code.
-    "DL0907" => "match reached no arm (checker bug if ever seen)",
+    "DL0907" => "an internal invariant the checker should have guaranteed was violated (compiler-bug class)",
 }
 
 pub fn is_registered(code: &str) -> bool {
@@ -717,9 +717,7 @@ pub fn code_explain(code: &str) -> Option<String> {
              no way to tell what happened. If the recursion is legitimate, restructure it \
              iteratively — the bound exists so that a runaway program fails in a way you can act \
              on.",
-        "DL0907" => "A `match` reached no arm at runtime. Exhaustiveness is checked statically \
-             (DL0407), so seeing this means the CHECKER let something through: it is a compiler \
-             bug, not your code's fault. Please report it with the program that produced it.",
+        "DL0907" => "The runtime reached a state the checker was supposed to have made impossible. This is a COMPILER BUG, not your code's fault — please report it with the program that produced it. The canonical case is a `match` that reached no arm: exhaustiveness is proved statically (DL0407), so a fallthrough at run time means the checker let something through. But this code covers the whole CLASS of checker-should-have-caught-it conditions, and it is raised for several others: an unbound name or an assignment to one, a field assignment on a non-record, an index assignment on a non-list, `?` applied to a non-Result, a call to an unknown function, an unknown test name, an actor turn with no actor address, and a foreign value reaching an actor boundary. Each is likewise a broken static guarantee rather than a program error. The message text always names the specific condition; this code names the class. (Campaign finding C14: this entry used to describe only the `match` case, so a reader who hit it for an unbound name was told something false about their own program.)",
 
         // ===== DL10xx — packages and provenance ============================
         "DL1001" => "A dependency's authority exceeds what the lockfile pinned for it. This is the \
@@ -820,8 +818,7 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL1510" => "The plugin has a signature and it does not verify: tampered content, the wrong \
              key, or a malformed signature. This is a DIFFERENT and louder failure than being \
              unsigned (DL1511) — they call for different responses, so they get different codes.",
-        "DL1511" => "The grant requires a signature and the plugin is unsigned. `require_signed` \
-             means what it says. See DL1510 for the case where a signature is present but invalid.",
+        "DL1511" => "The artifact carries NO signature. This is deliberately a different code from DL1510/DL1705, which mean a signature was PRESENT and did not verify — and the distinction is the one that matters most on a release-integrity surface. An unsigned artifact is a POLICY question (do you require signing here?) and is often benign; a signature that fails to verify is an ATTACK INDICATOR: tampered content, or the wrong key. A caller given one code for both cannot tell them apart, and the code is the contract while the message is not. For a plugin this fires when the grant sets `require_signed` — sign it (`plugin build --sign`) or clear the flag. For any other artifact, `delulu verify-sig` reports it when no `<artifact>.sig` accompanies the file. (Campaign finding C38 generalized this entry from plugins to every artifact kind: the detached path had been reporting DL1705 for an unsigned artifact, which claims a verification that never happened, and contradicted the project's own ruled deviation 8 that badly-signed and unsigned are different faults.)",
 
         // ===== DL16xx — actors and reference capabilities ==================
         "DL1601" => "A non-sendable value cannot cross an actor boundary — an unconsumed `iso`, an \

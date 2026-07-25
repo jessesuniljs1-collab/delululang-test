@@ -252,6 +252,45 @@ pub fn test_presence(src: &str, test: &str) -> TestPresence {
     }
 }
 
+/// Rejecting witnesses whose body legitimately never names the code they witness, with the reason.
+///
+/// The rule below is right for essentially every rejecting witness; these are the cases where naming
+/// the code would be wrong rather than merely absent. Keeping them as an explicit, reasoned list —
+/// rather than weakening the rule — is the same discipline `WITHHELD_FROM_ACTORS` uses in
+/// `delulu-runtime::actors` (ruling D40).
+const REJECTING_WITNESSES_WITHOUT_A_CODE_ASSERTION: &[(&str, &str)] = &[
+    // The refusal surfaces as a catchable `ComputeErr::KernelEnvelope` value inside the DeluluLang
+    // program, not as a DL-coded diagnostic on stderr, so the test observes the program's own error
+    // handling ("ENV: kernel_ms=0..1") and a control case. It genuinely exercises DL1907.
+    ("ref.diag.DL1907", "a_kernel_that_overruns_its_time_budget_is_refused_and_its_result_discarded"),
+];
+
+/// Does the named test's body mention `code` — i.e. does it assert on the diagnostic it witnesses?
+///
+/// **Why this check exists (`HARDENING_CAMPAIGN.md` C37).** The coverage law verified that a witness
+/// test EXISTS and is not `#[ignore]`d, and stopped there. Pointing a rejecting witness at a real but
+/// unrelated test therefore left coverage reporting **100%** while the code it claimed to cover was
+/// never produced by anything — demonstrated by repointing DL1710's rejecting witness at a test about
+/// pragmas and watching the gate pass.
+///
+/// A static scanner cannot run a test and observe which codes it emits. What it CAN check is that the
+/// test names the code, which every correctly written rejecting witness does — 108 of 109 in the tree
+/// already did. That is the strongest property available from this vantage point, and it closes the
+/// mis-registration hole.
+///
+/// Applied to **rejecting** witnesses only. An accepting witness proves a code does *not* fire on
+/// valid input; `accepting_programs_check_clean` witnesses eighty of them and would never name one,
+/// because the whole point is that nothing fires. Requiring a mention there would be requiring the
+/// wrong thing.
+fn body_mentions_code(src: &str, test: &str, code: &str) -> bool {
+    let Some(idx) = find_fn(src, test) else { return false };
+    let rest = &src[idx..];
+    // The body runs to the next test attribute, or to end of file for the last test in a module.
+    let end = rest.find("
+    #[test]").unwrap_or(rest.len());
+    rest[..end].contains(code)
+}
+
 /// Find `fn <test>` at an identifier boundary; returns the byte index of the `fn` keyword.
 fn find_fn(src: &str, test: &str) -> Option<usize> {
     let pat = format!("fn {test}");
@@ -460,6 +499,24 @@ pub fn run_coverage(root: &Path) -> Coverage {
                     };
                     match test_presence(&src, &r.test) {
                         TestPresence::Active => {
+                            // A REJECTING witness must assert on the code it witnesses (C37). Without
+                            // this, a witness repointed at a real but unrelated test satisfied the
+                            // anchor and coverage still read 100%.
+                            let code = r.anchor.strip_prefix("ref.diag.").unwrap_or("");
+                            let excepted = REJECTING_WITNESSES_WITHOUT_A_CODE_ASSERTION
+                                .iter()
+                                .any(|(a, t)| *a == r.anchor && *t == r.test);
+                            if !r.positive
+                                && !code.is_empty()
+                                && !excepted
+                                && !body_mentions_code(&src, &r.test, code)
+                            {
+                                validation_errors.push(format!(
+                                    "witness for `{}` names test `{}::{}`, whose body never mentions `{}`                                      — a rejecting witness must assert on the code it witnesses, or the                                      anchor is satisfied by a test that does not exercise it",
+                                    r.anchor, r.file, r.test, code
+                                ));
+                                continue;
+                            }
                             witnesses.add(&r.anchor, r.positive, format!("rust:{}::{}", r.file, r.test));
                         }
                         TestPresence::Ignored => validation_errors.push(format!(

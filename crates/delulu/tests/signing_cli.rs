@@ -186,3 +186,67 @@ fn add_on_an_unknown_package_is_dl1706() {
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["code"], "DL1706");
 }
+
+/// An unsigned artifact and a badly-signed one must report DIFFERENT codes (campaign C38).
+///
+/// Both used to be DL1705, "signature verification failed" — which for an unsigned artifact is not
+/// even true, because nothing was verified. The distinction is the one that matters most on this
+/// surface: no signature is a POLICY question and is often benign, while a signature that fails to
+/// verify is an ATTACK INDICATOR — tampered content, or the wrong key. A caller handed one code for
+/// both cannot tell them apart, and the code is the contract while the message is not.
+///
+/// This was not a new principle. The project had already RULED it (Stage-6 deviation 8, whose own
+/// test asserts "badly-signed vs unsigned are DIFFERENT faults") and the plugin path implements it
+/// with DL1510 vs DL1511. Only the detached path had never followed the rule.
+#[test]
+fn an_unsigned_artifact_and_a_bad_signature_are_different_codes() {
+    let dir = tmp("c38_codes");
+    let home = tmp("c38_home");
+    std::fs::write(dir.join("a.txt"), b"the artifact").unwrap();
+    std::fs::write(dir.join("b.txt"), b"the artifact").unwrap();
+    assert!(delulu(&dir, &home, &["keygen"]).status.success(), "keygen");
+    assert!(delulu(&dir, &home, &["sign", "a.txt"]).status.success(), "sign");
+
+    // (1) UNSIGNED: no `.sig` accompanies b.txt.
+    let o = delulu(&dir, &home, &["verify-sig", "b.txt", "--json"]);
+    assert_ne!(o.status.code(), Some(0), "an unsigned artifact must not verify");
+    let v: Value = serde_json::from_slice(&o.stdout).expect("one JSON object");
+    assert_eq!(v["code"], "DL1511", "unsigned is DL1511, not a verification failure: {v}");
+    assert_eq!(v["verdict"], "unsigned", "{v}");
+
+    // (2) BADLY SIGNED: a real signature over this artifact, one signature byte flipped.
+    let mut sig = std::fs::read(dir.join("a.txt.sig")).unwrap();
+    assert_eq!(sig.len(), 96, "the detached signature is pubkey(32) || sig(64)");
+    sig[64] ^= 0xff;
+    std::fs::write(dir.join("b.txt.sig"), &sig).unwrap();
+    let o = delulu(&dir, &home, &["verify-sig", "b.txt", "--json"]);
+    assert_ne!(o.status.code(), Some(0), "a bad signature must not verify");
+    let v: Value = serde_json::from_slice(&o.stdout).expect("one JSON object");
+    assert_eq!(v["code"], "DL1705", "a present-but-invalid signature stays DL1705: {v}");
+    assert_eq!(v["verdict"], "invalid", "{v}");
+
+    // (3) And the valid case still verifies, so neither refusal is a blanket "always refuse".
+    let o = delulu(&dir, &home, &["verify-sig", "a.txt", "--json"]);
+    assert_eq!(o.status.code(), Some(0), "a correctly signed artifact must verify");
+    let v: Value = serde_json::from_slice(&o.stdout).expect("one JSON object");
+    assert_eq!(v["verdict"], "valid", "{v}");
+    assert!(v.get("code").is_none(), "a valid verification carries no failure code: {v}");
+}
+
+/// A signature over a DIFFERENT artifact must not verify — the property that makes a detached
+/// signature mean anything at all. Distinct from a corrupted signature: here the signature is
+/// perfectly well-formed and correctly signed, just not over this file.
+#[test]
+fn a_signature_from_another_artifact_does_not_verify() {
+    let dir = tmp("c38_swap");
+    let home = tmp("c38_swap_home");
+    std::fs::write(dir.join("a.txt"), b"artifact A").unwrap();
+    std::fs::write(dir.join("b.txt"), b"artifact B, different bytes").unwrap();
+    assert!(delulu(&dir, &home, &["keygen"]).status.success());
+    assert!(delulu(&dir, &home, &["sign", "a.txt"]).status.success());
+    std::fs::copy(dir.join("a.txt.sig"), dir.join("b.txt.sig")).unwrap();
+    let o = delulu(&dir, &home, &["verify-sig", "b.txt", "--json"]);
+    assert_ne!(o.status.code(), Some(0));
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(v["code"], "DL1705", "a valid signature over other bytes is a verification failure: {v}");
+}

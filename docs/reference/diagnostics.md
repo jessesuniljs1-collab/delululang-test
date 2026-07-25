@@ -113,7 +113,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1508` | malformed or tampered `.dpx` container (not a valid plugin artifact) | `ref.diag.DL1508` | covered |
 | `DL1509` | a Contained plugin export's signature must be concrete at the `get` site (R-6a is otherwise undecidable) | `ref.diag.DL1509` | covered |
 | `DL1510` | plugin signature present but invalid (tampered content, wrong key, or malformed signature) | `ref.diag.DL1510` | covered |
-| `DL1511` | plugin is unsigned but the grant requires a signature (require_signed) | `ref.diag.DL1511` | covered |
+| `DL1511` | artifact is unsigned — it carries no signature at all (a DIFFERENT fault from one that fails to verify, DL1510/DL1705) | `ref.diag.DL1511` | covered |
 | `DL1601` | non-sendable value crossing an actor boundary (incl. unconsumed iso; incl. PyObj pinning) | `ref.diag.DL1601` | covered |
 | `DL1602` | use of a binding after `consume` | `ref.diag.DL1602` | covered |
 | `DL1603` | alias violates a reference-capability deny property (incl. a `val` closure over a `ref` capture) | `ref.diag.DL1603` | covered |
@@ -158,4 +158,4 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0903` | index out of bounds | `ref.diag.DL0903` | covered |
 | `DL0904` | capability scope violation | `ref.diag.DL0904` | covered |
 | `DL0905` | recursion depth exceeded | `ref.diag.DL0905` | covered |
-| `DL0907` | match reached no arm (checker bug if ever seen) | `ref.diag.DL0907` | covered |
+| `DL0907` | an internal invariant the checker should have guaranteed was violated (compiler-bug class) | `ref.diag.DL0907` | covered |

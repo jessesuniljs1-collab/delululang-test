@@ -79,7 +79,7 @@ deviations.
 | C11 | Checker — a user function silently loses to a same-named prelude builtin | **high** (correctness) | **CLOSED** — D25 |
 | C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | OPEN |
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
-| C14 | `DL0907`'s registry text is narrower than the conditions that raise it | low (accuracy) | OPEN |
+| C14 | **`DL0907` was titled "match reached no arm" and is raised for a dozen unrelated conditions** — a reader hitting it for an unbound name was told something false about their program | medium (honesty) | **CLOSED** — D42 |
 | C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
 | C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
@@ -101,6 +101,8 @@ deviations.
 | C34 | Stage 6 — a plugin manifest could declare `device`/`foreign_c`/`foreign_python` authority and have it **silently dropped**, advertising a ceiling the plugin can never have | medium (legibility — the C23 class, one level out) | **CLOSED** — D39 |
 | C35 | Stage 7 — a `Root` slice **silently loses `computes`** when it crosses an actor boundary; `RootMsg` is a hand-written enumeration that Stage 10 phase 10h did not extend | medium (silent narrowing — fail-closed but undecided) | **CLOSED** — D40 (gated + documented; carrying it is a capability decision for the owner) |
 | C36 | `atlas --format mermaid` is a module-level overview that did not say so — a reader could conclude a program has no functions or effects | medium (legibility of the authority graph) | **CLOSED** — D41 |
+| C37 | **The conformance coverage law proved a witness EXISTS, not that it exercises its anchor** — a rejecting witness repointed at an unrelated real test left coverage reporting 100% | **high** (the project's own proof of spec coverage) | **CLOSED** — D42 |
+| C38 | **An unsigned artifact and a badly-signed one both reported DL1705** on the detached path, contradicting the project's own ruled deviation 8 | medium (release integrity / machine contract) | **CLOSED** — D42 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -1120,6 +1122,92 @@ existed in the same file and one renderer had not adopted it.
 - **The LSP is a server and survives being treated as one.** Empty input, non-JSON, an unknown method,
   a truncated frame declaring `Content-Length: 99999`, and a hover on a nonexistent file: no panic, no
   hang, no signal death; every case exits cleanly.
+
+### C37 · The coverage law proved existence, not exercise — CLOSED (D42)
+
+Invariant 42 is the project's own proof that its suite covers its specification, so this pass tested the
+**proof** rather than the code. P9's lesson applied directly: ask what the projection cannot see.
+
+Two of the documented claims hold, verified by breaking them:
+
+- A witness pointing at a **nonexistent** test is caught, and the anchor correctly drops to "no
+  rejecting test".
+- A witness pointing at an **`#[ignore]`d** test is caught the same way.
+
+The third did not. Repointing DL1710's *rejecting* witness at
+`a_pragma_is_read_only_from_the_first_line` — a real, active test that has nothing to do with DL1710 and
+never produces it — left the gate reporting **`PASS: 100% anchor coverage`**. So the law proved *"a
+named, non-ignored test exists for this anchor"*, not *"that test exercises this anchor"*. 100% coverage
+did not mean every diagnostic was tested, and a single mis-registration would void it for one code
+silently.
+
+A static scanner cannot run a test and observe which codes it emits. What it *can* check is that the
+test **names** the code — which every correctly written rejecting witness does. Measured before
+deciding: **108 of 109** rejecting witnesses already named their code. The check costs almost nothing and
+closes the mis-registration hole.
+
+Two things it deliberately does not do:
+
+- **It applies to rejecting witnesses only.** An accepting witness proves a code does *not* fire on
+  valid input; `accepting_programs_check_clean` witnesses eighty of them and would never name one,
+  because the whole point is that nothing fires. Requiring a mention there would be requiring the wrong
+  thing — measured too: 82 of 144 accepting witnesses name no code, correctly.
+- **The one non-conforming rejecting witness is an explicit, reasoned exception, not a weakened rule.**
+  DL1907's witness observes the refusal through the DeluluLang program's own
+  `ComputeErr::KernelEnvelope` value (with a control case), because that refusal surfaces as a catchable
+  error rather than a DL-coded diagnostic. It genuinely exercises the code. Listed with its reason, the
+  way `WITHHELD_FROM_ACTORS` is (D40).
+
+### C38 · Unsigned and badly-signed reported the same code — CLOSED (D42)
+
+Seven attacks on the detached signature path. Every bad signature refused — a signature over a
+different artifact, truncated to 95 of 96 bytes, a flipped public-key byte, a flipped signature byte —
+and `--require-hybrid` against a classical-only signature correctly refused with its own code (DL1908).
+No fail-open anywhere.
+
+But an **absent** signature reported **DL1705, "signature verification failed"** — the same code as an
+invalid one, and for an unsigned artifact not even true, because nothing was verified.
+
+The distinction is the one that matters most here. "No signature exists" is a *policy* question and is
+often benign; "a signature exists and does not verify" is an *attack indicator* — tampered content, or
+the wrong key. A caller handed one code for both cannot tell them apart, and `docs/for-agents.md` is
+explicit that the code is the contract and the message is not.
+
+**This was not a new principle — the project had already ruled it.** Stage-6 deviation 8 says
+badly-signed and unsigned are different faults, its own test asserts that phrase, and the plugin path
+implements it with DL1510 vs DL1511. Only the detached path never followed the rule. Fixed by using
+**DL1511**, whose meaning already *is* "the artifact carries no signature", and generalizing its registry
+entry from plugins to every artifact kind rather than minting a new number.
+
+### C14 · `DL0907` described one condition and is raised for a dozen — CLOSED (D42)
+
+Registry title: *"match reached no arm (checker bug if ever seen)"*. Explain body: only the `match` case.
+Actually raised for an unbound name, an assignment to one, a field assignment on a non-record, an index
+assignment on a non-list, `?` on a non-Result, a call to an unknown function, an unknown test name, an
+actor turn with no actor address, and a foreign value reaching an actor boundary.
+
+So a reader who hit DL0907 for an unbound name — and ran `delulu explain DL0907`, which is exactly what
+the diagnostic invites — was told *"A `match` reached no arm at runtime"*, which is false about their
+program. The code is really the **class** "an internal invariant the checker should have guaranteed was
+violated"; the message text names the specific condition. Both entries now say that, the `match` case is
+kept as the canonical example, and the generated reference was regenerated.
+
+### 3.5 What Stage 9 got right, verified by execution
+
+- **The SBOM is accurate, and its scope is declared unusually well.** 17 direct third-party dependencies
+  declared by workspace crates, 17 listed, **zero drift in either direction**, and every version matches
+  what the lockfile resolves for that direct declaration. Its own note explains that transitive
+  dependencies live in the committed lockfile and *why* that omission is stated rather than left to be
+  discovered — "an SBOM that omits something linked into the binary is worse than none, because it will
+  be trusted". The D19 fix held.
+
+  Worth recording how nearly this was mis-reported: a first pass compared SBOM versions against a
+  name→version map built from the lockfile, and `wasm-encoder` and `getrandom` each appear at three
+  versions there. The SBOM names the version bound by the *direct* declaration (`wasm-encoder = "0.221"`
+  → 0.221.3), which is correct; the others are transitive resolutions for other dependents. The tool was
+  right and the analysis was wrong.
+- **Every bad signature refuses**, on all six shapes tried, and hybrid policy refusals are a distinct
+  code from verification failures.
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

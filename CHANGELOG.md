@@ -140,6 +140,20 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   listed, which is why a CLI sweep could not find them — and `deploy` was double-emitting JSON on its
   refusal paths. A gate now asserts every dispatched subcommand appears in `--help`, because an
   undocumented command is a command nothing sweeps. (C33, ruling D38)
+- **The conformance coverage law now checks that a witness exercises its anchor.** It verified a witness
+  test existed and was not `#[ignore]`d, and stopped there — so repointing a rejecting witness at a real
+  but unrelated test left the gate reporting **100% coverage** while nothing produced that diagnostic. A
+  rejecting witness must now name the code it witnesses; 108 of 109 already did. Accepting witnesses are
+  deliberately exempt (they prove a code does *not* fire). (C37, ruling D42)
+- **An unsigned artifact and a badly-signed one are different codes.** Both reported DL1705, "signature
+  verification failed" — untrue for an unsigned artifact, since nothing was verified. Unsigned is now
+  **DL1511**. The distinction is load-bearing: no signature is a policy question, a signature that fails
+  to verify is an attack indicator. The project had already ruled this (Stage-6 deviation 8) and the
+  plugin path implemented it; only the detached path did not. (C38, ruling D42)
+- **`DL0907` describes what it actually covers.** Titled "match reached no arm" while being raised for an
+  unbound name, `?` on a non-Result, an assignment to a non-record, an unknown function, and more — so
+  `delulu explain DL0907` told readers something false about their own program. It now names the class,
+  with the `match` case as the canonical example. (C14, ruling D42)
 - **`delulu fmt` no longer merges comment paragraphs.** A blank line between two comment paragraphs was
   deleted, joining them into one block. Neither formatter law could catch it: the identity law's comment
   projection is each comment's text and own-line flag in order, and a merge changes none of those — only

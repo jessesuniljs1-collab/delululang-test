@@ -252,15 +252,31 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
         SignatureStatus::Unsigned => ("unsigned", "no <artifact>.sig found".into()),
         SignatureStatus::Invalid { reason } => ("invalid", reason.clone()),
     };
+    // ABSENT and INVALID are different faults and now get different codes (campaign C38).
+    //
+    // Both used to report DL1705, "signature verification failed" — which for an unsigned artifact is
+    // not even true: nothing was verified. The distinction is the one that matters most here. "No
+    // signature exists" is a policy question and is often benign; "a signature exists and does not
+    // verify" is an attack indicator — tampered content, or the wrong key. A caller handed the same
+    // code for both cannot tell them apart, and `docs/for-agents.md` is explicit that the CODE is the
+    // contract and the message is not.
+    //
+    // This is not a new principle: the project already RULED it (Stage-6 deviation 8, whose own test
+    // asserts "badly-signed vs unsigned are DIFFERENT faults"), and the plugin path implements it with
+    // DL1510 vs DL1511. The detached path simply never followed the rule. DL1511 already means "the
+    // artifact carries no signature", so it is reused rather than a new number minted.
+    let code = match status {
+        SignatureStatus::Unsigned => "DL1511",
+        _ => "DL1705",
+    };
     if json {
-        // DL1705 for a failed verification (spec §10), requires_human by nature.
         let mut obj = json!({ "command": command, "artifact": artifact, "verdict": verdict });
         match status {
             SignatureStatus::Valid { signer } => {
                 obj["signer"] = json!(signer);
             }
             _ => {
-                obj["code"] = json!("DL1705");
+                obj["code"] = json!(code);
                 obj["detail"] = json!(detail);
             }
         }
@@ -269,7 +285,7 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
     } else {
         match status {
             SignatureStatus::Valid { signer } => println!("verify-sig: {artifact} — valid, signed by {signer}"),
-            _ => eprintln!("verify-sig[DL1705]: {artifact} — {verdict}: {detail}"),
+            _ => eprintln!("verify-sig[{code}]: {artifact} — {verdict}: {detail}"),
         }
     }
 }

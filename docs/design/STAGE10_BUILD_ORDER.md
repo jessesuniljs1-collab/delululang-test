@@ -1538,6 +1538,53 @@ byte-stable across runs, and a program with check errors is refused with DL1780 
 underlying diagnostic; the LSP survives empty input, non-JSON, an unknown method, a truncated frame
 declaring `Content-Length: 99999`, and a hover on a nonexistent file with no panic, hang, or signal.
 
+**D42 — The coverage law checks that a witness EXERCISES its anchor; unsigned and badly-signed are
+different codes; and DL0907 describes the class it actually covers.** Hardening campaign P10
+(`HARDENING_CAMPAIGN.md` C37, C38, C14). Stage 9 decides whether anyone can trust a build they did not
+make, so this pass attacked the CLAIMS.
+
+(a) **C37 — invariant 42 proved existence, not exercise.** A witness pointing at a nonexistent or
+`#[ignore]`d test is caught (both verified by breaking them). But repointing DL1710's *rejecting* witness
+at a real, active, unrelated test left the gate reporting **100% coverage** while nothing produced that
+code. The law proved "a named, non-ignored test exists", not "that test exercises the anchor".
+
+RULED: a **rejecting** witness's body must name the code it witnesses. A static scanner cannot run a test
+and observe its diagnostics; naming the code is the strongest property available from that vantage point,
+and **108 of 109** rejecting witnesses already satisfied it. Scoped to rejecting witnesses on purpose —
+an accepting witness proves a code does *not* fire, and the eighty anchors witnessed by
+`accepting_programs_check_clean` would never name one. The single legitimate exception (DL1907, whose
+refusal surfaces as a catchable `ComputeErr` value rather than a DL-coded diagnostic) is an explicit
+reasoned entry, not a weakened rule — the `WITHHELD_FROM_ACTORS` pattern from D40.
+
+(b) **C38 — the detached path violated a rule this project had already made.** An absent signature and an
+invalid one both reported DL1705, "signature verification failed" — untrue for an unsigned artifact, since
+nothing was verified. Stage-6 deviation 8 already ruled that badly-signed and unsigned are *different
+faults*; its own test asserts the phrase, and the plugin path implements it with DL1510 vs DL1511. Only
+the detached path never followed it. RULED: use **DL1511** for unsigned, whose meaning already is "carries
+no signature", and generalize its registry entry from plugins to every artifact kind rather than mint a
+new number. The distinction is the load-bearing one: unsigned is a policy question, a signature that fails
+to verify is an attack indicator.
+
+Everything else on that path already refused correctly: a signature over a different artifact, truncated
+to 95 of 96 bytes, a flipped key byte, a flipped signature byte, and `--require-hybrid` against a
+classical-only signature (DL1908, its own code). No fail-open.
+
+(c) **C14 — DL0907 described one condition and is raised for a dozen.** Titled "match reached no arm",
+and raised for an unbound name, an assignment to one, a field assignment on a non-record, an index
+assignment on a non-list, `?` on a non-Result, an unknown function, an unknown test name, an actor turn
+with no address, and a foreign value at an actor boundary. A reader who hit it for an unbound name and ran
+`delulu explain DL0907` — which the diagnostic invites — was told something false about their own program.
+RULED: the code names the CLASS ("an internal invariant the checker should have guaranteed was violated"),
+the message names the condition, and the `match` case stays as the canonical example.
+
+**Verified and unchanged: the SBOM is accurate** — 17 direct dependencies declared, 17 listed, zero drift
+either way, every version matching what the lockfile resolves for that direct declaration, and its own
+note explains why the transitive omission is stated rather than discovered. The D19 fix held. Recorded
+with a caveat about method: a first pass nearly mis-reported two versions as drift by comparing against a
+name→version map, when `wasm-encoder` and `getrandom` each appear at three versions in the lockfile and
+the SBOM correctly names the one bound by the direct declaration. The tool was right; the analysis was
+wrong.
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which
