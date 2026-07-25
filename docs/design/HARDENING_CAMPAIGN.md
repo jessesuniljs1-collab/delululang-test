@@ -77,7 +77,7 @@ deviations.
 | C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | **CLOSED** — D27 (owner-approved) |
 | C10 | Runtime — DL0703 refused without naming the grant that would fix it | medium (usability) | **CLOSED** — D25 |
 | C11 | Checker — a user function silently loses to a same-named prelude builtin | **high** (correctness) | **CLOSED** — D25 |
-| C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | OPEN |
+| C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | **DOES NOT REPRODUCE** — see §6; tested monomorphic + generic, both name real types |
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
 | C14 | **`DL0907` was titled "match reached no arm" and is raised for a dozen unrelated conditions** — a reader hitting it for an unbound name was told something false about their program | medium (honesty) | **CLOSED** — D42 |
 | C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
@@ -119,7 +119,7 @@ deviations.
 | C54 | **A USED cyclic type alias aborted the compiler with a stack overflow** — `type A = A` plus one use died at `0xC00000FD`; the no-panic sweeps could not see it, because a stack overflow prints no `panicked at` | **high** (hard crash on ordinary input; DoS for anything compiling untrusted code) | **CLOSED** — D47a (reshapes C16) |
 | C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c (measured and published; linear, not quadratic) |
 | C57 | **The authority SERIALIZATION seam had no gate** — `to_json` (write) is hand-enumerated with nothing to catch a dimension added to `Scopes` and not emitted; the read side already fails closed, the write side did not | medium (a silently under-reporting audit record — the C29/C30 class, not an escalation) | **CLOSED** — D48a (compile-enforced round-trip gate) |
-| C56 | **`--trace-effects` buffers the entire trace in RAM** — 100k effects take peak memory from 6.7 MB to 70.1 MB (~633 B/record), unbounded; the audit chain already streams to day files, the trace does not | medium (opt-in flag, but the runs that enable it are the long-lived ones) | OPEN — measured and published, queued |
+| C56 | **`--trace-effects` buffers the entire trace in RAM** — 100k effects take peak memory from 6.7 MB to 70.1 MB (~633 B/record), unbounded; the audit chain already streams to day files, the trace does not | medium (opt-in flag, but the runs that enable it are the long-lived ones) | **CLOSED** — D49 (bounded when diagnostic; `--assert-trace` never capped) |
 | C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
@@ -1815,3 +1815,113 @@ closed one, RFC 0001's comment period remains open until 2026-08-05 with two rec
 deviations against it. **Surface-syntax morphs now exist (D35)** but only for single files read
 through a `//! morph:` pragma — package sources must be canonical, and plugin-delivered morphs and
 per-reader LSP view morphs are not built.
+
+## 6. Close-out (2026-07-26, ruling D50)
+
+The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
+adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
+capstone, and this. **58 findings were filed. 53 are closed, 1 is a published limit, 3 are open with a
+current status, and 1 does not reproduce.**
+
+*(Those five numbers were counted from the table above by script, not estimated. The first draft of
+this paragraph said "57 filed, 48 closed, 3 limits, 4 open, 2 not reproducing" — written from memory
+before C56 was closed, and wrong on every count. Correcting it is noted rather than quietly fixed,
+because a close-out that miscounts its own findings is the exact defect this campaign spent sixteen
+phases on.)*
+
+### What shipped
+
+| Phase | Ruling | Headline |
+|---|---|---|
+| P0–P1 | D24, D25 | The front door was false — a v1.0-tagged tree said "Stage 1, under construction". `apply(double, 21)` type-checked and faulted at runtime, hidden because the Book's sample gate checked and never ran. |
+| P2 | D26 | Trojan Source refused (DL0107) — the security property a review-focused language must have. |
+| P3 | D28 | The semver-authority law was blind to secret-scope widening. |
+| P4 | D29 | The two engines did not fault alike, and the fuzz harness counted `(Err, Err)` as agreement. |
+| P5 | D30–D34 | All 16 builtin type names and 10 core effect names were shadowable, every shadow silently inert. The report knew a credential could leave and never said so. |
+| P6 | D36, D37 | A lease token for a **revoked** grant redeemed `Ok`; `audit tail` verified nothing; the Guard enumerated 7 of 8 dimensions. |
+| Crash hunt | D38 | `--json` emitted nothing on failure across ~every subcommand; a 10 KB file produced 76 MB of stderr. |
+| P7–P8 | D39, D40 | A plugin ceiling could advertise authority the model cannot confer; a `Root` slice silently lost `computes` at an actor boundary. |
+| P9–P10 | D41, D42 | `fmt` merged comment paragraphs; **the coverage law proved a witness existed, not that it exercised its anchor.** |
+| P11 | D43 | **A simulation could not run out of time** — and the same fix stopped a controller being told its setpoint was wrong when it had lost the machine. |
+| P12 | D44 | A quadratic field lookup behind a `.clone()`; **an empty `delulu.toml` crashed the build, and the crash gate could not see it.** |
+| P13 | D45 | **A lockfile could lie about a dependency and `build --locked` said "built clean"** — while `authority --diff` on the same file said WIDENING. |
+| — | D46 | The four owner-reserved questions decided under Jesse's explicit authority. |
+| P14 | D47 | **A used cyclic type alias aborted the compiler** with a stack overflow. |
+| P15 | D48 | The Authority + Guard capstone: 18 + 14 items discharged (`AUTHORITY_GUARD_CAPSTONE.md`). |
+| P16 | D49, D50 | The trace buffer bounded; both platforms re-verified; the front door re-tested from a clean clone. |
+
+### Still open, each checked rather than assumed
+
+- **C7 — the capability corpus is 8 programs; `tier4-multimodule` has none.** Unchanged. This is an
+  evidence gap, not a defect: the corpus under-samples multi-module programs, so conclusions drawn
+  from it are narrower than they look. Filling it is work, not a fix.
+- **C17 — a float literal that overflows to `inf` is accepted silently.** Re-verified: `1.0e400`
+  prints `inf`, exit 0, no diagnostic. Still open, still low: it matches C and JavaScript, and the
+  honest argument for changing it is legibility rather than correctness.
+- **C21 — the interpreter's `MAX_DEPTH` versus the host stack.** Refined by P14 rather than closed:
+  **the CLI is safe** — `main.rs` runs on a 512 MiB worker thread and deep recursion is DL0905, not a
+  crash, verified at 100,000 frames. What remains uncovered is a host **embedding** `delulu-runtime`
+  as a library on a small stack, where `MAX_DEPTH` may not be reachable before the native stack ends.
+  That is a library-contract question and it has no test.
+### Published limit
+
+- **C55 — runtime record field access is O(record width).** Measured, linear rather than quadratic,
+  and for the widths real programs use a short `Vec` scan is the faster representation. The real fix
+  is static field indices through the DIR. This is the only finding in the ledger carried as a limit
+  rather than closed or open.
+
+### Does not reproduce
+
+- **C12 — `DL0401` prints type variables where the names are known.** Tested in both the monomorphic
+  and generic shapes; both now report `expected Int, found Str`. Recorded as **not reproducible**
+  rather than closed: something during the campaign appears to have fixed it incidentally, and the
+  original reproduction was never written down precisely enough to be sure that is the same case.
+  Saying "closed" would claim knowledge this ledger does not have.
+- **C16 — a cyclic type alias is silently accepted.** Superseded by C54: the declaration is accepted,
+  but *using* one crashed the compiler. Closed under D47a with its severity corrected.
+
+### The two rules this campaign actually produced
+
+Both are in D48d, and they are the part worth carrying into whatever comes next.
+
+1. **A hand-maintained list of authority-bearing things falls behind the type that defines it, and
+   nothing notices.** Six instances: C31, C34, C35, C44, C52, C57. The answer is never "remember to
+   update the list" — it is a compiler-enforced pattern (a struct destructuring that will not compile)
+   or a source-scanning gate. Where a dependency edge allows it, better still is one list referenced
+   by both sides.
+2. **A gate is blind to the failure it exists to catch. Ask what SIGNAL a gate keys on, then ask what
+   failure produces a different signal.** Four instances: a coverage law that proved a witness existed
+   rather than that it exercised its anchor (D42a); a no-panic sweep keyed on exit 101 while the CLI
+   deliberately maps a worker-thread panic to exit 2 (D44c); a sweep matching `panicked at` against a
+   stack overflow, which prints no such text (D47a); and a cross-parser law that checked agreement only
+   where both sides said *yes* (D43e).
+
+A third pattern is worth naming even though it produced no ruling: **three of this campaign's findings
+were introduced by earlier fixes in this same campaign** (C26/D33's courtesy note caused C49's panic,
+and D46a's grammar change surfaced C53). A repair needs its own skip-branch analysis. "What if there is
+nothing to name?" is one of them.
+
+### Method notes that cost real time
+
+Recorded because the next person will otherwise pay for them again:
+
+- **A witness that passes against the old code witnesses nothing.** Two tests in this campaign passed
+  before their fix existed — one because its fixture never reached the defective path. Confirm the
+  failure *first*.
+- **Never conclude absence from truncated output.** Two "no panic here" readings were `head -3`
+  artifacts; the panic was below the fold.
+- **Confirm the command under test is the one making the guarantee.** A lockfile sweep run against
+  plain `build` reported all fifteen tamperings accepted — a false catastrophe. `--locked` is the verb
+  that verifies.
+- **A patch script must assert its replacement applied.** A heredoc turned `\n` into a real newline,
+  the replacement silently matched nothing, and the script printed success anyway.
+
+### What this campaign does not claim
+
+**macOS has never been executed** — not once, in any phase; there is no hardware and nothing was
+emulated. **No physical device has ever been commanded**; every demonstration drives the simulator.
+**Certification is NONE.** The hardware adapter is an operator-supplied subprocess with **no signature
+check**. Post-quantum cryptography is gated behind `--unstable` because the adopted implementations are
+unaudited by their own authors. The full list, in the same voice, is §3 of
+`AUTHORITY_GUARD_CAPSTONE.md`.
+

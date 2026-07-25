@@ -1,5 +1,7 @@
 # Compile-time and memory at scale (hardening campaign P12, ruling D44)
 
+*Taken: 2026-07-26. A measurement without a date is a claim without a shelf life — these numbers describe the tree as it stood on that day, not a permanent property.*
+
 **What this measures.** How `delulu check` behaves as programs get large, by SHAPE and not only by
 line count — because "30k lines" is not one workload. Published because ruling D44 corrected an
 O(fields × accesses) cost in the checker and the *residual* curve is real: a limit that is measured

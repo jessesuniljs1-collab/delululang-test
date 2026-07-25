@@ -557,6 +557,16 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
 /// `keygen` on a bad key path both failed with a bare stderr line. The invariant this enforces is
 /// "exactly one object", not "at least one" — the sweep in
 /// `crates/delulu/tests/json_contract.rs` parses stdout and counts, so a double-emit fails the build.
+/// How many effect records `--trace-effects` retains before it stops recording and says so.
+///
+/// A diagnostic trace must not be able to exhaust memory on a long run: the buffer used to keep every
+/// record until exit, so 100k effects took peak working set from 6.7 MB to 70.1 MB with no ceiling
+/// (campaign C56, measured in `measurements/scale/RECORD.md`). 200,000 records is far past any run a
+/// person reads by eye and still bounds the buffer at roughly 130 MB in the worst case.
+///
+/// `--assert-trace` is deliberately NOT capped — see `TraceSink`'s docs.
+const TRACE_RECORD_CAP: usize = 200_000;
+
 pub fn run(args: &[String]) -> i32 {
     let wants_json = args.iter().any(|a| a == "--json");
     let code = run_inner(args);
@@ -6204,8 +6214,10 @@ fn cmd_run(rest: &[String]) -> i32 {
         };
         // Effect tracing on the WASM engine (spec §6.1; criterion 6): the host records the same
         // `TraceRecord`s the interpreter would, so a foreign program's trace is byte-identical.
-        let sink = if opts.trace_effects || opts.assert_trace {
+        let sink = if opts.assert_trace {
             Some(delulu_runtime::TraceSink::new())
+        } else if opts.trace_effects {
+            Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
         } else {
             None
         };
@@ -6314,8 +6326,12 @@ fn cmd_run(rest: &[String]) -> i32 {
     }
 
     // Effect tracing (spec §6.1) — also attached when --assert-trace needs the witness.
-    let sink = if opts.trace_effects || opts.assert_trace {
+    let sink = if opts.assert_trace {
+        // `--assert-trace` proves no effect outside the declared set occurred, so it needs EVERY
+        // record: a dropped one could hide the violation (C56/D49).
         Some(delulu_runtime::TraceSink::new())
+    } else if opts.trace_effects {
+        Some(delulu_runtime::TraceSink::bounded(TRACE_RECORD_CAP))
     } else {
         None
     };
@@ -6620,6 +6636,17 @@ fn cmd_run(rest: &[String]) -> i32 {
                     }
                 }
                 None => eprintln!("{lines}"),
+            }
+            // A truncated trace says so, with the number withheld and how to get the rest — the
+            // same contract D38 gave the diagnostic flood. A trace that silently stopped recording
+            // would be worse than one that grew: the reader would conclude the effects stopped.
+            if s.dropped() > 0 {
+                eprintln!(
+                    "note: {} further effect record(s) not traced — `--trace-effects` retains the \
+                     first {TRACE_RECORD_CAP} so a long run cannot exhaust memory (campaign C56). \
+                     `--assert-trace` is never capped, because it must see every effect to be sound.",
+                    s.dropped()
+                );
             }
         }
     }

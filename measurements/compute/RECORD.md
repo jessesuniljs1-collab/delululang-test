@@ -1,5 +1,7 @@
 # Compute dispatch — recording and measurements
 
+*Taken: 2026-07-20. A measurement without a date is a claim without a shelf life — these numbers describe the tree as it stood on that day, not a permanent property.*
+
 **Stage 10 phase 10h, spec §7, acceptance criterion 7.** All numbers are from the **in-tree
 `cpu-reference` adapter**. No GPU, TPU, or any other accelerator was involved, and none is claimed.
 

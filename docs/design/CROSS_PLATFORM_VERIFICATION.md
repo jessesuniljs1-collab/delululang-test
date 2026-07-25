@@ -158,3 +158,66 @@ cargo run -q -p delulu-conform -- --check-reference
 #   run the same six gates. Run OS suites one at a time — concurrent builds
 #   starve the timing-sensitive dead-man tests.
 ```
+
+---
+
+## 8. Re-verification at the hardening campaign's close (2026-07-26, ruling D50)
+
+The numbers in §2 were taken on 2026-07-21, before a sixteen-phase hardening campaign changed the
+parser, the checker, the broker, the lockfile verifier and the runtime. They were re-taken from the
+committed tree rather than assumed to have survived.
+
+| Gate | Windows (native, x86_64-pc-windows-msvc) | Linux (WSL Ubuntu-20.04) | macOS |
+|---|---|---|---|
+| `cargo test --workspace` | ✅ **95 suites, 1289 passed, 0 failed** | ✅ **95 suites, 1293 passed, 0 failed** | **never run** |
+| `clippy --workspace --all-targets` | ✅ **65** warnings / 0 errors | ✅ **66** / 0 | **never run** |
+| `fmt --check examples` | ✅ 0 would change (13 clean) | ✅ | **never run** |
+| `fmt --check docs/book/samples` | ✅ 0 would change (10 clean) | ✅ | **never run** |
+| `check --no-default-features` (Python-less) | ✅ | ✅ | **never run** |
+| `conform --coverage` | ✅ 100% | ✅ 100% | (arch-independent) |
+| `conform --check-reference` | ✅ 24 chapters in sync | ✅ | (arch-independent) |
+
+The clippy figures are unchanged from §2 — **65 on Windows, 66 on Linux** — across roughly 4,000 lines
+added by the campaign. The four-test delta between platforms is the known one: Linux runs four tests
+Windows ignores. Suite counts rose from the campaign's own regression witnesses, every one of which
+was observed failing against the code it now guards.
+
+### The front door, re-tested rather than assumed
+
+P1 made "download, build, install, use" true. Sixteen phases later that promise was re-tested the only
+way that means anything — from a **fresh `git clone` into an empty directory**, following the README's
+own instructions verbatim:
+
+```
+$ cargo build --release                              # clean clone, no warm target/
+$ delulu check hello.delulu                          → ok: hello.delulu checked clean
+$ delulu authority hello.delulu                      → effects: Write / capabilities: Console
+$ delulu run hello.delulu --grant console            → Hello, Delulu
+$ delulu run hello.delulu                            → DL0703, exit 1
+```
+
+The last line is the one worth keeping: the README claims that leaving off `--grant console` fails
+with DL0703 because a DeluluLang program holds zero ambient authority. It does.
+
+### macOS — stated plainly, one more time
+
+**macOS has never been executed. Not once, in any phase, in this campaign or before it.** There is no
+Mac hardware, and no emulation was attempted or would have counted. Every macOS cell above says
+"never run" rather than "untested" or "pending", because those words invite a reader to assume someone
+tried. Nobody tried.
+
+Nothing in this repository may describe DeluluLang as supported on three platforms. The CI matrix in
+`.github/workflows/ci.yml` names `macos-latest` and **has never executed**, because the repository is
+never pushed. A declared matrix is not evidence.
+
+### Honesty scrub at close-out
+
+- **Banned claims:** "quantum-proof"/"quantum-safe" appear **12 times**, every one inside a sentence
+  prohibiting the term. (§2's historical note records 9 at the Stage-10 close-out; the campaign's own
+  rulings added three more prohibition sentences.) No occurrence is a claim.
+- **Measurements:** all nine records in `measurements/` now state **when they were taken**. Four did
+  not — including the one this campaign wrote, which had itself argued that "a table should say when
+  it was taken."
+- **The performance clause is intact:** "competitive with C on hot paths, with safety C cannot offer …
+  and only where a published benchmark shows it. Where DeluluLang loses, the table says so." Two new
+  losses were published under exactly that rule this campaign (C55, C56).

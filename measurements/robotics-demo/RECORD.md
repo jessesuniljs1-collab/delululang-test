@@ -1,5 +1,7 @@
 # The arm demonstration — recording and measurements
 
+*Taken: 2026-07-20. A measurement without a date is a claim without a shelf life — these numbers describe the tree as it stood on that day, not a permanent property.*
+
 **Stage 10 phase 10g, spec §5.5, acceptance criterion 4.** Everything below runs against the
 in-tree reference simulator (`--broker-profile sim`). **No hardware was involved and none is
 claimed.** A hardware adapter publishes its own numbers or it does not ship; that is what "per

@@ -2080,6 +2080,57 @@ enough that treating them as one-offs would be the actual defect:
    only where both sides said yes (D43e). **The rule: ask what SIGNAL a gate keys on, then ask what
    failure produces a different signal.**
 
+**D49 — A diagnostic trace is bounded; an assertion trace is not.** Hardening campaign P16
+(`HARDENING_CAMPAIGN.md` C56).
+
+`TraceSink` held every record until the process exited, so memory grew with the number of effects
+PERFORMED rather than with the program's live data: 100,000 console writes took peak working set from
+6.7 MB to 70.1 MB — about 633 bytes retained per effect, with no ceiling. At a thousand effects a
+second, an ordinary rate for the control loops Stage 10 exists to serve, that is roughly 2.3 GB per
+hour. `--trace-effects` is opt-in and off by default, which is why this is a finding rather than an
+emergency; what makes it a finding at all is *which* runs turn it on — a long-lived controller being
+diagnosed in the field is precisely where hours of uptime meet a flag that never frees.
+
+RULED: the sink takes its retention policy from the caller, and the two callers get different ones.
+
+- `--trace-effects` alone gets `TraceSink::bounded(200_000)`: records are kept from the FRONT, the
+  number withheld is counted, and the run prints a note naming it and pointing at the uncapped path.
+- **`--assert-trace` is never capped.** It consumes the same records to prove that no effect outside
+  the declared set occurred, so a dropped record could hide a violation — a fail-OPEN on a
+  security-adjacent check, which is strictly worse than the memory it would save. The asymmetry is the
+  ruling, not an implementation detail, and the test that pins it says so in its name.
+
+Kept from the front rather than as a ring buffer, deliberately: a deterministic prefix plus an honest
+count is reproducible evidence, where a ring buffer would let two runs of the same program disagree
+about what happened. This is the same contract D38 gave the diagnostic flood, applied to the same
+class of problem.
+
+Measured after the fix: 500,000 effects bound the buffer at **134 MB** (from ~316 MB unbounded) and the
+run reports `300000 further effect record(s) not traced`.
+
+**D50 — Cross-platform re-verification and the campaign's close-out.** Hardening campaign P16.
+
+The 2026-07-21 figures in `CROSS_PLATFORM_VERIFICATION.md` predated sixteen phases that changed the
+parser, the checker, the broker, the lockfile verifier and the runtime, so they were re-taken from the
+committed tree rather than assumed to have survived: **Windows 95 suites / 1289 passed / 0 failed /
+clippy 65; Linux 95 / 1293 / 0 / clippy 66; coverage 100%; reference in sync.** Clippy is unchanged on
+both platforms across roughly 4,000 added lines.
+
+P1's front-door promise was re-tested the only way that means anything — a fresh `git clone` into an
+empty directory, then the README's own commands verbatim. Build, `check`, `authority`, `run`, and the
+DL0703 refusal when `--grant console` is omitted: all as documented.
+
+RULED, and it is a statement rather than a change: **macOS has never been executed.** Not once, in any
+phase. Every macOS cell reads "never run" rather than "untested" or "pending", because those words
+invite a reader to assume someone tried. Nobody tried, there is no hardware, and the CI matrix that
+names `macos-latest` has never executed because the repository is never pushed. A declared matrix is
+not evidence, and nothing in this repository may describe DeluluLang as supported on three platforms.
+
+The close-out honesty scrub: "quantum-proof"/"quantum-safe" appear 12 times and **every one is inside a
+sentence prohibiting the term**; all nine `measurements/` records now state when they were taken (four
+did not, including the one this campaign wrote, which had itself argued that a table should say when it
+was taken); and the performance clause is intact, with two new losses published under it (C55, C56).
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

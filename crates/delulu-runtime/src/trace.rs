@@ -131,15 +131,63 @@ fn json_string(s: &str) -> String {
 
 /// A shared, append-only trace buffer. Cheap to clone (an `Rc`): callers keep one handle to read
 /// after the run and hand a clone to `Interp::with_trace`.
+///
+/// # Why this can be bounded, and when it must not be (C56, ruling D49)
+///
+/// The buffer held every record until the process exited, so memory grew with the number of effects
+/// PERFORMED rather than with the program's live data: 100,000 console writes took peak working set
+/// from 6.7 MB to 70.1 MB, about 633 bytes retained per effect and no ceiling. At a thousand effects
+/// a second — an ordinary rate for the control loops Stage 10 exists to serve — that is roughly
+/// 2.3 GB per hour, and the runs that enable `--trace-effects` are exactly the long-lived ones being
+/// diagnosed in the field.
+///
+/// **The cap is only ever applied when the trace is DIAGNOSTIC output.** `--assert-trace` consumes
+/// the same records to prove that no effect outside the declared set occurred, and dropping records
+/// there would let a violation go unseen — a fail-OPEN on a security-adjacent check, which is worse
+/// than the memory it would save. So the bound is chosen by the caller, and the assertion path asks
+/// for an unbounded sink.
+///
+/// Records are kept from the FRONT, and the count withheld is reported — the same shape D38 gave the
+/// diagnostic flood, and for the same reason: a deterministic prefix plus an honest number is
+/// reproducible evidence, where a ring buffer would silently make two runs of the same program
+/// disagree about what happened.
 #[derive(Clone, Default)]
-pub struct TraceSink(Rc<RefCell<Vec<TraceRecord>>>);
+pub struct TraceSink(Rc<RefCell<Vec<TraceRecord>>>, Rc<Cap>);
+
+/// The retention policy for one sink: how many records to keep, and how many were dropped.
+#[derive(Default)]
+pub struct Cap {
+    /// `None` = unbounded (the assertion path).
+    limit: Option<usize>,
+    dropped: std::cell::Cell<u64>,
+}
 
 impl TraceSink {
+    /// An UNBOUNDED sink. Correct for `--assert-trace`, which needs every record to be sound.
     pub fn new() -> TraceSink {
-        TraceSink(Rc::new(RefCell::new(Vec::new())))
+        TraceSink(Rc::new(RefCell::new(Vec::new())), Rc::new(Cap::default()))
+    }
+
+    /// A sink that retains at most `limit` records and counts the rest. For diagnostic tracing only.
+    pub fn bounded(limit: usize) -> TraceSink {
+        TraceSink(
+            Rc::new(RefCell::new(Vec::new())),
+            Rc::new(Cap { limit: Some(limit), dropped: std::cell::Cell::new(0) }),
+        )
+    }
+
+    /// How many records were dropped by the cap. `0` for an unbounded sink.
+    pub fn dropped(&self) -> u64 {
+        self.1.dropped.get()
     }
 
     pub fn push(&self, record: TraceRecord) {
+        if let Some(limit) = self.1.limit {
+            if self.0.borrow().len() >= limit {
+                self.1.dropped.set(self.1.dropped.get() + 1);
+                return;
+            }
+        }
         self.0.borrow_mut().push(record);
     }
 
@@ -408,5 +456,54 @@ mod tests {
             TraceRecord { seq: 1, effect: "Read".into(), op: "read_text".into(), cap_kind: "FsRead".into(), detail: None, span: None, ..Default::default() },
         ];
         assert!(assert_trace(&allowed, &records).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    fn rec(i: usize) -> TraceRecord {
+        TraceRecord {
+            seq: i as u64,
+            effect: "Write".to_string(),
+            op: "println".to_string(),
+            cap_kind: "Console".to_string(),
+            detail: Some(format!("{i}")),
+            ..Default::default()
+        }
+    }
+
+    /// **A diagnostic trace is bounded; an assertion trace is not.** The buffer used to keep every
+    /// record until exit, so memory grew with the number of effects PERFORMED — 100k console writes
+    /// took peak working set from 6.7 MB to 70.1 MB with no ceiling (C56).
+    ///
+    /// The asymmetry is the point and must not be "simplified" away later: `--assert-trace` proves
+    /// that no effect outside the declared set occurred, so a dropped record could hide a violation.
+    /// Capping that path would be a fail-OPEN on a security-adjacent check — strictly worse than the
+    /// memory it would save.
+    #[test]
+    fn a_bounded_sink_stops_at_its_limit_and_counts_the_rest() {
+        let s = TraceSink::bounded(10);
+        for i in 0..25 {
+            s.push(rec(i));
+        }
+        assert_eq!(s.len(), 10, "the cap holds");
+        assert_eq!(s.dropped(), 15, "and the number withheld is reported, not swallowed");
+        // Kept from the FRONT, deterministically: two runs of one program must agree about what
+        // happened. A ring buffer would make them disagree.
+        let kept = s.records();
+        assert_eq!(kept.first().unwrap().detail.as_deref(), Some("0"));
+        assert_eq!(kept.last().unwrap().detail.as_deref(), Some("9"));
+    }
+
+    #[test]
+    fn an_unbounded_sink_keeps_everything_because_assert_trace_must_be_sound() {
+        let s = TraceSink::new();
+        for i in 0..1000 {
+            s.push(rec(i));
+        }
+        assert_eq!(s.len(), 1000, "the assertion path is never capped");
+        assert_eq!(s.dropped(), 0);
     }
 }

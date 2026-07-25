@@ -1,5 +1,7 @@
 # The satellite scenario — recording
 
+*Taken: 2026-07-21. A measurement without a date is a claim without a shelf life — these numbers describe the tree as it stood on that day, not a permanent property.*
+
 **Stage 10 phase 10g, spec §5.6, addendum §2.3, acceptance criterion 10.** The second simulated
 domain beyond the arm.
 
