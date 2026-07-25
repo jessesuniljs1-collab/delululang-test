@@ -715,7 +715,8 @@ fn usage() -> &'static str {
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
-     \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]\n\
+     \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]
+\n                        (mermaid is a MODULE-LEVEL overview — no functions/effects; dot|json|tree show the whole graph)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
      \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
      \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\

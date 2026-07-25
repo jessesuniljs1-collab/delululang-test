@@ -1510,6 +1510,34 @@ Fail-closed is the safe default and this ruling keeps it.
 authority dimensions falls behind `Scopes` and nothing notices — C31's fixed `[…; 7]` guard array, C34's
 dropped plugin dimensions, and now C35's actor boundary. Every such list needs a gate.
 
+**D41 — The formatter preserves comment paragraphs, and the mermaid graph declares its own scope.**
+Hardening campaign P9 (`HARDENING_CAMPAIGN.md` C15, C36).
+
+(a) **C15 — `fmt` merged comment paragraphs, and neither law could see it.** Two paragraphs separated by
+a blank line came out as one block. The identity law's comment projection is each comment's
+`(text, own_line)` in order; a merge changes none of those. Only the *spacing between* comments was
+lost — the part carrying the author's structure. RULED: track the source line each own-line comment ends
+on and emit one blank when the next starts more than a line later. Runs of blank lines still collapse to
+one (canonical formatting), and a **trailing** comment does not end a paragraph — otherwise the
+formatter invents blank lines on top of item separation. The transferable lesson is recorded in the
+ledger: **when a projection is chosen to prove a property, ask what the projection cannot see.**
+
+(b) **C36 — `--format mermaid` under-reported the graph without saying so.** 3 nodes and 1 edge for a
+graph with 12 and 23: packages and modules only, no functions, effects, capabilities, or call edges.
+The scope is correct and *is* documented — one line in an addendum — but a mermaid diagram is pasted
+into READMEs and agent context, permanently separated from that documentation, and the conclusion
+available to its reader is "this program has no effects". For a graph whose purpose is that authority be
+legible, that is the worst wrong reading it could invite. RULED: the artifact describes itself (two `%%`
+comments naming the scope, the exclusions, and which format shows the rest) and `--help` says it too.
+The HTML renderer already did exactly this — full graph, collapsed above a cap *with a visible notice* —
+so the pattern existed in the same file and one renderer had not adopted it.
+
+**Verified and unchanged:** locale invariance proved mechanically (byte-identical `--json` across both
+shipped locales while human prose changes); the Atlas's four query verbs answer correctly, `digest` is
+byte-stable across runs, and a program with check errors is refused with DL1780 *alongside* its
+underlying diagnostic; the LSP survives empty input, non-JSON, an unknown method, a truncated frame
+declaring `Content-Length: 99999`, and a hover on a nonexistent file with no panic, hang, or signal.
+
 **Not ruled, deliberately: `type A = B` is ambiguous in the normative grammar** and the parser
 resolves it silently toward a single-variant sum, so `fn g() -> Meters { Int }` checks clean and no
 alias to a bare type name can be written at all. Choosing the disambiguation rule changes which

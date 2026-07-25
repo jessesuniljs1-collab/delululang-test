@@ -80,7 +80,7 @@ deviations.
 | C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | OPEN |
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
 | C14 | `DL0907`'s registry text is narrower than the conditions that raise it | low (accuracy) | OPEN |
-| C15 | `delulu fmt` deletes the blank line between two comment paragraphs before an item | medium (fidelity) | OPEN — P9 |
+| C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
 | C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low (hygiene) | OPEN — P2 return |
 | C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
@@ -100,6 +100,7 @@ deviations.
 | C33 | `deploy` and `fleet` are working top-level subcommands that `--help` never listed; `deploy` also double-emitted JSON on refusal | medium (discoverability / machine contract) | **CLOSED** — D38 |
 | C34 | Stage 6 — a plugin manifest could declare `device`/`foreign_c`/`foreign_python` authority and have it **silently dropped**, advertising a ceiling the plugin can never have | medium (legibility — the C23 class, one level out) | **CLOSED** — D39 |
 | C35 | Stage 7 — a `Root` slice **silently loses `computes`** when it crosses an actor boundary; `RootMsg` is a hand-written enumeration that Stage 10 phase 10h did not extend | medium (silent narrowing — fail-closed but undecided) | **CLOSED** — D40 (gated + documented; carrying it is a capability decision for the owner) |
+| C36 | `atlas --format mermaid` is a module-level overview that did not say so — a reader could conclude a program has no functions or effects | medium (legibility of the authority graph) | **CLOSED** — D41 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
@@ -1065,6 +1066,60 @@ better here than anywhere else in the tree:
   `RefCell` anywhere, so a send **deep-copies by construction**. The scheduler is genuinely
   multi-threaded with each worker owning its actors' heaps outright and cells never crossing threads.
   The alias therefore reads the sender's own data, which is coherent rather than unsound.
+
+### C15 · `fmt` merged comment paragraphs, and the identity law was blind to it — CLOSED (D41)
+
+Two comment paragraphs separated by a blank line came out as one block. Reproduced, fixed, and the
+interesting part is *why no law caught it*.
+
+The formatter has two laws, both compiler-bug class: identity (`parse(fmt(src)) ≡ parse(src)`, with a
+projection that includes the full comment sequence) and idempotence. The comment projection is each
+comment's `(text, own_line)` **in order** — and merging two paragraphs changes neither the text, nor the
+own-line flag, nor the order. Only the *spacing between* comments was lost, which is exactly the part
+carrying the author's structure. **A law that watches the pieces and not the gaps between them has a
+blind spot precisely this wide**, and that is the transferable lesson: when a projection is chosen to
+prove a property, ask what the projection cannot see.
+
+Fixed by tracking the source line each own-line comment ends on and emitting one blank when the next
+one starts more than a line later. Runs of blank lines still collapse to one — that is ordinary
+canonical formatting, and it is the line between *preserve the author's structure* and *preserve the
+author's whitespace*. The skip branch is a **trailing** comment: it belongs to the line above it, so it
+must not be treated as a paragraph end, or the formatter starts *inventing* blank lines on top of the
+item separation it already emits. Witnessed in both directions, and the identity + idempotence laws
+still hold on every corpus program.
+
+### C36 · The mermaid graph did not say what it leaves out — CLOSED (D41)
+
+`delulu atlas --format mermaid` renders **3 nodes and 1 edge** for a program whose graph has **12 nodes
+and 23 edges**: packages and modules only. No functions, no effects, no capabilities, no call edges.
+`--format dot` renders all of them.
+
+Module level is the right scope for a shareable overview, and it *is* documented — one line in
+`SURFACE_ATLAS_PALETTE_ADDENDUM.md`. The problem is where a mermaid diagram ends up: pasted into a
+README, an issue, or an agent's context, permanently separated from the command that produced it and
+from any documentation about it. A reader then sees two boxes and the honest conclusion available to
+them is that the program has no functions and no effects. For a graph whose stated purpose is that a
+human or an agent can read unfamiliar code **and its authority**, "this program appears to have no
+effects" is the worst wrong conclusion it could invite — and it is the C23/C34 class again: safe,
+and misleading.
+
+The artifact now describes itself, in two `%%` mermaid comments naming the scope, what is excluded, and
+which format shows the rest. `--help` says it too. **The HTML renderer already got this right** and is
+the model: full graph normally, collapsed above a node cap *with a visible notice* — so the pattern
+existed in the same file and one renderer had not adopted it.
+
+### 3.4 What Stage 8 got right, verified by execution
+
+- **Locale invariance is real, and now proved mechanically.** The same diagnostic-producing program
+  under `--locale en-US` and `--locale delulu-slang` yields **byte-identical `--json`**, while the human
+  prose genuinely changes. Invariant 39 holds where it matters.
+- **The Atlas queries and refusals work.** All four verbs (`node`/`callers`/`calls`/`why`) answer
+  correctly; `digest` is byte-stable across repeated runs; and a program with check errors is refused
+  with **DL1780 alongside** the underlying diagnostic, so the reader learns both that the graph was
+  refused and why — no partial graph.
+- **The LSP is a server and survives being treated as one.** Empty input, non-JSON, an unknown method,
+  a truncated frame declaring `Content-Length: 99999`, and a hover on a nonexistent file: no panic, no
+  hang, no signal death; every case exits cleanly.
 
 ### C28 · `type A = B` is ambiguous in the normative grammar — OPEN, owner-reserved
 

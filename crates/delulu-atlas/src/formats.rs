@@ -99,6 +99,27 @@ impl Atlas {
     pub fn render_mermaid(&self) -> String {
         let mut out = String::new();
         let _ = writeln!(out, "graph LR");
+        // Say what this diagram is, inside the diagram (`HARDENING_CAMPAIGN.md` C36).
+        //
+        // Module level is the right scope for a shareable overview, and it is documented — in a
+        // design addendum. The problem is where a mermaid diagram ENDS UP: pasted into a README, an
+        // issue, or an agent's context, permanently separated from the command that produced it and
+        // from any documentation about it. A reader then sees two boxes for a program with twelve
+        // nodes and twenty-three edges, and the honest conclusion available to them is that the
+        // program has no functions and no effects.
+        //
+        // A graph that under-reports authority and does not say so is the same defect as C23's inert
+        // declarations and C34's phantom ceiling: safe, and misleading. So the artifact describes
+        // itself. `%%` is a mermaid comment; renderers drop it, humans and agents reading the source
+        // see it, and it comes after `graph LR` so the declaration stays first.
+        let _ = writeln!(
+            out,
+            "  %% MODULE-LEVEL overview: packages and modules only. Functions, effects, capabilities,"
+        );
+        let _ = writeln!(
+            out,
+            "  %% and call edges are NOT shown here — use `--format dot`, `json`, or `tree` for those."
+        );
         // Stable short ids `n0, n1, …` for the module-level nodes, assigned in id order.
         let mut short: std::collections::BTreeMap<&str, String> = std::collections::BTreeMap::new();
         for (idx, n) in self
@@ -300,6 +321,39 @@ mod tests {
         }
     }
 
+    /// A mermaid diagram must say what it leaves out (`HARDENING_CAMPAIGN.md` C36).
+    ///
+    /// Module level is the right scope for a shareable overview and it is documented — in a design
+    /// addendum. But a mermaid diagram gets pasted into READMEs, issues, and agent context,
+    /// permanently separated from the command that made it. A reader seeing two boxes for a program
+    /// with a dozen nodes cannot tell that functions and effects were excluded BY DESIGN rather than
+    /// absent from the program, and "this program appears to have no effects" is the worst wrong
+    /// conclusion this particular graph could invite.
+    ///
+    /// The HTML renderer already got this right — full graph normally, collapsed above a node cap
+    /// *with a visible notice*. Mermaid now describes itself the same way.
+    #[test]
+    fn the_mermaid_overview_declares_its_own_scope() {
+        let a = tiny();
+        // The premise: this atlas really does contain a function and an effect that mermaid drops.
+        assert!(a.nodes.iter().any(|n| n.kind == NodeKind::Function), "premise: a function exists");
+        assert!(a.nodes.iter().any(|n| n.kind == NodeKind::Effect), "premise: an effect exists");
+
+        let m = a.render_mermaid();
+        assert!(m.starts_with("graph LR"), "the diagram declaration stays first:
+{m}");
+        assert!(m.contains("%% MODULE-LEVEL"), "the scope note is a mermaid comment:
+{m}");
+        assert!(m.contains("NOT shown"), "it says what is MISSING, not only what is present:
+{m}");
+        assert!(m.contains("--format dot"), "it points at a format that shows the rest:
+{m}");
+        assert!(!m.contains("main"), "premise: the function really is absent from the diagram:
+{m}");
+        assert!(m.contains("n0["), "the nodes still render:
+{m}");
+    }
+
     #[test]
     fn dot_mermaid_html_are_deterministic() {
         let a = tiny();
@@ -402,3 +456,4 @@ const HTML_JS: &str = r#"
     '<span><i style="background:#ff595e"></i>authority edge (dashed)</span>';
 })();
 "#;
+

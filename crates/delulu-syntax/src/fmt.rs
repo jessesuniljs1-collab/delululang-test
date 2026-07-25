@@ -168,14 +168,36 @@ impl<'a> Printer<'a> {
     /// indent; trailing comments re-attach to the previous printed line (there is always
     /// one — the module header at minimum), which keeps their `own_line = false` identity.
     fn flush_comments_before(&mut self, pos: u32) {
+        // The source line just after the previously emitted own-line comment, so a blank line the
+        // author put BETWEEN two comment paragraphs survives (`HARDENING_CAMPAIGN.md` C15).
+        //
+        // Without this the formatter emitted consecutive own-line comments back to back, merging
+        // two deliberately separated paragraphs into one block. The identity law did not catch it,
+        // and could not: its projection is each comment's `(text, own_line)` in order, and both are
+        // unchanged by the merge. Only the *spacing between* comments was lost — which is exactly
+        // the part carrying the author's meaning, and the part no law was watching.
+        let mut prev_end_line: Option<usize> = None;
         while self.comments.front().is_some_and(|c| c.start < pos) {
             let c = self.comments.pop_front().expect("front checked");
             if c.own_line {
+                let start_line = self.line_of(c.start);
+                // One or more blank source lines between the last comment and this one → keep one.
+                // Collapsing runs of blank lines to a single one is ordinary canonical formatting;
+                // deleting the separation entirely is not.
+                if prev_end_line.is_some_and(|p| start_line > p + 1) {
+                    self.blank();
+                }
                 for l in c.text.split('\n') {
                     self.line(l);
                 }
+                // A block comment spans its own newlines, so the end line is derived from the text
+                // rather than assumed to be the start line.
+                prev_end_line = Some(start_line + c.text.matches('\n').count());
             } else {
                 self.attach_trailing(&c.text);
+                // A trailing comment does not participate in paragraph spacing: it belongs to the
+                // line above it, so it must not make the next own-line comment look separated.
+                prev_end_line = None;
             }
         }
     }
@@ -1138,6 +1160,92 @@ mod tests {
             "IDEMPOTENCE violated:\n--- first ---\n{out}\n--- second ---\n{out2}"
         );
         out
+    }
+
+    #[test]
+    fn a_blank_line_between_comment_paragraphs_survives() {
+        // C15. The formatter emitted consecutive own-line comments back to back, so two paragraphs
+        // the author had deliberately separated were merged into one block — irrecoverably, since
+        // nothing downstream knows where the break had been.
+        //
+        // The identity law did not catch it and COULD NOT: its projection is each comment's
+        // `(text, own_line)` in order, and the merge changes neither. Only the spacing *between*
+        // comments was lost, which is precisely the part carrying the author's meaning. A law that
+        // watches the pieces and not the gaps between them has a blind spot exactly this wide.
+        let src = "module m
+
+            // First paragraph.
+            // Still the first.
+
+            // Second paragraph, separated on purpose.
+            fn f() -> Int { 1 }
+";
+        let out = laws(src);
+        let body = out
+            .split_once("// First paragraph.")
+            .expect("the first paragraph survives")
+            .1;
+        let between = body
+            .split_once("// Second paragraph")
+            .expect("the second paragraph survives")
+            .0;
+        assert!(
+            between.contains("
+
+"),
+            "the blank line between the two comment paragraphs must survive:
+{out}"
+        );
+    }
+
+    #[test]
+    fn comment_paragraph_spacing_is_canonical_not_merely_copied() {
+        // Two blank lines collapse to one — that is ordinary canonical formatting, and it is the
+        // line between "preserve the author's structure" and "preserve the author's whitespace".
+        // Deleting the separation entirely was the bug; reproducing an arbitrary run of blank lines
+        // would be a different one.
+        let src = "module m
+
+// A.
+
+
+
+// B.
+fn f() -> Int { 1 }
+";
+        let out = laws(src);
+        let mid = out.split_once("// A.").unwrap().1.split_once("// B.").unwrap().0;
+        assert_eq!(mid, "
+
+", "runs of blank lines collapse to exactly one: {mid:?}");
+    }
+
+    #[test]
+    fn a_trailing_comment_does_not_create_a_false_paragraph_break() {
+        // The skip branch of the C15 fix. A trailing comment belongs to the line above it, so it must
+        // not be treated as the end of a paragraph — otherwise the next own-line comment gets a blank
+        // line inserted *in addition* to the one item separation already provides, and the formatter
+        // starts inventing whitespace instead of preserving it.
+        //
+        // The single blank line below is the ordinary "one blank line between items" rule, not this
+        // fix; what is asserted is that nothing added a second one.
+        let src = "module m
+let a = 1 // trailing
+// own-line, immediately after
+fn f() -> Int { 1 }
+";
+        let out = laws(src);
+        let after = out.split_once("// trailing").expect("the trailing comment survives").1;
+        assert!(
+            !after.starts_with("
+
+
+"),
+            "a trailing comment must not add a paragraph break on top of item separation:
+{out}"
+        );
+        assert!(after.contains("// own-line"), "the own-line comment survives:
+{out}");
     }
 
     #[test]

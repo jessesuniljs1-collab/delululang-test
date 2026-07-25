@@ -140,6 +140,16 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   listed, which is why a CLI sweep could not find them — and `deploy` was double-emitting JSON on its
   refusal paths. A gate now asserts every dispatched subcommand appears in `--help`, because an
   undocumented command is a command nothing sweeps. (C33, ruling D38)
+- **`delulu fmt` no longer merges comment paragraphs.** A blank line between two comment paragraphs was
+  deleted, joining them into one block. Neither formatter law could catch it: the identity law's comment
+  projection is each comment's text and own-line flag in order, and a merge changes none of those — only
+  the spacing *between* comments, which is the part carrying the author's structure. Runs of blank lines
+  still collapse to one, and a trailing comment does not create a false paragraph break. (C15, ruling D41)
+- **`atlas --format mermaid` now says what it leaves out.** It renders a module-level overview — 3 nodes
+  for a graph with 12 — and said so only in a design addendum, while the diagram itself gets pasted into
+  READMEs and agent context far from any documentation. A reader could reasonably conclude the program
+  had no functions and no effects. The diagram now declares its scope inline, and `--help` does too.
+  (C36, ruling D41)
 - **Root authority can no longer narrow silently across an actor boundary.** `RootMsg` is a
   hand-written enumeration of what a `Root` carries to an actor, and Stage 10 phase 10h added
   `computes` without extending it — so an actor holding a Root slice lost compute authority and nothing
