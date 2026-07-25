@@ -246,6 +246,22 @@ authority and compare to `authority_hash` (mismatch: DL1002 — this catches "sa
 different code"); `delulu.lock` is committed to VCS; `--locked` (default in CI mode) refuses any
 resolution not already in the lockfile (DL1011).
 
+**The recorded fields are verified too, not only the hashes (normative; ruling D45b).** Comparing
+recomputed hashes against stored hashes says nothing about `effects`, `cap_kinds`, `secrets`, the
+scope lists or `version` — and those are what a human opens a lockfile to read. Each is therefore
+compared against the package's computed authority (mismatch: DL1002). Without this a lockfile could
+claim a dependency has no effects and no capabilities while that dependency reaches the network, and
+`build --locked` reported "built clean" while `authority --diff` on the same file reported a
+**WIDENING** — the automated gate trusting a claim the interactive review tool refused
+(`HARDENING_CAMPAIGN.md` C52). Two further shapes are refused for reasons stated elsewhere in this
+project: **two entries for one package** is an ambiguity refused rather than resolved (DL1011), and a
+**lock format `version` this toolchain does not understand** pins nothing rather than being read as
+version 1 (DL1011), on the same principle as an unverifiable signature algorithm (§8.2).
+
+`accepted_by` is deliberately exempt: it records an operator's decision to accept a widening, is not
+re-derivable from source, and confers nothing — it is written by `--accept-authority` and never read
+to make one.
+
 The `secrets` field records which secret names the package reads (`root.secret("NAME")`). It is
 part of a package's authority — Constitution invariant 10 lists *scopes*, and a secret name is a
 scope — so the semver-authority law (§4.3) and `authority --diff` treat a **new secret name as a

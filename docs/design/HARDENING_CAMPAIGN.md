@@ -114,7 +114,8 @@ deviations.
 | C48 | **Record field lookup cloned the whole type definition per access** — a function reading N fields of an N-field record did N² field-entry deep clones; 632 ms to check one 2000-field record | **high** (quadratic compile time on a realistic shape) | **CLOSED** — D44 (15× faster; residual curve measured and published) |
 | C49 | **An empty `delulu.toml` crashed `build`/`check` with a Rust panic** — and the project's own no-panic gate could not see it, because the CLI runs on a worker thread whose panic is mapped to exit 2 ("internal"), not 101 | **high** (crash on the most ordinary beginner mistake; the crash gate was structurally blind) | **CLOSED** — D44 |
 | C50 | **`delulu authority` reported `summary.errors: 0` and exit 0 for a package `check` refuses** — the review surface never opened `delulu.toml` at all | **high** (the review surface asserting a package is clean when it is not) | **CLOSED** — D44 |
-| C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | OPEN — fix identified, deferred to P13 |
+| C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | **CLOSED** — D45 |
+| C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | OPEN — owner-reserved (public specification) |
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | — | OPEN — owner-reserved (language surface) |
 | C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | OPEN — owner-reserved (safety policy) |
@@ -1541,25 +1542,123 @@ a clean report and exit 0 from `authority`, and DL1009 from `check`. That is def
 answers "what can this do", `check` answers "is this package well-formed" — but the review surface
 never mentioning that the package violates its own declaration is worth an owner's attention.
 
-### C51 · `authority` cannot review a package that has dependencies — OPEN
+### C51 · `authority` cannot review a package that has dependencies — CLOSED (D45)
 
-On every generated monorepo, `build` succeeded and `authority` failed:
+Found in P12 and closed in P13; the full account, including the regression the obvious fix
+would have caused, is under §3.8 below.
+
+### 3.8 P13 — every input is written by an adversary
+
+P12 proved the toolchain survives size. This phase assumed the input is hostile. Two findings closed,
+both on the supply-chain surface, and one large negative result.
+
+**The fuzz sweep found nothing, which is worth stating as a result.** 561 invocations across four
+parsers — `.delulu` source, `delulu.toml`, `delulu.lock` and morph TOML — driven by truncation at
+twelve offsets plus byte flips, deletions, inflations, injections (NUL, BOM, `1e400`, 200-deep bracket
+runs, oversized integers) and self-duplication, each run through `check`/`fmt`/`atlas`/`build`/`lock`/
+`authority`/`morph` as applicable. **No panics, no hangs.** Crashes were detected by the panic
+MESSAGE, not by exit code — the C49 lesson, without which this sweep would have been as blind as the
+one it replaced.
+
+The findings came instead from asking a different question of the same inputs: not *does it crash*
+but **does it NOTICE**.
+
+### C51 · The review surface could not review a real package — CLOSED (D45)
+
+`delulu authority <dir>` ran the single-package loader while `build`, `check`, `lock` and
+`authority --diff` all resolve the dependency graph. So:
 
 ```
-$ delulu build  mono/wide50/pkg1   →  ok: `pkg1` built clean (2 package(s), 2 module(s))
-$ delulu authority mono/wide50/pkg1 →  error[DL0303]: unknown module `pkg0` imported by `pkg1`
+$ delulu build     app   →  ok: `app` built clean (2 package(s), 2 module(s))
+$ delulu authority app   →  error[DL0303]: unknown module `lib` imported by `app`
 ```
 
-`authority_package` uses the single-package loader; `build`, `check`, `lock` and `authority --diff`
-all resolve the dependency graph. So the review surface is unusable for any package with a
-dependency — in a monorepo, nearly all of them — and the supply-chain question ("what does this
-dependency let my package do?") is precisely when it is wanted.
+Every package with a dependency was refused by the one command whose purpose is answering "what can
+this do to my system" — and in a monorepo that is nearly every package. The supply-chain question is
+*exactly* the case it could not handle.
 
-The fix is identified: resolve the workspace on this path as its siblings do. It is **not** applied
-here. It changes what the authority report CONTAINS for a whole class of packages (module lists,
-effects contributed by dependencies), and that report is a published contract surface; making that
-change at the end of a long phase without budget to verify the report's content across cases is how a
-fix becomes a defect. Carried to P13 as the first item.
+**The naive fix would have traded this for a worse bug, and nearly did.** Routing every
+`authority <dir>` through `resolve_workspace` looked obvious — until measurement showed
+`resolve_workspace` requires a manifest and reports DL1004 without one, which would have refused a
+plain directory of modules: legal since C26/D33 and deliberately preserved by C50. A manifest is what
+makes a directory a package, so its presence now selects the loader. Both cases are tested.
+
+Verified the way the phase brief demanded, before shipping: a no-dependency package's report is
+**byte-identical** before and after, on both the human and `--json` surfaces, for a simple package and
+for one exercising multiple modules, secrets and `Net`. One deliberate improvement rides along — a
+library package with no `fn main` used to be reported as `Authority of \`package\``, a placeholder;
+the root package's name is available once the graph is resolved, so it is used.
+
+### C52 · A lockfile could lie about a dependency, and the CI gate believed it — CLOSED (D45)
+
+`verify_locked` recomputed `content_hash` and `authority_hash` from reality and compared them to the
+stored hashes. It never looked at `effects`, `cap_kinds`, `secrets` or the scope lists — **the fields
+a human opens a lockfile to read.** A lockfile could therefore claim a dependency has no effects and
+no capabilities while that dependency genuinely calls `h.get`, and `build --locked` printed
+**"built clean"**.
+
+What made it undeniable is the disagreement between two commands reading the same file:
+
+| command | verdict on the forged lockfile |
+|---|---|
+| `delulu authority --diff <lock> <dir>` | `lib: + effects Net` … `verdict: WIDENING` |
+| `delulu build <dir> --locked` | `ok: built clean` |
+
+The interactive review command caught what the automated gate did not — backwards, because CI is
+where nobody is looking.
+
+A semantic attack matrix on the lockfile (fifteen things an attacker or a bad merge actually does)
+went from **15 accepted to 2**, with the untampered control still building throughout:
+
+| tampering | before | after |
+|---|---|---|
+| dep effects narrowed (hide `Net`) | accepted | **DL1002** |
+| dep `cap_kinds` emptied | accepted | **DL1002** |
+| dep effects widened | accepted | **DL1002** |
+| dep secrets widened | accepted | **DL1002** |
+| dep net/fs scopes widened to wildcards | accepted | **DL1002** |
+| recorded version ≠ package version | accepted | **DL1002** |
+| duplicate entry with wider authority | accepted | **DL1011** |
+| lock format `version = 999` | accepted | **DL1011** |
+| `authority_hash` forged | DL1002 | DL1002 |
+| `content_hash` forged / hashes emptied | DL1010 | DL1010 |
+| dep entry deleted | DL1011 | DL1011 |
+| dependency SOURCE tampered | DL1010 | DL1010 |
+
+Three of the new refusals restate rules this project had already made elsewhere. An unreadable lock
+format pins **nothing** rather than being read as version 1 — the same rule as an unverifiable
+signature algorithm (DL1908), and it reuses DL1011 because "nothing is pinned" is exactly what DL1011
+already names (`Lockfile::parse` documents the same posture for a garbled file). A duplicated entry is
+an ambiguity **refused rather than resolved** — the C40 rule, third application. And the field
+comparison is written as a **destructuring** `let LockEntry { .. }`, so a field added to the type
+later cannot compile until someone decides whether it belongs in the check: the C31/C34/C35/C44
+pattern answered structurally rather than by another hand-maintained list.
+
+**Two residuals, named rather than quietly left:**
+
+- *A lock entry for a package that is not in the graph is still accepted.* The verification iterates
+  the resolved packages and looks each up, so extra entries are never examined. They affect nothing
+  that is verified, and refusing them could break a legitimate superset lockfile, so this is recorded
+  rather than changed.
+- *`accepted_by` can be edited freely.* **Verified as conferring nothing**: it is written by the
+  `--accept-authority` flow and is never read to make a decision, so a forged value is a misleading
+  label and not an escalation. It is also not re-derivable from source, so nothing can validate it —
+  which is precisely why it is excluded from the destructured comparison, by name and with a reason.
+
+### What P13 verified and did not change
+
+- **`accepted_by` is a record, not a gate** (above) — grep-verified across the tree, not assumed.
+- **Hash-protected tampering was already caught** on every shape tried: forged `authority_hash`
+  (DL1002), forged or emptied `content_hash` (DL1010), a deleted entry (DL1011), and a dependency's
+  source edited under a valid lockfile (DL1010). D28's and P3's work holds.
+- **The manifest pin still bounds a dependency independently of the lockfile** — C52 is a
+  review-integrity defect, not an authority escalation, and is described that way throughout.
+
+⚠ **Method note, and it nearly produced a false report of catastrophe.** The first run of the lockfile
+attack used plain `delulu build` and reported **all fifteen tamperings accepted**. `build` does not
+consult the lockfile; `--locked` is the verb that verifies it. The sweep was measuring a command that
+was never claiming to check. Before reporting a supply-chain surface as unprotected, confirm the
+command under test is the one that makes the guarantee.
 
 ### C46 · Should a refused command prove liveness? — OPEN, owner-reserved
 

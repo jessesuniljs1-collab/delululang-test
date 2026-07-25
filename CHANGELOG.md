@@ -25,6 +25,20 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **A `delulu.lock` can no longer misstate what a dependency does.** `build --locked` recomputed the
+  content and authority hashes and compared them to the stored ones — but never checked the recorded
+  `effects`, `cap_kinds`, `secrets` or scope lists, which are the fields a human opens a lockfile to
+  read. A lockfile could claim a dependency has no effects and no capabilities while that dependency
+  genuinely reaches the network, and the locked build printed **"built clean"**. `authority --diff` on
+  the very same file reported `verdict: WIDENING`: the interactive review command caught what the
+  automated CI gate did not.
+
+  Now the recorded authority and version are compared against reality (DL1002), a duplicated entry is
+  refused rather than resolved (DL1011), and a lock format version this toolchain cannot read pins
+  nothing instead of being interpreted as version 1 (DL1011) — the same rule as an unverifiable
+  signature algorithm. A fifteen-case tampering matrix went from 15 accepted to 2, both remaining ones
+  named and reasoned. This is a review-integrity fix, not an authority escalation: the manifest pin
+  bounds a dependency independently of the lockfile. (C52, ruling D45b)
 - **An unreadable `delulu.toml` no longer crashes the build, and the crash gate can now see crashes
   at all.** An empty manifest — the most ordinary beginner mistake there is — made `delulu build` and
   `delulu check` panic, along with four other manifest shapes, while `lock` and `authority` diagnosed
@@ -191,6 +205,15 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **`delulu authority` can now report on a package that has dependencies.** It ran the single-package
+  loader while `build`, `check`, `lock` and `authority --diff` all resolve the dependency graph, so
+  every package with a dependency was refused with DL0303 ("unknown module") while `build` on the same
+  directory succeeded — making the review surface unusable for a monorepo, which is exactly where the
+  supply-chain question lives. A `delulu.toml`'s presence now selects the loader, so a plain directory
+  of modules still works: `resolve_workspace` requires a manifest, and routing everything through it
+  would have traded this bug for that regression. No-dependency reports are byte-identical to before,
+  on both surfaces. A library package with no `fn main` is now named after its package rather than the
+  placeholder `package`. (C51, ruling D45a)
 - **`--json` now emits exactly one object, including on failure.** `docs/for-agents.md` promised
   *"Every `--json` command emits one object"*; on a usage or I/O error — a missing argument, an
   unreadable path, a malformed flag — essentially every subcommand printed a human sentence to stderr

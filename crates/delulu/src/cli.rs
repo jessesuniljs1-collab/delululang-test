@@ -3289,40 +3289,57 @@ pub(crate) fn package_authority_value(dir: &str) -> Option<Json> {
     Some(program_authority(&program, &name, &scopes))
 }
 
+/// `delulu authority <dir>`.
+///
+/// **A `delulu.toml` is what makes a directory a package, and that decides which loader runs.**
+///
+/// With a manifest, this resolves the whole dependency graph exactly as `build`, `check`, `lock` and
+/// `authority --diff` do. It used to use the single-package loader instead, which cannot see a
+/// dependency — so `authority` refused every package that had one with DL0303 ("unknown module")
+/// while `build` on the same package succeeded (`HARDENING_CAMPAIGN.md` C51). In a monorepo that is
+/// nearly every package, and "what does this dependency let my package do?" is the supply-chain
+/// question this command exists to answer.
+///
+/// Without a manifest it stays on the single-package loader, deliberately: `resolve_workspace`
+/// requires a manifest and reports DL1004 without one, so routing everything through it would have
+/// refused a plain directory of modules — the case C26/D33 ruled legal and C50 explicitly preserved.
+/// Trading C51 for that regression would have been no fix at all.
 fn authority_package(dir: &str, opts: &Opts) -> i32 {
-    let mut pkg = load_package(dir);
-    // A `delulu.toml` that is PRESENT must be readable. `load_package` only walks `src/` and never
-    // opens the manifest, so this command — the review surface, whose whole product is "what this
-    // program can do to your system" — printed a confident report, `diagnostics: []`,
-    // `summary.errors: 0` and exit 0 for a package `check` refuses with DL1004: an empty file, a
-    // file that is not TOML, one with no `[package]` section (C50).
-    //
-    // ABSENT is deliberately not an error: `authority` accepts a plain directory of modules, and
-    // C26/D33 already ruled on flat layouts. Present-and-unreadable is the different case, and it is
-    // the same shape as a present-but-invalid plugin signature (Stage-6 deviation 8) — a checker
-    // that shrugs at a claim it cannot check is the "when it cannot tell, it says yes" failure.
-    let manifest_path = std::path::Path::new(dir).join("delulu.toml");
-    if manifest_path.is_file() {
-        match std::fs::read_to_string(&manifest_path) {
-            Ok(text) => {
-                let file = pkg.source_map.add_file(manifest_path.display().to_string(), text.clone());
-                let (_, mdiags) = delulu_check::Manifest::parse(&text, file);
-                pkg.diagnostics.extend(mdiags);
-            }
-            Err(e) => pkg.diagnostics.push(Diagnostic::error(
-                "DL1004",
-                format!("cannot read manifest `{}`: {e}", manifest_path.display()),
-            )),
-        }
+    if std::path::Path::new(dir).join("delulu.toml").is_file() {
+        authority_workspace(dir, opts)
+    } else {
+        authority_loose_dir(dir, opts)
     }
+}
+
+/// The package path: resolve dependencies, check the whole graph, report the root's authority.
+fn authority_workspace(dir: &str, opts: &Opts) -> i32 {
+    let ws = resolve_workspace(dir);
+    let program = check_workspace(&ws);
+    // Both lists, for C50's reason: the workspace's own diagnostics carry an unreadable or
+    // non-conforming manifest (DL1004/DL1001/…), and dropping them let the review surface assert
+    // `summary.errors: 0` for a package `check` refuses.
+    let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+    diags.extend(program.diagnostics.iter().cloned());
+    if errors(&diags) > 0 {
+        print_diagnostics("authority", &diags, &ws.source_map, None, opts.json);
+        return 1;
+    }
+    // The entry module names the report when there is one. A library package has no `fn main`, and
+    // the old fallback called it `package` — a placeholder that tells a reviewer nothing about what
+    // they are reading. The root package's own name is right there once the graph is resolved.
+    let name = program
+        .entry_module
+        .clone()
+        .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
+        .unwrap_or_else(|| "package".to_string());
+    emit_authority(&program, &name, dir, &ws.source_map, opts)
+}
+
+/// The loose-directory path: no manifest, so no dependency graph and nothing to resolve.
+fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
+    let pkg = load_package(dir);
     let program = check_program(&pkg);
-    // The package's OWN diagnostics are unioned in, not just the program's. They were computed and
-    // then dropped, so `delulu authority` on a package whose `delulu.toml` is empty, not TOML, or
-    // missing `[package]` printed a confident report with `diagnostics: []`, `summary.errors: 0` and
-    // exit 0 — for a package `check` refuses with DL1004 (`HARDENING_CAMPAIGN.md` C50). This is the
-    // review surface: the one command whose entire product is "what this program can do to your
-    // system", asserting zero errors for a package that has them, on BOTH the human and `--json`
-    // surfaces. `cmd_authority_diff` already unions both lists for a directory; this path did not.
     let mut diags: Vec<Diagnostic> = pkg.diagnostics.clone();
     diags.extend(program.diagnostics.iter().cloned());
     if errors(&diags) > 0 {
@@ -3330,14 +3347,26 @@ fn authority_package(dir: &str, opts: &Opts) -> i32 {
         return 1;
     }
     let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
+    emit_authority(&program, &name, dir, &pkg.source_map, opts)
+}
+
+/// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
+/// One function so the two loaders above cannot drift into reporting different things.
+fn emit_authority(
+    program: &delulu_check::Program,
+    name: &str,
+    dir: &str,
+    map: &SourceMap,
+    opts: &Opts,
+) -> i32 {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
-    let mut report = program_authority(&program, &name, &scopes);
+    let mut report = program_authority(program, name, &scopes);
     stamp_custody(&mut report, opts);
     stamp_foreign_isolation(&mut report, opts);
     stamp_isolation(&mut report, opts);
     if opts.json {
         note_json_emitted();
-        println!("{}", envelope_to_string("authority", &[], Some(report), &pkg.source_map));
+        println!("{}", envelope_to_string("authority", &[], Some(report), map));
     } else {
         print!("{}", render_authority(&report));
     }

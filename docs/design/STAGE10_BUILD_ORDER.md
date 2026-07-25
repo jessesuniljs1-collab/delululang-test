@@ -1833,6 +1833,72 @@ diagnostics in one object with a truthful `summary`. Monorepos hold: 50-deep dep
 200-package diamonds check, build and lock cleanly, and **lockfiles are byte-identical across repeated
 writes** at every size — the semver-authority law's determinism survives depth.
 
+**D45 — The review surface can review a real package, and a lockfile can no longer lie about one.**
+Hardening campaign P13 (`HARDENING_CAMPAIGN.md` C51, C52). Two sub-rulings, both on the supply-chain
+surface, plus a large negative result.
+
+(a) **C51 — `authority` ran the wrong loader.** `delulu authority <dir>` used the single-package
+loader while `build`, `check`, `lock` and `authority --diff` all resolve the dependency graph, so
+every package with a dependency was refused with DL0303 while `build` on the same directory
+succeeded. The one command whose product is "what can this do to my system" could not answer for a
+monorepo member — and the supply-chain question is exactly that case.
+
+RULED: **the presence of a `delulu.toml` selects the loader.** With a manifest, resolve the whole
+graph as the siblings do; without one, keep the single-package loader. That branch is not
+decoration — `resolve_workspace` requires a manifest and reports DL1004 without one, so routing
+everything through it would have refused a plain directory of modules, which C26/D33 made legal and
+C50 deliberately preserved. The obvious fix would have traded C51 for that regression.
+
+Verified before shipping, as the phase required: a no-dependency package's report is **byte-identical**
+before and after on both surfaces, for a simple package and for one exercising multiple modules,
+secrets and `Net`. One improvement rides along: a library package with no `fn main` reported
+`Authority of \`package\`` — a placeholder — and now uses the root package's name, which is available
+once the graph is resolved.
+
+(b) **C52 — `build --locked` verified a lockfile's hashes but not its claims.** `verify_locked`
+recomputed `content_hash` and `authority_hash` from reality and compared them to the stored hashes,
+and never looked at `effects`, `cap_kinds`, `secrets` or the scope lists — the fields a human opens a
+lockfile to read. A lockfile could claim a dependency has no effects and no capabilities while that
+dependency genuinely performs `Net`, and the locked build printed "built clean". `authority --diff` on
+the very same file reported `+ effects Net` and `verdict: WIDENING`: **the interactive review command
+caught what the automated CI gate did not.**
+
+RULED, four checks, each restating a rule this project had already made:
+- The recorded authority fields are compared against the computed authority (DL1002). Written as a
+  **destructuring** `let LockEntry { … }` so a field added to the type cannot compile until someone
+  decides whether it belongs — the C31/C34/C35/C44 pattern answered structurally instead of with a
+  fifth hand-maintained list. `accepted_by` is excluded **by name and with a reason**: it is an
+  operator's recorded decision, not re-derivable from source.
+- The recorded `version` is compared against the package's own (DL1002). `--locked` means "refuse any
+  resolution not already pinned", and a stale version was never pinned.
+- A **duplicated** entry is refused, not resolved (DL1011) — the C40 rule, third application.
+- An **unreadable lock format version** pins nothing (DL1011) rather than being interpreted as
+  version 1. Same rule as an unverifiable signature algorithm (DL1908), and DL1011 is the honest code
+  because "nothing is pinned" is precisely what it already names — `Lockfile::parse` documents the
+  same posture for a garbled file. **No new diagnostic code was needed.**
+
+A fifteen-case semantic attack matrix went from 15 accepted to 2, with the untampered control
+building throughout. **Framed precisely: this is a review-integrity defect, not an authority
+escalation** — the manifest pin bounds a dependency independently of the lockfile, and the
+hash-protected tampering was already caught on every shape tried.
+
+Two residuals, named: a lock entry for a package not in the resolved graph is still accepted (it is
+never examined and refusing it could break a legitimate superset lockfile), and `accepted_by` can be
+edited freely — **verified to confer nothing**, since it is written by the `--accept-authority` flow
+and never read to make a decision.
+
+**Negative result worth recording so it is not re-run blind.** 561 fuzz invocations across four
+parsers — `.delulu` source, `delulu.toml`, `delulu.lock`, morph TOML — under truncation at twelve
+offsets, byte flips, deletions, inflations, injections (NUL, BOM, `1e400`, 200-deep bracket runs,
+oversized integers) and self-duplication, swept through `check`/`fmt`/`atlas`/`build`/`lock`/
+`authority`/`morph`: **no panics, no hangs.** Crashes were detected by the panic MESSAGE, not by exit
+code — without D44c's lesson this sweep would have been as blind as the one it replaced.
+
+⚠ **Method warning.** The first run of the lockfile attack used plain `delulu build` and reported all
+fifteen tamperings accepted — a false catastrophe. `build` does not consult the lockfile; `--locked`
+does. Before reporting a surface as unprotected, confirm the command under test is the one making the
+guarantee.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

@@ -217,6 +217,45 @@ pub fn compute_lockfile(ws: &Workspace, program: &Program) -> Lockfile {
 /// Verify a checked workspace against an existing lockfile (used by `build --locked`).
 pub fn verify_locked(ws: &Workspace, program: &Program, lock: &Lockfile) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
+
+    // A lockfile this build cannot read is a lockfile it cannot verify. `version = 999` used to be
+    // accepted and then interpreted as if it were version 1 — the "when the checker cannot tell, it
+    // says yes" failure this project refuses everywhere else (an unverifiable certificate algorithm
+    // is DL1908, not a shrug). Reported as DL1011 rather than a new code because the CONSEQUENCE is
+    // exactly what DL1011 already names: under `--locked`, nothing is pinned (C52).
+    if lock.version != 1 {
+        diags.push(Diagnostic::error(
+            "DL1011",
+            format!(
+                "delulu.lock declares format version {} and this toolchain understands version 1 — \
+                 a lockfile it cannot read pins nothing, so no resolution is verified",
+                lock.version
+            ),
+        ));
+        return diags;
+    }
+
+    // One package, one entry. Two entries for the same name is an ambiguity, and resolving it
+    // silently (by taking the first) is how a widening gets in — the rule `Scopes::device` and the
+    // device grant grammar already apply (C40). A reader seeing two conflicting entries cannot know
+    // which one the tool used; neither could the tool justify its choice.
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for e in &lock.packages {
+        if !seen.insert(e.name.as_str()) {
+            diags.push(Diagnostic::error(
+                "DL1011",
+                format!(
+                    "delulu.lock has more than one entry for package `{}` — a duplicated entry is an \
+                     ambiguity about what was pinned, and it is refused rather than resolved",
+                    e.name
+                ),
+            ));
+        }
+    }
+    if !diags.is_empty() {
+        return diags;
+    }
+
     for (idx, pkg) in ws.packages.iter().enumerate() {
         let Some(entry) = lock.get(&pkg.name) else {
             diags.push(Diagnostic::error(
@@ -242,6 +281,82 @@ pub fn verify_locked(ws: &Workspace, program: &Program, lock: &Lockfile) -> Vec<
                 "DL1002",
                 format!("package `{}` has a different verified authority than its lock entry (same version, different authority)", pkg.name),
             ));
+            continue;
+        }
+        // Then the RECORDED FIELDS, which are what a human reads.
+        //
+        // The two checks above compare hashes computed from reality against hashes stored in the
+        // file. Neither one looks at `effects`, `cap_kinds`, `secrets` or the scope lists — so those
+        // could be edited to say anything and `build --locked` still reported "built clean". A
+        // lockfile could claim a dependency has no effects and no capabilities while that dependency
+        // reaches the network, which is precisely the question a reviewer opens a lockfile to answer
+        // (`HARDENING_CAMPAIGN.md` C52).
+        //
+        // What made it plain: `authority --diff` on the very same forged pair reports
+        // `+ effects Net` and `verdict: WIDENING`. The interactive review command caught what the
+        // automated CI gate did not, which is backwards — CI is where nobody is looking.
+        let expected = compute_entry(ws, program, idx);
+        // Destructured on purpose: a field added to `LockEntry` later will not compile until someone
+        // decides whether it belongs in this comparison. The campaign has found four hand-maintained
+        // authority lists that fell behind the type defining them (C31/C34/C35/C44); this is the
+        // shape that cannot.
+        let LockEntry {
+            name: _,
+            version,
+            source: _,
+            content_hash: _,
+            authority_hash: _,
+            api_row_hash: _,
+            effects,
+            cap_kinds,
+            secrets,
+            net,
+            fs_read,
+            fs_write,
+            // An operator's recorded decision about a widening, not a fact about the package, so it
+            // is not re-derivable from source and cannot be compared against it.
+            accepted_by: _,
+        } = &expected;
+        // Sorted before comparison: a differently-ordered list means the same authority, and this
+        // check is about what the entry CLAIMS, not about canonical formatting.
+        let sorted = |v: &Vec<String>| {
+            let mut c = v.clone();
+            c.sort();
+            c
+        };
+        // The version is re-derivable (it is the package's own manifest version), so a lock entry
+        // naming a different one is stale or forged. Under `--locked` — whose contract is "refuse
+        // any resolution not already pinned" — that must not build.
+        if &entry.version != version {
+            diags.push(Diagnostic::error(
+                "DL1002",
+                format!(
+                    "package `{}`'s lock entry records version `{}` but the package is version `{}` \
+                     — re-run `delulu lock`",
+                    pkg.name, entry.version, version
+                ),
+            ));
+        }
+        for (field, recorded, actual) in [
+            ("effects", &entry.effects, effects),
+            ("cap_kinds", &entry.cap_kinds, cap_kinds),
+            ("secrets", &entry.secrets, secrets),
+            ("net", &entry.net, net),
+            ("fs.read", &entry.fs_read, fs_read),
+            ("fs.write", &entry.fs_write, fs_write),
+        ] {
+            if sorted(recorded) != sorted(actual) {
+                diags.push(Diagnostic::error(
+                    "DL1002",
+                    format!(
+                        "package `{}`'s lock entry records `{field} = {:?}` but its verified \
+                         authority is {:?} — the lockfile misrepresents what this dependency can do",
+                        pkg.name,
+                        sorted(recorded),
+                        sorted(actual)
+                    ),
+                ));
+            }
         }
     }
     diags
