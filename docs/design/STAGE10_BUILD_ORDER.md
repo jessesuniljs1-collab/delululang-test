@@ -2023,6 +2023,63 @@ quadratic, and the constant is small — the opposite of C48, which was accident
 allocated on every access. Recorded in `measurements/scale/RECORD.md` under the Constitution's own rule
 that where DeluluLang loses, the table says so.
 
+**D48 — The Authority and Guard cross-stage capstone.** Hardening campaign P15, the phase the
+commission ranked highest. The full discharge is `docs/design/AUTHORITY_GUARD_CAPSTONE.md`; this ruling
+records what changed in code and what was decided.
+
+(a) **The authority SERIALIZATION seam had no gate, and now does** (closed in P15).
+`Authority::to_json` (write) and `authority_from_json` (read) are two hand-enumerated lists of the same
+eight dimensions on opposite sides of a certificate, an audit record and every `--json` report. The read
+side already refuses an unrecognized dimension by rejecting the whole certificate — RFC §4.9.3's
+load-bearing skip branch, tested. The **write** side had nothing: a ninth dimension added to `Scopes`
+would simply not be emitted.
+
+RULED: a round-trip gate that populates every dimension, asserts write→read is the identity, and
+**destructures `Scopes`** so a new field makes the test fail to COMPILE until someone decides how it
+serializes. Verified non-vacuous by deleting `foreign.python` from the writer and watching the gate name
+exactly that dimension. This is the **sixth** instance of the recurring hand-maintained-list pattern
+(C31/C34/C35/C44/C52 preceding it) and it is answered the same structural way.
+
+Why it mattered although omission is fail-closed for the grant: the authority embedded in every
+hash-chained AUDIT record would have under-reported what a holder actually held, and `render_compact`
+feeds the same list into DL0802's repair text. C29/C30's class — not an escalation, a loss of the
+accountability the system sells.
+
+(b) **P6's open question — "revocation racing an in-flight operation" — is discharged, and the answer
+is that there is no data race to find.** The broker daemon is single-threaded and serializes at
+*request* granularity: one `accept`, one frame, one `handle`, one response. A `check` and a `revoke`
+cannot interleave inside the broker. What remains is the **logical** window the project already
+documents — revocation is effective before the next USE, never retroactively against an operation
+already authorized — bounded by per-use re-checking for synchronous ops and by `--epoch-ms` for
+epoch-class ops, and measured at 12.7 ms p50 / **39.7 ms worst** for operator-to-stopped. Mid-run
+revocation is tested end to end WITH a control (`estop_cli.rs`). Nothing to fix; the debt is paid by
+demonstrating the bound rather than by discovering a defect.
+
+(c) **The 14 Guard surfaces are discharged individually, and three of them do not exist in v1.x.**
+Saying so is the honest discharge — a surface that cannot be reached needs a reason, not a checkmark.
+The **optimizer** is described in spec §2.1 and not implemented. The **native backend** does not exist
+and is leashed (DL1906; and `exec_native: false` is hard-coded on the lease path, so the leash holds
+across the federation boundary). **Distributed execution** is not a separate surface — the distributed
+piece is broker federation plus a single-host actor runtime. The other eleven are guarded, each with
+cited evidence, and two carry named gaps rather than clean passes: the adapter has **no signature
+check** (D23), and **hardware has never been exercised** — no driver ships in-tree and no physical
+device has ever been commanded.
+
+(d) **Two failure shapes are promoted from incidents to design rules**, because each recurred often
+enough that treating them as one-offs would be the actual defect:
+
+1. *A hand-maintained list of authority-bearing things falls behind the type that defines it, and
+   nothing notices.* Six instances (C31, C34, C35, C44, C52, and (a) above). The answer is never
+   "remember to update the list" — it is a compiler-enforced pattern or a source-scanning gate. Where a
+   dependency edge permits, the stronger answer is one list referenced by both sides
+   (`device_scope::FAIL_STATES`, D43d).
+2. *A gate is blind to the failure it exists to catch.* Three instances plus a near-miss: a coverage law
+   that proved a witness existed rather than that it exercised its anchor (D42a); a no-panic sweep keyed
+   on exit 101 while a worker-thread panic maps to exit 2 (D44c); a sweep matching `panicked at` against
+   a stack overflow, which prints no such text (D47a); and a cross-parser law that checked agreement
+   only where both sides said yes (D43e). **The rule: ask what SIGNAL a gate keys on, then ask what
+   failure produces a different signal.**
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

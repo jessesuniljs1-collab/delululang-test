@@ -1215,4 +1215,84 @@ mod tests {
         let body = canonical_json(&c.body_value()).into_bytes();
         assert_ne!(signed, body);
     }
+    // ----- the authority SERIALIZATION seam (hardening P15) -------------------------------------
+
+    /// **Every authority dimension must survive the write/read round trip, and the compiler must
+    /// force this test to be revisited when a dimension is added.**
+    ///
+    /// `Authority::to_json` (the write side) and `authority_from_json` (the read side) are two
+    /// hand-enumerated lists of the same eight dimensions, on opposite sides of a certificate, an
+    /// audit record and a `--json` report. The read side already fails closed on a dimension it does
+    /// not recognize — that is RFC §4.9.3's load-bearing skip branch, and it is tested. The WRITE
+    /// side had no such protection: a ninth dimension added to `Scopes` would simply not be emitted,
+    /// and nothing would notice.
+    ///
+    /// That failure is quiet rather than loud. Omitting a dimension is fail-CLOSED for the grant (a
+    /// certificate would convey less than it should), so nothing becomes more permissive — but the
+    /// authority embedded in every hash-chained AUDIT record would silently under-report what a
+    /// holder actually held, and `render_compact` feeds the same list into DL0802's repair text. An
+    /// audit trail that under-reports authority is the C29/C30 defect class: not an escalation, but a
+    /// loss of exactly the accountability this system sells.
+    ///
+    /// The destructuring below is the enforcement. It is not decoration: adding a field to `Scopes`
+    /// makes this test fail to COMPILE until someone decides how the new dimension serializes.
+    #[test]
+    fn every_authority_dimension_survives_the_json_round_trip() {
+        let scopes = Scopes {
+            fs_read: ["/srv/in".to_string()].into_iter().collect(),
+            fs_write: ["/srv/out".to_string()].into_iter().collect(),
+            net: ["api.example.com".to_string()].into_iter().collect(),
+            secrets: ["API_KEY".to_string()].into_iter().collect(),
+            declassify: ["API_KEY".to_string()].into_iter().collect(),
+            foreign_c: ["libm".to_string()].into_iter().collect(),
+            foreign_python: ["numpy".to_string()].into_iter().collect(),
+            device: [device_scope::parse(
+                "arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold",
+            )
+            .unwrap()]
+            .into_iter()
+            .map(|d| (d.device.clone(), d))
+            .collect(),
+        };
+        // Exhaustive by construction: a new field breaks this pattern at compile time.
+        let Scopes {
+            fs_read,
+            fs_write,
+            net,
+            secrets,
+            declassify,
+            foreign_c,
+            foreign_python,
+            device,
+        } = &scopes;
+        for (what, empty) in [
+            ("fs_read", fs_read.is_empty()),
+            ("fs_write", fs_write.is_empty()),
+            ("net", net.is_empty()),
+            ("secrets", secrets.is_empty()),
+            ("declassify", declassify.is_empty()),
+            ("foreign_c", foreign_c.is_empty()),
+            ("foreign_python", foreign_python.is_empty()),
+            ("device", device.is_empty()),
+        ] {
+            assert!(!empty, "the fixture must populate `{what}`, or the round trip proves nothing");
+        }
+
+        let original = Authority::new(
+            ["Read", "Write", "Net", "Declassify", "ForeignCall", "Actuate"]
+                .iter()
+                .map(|n| Effect::core_from_name(n).unwrap()),
+            scopes.clone(),
+        );
+        let json = original.to_json();
+        let parsed = authority_from_json(&json).expect("the canonical form must parse back");
+        assert_eq!(parsed, original, "an authority must survive write -> read unchanged");
+
+        // And the rendering a human reads must mention every non-empty dimension, since it is the
+        // same hand-written list and feeds DL0802's repair text.
+        let compact = original.render_compact();
+        for needle in ["fs.read", "fs.write", "net", "secrets", "declassify", "foreign.c", "foreign.python", "device"] {
+            assert!(compact.contains(needle), "`render_compact` omits `{needle}`: {compact}");
+        }
+    }
 }

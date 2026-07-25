@@ -117,7 +117,8 @@ deviations.
 | C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | **CLOSED** — D45 |
 | C53 | **An unused type alias is never resolved** — `type Meters = Metres` (a typo) checks clean, and the error only appears if and where the alias is used; in a library whose own code never uses it, the diagnostic lands on the consumer | medium (a declaration accepted and silently inert — the C11/C23 family) | **CLOSED** — D47b |
 | C54 | **A USED cyclic type alias aborted the compiler with a stack overflow** — `type A = A` plus one use died at `0xC00000FD`; the no-panic sweeps could not see it, because a stack overflow prints no `panicked at` | **high** (hard crash on ordinary input; DoS for anything compiling untrusted code) | **CLOSED** — D47a (reshapes C16) |
-| C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c (measured and published; linear, not quadratic) |
+| C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c (measured and published; linear, not quadratic) |
+| C57 | **The authority SERIALIZATION seam had no gate** — `to_json` (write) is hand-enumerated with nothing to catch a dimension added to `Scopes` and not emitted; the read side already fails closed, the write side did not | medium (a silently under-reporting audit record — the C29/C30 class, not an escalation) | **CLOSED** — D48a (compile-enforced round-trip gate) |
 | C56 | **`--trace-effects` buffers the entire trace in RAM** — 100k effects take peak memory from 6.7 MB to 70.1 MB (~633 B/record), unbounded; the audit chain already streams to day files, the trace does not | medium (opt-in flag, but the runs that enable it are the long-lived ones) | OPEN — measured and published, queued |
 | C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
@@ -1792,11 +1793,18 @@ the implementation actually does.
 | P12 | Scale | 10k–30k+ line programs, monorepos, compile-time and memory behaviour |
 | P13 | Fuzz, malicious input, security | hostile programs, packages, plugins, adapters, certificates |
 | P14 | Performance and memory pressure | against `measurements/METHODOLOGY.md` |
-| P15 | Authority + Guard cross-stage audit | the capstone: consistency across all ten stages at once |
+| P15 | Authority + Guard cross-stage audit | the capstone: consistency across all ten stages at once — **discharged in `AUTHORITY_GUARD_CAPSTONE.md`** |
 | P16 | Cross-platform re-verification and close-out | Windows, Linux, and an honest statement about macOS |
 
 Phase state is tracked in the working session, not here; this table is the shape, and §3 is the
 durable record.
+
+**P15's deliverable is a separate document** — `docs/design/AUTHORITY_GUARD_CAPSTONE.md` — because it
+is the one artifact a reader should be able to open without reading this whole ledger first. It
+discharges the commission's 18-item authority checklist and 14-item Guard surface checklist item by
+item, each with the evidence and where the evidence lives, and it ends with the limits the audit did
+**not** settle stated in the same voice as the successes. Three of the fourteen Guard surfaces do not
+exist in v1.x, and it says which and why rather than marking them covered.
 
 ## 5. Standing limits this campaign does not remove
 
