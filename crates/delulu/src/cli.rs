@@ -742,7 +742,9 @@ fn usage() -> &'static str {
      \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
      \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
-     \x20 delulu run       <file.delulu | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
+     \x20 delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 for execution; two modules declaring the same top-level name are refused, not guessed — D61)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
@@ -5926,6 +5928,118 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
     }
 }
 
+/// `run <package-dir>`: resolve the dependency graph, check it, and flatten it for execution.
+///
+/// Closes campaign finding **C59** (ruling D61): `delulu run` took a single `.delulu` file or a
+/// `.dwx`, so a multi-package program — and even the shipped two-module `examples/greeter/` — could
+/// only ever be *checked*. `kind = "bin"` was a manifest field the toolchain could not honour.
+///
+/// **The order here is the ruling.** `check_workspace` is authoritative: per-module visibility,
+/// package authority ceilings, dependency pins, `pub`/`pub import` export rules. Nothing runs unless
+/// it passes. Only then is the program flattened into one module for the interpreter, and the
+/// flattened form's own check exists solely to *discover a name collision between modules* — never
+/// to admit a program the workspace rejected.
+///
+/// A collision is refused with its own message rather than silently resolved by merge order. That is
+/// the same bargain the WASM backend makes with DL1201: a bounded capability with a fail-closed edge
+/// beats an unbounded one that sometimes runs the wrong function. Lifting it needs per-module
+/// resolution inside `Interp`, for which the checker already computes `Program::call_owner`.
+fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_check::Checked), i32> {
+    // A directory that is not a package at all. Before D61 this said "is a directory — try `delulu
+    // build`", which was right then and is wrong now: `run` DOES take a directory. What it must never
+    // do is leak the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a directory` on
+    // Linux) — two different misleading texts for one mistake, which is what C27 was.
+    if !std::path::Path::new(dir).join("delulu.toml").is_file() {
+        eprintln!("error: `{dir}` is a directory and not a DeluluLang package — there is no `delulu.toml` in it");
+        eprintln!(
+            "note: name the file to run, e.g. `{}`, or add a `delulu.toml` to run the directory as a package",
+            std::path::Path::new(dir).join("main.delulu").display()
+        );
+        return Err(2);
+    }
+
+    let ws = delulu_check::deps::resolve_workspace(dir);
+    // An empty package: a manifest with no sources. `build` already refuses this with its own note
+    // (C26/D33 — "nothing checked, success claimed" was the defect); `run` says the same thing rather
+    // than inventing a second vocabulary for one condition.
+    if ws.modules.is_empty() {
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        if errors(&diags) > 0 {
+            print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+        } else {
+            diags.clear();
+            eprintln!(
+                "error: no `.delulu` modules found under `{}` — a DeluluLang package keeps its \
+                 sources in `src/`, so there is nothing to run",
+                std::path::Path::new(dir).join("src").display()
+            );
+        }
+        return Err(2);
+    }
+    let program = delulu_check::deps::check_workspace(&ws);
+
+    // The authoritative gate.
+    let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+    diags.extend(program.diagnostics.iter().cloned());
+    if errors(&diags) > 0 {
+        print_diagnostics("run", &diags, &ws.source_map, None, opts.json);
+        return Err(1);
+    }
+
+    let Some(entry_name) = program.entry_module.clone().or_else(|| ws.root_entry_module()) else {
+        eprintln!("error: `{dir}` declares no entry module — a runnable package needs one");
+        return Err(2);
+    };
+    if !ws.modules.iter().any(|m| m.unit.name == entry_name) {
+        eprintln!("error: `{dir}`'s entry module `{entry_name}` was not loaded");
+        return Err(2);
+    }
+
+    // Flatten the SOURCE, then parse once. Merging the module ASTs instead looks equivalent and is
+    // not: each was parsed separately so their `NodeId`s overlap, and every checker side table keyed
+    // by node id then reads one module's entry for another module's expression. The first attempt did
+    // that and produced a nonsense reference-capability complaint about a correct program.
+    let module_count = ws.modules.len();
+    let texts: Vec<&str> =
+        ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
+    let flat_src = delulu_check::flatten_sources(&entry_name, &texts);
+
+    // The flattened program gets its own file in the map, so a diagnostic from it can still be
+    // rendered with a real snippet rather than pointing into a file whose offsets no longer apply.
+    let mut map = ws.source_map;
+    let fid = map.add_file(format!("{dir} (flattened for execution)"), flat_src.clone());
+    let flat = check_source(fid, &flat_src);
+
+    if errors(&flat.diagnostics) > 0 {
+        // The workspace accepted this program, so these are not the author's errors: flattening
+        // collided. Say which name, and say that the program is CORRECT — the runner is what is
+        // limited. Anything less would send someone hunting a bug in code the checker just approved.
+        let dup: Vec<String> = flat
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error())
+            .map(|d| d.message.clone())
+            .take(3)
+            .collect();
+        eprintln!(
+            "error: `{dir}` checks clean as a {module_count}-module program, but two of its modules \
+             declare the same top-level name, and running it flattens them into one scope"
+        );
+        for m in &dup {
+            eprintln!("  collision: {m}");
+        }
+        eprintln!(
+            "note: the program is not wrong — `delulu check`/`build`/`authority` all handle it. The \
+             RUNNER cannot yet distinguish two same-named declarations from different modules \
+             (campaign finding C59, ruling D61). Rename one, or run the entry module as a single \
+             file if it does not import."
+        );
+        return Err(1);
+    }
+
+    Ok((map, flat))
+}
+
 /// `run <file>.dwx`: re-verify a pre-built artifact's embedded `delulu:authority` manifest against
 /// its code (DL1202 on a missing/tampered section, DL1204 on an incompatible version), announce
 /// what it declares it can do, then run `main` under the deny-by-default Wasmtime host.
@@ -6085,11 +6199,22 @@ fn cmd_run(rest: &[String]) -> i32 {
     if file.ends_with(".dwx") {
         return run_dwx_artifact(&file, &opts);
     }
-    let (map, id, src) = match load(&file) {
-        Ok(x) => x,
-        Err(c) => return c,
+    // A package DIRECTORY: resolve the dependency graph, check it authoritatively, then flatten it
+    // for execution (ruling D61, closing C59 — `kind = "bin"` was declarable and unexecutable).
+    let is_package = std::path::Path::new(&file).is_dir();
+    let (map, checked) = if is_package {
+        match load_package_for_run(&file, &opts) {
+            Ok(x) => x,
+            Err(c) => return c,
+        }
+    } else {
+        let (map, id, src) = match load(&file) {
+            Ok(x) => x,
+            Err(c) => return c,
+        };
+        let checked = check_source(id, &src);
+        (map, checked)
     };
-    let checked = check_source(id, &src);
     if errors(&checked.diagnostics) > 0 {
         print_diagnostics("run", &checked.diagnostics, &map, None, opts.json);
         return 1;
@@ -6099,8 +6224,10 @@ fn cmd_run(rest: &[String]) -> i32 {
         return 2;
     }
 
-    // Grant flow (§7.2): manifest DL0701 check, then reconcile grants.
-    let dir = std::path::Path::new(&file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    // Grant flow (§7.2): manifest DL0701 check, then reconcile grants. For a package the manifest
+    // is the package's own; for a single file it is whatever sits beside it.
+    let file_dir = std::path::Path::new(&file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    let dir = if is_package { std::path::Path::new(&file) } else { file_dir };
     let manifest = std::fs::read_to_string(dir.join("delulu.toml")).ok().map(|s| parse_manifest(&s));
     let empty = std::collections::BTreeSet::new();
     let main_row = checked.result.main_row.as_ref().unwrap_or(&empty);

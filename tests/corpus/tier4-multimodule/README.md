@@ -32,22 +32,30 @@ actually built around, which only appears once a program has more than one autho
   type, and `pub import` re-exports a module's names to *your* consumers. A public signature that
   mentions a type you did not re-export does not resolve for the package that depends on you.
 
-## What it does not show
+## Running it
 
-**These packages are checked, not executed.** `delulu run` takes a single `.delulu` file or a
-`.dwx` artifact; there is no way to run a multi-package program on the interpreter, so the
-evidence this tier provides is compile-time evidence. `kind = "bin"` in `station/delulu.toml`
-declares an intent the toolchain cannot yet carry out. Recorded as campaign finding **C59** rather
-than papered over — a corpus tier that implied more than it demonstrates would be worse than the
-empty directory this replaces.
-
-## Running the checks
+**This program runs.** It did not when the tier was written — `delulu run` took a single `.delulu`
+file or a `.dwx`, so `kind = "bin"` was a manifest field the toolchain could not honour, recorded as
+campaign finding **C59**. Ruling **D61** closed it.
 
 ```
-delulu build tests/corpus/tier4-multimodule/station     # the whole graph
-delulu authority tests/corpus/tier4-multimodule/station # what it can do, computed from the code
-delulu why Write tests/corpus/tier4-multimodule/station # and why it can do that
+delulu run       tests/corpus/tier4-multimodule/station \
+    --grant console --grant fs.read=./data --grant fs.write=./out
+delulu build     tests/corpus/tier4-multimodule/station     # the whole graph
+delulu authority tests/corpus/tier4-multimodule/station     # what it can do, computed from the code
+delulu why Write tests/corpus/tier4-multimodule/station     # and why it can do that
 ```
 
-`crates/delulu/tests/conformance.rs::accepting_packages_build_clean` runs the first of these on
-every package in the corpus on every test run.
+Given a `data/telemetry.txt`, it classifies each reading, rejects malformed lines with distinct
+reasons, archives the good ones through the one package granted `Write`, and totals the alarms.
+`crates/delulu/tests/package_run.rs` asserts that output and the files it writes; `conformance.rs`
+builds every corpus package on every test run.
+
+## The one thing it still cannot do
+
+A package whose modules declare **the same top-level name** in two places is refused by the runner —
+not silently mis-resolved. Visibility is per module, so two private `helper`s are legal, and running
+the program flattens the modules into one scope where they are not distinguishable. `check`, `build`
+and `authority` all handle such a program; only `run` refuses, and it says so in those words rather
+than blaming the author. Lifting that needs per-module resolution inside the interpreter, for which
+the checker already computes the map (`Program::call_owner`).

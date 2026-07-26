@@ -82,7 +82,7 @@ DeluluLang/
 │       │                           #     higher-order code, and the `iso`/`val` write rule
 │       ├── tier3-application/      # 2 — real input, distinguishable failures, Result chains
 │       ├── tier4-multimodule/      # 4 PACKAGES / 7 modules, depth 3, one diamond (see its
-│       │                           #     README.md) — checked, not executable: finding C59
+│       │                           #     README.md) — built AND run (D61)
 │       └── tier5-security/         # 3 — confinement, secrets, capability attenuation
 │
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config

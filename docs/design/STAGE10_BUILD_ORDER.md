@@ -2442,6 +2442,45 @@ cannot run the second engine), and C68 (a doc gate comparing counts) are all the
 unasked: **what would this gate look like if the thing it guards were completely wrong?** For C68 the
 answer was "identical, as long as nobody added or removed a file."
 
+**D61 — A multi-package program runs.** Closes C59, the largest capability gap the campaign found, and
+the one that made `kind = "bin"` a manifest field the toolchain could not honour. `examples/greeter/` —
+two modules, shipped in this tree since Stage 2 — could only ever be checked.
+
+RULED, and the ORDER is the ruling:
+
+1. **`check_workspace` stays authoritative.** Per-module visibility, package authority ceilings,
+   dependency pins, `pub`/`pub import` export rules. Nothing runs unless it passes. The flattening
+   below is an execution vehicle and is never allowed to admit a program the workspace rejected.
+2. **Flattening is on SOURCE, and the reason is a bug that was written and caught.** The obvious
+   implementation merges the module ASTs. Each module is parsed separately, so their `NodeId`s both
+   start at zero and **overlap** — and every checker side table keyed by node id (`node_types`, and
+   through it the reference-capability analysis) then reads one module's entry for another module's
+   expression. The first implementation did exactly that and reported `cannot store 'box' where 'val'
+   is required` about the tier-4 corpus program, which the workspace had just accepted. **A wrong
+   answer, not an error**, and the kind that would have shipped. Concatenating the sources and parsing
+   once gives one numbering, and the flattened program is then an ordinary DeluluLang program whose
+   semantics are simply the language's. A regression test pins this by name.
+3. **A name collision between modules is REFUSED, not resolved.** Visibility is per module, so two
+   modules may legally declare the same private `helper`; flattened, they are one scope and not
+   distinguishable. The runner refuses, names the colliding declaration, and **states that the program
+   is correct** — because it is: `check`, `build` and `authority` all handle it. A runner that silently
+   picked whichever module merged last would answer the wrong question quietly, which is the failure
+   mode this whole campaign is about. Same bargain as the WASM backend's DL1201: a bounded capability
+   with a fail-closed edge beats an unbounded one that is sometimes wrong.
+
+Lifting the restriction means per-module resolution inside `Interp`, for which the checker already
+computes the map (`Program::call_owner`). That is a real change and is not being smuggled in here.
+
+**Not weakened:** every grant is still enforced on the package path (witnessed for console, fs.read
+and fs.write), the manifest read is the package's own, and the authority report is unchanged. No new
+diagnostic number was minted.
+
+**Also closes a stale deferral.** `STAGE6_BUILD_ORDER.md` lists "multi-module plugin packages" as
+deferred because it "needs a whole-program DIR replay path (`check_program`)". `check_program` exists
+and has for some time — the deferral's stated blocker is gone, and what actually remained was
+execution. The Stage-6 note is stale rather than wrong; it is left in place with this ruling as its
+cross-reference, because rewriting a build order's history is worse than annotating it.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

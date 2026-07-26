@@ -635,17 +635,35 @@ fn naming_a_directory_where_a_file_belongs_says_so() {
     // C27. Reading a directory as a file surfaced the raw OS error — on Windows
     // `Access is denied. (os error 5)`, which reads as a permissions problem and sends the reader
     // hunting for an ACL that was never involved; on Linux `Is a directory`. Different misleading
-    // text per platform, for the same mistake: `build` takes a directory, so `run` looks like it
-    // should too.
-    let dir = std::env::temp_dir().join("delulu_cli_dir_not_file");
+    // text per platform, for one mistake.
+    //
+    // D61 changed the premise, not the property: `run` now DOES take a package directory, so the old
+    // advice ("try `delulu build`") became wrong and the two directories that still cannot be run
+    // need their own answers. What C27 asserts is unchanged and is the last two lines of each case —
+    // exit 2, and never a raw OS error.
+
+    // 1. A manifest with no sources. `build` refuses this too (C26/D33), and `run` uses the same
+    //    words rather than inventing a second vocabulary for one condition.
+    let dir = std::env::temp_dir().join("delulu_cli_dir_empty_pkg");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("delulu.toml"), "[package]\nname = \"p\"\nversion = \"0.1.0\"\n").unwrap();
     let o = delulu(&["run", dir.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(2), "a usage mistake is exit 2");
     let err = stderr(&o);
-    assert!(err.contains("is a directory"), "{err}");
-    assert!(err.contains("delulu build"), "it must point at the command that does take a directory: {err}");
+    assert!(err.contains("no `.delulu` modules found"), "it must say what is missing: {err}");
+    assert!(err.contains("src"), "and where sources belong: {err}");
+    assert!(!err.contains("os error"), "no raw OS error may leak into this message: {err}");
+
+    // 2. A directory that is not a package at all.
+    let bare = std::env::temp_dir().join("delulu_cli_dir_not_pkg");
+    let _ = std::fs::remove_dir_all(&bare);
+    std::fs::create_dir_all(&bare).unwrap();
+    let o = delulu(&["run", bare.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "a usage mistake is exit 2");
+    let err = stderr(&o);
+    assert!(err.contains("not a DeluluLang package"), "it must say why: {err}");
+    assert!(err.contains("delulu.toml"), "and name what is absent: {err}");
     assert!(!err.contains("os error"), "no raw OS error may leak into this message: {err}");
 }
 

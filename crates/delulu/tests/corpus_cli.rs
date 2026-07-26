@@ -10,10 +10,11 @@
 //! tier-5 attenuation program (two disjoint narrowings of one capability), and the tier-4
 //! multi-package pipeline (whose authority is computed across four manifests).
 //!
-//! What this file cannot do is RUN the tier-4 program. `delulu run` takes one `.delulu` file or a
-//! `.dwx`; a multi-package program has no execution path on the interpreter. That gap is campaign
-//! finding C59, and the assertions below are compile-time assertions because that is all the
-//! toolchain currently offers for a package.
+//! The tier-4 assertions here are deliberately about the ANALYSIS surface — the authority join
+//! across four manifests and the `why` chain that crosses a package boundary. Running that program is
+//! covered separately in `package_run.rs`: `delulu run <package-dir>` used to be impossible (campaign
+//! finding C59) and is not any more (ruling D61), so the two files split the claim rather than
+//! duplicating it.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

@@ -438,12 +438,17 @@ dependency depth three, three of them declaring `effects = []`, and one authorit
 across the four manifests. `delulu authority` on it names every module and every effect; `delulu why
 Write` traces `main` into the one dependency allowed to write.
 
-> **What packages cannot do yet.** This chapter is about *verifying* a dependency graph, and that is
-> all a package currently does. `delulu run` takes a single `.delulu` file or a `.dwx` artifact —
-> there is no way to execute a multi-package program on the interpreter, so `kind = "bin"` in a
-> manifest declares an intent the toolchain cannot yet carry out. This is recorded as campaign
-> finding **C59** and is the largest capability gap the project has open. Single-file programs run;
-> package graphs are checked.
+**And it runs.** `delulu run <package-dir>` executes a multi-package program: the graph is resolved
+and checked first — per-module visibility, authority ceilings, dependency pins — and only a program
+that passes all of that is executed.
+
+> **The one limit, stated plainly.** Two modules may legally declare the same top-level name, because
+> visibility is per module. Running the program brings the modules into one scope, where two private
+> `helper`s are not distinguishable, so that case is **refused by the runner** rather than resolved by
+> whichever module happened to be merged last — and the refusal says the program is correct, because
+> it is: `check`, `build` and `authority` all handle it. Lifting the restriction needs per-module
+> resolution inside the interpreter. This was campaign finding **C59**, closed by ruling **D61**; the
+> remaining edge is the fail-closed part of that fix, not a leftover.
 
 ---
 

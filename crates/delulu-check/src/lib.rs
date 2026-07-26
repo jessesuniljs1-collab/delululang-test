@@ -77,6 +77,51 @@ pub fn check_source(file: FileId, src: &str) -> Checked {
     Checked { module, table, result, diagnostics }
 }
 
+/// Flatten an already-checked multi-module program into one `Checked`, so the single-module
+/// execution path can run it (campaign finding **C59**, ruling **D61**).
+///
+/// **This is an execution vehicle, not a check.** The authoritative check is
+/// [`deps::check_workspace`], which enforces per-module visibility, package authority ceilings and
+/// dependency pins. Callers MUST run that first and refuse on its errors; this turns an accepted
+/// program into something `Interp` can execute, and re-checks the flattened form only to *discover
+/// collisions*, never to admit a program the workspace rejected.
+///
+/// **It flattens SOURCE TEXT, and that is the whole design.** The obvious implementation — merge the
+/// module ASTs — is wrong in a way that is easy to ship and hard to debug: each module was parsed
+/// separately, so their `NodeId`s start from zero and OVERLAP. Every side table the checker keys by
+/// node id (`node_types`, and through it the reference-capability analysis) then silently reads one
+/// module's entry for another module's expression. The first attempt did exactly this and produced a
+/// nonsense `box`-vs-`val` complaint about a program that is correct — a wrong answer, not an error.
+/// Re-parsing one concatenated text gives one numbering, and the flattened program is then a real
+/// DeluluLang program whose semantics are simply the language's.
+///
+/// Flattening is sound exactly when no two modules define the same top-level name. When they do the
+/// merged form has a duplicate and the re-check says so, which is why a collision is DISCOVERED
+/// rather than silently resolved by merge order. The caller refuses it with a message naming the
+/// limitation, in the same spirit as the WASM backend's DL1201: a bounded capability with a
+/// fail-closed edge beats an unbounded one that sometimes runs the wrong function. Lifting it needs
+/// per-module resolution inside `Interp`, for which the checker already computes
+/// `Program::call_owner`.
+pub fn flatten_sources(entry_module: &str, sources: &[&str]) -> String {
+    let mut out = format!("module {entry_module}\n");
+    for src in sources {
+        for line in src.lines() {
+            let t = line.trim_start();
+            // The module header and imports are dropped: every name they resolved to is now in this
+            // one text, and asking the resolver to find modules the flattened program no longer has
+            // would fail. Matched at line start on the canonical spellings, which is where the
+            // grammar puts them; a mis-strip cannot pass silently — it becomes a check error.
+            if t.starts_with("module ") || t.starts_with("import ") || t.starts_with("pub import ") {
+                continue;
+            }
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -125,7 +125,7 @@ deviations.
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
 | C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | **CLOSED** — D46c (no; the stricter reading, which is what the code already did) |
 | C58 | **A `pub fn` whose signature names a type the package does not re-export builds clean alone and fails when consumed** — and the error is reported *inside the dependency's own source*, calling a type "not a type" in a file where it is in scope | medium (diagnostic blames the wrong line in the wrong package — the C53 family) | OPEN |
-| C59 | **A multi-package program cannot be RUN.** `delulu run` takes one file or a `.dwx`; `build` emits `interface.json` and nothing executable, so `kind = "bin"` is declarable and unexecutable — true of the shipped `examples/greeter/` too | **high** (the largest capability gap the campaign has found; a feature, not a fix) | OPEN |
+| C59 | **A multi-package program cannot be RUN.** `delulu run` takes one file or a `.dwx`; `build` emits `interface.json` and nothing executable, so `kind = "bin"` is declarable and unexecutable — true of the shipped `examples/greeter/` too | **high** (the largest capability gap the campaign found) | **CLOSED** — D61 (`run <package-dir>`; source-flattened after the workspace check; a cross-module name collision is refused, not guessed) |
 | C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | OPEN — named by D53 |
 | C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | OPEN |
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
@@ -2040,11 +2040,37 @@ and refuses the broken form inside any code block by name. The gate is scoped to
 converted so far and says so, because the honest state is partial — a gate claiming more than it checks
 is the thing being fixed.
 
+### C59 · A multi-package program could not be run — CLOSED (D61)
+
+`delulu run` took one `.delulu` file or a `.dwx`. Everything else about packages worked — resolution,
+per-module visibility, authority ceilings, pins, the authority report, `why` across a package boundary
+— and none of it could be *executed*. `kind = "bin"` was a manifest field the toolchain could not
+honour, and the plainest evidence was `examples/greeter/`: a two-module binary package shipped in this
+tree since Stage 2 that had never once been run.
+
+**Closed by flattening, after the real check.** `check_workspace` remains authoritative; only a
+program that passes it is flattened into one module for the interpreter.
+
+**The instructive part is the implementation that was wrong.** Merging the module ASTs is the obvious
+approach and it produced a *wrong answer* rather than an error: each module is parsed separately, so
+their `NodeId`s both start at zero and overlap, and the checker's node-keyed side tables — `node_types`,
+and through it the reference-capability analysis — then read one module's entry for another module's
+expression. The first attempt reported `cannot store 'box' where 'val' is required` about the tier-4
+corpus program that the workspace had just accepted. It was caught by disbelieving the diagnostic and
+hand-flattening the same seven modules into one file, which checked clean. Concatenating source and
+parsing once gives one numbering; `package_run.rs` pins it as a regression by name.
+
+**The remaining edge is deliberate.** Two modules may legally declare the same top-level name, and
+flattened they are one scope. That is refused — with the colliding name, and with the sentence *"the
+program is not wrong"* — because `check`, `build` and `authority` all handle such a program and only
+the runner cannot. Silently running whichever definition merged last would be the exact failure this
+campaign exists to find.
+
 ## 6. Close-out (2026-07-26, ruling D50)
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **68 findings have been filed. 61 are closed, 1 is a published limit, 5 are open
+capstone, and this. **68 findings have been filed. 62 are closed, 1 is a published limit, 4 are open
 with a current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -2090,14 +2116,13 @@ Every item that stood here when this section was first written — **C7, C17, C2
 it once listed is the kind of drift this campaign existed to stop. What replaced them are four
 findings that did not exist then, three of which were found by *writing the corpus C7 asked for*:
 
-- **C59 — a multi-package program cannot be RUN.** `delulu run` takes one `.delulu` file or a `.dwx`.
-  `build` on a package emits `interface.json` and nothing executable, so `kind = "bin"` is a manifest
-  field the toolchain cannot honour — and this is true of `examples/greeter/`, a two-module example
-  that ships in this tree and can only be checked. **This is the largest capability gap the campaign
-  has found.** It is a feature, not a fix: the interpreter keys functions by bare name in one flat
-  map, and multi-module execution needs per-module resolution (the checker already computes the map
-  it would need). Named here rather than attempted at the tail of a pass, and the corpus tier's own
-  README says so instead of implying otherwise.
+- **C59 — CLOSED by D61.** `delulu run <package-dir>` executes a multi-package program: the graph is
+  checked authoritatively, then flattened on SOURCE (an AST merge overlaps `NodeId`s and corrupts the
+  checker's node-keyed tables — that was written, caught, and is now a named regression test). The
+  four-package corpus tier and the shipped `examples/greeter/` both run. **What remains is the
+  fail-closed edge of that fix, not a leftover:** two modules declaring the same top-level name are
+  refused by the runner rather than resolved by merge order, and the refusal says the program is
+  correct. Per-module resolution inside `Interp` would lift it.
 - **C58 — a public signature may name a type the package does not re-export**, and the failure lands
   on the consumer, reported inside the dependency's source, calling a type "not a type" in a file
   where it is in scope. The rule is right; the diagnostic blames the wrong line in the wrong package.
