@@ -897,7 +897,7 @@ impl<'a> Pass<'a> {
                                 }
                                 return K::Known(Rcap::Val);
                             }
-                            "str" | "len" | "int" | "float" | "parse_int" | "range" => {
+                            "str" | "len" | "int" | "float" | "parse_int" | "parse_float" | "range" => {
                                 for a in args {
                                     self.walk_expr(a);
                                 }

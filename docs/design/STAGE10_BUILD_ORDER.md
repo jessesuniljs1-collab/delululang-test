@@ -2198,6 +2198,161 @@ with this key vouched for these bytes" — and does not bound what the driver do
 envelope is what bounds that, and it is unchanged. The gap narrowed; it did not disappear, and
 `AUTHORITY_GUARD_CAPSTONE.md` §2 row 8 says so.
 
+**D53 — "Signed" is not "signed by anyone you trust", and D52 could not tell the difference.**
+Extends D52 after Jesse asked, of the four-branch gate, whether it was right for a language meant
+to last. It was not, and the reason was not one of the four branches — it was the question they all
+answered.
+
+`verify_detached` reads the public key **out of the first 32 bytes of the signature file it is
+checking**. The `.sig` sits beside the driver. So an attacker who can overwrite `drive.exe` can
+overwrite `drive.exe.sig` with one they signed a second ago, and every branch of D52 says yes: the
+signature is present, it verifies, the gate prints `signature verifies (signer …)` and spawns the
+driver. **Against that attacker `--require-signed-adapter` bought nothing.** It stopped accidents
+and unsigned drivers, which is worth having and is not what a reader of the flag's name assumes.
+
+The witness plays the attack out before fixing it
+(`a_driver_resigned_by_an_attackers_key_verifies_and_is_still_refused_when_the_key_is_pinned`), so
+the hole is on the record as observed behaviour and not only as a paragraph.
+
+RULED:
+
+1. **`--adapter-signer <hex>` pins the key.** A signature that verifies under any other key is
+   **DL1510** — the "wrong-key" case that code's own text has always claimed to cover, and did not,
+   because nothing ever compared the signer to anything. Pinning implies the signature is required:
+   an operator who names the acceptable signer has not said "unsigned is fine".
+2. **`--adapter-artifact <path>` names which bytes carry the provenance.** D52's branch 4 was right
+   to refuse rather than verify an interpreter, but it left `--require-signed-adapter` **unusable
+   for every script-hosted driver** — a control nobody can switch on is not a control. Separating
+   "which command runs" from "which bytes were signed" makes the flag usable and keeps branch 4's
+   honesty for the case where nothing was named.
+3. **An unpinned verify must say what it does not mean.** The success line now states that it proves
+   these bytes were signed by that key, not that the key is trusted, and prints the
+   `--adapter-signer` invocation that would pin it. A bare "signature verifies" reads as an
+   assurance; on a signature that travels beside the file, it is not one.
+
+No new diagnostic number minted; no cryptography hand-rolled. Spec §10's "signatures authenticate
+origin, not behavior — no trust policy" is unchanged as a statement about the *default*, and there
+is now a way for an operator to state one for the case that moves machinery.
+
+**What is still open, and named rather than implied closed: C60 — the verdict is printed, not
+recorded.** A run leaves no durable, queryable evidence of which key signed the driver that drove the
+machine. Both existing homes were examined and neither fits: the broker's audit chain is a no-op
+without a sink (so it would record nothing in the default configuration, which is the configuration
+that matters), and the DL1905 sign-off record is written by a **simulation**, before any adapter has
+been chosen. That is a real gap in accountability and it wants an artifact this ruling is not
+inventing at the tail of a pass. It is also the sharper form of the general point: the sign-off gate
+binds the program's bytes and says nothing about the driver's.
+
+**D54 — A literal that is not the value you wrote is refused, in both numeric columns.** Closes C17,
+open since P2, and the framing that closed it is the one the finding did not have: this was never
+about floats, it was about an **asymmetry**. The lexer has always refused an integer literal too
+large for `Int` — "there is no automatic promotion, because a silent widening is a silent change of
+meaning" — and accepted `1.0e400`, which becomes `inf`. Same defect, opposite answers, in two arms
+of one function.
+
+`f64::from_str` does not fail on a magnitude it cannot hold: it **saturates** to infinity and
+**flushes** to zero. RULED: both are **DL0104**, on the existing code.
+
+The underflow half was not in C17 and is the worse of the two. `1.0e-400` becomes `0.0` — and where
+`inf` announces itself downstream, a silently-zeroed gain makes a control law quietly do nothing
+while every value on the way looks ordinary. A literal the author *did* write as zero is still zero
+(`0.0e-400` is accepted), and a **subnormal is accepted**: it loses precision but keeps its
+magnitude, which is the property the rule is about.
+
+Infinity remains reachable by computing it (`1.0 / 0.0`). What cannot be done is spelling it as a
+finite number.
+
+**The rule has one home, because it has two callers.** Writing the tier-4 corpus found that
+DeluluLang had `parse_int` and no way at all to read a `Float` out of text — so a program could not
+read a temperature from a file. `parse_float` is added, and it asks **the same function the lexer
+asks** (`delulu_syntax::num::float_from_text`). Had it been written separately the obvious
+implementation would have been `s.trim().parse::<f64>().ok()`, which answers `Some(inf)` for
+`1.0e400` and `Some(inf)` for the *word* `inf` — a data file could then put infinity into a program
+whose source is forbidden to write it, and the language would have had two float rules wearing one
+name. That is C40's shape exactly (two parsers resolving one question in opposite directions), and
+it is why the rule is a shared function rather than a copied five lines.
+
+`parse_float` is additive: no existing program changes meaning, and the WASM backend refuses it with
+the DL1201 it already gives `parse_int`, so no engine-parity debt is created.
+
+**D55 — The capability corpus is evidence, and tier 4 was an empty directory.** Closes C7.
+
+`tests/corpus/` held **seven** programs (the finding said eight; it counted `tier4-multimodule/`'s
+`NOTE.md`, which is a note, and the correction is recorded rather than quietly applied), and the
+tier for multi-module programs contained no program. The note deferred it to Stage 2 — "packages
+land with `STAGE2_SPECIFICATION.md`" — and Stage 2 shipped, and nobody came back.
+
+RULED: tier 4 is **four packages, seven modules, dependency depth three, with a diamond**, exercising
+what only appears above single-file size — authority declared per package and joined across the
+graph, a ceiling stated by the consumer rather than claimed by the dependency, a type that crosses
+every boundary while carrying none, and both senses of "module". The conformance harness learned the
+difference: a directory holding a `delulu.toml` is **built** through the loader `delulu build` uses,
+and its files are no longer fed to `check_source` one at a time (which would have reported failures
+that say nothing about the program). Three corpus programs are additionally **run**, with their
+output asserted — `corpus_cli.rs` — because checking clean and working are different claims.
+
+**Writing the corpus is what made it evidence, and it immediately found four things.** This is the
+argument for a corpus in the first place, so they are listed rather than folded away:
+
+- **No `parse_float`** — see D54. A language with a `Float` type could not read one from input.
+- **C58** — a `pub fn` whose signature names a type the package does not **re-export** builds clean
+  on its own and fails when consumed, with the error reported *inside the dependency's own source*
+  (`dep:reading/src/reading.delulu`) saying `Sample` is "not a type" — in a file where `Sample` is
+  perfectly in scope. The rule is right (`pub import` is explicit re-export, like Rust's `pub use`);
+  the diagnostic blames the wrong line, in the wrong package, for the wrong reason. Same family as
+  C53: a declaration accepted, inert, and paid for by someone else.
+- **C59** — **a multi-package program cannot be run.** `delulu run` takes one `.delulu` file or a
+  `.dwx`; `build` on a package emits `interface.json` and nothing executable. `kind = "bin"` is
+  declarable and unexecutable, and this is true of `examples/greeter/` too — a two-module example
+  that ships in this tree and can only be checked. The corpus tier says so in its own README instead
+  of implying otherwise, and `corpus_cli.rs` says why its tier-4 assertions are compile-time ones.
+  This is the largest capability gap the campaign has found and it is a feature, not a fix.
+- **C61** — `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern. Discarding
+  is still possible under any other name, so the restriction prevents nothing and costs the reader a
+  worse one.
+
+**D56 — C55's published reasoning was an extrapolation, and is now a measurement.** The named limit
+claimed that "for the widths real programs use — five to twenty fields — a linear scan over a short
+`Vec` is the faster representation". The table under it started at **fifty**. The claim about the
+range that matters was reasoning past the smallest measured point, which is the shape this campaign
+distrusts everywhere else.
+
+Measured at the narrow end, total reads held constant at 200,000, release build:
+
+| fields | 2 | 5 | 10 | 20 | 50 | 200 |
+|---|---|---|---|---|---|---|
+| µs per 1k reads | 444 | 265 | 209 | **188** | 223 | 415 |
+
+The curve is **U-shaped**. Per-read cost is at its *minimum* between ten and twenty fields and rises
+in both directions — at width 2 because loop overhead is amortised over two reads, at width 200
+because the scan begins to dominate. In the five-to-twenty band the field lookup is not the cost;
+interpreter overhead is. A per-instance hash map would add an allocation to every record to speed up
+the part that is already free.
+
+RULED: **C55 stays a published limit**, unchanged in substance and corrected in kind — the reasoning
+is now data. The wide-region slope agrees with the original table across two different harnesses
+(200/50 ≈ 1.86 here, 1.82 there), which is the cross-check that makes both trustworthy.
+
+**D57 — A declared invariant with no gate is a comment.** Closes C62, which was found by accident:
+staging this pass's documentation edits produced a 1,927-line diff on a file whose real change was
+102 lines.
+
+`.gitattributes` (D19d) declares `* text=auto eol=lf`, adopted on measured evidence — "472/472 LF,
+zero CRLF" — and that evidence was correct on the day. Three days later `HARDENING_CAMPAIGN.md` was
+created and thereafter rewritten by tooling on nearly every phase, and its committed blob held
+**CRLF**. Exactly one file out of 512, for the whole campaign, in the document that itself lists *"a
+gate is blind to the failure it exists to catch"* as one of the two rules the campaign produced.
+Here the gate was not blind. It did not exist.
+
+RULED: the file is renormalized, and `governance.rs::no_tracked_text_file_is_stored_with_crlf` reads
+the **index** — the bytes about to be committed — and fails on any CR in a text blob. It skips what
+git classifies as binary, which is what keeps the signed `.dwx`/`.sig` artifacts out of it: their
+bytes are a signature's subject and nothing may normalize them. Observed failing against `HEAD`
+before the renormalization was staged.
+
+The renormalization is why this pass's diff on `HARDENING_CAMPAIGN.md` is large; the semantic change
+is small and the rest is line endings. Said here so nobody has to work that out from the diff.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

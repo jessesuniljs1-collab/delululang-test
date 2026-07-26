@@ -42,6 +42,39 @@ it is the reason CI runs one OS per runner, and the reason these numbers were re
 The one-warning Windows/Linux `clippy` delta (65 vs 66) is a single platform-specific lint on the
 Linux side, unrelated to any gate; it is tracked, not blocking.
 
+### Re-verified 2026-07-26 (rulings D53–D56)
+
+| Gate | Windows | Linux (WSL Ubuntu-20.04) |
+|---|---|---|
+| `cargo test --workspace` | ✅ **96 suites / 1,305 passed / 0 failed / 4 ignored** | ✅ **96 / 1,309 / 0 / 4** |
+| `clippy --workspace --all-targets` | ✅ **65** / 0 errors | ✅ **66** / 0 errors |
+| `conform --coverage` | ✅ 100% | (arch-independent) |
+| `conform --check-reference` | ✅ 24 chapters in sync | (arch-independent) |
+| macOS | **never run** — see §8 | |
+
+Both baselines held across the float-literal rule, the new `parse_float` prelude function, the
+four-package corpus tier, the adapter signer pin and the line-ending gate. The 4-test Linux surplus is the platform-specific
+set Windows skips, and matches the historical delta.
+
+**A reproduction trap, recorded because it cost a run.** Building for Linux *in the Windows working
+tree* (`/mnt/d/...`) fails in `libffi-sys`'s `configure`, which cannot write its own `config.log` on
+the DrvFs mount — it panics with "Configuring libffi" and no useful cause. The fix is to give the
+Linux build its own target directory on the Linux filesystem:
+
+```
+cd /mnt/d/nelan/DeluluLang && CARGO_TARGET_DIR=$HOME/delulu-target cargo test --workspace
+```
+
+This is a WSL/DrvFs property, not a portability defect: a Linux build in a Linux checkout is
+unaffected. It is here because the alternative is the next person concluding the tree does not build
+on Linux.
+
+**And a method warning about the measurement itself.** The first Linux count came back "70 suites /
+1,042 passed" against Windows' 96 — not a platform difference but `tail -70` in the counting pipeline,
+silently discarding 26 suites. It was caught only because the totals disagreed with Windows. This is
+the third time in this campaign that a truncating pipe has produced a confident wrong number
+(`head -3` hid two panics in P13). **Count first, truncate never.**
+
 ## 3. Why it ports — the load-bearing design facts
 
 - **Wire format is endianness-independent.** Every serialized integer uses `to_le_bytes` /

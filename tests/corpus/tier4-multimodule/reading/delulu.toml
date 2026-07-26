@@ -1,0 +1,10 @@
+[package]
+name = "reading"
+version = "0.1.0"
+kind = "lib"
+
+# The pure core of the pipeline. An empty effect row is not a default here — it is the
+# claim being made, and `delulu authority` refuses the package if any function in it
+# performs an effect this list does not name.
+[authority]
+effects = []

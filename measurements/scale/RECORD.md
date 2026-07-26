@@ -132,6 +132,29 @@ either a per-instance map (paying memory on *every* record, including the narrow
 or resolving field indices statically through the DIR side tables. The second is the right fix and it
 is a real change, not a tidy-up; it is not being attempted at the tail of a phase.
 
+### The narrow end, which the paragraph above was guessing about (ruling D56, 2026-07-26)
+
+*Read the previous paragraph again and then the table above it: the claim is about **five to twenty**
+fields and the smallest row measured is **fifty**. The part that mattered was an extrapolation past
+the data, which is the exact shape this campaign distrusts everywhere else. So it was measured.*
+
+Same method, same constant of ~200,000 total reads, release build. Reads are inlined into the loop
+rather than made through a helper, so the number is the field scan and not argument passing:
+
+| fields | 2 | 5 | 10 | 20 | 50 | 200 |
+|---|---|---|---|---|---|---|
+| µs per 1k reads | 444 | 265 | 209 | **188** | 223 | 415 |
+
+**The curve is U-shaped, and the claim survives.** Per-read cost is at its *minimum* around ten to
+twenty fields and rises in both directions: at width 2 because the loop's own overhead is amortised
+over only two reads, at width 200 because the scan starts to dominate. In the band the claim was
+about, the field lookup is **not** the cost — interpreter overhead is, and a per-instance hash map
+would add an allocation to every record in order to speed up the part that is already free.
+
+Two harnesses now agree on the wide-region slope (200/50 is 1.86 here against 1.82 in the table
+above), which is what makes both trustworthy. The absolute numbers differ because the harnesses
+differ; the shape is the result, as always.
+
 What makes this a limit and not a defect: it is linear, not quadratic, in the thing being varied, and
 the constant is small. Contrast C48, which was accidentally quadratic *and* allocated on every access
 — that was fixed. This is inherent to the representation and is therefore reported with a number, per

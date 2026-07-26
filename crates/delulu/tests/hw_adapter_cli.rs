@@ -310,3 +310,111 @@ fn an_adapter_with_a_bad_signature_is_refused_whatever_the_policy_says() {
         stderr(&o)
     );
 }
+
+/// D53. **A signature that verifies is not a signature you trust**, and D52 shipped a gate that
+/// could not tell the difference.
+///
+/// The `.sig` lives beside the driver and CARRIES ITS OWN PUBLIC KEY — `verify_detached` reads the
+/// key out of the first 32 bytes of the file it is checking. So an attacker who can overwrite
+/// `driver.bin` can overwrite `driver.bin.sig` too, signing the replacement with a key they
+/// generated a second ago. Against that attacker, `--require-signed-adapter` bought nothing: the
+/// signature verifies, the gate says "verifies (signer …)", and the driver spawns.
+///
+/// This test plays that attack out, and then pins the key.
+#[test]
+fn a_driver_resigned_by_an_attackers_key_verifies_and_is_still_refused_when_the_key_is_pinned() {
+    let r = rig("pin", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    let drv = r.dir.join("driver.bin");
+    let sig = r.dir.join("driver.bin.sig");
+    let drv_s = drv.display().to_string();
+
+    // The operator's key signs the driver they built.
+    let operator_seed = [7u8; 32];
+    let operator_key = delulu_runtime::plugin::public_key_hex(&operator_seed);
+    std::fs::write(&drv, b"the driver the operator built and reviewed").unwrap();
+    std::fs::write(&sig, delulu_runtime::plugin::sign_detached(&operator_seed, &std::fs::read(&drv).unwrap())).unwrap();
+
+    // Pinned to the operator's key: accepted, and the run gets as far as the driver.
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
+                   "--adapter-signer", &operator_key]);
+    let err = stderr(&o);
+    assert!(
+        err.contains("verifies under the pinned key"),
+        "the operator's own signed driver must pass its own pin: {err}"
+    );
+
+    // Now the attack. Both files are replaced; the new signature is real and self-consistent.
+    let attacker_seed = [66u8; 32];
+    let attacker_key = delulu_runtime::plugin::public_key_hex(&attacker_seed);
+    assert_ne!(attacker_key, operator_key);
+    std::fs::write(&drv, b"a driver that does something else entirely").unwrap();
+    std::fs::write(&sig, delulu_runtime::plugin::sign_detached(&attacker_seed, &std::fs::read(&drv).unwrap())).unwrap();
+
+    // WITHOUT a pin — the D52 gate, and the whole point of this test. The strongest flag D52
+    // offered ACCEPTS the attacker's driver, because "signed" was all it ever asked.
+    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter", "--adapter-cmd", &drv_s]);
+    let err = stderr(&o);
+    assert!(
+        err.contains("signature verifies"),
+        "unpinned, the attacker's own signature satisfies the gate — this is the hole: {err}"
+    );
+    // And the run must SAY that this is not an assurance, rather than reporting a bare success.
+    assert!(
+        err.contains("NOT that the key is trusted"),
+        "an unpinned verify must not read as a trust decision: {err}"
+    );
+
+    // WITH the pin: refused. Same bytes, same valid signature, different answer — because the
+    // question changed from "did anyone sign this?" to "did YOU sign this?".
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
+                   "--adapter-signer", &operator_key]);
+    assert!(!o.status.success(), "a pinned run must refuse another signer: {}", stdout(&o));
+    let err = stderr(&o);
+    assert!(err.contains("DL1510"), "the wrong-key case is DL1510: {err}");
+    assert!(
+        err.contains(&attacker_key) && err.contains(&operator_key),
+        "the refusal must name BOTH keys, or an operator cannot tell what happened: {err}"
+    );
+}
+
+/// D53. `--adapter-artifact` exists because the commonest driver shape could not be checked at all.
+///
+/// `powershell -File driver.ps1` names the INTERPRETER. D52 was right to refuse rather than verify
+/// the wrong bytes — but that left `--require-signed-adapter` unusable for every script-hosted
+/// driver, which is a control nobody can turn on. Naming the artifact separates "which command runs"
+/// from "which bytes were signed".
+#[test]
+fn the_signed_bytes_can_be_named_apart_from_the_command_that_runs() {
+    let r = rig("artifact", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    // The real driver is the script; the command names the interpreter.
+    let script = if cfg!(windows) { "driver.ps1" } else { "driver.sh" };
+    let seed = [11u8; 32];
+    let key = delulu_runtime::plugin::public_key_hex(&seed);
+    let bytes = std::fs::read(r.dir.join(script)).unwrap();
+    std::fs::write(r.dir.join(format!("{script}.sig")), delulu_runtime::plugin::sign_detached(&seed, &bytes)).unwrap();
+
+    // Without naming it, the run still cannot verify — and still refuses under the flag.
+    let o = r.hw(&["--approved", "signoff.json", "--require-signed-adapter",
+                   "--adapter-cmd", &r.adapter_cmd]);
+    assert!(!o.status.success(), "unchanged from D52: the interpreter is not the driver");
+    assert!(stderr(&o).contains("--adapter-artifact"), "and it now names the fix: {}", stderr(&o));
+
+    // Naming it verifies the script's own bytes, under the operator's own key.
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd,
+                   "--adapter-artifact", script, "--adapter-signer", &key]);
+    let err = stderr(&o);
+    assert!(err.contains("verifies under the pinned key"), "the script itself is what got signed: {err}");
+    assert!(o.status.success(), "and the run proceeds: {} {}", stdout(&o), err);
+
+    // Tamper with the script the interpreter will actually execute: refused, because the bytes
+    // named are the bytes checked.
+    std::fs::write(r.dir.join(script), "# replaced\n").unwrap();
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &r.adapter_cmd,
+                   "--adapter-artifact", script, "--adapter-signer", &key]);
+    assert!(!o.status.success(), "a tampered driver must not run");
+    assert!(stderr(&o).contains("DL1510"), "{}", stderr(&o));
+}

@@ -1,0 +1,11 @@
+module conf
+
+// A witness for DL0104 in the float column. `f64::from_str` does not fail on a magnitude it
+// cannot hold — it saturates to infinity — so this literal would otherwise check clean and
+// evaluate to `inf`, and nothing in the program would say the number changed.
+//
+// The integer column has always refused its own version of this (a literal too large for `Int`).
+// Refusing both is the rule; accepting one and not the other was the defect (campaign C17).
+fn budget_seconds() -> Float {
+  1.0e400
+}

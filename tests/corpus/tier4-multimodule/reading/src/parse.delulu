@@ -1,0 +1,37 @@
+module reading.parse
+
+import reading.types
+
+// A telemetry line is `sensor=celsius`, e.g. `bay3=21.5`. Nothing here performs an effect, so
+// nothing here takes a capability parameter — and because it takes none, the compiler proves it
+// cannot acquire one. That proof is what makes decoding safe to run on untrusted input: the worst
+// a malformed line can do is return `Err`.
+pub fn decode_line(line: Str) -> Result[Sample, ReadErr] {
+  let text = line.trim()
+  if text.len() == 0 {
+    return Err(Blank)
+  }
+  let parts = text.split("=")
+  if parts.len() != 2 {
+    return Err(Malformed(text))
+  }
+  match trimmed(parts, 0) {
+    None => Err(Malformed(text)),
+    Some(name) => match trimmed(parts, 1) {
+      None => Err(Malformed(text)),
+      Some(value) => match parse_float(value) {
+        None => Err(NotANumber(value)),
+        Some(c) => Ok(Sample { sensor: name, celsius: c })
+      }
+    }
+  }
+}
+
+// Not `pub`: a helper the sibling modules have no business calling. Module privacy is the
+// smallest unit of the same idea the authority system applies to effects — say what you export.
+fn trimmed(parts: List[Str], i: Int) -> Option[Str] {
+  match parts.get(i) {
+    Some(s) => Some(s.trim()),
+    None => None
+  }
+}

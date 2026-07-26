@@ -1,0 +1,96 @@
+module tier2
+
+// A recursive sum type, and the algorithms over it. Nothing here takes a capability, so the
+// compiler proves the whole file is pure — a tree walk cannot reach the disk however deep it goes.
+type Tree = Leaf | Node(Tree, Int, Tree)
+
+fn insert(t: Tree, v: Int) -> Tree {
+  match t {
+    Leaf => Node(Leaf, v, Leaf),
+    Node(l, x, r) => {
+      if v < x {
+        Node(insert(l, v), x, r)
+      } else {
+        if v > x {
+          Node(l, x, insert(r, v))
+        } else {
+          Node(l, x, r)
+        }
+      }
+    }
+  }
+}
+
+fn contains(t: Tree, v: Int) -> Bool {
+  match t {
+    Leaf => false,
+    Node(l, x, r) => {
+      if v == x {
+        true
+      } else {
+        if v < x { contains(l, v) } else { contains(r, v) }
+      }
+    }
+  }
+}
+
+// Depth is the interesting one: it is the recursion the interpreter's depth bound
+// (`DEFAULT_MAX_DEPTH`, published with its per-frame stack cost) exists to bound. A degenerate
+// tree built from sorted input recurses once per element.
+fn depth(t: Tree) -> Int {
+  match t {
+    Leaf => 0,
+    Node(l, _, r) => {
+      let dl = depth(l)
+      let dr = depth(r)
+      if dl > dr { dl + 1 } else { dr + 1 }
+    }
+  }
+}
+
+// Written the long way on purpose. The obvious version — `var out = in_order(l)` and then push
+// onto it — is DL1604: a value returned from a call arrives as `val` (shareable, immutable), and
+// pushing is a write. Only a freshly built list is `iso`, so the accumulator has to start as `[]`
+// here and be filled. That is the reference-capability system doing its job on ordinary code, and
+// a corpus that never met it would be under-reporting what writing DeluluLang is like.
+fn in_order(t: Tree) -> List[Int] {
+  match t {
+    Leaf => [],
+    Node(l, x, r) => {
+      var out = []
+      let left = in_order(l)
+      var i = 0
+      while i < left.len() {
+        match left.get(i) {
+          Some(v) => { push(out, v) },
+          None => { }
+        }
+        i = i + 1
+      }
+      push(out, x)
+      let right = in_order(r)
+      var j = 0
+      while j < right.len() {
+        match right.get(j) {
+          Some(v) => { push(out, v) },
+          None => { }
+        }
+        j = j + 1
+      }
+      out
+    }
+  }
+}
+
+fn from_list(xs: List[Int]) -> Tree {
+  var t = Leaf
+  var i = 0
+  while i < xs.len() {
+    match xs.get(i) {
+      Some(v) => { t = insert(t, v) },
+      None => { }
+    }
+    i = i + 1
+  }
+  t
+}

@@ -388,6 +388,20 @@ pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Val
             },
             _ => Value::variant("None", vec![]),
         }),
+        // The float half of `parse_int`, and deliberately the SAME rule the lexer applies to a
+        // literal (`delulu_syntax::num`) rather than a second one: text that names a magnitude
+        // `Float` cannot hold is `None`, not a silent `inf` or `0.0`. That also closes the way in
+        // for the non-finite words — without it, a data file containing `inf` could put infinity
+        // into a program whose source is not allowed to write it.
+        "parse_float" => Ok(match args.first() {
+            Some(Value::Str(s)) => match delulu_syntax::num::float_from_text(s.trim()) {
+                delulu_syntax::num::FloatText::Value(f) => {
+                    Value::variant("Some", vec![Value::Float(f)])
+                }
+                _ => Value::variant("None", vec![]),
+            },
+            _ => Value::variant("None", vec![]),
+        }),
         "range" => {
             let lo = args.first().and_then(as_int).unwrap_or(0);
             let hi = args.get(1).and_then(as_int).unwrap_or(0);

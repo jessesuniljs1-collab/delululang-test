@@ -12,6 +12,7 @@ pub mod fmt;
 pub mod grammar;
 pub mod lexer;
 pub mod morph;
+pub mod num;
 pub mod parser;
 pub mod token;
 

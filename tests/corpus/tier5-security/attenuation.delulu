@@ -1,0 +1,44 @@
+module tier5
+
+// Attenuation: a capability can be narrowed on the way down a call chain, never widened. This is
+// the runtime analogue of the `⊑` relation the whole authority system is built on, and the
+// property that makes it safe to hand a capability to code you did not write.
+//
+// `narrow` returns a NEW `Cap[FsRead]` bounded to a subdirectory. The caller keeps the wider one;
+// the callee is handed only the narrower. There is no operation that goes the other way — a
+// `Cap[FsRead]` for `./data/public` cannot produce one for `./data`, so a function's reach is
+// bounded by what it was given, not by what it asks for.
+fn read_public(fs: Cap[FsRead], name: Str) -> Result[Str, IoErr] ! {Read} {
+  fs.read_text(name)
+}
+
+// The confinement is visible at the call site: whoever reads this line can see exactly which part
+// of the tree `read_public` was allowed to see, without reading `read_public` at all.
+fn load_notice(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let public = fs.narrow("./public")
+  read_public(public, "notice.txt")
+}
+
+// Two narrowings on the same source capability are independent, and neither can reach the other's
+// subtree. Splitting authority this way is how a program gives two components access to disjoint
+// data without either being able to widen back to their common parent.
+fn load_both(fs: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+  let public = fs.narrow("./public")
+  let archive = fs.narrow("./archive")
+  match read_public(public, "notice.txt") {
+    Err(e) => Err(e),
+    Ok(a) => match read_public(archive, "index.txt") {
+      Err(e) => Err(e),
+      Ok(b) => Ok(a + "\n" + b)
+    }
+  }
+}
+
+fn main(root: Root) ! {Read, Write} {
+  let out = root.console()
+  let fs = root.fs_read("./data")
+  match load_both(fs) {
+    Ok(text) => out.println(text),
+    Err(_) => out.println("nothing to show")
+  }
+}

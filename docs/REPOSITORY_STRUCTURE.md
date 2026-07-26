@@ -75,11 +75,15 @@ DeluluLang/
 │   │   ├── accept/                 # programs that must check clean (+ expected authority JSON)
 │   │   └── reject/                 # programs that must fail (+ expected DLxxxx code/span/repair)
 │   └── corpus/                     # coding-capability tiers (simple → security-expert)
-│       ├── tier1-simple/
-│       ├── tier2-dsa/
-│       ├── tier3-application/
-│       ├── tier4-multimodule/
-│       └── tier5-security/
+│       │                           # every file must CHECK clean and every package must BUILD
+│       │                           # clean (conformance.rs); three are also RUN (corpus_cli.rs)
+│       ├── tier1-simple/           # 2 programs
+│       ├── tier2-dsa/              # 4 — recursion, a recursive sum type, row-polymorphic
+│       │                           #     higher-order code, and the `iso`/`val` write rule
+│       ├── tier3-application/      # 2 — real input, distinguishable failures, Result chains
+│       ├── tier4-multimodule/      # 4 PACKAGES / 7 modules, depth 3, one diamond (see its
+│       │                           #     README.md) — checked, not executable: finding C59
+│       └── tier5-security/         # 3 — confinement, secrets, capability attenuation
 │
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config
 │   └── vscode/

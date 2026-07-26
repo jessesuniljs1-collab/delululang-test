@@ -1,0 +1,25 @@
+module archive
+
+import reading
+
+// The capability is a PARAMETER, not something this module reaches out and takes. There is no
+// ambient filesystem here to reach for: a caller that holds no `Cap[FsWrite]` cannot make these
+// functions write, however it calls them.
+//
+// The `! {Write}` row is checked, not documentation. Adding a `read_text` below without adding
+// `Read` here does not compile, and adding `Read` here without adding it to `delulu.toml` does
+// not build.
+pub fn record(w: Cap[FsWrite], s: Sample) -> Result[Unit, IoErr] ! {Write} {
+  w.append_text("readings.log", line_for(s))
+}
+
+pub fn record_alarm(w: Cap[FsWrite], text: Str) -> Result[Unit, IoErr] ! {Write} {
+  w.append_text("alarms.log", text + "\n")
+}
+
+// Pure, and in the same module as the two effectful functions above — which is the point. The
+// effect row is per FUNCTION, not per file, so a helper that only formats a string carries no
+// authority just because it sits next to something that does.
+fn line_for(s: Sample) -> Str {
+  sensor_of(s) + "," + str(celsius_of(s)) + "\n"
+}

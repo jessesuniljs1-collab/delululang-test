@@ -1,0 +1,36 @@
+module policy
+
+import reading
+
+pub type Verdict = Nominal | Cold(Float) | Hot(Float)
+
+// Limits carried as data rather than baked in, so a caller can state them at the call site and
+// the reader can see what "out of range" meant for this run.
+pub fn classify(s: Sample, low: Float, high: Float) -> Verdict {
+  let c = celsius_of(s)
+  if c < low {
+    Cold(c)
+  } else {
+    if c > high {
+      Hot(c)
+    } else {
+      Nominal
+    }
+  }
+}
+
+pub fn describe(s: Sample, v: Verdict) -> Str {
+  match v {
+    Nominal => sensor_of(s) + ": nominal",
+    Cold(c) => sensor_of(s) + ": COLD at " + str(c),
+    Hot(c) => sensor_of(s) + ": HOT at " + str(c)
+  }
+}
+
+pub fn is_alarm(v: Verdict) -> Bool {
+  match v {
+    Nominal => false,
+    Cold(_) => true,
+    Hot(_) => true
+  }
+}

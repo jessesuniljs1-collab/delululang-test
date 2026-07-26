@@ -1,0 +1,40 @@
+module tier2
+
+// Row polymorphism, which is the part of the type system that makes higher-order code compatible
+// with an honest effect row. `apply` is generic over the effects of the function it is handed:
+// `! e` says "whatever `f` does, `apply` does, and no more". Without it, either every combinator
+// would have to be effect-free, or every caller would have to over-declare.
+fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e {
+  f(x)
+}
+
+fn compose[A, B, C](f: fn(A) -> B, g: fn(B) -> C) -> fn(A) -> C {
+  fn(a: A) -> C { g(f(a)) }
+}
+
+// `fold` is where the row variable earns its keep: folding a pure function stays pure, and
+// folding one that writes carries `Write` outward — the same code, two honest rows.
+fn fold[T, e](xs: List[Int], init: T, step: fn(T, Int) -> T ! e) -> T ! e {
+  var acc = init
+  var i = 0
+  while i < xs.len() {
+    match xs.get(i) {
+      Some(v) => { acc = step(acc, v) },
+      None => { }
+    }
+    i = i + 1
+  }
+  acc
+}
+
+fn sum(xs: List[Int]) -> Int {
+  fold(xs, 0, fn(a: Int, b: Int) -> Int { a + b })
+}
+
+fn count_matching(xs: List[Int], pred: fn(Int) -> Bool) -> Int {
+  fold(xs, 0, fn(a: Int, b: Int) -> Int { if pred(b) { a + 1 } else { a } })
+}
+
+fn evens(xs: List[Int]) -> Int {
+  count_matching(xs, fn(n: Int) -> Bool { n % 2 == 0 })
+}

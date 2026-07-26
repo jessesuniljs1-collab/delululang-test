@@ -641,7 +641,23 @@ Attenuation (`narrow`, and `Root` constructors) is pure: deriving weaker authori
 effect; *using* authority is.
 
 Builtin free functions (prelude, all pure): `str(x)`, `len(x)`, `int(f)`, `float(i)`,
-`parse_int(s) -> Option[Int]`, `push(list, x)`, `range(lo, hi) -> List[Int]`.
+`parse_int(s) -> Option[Int]`, `parse_float(s) -> Option[Float]`, `push(list, x)`,
+`range(lo, hi) -> List[Int]`.
+
+**Numeric literals, and `parse_float`, obey one rule: the value written is the value used.** A
+literal that names a magnitude the type cannot hold is **DL0104**, in both columns — an integer too
+large for `Int` (there is no automatic promotion, because a silent widening is a silent change of
+meaning), and a float too large or too small for `Float`. `1.0e400` would saturate to `inf` and
+`1.0e-400` would flush to `0.0`; both are refused. A literal written as zero is zero (`0.0e-400` is
+accepted), and a **subnormal is accepted** — it loses precision but keeps its magnitude, which is
+what the rule is about. Infinity is reachable by computing it (`1.0 / 0.0`), not by spelling it as a
+finite number.
+
+`parse_float` applies the **same** rule to text, so it answers `None` for `1.0e400`, for `1.0e-400`,
+and for the non-finite words (`inf`, `NaN`) that `f64::from_str` accepts. A number cannot enter a
+program through a data file that could not have been written in its source (ruling D54; the rule has
+one implementation, `delulu_syntax::num::float_from_text`, called by the lexer and by
+`parse_float`).
 
 ---
 
@@ -832,7 +848,7 @@ diagnostic is a bug.
 
 | Range | Domain |
 |---|---|
-| DL01xx | lexical — allocated: DL0101 unexpected character, DL0102 unterminated string, DL0103 invalid escape, DL0104 invalid numeric literal, DL0105 unterminated block comment, DL0106 reserved word declared |
+| DL01xx | lexical — allocated: DL0101 unexpected character, DL0102 unterminated string, DL0103 invalid escape, DL0104 invalid numeric literal (an `Int` literal that overflows; a `Float` literal that overflows to `inf` or underflows to `0.0`; a malformed exponent), DL0105 unterminated block comment, DL0106 reserved word declared |
 | DL02xx | parse — allocated: DL0201 expected token, DL0202 expected expression, DL0203 expected type, DL0204 missing `module` header, DL0205 expected pattern, DL0206 chained comparison (non-associative), DL0207 invalid assignment target, DL0208 expected item, DL0209 expected statement terminator, DL0210 reserved |
 | DL03xx | names/modules (DL0304 import cycle, DL0305 module-level `var`) |
 | DL04xx | types (DL0402 numeric mix, DL0407 non-exhaustive match, DL0410 var kind conflict) |

@@ -433,6 +433,18 @@ some-package`, the registry's index line carries the authority summary, so you s
 lockfile carries content hashes (blake3) binding the exact source you verified. Trust is
 *trust-on-first-verify*: you re-verify locally, you don't trust-on-read.
 
+`tests/corpus/tier4-multimodule/` is a worked example of all of this: four packages, seven modules,
+dependency depth three, three of them declaring `effects = []`, and one authority answer computed
+across the four manifests. `delulu authority` on it names every module and every effect; `delulu why
+Write` traces `main` into the one dependency allowed to write.
+
+> **What packages cannot do yet.** This chapter is about *verifying* a dependency graph, and that is
+> all a package currently does. `delulu run` takes a single `.delulu` file or a `.dwx` artifact —
+> there is no way to execute a multi-package program on the interpreter, so `kind = "bin"` in a
+> manifest declares an intent the toolchain cannot yet carry out. This is recorded as campaign
+> finding **C59** and is the largest capability gap the project has open. Single-file programs run;
+> package graphs are checked.
+
 ---
 
 ## Chapter 9 — Containment: WASM, Artifacts, and the Sandbox Floor

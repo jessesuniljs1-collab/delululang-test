@@ -1,0 +1,16 @@
+[package]
+name = "policy"
+version = "0.1.0"
+kind = "lib"
+
+# Still nothing. A package that decides whether a reading is out of limits has no business
+# touching the disk, the network, or the clock, and this line is the enforced claim that it does
+# not — not a comment about intent.
+[authority]
+effects = []
+
+[dependencies]
+# The ceiling granted to `reading`, not a description of it. A dependency cannot exceed what its
+# consumer grants here, and `authority --diff` treats any later widening of this line as the
+# supply-chain event it is.
+reading = { path = "../reading", authority = { effects = [] } }

@@ -509,16 +509,37 @@ impl<'a> Lexer<'a> {
 
         let text: String = self.src[start..self.pos].chars().filter(|&c| c != '_').collect();
         if is_float {
-            match text.parse::<f64>() {
-                Ok(v) => self.push(TokenKind::Float(v), start),
-                Err(_) => {
-                    self.diags.push(
-                        Diagnostic::error("DL0104", "invalid float literal")
-                            .with_bare_span(self.span_from(start)),
-                    );
-                    self.push(TokenKind::Float(0.0), start);
-                }
+            // The rule is shared with the runtime's `parse_float` (see `crate::num`): a literal in
+            // source and a number read from input must mean the same thing, or the language has
+            // two float rules wearing one name. `f64::from_str` saturates to infinity and flushes
+            // to zero rather than failing, and both are the same defect the integer arm below
+            // already refuses — the value written is not the value the program will use.
+            //
+            // Infinity remains reachable by computing it (`1.0 / 0.0`). What cannot be done is
+            // spelling it as a finite number.
+            let (value, message) = match crate::num::float_from_text(&text) {
+                crate::num::FloatText::Value(v) => (v, None),
+                crate::num::FloatText::Overflow => (
+                    0.0,
+                    Some(
+                        "float literal overflows Float (f64) — it is larger than any representable \
+                         float, so it would silently become `inf`",
+                    ),
+                ),
+                crate::num::FloatText::Underflow => (
+                    0.0,
+                    Some(
+                        "float literal underflows Float (f64) to zero — it is smaller than any \
+                         representable non-zero float, so it would silently become `0.0`",
+                    ),
+                ),
+                crate::num::FloatText::Malformed => (0.0, Some("invalid float literal")),
+            };
+            if let Some(m) = message {
+                self.diags
+                    .push(Diagnostic::error("DL0104", m).with_bare_span(self.span_from(start)));
             }
+            self.push(TokenKind::Float(value), start);
         } else {
             match text.parse::<i64>() {
                 Ok(v) => self.push(TokenKind::Int(v), start),
@@ -673,6 +694,52 @@ mod tests {
     fn eof_terminates_last_statement_without_newline() {
         let k = kinds("return x");
         assert_eq!(k, vec![TokenKind::KwReturn, ident("x"), TokenKind::Term, TokenKind::Eof]);
+    }
+
+    /// C17. The integer column has always refused a literal it cannot hold; the float column
+    /// saturated to `inf` and flushed to `0.0` in silence. Same defect, so the same answer — and
+    /// the underflow half is the worse one, because `inf` at least LOOKS wrong downstream while a
+    /// silently-zeroed gain just makes a control law quietly do nothing.
+    #[test]
+    fn a_float_literal_that_is_not_representable_is_refused_like_an_integer_one() {
+        for src in ["1.0e400", "-2.5e308000", "1.7976931348623159e308"] {
+            let (_, diags) = lex(0, src);
+            assert!(
+                diags.iter().any(|d| d.code == "DL0104" && d.message.contains("overflows Float")),
+                "{src} should be refused as an overflow, got {diags:?}"
+            );
+        }
+        // The second is the same defect written the long way, with no exponent to notice: 400
+        // zeros then a 1, well past the smallest subnormal (~4.9e-324).
+        let written_out = format!("0.{}1", "0".repeat(400));
+        for src in ["1.0e-400", &written_out] {
+            let (_, diags) = lex(0, src);
+            assert!(
+                diags.iter().any(|d| d.code == "DL0104" && d.message.contains("underflows Float")),
+                "{src} should be refused as an underflow, got {diags:?}"
+            );
+        }
+    }
+
+    /// The other side of the same rule, which is what stops it being a blunt "reject small floats":
+    /// a literal the author DID write as zero is zero, and a subnormal is a real number that loses
+    /// precision without losing its magnitude — neither is the defect above.
+    #[test]
+    fn zero_and_subnormal_float_literals_are_still_accepted() {
+        assert_eq!(kinds("0.0"), vec![TokenKind::Float(0.0), TokenKind::Term, TokenKind::Eof]);
+        assert_eq!(kinds("0.0e-400"), vec![TokenKind::Float(0.0), TokenKind::Term, TokenKind::Eof]);
+        assert_eq!(kinds("-0.0"), vec![TokenKind::Minus, TokenKind::Float(0.0), TokenKind::Term, TokenKind::Eof]);
+        // A subnormal: below f64::MIN_POSITIVE, above zero, and representable.
+        let (tokens, diags) = lex(0, "1.0e-320");
+        assert!(diags.is_empty(), "a subnormal is representable: {diags:?}");
+        match tokens[0].kind {
+            TokenKind::Float(v) => assert!(v > 0.0 && v < f64::MIN_POSITIVE, "expected a subnormal, got {v}"),
+            ref k => panic!("expected a float, got {k:?}"),
+        }
+        // And the largest float there is, one ulp below the overflow case above.
+        let (tokens, diags) = lex(0, "1.7976931348623157e308");
+        assert!(diags.is_empty(), "f64::MAX is representable: {diags:?}");
+        assert_eq!(tokens[0].kind, TokenKind::Float(f64::MAX));
     }
 
     #[test]

@@ -1,0 +1,70 @@
+module station
+
+import archive
+import policy
+import reading
+import station.report
+
+// Tier 4 exists for the shape a single file cannot have: four packages, a dependency depth of
+// three, and one type (`Sample`) that crosses every boundary while carrying no authority.
+//
+// The pipeline: read a telemetry file, decode each line purely, classify it purely, and write
+// only the results. Decoding is the only part that touches untrusted bytes, and it is the part
+// the compiler has proved cannot do anything but compute.
+fn main(root: Root) ! {Read, Write} {
+  let out = root.console()
+  let fs = root.fs_read("./data")
+  let w = root.fs_write("./out")
+  match fs.read_text("telemetry.txt") {
+    Err(_) => out.println("no telemetry to read"),
+    Ok(text) => {
+      var alarms = 0
+      let lines = text.split("\n")
+      var i = 0
+      while i < lines.len() {
+        match lines.get(i) {
+          None => { },
+          Some(line) => {
+            if line.trim().len() > 0 {
+              alarms = alarms + handle(out, w, line)
+            }
+          }
+        }
+        i = i + 1
+      }
+      out.println(summary(alarms))
+    }
+  }
+}
+
+// One line, end to end. The return value is the alarm count so the caller can total it without
+// a mutable global — there are none.
+fn handle(out: Cap[Console], w: Cap[FsWrite], line: Str) -> Int ! {Write} {
+  match decode(line) {
+    Err(e) => {
+      out.println(reason(e))
+      0
+    },
+    Ok(s) => {
+      let v = classify(s, 15.0, 30.0)
+      let text = describe(s, v)
+      out.println(text)
+      // Every write is matched. A `Result` here is not decoration: the archive is the only
+      // durable record this program leaves, and a run that silently failed to write it would
+      // look identical to a run that succeeded.
+      match record(w, s) {
+        Err(_) => out.println("  (could not archive this reading)"),
+        Ok(_) => { }
+      }
+      if is_alarm(v) {
+        match record_alarm(w, text) {
+          Err(_) => out.println("  (could not archive this alarm)"),
+          Ok(_) => { }
+        }
+        1
+      } else {
+        0
+      }
+    }
+  }
+}

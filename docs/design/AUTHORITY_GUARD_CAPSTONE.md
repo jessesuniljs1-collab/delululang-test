@@ -121,15 +121,29 @@ The envelope is enforced **host-side, before one byte reaches vendor code** — 
 driver's own log: a program commanding 12° (in envelope) and 999° (out) leaves exactly **one** line in
 it. An adapter can refuse more and can never permit more.
 
-**The gap D23 named is now narrowed, not gone (ruling D52).** A driver's provenance is checked
-before it is spawned: a signature that is present and does not verify refuses the run *regardless of
-policy* (DL1510), absent is disclosed loudly and refusable with `--require-signed-adapter` (DL1511),
-and when `--adapter-cmd`'s first token is not a readable file — an interpreter-hosted driver names the
-*interpreter* — the run says it could not check rather than passing silently.
+**The gap D23 named is now narrowed, not gone (rulings D52 and D53).** A driver's provenance is
+checked before it is spawned: a signature that is present and does not verify refuses the run
+*regardless of policy* (DL1510), absent is disclosed loudly and refusable with
+`--require-signed-adapter` (DL1511), and when nothing resolves to a readable file — an
+interpreter-hosted driver names the *interpreter* — the run says it could not check rather than
+passing silently.
+
+**D52 shipped that gate and it answered a weaker question than it appeared to.** `verify_detached`
+reads the public key out of the signature file it is checking, and the `.sig` sits beside the driver
+— so an attacker who can overwrite `drive.exe` can overwrite `drive.exe.sig` with one they signed
+themselves, and D52's strongest flag accepted it. That is on the record as an observed run, not a
+paragraph. **D53's answer: `--adapter-signer <hex>` pins the key** (any other signer is DL1510, the
+"wrong-key" case that text always claimed), **`--adapter-artifact <path>` names which bytes were
+signed** (without it, `--require-signed-adapter` was unusable for every script-hosted driver — a
+control nobody can switch on), and an unpinned verify now states that it proves these bytes were
+signed by that key, **not** that the key is trusted.
 
 What remains true: this is still an operator-supplied subprocess, not spec §5.4's Verified-class
 signed plugin loaded into the host. Signing buys **provenance**, not behaviour — the envelope is what
-bounds behaviour. And **no driver for any real device ships in-tree.**
+bounds behaviour. Unpinned there is still **no trust policy**, exactly as spec §10 states for
+plugins. The verdict is **printed, not recorded** — no durable evidence of which key signed the
+driver that drove the machine (finding C60, open). And **no driver for any real device ships
+in-tree.**
 
 ### 1.12 Runtime enforcement — HELD
 
@@ -203,7 +217,7 @@ so is the honest discharge — a surface that cannot be reached needs a reason, 
 | 5 | WASM backend | **Guarded** | Fault parity with the interpreter is enforced (C20/D29): both engines report identical fault *codes*, with the one residual divergence (`%`-by-zero) named rather than hidden. A guest backtrace no longer floods 16,326 lines. |
 | 6 | Native backend | **Does not exist — and is leashed** | No native tier ships in v1.x. `@jit` without `--grant exec.native` is DL1906, the hint is ignored, and the authority report discloses it on both surfaces. **A lease can never confer it**: `exec_native: false` is hard-coded on the lease path, so the leash holds across the federation boundary too. |
 | 7 | FFI | **Guarded** | A raw secret cannot cross (DL0602). The grant gate is enforced at run time (DL1303 at startup), arity is checked, a missing row is DL0501, and `trace_foreign` fires *before* the call so it cannot be omitted by crashing. |
-| 8 | Adapters | **Guarded, with a named gap** | Envelope enforced host-side before dispatch, proved from the driver's own log. Gap: operator-supplied subprocess, **no signature check** (D23). |
+| 8 | Adapters | **Guarded, with a named gap** | Envelope enforced host-side before dispatch, proved from the driver's own log. Provenance checked before spawn, with the signer pinnable (D52, D53). Gaps: operator-supplied subprocess rather than a §5.4 signed plugin; **no trust policy unless the operator pins a key**; the verdict is printed, not recorded (C60). |
 | 9 | Broker federation | **Guarded** | §1.9 above. |
 | 10 | Hardware | **Gated, never exercised** | DL1905 refuses `--broker-profile hw:` without a sign-off record for those exact artifact bytes; `hw:` with no `--adapter-cmd` refuses rather than reporting success for a machine that never moved. **No real driver ships in-tree and no physical device has ever been commanded** — stated wherever the gate is. |
 | 11 | Distributed execution | **Does not exist as a separate surface** | There is no distributed-execution crate; the distributed piece *is* broker federation (§1.9) plus the actor runtime, which is single-host and multi-threaded. Named rather than checked off. |

@@ -152,3 +152,47 @@ fn pending_public_controls_are_still_marked_as_pending() {
         assert!(s.contains(live), "the controls table must list `{live}`");
     }
 }
+
+/// `.gitattributes` (ruling D19d) declares `* text=auto eol=lf`, on the stated evidence that every
+/// tracked text file was already stored LF — "472/472 LF, zero CRLF". That was true when written.
+///
+/// **Nothing checked it afterwards, and it stopped being true.** By 2026-07-26 exactly one tracked
+/// file was stored with CRLF in its committed blob: `docs/design/HARDENING_CAMPAIGN.md`, created
+/// three days AFTER the attribute was adopted and rewritten by tooling on nearly every phase of the
+/// campaign. It went unnoticed for the whole campaign because a `.gitattributes` line is a
+/// declaration, not a gate, and the file's own §6 lists "a gate is blind to the failure it exists to
+/// catch" as one of the two rules the campaign produced. Here there was no gate at all.
+///
+/// So this is the gate. It reads the INDEX — the bytes about to be committed — and not the working
+/// tree: `eol=lf` normalizes on the way in, so a working copy may legitimately hold CRLF on a
+/// machine with `core.autocrlf=true` while the repository stays clean. What must never contain a CR
+/// is what gets stored. After a fresh checkout the index matches `HEAD`, so on CI this is exactly a
+/// statement about the committed tree.
+#[test]
+fn no_tracked_text_file_is_stored_with_crlf() {
+    // `-I` skips anything git considers binary, which is what keeps the signed release artifacts
+    // (`*.dwx`, `*.sig`, pinned `-text` in .gitattributes) out of this — their bytes are a
+    // signature's subject and nothing may normalize them.
+    let out = std::process::Command::new("git")
+        .current_dir(root())
+        .args(["grep", "--files-with-matches", "--cached", "-I", "\r"])
+        .output();
+    let Ok(out) = out else {
+        // A source tarball has no git. The invariant is about the repository, so there is nothing
+        // to check here and nothing to fail — but say so rather than passing silently.
+        eprintln!("note: `git` unavailable, line-ending invariant not checked");
+        return;
+    };
+    let offenders: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "`.gitattributes` declares `* text=auto eol=lf`, and these tracked files are stored with \
+         CRLF in the committed blob: {offenders:#?}\n\nRenormalize them (`git add --renormalize \
+         <path>`) — a declared invariant that only holds by luck is the shape ruling D19d meant to \
+         end."
+    );
+}

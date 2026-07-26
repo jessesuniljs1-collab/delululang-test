@@ -25,6 +25,26 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **A driver signature that verified under an attacker's key satisfied the strongest flag there was.**
+  `verify_detached` reads the public key out of the first 32 bytes of the signature file it is
+  checking, and the `.sig` sits beside the driver — so anyone able to overwrite `drive.exe` could
+  overwrite `drive.exe.sig` with one they had signed a second earlier, and `--require-signed-adapter`
+  accepted it. The check answered "did somebody sign this?" while its name promised something else.
+  The witness plays the attack out before pinning anything, so the hole is recorded as observed
+  behaviour.
+
+  **`--adapter-signer <hex>` pins the key**: a signature that verifies under any other key is DL1510 —
+  the "wrong-key" case the code's own text always claimed to cover, and never did, because nothing
+  compared the signer to anything. Pinning implies the signature is required. **`--adapter-artifact
+  <path>` names which bytes carry the provenance**, because refusing to verify an interpreter (D52,
+  correctly) had left `--require-signed-adapter` unusable for every script-hosted driver — a control
+  nobody can switch on is not a control. And an unpinned verify now says what it does *not* mean.
+
+  Still true, and stated wherever the gate is: this is an operator-supplied subprocess, not spec
+  §5.4's Verified-class signed plugin; signing buys **provenance**, not behaviour; unpinned there is
+  no trust policy at all; and the verdict is **printed, not recorded** — there is no durable evidence
+  of which key signed the driver that drove the machine (finding C60, open). (D53)
+
 - **A hardware driver's provenance is checked before it is spawned.** The adapter shipped as an
   operator-supplied subprocess with **no signature check** — named honestly as a gap, but a gap: the
   envelope bounds what a driver may be *asked* to do and says nothing about where the driver came from.
@@ -140,6 +160,33 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`parse_float(s) -> Option[Float]`.** DeluluLang had `parse_int` and no way at all to read a
+  `Float` out of text — a program could not read a temperature from a file. Found by writing the
+  multi-package corpus, which is what a corpus is for.
+
+  It asks **the same function the lexer asks**. Written separately, the obvious implementation would
+  have been `s.trim().parse::<f64>().ok()`, which answers `Some(inf)` for `1.0e400` and for the *word*
+  `inf` — a data file could then put infinity into a program whose source is forbidden to write it,
+  and the language would have had two float rules wearing one name. Additive: no existing program
+  changes meaning, and the WASM backend refuses it with the DL1201 it already gives `parse_int`. (D54)
+
+- **The capability corpus has a multi-package tier, and three of its programs are RUN.** `tests/corpus/`
+  held seven programs and the tier for multi-module programs held a note and no program. Tier 4 is now
+  **four packages, seven modules, dependency depth three, with a diamond**, exercising what only
+  appears above single-file size: authority declared per package and joined across the graph, a ceiling
+  stated by the consumer rather than claimed by the dependency, and a type that crosses every boundary
+  while carrying none. The conformance harness learned the difference between a file and a package, and
+  `corpus_cli.rs` asserts the *output* of three programs — because checking clean and working are
+  different claims.
+
+  Writing it found four defects, which is the argument for having written it: no `parse_float` (above);
+  a public signature may name a type its package does not re-export, and the failure lands on the
+  consumer with the error reported inside the dependency's own source (C58); **a multi-package program
+  cannot be run at all** — `kind = "bin"` is declarable and unexecutable, true of the shipped
+  `examples/greeter/` too (C59); and `let _ = expr` is refused although `_` is a valid match pattern
+  (C61). All three are recorded open rather than papered over, and the corpus tier's README says which
+  of its claims are compile-time only. (C7, ruling D55)
+
 - **The authority report says when a credential can leave.** A new gated `exposure:` line joins facts
   the report already carried — `Declassify` in the effect row, the secret names, and the reachable
   egress (foreign code, network, files) — into the sentence a human needs *before* deciding whether to
@@ -192,6 +239,20 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   (C13, ruling D25)
 
 ### Changed
+
+- **A numeric literal that is not the value you wrote is refused, in both columns.** The lexer has
+  always rejected an integer literal too large for `Int` — "no automatic promotion, because a silent
+  widening is a silent change of meaning" — and accepted `1.0e400`, which becomes `inf`. Same defect,
+  opposite answers, twelve lines apart. `f64::from_str` does not fail on a magnitude it cannot hold: it
+  saturates to infinity **and flushes to zero**, and the underflow half is the worse one — where `inf`
+  announces itself downstream, a silently-zeroed gain makes a control law quietly do nothing while
+  every value on the way looks ordinary.
+
+  Both are now **DL0104**. A literal written as zero is still zero (`0.0e-400` is accepted) and a
+  **subnormal is accepted** — it loses precision but keeps its magnitude, which is what the rule is
+  about. Infinity remains reachable by computing it (`1.0 / 0.0`); it just cannot be spelled as a
+  finite number. **This rejects programs that previously compiled**, which is why it is a change and
+  not a fix. (C17, ruling D54)
 
 - **`type Meters = Int` is now an alias, not a one-variant sum.** The right-hand side of `type X = …`
   was read as a sum whenever it was a bare identifier, which declared a *constructor* named `Int` —

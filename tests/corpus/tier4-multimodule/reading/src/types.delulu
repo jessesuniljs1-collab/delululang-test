@@ -1,0 +1,9 @@
+module reading.types
+
+// The shapes every other package in this pipeline agrees on, declared in the package that has no
+// authority at all — so the type that crosses every boundary carries none with it.
+// `pub` on a type is what lets it cross a module boundary, exactly as it does on a function: an
+// unexported type is private to its own compilation unit even inside its own package.
+pub type Sample { sensor: Str, celsius: Float }
+
+pub type ReadErr = Blank | Malformed(Str) | NotANumber(Str)

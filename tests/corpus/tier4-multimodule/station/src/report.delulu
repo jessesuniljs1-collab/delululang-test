@@ -1,0 +1,25 @@
+module station.report
+
+import reading
+
+// A second module in the binary package, kept pure on purpose: turning a failure into words is
+// not an effect, and giving it its own compilation unit means it can be read and tested without
+// the filesystem anywhere in sight.
+//
+// The import above is what makes `ReadErr` nameable here. Module membership is not enough —
+// `station` importing `reading` does nothing for its sibling, because visibility is per module.
+pub fn reason(e: ReadErr) -> Str {
+  match e {
+    Blank => "skipped a blank line",
+    Malformed(t) => "malformed line: " + t,
+    NotANumber(t) => "not a temperature: " + t
+  }
+}
+
+pub fn summary(alarms: Int) -> Str {
+  if alarms == 0 {
+    "all readings nominal"
+  } else {
+    str(alarms) + " reading(s) outside limits"
+  }
+}

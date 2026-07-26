@@ -529,9 +529,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              recognized escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"`. To write a literal \
              backslash, double it.",
         "DL0104" => "A numeric literal is not a valid number: an integer too large for `Int`, a \
-             float with a malformed exponent, or digits in a base that does not have them. Integer \
-             literals must fit in a signed 64-bit `Int` — there is no automatic promotion, because \
-             a silent widening is a silent change of meaning.",
+             float too large or too small for `Float`, a float with a malformed exponent, or digits \
+             in a base that does not have them. Integer literals must fit in a signed 64-bit `Int` — \
+             there is no automatic promotion, because a silent widening is a silent change of \
+             meaning. Float literals must name a value `Float` (f64) can actually hold: `1.0e400` \
+             would become `inf` and `1.0e-400` would become `0.0`, and a literal whose value is not \
+             the value you wrote is refused on the same reasoning. Infinity is still reachable by \
+             computing it (`1.0 / 0.0`); what you cannot do is spell it as a finite number.",
         "DL0105" => "A block comment opened with `/*` and the file ended before `*/`. Block \
              comments NEST, so an inner `/*` needs its own close — count them from the top of the \
              comment. Nesting is deliberate: it lets you comment out a region that already contains \

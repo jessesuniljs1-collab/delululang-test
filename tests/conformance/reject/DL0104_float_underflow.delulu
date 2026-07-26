@@ -1,0 +1,11 @@
+module conf
+
+// The other half of DL0104's float rule, and the more dangerous half. An overflow to `inf`
+// announces itself downstream; an underflow to `0.0` does not — a gain that silently becomes
+// zero makes a control law quietly do nothing, and nothing about the run looks wrong.
+//
+// A literal the author DID write as zero is still zero (`0.0e-400` is accepted): the refusal is
+// for a literal whose written magnitude is nonzero and whose value is not.
+fn leak_rate() -> Float {
+  1.0e-400
+}

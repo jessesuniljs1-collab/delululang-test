@@ -18,8 +18,17 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
+/// Every loose `.delulu` file under `dir`, skipping anything that belongs to a package.
+///
+/// A package's modules are NOT independently checkable — `station.delulu` alone cannot resolve
+/// `Sample`, which lives in another package — so feeding them to `check_source` one at a time
+/// would report failures that say nothing about the program. Package directories are found by
+/// their `delulu.toml` and handed to [`corpus_packages`] instead.
 fn delulu_files(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
+    if dir.join("delulu.toml").is_file() {
+        return out;
+    }
     if let Ok(entries) = std::fs::read_dir(dir) {
         for e in entries.flatten() {
             let p = e.path();
@@ -30,6 +39,26 @@ fn delulu_files(dir: &Path) -> Vec<PathBuf> {
             }
         }
     }
+    out
+}
+
+/// Every package directory under `dir`: one that holds a `delulu.toml`. Nested packages are not
+/// searched for — a package's dependencies come from its manifest, not from where it sits on disk.
+fn corpus_packages(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if dir.join("delulu.toml").is_file() {
+        out.push(dir.to_path_buf());
+        return out;
+    }
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                out.extend(corpus_packages(&p));
+            }
+        }
+    }
+    out.sort();
     out
 }
 
@@ -65,6 +94,36 @@ fn accepting_programs_check_clean() {
         }
     }
     assert!(checked >= 12, "expected a substantial accept corpus, found {checked}");
+}
+
+/// The package-shaped half of the corpus (C7). These resolve a dependency graph, so they go
+/// through the same loader `delulu build` uses rather than through `check_source`.
+///
+/// The count floor is here for the reason the file floor above is: the walk is the kind of thing
+/// that can silently stop finding anything — a renamed directory, a `delulu.toml` that stops being
+/// recognised — and a corpus law that passes because it examined nothing is the shape this project
+/// has already been bitten by twice (C37, C49).
+#[test]
+fn accepting_packages_build_clean() {
+    let root = workspace_root();
+    let pkgs = corpus_packages(&root.join("tests/corpus"));
+    assert!(
+        pkgs.len() >= 4,
+        "expected the multi-package corpus tier to be populated, found {} package(s)",
+        pkgs.len()
+    );
+    for dir in &pkgs {
+        let ws = delulu_check::deps::resolve_workspace(dir);
+        let program = delulu_check::deps::check_workspace(&ws);
+        let errors: Vec<String> = ws
+            .diagnostics
+            .iter()
+            .chain(program.diagnostics.iter())
+            .filter(|d| d.is_error())
+            .map(|d| format!("{}: {}", d.code, d.message))
+            .collect();
+        assert!(errors.is_empty(), "{} should build clean, got {:#?}", dir.display(), errors);
+    }
 }
 
 #[test]

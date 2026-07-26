@@ -72,7 +72,7 @@ deviations.
 | C4 | Front door — `README.md` describes a project that no longer exists | **high** (adoption) | **CLOSED** — D25 |
 | C5 | `REPOSITORY_STRUCTURE.md` — the repository map has drifted from the repository | medium (accuracy) | **CLOSED** — D25 |
 | C6 | **The documented surface is a subset of the real one** — working constructs are untaught | **high** (adoption) | **CLOSED** — D25 |
-| C7 | The capability corpus is 8 programs; `tier4-multimodule` has none | medium (evidence) | OPEN |
+| C7 | The capability corpus is **7** programs (filed as 8 — the count included a `NOTE.md`); `tier4-multimodule` has none | medium (evidence) | **CLOSED** — D55 (tier 4 is now 4 packages / 7 modules, depth 3; 3 programs are RUN, not only checked) |
 | C8 | The interpreter's recursion bound is fixed at 10,000 and appears in no user-facing document | medium (usability) | **CLOSED** (documented) — D25 |
 | C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | **CLOSED** — D27 (owner-approved) |
 | C10 | Runtime — DL0703 refused without naming the grant that would fix it | medium (usability) | **CLOSED** — D25 |
@@ -82,7 +82,7 @@ deviations.
 | C14 | **`DL0907` was titled "match reached no arm" and is raised for a dozen unrelated conditions** — a reader hitting it for an unbound name was told something false about their program | medium (honesty) | **CLOSED** — D42 |
 | C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
 | C16 | Checker — a cyclic type alias (`type A = A`) is silently accepted | low as filed (hygiene) — **the severity was wrong**: P2 tested the declaration, never a USE, and a used cycle crashed the compiler (C54) | **CLOSED** — D47a, together with C54 |
-| C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning | low (honesty) | OPEN |
+| C17 | Lexer — a float literal that overflows to `inf` is accepted without a warning; **and, not filed, the worse half: one that underflows to `0.0`** | low as filed (honesty) — **the framing was wrong**: the integer column already refused its own version, so this was an asymmetry, not a preference | **CLOSED** — D54 (both refused as DL0104; `parse_float` added on the same shared rule) |
 | C18 | **Stage 2 — the semver-authority law and `authority --diff` were blind to secret-scope widening** | **high** (supply chain) | **CLOSED** — D28 |
 | C19 | **Stage 2 — the dependency pin (DL1001) and self-declaration (DL1009) do not enforce secrets** | **high** (supply chain) | **CLOSED** — D34 (owner approved 2026-07-25) |
 | C20 | **Stage 3 — the two engines disagree on fault codes, and a WASM trap dumps a ~16k-line backtrace** | **high** (parity/usability) | **CLOSED** — D29 |
@@ -117,13 +117,18 @@ deviations.
 | C51 | **`delulu authority <dir>` cannot report on any package that has a dependency** — it uses the single-package loader while `build`/`lock`/`authority --diff` resolve the graph, so DL0303 refuses every monorepo member | **high** (the supply-chain question is exactly when the review surface is wanted) | **CLOSED** — D45 |
 | C53 | **An unused type alias is never resolved** — `type Meters = Metres` (a typo) checks clean, and the error only appears if and where the alias is used; in a library whose own code never uses it, the diagnostic lands on the consumer | medium (a declaration accepted and silently inert — the C11/C23 family) | **CLOSED** — D47b |
 | C54 | **A USED cyclic type alias aborted the compiler with a stack overflow** — `type A = A` plus one use died at `0xC00000FD`; the no-panic sweeps could not see it, because a stack overflow prints no `panicked at` | **high** (hard crash on ordinary input; DoS for anything compiling untrusted code) | **CLOSED** — D47a (reshapes C16) |
-| C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c (measured and published; linear, not quadratic) |
+| C55 | Runtime record field access is **O(record width) per read** (165→5,071 µs/1k reads at 50→3,200 fields) | — | **NAMED LIMIT** — D47c, re-examined D56: the claim about 5–20 fields was an extrapolation from a table starting at 50. Measured, the curve is **U-shaped** and per-read cost is at its MINIMUM there. Limit stands, reasoning is now data |
 | C57 | **The authority SERIALIZATION seam had no gate** — `to_json` (write) is hand-enumerated with nothing to catch a dimension added to `Scopes` and not emitted; the read side already fails closed, the write side did not | medium (a silently under-reporting audit record — the C29/C30 class, not an escalation) | **CLOSED** — D48a (compile-enforced round-trip gate) |
 | C56 | **`--trace-effects` buffers the entire trace in RAM** — 100k effects take peak memory from 6.7 MB to 70.1 MB (~633 B/record), unbounded; the audit chain already streams to day files, the trace does not | medium (opt-in flag, but the runs that enable it are the long-lived ones) | **CLOSED** — D49 (bounded when diagnostic; `--assert-trace` never capped) |
 | C52 | **A `delulu.lock` could misstate what a dependency does and `build --locked` reported "built clean"** — the recorded `effects`/`cap_kinds`/`secrets`/scope fields, the ones a reviewer reads, were verified against nothing; so were the format version, duplicate entries and a stale recorded version | **high** (the CI gate trusted a review artifact it never checked, while `authority --diff` on the same file reported WIDENING) | **CLOSED** — D45 |
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
 | C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | **CLOSED** — D46c (no; the stricter reading, which is what the code already did) |
+| C58 | **A `pub fn` whose signature names a type the package does not re-export builds clean alone and fails when consumed** — and the error is reported *inside the dependency's own source*, calling a type "not a type" in a file where it is in scope | medium (diagnostic blames the wrong line in the wrong package — the C53 family) | OPEN |
+| C59 | **A multi-package program cannot be RUN.** `delulu run` takes one file or a `.dwx`; `build` emits `interface.json` and nothing executable, so `kind = "bin"` is declarable and unexecutable — true of the shipped `examples/greeter/` too | **high** (the largest capability gap the campaign has found; a feature, not a fix) | OPEN |
+| C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | OPEN — named by D53 |
+| C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | OPEN |
+| C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -339,13 +344,37 @@ The lesson generalizes past this list: **the project tested its documentation fo
 never for sufficiency.** Every documented claim is true. A developer cannot get from them to a
 working program.
 
-### C7 · The capability corpus is eight programs — OPEN
+### C7 · The capability corpus is seven programs — CLOSED (D55)
 
 `tests/corpus/` is described in `REPOSITORY_STRUCTURE.md` as "coding-capability tiers (simple →
-security-expert)". It contains **eight programs**: two simple, two DSA, one application, two
-security — and `tier4-multimodule/` holds a `NOTE.md` and **no program at all**. For a language
+security-expert)". It contained **seven programs**: two simple, two DSA, one application, two
+security — and `tier4-multimodule/` held a `NOTE.md` and **no program at all**. For a language
 proposing itself for robotics, satellites, SaaS backends, and enterprise systems, this is not
 enough evidence to support the proposal, independent of whether the language is capable.
+
+*(The finding said eight. Its own breakdown sums to seven; the eighth item was the `NOTE.md`. The
+miscount is corrected here rather than silently — a ledger that quietly fixes its own numbers is
+one nobody can audit.)*
+
+**Closed (D55).** Tier 4 is now **four packages, seven modules, dependency depth three, with a
+diamond**, and the other tiers gained four programs (a recursive sum type with its algorithms,
+row-polymorphic higher-order code, an application over real input with distinguishable failures,
+and capability attenuation via `narrow`). Eleven single-file programs and one package graph.
+
+Two things make it evidence rather than volume:
+
+- **The harness learned the difference between a file and a package.** A directory holding a
+  `delulu.toml` is built through the same loader `delulu build` uses; feeding its files to
+  `check_source` one at a time reported failures that said nothing about the program.
+  `accepting_packages_build_clean` carries a count floor, because a corpus law that passes by
+  examining nothing is the shape C37 and C49 already cost this project.
+- **Three programs are RUN, with their output asserted** (`corpus_cli.rs`). Checking clean and
+  working are different claims, and the corpus was only ever making the first one.
+
+**Writing it found four defects, which is the argument for having done it** — see D55 for each:
+`parse_float` did not exist (a language with a `Float` type could not read one from input, now
+closed under D54), **C58** (a public signature naming an unexported type), **C59** (a multi-package
+program cannot be run at all), and **C61** (`let _` is refused).
 
 ### C8 · The recursion bound is fixed at 10,000 and is undocumented — OPEN
 
@@ -541,13 +570,33 @@ emits a confusing `expected T10, found T9` (the same type-variable-leak as C12) 
 the cycle. Deferred to a focused Stage-1 return rather than bolted onto the D26 commit, because it
 wants real cycle detection in the resolver with its own diagnostic and witnesses — not a patch.
 
-### C17 · A float literal that overflows to infinity is accepted silently — OPEN
+### C17 · A literal that is not the value you wrote — CLOSED (D54)
 
-`1.0e400` checks clean and evaluates to `inf`. This matches C, JavaScript, and Rust (which produce
-`inf` for an over-range float literal), so it is defensible and is **not** a soundness issue — filed
-as an honesty gap, not a defect. Rust emits a warning in this case; DeluluLang, whose posture is to
-say what it is doing, arguably should too. Low priority. (Note: `1e400` *without* a decimal point is
-a parse error, because a float literal requires the point — `1e400` lexes as `1` then `e400`.)
+**As filed:** `1.0e400` checks clean and evaluates to `inf`. This matches C, JavaScript, and Rust,
+so it is defensible and is **not** a soundness issue — filed as an honesty gap, not a defect, and
+left at low priority for a year of campaign time.
+
+**The framing was wrong, and that is why it sat.** Comparing DeluluLang to C was comparing it to the
+wrong thing. The right comparison was to the arm of the same function twelve lines below, which has
+always refused an integer literal too large for `Int` — *"there is no automatic promotion, because a
+silent widening is a silent change of meaning."* Two literals, one failure mode (the written value is
+not the value the program will use), opposite answers. It was an **asymmetry**, not a preference.
+
+**And the half that was not filed is the worse one.** `f64::from_str` also *flushes to zero*:
+`1.0e-400` becomes `0.0`. Where `inf` announces itself downstream, a silently-zeroed gain makes a
+control law quietly do nothing while every value along the way looks perfectly ordinary. For a
+language aimed at machinery that is the more dangerous direction, and nothing in the original finding
+saw it.
+
+**Closed (D54).** Both are **DL0104** on the existing code. A literal the author *did* write as zero
+is still zero (`0.0e-400` is accepted) and a **subnormal is accepted** — it loses precision but keeps
+its magnitude, which is the property the rule is about. Infinity is still reachable by computing it
+(`1.0 / 0.0`); it just cannot be spelled as a finite number. The rule lives in one function
+(`delulu_syntax::num::float_from_text`) because it has two callers — the lexer and the new
+`parse_float` — and two copies of it would have been C40 again.
+
+(Note: `1e400` *without* a decimal point is a parse error, because a float literal requires the
+point — `1e400` lexes as `1` then `e400`.)
 
 ### C18 · The semver-authority law was blind to secret-scope widening — CLOSED (D28)
 
@@ -1820,14 +1869,21 @@ per-reader LSP view morphs are not built.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **58 findings were filed. 54 are closed, 1 is a published limit, 2 are open with a
-current status, and 1 does not reproduce.**
+capstone, and this. **62 findings have been filed. 56 are closed, 1 is a published limit, 4 are open
+with a current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
 this paragraph said "57 filed, 48 closed, 3 limits, 4 open, 2 not reproducing" — written from memory
 before C56 was closed, and wrong on every count. Correcting it is noted rather than quietly fixed,
 because a close-out that miscounts its own findings is the exact defect this campaign spent sixteen
 phases on.)*
+
+**The count grew after the close-out, and that is the honest shape of it.** At close-out the total
+was 58 filed / 54 closed / 2 open. Three of the four items open now (C58, C59, C61) were found by
+doing the work C7 asked for — writing the multi-package corpus — and the fourth (C60) by answering
+Jesse's question about whether the D52 adapter gate was right, which it was not. C62 was found by
+*staging the edits to this very file* and noticing the diff was twenty times larger than the change.
+A campaign whose finding count only ever falls is a campaign that stopped looking.
 
 ### What shipped
 
@@ -1849,26 +1905,45 @@ phases on.)*
 | P14 | D47 | **A used cyclic type alias aborted the compiler** with a stack overflow. |
 | P15 | D48 | The Authority + Guard capstone: 18 + 14 items discharged (`AUTHORITY_GUARD_CAPSTONE.md`). |
 | P16 | D49, D50 | The trace buffer bounded; both platforms re-verified; the front door re-tested from a clean clone. |
+| — | D51, D52 | The depth bound made API with its stack cost measured; the hardware driver's provenance checked before spawn. |
+| — | D53–D56 | **A signature that verified under an ATTACKER'S key satisfied D52's strongest flag**; both numeric columns now refuse a literal that is not the value written; tier 4 built and the corpus RUN; C55 re-measured at the widths its claim was about. |
 
 ### Still open, each checked rather than assumed
 
-- **C7 — the capability corpus is 8 programs; `tier4-multimodule` has none.** Unchanged. This is an
-  evidence gap, not a defect: the corpus under-samples multi-module programs, so conclusions drawn
-  from it are narrower than they look. Filling it is work, not a fix.
-- **C17 — a float literal that overflows to `inf` is accepted silently.** Re-verified: `1.0e400`
-  prints `inf`, exit 0, no diagnostic. Still open, still low: it matches C and JavaScript, and the
-  honest argument for changing it is legibility rather than correctness.
-*(C21 appeared here when this section was first written and is now **closed** — see D51. The
-library-contract question it raised was answered: the depth bound is part of the API
-(`Interp::with_max_depth`), the per-frame stack cost is measured and published, and a witness runs the
-guard on a deliberately small thread. Left visible rather than deleted, because a close-out that
-silently loses an item it once listed is the kind of drift this campaign existed to stop.)*
+Every item that stood here when this section was first written — **C7, C17, C21** — is now closed
+(D55, D54, D51). They are named rather than deleted, because a close-out that silently loses an item
+it once listed is the kind of drift this campaign existed to stop. What replaced them are four
+findings that did not exist then, three of which were found by *writing the corpus C7 asked for*:
+
+- **C59 — a multi-package program cannot be RUN.** `delulu run` takes one `.delulu` file or a `.dwx`.
+  `build` on a package emits `interface.json` and nothing executable, so `kind = "bin"` is a manifest
+  field the toolchain cannot honour — and this is true of `examples/greeter/`, a two-module example
+  that ships in this tree and can only be checked. **This is the largest capability gap the campaign
+  has found.** It is a feature, not a fix: the interpreter keys functions by bare name in one flat
+  map, and multi-module execution needs per-module resolution (the checker already computes the map
+  it would need). Named here rather than attempted at the tail of a pass, and the corpus tier's own
+  README says so instead of implying otherwise.
+- **C58 — a public signature may name a type the package does not re-export**, and the failure lands
+  on the consumer, reported inside the dependency's source, calling a type "not a type" in a file
+  where it is in scope. The rule is right; the diagnostic blames the wrong line in the wrong package.
+- **C60 — the adapter provenance verdict is printed, not recorded.** Named by D53, which fixed what
+  it could: there is no durable evidence of which key signed the driver that moved the machine, and
+  neither existing home fits (the audit chain is a no-op without a sink; the DL1905 sign-off is
+  written by a simulation, before an adapter has been chosen).
+- **C61 — `let _ = expr` is refused** although `_` is a valid match pattern, and discarding remains
+  possible under any other name. Low: friction with no safety benefit.
+
 ### Published limit
 
-- **C55 — runtime record field access is O(record width).** Measured, linear rather than quadratic,
-  and for the widths real programs use a short `Vec` scan is the faster representation. The real fix
-  is static field indices through the DIR. This is the only finding in the ledger carried as a limit
-  rather than closed or open.
+- **C55 — runtime record field access is O(record width).** Linear rather than quadratic, and the
+  real fix is static field indices through the DIR. Still the only finding carried as a limit rather
+  than closed or open — but the *reason* has changed. Its claim was that "for the widths real
+  programs use — five to twenty fields — a linear scan is the faster representation", and the table
+  under it began at fifty: the claim about the range that matters was an extrapolation past the
+  smallest measured point. Measured at the narrow end (D56), the curve is **U-shaped** — 444 µs/1k
+  reads at width 2, a **minimum of 188 at width 20**, 415 at width 200. In the band the claim was
+  about, the field scan is not the cost; interpreter overhead is. The limit stands and its reasoning
+  is now data.
 
 ### Does not reproduce
 

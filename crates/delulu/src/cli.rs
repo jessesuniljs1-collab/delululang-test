@@ -280,6 +280,17 @@ struct Opts {
     adapter_cmd: Option<String>,
     /// `--require-signed-adapter`: refuse a hardware driver that carries no signature (D52).
     require_signed_adapter: bool,
+    /// `--adapter-artifact <path>`: WHICH bytes carry the driver's provenance (D53). Without it
+    /// the first token of `--adapter-cmd` is used, and that token is the INTERPRETER for a
+    /// script-hosted driver (`powershell -File drive.ps1`) — so the flag exists to make
+    /// `--require-signed-adapter` usable for the commonest driver shape instead of unusable.
+    adapter_artifact: Option<String>,
+    /// `--adapter-signer <hex>`: the ed25519 public key whose signature this run will accept on the
+    /// driver (D53). Without it, a verifying signature proves only that SOMEBODY signed these
+    /// bytes — and the `.sig` sits beside the driver, so anyone who can replace one can replace
+    /// both. Naming the key is what turns the check into a control. Implies the signature is
+    /// required.
+    adapter_signer: Option<String>,
     sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -329,6 +340,8 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         broker_profile: None,
         adapter_cmd: None,
         require_signed_adapter: false,
+        adapter_artifact: None,
+        adapter_signer: None,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -385,6 +398,18 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--adapter-cmd" => {
                 if i + 1 < rest.len() {
                     opts.adapter_cmd = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--adapter-artifact" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_artifact = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--adapter-signer" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_signer = Some(rest[i + 1].clone());
                     i += 1;
                 }
             }
@@ -728,7 +753,10 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-cmd CMD names the hw driver: a signature beside it that does NOT verify always refuses,\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and --require-signed-adapter refuses an unsigned one — D52)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and --require-signed-adapter refuses an unsigned one — D52;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-artifact PATH names WHICH bytes were signed (an interpreter-hosted driver\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 names the interpreter in --adapter-cmd, not the driver), and --adapter-signer HEX pins\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53)\n\
      \x20 delulu authority <file.delulu | package-dir> [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
@@ -6425,7 +6453,12 @@ fn cmd_run(rest: &[String]) -> i32 {
                 };
                 let args: Vec<String> = parts.map(str::to_string).collect();
                 // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
-                if let Err(code) = check_adapter_signature(prog, opts.require_signed_adapter) {
+                if let Err(code) = check_adapter_signature(
+                    prog,
+                    opts.adapter_artifact.as_deref(),
+                    opts.require_signed_adapter,
+                    opts.adapter_signer.as_deref(),
+                ) {
                     return code;
                 }
                 match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
@@ -8024,11 +8057,13 @@ fn _json_marker() -> Json {
     json!({})
 }
 
-/// Verify a hardware adapter's provenance before it is spawned (ruling D52, closing the gap D23
-/// named: "an operator-supplied SUBPROCESS with NO signature check").
+/// Verify a hardware adapter's provenance before it is spawned (ruling D52, extended by D53).
 ///
-/// The rule is the one Stage 6 already made for plugins, applied to drivers, and the asymmetry is the
-/// whole point:
+/// D52 closed the gap D23 named — "an operator-supplied SUBPROCESS with NO signature check" — by
+/// applying Stage 6's plugin rule to drivers. D53 closed the hole D52 left, which was that the rule
+/// as written answered a weaker question than it appeared to.
+///
+/// **The rule.** The asymmetry between these is the point:
 ///
 /// - **A signature that is PRESENT but does not verify refuses the run, unconditionally** — whatever
 ///   the policy flag says. This is the branch a "not required, so don't check" reading would skip,
@@ -8037,31 +8072,54 @@ fn _json_marker() -> Json {
 /// - **A signature that is ABSENT is a policy question**, because requiring one everywhere would
 ///   refuse every driver an operator builds locally. Absent is allowed by default and *disclosed
 ///   loudly*; `--require-signed-adapter` turns it into a refusal.
+/// - **A signature that verifies under a key the operator did not name proves very little.** The
+///   `.sig` sits beside the driver and carries its own public key, so anyone who can replace
+///   `drive.exe` can replace `drive.exe.sig` with one they signed themselves, and an unpinned check
+///   passes. `--adapter-signer <hex>` names the acceptable key; any other signer is DL1510, which
+///   is the "wrong-key" case that code has always claimed to cover.
 ///
-/// What this does NOT do, stated so no one reads more into it: spec §5.4 describes Verified-class
-/// signed plugins loaded into the host, and this is still an operator-supplied subprocess. Signing
-/// buys provenance — "these are the bytes someone with this key vouched for" — it does not bound what
-/// the driver does once running. The envelope is what bounds that, enforced host-side before one byte
-/// reaches the driver, and it is unchanged.
-fn check_adapter_signature(prog: &str, require_signed: bool) -> Result<(), i32> {
+/// **What this does NOT do**, stated here so no surface reads more into it:
+///
+/// - This is still an operator-supplied **subprocess**, not spec §5.4's Verified-class signed
+///   plugin loaded into the host.
+/// - Signing buys **provenance**, not behaviour: "these are the bytes this key vouched for" says
+///   nothing about what the driver does once running. The envelope bounds that, enforced host-side
+///   before one byte reaches the driver, and it is unchanged.
+/// - Without `--adapter-signer` there is **no trust policy** — the same limit spec §10 states for
+///   plugins. Unpinned, `--require-signed-adapter` stops accidents and unsigned drivers; it does
+///   not stop an adversary who can write files next to the driver.
+/// - The verdict is printed, not recorded. A run leaves no durable, queryable evidence of which key
+///   signed the driver that moved the machine — campaign finding **C60**, open: the broker's audit
+///   chain is a no-op without a sink, and the DL1905 sign-off record is written by a SIMULATION,
+///   before any adapter has been chosen.
+fn check_adapter_signature(
+    prog: &str,
+    artifact: Option<&str>,
+    require_signed: bool,
+    expect_signer: Option<&str>,
+) -> Result<(), i32> {
+    // Pinning a key is itself a demand for a signature: an operator who names the acceptable signer
+    // has not said "unsigned is fine".
+    let require_signed = require_signed || expect_signer.is_some();
+
     // `--adapter-cmd` is a command line, and its first token is not always the driver: an
     // interpreter-hosted driver (`powershell -File drive.ps1`, `python drive.py`) names the
-    // INTERPRETER here, and signing that would vouch for the wrong bytes entirely.
+    // INTERPRETER, and verifying that would vouch for the wrong bytes entirely. `--adapter-artifact`
+    // is how an operator says which bytes are actually the driver; without it, the first token is
+    // the only candidate there is.
     //
-    // So when the first token does not resolve to a readable file, this does not quietly pass —
-    // "the checker could not tell" must never read as "yes". It says what it could not verify, and
-    // under `--require-signed-adapter` it refuses. An operator who wants the guarantee points
-    // `--adapter-cmd` at the executable itself, or wraps the script so the signed artifact IS the
-    // first token.
+    // When nothing resolves to a readable file this does not quietly pass — "the checker could not
+    // tell" must never read as "yes".
+    let prog = artifact.unwrap_or(prog);
     if !std::path::Path::new(prog).is_file() {
         if require_signed {
             let d = Diagnostic::error(
                 "DL1511",
                 format!(
-                    "`--require-signed-adapter` was given, but `{prog}` is not a file this run can \
+                    "the driver's provenance was required, but `{prog}` is not a file this run can \
                      read, so there is nothing to verify — an interpreter-hosted driver names the \
-                     interpreter here, not the driver. Point `--adapter-cmd` at the signed artifact \
-                     itself"
+                     interpreter in `--adapter-cmd`, not the driver. Pass `--adapter-artifact \
+                     <path>` naming the bytes that were signed"
                 ),
             );
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
@@ -8070,7 +8128,8 @@ fn check_adapter_signature(prog: &str, require_signed: bool) -> Result<(), i32> 
         eprintln!(
             "warning: hardware adapter `{prog}` is not a readable file (an interpreter-hosted \
              driver names the interpreter, not the driver), so its provenance was NOT checked. \
-             Pass `--require-signed-adapter` to refuse this."
+             Pass `--adapter-artifact <path>` to name the driver, or `--require-signed-adapter` to \
+             refuse this."
         );
         return Ok(());
     }
@@ -8082,9 +8141,9 @@ fn check_adapter_signature(prog: &str, require_signed: bool) -> Result<(), i32> 
                 let d = Diagnostic::error(
                     "DL1511",
                     format!(
-                        "hardware adapter `{prog}` has no signature at `{sig_path}`, and \
-                         `--require-signed-adapter` was given — a driver commands physical machinery, \
-                         so its provenance is not something this run will assume"
+                        "hardware adapter `{prog}` has no signature at `{sig_path}`, and this run \
+                         requires one — a driver commands physical machinery, so its provenance is \
+                         not something this run will assume"
                     ),
                 );
                 eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
@@ -8105,10 +8164,37 @@ fn check_adapter_signature(prog: &str, require_signed: bool) -> Result<(), i32> 
         }
     };
     match delulu_runtime::pqc::verify(&data, &sig, delulu_runtime::pqc::Policy::AcceptClassical, false) {
-        delulu_runtime::pqc::Verdict::Valid { signer, .. } => {
-            eprintln!("adapter: `{prog}` signature verifies (signer {signer})");
-            Ok(())
-        }
+        delulu_runtime::pqc::Verdict::Valid { signer, .. } => match expect_signer {
+            // DL1510 covers "tampered, wrong-key, or malformed" (Stage 6 deviation 8). A signature
+            // that verifies under a key the operator did not name IS the wrong-key case: these
+            // bytes are vouched for by somebody, and not by anybody this run accepts.
+            Some(want) if !signer.eq_ignore_ascii_case(want) => {
+                let d = Diagnostic::error(
+                    "DL1510",
+                    format!(
+                        "hardware adapter `{prog}` is signed by `{signer}`, and this run accepts \
+                         only `{want}` — the signature verifies, which means somebody vouched for \
+                         these bytes; it does not mean anybody you named did"
+                    ),
+                );
+                eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+                Err(1)
+            }
+            Some(want) => {
+                eprintln!("adapter: `{prog}` signature verifies under the pinned key {want}");
+                Ok(())
+            }
+            // Deliberately says what it does NOT mean. An unpinned "verifies" reads as an
+            // assurance, and on a `.sig` that travels beside the file it is not one.
+            None => {
+                eprintln!(
+                    "adapter: `{prog}` signature verifies (signer {signer}) — this proves these \
+                     bytes were signed by that key, NOT that the key is trusted. Pass \
+                     `--adapter-signer {signer}` to make this run refuse any other signer."
+                );
+                Ok(())
+            }
+        },
         // Present and bad: refused REGARDLESS of `require_signed`. Stage-6 deviation 8's rule.
         delulu_runtime::pqc::Verdict::Invalid { reason } => {
             let d = Diagnostic::error(

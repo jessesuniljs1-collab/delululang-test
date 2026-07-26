@@ -1,0 +1,26 @@
+[package]
+name = "station"
+version = "0.1.0"
+kind = "bin"
+
+# The whole program's authority is the JOIN of what it uses and what its dependencies are allowed
+# to use — never less. `Read` is this package's own (it opens the input); `Write` it both uses
+# (the console) and grants onward to `archive`.
+[authority]
+effects  = ["Read", "Write"]
+fs.read  = ["./data"]
+fs.write = ["./out"]
+
+[dependencies]
+# The diamond: both of these depend on `reading`, and `reading` is resolved once.
+#
+# Note the two ceilings differ. `policy` is granted nothing and would fail its own build if it
+# ever performed an effect; `archive` is granted exactly `Write`. A reviewer reading this file
+# learns which dependency can touch the disk without opening either of them.
+policy  = { path = "../policy",  authority = { effects = [] } }
+archive = { path = "../archive", authority = { effects = ["Write"] } }
+# `reading` is listed even though both of the above already depend on it. A transitive dependency
+# is NOT importable — a package may only name what it declares — so this line is what lets this
+# package's own code mention `Sample`. It is also the honest record: `station` uses `reading`
+# directly, and a manifest that left it out would say otherwise.
+reading = { path = "../reading", authority = { effects = [] } }

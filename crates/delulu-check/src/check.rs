@@ -27,7 +27,7 @@ use crate::unify::{InferCtx, UnifyError};
 /// naming a type the author never wrote. `resolve.rs` refuses the redefinition (DL0302) so the
 /// collision is reported where it is caused. See `HARDENING_CAMPAIGN.md` C11.
 pub const PRELUDE_BUILTINS: &[&str] =
-    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "range", "push"];
+    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "parse_float", "range", "push"];
 
 /// The builtin TYPE names [`Checker::lower_type`] intercepts before it ever consults user scope.
 ///
@@ -1512,6 +1512,10 @@ impl<'a> Checker<'a> {
             "parse_int" => {
                 check_args(self, ctx, &mut acc);
                 Some((Type::Option(Box::new(Type::Int)), acc))
+            }
+            "parse_float" => {
+                check_args(self, ctx, &mut acc);
+                Some((Type::Option(Box::new(Type::Float)), acc))
             }
             "range" => {
                 check_args(self, ctx, &mut acc);

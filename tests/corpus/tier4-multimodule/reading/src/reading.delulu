@@ -1,0 +1,22 @@
+module reading
+
+import reading.parse
+pub import reading.types
+
+// The package's front door. `reading.types` and `reading.parse` are separate compilation units in
+// the SAME package — the other sense of "multi-module": no dependency entry, no version, no
+// authority declaration of their own, but their own imports and their own privacy.
+
+pub fn decode(line: Str) -> Result[Sample, ReadErr] {
+  decode_line(line)
+}
+
+// Exported so `policy` and `archive` can each work with a `Sample` without either depending on
+// the other. That is the diamond this tier exists to exercise.
+pub fn sensor_of(s: Sample) -> Str {
+  s.sensor
+}
+
+pub fn celsius_of(s: Sample) -> Float {
+  s.celsius
+}

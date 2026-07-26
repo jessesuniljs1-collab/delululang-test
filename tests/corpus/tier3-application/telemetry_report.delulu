@@ -1,0 +1,85 @@
+module tier3
+
+// An application that reads real input and can fail in several distinguishable ways. The point
+// of the file is the error handling: DeluluLang has no exceptions, so every way this can fail is
+// visible in a return type, and the effect row is an honest summary because there is no invisible
+// control flow that could carry an effect past it.
+
+type Load = Missing | Unreadable | Empty
+
+// `?` propagates an `Err` unchanged, and only where the error types already line up. There is no
+// implicit conversion between `IoErr` and `Load`, which is why the `match` below is written out:
+// bridging the two is a decision, and decisions are visible.
+fn slurp(fs: Cap[FsRead], path: Str) -> Result[Str, Load] ! {Read} {
+  match fs.read_text(path) {
+    Err(_) => Err(Unreadable),
+    Ok(text) => {
+      if text.trim().len() == 0 {
+        Err(Empty)
+      } else {
+        Ok(text)
+      }
+    }
+  }
+}
+
+// Reading a number out of text uses `parse_float`, which answers `Option[Float]` and answers
+// `None` for anything `Float` cannot actually hold — `1.0e400` and the word `inf` included. That
+// is the same rule the lexer applies to a literal in source, so a value cannot enter the program
+// through a data file that could not have been written in it.
+fn temperature(line: Str) -> Option[Float] {
+  let parts = line.split("=")
+  if parts.len() != 2 {
+    None
+  } else {
+    match parts.get(1) {
+      None => None,
+      Some(v) => parse_float(v.trim())
+    }
+  }
+}
+
+fn hottest(text: Str) -> Option[Float] {
+  var best = 0.0
+  var found = false
+  let lines = text.split("\n")
+  var i = 0
+  while i < lines.len() {
+    match lines.get(i) {
+      None => { },
+      Some(line) => match temperature(line) {
+        None => { },
+        Some(c) => {
+          if found {
+            if c > best { best = c }
+          } else {
+            best = c
+            found = true
+          }
+        }
+      }
+    }
+    i = i + 1
+  }
+  if found { Some(best) } else { None }
+}
+
+fn describe(l: Load) -> Str {
+  match l {
+    Missing => "no telemetry file was named",
+    Unreadable => "the telemetry file could not be read",
+    Empty => "the telemetry file was empty"
+  }
+}
+
+fn main(root: Root) ! {Read, Write} {
+  let out = root.console()
+  let fs = root.fs_read("./data")
+  match slurp(fs, "telemetry.txt") {
+    Err(e) => out.println(describe(e)),
+    Ok(text) => match hottest(text) {
+      None => out.println("no readings found"),
+      Some(c) => out.println("hottest reading: " + str(c))
+    }
+  }
+}
