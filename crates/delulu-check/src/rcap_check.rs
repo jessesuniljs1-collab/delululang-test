@@ -54,6 +54,14 @@ struct Binding {
     /// is a dead binding (the unique reference may already have been transferred). The bool
     /// marks a consume carried in from a previous loop iteration, for a clearer message.
     consumed: Option<(Span, bool)>,
+    /// Did the AUTHOR write this binding's reference capability (`let xs: ref List[Int] = …`)?
+    ///
+    /// Only relevant to C64's argument lift (D62), and it is the whole reason that lift is safe to
+    /// have: an inferred binding holding a fresh literal may be lifted to `val` at a call, giving up
+    /// its write access. A binding whose `ref` the author wrote asked for write access explicitly,
+    /// and silently demoting it would override an annotation — which is the class of behaviour this
+    /// language exists to refuse. Such a binding keeps its annotation and its DL1603.
+    rcap_written: bool,
 }
 
 pub fn check_rcaps(
@@ -270,7 +278,7 @@ impl<'a> Pass<'a> {
                 .ty
                 .written_rcap()
                 .or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false });
         }
         let ret_dest = f
             .ret
@@ -291,7 +299,7 @@ impl<'a> Pass<'a> {
         self.push_scope();
         let root = Type::Root;
         let rcap = self.default_of(&root);
-        self.bind("test_root", Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None });
+        self.bind("test_root", Binding { rcap, ty: Some(root), fresh_lift: None, consumed: None, rcap_written: false });
         let ret_dest = self.default_of(&Type::Unit);
         self.walk_block_with_tail(&t.body, ret_dest, false);
         self.pop_scope();
@@ -385,7 +393,7 @@ impl<'a> Pass<'a> {
         // external reference is tag (spec §2 default + DL1607).
         self.bind(
             "self",
-            Binding { rcap: Some(Rcap::Ref), ty: Some(self_ty.clone()), fresh_lift: None, consumed: None },
+            Binding { rcap: Some(Rcap::Ref), ty: Some(self_ty.clone()), fresh_lift: None, consumed: None, rcap_written: false },
         );
         let key = format!("{actor}.{member}");
         let sig_params: Vec<Type> = match self.fn_types.get(&key) {
@@ -395,7 +403,7 @@ impl<'a> Pass<'a> {
         for (i, p) in params.iter().enumerate() {
             let ty = sig_params.get(i).cloned();
             let rcap = p.ty.written_rcap().or_else(|| ty.as_ref().and_then(|t| self.default_of(t)));
-            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None });
+            self.bind(&p.name.name, Binding { rcap, ty, fresh_lift: None, consumed: None, rcap_written: false });
         }
         let ret_dest = has_ret
             .then(|| match self.fn_types.get(&key) {
@@ -460,7 +468,10 @@ impl<'a> Pass<'a> {
                         self.mark_escaped(&path.segs[0].name);
                     }
                 }
-                self.bind(&name.name, Binding { rcap, ty: vty, fresh_lift, consumed: None });
+                self.bind(
+                    &name.name,
+                    Binding { rcap, ty: vty, fresh_lift, consumed: None, rcap_written: written.is_some() },
+                );
             }
             Stmt::Assign { target, value, span } => {
                 let vk = self.walk_expr(value);
@@ -537,6 +548,77 @@ impl<'a> Pass<'a> {
 
     /// The storability rule (spec §3): an unconsumed value stores through `alias(κ)`; a
     /// consumed/recovered value through its full κ; a fresh literal lifts per its contents.
+    /// Let a `let`-bound literal be passed to a `val` parameter (campaign finding **C64**, ruling
+    /// **D62**).
+    ///
+    /// `let p = P { x: 1 }` then `f(p)` was DL1603, while `f(P { x: 1 })` inlined was fine — and so
+    /// was the same value arriving from a call's return or a `match` binding. Four spellings of one
+    /// program, one of them refused, so the rule was protecting nothing: **extract-variable turned a
+    /// working program into a compile error.** The diagnostic even said the value "aliases as `ref`"
+    /// where there was one binding and one use.
+    ///
+    /// The machinery was already here and half-wired. A record or list literal evaluates to
+    /// `K::Fresh { lift_val, lift_iso }`, `Stmt::Let` carries that onto the binding as `fresh_lift`
+    /// (`Some` exactly while the binding still holds a fresh, never-escaped literal), and the lattice
+    /// already permits the lift — `rcaps.rs` asserts `subcap(Iso, Val)`. But `fresh_lift` was consulted
+    /// in exactly one place, `check_return_position`. Nothing asked it at an argument.
+    ///
+    /// **The lift costs the caller its write access, and that is what makes it sound.** A `val` is
+    /// immutable *and* sendable, so the callee may keep it — hand it to an actor, store it. If the
+    /// local could still be written afterwards, that guarantee would be invalidated behind the
+    /// callee's back. So the binding is demoted to `val` here: a later `p.x = 5` is refused, which is
+    /// the negative half of this fix and is witnessed.
+    ///
+    /// Scoped deliberately to `val` destinations. `iso`/`trn` mean *transfer*, and the right spelling
+    /// for that is `consume` — quietly consuming a binding because it happened to be fresh would be a
+    /// second, invisible way to move a unique reference.
+    fn lift_fresh_arg(
+        &mut self,
+        arg: &Expr,
+        dest: Rcap,
+        k: K,
+        captured: Option<(bool, bool)>,
+    ) -> K {
+        if dest != Rcap::Val {
+            return k;
+        }
+        // `fresh_lift` is `Some` only while the binding provably holds a fresh, unaliased literal.
+        // It was captured before `escape_arg` cleared it.
+        let Some((lift_val, lift_iso)) = captured else { return k };
+        if !lift_val {
+            return k; // the contents themselves forbid it; `check_storable` will say so
+        }
+        let Expr::Var { path, .. } = arg else { return k };
+        if path.segs.len() != 1 {
+            return k;
+        }
+        let name = path.segs[0].name.clone();
+        let natural = self.lookup(&name).and_then(|b| b.rcap).unwrap_or(Rcap::Ref);
+        // The caller gives up write access here. This is the load-bearing half.
+        if let Some(b) = self.lookup_mut(&name) {
+            b.rcap = Some(Rcap::Val);
+            b.fresh_lift = None;
+        }
+        K::Fresh { natural, lift_val, lift_iso }
+    }
+
+    /// The `fresh_lift` of a bare-variable expression, if it still has one. Read at argument sites
+    /// *before* the argument escapes (C64/D62).
+    fn fresh_lift_of(&self, e: &Expr) -> Option<(bool, bool)> {
+        let Expr::Var { path, .. } = e else { return None };
+        if path.segs.len() != 1 {
+            return None;
+        }
+        let b = self.lookup(&path.segs[0].name)?;
+        // An author-written rcap is never lifted: `let xs: ref List[Int] = [1]` asked for write
+        // access, and quietly turning it into `val` to make a call type-check would override an
+        // annotation. That case keeps its DL1603, and its message is honest about why.
+        if b.rcap_written {
+            return None;
+        }
+        b.fresh_lift
+    }
+
     fn check_storable(&mut self, k: K, dest: Rcap, span: Span, what: &str, dest_written: bool) {
         let ok = match k {
             K::Known(kk) => subcap(alias(kk), dest),
@@ -907,12 +989,17 @@ impl<'a> Pass<'a> {
                         }
                     }
                 }
-                let arg_ks: Vec<K> = args
+                // The captured `fresh_lift` is read BEFORE `escape_arg` clears it. Passing an argument
+                // IS an escape, so by the time the storability check below runs the binding no longer
+                // remembers it was a fresh literal — which is why C64's lift has to be captured here
+                // rather than looked up later.
+                let arg_ks: Vec<(K, Option<(bool, bool)>)> = args
                     .iter()
                     .map(|a| {
                         let k = self.walk_expr(a);
+                        let lift = self.fresh_lift_of(a);
                         self.escape_arg(a);
-                        k
+                        (k, lift)
                     })
                     .collect();
                 if let Expr::Var { path, .. } = &**callee {
@@ -932,9 +1019,12 @@ impl<'a> Pass<'a> {
                                     .ty
                                     .written_rcap()
                                     .or_else(|| sig_tys.get(i).and_then(|t| self.default_of(t)));
-                                if let (Some(d), Some(k), Some(a)) = (dest, arg_ks.get(i), args.get(i)) {
+                                if let (Some(d), Some((k, lift)), Some(a)) =
+                                    (dest, arg_ks.get(i), args.get(i))
+                                {
+                                    let k = self.lift_fresh_arg(a, d, *k, *lift);
                                     self.check_storable(
-                                        *k,
+                                        k,
                                         d,
                                         a.span(),
                                         &format!("argument `{}`", p.name.name),
@@ -1136,7 +1226,7 @@ impl<'a> Pass<'a> {
                 self.push_scope();
                 for p in params {
                     let rcap = p.ty.written_rcap();
-                    self.bind(&p.name.name, Binding { rcap, ty: None, fresh_lift: None, consumed: None });
+                    self.bind(&p.name.name, Binding { rcap, ty: None, fresh_lift: None, consumed: None, rcap_written: false });
                 }
                 self.walk_block_with_tail(body, None, false);
                 self.pop_scope();
@@ -1209,7 +1299,7 @@ impl<'a> Pass<'a> {
     fn bind_pattern(&mut self, p: &Pattern) {
         match p {
             Pattern::Bind(id) => {
-                self.bind(&id.name, Binding { rcap: None, ty: None, fresh_lift: None, consumed: None });
+                self.bind(&id.name, Binding { rcap: None, ty: None, fresh_lift: None, consumed: None, rcap_written: false });
             }
             Pattern::Variant { fields, .. } => {
                 for f in fields {

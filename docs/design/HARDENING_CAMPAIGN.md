@@ -130,7 +130,7 @@ deviations.
 | C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | OPEN |
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
 | C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
-| C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | OPEN — mechanism located, fix designed, not shipped |
+| C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | **CLOSED** — D62 (lifted at `val` arguments; the caller gives up write access, and an author-written `ref` is never lifted) |
 | C65 | **`delulu authority` could not read a `.dwx`** — the DISTRIBUTION format, whose whole claim is "authority that travels with the code". It fell through to the source loader and died with `stream did not contain valid UTF-8`, while `run` verified the same embedded manifest and printed the effects | **high** (the review surface cannot review what you ship) | **CLOSED** — D59 |
 | C66 | **`delulu fmt notes.txt` reported "reformatted 0 file(s)" and exited 0** — nothing done, success claimed, on a path the user named deliberately | medium (silent success — the C26 class) | **CLOSED** — D59 |
 | C67 | **The authority report's `pure fns:` list is unbounded** — on a 24,630-line program it is 2,536 names on ONE line of 28,242 characters, burying the six lines a reviewer came for. D38 capped diagnostics for exactly this reason; the review surface was never capped | medium (legibility of the review surface at scale — the C32 class) | **CLOSED** — D60 |
@@ -1914,58 +1914,39 @@ test** and requires the prose to match (and refuses the two stale phrasings by n
 `the_differential_fuzz_crate_still_does_not_run_the_wasm_backend` asserts the dependency list the
 prose now relies on. Observed failing against the old text.
 
-### C64 · A named record literal cannot be passed to a function — OPEN
+### C64 · A named record literal could not be passed to a function — CLOSED (D62)
 
-Found by writing the tier-3 and tier-4 programs Jesse asked to be run end to end. It was hit **three
-times in one session** while writing perfectly ordinary code, and each time worked around by
-restructuring — which is how a defect this ordinary stays invisible.
+Found by writing the tier-3 and tier-4 programs Jesse asked to be run end to end, and hit **three times
+in one session** while writing perfectly ordinary code — worked around each time by restructuring, which
+is how a defect this ordinary stays invisible.
 
 ```delulu
 type P { x: Int }
 fn f(p: P) -> Int { p.x }
 
 let p = P { x: 1 }
-f(p)            // DL1603: cannot store `ref` (aliases as `ref`) where `val` is required
+f(p)            // WAS DL1603: cannot store `ref` (aliases as `ref`) where `val` is required
 f(P { x: 1 })   // the SAME value, inlined: accepted
 ```
 
-**Characterized, because the boundary is the finding.** Refused: a `let`-bound **record literal** and
-a `let`-bound **list literal**. Accepted: the identical value arriving from a **call's return value**,
-from a **`match` binding**, a `let`-bound **variant** literal (`let s = A(7)`), a `let`-bound `Int`,
-field access on the let-bound record, and the literal **inlined at the call site**. So the restriction
-is not protecting an invariant about the value — four other spellings of the same program compile.
-It is an artifact of one binding form.
+Refused: a `let`-bound **record literal** and a `let`-bound **list literal**. Accepted: the identical
+value from a **call's return**, from a **`match` binding**, a `let`-bound **variant** literal, a
+`let`-bound `Int`, field access on the let-bound record, and the literal **inlined**. Four other
+spellings of the same program compiled, so the restriction was not protecting an invariant — it was an
+artifact of one binding form. The diagnostic also said the value *"aliases as `ref`"* where there was one
+binding and one use.
 
-**The diagnostic is also wrong about why.** It says the value "aliases as `ref`" where there is
-exactly one binding and one use. Nothing aliases.
+**Mechanism.** A record or list literal evaluates to `K::Fresh { lift_val, lift_iso }`; `Stmt::Let`
+carries that onto the binding as `fresh_lift` — whose doc comment says it is `Some` *"while the binding
+still holds a fresh, never-escaped literal"* — and the lattice already permits the lift
+(`subcap(Iso, Val)`). `fresh_lift` was consulted in exactly one place: `check_return_position`.
 
-**Mechanism, located.** A record or list literal evaluates to `K::Fresh { natural: Rcap::Ref,
-lift_val, lift_iso }` (`rcap_check.rs`) — freshly allocated, liftable to `val` or `iso` if its
-components allow. `Stmt::Let` **does** carry that lift onto the binding as `fresh_lift`, whose own
-doc comment says it is `Some` "while the binding still holds a fresh, never-escaped literal". But
-`fresh_lift` is consulted in exactly one place: `check_return_position`. **Nothing consults it at an
-argument position**, so the binding is checked at its natural `ref` and `subcap(Ref, Val)` is false.
-The lattice itself already permits the lift — `rcaps.rs` asserts `subcap(Iso, Val)`.
-
-**Fix designed, and deliberately not shipped in this pass.** At the argument-storability check, when
-the argument is a bare `Var` whose binding still has `fresh_lift = Some((lift_val, _))` and the
-destination is `Val` with `lift_val` true, accept — and then **demote that binding's own `rcap` to
-`Val` and clear `fresh_lift`**. The demotion is the load-bearing half and the reason this is not a
-one-line change: sharing a fresh aggregate immutably must cost the caller its own write access, or the
-callee's `val` (immutable, sendable) could be invalidated by a later write through the local `ref`.
-`Iso`/`Trn` destinations take the same path via `lift_iso` and additionally mark the binding consumed.
-
-The negative witness that must keep failing, and which any implementation has to carry:
-
-```delulu
-let p = P { x: 1 }
-f(p)        // lifts to val — caller gives up write access here
-p.x = 5     // must STILL be refused; the callee may be holding it as immutable
-```
-
-Not shipped because it loosens a **soundness-bearing** rule in the reference-capability system, and
-this campaign's own standard is that such a change gets its own pass with its witnesses written first,
-not a twenty-line patch at the tail of a long one. The same judgment C55 and C59 got.
+**Closed (D62)** by consulting it at `val` arguments too, with two guards that are the actual ruling:
+the lift **costs the caller its write access** (a `val` is immutable *and* sendable, so the callee may
+keep it), and an **author-written `ref` is never lifted**. That second guard was missing from the first
+implementation and an existing regression test — the one pinning the `val`-parameter laundering channel
+— failed. The test was right; the fix was wrong. Worth recording: a loosening of a soundness-bearing
+rule checked only by the author's own new tests is a loosening nobody has checked.
 
 ### C65 · The review surface could not review the shipped artifact — CLOSED (D59)
 
@@ -2070,7 +2051,7 @@ campaign exists to find.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **68 findings have been filed. 62 are closed, 1 is a published limit, 4 are open
+capstone, and this. **68 findings have been filed. 63 are closed, 1 is a published limit, 3 are open
 with a current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -2130,11 +2111,10 @@ findings that did not exist then, three of which were found by *writing the corp
   it could: there is no durable evidence of which key signed the driver that moved the machine, and
   neither existing home fits (the audit chain is a no-op without a sink; the DL1905 sign-off is
   written by a simulation, before an adapter has been chosen).
-- **C64 — a `let`-bound record or list literal cannot be passed to a function**, while the same
-  value inlined, returned from a call, or bound by a `match` can. **Mechanism located and fix
-  designed** (see above): `fresh_lift` is consulted only in return position, and the fix must demote
-  the caller's own write access when it lifts. Not shipped — it loosens a soundness-bearing rule and
-  wants its own pass. The highest-value item on this list for anyone actually writing DeluluLang.
+- **C64 — CLOSED by D62.** The lift happens at `val` arguments, the caller gives up its write
+  access (witnessed: a write after the lift is refused), and an author-written `ref` is never lifted —
+  that last clause exists because the first implementation lacked it and **an existing regression test
+  caught it**, which is the part worth remembering.
 - **C61 — `let _ = expr` is refused** although `_` is a valid match pattern, and discarding remains
   possible under any other name. Low: friction with no safety benefit.
 

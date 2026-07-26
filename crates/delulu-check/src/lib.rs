@@ -970,6 +970,99 @@ mod tests {
         assert!(e.contains(&"DL1603".to_string()), "{e:?}");
     }
 
+    // ----- C64 / D62: a named fresh literal is still a fresh literal -------------------
+
+    /// C64. `let p = P { x: 1 }` then `f(p)` was DL1603, while the SAME value inlined, returned from
+    /// a call, or bound by a `match` was fine. Four spellings of one program, one refused — so the
+    /// rule protected nothing, and extract-variable turned a working program into a compile error.
+    #[test]
+    fn a_let_bound_record_literal_may_be_passed_to_a_val_param() {
+        let c = check(
+            "module m
+type P { x: Int }
+fn f(p: P) -> Int { p.x }
+             fn g() -> Int {
+ let p = P { x: 1 }
+ f(p)
+}
+",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    #[test]
+    fn a_let_bound_list_literal_may_be_passed_to_a_val_param() {
+        let c = check(
+            "module m
+fn reader(xs: List[Int]) -> Int { xs.len() }
+             fn g() -> Int {
+ let xs = [1, 2, 3]
+ reader(xs)
+}
+",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    /// Passing it twice is fine: `val` is immutable and shareable, so two readers is exactly what it
+    /// is for. Only WRITING after the lift is a problem.
+    #[test]
+    fn a_lifted_fresh_literal_may_be_shared_more_than_once() {
+        let c = check(
+            "module m
+type P { x: Int }
+fn f(p: P) -> Int { p.x }
+             fn g() -> Int {
+ let p = P { x: 1 }
+ f(p) + f(p)
+}
+",
+        );
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+    }
+
+    /// **The load-bearing negative.** Lifting to `val` costs the caller its write access, and that is
+    /// what makes the lift sound: `val` is immutable AND sendable, so the callee may keep it — hand
+    /// it to an actor, store it. A later write through the local would invalidate a guarantee
+    /// somebody else is relying on, so it is refused.
+    #[test]
+    fn writing_a_fresh_literal_after_lifting_it_to_val_is_refused() {
+        let e = errors(
+            "module m
+type P { x: Int }
+fn f(p: P) -> Int { p.x }
+             fn g() -> Int {
+ var p = P { x: 1 }
+ let n = f(p)
+ p.x = 5
+ n
+}
+",
+        );
+        assert!(
+            e.iter().any(|c| c == "DL1603" || c == "DL1604"),
+            "a write after the lift must be refused: {e:?}"
+        );
+    }
+
+    /// And an AUTHOR-WRITTEN rcap is never lifted. `let xs: ref List[Int]` asked for write access;
+    /// quietly demoting it to `val` so a call type-checks would override an annotation, which is the
+    /// class of silent behaviour this language exists to refuse. This is the case that caught the
+    /// first version of the fix.
+    #[test]
+    fn an_explicitly_ref_binding_is_not_lifted_even_when_freshly_built() {
+        let e = errors(
+            "module m
+fn reader(xs: List[Int]) -> Int { xs.len() }
+             fn f() -> Int {
+ let xs: ref List[Int] = [1]
+ reader(xs)
+}
+",
+        );
+        assert!(e.contains(&"DL1603".to_string()), "an explicit `ref` keeps its meaning: {e:?}");
+    }
+
     #[test]
     fn a_fresh_literal_argument_satisfies_a_val_param() {
         let c = check(

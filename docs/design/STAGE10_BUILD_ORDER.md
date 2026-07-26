@@ -2481,6 +2481,50 @@ and has for some time — the deferral's stated blocker is gone, and what actual
 execution. The Stage-6 note is stale rather than wrong; it is left in place with this ruling as its
 cross-reference, because rewriting a build order's history is worse than annotating it.
 
+**D62 — Naming a value is not an act with consequences.** Closes C64. `let p = P { x: 1 }` followed by
+`f(p)` was DL1603, while the same value **inlined** at the call, **returned from a call**, or bound by a
+**`match`** was accepted. Four spellings of one program, one refused — so the rule protected nothing,
+and **extract-variable, the most basic refactoring there is, turned a working program into a compile
+error.** It was hit three times in one session writing the corpus C7 asked for, and worked around each
+time, which is how something this ordinary stays invisible.
+
+The diagnostic compounded it: *"cannot store `ref` (aliases as `ref`)"* about a value with exactly one
+binding and one use. Nothing aliased.
+
+**The machinery was already here and half-wired.** A record or list literal evaluates to
+`K::Fresh { lift_val, lift_iso }`; `Stmt::Let` carries that onto the binding as `fresh_lift`, whose own
+doc comment says it is `Some` *"while the binding still holds a fresh, never-escaped literal"*; and the
+lattice already permits the lift — `rcaps.rs` asserts `subcap(Iso, Val)`. But `fresh_lift` was consulted
+in exactly one place: `check_return_position`. **Nothing asked it at an argument.**
+
+RULED, and the second clause is what makes the first sound:
+
+1. At a call, an argument that is a bare variable still holding a live `fresh_lift` may be **lifted to
+   a `val` parameter**. Scoped to `val` deliberately: `iso`/`trn` mean *transfer*, and the spelling for
+   that is `consume` — quietly consuming a binding because it happened to be fresh would be a second,
+   invisible way to move a unique reference.
+2. **The lift costs the caller its write access.** A `val` is immutable *and* sendable, so the callee
+   may keep it — hand it to an actor, store it. The binding is demoted to `val` at the lift, so a later
+   `p.x = 5` is refused. That negative is witnessed, and it is the half a careless implementation drops.
+3. **An author-written rcap is never lifted.** `let xs: ref List[Int] = [1]` asked for write access, and
+   demoting it to make a call type-check would override an annotation — the class of silent behaviour
+   this language exists to refuse. Such a binding keeps its DL1603.
+
+Clause 3 exists because the first implementation did not have it and **an existing regression test
+caught it**: `passing_an_aliased_ref_list_where_the_param_defaults_val_is_dl1603`, which pins the
+laundering channel where a `val` parameter fed shared mutable state could later cross an actor boundary
+as "immutable". The test was right and the fix was wrong. Recorded because a loosening of a
+soundness-bearing rule that is *only* checked by the author's own new tests is a loosening nobody has
+checked — the suite disagreed, and the suite won.
+
+Five witnesses, three of them observed failing against the pre-fix checker. Full suite unchanged at
+1,317 passing; clippy at baseline. No new diagnostic number.
+
+**Still refused, and correctly:** `var out = in_order(l)` then `push(out, x)`. That value comes from a
+call's RETURN, not from a fresh literal — it arrives already `val`, and pushing into it is DL1604. The
+corpus program that documents this (`tier2-dsa/binary_tree.delulu`) was re-checked against this ruling
+and its comment is still accurate.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
