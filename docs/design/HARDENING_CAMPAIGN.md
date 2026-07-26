@@ -127,7 +127,7 @@ deviations.
 | C58 | **A `pub fn` whose signature names a type the package does not re-export builds clean alone and fails when consumed** — and the error is reported *inside the dependency's own source*, calling a type "not a type" in a file where it is in scope | medium (diagnostic blames the wrong line in the wrong package — the C53 family) | OPEN |
 | C59 | **A multi-package program cannot be RUN.** `delulu run` takes one file or a `.dwx`; `build` emits `interface.json` and nothing executable, so `kind = "bin"` is declarable and unexecutable — true of the shipped `examples/greeter/` too | **high** (the largest capability gap the campaign found) | **CLOSED** — D61 (`run <package-dir>`; source-flattened after the workspace check; a cross-module name collision is refused, not guessed) |
 | C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | OPEN — named by D53 |
-| C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | OPEN |
+| C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | **CLOSED** — D63 (`_` is unreadable because it lexes as its own token, not because a rule forbids it) |
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
 | C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
 | C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | **CLOSED** — D62 (lifted at `val` arguments; the caller gives up write access, and an author-written `ref` is never lifted) |
@@ -2051,7 +2051,7 @@ campaign exists to find.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **68 findings have been filed. 63 are closed, 1 is a published limit, 3 are open
+capstone, and this. **68 findings have been filed. 64 are closed, 1 is a published limit, 2 are open
 with a current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -2115,8 +2115,9 @@ findings that did not exist then, three of which were found by *writing the corp
   access (witnessed: a write after the lift is refused), and an author-written `ref` is never lifted —
   that last clause exists because the first implementation lacked it and **an existing regression test
   caught it**, which is the part worth remembering.
-- **C61 — `let _ = expr` is refused** although `_` is a valid match pattern, and discarding remains
-  possible under any other name. Low: friction with no safety benefit.
+- **C61 — CLOSED by D63.** `let _` / `var _` bind the ordinary name `_`, which cannot be read
+  because a bare `_` lexes as its own token and never as an identifier — write-only by construction
+  rather than by a rule someone could forget to enforce.
 
 ### Published limit
 

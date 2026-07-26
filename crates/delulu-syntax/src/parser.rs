@@ -1221,7 +1221,22 @@ impl Parser {
                 let mutable = matches!(self.peek(), TokenKind::KwVar);
                 let start = self.span();
                 self.bump();
-                let name = self.expect_decl_name();
+                // `let _ = expr` — evaluate and discard (campaign finding C61, ruling D63).
+                //
+                // `_` was refused here (DL0201 "expected a name") while being a perfectly good
+                // MATCH pattern, so the language had a discard in one position and not the other.
+                // The restriction prevented nothing: `let ignored = expr` already discards, so all
+                // it bought was a worse name. It is bound as the ordinary name `_`, which is safe
+                // because a bare `_` LEXES as `TokenKind::Underscore` and never as an `Ident` — so
+                // no expression can name it. Write-only by construction rather than by rule.
+                let name = if self.at(&TokenKind::Underscore) {
+                    let span = self.span();
+                    self.bump();
+                    self.panicking = false;
+                    Ident { name: "_".into(), span }
+                } else {
+                    self.expect_decl_name()
+                };
                 let ty = if self.eat(&TokenKind::Colon) { Some(self.parse_type()) } else { None };
                 self.expect(TokenKind::Eq);
                 let value = self.parse_expr();
@@ -2224,6 +2239,84 @@ mod tests {
 /// This used to resolve toward a single-variant sum, which made `type Meters = Int` declare a
 /// constructor named `Int` — so `fn g() -> Meters { Int }` type-checked — and made an alias to a
 /// bare type name unwritable except as `type Meters = (Int)`.
+#[cfg(test)]
+mod discard_binding_tests {
+    use super::*;
+
+    fn parse_ok(src: &str) -> Module {
+        let (tokens, ldiags) = crate::lexer::lex(0, src);
+        assert!(ldiags.is_empty(), "lex: {ldiags:?}");
+        let (m, diags) = parse(0, tokens);
+        assert!(!diags.iter().any(|d| d.is_error()), "parse: {diags:?}");
+        m
+    }
+
+    /// C61. `let _ = expr` was DL0201 "expected a name" while `_` was a perfectly good MATCH
+    /// pattern — a discard in one position and not the other. The restriction prevented nothing:
+    /// `let ignored = expr` already discards, so all it bought was a worse name.
+    #[test]
+    fn let_underscore_binds_the_discard_name() {
+        let m = parse_ok("module m
+fn f() -> Int {
+ let _ = 1
+ 2
+}
+");
+        let Item::Fn(f) = &m.items[0] else { panic!("expected a fn") };
+        let Stmt::Let { name, .. } = &f.body.stmts[0] else {
+            panic!("expected a let, got {:?}", f.body.stmts[0])
+        };
+        assert_eq!(name.name, "_");
+    }
+
+    /// Two discards in one scope must not collide — which is the point of allowing `_` at all.
+    #[test]
+    fn more_than_one_discard_in_a_scope_is_fine() {
+        let m = parse_ok("module m
+fn f() -> Int {
+ let _ = 1
+ let _ = 2
+ 3
+}
+");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        assert_eq!(f.body.stmts.len(), 3);
+    }
+
+    /// `var _` parses too. Pointless to write, but refusing it would need a special case, and a
+    /// special case is a rule someone has to remember.
+    #[test]
+    fn var_underscore_parses_as_well() {
+        let m = parse_ok("module m
+fn f() -> Int {
+ var _ = 1
+ 2
+}
+");
+        let Item::Fn(f) = &m.items[0] else { panic!() };
+        let Stmt::Let { name, mutable, .. } = &f.body.stmts[0] else { panic!() };
+        assert_eq!(name.name, "_");
+        assert!(*mutable);
+    }
+
+    /// And the property that makes binding it as a plain name SAFE rather than merely convenient:
+    /// a bare `_` lexes as `TokenKind::Underscore`, never as an `Ident`, so no expression can name
+    /// it. The discard is write-only by construction, not by a rule anyone could forget.
+    #[test]
+    fn a_bare_underscore_is_not_an_identifier_token() {
+        let (tokens, diags) = crate::lexer::lex(0, "_");
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(tokens[0].kind, TokenKind::Underscore);
+        // `_foo` is an ordinary identifier — only the bare one is the discard.
+        let (tokens, _) = crate::lexer::lex(0, "_foo");
+        assert!(
+            matches!(tokens[0].kind, TokenKind::Ident(ref n) if n == "_foo"),
+            "got {:?}",
+            tokens[0].kind
+        );
+    }
+}
+
 #[cfg(test)]
 mod alias_vs_sum_tests {
     use super::tests_support::*;

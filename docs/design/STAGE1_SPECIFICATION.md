@@ -640,6 +640,12 @@ a `root.http(...)` call without a net grant is a startup-time refusal with DL070
 Attenuation (`narrow`, and `Root` constructors) is pure: deriving weaker authority is not an
 effect; *using* authority is.
 
+**Discarding a value.** `let _ = expr` (and `var _`) evaluates `expr` and binds nothing readable.
+`_` is not an identifier: a bare underscore lexes as its own token, so no expression can name the
+binding — the discard is write-only because the grammar cannot spell a read, not because a rule
+forbids one. More than one `_` per scope is fine. This matches `_`'s long-standing role as a match
+pattern; refusing it here only made authors invent a name and wonder whether it mattered (ruling D63).
+
 Builtin free functions (prelude, all pure): `str(x)`, `len(x)`, `int(f)`, `float(i)`,
 `parse_int(s) -> Option[Int]`, `parse_float(s) -> Option[Float]`, `push(list, x)`,
 `range(lo, hi) -> List[Int]`.

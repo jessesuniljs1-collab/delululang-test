@@ -2525,6 +2525,25 @@ call's RETURN, not from a fresh literal — it arrives already `val`, and pushin
 corpus program that documents this (`tier2-dsa/binary_tree.delulu`) was re-checked against this ruling
 and its comment is still accurate.
 
+**D63 — A discard is a discard in both positions.** Closes C61. `let _ = expr` was **DL0201**
+("expected a name, found `_`") while `_` was a perfectly good **match** pattern. The language had a
+discard in one position and refused it in the other.
+
+The restriction bought nothing. `let ignored = expr` already discards — nothing forced the result to be
+used — so all the refusal achieved was making the reader invent a worse name and wonder whether it
+mattered.
+
+RULED: `let _` / `var _` bind the ordinary name `_`. **That is safe by construction rather than by
+rule**, which is the part worth stating: a bare `_` lexes as `TokenKind::Underscore` and never as an
+`Ident`, so no expression can name it. The discard is write-only because the grammar cannot spell a
+read, not because a check forbids one — and a property enforced by the token set is a property nobody
+can forget to check. Confirmed: `_` in expression position is still a parse error, and `_foo` remains
+an ordinary identifier.
+
+Four parser witnesses (three observed failing against the pre-fix parser) plus a conformance program.
+Two discards in one scope do not collide, which is the whole point of allowing it. No new diagnostic
+number; DL0201 keeps its meaning everywhere else a name is required.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

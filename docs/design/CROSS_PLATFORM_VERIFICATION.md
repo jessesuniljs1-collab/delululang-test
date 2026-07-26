@@ -46,7 +46,7 @@ Linux side, unrelated to any gate; it is tracked, not blocking.
 
 | Gate | Windows | Linux (WSL Ubuntu-20.04) |
 |---|---|---|
-| `cargo test --workspace` | ✅ **98 suites / 1,322 passed / 0 failed / 4 ignored** | ✅ **98 / 1,326 / 0 / 4** |
+| `cargo test --workspace` | ✅ **98 suites / 1,326 passed / 0 failed / 4 ignored** | ✅ **98 / 1,330 / 0 / 4** |
 | `clippy --workspace --all-targets` | ✅ **65** / 0 errors | ✅ **66** / 0 errors |
 | `conform --coverage` | ✅ 100% | (arch-independent) |
 | `conform --check-reference` | ✅ 24 chapters in sync | (arch-independent) |

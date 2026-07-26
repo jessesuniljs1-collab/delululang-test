@@ -1,0 +1,21 @@
+// anchors: ref.grammar.stmt
+module conf
+
+// `let _ = expr` evaluates and discards (campaign finding C61, ruling D63).
+//
+// `_` was already a valid MATCH pattern while being refused here, so the language had a discard in
+// one position and not the other. The restriction prevented nothing — `let ignored = expr` discards
+// just as well — so all it bought was a worse name.
+type P { x: Int, y: Int }
+
+fn side_effecting_pure_thing(p: P) -> Int {
+  p.x + p.y
+}
+
+fn discards() -> Int {
+  let _ = side_effecting_pure_thing(P { x: 1, y: 2 })
+  // More than one in a scope is fine: `_` is not a name anything can collide on.
+  let _ = 99
+  let kept = 7
+  kept
+}
