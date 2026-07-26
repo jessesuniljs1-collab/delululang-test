@@ -454,11 +454,46 @@ to ship as a sealed artifact, and code that isn't fully trusted to have been typ
 DeluluLang's answer is a WebAssembly backend with a deny-by-default host — the "sandbox floor" beneath
 the type-level guarantee.
 
-The interpreter is the **reference engine** — it defines the semantics. The WASM backend must produce
-**byte-identical** observable behavior; this "two-engine parity" is enforced by a differential fuzzer
-running tens of thousands of programs on both engines with zero divergence. When two independent
-implementations agree on 50,000 random programs, you have strong evidence the behavior is the
-specified one, not an accident.
+The interpreter is the **reference engine** — it defines the semantics, and it runs the whole
+language. The WASM backend is **a fragment of it**, and this chapter is worth nothing if you read it
+any other way.
+
+Inside that fragment the contract is **byte-identical** observable behaviour, and it is checked two
+ways: a curated parity set, and a generative fuzzer that runs **2,000** random console programs on
+both engines and compares their output exactly. Outside the fragment, a program does not miscompile —
+it is refused as **DL1201** and falls back to the interpreter, and that boundary is itself tested.
+Fail-closed at the edge is the property that makes a partial backend safe to have.
+
+**What "fragment" means concretely.** Measured, not estimated. What compiles today is roughly:
+`Int`/`Bool`/`Str` arithmetic and comparison, `if`/`else`, `let`, function calls, recursion, `match`
+on a sum type, string concatenation, `str(Int)`, and console output. That is enough to compile `fib`
+and `gcd` and print the answer.
+
+What is **DL1201** today includes `while` loops, `Float` arithmetic, record field access (outside
+`self.field`), `List` and `.len()`, the clock, every string method (`.trim`, `.split`), `.narrow`,
+`.fs_write`, embedded Python, and actor state outside the `Int`/actor-reference subset. Of the
+entry-point programs in this repository's corpus and examples, **6 of 19** compile to WASM, and
+**none of this book's own guide chapters do**.
+
+So: if you are writing ordinary DeluluLang — anything with a loop, a float, a record, or a list —
+**you are running on the interpreter.** The WASM path is for the sealed-artifact and untrusted-code
+cases described below, and it is grown deliberately, one construct at a time, with the boundary
+refusing rather than guessing.
+
+> **This paragraph used to say something false**, and the correction is left visible rather than
+> quietly swapped. It claimed parity was "enforced by a differential fuzzer running tens of thousands
+> of programs on both engines" and that "two independent implementations agree on 50,000 random
+> programs". The real number is 2,000, inside the fragment; the crate actually named the differential
+> fuzz harness (`delulu-fuzz`) depends on the checker and the interpreter and **cannot run the WASM
+> backend at all**. What it proves is something else, and something better — see the note below.
+> Campaign finding **C63**, ruling **D58**.
+
+**What `delulu-fuzz` actually proves, which is the more important claim.** For every program it
+generates and accepts, it runs it under a trace sink and asserts the observed runtime effects are a
+**subset of the effect row the checker computed for `main`** — the executable form of the
+Effect-Soundness theorem (`DELULU_CORE.md` Theorem 3, spec invariant 12). A single violation would be
+an effect escaping the type, which is the one bug this language exists to prevent. That evidence was
+real all along; the old paragraph credited it to the wrong property.
 
 The key architectural choice: **capability checks live host-side, not in guest code.** A compiled
 DeluluLang program running under WASM doesn't carry authority checks inside its compute loop — the
@@ -703,13 +738,35 @@ opens that door and **paints a bright line around it.**
 ```delulu
 foreign "c" lib mathlib {
   fn cos(x: Float) -> Float
+  fn sqrt(x: Float) -> Float
 }
 
-fn main(root: Root) ! {ForeignCall} {
-  let m = root.foreign[mathlib](root.foreign_load())?
-  let c = m.cos(1.0)         // row includes ForeignCall
+fn report(m: mathlib, out: Cap[Console]) -> Unit ! {Write, ForeignCall} {
+  out.println("cos(0.0)    = " + str(m.cos(0.0)))
+  out.println("sqrt(144.0) = " + str(m.sqrt(144.0)))
+}
+
+fn main(root: Root) ! {Write, ForeignCall} {
+  let out = root.console()
+  match root.foreign(root.foreign_load()) {
+    Err(_) => out.println("could not load the library"),
+    Ok(m) => report(m, out)
+  }
 }
 ```
+
+Two things in that shape are not obvious and are not decoration. **The handle's type is written on a
+parameter**, because `root.foreign` answers a fresh type variable and the lib type is *inferred* from
+how the handle is used — the grammar has no method type-argument syntax, so there is nowhere to write
+`[mathlib]` at the call site. And **loading is a `Result`**: a missing library or a missing symbol is
+an ordinary value the program handles, not a crash. Binding the handle is pure; only *calling* through
+it carries `ForeignCall`.
+
+> This block is a literal slice of `docs/book/samples/08_foreign.delulu`, which the test suite
+> compiles on every run. It has to be: the previous version of this example showed
+> `root.foreign[mathlib](root.foreign_load())?`, which does not compile — `Root` has no field
+> `foreign` — and it sat here uncaught because the Book's gate compared the *number* of code blocks to
+> the number of sample files and never once compared their contents. Campaign finding **C68**.
 
 Calling foreign code activates the `ForeignCall` effect — it shows up in the row, in `delulu
 authority`, under an explicit separator:

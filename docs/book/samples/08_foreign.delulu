@@ -3,6 +3,35 @@ module foreignish
 // The foreign boundary is honest: a foreign call carries ForeignCall, and the
 // authority report lists it under a separate heading — a hole in the proof,
 // enumerated rather than hidden.
+//
+// This file is what Chapter 14 shows, and it is compiled on every test run. The
+// chapter used to show `root.foreign[mathlib](root.foreign_load())?`, which does
+// not compile at all — `Root` has no field `foreign`, and `mathlib` is a type
+// rather than a value. Nothing caught it, because the Book gate compared the
+// NUMBER of code blocks to the number of sample files and never their contents
+// (campaign finding C68).
 foreign "c" lib mathlib {
-    fn cos(x: Float) -> Float
+  fn cos(x: Float) -> Float
+  fn sqrt(x: Float) -> Float
+}
+
+// The handle's type is written HERE, on a parameter, and that is the part worth
+// noticing: `root.foreign` answers a fresh type variable, and the lib type is
+// INFERRED from how the handle gets used. The grammar has no method
+// type-argument syntax, so there is nowhere to write `[mathlib]` at the call —
+// an annotated parameter is where it goes.
+fn report(m: mathlib, out: Cap[Console]) -> Unit ! {Write, ForeignCall} {
+  out.println("cos(0.0)    = " + str(m.cos(0.0)))
+  out.println("sqrt(144.0) = " + str(m.sqrt(144.0)))
+}
+
+fn main(root: Root) ! {Write, ForeignCall} {
+  let out = root.console()
+  // Binding the handle is PURE — deriving authority is not using it. Loading can
+  // fail (no such library, a missing symbol), and that is an ordinary `Result`
+  // the program handles rather than a crash.
+  match root.foreign(root.foreign_load()) {
+    Err(_) => out.println("could not load the library"),
+    Ok(m) => report(m, out)
+  }
 }

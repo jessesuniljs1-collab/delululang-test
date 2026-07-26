@@ -313,6 +313,58 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **`delulu authority` could not read a `.dwx` — the format you actually ship.** The artifact carries
+  its own authority manifest, and `delulu run` reads it, verifies it and announces the effects.
+  `delulu authority` on the same file fell through to the source loader and printed `stream did not
+  contain valid UTF-8`; so did `check`, `why` and `atlas`. The manifest was always there — nothing
+  asked it.
+
+  `authority <file>.dwx` now reports it through the **same** `read_and_verify` the runner uses, so the
+  review surface cannot vouch for bytes the runtime would refuse (a witness flips one byte and requires
+  DL1202 from both). The report is labelled a compiled artifact and states what it therefore cannot
+  tell you — no per-function purity, no `why` chain, because those need source. `check`/`why`/`atlas`
+  now name what the file is and point at the two commands that can read it, detecting it by content
+  (`\0asm`) rather than extension. And `delulu fmt notes.txt` no longer reports "reformatted 0 file(s)"
+  and exits 0 on a file it silently ignored. (C65, C66, ruling D59)
+
+- **The authority report was unreadable on a large program, and the Book's example gate counted instead
+  of compiling.** On a 24,630-line program the report correctly proved **2,536 of 2,539 functions pure**
+  and then printed all 2,536 names on one line of 28,242 characters, burying the six lines a reviewer
+  opened it for. D38 had already ruled this shape for diagnostics — bounded for the human, complete for
+  the machine — and the review surface never got it. Now 40 names plus the count, 912 bytes, with
+  `--json` unchanged and complete.
+
+  Separately, `every_book_code_block_has_a_checked_sample` asserted that the *number* of code blocks
+  equals the number of sample files and never compared their contents: 0 of 10 blocks were slices of any
+  sample. The consequence was in the worst chapter for it — 14, "Real adoption means calling C and
+  Python" — which taught `root.foreign[mathlib](root.foreign_load())?`. That does not compile: `Root`
+  has no field `foreign`, and the lib type is inferred from an annotated parameter because the grammar
+  has no method type-argument syntax. The sample backing it held only the `foreign` declaration, with no
+  call site. The chapter's block is now a literal slice of a sample that compiles on every run and was
+  executed against the real Windows C runtime, and a correspondence gate holds it there. (C67, C68,
+  ruling D60)
+
+- **The Book credited two-engine parity to a fuzzer that cannot run the second engine, at 25× the
+  real number.** Chapter 9 said parity was "enforced by a differential fuzzer running tens of
+  thousands of programs on both engines" and that "two independent implementations agree on 50,000
+  random programs". The generative two-engine sweep runs **2,000** programs, all inside the WASM
+  fragment, and `delulu-fuzz` — the crate actually named the differential fuzz harness — depends on
+  `delulu-check` and `delulu-runtime` and cannot run the WASM backend at all.
+
+  The chapter also never said the WASM backend is a **fragment**. It is, deliberately and safely:
+  outside it a program is refused as **DL1201** and falls back to the interpreter rather than
+  miscompiling, and `STAGE3_SPECIFICATION.md` has always said so. Measured, **6 of 19 entry-point
+  programs** in the corpus and examples compile to WASM — `.len`, `.trim`, `.split`, `.narrow`,
+  `.fs_write`, embedded Python and non-`Int` actor state are all DL1201, so **none of the Book's own
+  guide chapters build to a `.dwx`**. If you are writing ordinary DeluluLang you are on the
+  interpreter, and the chapter now says that in those words.
+
+  What `delulu-fuzz` does prove is stronger than the claim it was attached to: for every accepted
+  program, the observed runtime effects are a subset of the effect row the checker computed for
+  `main` — the executable Effect-Soundness theorem. The better evidence had been credited to the
+  weaker claim. Two gates now hold the prose to the code: one reads the parity harness's loop bound
+  and requires the Book to match it, one asserts `delulu-fuzz`'s dependency list. (C63, ruling D58)
+
 - **The interpreter's recursion bound is now part of the API, so embedding is a contract rather than a
   trap.** `delulu-runtime` capped recursion at 10,000 calls and reported DL0905 — but only if the native
   stack outlasted the bound. The `delulu` CLI reserves 512 MiB for exactly that reason; an embedder got

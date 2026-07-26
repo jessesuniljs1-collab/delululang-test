@@ -105,6 +105,45 @@ with a dependency (DL0303) while `build` on the same package succeeded — campa
 `authority` answers for a monorepo member. The row is left out rather than back-filled because these
 numbers were measured in one sitting and a table should say when it was taken, not be quietly patched.
 
+## A 25,000-line program, end to end (2026-07-26)
+
+**What this measures.** Not compile time by line count — that is above — but whether a large program
+actually *works*: checks, runs, produces the right answer, and can still be reviewed. Commissioned
+directly ("write a really big and complex program and test on cli and compiler").
+
+**Method.** Generated, never hand-written, and deliberately **interconnected** rather than N copies of
+one function: each of K entities has a record, an error sum, a validator, a normalizer, a scorer, a
+classifier, a reducer and an entry point, and entity *k* calls *k-1* and *k-2*; dispatch groups fan
+across every entity; a pipeline layer drives the dispatchers. A flat fan-out would measure parsing.
+Debug binary, warm cache. Generator kept out of the repo.
+
+| entities | lines | bytes | fns | types | `check` | `run` (incl. check) | result |
+|---|---|---|---|---|---|---|---|
+| 40 | 2,806 | 65 KB | 281 | 82 | — | — | ✅ correct |
+| 215 | 14,746 | 350 KB | 1,521 | 432 | **866 ms** | **907 ms** | ✅ correct |
+| 360 | **24,630** | 587 KB | 2,539 | 722 | **1,492 ms** | **1,652 ms** | ✅ correct |
+
+Linear in size across a 9× range (2,806 → 24,630 lines costs 866 → 1,492 ms of checking; the run adds
+~40–160 ms on top). All three sizes agree on the size-independent parts of the output, which is the
+cheap correctness cross-check: `reduce0 = 340` in every one.
+
+**What it produced.** `pipeline`, a severity sweep and a higher-order reduce, written to a file through
+a `Cap[FsWrite]`, with the console reporting each. Every dropped `--grant` refuses with DL0703 naming
+the missing capability.
+
+**The authority answer is the interesting one.** On the 24,630-line program `delulu authority` reports
+**effects `Read, Write`**, three capabilities, no secrets, and **2,536 of 2,539 functions proved pure** —
+the three that are not are `load_input`, `save_report` and `main`. That is the language's central claim
+at a scale where a human could not audit it by reading: 24,000 lines of business logic that provably
+cannot touch the world, and three functions that can.
+
+Printing it, however, was **28,242 characters on one line** — finding C67, fixed under D60 (bounded for
+the human at 40 names plus the count, complete in `--json`). The report is now 912 bytes.
+
+**On the WASM engine: none of it compiles**, by design — the program uses `while`, records and lists,
+all outside the fragment (see the Book's Chapter 9 and finding C63). It is DL1201 and falls back to the
+interpreter rather than miscompiling.
+
 ## Runtime: record field access is O(record width) per read (hardening P14, ruling D47c)
 
 The C48 fix was to the CHECKER's field lookup. The interpreter was checked for the same shape and does

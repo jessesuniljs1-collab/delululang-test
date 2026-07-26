@@ -46,14 +46,21 @@ Linux side, unrelated to any gate; it is tracked, not blocking.
 
 | Gate | Windows | Linux (WSL Ubuntu-20.04) |
 |---|---|---|
-| `cargo test --workspace` | ✅ **96 suites / 1,305 passed / 0 failed / 4 ignored** | ✅ **96 / 1,309 / 0 / 4** |
+| `cargo test --workspace` | ✅ **97 suites / 1,312 passed / 0 failed / 4 ignored** | ✅ **97 / 1,316 / 0 / 4** |
 | `clippy --workspace --all-targets` | ✅ **65** / 0 errors | ✅ **66** / 0 errors |
 | `conform --coverage` | ✅ 100% | (arch-independent) |
 | `conform --check-reference` | ✅ 24 chapters in sync | (arch-independent) |
 | macOS | **never run** — see §8 | |
 
 Both baselines held across the float-literal rule, the new `parse_float` prelude function, the
-four-package corpus tier, the adapter signer pin and the line-ending gate. The 4-test Linux surplus is the platform-specific
+four-package corpus tier, the adapter signer pin, the line-ending gate, artifact review (D59), the
+bounded authority report and the Book correspondence gate (D60).
+
+**Interoperability was exercised on Windows for the first time as part of this pass**, and is recorded
+here because it is a platform-specific claim: DeluluLang called into the real Windows C runtime
+(`msvcrt.dll` and `ucrtbase.dll` both giving `cos(0.0)=1.0`, `sqrt(144.0)=12.0`, `pow(2.0,10.0)=1024.0`)
+and into real embedded CPython (`statistics.pstdev` = 2.0, a `base64` round trip). The C path on macOS —
+`libm.dylib` — remains the one FFI arm that has never compiled or run anywhere (§8). The 4-test Linux surplus is the platform-specific
 set Windows skips, and matches the historical delta.
 
 **A reproduction trap, recorded because it cost a run.** Building for Linux *in the Windows working

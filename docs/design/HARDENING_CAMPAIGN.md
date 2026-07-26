@@ -129,6 +129,12 @@ deviations.
 | C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | OPEN — named by D53 |
 | C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | OPEN |
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
+| C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
+| C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | OPEN — mechanism located, fix designed, not shipped |
+| C65 | **`delulu authority` could not read a `.dwx`** — the DISTRIBUTION format, whose whole claim is "authority that travels with the code". It fell through to the source loader and died with `stream did not contain valid UTF-8`, while `run` verified the same embedded manifest and printed the effects | **high** (the review surface cannot review what you ship) | **CLOSED** — D59 |
+| C66 | **`delulu fmt notes.txt` reported "reformatted 0 file(s)" and exited 0** — nothing done, success claimed, on a path the user named deliberately | medium (silent success — the C26 class) | **CLOSED** — D59 |
+| C67 | **The authority report's `pure fns:` list is unbounded** — on a 24,630-line program it is 2,536 names on ONE line of 28,242 characters, burying the six lines a reviewer came for. D38 capped diagnostics for exactly this reason; the review surface was never capped | medium (legibility of the review surface at scale — the C32 class) | **CLOSED** — D60 |
+| C68 | **The Book's code-block gate compared COUNTS, never contents** — 0 of 10 blocks were slices of any compiled sample, and Chapter 14 taught `root.foreign[mathlib](...)`, which does not compile at all. The sample backing it held only the `foreign` declaration: the safe half, no call site | **high** (the one chapter for calling C taught a form the compiler rejects — C37's shape in the front door) | **CLOSED** — D60 (block corrected and made a literal slice; correspondence gate added) |
 
 ### C1 · Two unbounded loops in the Stage-1 parser — CLOSED (ruling D24)
 
@@ -1865,11 +1871,180 @@ deviations against it. **Surface-syntax morphs now exist (D35)** but only for si
 through a `//! morph:` pragma — package sources must be canonical, and plugin-delivered morphs and
 per-reader LSP view morphs are not built.
 
+### C63 · The Book credited the wrong harness, at 25× the real number — CLOSED (D58)
+
+Found by answering a direct question from Jesse: *"both cli and compiler are working and have all the
+features of DeluluLang right?"* The answer is no, and the interesting part is not the gap — the gap is
+deliberate and the Stage-3 spec states it plainly — but that **the Book described it as something
+else.**
+
+**What is actually true, and is fine.** The interpreter is the reference engine and runs the whole
+language. The WASM backend compiles a **fragment**, and outside it a program is refused as **DL1201**
+and falls back to the interpreter rather than miscompiling. `STAGE3_SPECIFICATION.md` says "the
+**pure-Int/Bool fragment**" and "constructs outside the fragment are `CompileError` (DL1201-class)";
+`crates/delulu-wasm/tests/conformance_parity.rs` says "byte-identical observable output for every
+program **inside its fragment**" and tests the boundary itself. Fail-closed at the edge is what makes
+a partial backend safe to have. Measured over corpus + examples: **6 of 19 entry-point programs
+compile to WASM.** `.len`, `.trim`, `.split`, `.narrow`, `.fs_write`, embedded Python and actor state
+outside the `Int`/actor-reference subset are all DL1201 — so **none of the Book's own guide chapters
+build to a `.dwx`.**
+
+**What the Book said.** *"this 'two-engine parity' is enforced by a differential fuzzer running tens of
+thousands of programs on both engines with zero divergence. When two independent implementations agree
+on 50,000 random programs…"* Three things wrong:
+
+1. The generative two-engine sweep runs **2,000** programs, not 50,000 — a 25× overstatement of a
+   headline number.
+2. The crate actually *named* the differential fuzz harness, `delulu-fuzz`, depends on
+   `delulu-check` and `delulu-runtime` and **cannot run the WASM backend at all**. Its dependency
+   list is the proof.
+3. "Two independent implementations" invites the reader to think the second one runs the language.
+   It runs about a third of the corpus and none of the Book's teaching examples, and the chapter
+   never said so.
+
+**And the evidence it misattributed is better than the claim it was attached to.** What `delulu-fuzz`
+proves is that for every accepted program the observed runtime effects are a **subset of the effect
+row the checker computed for `main`** — the executable Effect-Soundness theorem, invariant 12. That is
+the one bug this language exists to prevent, and the old paragraph spent it on backend parity.
+
+**Fixed (D58).** Chapter 9 now states the fragment, quotes 2,000, names DL1201 as the boundary, and
+carries the correction visibly rather than swapping the number silently. Two gates:
+`book.rs::the_books_engine_parity_number_matches_the_harness` reads the loop bound **out of the parity
+test** and requires the prose to match (and refuses the two stale phrasings by name), and
+`the_differential_fuzz_crate_still_does_not_run_the_wasm_backend` asserts the dependency list the
+prose now relies on. Observed failing against the old text.
+
+### C64 · A named record literal cannot be passed to a function — OPEN
+
+Found by writing the tier-3 and tier-4 programs Jesse asked to be run end to end. It was hit **three
+times in one session** while writing perfectly ordinary code, and each time worked around by
+restructuring — which is how a defect this ordinary stays invisible.
+
+```delulu
+type P { x: Int }
+fn f(p: P) -> Int { p.x }
+
+let p = P { x: 1 }
+f(p)            // DL1603: cannot store `ref` (aliases as `ref`) where `val` is required
+f(P { x: 1 })   // the SAME value, inlined: accepted
+```
+
+**Characterized, because the boundary is the finding.** Refused: a `let`-bound **record literal** and
+a `let`-bound **list literal**. Accepted: the identical value arriving from a **call's return value**,
+from a **`match` binding**, a `let`-bound **variant** literal (`let s = A(7)`), a `let`-bound `Int`,
+field access on the let-bound record, and the literal **inlined at the call site**. So the restriction
+is not protecting an invariant about the value — four other spellings of the same program compile.
+It is an artifact of one binding form.
+
+**The diagnostic is also wrong about why.** It says the value "aliases as `ref`" where there is
+exactly one binding and one use. Nothing aliases.
+
+**Mechanism, located.** A record or list literal evaluates to `K::Fresh { natural: Rcap::Ref,
+lift_val, lift_iso }` (`rcap_check.rs`) — freshly allocated, liftable to `val` or `iso` if its
+components allow. `Stmt::Let` **does** carry that lift onto the binding as `fresh_lift`, whose own
+doc comment says it is `Some` "while the binding still holds a fresh, never-escaped literal". But
+`fresh_lift` is consulted in exactly one place: `check_return_position`. **Nothing consults it at an
+argument position**, so the binding is checked at its natural `ref` and `subcap(Ref, Val)` is false.
+The lattice itself already permits the lift — `rcaps.rs` asserts `subcap(Iso, Val)`.
+
+**Fix designed, and deliberately not shipped in this pass.** At the argument-storability check, when
+the argument is a bare `Var` whose binding still has `fresh_lift = Some((lift_val, _))` and the
+destination is `Val` with `lift_val` true, accept — and then **demote that binding's own `rcap` to
+`Val` and clear `fresh_lift`**. The demotion is the load-bearing half and the reason this is not a
+one-line change: sharing a fresh aggregate immutably must cost the caller its own write access, or the
+callee's `val` (immutable, sendable) could be invalidated by a later write through the local `ref`.
+`Iso`/`Trn` destinations take the same path via `lift_iso` and additionally mark the binding consumed.
+
+The negative witness that must keep failing, and which any implementation has to carry:
+
+```delulu
+let p = P { x: 1 }
+f(p)        // lifts to val — caller gives up write access here
+p.x = 5     // must STILL be refused; the callee may be holding it as immutable
+```
+
+Not shipped because it loosens a **soundness-bearing** rule in the reference-capability system, and
+this campaign's own standard is that such a change gets its own pass with its witnesses written first,
+not a twenty-line patch at the tail of a long one. The same judgment C55 and C59 got.
+
+### C65 · The review surface could not review the shipped artifact — CLOSED (D59)
+
+Found by answering Jesse's question about whether the features work on "both CLI and compiler". A
+`.dwx` is what you *ship*, and Chapter 9's claim for it is "authority that travels with the code":
+
+```
+$ delulu build frag.delulu --target wasm -o frag.dwx
+ok: wrote `frag.dwx` (1163 bytes) with authority embedded as `delulu:authority`
+$ delulu run frag.dwx --grant console
+running `frag.dwx` — authority verified; declared effects: Write
+$ delulu authority frag.dwx
+error: cannot read `frag.dwx`: stream did not contain valid UTF-8
+```
+
+The runner reads the embedded manifest and announces it. The command whose entire job is "everything
+this program can do" fell through to the source loader and died on an encoding error. **The manifest
+was always there; nothing asked it.** `check`, `why` and `atlas` did the same.
+
+**Fixed (D59).** `authority <file>.dwx` reports the embedded manifest through the **same**
+`read_and_verify` the runner uses — so the review surface cannot vouch for bytes the runtime would
+refuse, and a witness proves a one-byte tamper yields **DL1202 from both**. The report is labelled a
+COMPILED ARTIFACT and says what it therefore cannot tell you (no per-function purity, no `why` chain —
+those need source). `check`/`why`/`atlas` now name what the file is and point at the two commands that
+can read it, and detection is by content (`\0asm`) rather than extension, so a renamed artifact gets
+the same answer.
+
+### C66 · `fmt` reported success on a file it ignored — CLOSED (D59)
+
+`delulu fmt notes.txt` printed "reformatted 0 file(s), 0 already canonical, 0 refused" and exited
+**0**. `collect_delulu_files` keeps only `*.delulu`, so an explicitly named file of any other kind was
+silently dropped — nothing done, success claimed, which is C26 exactly. A *directory* filtering to
+nothing is different and still fine: filtering is the entire point of walking one.
+
+### C67 · The review surface is unreadable at scale — CLOSED (D60)
+
+Found by running the 24,630-line generated program Jesse asked for. The authority report proved
+**2,536 of 2,539 functions pure** — correct, and exactly the language's central claim — and printed
+all 2,536 names on **one line of 28,242 characters**, burying the six lines a reviewer opened it for.
+
+D38 already ruled this shape for diagnostics: *bounded for the human, complete for the machine.* The
+review surface never got the same treatment. `--json` was already complete (`authority.pure_functions`
+carries every name), so the fix is only to the human channel: 40 names and the count. **28,536 bytes →
+912.** The count was always the load-bearing part anyway — "2,536 of 2,539 cannot touch the world" is
+the finding; the roll-call is not.
+
+### C68 · The Book's gate counted its examples instead of compiling them — CLOSED (D60)
+
+`every_book_code_block_has_a_checked_sample` asserts that the NUMBER of ` ```delulu ` blocks equals the
+number of files in `docs/book/samples/`. It never compared a block to a file. Measured: **0 of 10
+blocks were slices of any sample.** They were paraphrases, and paraphrases are not compiled.
+
+**The live consequence.** Chapter 14 — *"Real adoption means calling C and Python"* — showed:
+
+```
+let m = root.foreign[mathlib](root.foreign_load())?
+```
+
+which does not compile: `Root` has no field `foreign` (DL0405), and `mathlib` is a type, not a value.
+There is no method type-argument syntax in the grammar, so the lib type cannot be written at the call
+at all — it is **inferred from an annotated parameter**, which the chapter never showed. And
+`08_foreign.delulu`, the sample "backing" it, contained only the `foreign` declaration: the safe half,
+with no call site. So the single chapter a developer reads to call C taught a form the compiler
+rejects, and the gate built to prevent that was counting.
+
+This is C37's shape — existence proved, correspondence not — in the front door rather than in a test.
+
+**Fixed (D60).** The chapter's block is now a **literal slice** of `08_foreign.delulu`, which compiles
+on every run and which was additionally **executed against the real Windows CRT** (`ucrtbase.dll`:
+`cos(0.0)=1.0`, `sqrt(144.0)=12.0`). A new gate checks *correspondence* for blocks declared backed,
+and refuses the broken form inside any code block by name. The gate is scoped to what has been
+converted so far and says so, because the honest state is partial — a gate claiming more than it checks
+is the thing being fixed.
+
 ## 6. Close-out (2026-07-26, ruling D50)
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **62 findings have been filed. 56 are closed, 1 is a published limit, 4 are open
+capstone, and this. **68 findings have been filed. 61 are closed, 1 is a published limit, 5 are open
 with a current status, and 1 does not reproduce.**
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -1930,6 +2105,11 @@ findings that did not exist then, three of which were found by *writing the corp
   it could: there is no durable evidence of which key signed the driver that moved the machine, and
   neither existing home fits (the audit chain is a no-op without a sink; the DL1905 sign-off is
   written by a simulation, before an adapter has been chosen).
+- **C64 — a `let`-bound record or list literal cannot be passed to a function**, while the same
+  value inlined, returned from a call, or bound by a `match` can. **Mechanism located and fix
+  designed** (see above): `fresh_lift` is consulted only in return position, and the fix must demote
+  the caller's own write access when it lifts. Not shipped — it loosens a soundness-bearing rule and
+  wants its own pass. The highest-value item on this list for anyone actually writing DeluluLang.
 - **C61 — `let _ = expr` is refused** although `_` is a valid match pattern, and discarding remains
   possible under any other name. Low: friction with no safety benefit.
 

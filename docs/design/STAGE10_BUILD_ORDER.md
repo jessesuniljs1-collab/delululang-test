@@ -2353,6 +2353,95 @@ before the renormalization was staged.
 The renormalization is why this pass's diff on `HARDENING_CAMPAIGN.md` is large; the semantic change
 is small and the rest is line endings. Said here so nobody has to work that out from the diff.
 
+**D58 — A partial backend is fine; describing it as a whole one is not.** Closes C63, found by
+Jesse asking whether the CLI and compiler have all the language's features.
+
+They do not, and the architecture is right: the interpreter is the reference engine and runs
+everything; the WASM backend compiles a **fragment** and refuses the rest as **DL1201** rather than
+miscompiling. That is stated in `STAGE3_SPECIFICATION.md` ("the pure-Int/Bool fragment"), tested at
+its boundary, and fail-closed. Measured: **6 of 19 entry-point programs** in corpus + examples compile
+to WASM; `.len`, `.trim`, `.split`, `.narrow`, `.fs_write`, embedded Python and non-Int actor state
+are all DL1201, so **none of the Book's own guide chapters build to a `.dwx`.**
+
+The Book's Chapter 9 said parity was "enforced by a differential fuzzer running tens of thousands of
+programs on both engines" and that "two independent implementations agree on 50,000 random programs".
+The generative two-engine sweep is **2,000** programs, inside the fragment. `delulu-fuzz` — the crate
+named the differential fuzz harness — depends on `delulu-check` and `delulu-runtime` and cannot run
+the WASM backend at all; what it proves is that observed effects are a subset of the checker's row for
+`main`, the executable Effect-Soundness theorem. **The better evidence was credited to the weaker
+claim.**
+
+RULED: the chapter states the fragment, quotes the real number, names DL1201 as the boundary, and
+keeps the correction visible instead of swapping a digit. Two gates, because a number in prose that
+no test reads is how this happened: one reads the loop bound out of the parity harness and requires
+the prose to agree (refusing both stale phrasings by name), one asserts `delulu-fuzz`'s dependency
+list still matches what the prose now claims about it. Both observed failing against the old text.
+
+This is the third time the campaign has found a law or claim that proves less than a reader takes it
+to prove (C37, C43, now C63) — and the first where the shortfall was in the front door rather than in
+a test.
+
+**D59 — The review surface must be able to review what you ship.** Closes C65 and C66, found by
+answering Jesse's question of whether the features work on "both CLI and compiler".
+
+A `.dwx` is the distribution format and Chapter 9's claim for it is "authority that travels with the
+code". `delulu run frag.dwx` read the embedded `delulu:authority` manifest, verified it and announced
+the effects. `delulu authority frag.dwx` — the command whose entire job is "everything this program can
+do" — fell through to the source loader and printed `stream did not contain valid UTF-8`. So did
+`check`, `why` and `atlas`. **The manifest was always there. Nothing asked it.**
+
+RULED:
+
+1. `authority <file>.dwx` reports the embedded manifest, through the **same `read_and_verify` the
+   runner uses**. That sharing is the ruling, not an implementation note: a review surface that
+   vouched for bytes the runtime refuses would be worse than one that cannot read them at all. A
+   witness flips one byte and requires **DL1202 from both**.
+2. The report is labelled a COMPILED ARTIFACT and states what it therefore **cannot** tell you — no
+   per-function purity, no `why` chain, because those need source. What travels is the ceiling.
+3. `check`/`why`/`atlas` name what the file is and point at the two commands that can read it.
+   Detection is by **content** (`\0asm`), not extension, so a renamed artifact gets the same answer —
+   an extension is not evidence.
+4. **C66:** `fmt` given an explicitly named file it will not format now refuses instead of reporting
+   "reformatted 0 file(s)" and exiting 0. A *directory* that filters to nothing is unchanged, because
+   filtering is the whole point of walking one.
+
+No new diagnostic numbers minted.
+
+**D60 — A gate that counts is not a gate.** Closes C67 and C68. Both were found by running the work
+Jesse asked for — a 24,630-line program, and interoperability with C and Python — and both are the
+same defect in different clothes: something that looked verified and was not.
+
+**C67, the review surface at scale.** On 24,630 lines the authority report proved **2,536 of 2,539
+functions pure**, which is the language's central claim landing exactly as designed, and then printed
+all 2,536 names on **one line of 28,242 characters**, burying the six lines a reviewer opened the
+report for. D38 had already ruled this shape for diagnostics — *bounded for the human, complete for the
+machine* — and the review surface never received it. `--json` was already complete, so only the human
+channel changed: 40 names plus the count, **28,536 bytes → 912**. The count carries the meaning; the
+roll-call never did.
+
+**C68, the Book's examples.** `every_book_code_block_has_a_checked_sample` asserted that the *number*
+of ` ```delulu ` blocks equals the number of sample files. Measured: **0 of 10 blocks were slices of any
+sample.** The consequence was live and in the worst possible chapter — 14, *"Real adoption means
+calling C and Python"* — which showed `root.foreign[mathlib](root.foreign_load())?`. That does not
+compile: `Root` has no field `foreign`, `mathlib` is a type rather than a value, and the grammar has no
+method type-argument syntax, so the lib type cannot be written at the call at all. It is **inferred from
+an annotated parameter**, which the chapter never showed. The sample "backing" it held only the
+`foreign` declaration — the safe half, no call site.
+
+RULED: the chapter's block is a **literal slice** of `08_foreign.delulu`, which compiles on every run
+and which was additionally **executed against the real Windows CRT** — `ucrtbase.dll` giving
+`cos(0.0)=1.0` and `sqrt(144.0)=12.0`. A correspondence gate checks slice-hood for blocks declared
+backed and refuses the broken form inside any code block by name, while the prose stays free to quote
+it in order to explain the correction. The gate is scoped to what has been converted and **says so**:
+nine blocks are still paraphrases, and a gate claiming otherwise is the defect being fixed.
+
+**This is the third and fourth instance of one pattern, and it is now the campaign's clearest lesson.**
+C37 (a coverage law proving a witness exists rather than that it exercises its anchor), C43 (a
+cross-parser law checking one direction over four examples), C63 (parity credited to a harness that
+cannot run the second engine), and C68 (a doc gate comparing counts) are all the same question left
+unasked: **what would this gate look like if the thing it guards were completely wrong?** For C68 the
+answer was "identical, as long as nobody added or removed a file."
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

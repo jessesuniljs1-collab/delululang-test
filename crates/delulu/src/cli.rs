@@ -942,6 +942,21 @@ fn cmd_fmt(args: &[String]) -> i32 {
             eprintln!("no such file or directory: {}", p.display());
             return 2;
         }
+        // A FILE named explicitly is a request about that file. `collect_delulu_files` keeps only
+        // `*.delulu`, so `fmt notes.txt` and `fmt app.dwx` used to walk away with "reformatted 0
+        // file(s)" and exit 0 — nothing done, success reported, on an argument the user chose
+        // deliberately (campaign finding C66, the C26 class). A DIRECTORY is different: filtering is
+        // the whole point of walking one, and a tree with no `.delulu` in it is not a mistake.
+        if p.is_file() && p.extension().and_then(|e| e.to_str()) != Some("delulu") {
+            eprintln!(
+                "error: `{}` is not a `.delulu` source file, so `fmt` has nothing to do with it",
+                p.display()
+            );
+            if looks_like_dwx(&p.display().to_string()) {
+                eprintln!("note: that is a compiled `.dwx` artifact — format the source it was built from");
+            }
+            return 2;
+        }
         if let Err(e) = collect_delulu_files(p, &mut files) {
             eprintln!("cannot read {}: {e}", p.display());
             return 2;
@@ -1867,10 +1882,103 @@ fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
             Ok((map, id, src))
         }
         Err(e) => {
+            // A compiled artifact handed to a source command produced a raw
+            // `stream did not contain valid UTF-8`, which tells the reader nothing about what they
+            // did or what to do instead — the C27 class of surfacing an OS-level error where a
+            // diagnostic belongs (campaign finding C65). The `.dwx` is the DISTRIBUTION format, so
+            // this is the mistake a reviewer makes first.
+            if looks_like_dwx(file) {
+                eprintln!(
+                    "error: `{file}` is a compiled `.dwx` artifact, not DeluluLang source, and this \
+                     command reads source"
+                );
+                eprintln!(
+                    "note: the artifact carries its own authority — `delulu authority {file}` reports \
+                     what it declares, and `delulu run {file}` verifies and executes it"
+                );
+                return Err(2);
+            }
             eprintln!("error: cannot read `{file}`: {e}");
             Err(2)
         }
     }
+}
+
+/// `authority <file>.dwx`: report the artifact's own embedded `delulu:authority` manifest.
+///
+/// This goes through the SAME `read_and_verify` the runner uses, so the report cannot describe an
+/// artifact the runner would reject: a tampered or missing section is DL1202 and a version mismatch
+/// is DL1204, here exactly as at run time. A review surface that would vouch for bytes the runtime
+/// refuses is worse than no review surface (finding C65, ruling D59).
+///
+/// What it reports is the artifact's DECLARATION, which is a different thing from a source report and
+/// is labelled as such: there is no source in a `.dwx`, so there are no spans, no per-function purity
+/// and no `why` chain — those need the code. What travels is the ceiling.
+fn authority_artifact(file: &str, opts: &Opts) -> i32 {
+    let bytes = match std::fs::read(file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let artifact = match delulu_wasm::read_and_verify(&bytes) {
+        Ok(a) => a,
+        Err(e) => {
+            let d = Diagnostic::error(e.code(), format!("`{file}`: {}", e.message()));
+            print_diagnostics("authority", &d_slice(&d), &SourceMap::new(), None, opts.json);
+            return 1;
+        }
+    };
+    let effects = artifact.authority.get("effects").map(strs).unwrap_or_default();
+    let secrets = artifact.authority.get("secrets").map(strs).unwrap_or_default();
+    if opts.json {
+        let report = json!({
+            "artifact": file,
+            "kind": "dwx",
+            "verified": true,
+            "authority": artifact.authority,
+            "summary": { "effects": effects.len(), "secrets": secrets.len(), "errors": 0 },
+        });
+        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+        note_json_emitted();
+        return 0;
+    }
+    println!("Authority of `{file}` — a COMPILED ARTIFACT's own embedded manifest, re-verified:");
+    println!(
+        "  effects:      {}",
+        if effects.is_empty() { "(none — provably pure)".to_string() } else { effects.join(", ") }
+    );
+    println!("  secrets:      {}", if secrets.is_empty() { "(none)".to_string() } else { secrets.join(", ") });
+    for key in ["fs_read", "fs_write", "net", "declassify"] {
+        let v = artifact.authority.get(key).map(strs).unwrap_or_default();
+        if !v.is_empty() {
+            println!("  {key:<13} {}", v.join(", "));
+        }
+    }
+    // Said plainly, because the source report says more and a reader comparing the two must know
+    // why: this is the declaration that ships, not an analysis of code that is not here.
+    println!(
+        "  note:         a `.dwx` carries no source, so there is no per-function purity and no \
+         `why` chain — run those against the `.delulu` it was built from"
+    );
+    0
+}
+
+/// One diagnostic as a slice, for the `print_diagnostics` signature.
+fn d_slice(d: &Diagnostic) -> [Diagnostic; 1] {
+    [d.clone()]
+}
+
+/// Is `file` a compiled WebAssembly artifact rather than source?
+///
+/// Checked by CONTENT (the `\0asm` magic) and not only by extension: a `.dwx` renamed to `.delulu`
+/// is the same mistake and deserves the same answer, and an extension is not evidence.
+fn looks_like_dwx(file: &str) -> bool {
+    if let Ok(bytes) = std::fs::read(file) {
+        return bytes.starts_with(b"\0asm");
+    }
+    false
 }
 
 /// Whether a `--json` envelope has already reached stdout in this process.
@@ -1969,6 +2077,13 @@ fn cmd_authority(rest: &[String]) -> i32 {
     };
     if std::path::Path::new(&file).is_dir() {
         return authority_package(&file, &opts);
+    }
+    // A `.dwx` is the format you SHIP, and the Book's claim for it is "authority that travels with
+    // the code". The review command could not read it (campaign finding C65): it fell through to
+    // the source loader and died on invalid UTF-8, while `run` happily verified the same embedded
+    // manifest and announced the effects. The manifest was always there; nothing asked it.
+    if looks_like_dwx(&file) {
+        return authority_artifact(&file, &opts);
     }
     let (map, id, src) = match load(&file) {
         Ok(x) => x,
@@ -2360,7 +2475,30 @@ fn render_authority(report: &Json) -> String {
         }
     }
     let pure = strs(&report["pure_functions"]);
-    let _ = writeln!(out, "  pure fns:     {}", if pure.is_empty() { "(none)".to_string() } else { pure.join(", ") });
+    // Bounded for the human, complete for the machine — D38's rule, which this line did not follow
+    // (campaign finding C67). On a 24,600-line program the list is 2,536 names on ONE line of 28,242
+    // characters, which buries the six lines a reviewer actually came for: the effects, the
+    // capabilities, the secrets and the exposure verdict. `--json` carries every name in
+    // `authority.pure_functions` and is deliberately uncapped, so nothing is lost — the count is what
+    // carries the meaning here anyway ("2,536 of 2,539 functions cannot touch the world"), not the
+    // roll-call.
+    const MAX_HUMAN_PURE_FNS: usize = 40;
+    let _ = writeln!(
+        out,
+        "  pure fns:     {}",
+        if pure.is_empty() {
+            "(none)".to_string()
+        } else if pure.len() <= MAX_HUMAN_PURE_FNS {
+            pure.join(", ")
+        } else {
+            format!(
+                "{} total — showing {}: {}, … (`--json` lists every one under `authority.pure_functions`)",
+                pure.len(),
+                MAX_HUMAN_PURE_FNS,
+                pure.iter().take(MAX_HUMAN_PURE_FNS).cloned().collect::<Vec<_>>().join(", ")
+            )
+        }
+    );
     // Foreign code lives OUTSIDE the effect proof. With none declared, the report is byte-identical
     // to Stage 3 (criterion 7); with foreign blocks, they list under the mandated separator line.
     // The custody label (Stage 5): where authority lives when this program runs. The JSON report
