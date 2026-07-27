@@ -291,6 +291,8 @@ struct Opts {
     /// both. Naming the key is what turns the check into a control. Implies the signature is
     /// required.
     adapter_signer: Option<String>,
+    /// Directory for the hash-chained record of the driver-provenance decision (C60).
+    adapter_record: Option<String>,
     sim_step: Option<u64>,
     /// `--signoff <path>`: on a successful `sim` run, write the artifact's content hash as the
     /// approved-for-hardware record (invariant 48).
@@ -342,6 +344,7 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         require_signed_adapter: false,
         adapter_artifact: None,
         adapter_signer: None,
+        adapter_record: None,
         sim_step: None,
         signoff: None,
         approved: None,
@@ -410,6 +413,12 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             "--adapter-signer" => {
                 if i + 1 < rest.len() {
                     opts.adapter_signer = Some(rest[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--adapter-record" => {
+                if i + 1 < rest.len() {
+                    opts.adapter_record = Some(rest[i + 1].clone());
                     i += 1;
                 }
             }
@@ -6729,12 +6738,18 @@ fn cmd_run(rest: &[String]) -> i32 {
                 };
                 let args: Vec<String> = parts.map(str::to_string).collect();
                 // Provenance, BEFORE the driver is spawned (D52, closing the gap D23 named).
-                if let Err(code) = check_adapter_signature(
+                let (prov, gate) = check_adapter_signature(
                     prog,
                     opts.adapter_artifact.as_deref(),
                     opts.require_signed_adapter,
                     opts.adapter_signer.as_deref(),
-                ) {
+                );
+                // Recorded BEFORE the refusal is acted on, so a run stopped because the driver was
+                // signed by the wrong key leaves the evidence that it happened (C60).
+                if let Err(code) = record_adapter_provenance(&prov, opts.adapter_record.as_deref()) {
+                    return code;
+                }
+                if let Some(code) = gate {
                     return code;
                 }
                 match delulu_runtime::adapter::ProcessAdapter::spawn(adapter, prog, &args) {
@@ -8333,6 +8348,90 @@ fn _json_marker() -> Json {
     json!({})
 }
 
+/// What a run decided about its driver's provenance.
+///
+/// D53 made the decision correct and printed it to stderr; C60 was that it went nowhere else. A run
+/// that commanded machinery left no durable, queryable evidence of WHICH KEY signed the driver that
+/// moved it — the one question an incident actually asks.
+struct AdapterProvenance {
+    artifact: String,
+    /// `verified-pinned` / `verified` / `unsigned` / `unverifiable` / `refused-*`.
+    decision: &'static str,
+    signer: Option<String>,
+    pinned: Option<String>,
+}
+
+/// Record a provenance decision in the broker's hash-chained audit log.
+///
+/// **Deliberately not a new artifact.** The chain, its tamper-evidence, its day-file rotation and
+/// its reader (`delulu audit verify|tail|query`) already exist and are already the place an operator
+/// looks; C60's real gap was that nothing wrote the adapter decision INTO it. A second format would
+/// have been a second thing to verify, and two records of one machine is how they disagree.
+///
+/// **Refusals are recorded too, and that is the point.** A run that was stopped because the driver
+/// was signed by the wrong key is exactly the event worth keeping.
+///
+/// **There is deliberately NO default sink, and the reason is a property of hash chains.** A chain
+/// has exactly one writer: `AuditLog::open` reads the head, then appends against it. The broker is a
+/// single long-lived process and satisfies that. `delulu run` is short-lived and many can run at
+/// once, so defaulting to the shared `~/.delulu/audit` made every concurrent run a second writer.
+/// That is not theoretical — the first version of this function did default there, and the test
+/// suite (which runs in parallel) produced a chain that failed `delulu audit verify` with a
+/// `prev_hash` break plus two physically interleaved half-lines. An operator naming a sink is
+/// choosing one they control; guessing one for them corrupts the log this feature exists to create.
+///
+/// Returns `Err` when the sink could not be written: asking for a record and silently not getting
+/// one is the failure this project refuses everywhere else.
+fn record_adapter_provenance(prov: &AdapterProvenance, explicit_dir: Option<&str>) -> Result<(), i32> {
+    let Some(dir) = explicit_dir.map(std::path::PathBuf::from) else {
+        eprintln!(
+            "warning: this driver's provenance decision ({}) was printed but NOT recorded. Pass `--adapter-record <dir>` to keep durable evidence of which key signed the driver that moved the machine.",
+            prov.decision
+        );
+        return Ok(());
+    };
+    let mut authority = serde_json::Map::new();
+    authority.insert("decision".into(), serde_json::json!(prov.decision));
+    if let Some(sig) = &prov.signer {
+        authority.insert("signer".into(), serde_json::json!(sig));
+    }
+    if let Some(pin) = &prov.pinned {
+        authority.insert("pinned_signer".into(), serde_json::json!(pin));
+    }
+    let entry = delulu_broker::AuditEntry {
+        seq: 0,
+        ts: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0),
+        actor_node: None,
+        action: "adapter.provenance".to_string(),
+        target: Some(prov.artifact.clone()),
+        authority: Some(serde_json::Value::Object(authority)),
+        span: None,
+        decision: prov.decision.to_string(),
+    };
+    let written = delulu_broker::AuditLog::open(&dir)
+        .and_then(|mut log| delulu_broker::AuditSink::append(&mut log, entry));
+    match written {
+        Ok(rec) => {
+            eprintln!("adapter: provenance recorded in {} (seq {}, {})", dir.display(), rec.seq, rec.hash);
+            Ok(())
+        }
+        Err(e) => {
+            let d = Diagnostic::error(
+                "DL1511",
+                format!(
+                    "this run was told to record its driver's provenance in `{}` and could not ({e}) — a record you asked for and did not get is worse than none, because you would believe you had it",
+                    dir.display()
+                ),
+            );
+            eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
+            Err(1)
+        }
+    }
+}
+
 /// Verify a hardware adapter's provenance before it is spawned (ruling D52, extended by D53).
 ///
 /// D52 closed the gap D23 named — "an operator-supplied SUBPROCESS with NO signature check" — by
@@ -8364,16 +8463,16 @@ fn _json_marker() -> Json {
 /// - Without `--adapter-signer` there is **no trust policy** — the same limit spec §10 states for
 ///   plugins. Unpinned, `--require-signed-adapter` stops accidents and unsigned drivers; it does
 ///   not stop an adversary who can write files next to the driver.
-/// - The verdict is printed, not recorded. A run leaves no durable, queryable evidence of which key
-///   signed the driver that moved the machine — campaign finding **C60**, open: the broker's audit
-///   chain is a no-op without a sink, and the DL1905 sign-off record is written by a SIMULATION,
-///   before any adapter has been chosen.
+/// - Without `--adapter-record <dir>` the verdict is printed and **not kept**, and the run says so.
+///   With it, the decision (refusals included) is appended to the broker's hash-chained audit log —
+///   ruling D66, closing campaign finding **C60**. There is no default sink: a hash chain has one
+///   writer and a short-lived `delulu run` is not one (**C69**).
 fn check_adapter_signature(
     prog: &str,
     artifact: Option<&str>,
     require_signed: bool,
     expect_signer: Option<&str>,
-) -> Result<(), i32> {
+) -> (AdapterProvenance, Option<i32>) {
     // Pinning a key is itself a demand for a signature: an operator who names the acceptable signer
     // has not said "unsigned is fine".
     let require_signed = require_signed || expect_signer.is_some();
@@ -8387,6 +8486,13 @@ fn check_adapter_signature(
     // When nothing resolves to a readable file this does not quietly pass — "the checker could not
     // tell" must never read as "yes".
     let prog = artifact.unwrap_or(prog);
+    // Every exit below returns one of these, so no decision path can forget to be recordable.
+    let rec = |decision: &'static str, signer: Option<String>| AdapterProvenance {
+        artifact: prog.to_string(),
+        decision,
+        signer,
+        pinned: expect_signer.map(str::to_string),
+    };
     if !std::path::Path::new(prog).is_file() {
         if require_signed {
             let d = Diagnostic::error(
@@ -8399,7 +8505,7 @@ fn check_adapter_signature(
                 ),
             );
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
-            return Err(1);
+            return (rec("refused-unverifiable", None), Some(1));
         }
         eprintln!(
             "warning: hardware adapter `{prog}` is not a readable file (an interpreter-hosted \
@@ -8407,7 +8513,7 @@ fn check_adapter_signature(
              Pass `--adapter-artifact <path>` to name the driver, or `--require-signed-adapter` to \
              refuse this."
         );
-        return Ok(());
+        return (rec("unverifiable", None), None);
     }
     let sig_path = format!("{prog}.sig");
     let sig = match std::fs::read(&sig_path) {
@@ -8423,20 +8529,20 @@ fn check_adapter_signature(
                     ),
                 );
                 eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
-                return Err(1);
+                return (rec("refused-unsigned", None), Some(1));
             }
             eprintln!(
                 "warning: hardware adapter `{prog}` is UNSIGNED (no `{sig_path}`) — its provenance is \
                  unknown. Pass `--require-signed-adapter` to refuse this."
             );
-            return Ok(());
+            return (rec("unsigned", None), None);
         }
     };
     let data = match std::fs::read(prog) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("error: cannot read hardware adapter `{prog}` to verify its signature: {e}");
-            return Err(2);
+            return (rec("refused-unreadable", None), Some(2));
         }
     };
     match delulu_runtime::pqc::verify(&data, &sig, delulu_runtime::pqc::Policy::AcceptClassical, false) {
@@ -8454,11 +8560,11 @@ fn check_adapter_signature(
                     ),
                 );
                 eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
-                Err(1)
+                (rec("refused-wrong-signer", Some(signer.clone())), Some(1))
             }
             Some(want) => {
                 eprintln!("adapter: `{prog}` signature verifies under the pinned key {want}");
-                Ok(())
+                (rec("verified-pinned", Some(signer.clone())), None)
             }
             // Deliberately says what it does NOT mean. An unpinned "verifies" reads as an
             // assurance, and on a `.sig` that travels beside the file it is not one.
@@ -8468,7 +8574,7 @@ fn check_adapter_signature(
                      bytes were signed by that key, NOT that the key is trusted. Pass \
                      `--adapter-signer {signer}` to make this run refuse any other signer."
                 );
-                Ok(())
+                (rec("verified", Some(signer.clone())), None)
             }
         },
         // Present and bad: refused REGARDLESS of `require_signed`. Stage-6 deviation 8's rule.
@@ -8481,12 +8587,12 @@ fn check_adapter_signature(
                 ),
             );
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
-            Err(1)
+            (rec("refused-bad-signature", None), Some(1))
         }
         delulu_runtime::pqc::Verdict::Refused { code, reason } => {
             let d = Diagnostic::error(code, format!("hardware adapter `{prog}`: {reason}"));
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
-            Err(1)
+            (rec("refused-policy", None), Some(1))
         }
     }
 }

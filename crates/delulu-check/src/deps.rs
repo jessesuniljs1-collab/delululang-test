@@ -359,6 +359,11 @@ pub fn check_workspace(ws: &Workspace) -> Program {
     // Modules that have already had a re-export cycle reported (DL1005), to avoid duplicates.
     let mut reported_cycles: HashSet<usize> = HashSet::new();
 
+    // Which module owns each source file, so a diagnostic that lands outside the module being
+    // checked can be attributed to the module whose text it actually is (C58).
+    let file_owner: HashMap<delulu_diag::FileId, usize> =
+        (0..n).map(|gi| (ws.modules[gi].unit.file, gi)).collect();
+
     for gi in 0..n {
         let unit = &ws.modules[gi].unit;
         let p = ws.modules[gi].pkg;
@@ -471,7 +476,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
 
         let table = DeclTable { types: gtypes.clone(), type_ix, user_effects, fns, consts, foreigns, actors: HashMap::new(), fn_order };
         let result = check_module(&unit.module, &table);
-        diagnostics.extend(result.diags.iter().cloned());
+        diagnostics.extend(reframe_foreign_scope_errors(&result.diags, gi, ws, &owned_types, &file_owner));
         for (name, f) in result.facts {
             facts.insert(format!("{m}::{name}"), f);
         }
@@ -481,9 +486,133 @@ pub fn check_workspace(ws: &Workspace) -> Program {
         call_owner.insert(m.clone(), owner);
     }
 
+    // One fact reported once. A type in a diamond's shared dependency is lowered afresh for every
+    // path that reaches it, so the SAME failure arrived up to four times (C58: 25 errors at 14
+    // distinct locations). Deduplication is by code + message + primary span, which is exactly
+    // "this is the same sentence about the same place" and never merges two different facts.
+    let mut seen: HashSet<(&'static str, String, Option<Span>)> = HashSet::new();
+    diagnostics.retain(|d| seen.insert((d.code, d.message.clone(), d.primary_span())));
+
     let entry_module = ws.root_entry_module();
     let type_names = crate::ty::TypeNameList(gtypes.iter().map(|d| d.name.clone()).collect());
     Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names }
+}
+
+/// Re-frame diagnostics that landed in **another module's file** (C58).
+///
+/// A `pub fn`'s signature is lowered in the scope of whoever IMPORTS it, not where it was written.
+/// So when an importer cannot see a type that signature names, `lower_type` reports `unknown type`
+/// at the span where the text lives — inside the dependency's own source, which checked clean on its
+/// own, and in a file where that type IS in scope. The rule is right (the importer genuinely cannot
+/// use that function); the report blamed the wrong line, in the wrong package, for a reason that
+/// reads as false.
+///
+/// Those reports are collapsed into ONE diagnostic per source module, at the import that brought the
+/// signature in, naming where the type is declared and both ends it can be fixed from.
+///
+/// **Only the case it can identify is rewritten.** A foreign-file diagnostic that is not a tagged
+/// `DL0301` is passed through untouched — dropping a diagnostic nobody classified is the fail-open
+/// branch this project refuses everywhere else.
+fn reframe_foreign_scope_errors(
+    diags: &[Diagnostic],
+    gi: usize,
+    ws: &Workspace,
+    owned_types: &[Vec<(String, TypeDefId, bool)>],
+    file_owner: &HashMap<delulu_diag::FileId, usize>,
+) -> Vec<Diagnostic> {
+    let unit = &ws.modules[gi].unit;
+    let mut out: Vec<Diagnostic> = Vec::new();
+    // The type names this module could not see, first-seen order (determinism), paired with the
+    // modules whose signatures wanted them.
+    let mut missing: Vec<String> = Vec::new();
+    let mut sources: Vec<String> = Vec::new();
+
+    // Where a type is actually declared. "unknown type" is false here in the way that matters —
+    // the type exists — so saying where turns a dead end into one edit.
+    let home_of = |name: &str| -> Option<String> {
+        (0..ws.modules.len())
+            .find(|&mi| owned_types[mi].iter().any(|(tn, _, _)| tn == name))
+            .map(|mi| ws.modules[mi].unit.name.clone())
+    };
+
+    for d in diags {
+        let elsewhere = d.primary_span().map(|s| s.file != unit.file).unwrap_or(false);
+        let named = d.args.iter().find(|(k, _)| k == "type").map(|(_, v)| v.clone());
+        match (d.code, named) {
+            // Reported inside SOMEBODY ELSE'S file: that file checked clean on its own and the type
+            // is in scope there. Collapsed into one diagnostic at the import, below.
+            ("DL0301", Some(name)) if elsewhere => {
+                if !missing.contains(&name) {
+                    missing.push(name);
+                }
+                if let Some(src) = d.primary_span().and_then(|s| file_owner.get(&s.file)) {
+                    let m = ws.modules[*src].unit.name.clone();
+                    if !sources.contains(&m) {
+                        sources.push(m);
+                    }
+                }
+            }
+            // In this module's own file the span is already right, so the error STAYS THERE and only
+            // gains the answer. Rewriting it to point at an import would trade a precise location
+            // for a general one — and a plain typo (`Smaple`) has no home, so it is left exactly as
+            // it was rather than decorated with a guess.
+            ("DL0301", Some(name)) => {
+                let mut d = d.clone();
+                if let Some(home) = home_of(&name) {
+                    d.message = format!(
+                        "{} — `{name}` is declared in `{home}`, which is not in scope here; add `import {home}`, or have the module you import re-export it with `pub import {home}`",
+                        d.message
+                    );
+                }
+                out.push(d);
+            }
+            _ => out.push(d.clone()),
+        }
+    }
+
+    if !missing.is_empty() {
+        let list = missing.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
+        let from = sources.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
+        let homes: Vec<String> = {
+            let mut h: Vec<String> = Vec::new();
+            for n in &missing {
+                if let Some(x) = home_of(n) {
+                    if !h.contains(&x) {
+                        h.push(x);
+                    }
+                }
+            }
+            h
+        };
+        let advice = match homes.first() {
+            Some(home) => format!(
+                "an imported signature is resolved in YOUR scope, so a name the dependency can see is not automatically one you can see. Add `import {home}` here, or re-export it with `pub import {home}` in the module you import"
+            ),
+            None => "no module in this workspace declares them".to_string(),
+        };
+        let where_ = match homes.len() {
+            0 => String::new(),
+            1 => format!(", declared in `{}`", homes[0]),
+            _ => format!(", declared in {}", homes.iter().map(|h| format!("`{h}`")).collect::<Vec<_>>().join(" and ")),
+        };
+        let mut d = Diagnostic::error(
+            "DL0301",
+            format!("`{}` cannot see {list}{where_} — named by signatures it imports from {from}: {advice}", unit.name),
+        );
+        for name in &missing {
+            d = d.with_arg("type", name.clone());
+        }
+        // Point at the import that brought a failing signature in. If the module reached it some
+        // other way, fall back to the module header rather than inventing a location.
+        let at = sources
+            .iter()
+            .find_map(|src| unit.module.imports.iter().find(|i| i.path.dotted() == *src))
+            .map(|i| (i.span, "this import does not bring those types with it"))
+            .unwrap_or((unit.module.name.span(), "this module"));
+        out.push(d.with_span(at.0, at.1));
+    }
+
+    out
 }
 
 // ===== per-package authority ====================================================================
@@ -1125,5 +1254,126 @@ mod tests {
         write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn bad() -> Int { helper() }\n");
         let prog = check_workspace(&resolve_workspace(&dir));
         assert!(err_codes(&prog).iter().any(|c| c == "DL0301"), "helper must NOT leak through a plain import: {:?}", prog.diagnostics);
+    }
+
+    // ===== C58 · the report lands where the reader can act on it ============================
+    //
+    // A `pub fn`'s signature is lowered in the scope of whoever IMPORTS it, so an importer that
+    // cannot see a type the signature names produced `unknown type` at a span inside the
+    // DEPENDENCY'S own file — which had checked clean, and where the type is in scope.
+
+    /// Sets up the exact shape: `inner` declares the type, `facade` uses it in a `pub fn` but only
+    /// plain-imports it, `root` imports `facade` **and calls it**.
+    ///
+    /// The call matters. A signature is lowered per call site, so merely importing a function whose
+    /// parameter you cannot name costs nothing — the failure appears when you use it, which is the
+    /// right laziness and the reason the first version of this fixture checked clean.
+    fn unexported_type_workspace(name: &str) -> std::path::PathBuf {
+        let dir = scratch(name);
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/inner.delulu", "module p.inner\npub type Sample { v: Int }\n");
+        write(
+            &dir,
+            "src/facade.delulu",
+            "module p.facade\nimport p.inner\npub fn widen(s: Sample) -> Int { s.v }\n",
+        );
+        write(&dir, "src/root.delulu", "module p\nimport p.facade\npub fn go() -> Int { widen(0) }\n");
+        dir
+    }
+
+    #[test]
+    fn an_unexported_type_in_a_public_signature_is_not_blamed_on_the_file_it_is_in_scope_in() {
+        let dir = unexported_type_workspace("c58blame");
+        let ws = resolve_workspace(&dir);
+        let prog = check_workspace(&ws);
+        let root_file = ws.modules.iter().find(|m| m.unit.name == "p").expect("root module").unit.file;
+        let facade_file = ws.modules.iter().find(|m| m.unit.name == "p.facade").expect("facade").unit.file;
+
+        // Still refused — the rule is right and unchanged.
+        assert!(err_codes(&prog).iter().any(|c| c == "DL0301"), "{:?}", prog.diagnostics);
+
+        // But nothing is reported against `p.facade`, which checks clean on its own and where
+        // `Sample` is genuinely in scope. That was the whole defect.
+        let blamed_facade: Vec<&Diagnostic> = prog
+            .diagnostics
+            .iter()
+            .filter(|d| d.is_error() && d.primary_span().map(|s| s.file == facade_file).unwrap_or(false))
+            .collect();
+        assert!(blamed_facade.is_empty(), "the dependency's own file must not be blamed: {blamed_facade:?}");
+
+        // It is reported against the module that actually cannot compile.
+        assert!(
+            prog.diagnostics
+                .iter()
+                .any(|d| d.is_error() && d.primary_span().map(|s| s.file == root_file).unwrap_or(false)),
+            "the importer must be told: {:?}",
+            prog.diagnostics
+        );
+    }
+
+    #[test]
+    fn the_report_says_where_the_type_lives_and_how_to_reach_it() {
+        let dir = unexported_type_workspace("c58advice");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        let text = prog.diagnostics.iter().map(|d| d.message.clone()).collect::<Vec<_>>().join("\n");
+        assert!(text.contains("`Sample`"), "must name the type: {text}");
+        assert!(text.contains("p.inner"), "must say where it is declared: {text}");
+        assert!(text.contains("pub import p.inner"), "must state the fix: {text}");
+    }
+
+    /// The advice has to be true. Applying exactly what the message says must build clean —
+    /// otherwise the diagnostic is confident and wrong, which is worse than terse.
+    #[test]
+    fn applying_the_suggested_re_export_builds_clean() {
+        let dir = unexported_type_workspace("c58fix");
+        write(
+            &dir,
+            "src/facade.delulu",
+            "module p.facade\npub import p.inner\npub fn widen(s: Sample) -> Int { s.v }\n",
+        );
+        // With the re-export in place `Sample` reaches the root, so the call can be written the way
+        // it always should have been — which is the point: the advice restores the whole type.
+        write(
+            &dir,
+            "src/root.delulu",
+            "module p\nimport p.facade\npub fn go() -> Int { widen(Sample { v: 1 }) }\n",
+        );
+        let prog = check_workspace(&resolve_workspace(&dir));
+        assert!(err_codes(&prog).is_empty(), "the suggested fix must work: {:?}", prog.diagnostics);
+    }
+
+    /// The skip branch. A name that is simply misspelled has no home anywhere, so there is nothing
+    /// true to add — it keeps its precise span and gains no invented advice.
+    #[test]
+    fn a_misspelled_type_keeps_its_plain_message() {
+        let dir = scratch("c58typo");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/root.delulu", "module p\ntype Sample { v: Int }\npub fn f(s: Smaple) -> Int { 1 }\n");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        let d = prog
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL0301")
+            .expect("the typo must still be refused");
+        assert_eq!(d.message, "unknown type `Smaple`", "a typo must not be decorated with a guess");
+    }
+
+    /// One fact, reported once. A diamond lowers a shared dependency's signature afresh per path,
+    /// which used to multiply the SAME sentence about the SAME place up to four times.
+    #[test]
+    fn the_same_failure_is_not_reported_once_per_path_through_a_diamond() {
+        let dir = scratch("c58dedupe");
+        write(&dir, "delulu.toml", LIB);
+        write(&dir, "src/inner.delulu", "module p.inner\npub type Sample { v: Int }\n");
+        write(&dir, "src/facade.delulu", "module p.facade\nimport p.inner\npub fn a(s: Sample) -> Int { s.v }\n");
+        write(&dir, "src/other.delulu", "module p.other\nimport p.inner\npub fn b(s: Sample) -> Int { s.v }\n");
+        write(&dir, "src/root.delulu", "module p\nimport p.facade\nimport p.other\npub fn go() -> Int { 1 }\n");
+        let prog = check_workspace(&resolve_workspace(&dir));
+        let mut seen: Vec<(&str, &str, Option<Span>)> = Vec::new();
+        for d in prog.diagnostics.iter().filter(|d| d.is_error()) {
+            let key = (d.code, d.message.as_str(), d.primary_span());
+            assert!(!seen.contains(&key), "duplicate diagnostic: {} @ {:?}", d.message, d.primary_span());
+            seen.push(key);
+        }
     }
 }

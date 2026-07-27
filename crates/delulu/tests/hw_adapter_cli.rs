@@ -379,6 +379,123 @@ fn a_driver_resigned_by_an_attackers_key_verifies_and_is_still_refused_when_the_
     );
 }
 
+// ===== C60 · the provenance decision is RECORDED, not only printed ==========================
+//
+// D53 made the decision correct and wrote it to stderr. Afterwards there was no durable, queryable
+// evidence of which key signed the driver that moved the machine — the one question an incident
+// asks. The record goes into the broker's existing hash-chained audit log rather than a second
+// format, so `delulu audit verify|tail|query` already reads it.
+
+/// Everything the audit directory holds, as one string. Read from the files rather than through the
+/// library so the test is checking what an auditor would actually find on disk.
+fn audit_text(dir: &std::path::Path) -> String {
+    let mut out = String::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        let mut paths: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+        paths.sort();
+        for p in paths {
+            out.push_str(&std::fs::read_to_string(&p).unwrap_or_default());
+        }
+    }
+    out
+}
+
+#[test]
+fn a_verified_driver_leaves_a_durable_record_of_which_key_signed_it() {
+    let r = rig("record", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    let drv = r.dir.join("driver.bin");
+    let drv_s = drv.display().to_string();
+    let seed = [7u8; 32];
+    let key = delulu_runtime::plugin::public_key_hex(&seed);
+    std::fs::write(&drv, b"the driver the operator built and reviewed").unwrap();
+    std::fs::write(
+        r.dir.join("driver.bin.sig"),
+        delulu_runtime::plugin::sign_detached(&seed, &std::fs::read(&drv).unwrap()),
+    )
+    .unwrap();
+
+    let rec_dir = r.dir.join("provenance");
+    let rec_s = rec_dir.display().to_string();
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
+                   "--adapter-signer", &key, "--adapter-record", &rec_s]);
+    assert!(
+        stderr(&o).contains("verifies under the pinned key"),
+        "the operator's own driver must pass its own pin: {}",
+        stderr(&o)
+    );
+
+    let text = audit_text(&rec_dir);
+    assert!(text.contains("adapter.provenance"), "the decision must be recorded: {text}");
+    assert!(text.contains("verified-pinned"), "the record must carry the verdict: {text}");
+    assert!(text.contains(&key), "and WHICH KEY signed it — the whole point of C60: {text}");
+    // It is a chain, not a log: every record links to the one before it.
+    assert!(text.contains("prev_hash"), "the record must be hash-chained: {text}");
+}
+
+/// **The load-bearing half.** A run stopped because the driver was signed by the wrong key is
+/// exactly the event worth keeping, and a recorder that only writes successes keeps the one case
+/// nobody needed to look up.
+#[test]
+fn a_refused_driver_is_recorded_too() {
+    let r = rig("recordrefuse", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    let drv = r.dir.join("driver.bin");
+    let drv_s = drv.display().to_string();
+    let attacker = [66u8; 32];
+    let operator_key = delulu_runtime::plugin::public_key_hex(&[7u8; 32]);
+    let attacker_key = delulu_runtime::plugin::public_key_hex(&attacker);
+    std::fs::write(&drv, b"a driver that does something else entirely").unwrap();
+    std::fs::write(
+        r.dir.join("driver.bin.sig"),
+        delulu_runtime::plugin::sign_detached(&attacker, &std::fs::read(&drv).unwrap()),
+    )
+    .unwrap();
+
+    let rec_dir = r.dir.join("provenance");
+    let rec_s = rec_dir.display().to_string();
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s,
+                   "--adapter-signer", &operator_key, "--adapter-record", &rec_s]);
+    assert!(!o.status.success(), "a pinned run must refuse another signer: {}", stdout(&o));
+
+    let text = audit_text(&rec_dir);
+    assert!(text.contains("refused-wrong-signer"), "the refusal must be recorded: {text}");
+    assert!(
+        text.contains(&attacker_key),
+        "and it must name the key that was actually presented, which is the forensic value: {text}"
+    );
+}
+
+/// The skip branch. A record the operator ASKED for and did not get is worse than none, because
+/// they would believe they had it — so an unwritable named sink refuses the run rather than
+/// warning past it.
+#[test]
+fn a_named_record_sink_that_cannot_be_written_refuses_the_run() {
+    let r = rig("recordfail", &arm_program(12.0, 999.0));
+    r.signoff("signoff.json");
+
+    let drv = r.dir.join("driver.bin");
+    let drv_s = drv.display().to_string();
+    std::fs::write(&drv, b"a driver").unwrap();
+
+    // A regular FILE where the directory would have to be: `create_dir_all` cannot succeed here on
+    // any platform, which is a portable way to make the sink genuinely unwritable.
+    let blocker = r.dir.join("not-a-dir");
+    std::fs::write(&blocker, b"x").unwrap();
+    let rec_s = blocker.join("inner").display().to_string();
+
+    let o = r.hw(&["--approved", "signoff.json", "--adapter-cmd", &drv_s, "--adapter-record", &rec_s]);
+    assert!(!o.status.success(), "an unwritable named sink must stop the run: {}", stdout(&o));
+    let err = stderr(&o);
+    assert!(err.contains("DL1511"), "refused under the adapter-provenance code: {err}");
+    assert!(
+        err.contains("worse than none"),
+        "and it must say why it refused rather than warning: {err}"
+    );
+}
+
 /// D53. `--adapter-artifact` exists because the commonest driver shape could not be checked at all.
 ///
 /// `powershell -File driver.ps1` names the INTERPRETER. D52 was right to refuse rather than verify

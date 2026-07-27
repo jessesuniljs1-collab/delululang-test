@@ -138,12 +138,20 @@ signed** (without it, `--require-signed-adapter` was unusable for every script-h
 control nobody can switch on), and an unpinned verify now states that it proves these bytes were
 signed by that key, **not** that the key is trusted.
 
+**D66 made the decision durable.** `--adapter-record <dir>` appends the verdict to the broker's
+existing hash-chained audit log as `adapter.provenance`, carrying the artifact, the decision, the
+signer's key and the pinned key — read back by `delulu audit verify|tail|query`, no second format
+invented. **Refusals are recorded before the refusal is acted on**, because a run stopped by the
+wrong key is the event worth keeping, and a named sink that cannot be written refuses the run. There
+is **no default sink**: a hash chain has one writer, and a short-lived `delulu run` is not one
+(finding C69 — a default sink corrupted the chain in this project's own test suite before it was
+caught).
+
 What remains true: this is still an operator-supplied subprocess, not spec §5.4's Verified-class
 signed plugin loaded into the host. Signing buys **provenance**, not behaviour — the envelope is what
 bounds behaviour. Unpinned there is still **no trust policy**, exactly as spec §10 states for
-plugins. The verdict is **printed, not recorded** — no durable evidence of which key signed the
-driver that drove the machine (finding C60, open). And **no driver for any real device ships
-in-tree.**
+plugins. **Without `--adapter-record` the verdict is printed and not kept**, and the run says so. And
+**no driver for any real device ships in-tree.**
 
 ### 1.12 Runtime enforcement — HELD
 

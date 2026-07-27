@@ -124,9 +124,10 @@ deviations.
 | C28 | **`type A = B` is ambiguous in the normative grammar** — it matches both the sum and the alias production; the parser silently prefers a single-variant sum | **high** (specification ambiguity) | **CLOSED** — D46a (resolved to ALIAS; a variant list is signalled only by `(` or `\|`) |
 | C47b | **Should a multi-line bracketed list require its trailing comma?** The parser requires it, most languages do not, and the diagnostic does not teach the fix | medium (front-door usability) | **CLOSED** — D46d (no; all four spellings accepted, in all nine lists) |
 | C46 | **Should a refused command prove liveness?** The dead-man now charges a refused attempt the same simulated time the wall clock charges it, but whether a controller whose every setpoint is out of range should KEEP its machine is a safety-policy choice | — | **CLOSED** — D46c (no; the stricter reading, which is what the code already did) |
-| C58 | **A `pub fn` whose signature names a type the package does not re-export builds clean alone and fails when consumed** — and the error is reported *inside the dependency's own source*, calling a type "not a type" in a file where it is in scope | medium (diagnostic blames the wrong line in the wrong package — the C53 family) | OPEN |
+| C58 | **A `pub fn` whose signature names a type the package does not re-export builds clean alone and fails when consumed** — and the error is reported *inside the dependency's own source*, calling a type "not a type" in a file where it is in scope | medium (diagnostic blames the wrong line in the wrong package — the C53 family) | **CLOSED** — D65 (re-framed to the import that brought the signature in; the private-in-public rule was measured against the corpus and rejected) |
 | C59 | **A multi-package program cannot be RUN.** `delulu run` takes one file or a `.dwx`; `build` emits `interface.json` and nothing executable, so `kind = "bin"` is declarable and unexecutable — true of the shipped `examples/greeter/` too | **high** (the largest capability gap the campaign found) | **CLOSED** — D61 (`run <package-dir>`; source-flattened after the workspace check; a cross-module name collision is refused, not guessed) |
-| C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | OPEN — named by D53 |
+| C60 | **The adapter provenance verdict is printed, not recorded** — no durable, queryable evidence of which key signed the driver that drove the machine. Both existing homes were checked and neither fits (the audit chain is a no-op without a sink; the DL1905 sign-off is written by a simulation, before any adapter exists) | medium (accountability at the physical boundary) | **CLOSED** — D66 (written into the broker's existing hash-chained audit log; refusals recorded too) |
+| C69 | **The audit chain's single-writer assumption is undocumented and unenforced** — `AuditLog::open` reads the head then appends, which is safe for the long-lived broker and unsafe for any short-lived process that can run concurrently | medium (a second writer silently corrupts the chain: `prev_hash` break plus physically interleaved lines) | **CLOSED** — D66 (no default sink; the assumption is now stated where a writer is created). **Found by causing it** |
 | C61 | `let _ = expr` is refused (DL0201) although `_` is a valid **match** pattern; discarding is still possible under any other name, so the restriction prevents nothing | low (friction with no safety benefit) | **CLOSED** — D63 (`_` is unreadable because it lexes as its own token, not because a rule forbids it) |
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
 | C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
@@ -2066,8 +2067,8 @@ campaign exists to find.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **68 findings have been filed. 65 are closed, 1 is a published limit, and 2 are
-open with a current status.** Nothing is now carried as "does not reproduce" — the one entry that was
+capstone, and this. **69 findings have been filed. 68 are closed and 1 is a published limit
+(C55).** Nothing is open, and nothing is carried as "does not reproduce" — the one entry that was
 (C12) reproduced on re-test and is closed under D64.
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
@@ -2077,8 +2078,8 @@ because a close-out that miscounts its own findings is the exact defect this cam
 phases on.)*
 
 **The count grew after the close-out, and that is the honest shape of it.** At close-out the total
-was 58 filed / 54 closed / 2 open. Three of the four items open now (C58, C59, C61) were found by
-doing the work C7 asked for — writing the multi-package corpus — and the fourth (C60) by answering
+was 58 filed / 54 closed / 2 open. Three of the four items open at that point (C58, C59, C61) were
+found by doing the work C7 asked for — writing the multi-package corpus — and the fourth (C60) by answering
 Jesse's question about whether the D52 adapter gate was right, which it was not. C62 was found by
 *staging the edits to this very file* and noticing the diff was twenty times larger than the change.
 A campaign whose finding count only ever falls is a campaign that stopped looking.
@@ -2120,13 +2121,23 @@ findings that did not exist then, three of which were found by *writing the corp
   fail-closed edge of that fix, not a leftover:** two modules declaring the same top-level name are
   refused by the runner rather than resolved by merge order, and the refusal says the program is
   correct. Per-module resolution inside `Interp` would lift it.
-- **C58 — a public signature may name a type the package does not re-export**, and the failure lands
-  on the consumer, reported inside the dependency's source, calling a type "not a type" in a file
-  where it is in scope. The rule is right; the diagnostic blames the wrong line in the wrong package.
-- **C60 — the adapter provenance verdict is printed, not recorded.** Named by D53, which fixed what
-  it could: there is no durable evidence of which key signed the driver that moved the machine, and
-  neither existing home fits (the audit chain is a no-op without a sink; the DL1905 sign-off is
-  written by a simulation, before an adapter has been chosen).
+- **C58 — CLOSED by D65.** Re-framed onto the import that brought the signature in, with where the
+  type is declared and both fixes; a misspelling is left untouched, because it has no true advice to
+  add. The tempting fix — Rust's private-in-public rule — was measured against the shipped corpus and
+  **rejected**: three tier-4 modules legitimately name a type behind a plain `import`, and the rule
+  would have outlawed the diamond the tier exists to demonstrate.
+- **C60 — CLOSED by D66.** Written into the broker's existing hash-chained audit log as
+  `adapter.provenance`, carrying the signer and the pinned key. The earlier reading — "neither home
+  fits" — was half wrong: the chain is complete and already has a reader and a default location;
+  nothing was writing the adapter decision *into* it. **Refusals are recorded too**, before the
+  refusal is acted on, and a named sink that cannot be written refuses the run.
+- **C69 — CLOSED by D66, and found by causing it.** The first version of D66 defaulted to the shared
+  `~/.delulu/audit`. A hash chain has one writer (`open` reads the head, then appends), the broker
+  satisfies that and a short-lived `delulu run` does not — so the parallel suite produced a chain
+  that failed `delulu audit verify`, with two physically interleaved half-lines. Caught by
+  `every_listed_subcommand_honors_a_valid_invocation`, a gate written for something else. Recorded
+  because the assumption is real and undocumented, and because a fix that damages the artifact it
+  was written to create is worth remembering.
 - **C64 — CLOSED by D62.** The lift happens at `val` arguments, the caller gives up its write
   access (witnessed: a write after the lift is refused), and an author-written `ref` is never lifted —
   that last clause exists because the first implementation lacked it and **an existing regression test

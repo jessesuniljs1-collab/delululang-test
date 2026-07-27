@@ -25,6 +25,26 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Security
 
+- **The decision that started a machine is now recorded, not only printed.** A run that spawned a
+  hardware driver announced its provenance verdict on stderr and nowhere else, so afterwards nothing
+  answered the one question an incident asks: *which key signed the driver that moved the machine?*
+
+  `--adapter-record <dir>` appends the decision to the broker's **existing** hash-chained audit log
+  as `adapter.provenance`, carrying the artifact, the verdict, the signer's key and the pinned key —
+  so `delulu audit verify|tail|query` already reads it. No second format was invented: two records of
+  one machine is how two records come to disagree.
+
+  **Refusals are recorded too, and that is the load-bearing half** — a run stopped because the driver
+  was signed by the wrong key is precisely the event worth keeping, so the record is written *before*
+  the refusal is acted on. A named sink that cannot be written **refuses the run**: a record you
+  asked for and did not get is worse than none, because you would believe you had it.
+
+  **There is no default sink, and the reason was learned the hard way.** A hash chain has exactly one
+  writer; the broker is one process and satisfies that, but `delulu run` is short-lived and many can
+  run at once. The first version defaulted to the shared audit directory, and the parallel test suite
+  produced a chain that failed its own verifier with interleaved half-lines. Filed as C69 rather than
+  quietly corrected. (D66, closing C60 and C69)
+
 - **A driver signature that verified under an attacker's key satisfied the strongest flag there was.**
   `verify_detached` reads the public key out of the first 32 bytes of the signature file it is
   checking, and the `.sig` sits beside the driver — so anyone able to overwrite `drive.exe` could
@@ -312,6 +332,25 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   a function type is reclassified to **DL1302** (rule R-6a). (C24, ruling D31)
 
 ### Fixed
+
+- **A package whose public signature named a type it did not re-export blamed the wrong file, in the
+  wrong package, for the wrong reason.** It built clean on its own; consuming it produced **25 errors
+  at 14 locations**, most of them inside the *dependency's* source insisting a type was "not a type"
+  in a file where that type is plainly in scope. Nothing anywhere said what was actually wrong.
+
+  A signature is lowered in the scope of whoever **imports** it, so those reports are now collapsed
+  into one diagnostic at the import that brought the signature in, naming the missing types, the
+  module that declares them, and both ends it can be fixed from. In a module's own file the error
+  stays exactly where it is and only gains the answer. A plain misspelling gains nothing, because it
+  has no true advice to add — a diagnostic that is confident and wrong is worse than one that is
+  terse. Duplicates are gone too: a diamond used to report the same sentence about the same span up
+  to four times. 25 errors became 15, and a test applies the printed advice and requires the result
+  to build clean.
+
+  The tempting fix — Rust's private-in-public rule, refusing the `pub fn` where it is written — was
+  measured against the shipped corpus and **rejected**: three tier-4 modules legitimately name a type
+  behind a plain `import`, and that rule would have outlawed the diamond the tier exists to
+  demonstrate. The rule was never wrong; only the report was. (D65, closing C58)
 
 - **Every diagnostic that mentioned one of your types printed a number instead of its name.**
   `expected T11, found T12`, where the truth was `Verdict` versus `Status`. `Record` and `Sum` store

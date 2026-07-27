@@ -2234,8 +2234,9 @@ No new diagnostic number minted; no cryptography hand-rolled. Spec §10's "signa
 origin, not behavior — no trust policy" is unchanged as a statement about the *default*, and there
 is now a way for an operator to state one for the case that moves machinery.
 
-**What is still open, and named rather than implied closed: C60 — the verdict is printed, not
-recorded.** A run leaves no durable, queryable evidence of which key signed the driver that drove the
+**What was still open when this ruling was written, and named rather than implied closed: C60 — the
+verdict is printed, not recorded** (closed later by **D66**; the reading below that "neither home
+fits" turned out to be half wrong, and the correction is recorded there rather than edited in here)**.** A run leaves no durable, queryable evidence of which key signed the driver that drove the
 machine. Both existing homes were examined and neither fits: the broker's audit chain is a no-op
 without a sink (so it would record nothing in the default configuration, which is the configuration
 that matters), and the DL1905 sign-off record is written by a **simulation**, before any adapter has
@@ -2590,6 +2591,80 @@ real names while the field beside it printed indices.
 
 Five witnesses, including the nesting case (`List[Sample]`, because a printer fixed only at the top
 level still says `List[T11]`) and the fallback. No new diagnostic number; DL0401 keeps its meaning.
+
+**D65 — A report lands where the reader can act on it.** Closes C58. A `pub fn` whose signature named
+a type its package did not re-export built clean alone and, when consumed, produced **25 errors at 14
+distinct locations** — most of them *inside the dependency's own source*, saying a type was "not a
+type" in a file where it is perfectly in scope.
+
+**The obvious fix was measured and rejected.** Rust's private-in-public rule (refuse the `pub fn`
+where it is written) does not hold here: DeluluLang lowers an imported signature in the **importer's**
+scope, so a consumer that independently imports the declaring module can use the function fine. The
+shipped tier-4 corpus does exactly that in three places — `reading.parse`, `policy` and `archive` all
+name `Sample` in `pub fn` signatures behind a plain `import`, and all build clean. Adding that rule
+would have outlawed the diamond the tier exists to demonstrate. **The rule was never wrong; only the
+report was.** Checking the corpus before writing the rule is what caught this.
+
+RULED, in three parts:
+
+1. **A diagnostic reported in another module's file is re-framed, not relocated blindly.** That file
+   checked clean on its own and the type IS in scope there, so the report is collapsed into ONE
+   diagnostic at the **import that brought the signature in**, naming which types are missing, which
+   module declares them, and both ends it can be fixed from.
+2. **In the module's own file the error stays exactly where it is** and only gains the answer —
+   "`Sample` is declared in `p.inner`; add `import p.inner`, or re-export it with `pub import`".
+   Relocating it to the import would trade a precise location for a general one.
+3. **The skip branch is the interesting one.** A plain misspelling (`Smaple`) has no home anywhere, so
+   there is nothing true to add and the message is left byte-identical. A diagnostic that is confident
+   and wrong is worse than one that is terse; witnessed with its own test.
+
+Deduplication rides along and is a general repair: a diamond lowers a shared dependency's signature
+afresh per path, so the SAME sentence about the SAME span arrived up to four times. `check_workspace`
+now keeps the first of each (code, message, span).
+
+25 errors became 15, every one of which now explains itself. **The advice is witnessed to be true** —
+a test applies exactly what the message says and requires the workspace to build clean, because
+confident wrong advice is the failure mode a helpful diagnostic invites. No new diagnostic number:
+DL0301 already means "this name is not in scope here", which is precisely what is wrong.
+
+**D66 — The decision that started the machine is recorded, not only printed.** Closes C60, open since
+D53 named it. A run that spawned a hardware driver announced its provenance verdict on **stderr** and
+nowhere else, so afterwards nothing on disk answered *which key signed the driver that moved the
+machine* — the one question an incident actually asks.
+
+**No new artifact was invented, and that is the ruling.** C60's note said neither existing home fit;
+re-reading them showed that was half right. The broker's audit chain is not a no-op — it is a complete
+hash-chained, day-rotated, tamper-evident log with `verify`/`tail`/`query`/`bundle` already built and
+a default location (`~/.delulu/audit`) the `delulu audit` commands already read. What was missing was
+not a format. It was that **nothing wrote the adapter decision into it.** A second record of one
+machine is how two records come to disagree.
+
+RULED:
+
+1. The provenance decision is appended as `action: adapter.provenance`, carrying the artifact, the
+   verdict, the signer's key and the pinned key. `--adapter-record <dir>` names the sink; without it
+   the default audit directory is used.
+2. **Refusals are recorded, and that is the load-bearing half.** A run stopped because the driver was
+   signed by the wrong key is precisely the event worth keeping — so the record is written *before*
+   the refusal is acted on. Witnessed by inverting that order and observing the test fail.
+3. **A record you asked for and did not get is worse than none**, because you would believe you had
+   it. An explicitly named sink that cannot be written **refuses the run** (DL1511). On the default
+   path a failure warns loudly and continues — an unwritable home directory must not stop a machine.
+
+4. **There is deliberately NO default sink**, and the reason is the finding this ruling produced.
+   A hash chain has exactly one writer: `AuditLog::open` reads the head, then appends against it.
+   The broker is a single long-lived process and satisfies that; **`delulu run` is short-lived and
+   many can run at once.** The first version of this ruling defaulted to the shared
+   `~/.delulu/audit`, which made every concurrent run a second writer — and the parallel test suite
+   promptly produced a chain that failed `delulu audit verify` with a `prev_hash` break **and two
+   physically interleaved half-lines**. It was caught by `cli_contract`'s
+   `every_listed_subcommand_honors_a_valid_invocation`, a gate written for something else entirely.
+   An operator naming a sink chooses one they control; guessing one for them corrupts the very log
+   the feature exists to produce. Filed as **C69** rather than quietly corrected, because the
+   single-writer assumption is real, undocumented, and the next person to add a writer will hit it.
+
+Still true, and unchanged: signing buys **provenance, not behaviour**; unpinned, there is no trust
+policy; and this is an operator-supplied subprocess, not spec §5.4's Verified-class signed plugin.
 
 ## 5. Diagnostics budget
 

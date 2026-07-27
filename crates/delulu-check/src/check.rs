@@ -2620,10 +2620,22 @@ impl<'a> Checker<'a> {
                             }
                         };
                     }
-                    self.diags.push(Diagnostic::error("DL0301", format!("unknown type `{name}`")).with_span(*span, "not a type"));
+                    // `with_arg("type", ..)` is not decoration: `check_workspace` reads it to tell
+                    // this apart from an ordinary unknown name. An imported signature is lowered in
+                    // the IMPORTER's scope, so this fires with a span inside the dependency's own
+                    // source — see `reframe_foreign_scope_errors` (C58).
+                    self.diags.push(
+                        Diagnostic::error("DL0301", format!("unknown type `{name}`"))
+                            .with_arg("type", name.clone())
+                            .with_span(*span, "not a type"),
+                    );
                     return self.cx.fresh_type();
                 }
-                self.diags.push(Diagnostic::error("DL0301", format!("unknown type `{}`", path.dotted())).with_span(*span, "not a type"));
+                self.diags.push(
+                    Diagnostic::error("DL0301", format!("unknown type `{}`", path.dotted()))
+                        .with_arg("type", path.dotted())
+                        .with_span(*span, "not a type"),
+                );
                 self.cx.fresh_type()
             }
             TypeExpr::Fn { params, ret, row, .. } => {
