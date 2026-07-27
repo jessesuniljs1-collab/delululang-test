@@ -65,7 +65,7 @@ fn handle(input: &str, decls: &mut Vec<String>, grants: &Grants) {
         if let Some(name) = input.strip_prefix("fn ").or_else(|| input.strip_prefix("pub fn ")) {
             let fname = name.split(['(', '[', ' ']).next().unwrap_or("").to_string();
             if let Some(ty) = checked.result.fn_types.get(&fname) {
-                eprintln!("  {fname}: {ty}");
+                eprintln!("  {fname}: {}", ty.show(&checked.table));
             }
         } else {
             eprintln!("  ok");
@@ -79,7 +79,7 @@ fn handle(input: &str, decls: &mut Vec<String>, grants: &Grants) {
         let checked = check_source(0, &probe);
         if checked.result.fn_types.contains_key(input) {
             if let Some(ty) = checked.result.fn_types.get(input) {
-                eprintln!("  {input}: {ty}");
+                eprintln!("  {input}: {}", ty.show(&checked.table));
                 return;
             }
         }

@@ -405,7 +405,7 @@ impl Server {
                         .result
                         .fn_types
                         .get(&f.name.name)
-                        .map(|t| format!("{t}"))
+                        .map(|t| t.show(&checked.table).to_string())
                         .unwrap_or_else(|| "fn".to_string());
                     let authority = checked
                         .result
@@ -434,7 +434,7 @@ impl Server {
                 if let Some(ty) = checked.result.node_types.get(&e.id()) {
                     let width = sp.end - sp.start;
                     if best.as_ref().is_none_or(|(s, e2, _)| (e2 - s) > width) {
-                        best = Some((sp.start, sp.end, format!("{ty}")));
+                        best = Some((sp.start, sp.end, ty.show(&checked.table).to_string()));
                     }
                 }
             }

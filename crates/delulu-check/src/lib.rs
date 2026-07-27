@@ -1063,6 +1063,81 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         assert!(e.contains(&"DL1603".to_string()), "an explicit `ref` keeps its meaning: {e:?}");
     }
 
+    // ===== C12 · a diagnostic names the types it is about ==================================
+    //
+    // `Type::Record`/`Type::Sum` store a table INDEX, and the printer had no table, so every
+    // nominal type in every message read `T11`. The ledger carried this as "does not reproduce"
+    // on the strength of a re-test that used `Int` and `Str` — types that print themselves.
+
+    fn messages(src: &str) -> String {
+        check(src).diagnostics.iter().map(|d| d.message.clone()).collect::<Vec<_>>().join("\n")
+    }
+
+    /// C12 exactly as it was written down: two PRELUDE sums inside one generic. This is the
+    /// reproduction the "does not reproduce" verdict was supposed to have run.
+    #[test]
+    fn a_mismatch_between_two_prelude_sums_names_both_of_them() {
+        let m = messages(
+            "module m
+fn take_io(r: Result[Str, IoErr]) -> Str { match r { Ok(s) => s, Err(_e) => \"io\" } }
+             pub fn main(h: Cap[Http]) -> Str ! {Net} { take_io(h.get(\"https://example.com\")) }
+",
+        );
+        assert!(m.contains("Result[Str, IoErr]"), "the expected type must be named: {m}");
+        assert!(m.contains("Result[Str, NetErr]"), "the found type must be named: {m}");
+        assert!(!m.contains("T0"), "no table index may survive into a message: {m}");
+    }
+
+    /// And the case an author hits constantly, which the finding never mentioned: their OWN
+    /// types. `expected T11, found T12` is the same defect with the blast radius the filed
+    /// version missed.
+    #[test]
+    fn a_mismatch_between_two_user_declared_types_names_both_of_them() {
+        let m = messages(
+            "module m
+type Celsius { v: Float }
+type Fahrenheit { v: Float }
+type Verdict = Cold | Hot
+type Status = Up | Down
+fn want_c(c: Celsius) -> Float { c.v }
+fn want_v(v: Verdict) -> Int { match v { Cold => 0, Hot => 1 } }
+             pub fn main() -> Float {
+ let f = Fahrenheit { v: 1.0 }
+ let s = Up
+ let _ = want_v(s)
+ want_c(f)
+}
+",
+        );
+        assert!(m.contains("expected `Celsius`, found `Fahrenheit`"), "{m}");
+        assert!(m.contains("expected `Verdict`, found `Status`"), "{m}");
+    }
+
+    /// The nesting matters: a name has to survive being wrapped. A printer fixed only at the top
+    /// level would still say `List[T11]`.
+    #[test]
+    fn a_named_type_survives_nesting_inside_a_generic() {
+        let m = messages(
+            "module m
+type Sample { v: Int }
+fn want(xs: List[Sample]) -> Int { xs.len() }
+             pub fn main() -> Int { want([1]) }
+",
+        );
+        assert!(m.contains("List[Sample]"), "the name must survive nesting: {m}");
+    }
+
+    /// The fallback is the skip branch, so it is witnessed rather than assumed. When no name is
+    /// available the printer must produce something that CANNOT be mistaken for a type an author
+    /// wrote — `T11` could be; `<type #11>` cannot.
+    #[test]
+    fn an_unnameable_type_renders_as_visibly_unresolved_not_as_a_plausible_name() {
+        use crate::ty::{NoTypeNames, Type, TypeDefId};
+        let t = Type::List(Box::new(Type::Sum(TypeDefId(11), vec![])));
+        let s = t.show(&NoTypeNames).to_string();
+        assert_eq!(s, "List[<type #11>]", "an unresolved name must announce itself");
+    }
+
     #[test]
     fn a_fresh_literal_argument_satisfies_a_val_param() {
         let c = check(

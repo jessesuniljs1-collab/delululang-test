@@ -117,7 +117,23 @@ pub struct DeclTable {
     pub fn_order: Vec<String>,
 }
 
+/// Lets a diagnostic name a record or sum instead of printing its table index (C12).
+///
+/// Indexing is deliberately fallible here where [`DeclTable::type_def`] panics: this runs while a
+/// diagnostic is being formatted, and a compiler that panics *reporting* an error tells the author
+/// nothing about the error they actually have.
+impl crate::ty::TypeNames for DeclTable {
+    fn type_name(&self, id: TypeDefId) -> Option<&str> {
+        self.types.get(id.0 as usize).map(|d| d.name.as_str())
+    }
+}
+
 impl DeclTable {
+    /// This table's names, detached from it, for a result that outlives the table.
+    pub fn type_names(&self) -> crate::ty::TypeNameList {
+        crate::ty::TypeNameList(self.types.iter().map(|d| d.name.clone()).collect())
+    }
+
     pub fn type_def(&self, id: TypeDefId) -> &TypeDef {
         &self.types[id.0 as usize]
     }

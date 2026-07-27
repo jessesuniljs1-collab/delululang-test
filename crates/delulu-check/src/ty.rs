@@ -332,30 +332,102 @@ impl Type {
     }
 }
 
-impl fmt::Display for Type {
+/// Resolves a [`TypeDefId`] back to the name the author wrote.
+///
+/// [`Type::Record`] and [`Type::Sum`] store an **index** into the declaration table, not a name, so
+/// a printer that does not hold the table can only emit `T11`. That was C12: a diagnostic naming
+/// the *shape* of a disagreement (`Result[Str, T0]` vs `Result[Str, T1]`) while hiding its
+/// *content* (`IoErr` vs `NetErr`) — accurate and useless.
+///
+/// There is deliberately **no `Display for Type`**. Rendering a type requires supplying the names,
+/// so no site can print a nameless one by forgetting to — the compiler asks, rather than a
+/// convention that decays. This is the same shape as the campaign's first rule: replace "remember
+/// to do it" with something that will not build otherwise.
+pub trait TypeNames {
+    /// The declared name of `id`, or `None` if this table does not hold it.
+    fn type_name(&self, id: TypeDefId) -> Option<&str>;
+}
+
+/// A [`TypeNames`] that knows no names, for the few printers with no declaration table in reach —
+/// the runtime plugin loader reports on types recovered from a DIR, after the table is gone.
+///
+/// Nominal types then render as `<type #11>`: visibly unresolved. That is the point. It is not an
+/// improvement on `T11` as *information*, it is an improvement as *honesty* — a reader can tell the
+/// printer failed instead of reading a plausible name that does not exist. Never use this where a
+/// table is available; the compiler cannot tell the difference, so this is the one place in the
+/// mechanism that still relies on judgement.
+pub struct NoTypeNames;
+
+impl TypeNames for NoTypeNames {
+    fn type_name(&self, _id: TypeDefId) -> Option<&str> {
+        None
+    }
+}
+
+/// Type names indexed by [`TypeDefId`], owned rather than borrowed.
+///
+/// Both whole-program paths (`check_program`, `check_workspace`) build ONE global type registry
+/// across every module, so a single flat list can name any type in the program. `Program` carries
+/// this because it does not keep the per-module `DeclTable`s the check ran against — and without
+/// it `interface.json`, the artifact whose stated purpose is letting an agent introspect a
+/// dependency without reading its source, published `fn(T9) -> Float`.
+#[derive(Clone, Debug, Default)]
+pub struct TypeNameList(pub Vec<String>);
+
+impl TypeNames for TypeNameList {
+    fn type_name(&self, id: TypeDefId) -> Option<&str> {
+        self.0.get(id.0 as usize).map(String::as_str)
+    }
+}
+
+/// A [`Type`] bound to the names of its nominal parts. Produced by [`Type::show`].
+pub struct Shown<'a> {
+    ty: &'a Type,
+    names: &'a dyn TypeNames,
+}
+
+impl Type {
+    /// Render this type for a human, naming records and sums.
+    pub fn show<'a>(&'a self, names: &'a dyn TypeNames) -> Shown<'a> {
+        Shown { ty: self, names }
+    }
+}
+
+fn write_args(f: &mut fmt::Formatter<'_>, args: &[Type], names: &dyn TypeNames) -> fmt::Result {
+    if args.is_empty() {
+        return Ok(());
+    }
+    f.write_str("[")?;
+    for (i, a) in args.iter().enumerate() {
+        if i > 0 {
+            f.write_str(", ")?;
+        }
+        write!(f, "{}", a.show(names))?;
+    }
+    f.write_str("]")
+}
+
+impl fmt::Display for Shown<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        let n = self.names;
+        match self.ty {
             Type::Int => f.write_str("Int"),
             Type::Float => f.write_str("Float"),
             Type::Bool => f.write_str("Bool"),
             Type::Str => f.write_str("Str"),
             Type::Unit => f.write_str("Unit"),
-            Type::List(t) => write!(f, "List[{t}]"),
-            Type::Option(t) => write!(f, "Option[{t}]"),
-            Type::Result(o, e) => write!(f, "Result[{o}, {e}]"),
+            Type::List(t) => write!(f, "List[{}]", t.show(n)),
+            Type::Option(t) => write!(f, "Option[{}]", t.show(n)),
+            Type::Result(o, e) => write!(f, "Result[{}, {}]", o.show(n), e.show(n)),
             Type::Record(id, args) | Type::Sum(id, args) => {
-                write!(f, "T{}", id.0)?;
-                if !args.is_empty() {
-                    write!(f, "[")?;
-                    for (i, a) in args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{a}")?;
-                    }
-                    write!(f, "]")?;
+                // The fallback is deliberately unmistakable. `T11` was indistinguishable from a
+                // type an author could have written, so a printer failure read as an answer;
+                // `<type #11>` is not source-level syntax and can only mean this lookup failed.
+                match n.type_name(*id) {
+                    Some(name) => f.write_str(name)?,
+                    None => write!(f, "<type #{}>", id.0)?,
                 }
-                Ok(())
+                write_args(f, args, n)
             }
             Type::Fn { params, ret, row } => {
                 f.write_str("fn(")?;
@@ -363,36 +435,26 @@ impl fmt::Display for Type {
                     if i > 0 {
                         f.write_str(", ")?;
                     }
-                    write!(f, "{p}")?;
+                    write!(f, "{}", p.show(n))?;
                 }
-                write!(f, ") -> {ret}")?;
+                write!(f, ") -> {}", ret.show(n))?;
                 if !row.is_pure() {
                     write!(f, " {row}")?;
                 }
                 Ok(())
             }
             Type::Cap(r) => write!(f, "Cap[{}]", r.name()),
-            Type::Secret(t) => write!(f, "Secret[{t}]"),
+            Type::Secret(t) => write!(f, "Secret[{}]", t.show(n)),
             Type::Root => f.write_str("Root"),
             Type::ForeignPtr => f.write_str("ForeignPtr"),
             Type::PyObj => f.write_str("PyObj"),
             Type::Foreign(name) => f.write_str(name),
-            Type::Plugin(c) => write!(f, "Plugin[{c}]"),
+            Type::Plugin(c) => write!(f, "Plugin[{}]", c.show(n)),
             Type::Verified => f.write_str("Verified"),
             Type::Contained => f.write_str("Contained"),
             Type::Actor(name, args) => {
                 f.write_str(name)?;
-                if !args.is_empty() {
-                    write!(f, "[")?;
-                    for (i, a) in args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{a}")?;
-                    }
-                    write!(f, "]")?;
-                }
-                Ok(())
+                write_args(f, args, n)
             }
             Type::Var(TypeVar(v)) => write!(f, "'t{v}"),
         }

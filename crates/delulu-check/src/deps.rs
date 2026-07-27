@@ -482,7 +482,8 @@ pub fn check_workspace(ws: &Workspace) -> Program {
     }
 
     let entry_module = ws.root_entry_module();
-    Program { diagnostics, facts, fn_types, call_owner, entry_module }
+    let type_names = crate::ty::TypeNameList(gtypes.iter().map(|d| d.name.clone()).collect());
+    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names }
 }
 
 // ===== per-package authority ====================================================================

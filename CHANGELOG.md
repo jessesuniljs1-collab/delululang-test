@@ -313,6 +313,25 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **Every diagnostic that mentioned one of your types printed a number instead of its name.**
+  `expected T11, found T12`, where the truth was `Verdict` versus `Status`. `Record` and `Sum` store
+  an index into the declaration table, and the printer had no table — so the message named the shape
+  of a disagreement and hid its content. It was not a corner case: it was every user-declared type,
+  in every message, plus three surfaces nobody had connected to it — the **LSP hover**, the **REPL**,
+  and **`interface.json`**, the machine-readable artifact whose whole purpose is letting an agent
+  introspect a dependency without reading its source, and which published `"type": "fn(T9) -> Float"`.
+
+  `Display for Type` is **deleted** rather than repaired: rendering a type now requires supplying the
+  names, so no site can omit them by forgetting — that is what surfaced all 22 sites, three of which
+  nobody would have gone looking for. Where no table exists (the plugin loader reports on types
+  recovered from a DIR) a type renders `<type #11>` — not better information, but honest, because
+  `T11` is spellable by an author and reads as an answer. `api_row_hash` is computed from the AST, so
+  the corrected `interface.json` left every hash byte-identical and no lockfile moved.
+
+  Recorded rather than quietly fixed: the ledger had carried this as **"does not reproduce"**. It
+  reproduced on the first try. The re-test that cleared it had used `Int` and `Str` — the two shapes
+  that print themselves and so could never have failed. (D64, closing C12)
+
 - **`delulu authority` could not read a `.dwx` — the format you actually ship.** The artifact carries
   its own authority manifest, and `delulu run` reads it, verifies it and announces the effects.
   `delulu authority` on the same file fell through to the source loader and printed `stream did not

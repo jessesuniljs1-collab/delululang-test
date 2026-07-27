@@ -480,7 +480,7 @@ mod tests {
             Type::Root,
             Type::Foreign("mathlib".into()),
         ] {
-            assert_eq!(dr(&t), Some(Rcap::Val), "{t}");
+            assert_eq!(dr(&t), Some(Rcap::Val), "{t:?}");
         }
     }
 

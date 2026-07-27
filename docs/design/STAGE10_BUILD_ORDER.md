@@ -2544,6 +2544,53 @@ Four parser witnesses (three observed failing against the pre-fix parser) plus a
 Two discards in one scope do not collide, which is the whole point of allowing it. No new diagnostic
 number; DL0201 keeps its meaning everywhere else a name is required.
 
+**D64 — A diagnostic names the types it is about.** Closes C12, which this ledger had recorded as
+**DOES NOT REPRODUCE**. It reproduced, from its own written reproduction, on the first try:
+
+```
+error[DL0401]: argument type mismatch: expected `Result[Str, T0]`, found `Result[Str, T1]`
+```
+
+**Why the earlier verdict was wrong is the part worth keeping.** The re-test that cleared C12 used
+the monomorphic and generic shapes — `Int` versus `Str`. Those are `Type::Int` and `Type::Str`, which
+print themselves. `Type::Record` and `Type::Sum` are the ONLY variants that store a table **index**
+instead of a name, so they were the only ones that could ever fail, and they were the shapes never
+re-tested. That is this campaign's own rule 2 turned on the campaign: a check keyed on a signal the
+failure does not produce. "Does not reproduce" then did real work in the ledger — it let an everyday
+defect sit behind a verdict that reads like diligence.
+
+**And the finding was filed far too narrowly.** C12 described a `Cap[Http]`/`IoErr` corner. Measured,
+it was every nominal type in the language: `expected T11, found T12` where the truth is `Verdict`
+versus `Status`. Following it outward found three more surfaces nobody had connected to it — the LSP
+hover, the REPL's type echo, and **`interface.json`**, whose stated purpose is letting an agent
+introspect a dependency without reading its source, and which published `"type": "fn(T9) -> Float"`.
+A checked-in artifact in this tree said that. The durable one is the worst of the four.
+
+RULED, and the shape of the fix is the ruling:
+
+1. **`impl Display for Type` is DELETED, not repaired.** Rendering a type now requires supplying the
+   names (`t.show(&names)`), so a site cannot print a nameless one by forgetting — the compiler asks.
+   Removing it is what found all 22 sites; a `display_with` helper added alongside `Display` would
+   have fixed the sites someone thought of and left the rest, which is how the LSP, the REPL and
+   `interface.json` had drifted apart in the first place. Campaign rule 1: replace "remember to" with
+   something that will not build otherwise.
+2. **The unresolvable case must announce itself.** Where no table is in reach — the runtime plugin
+   loader reports on types recovered from a DIR, after the table is gone — a nominal type renders
+   `<type #11>`, not `T11`. That is not better *information*; it is better *honesty*. `T11` is
+   spellable by an author and so reads as an answer; `<type #11>` cannot be mistaken for one. The
+   skip branch is witnessed rather than assumed.
+3. **`Program` carries its own names.** Both whole-program paths already build ONE global type
+   registry across every module, so a flat `TypeNameList` indexed by `TypeDefId` names anything in
+   the program without dragging per-module `DeclTable`s into the result.
+
+**No hash moved.** `api_row_hash` is computed from the AST (`TypeExpr`), not from `Type`, so
+`interface.json`'s corrected `"type"` field left the hash byte-identical — verified, not assumed. No
+lockfile is invalidated. The two surfaces had in fact been disagreeing inside one file: the hash used
+real names while the field beside it printed indices.
+
+Five witnesses, including the nesting case (`List[Sample]`, because a printer fixed only at the top
+level still says `List[T11]`) and the fallback. No new diagnostic number; DL0401 keeps its meaning.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

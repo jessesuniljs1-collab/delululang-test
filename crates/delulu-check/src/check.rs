@@ -236,7 +236,8 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
                     Diagnostic::error(
                         "DL1509",
                         format!(
-                            "a Contained plugin export's signature must be concrete at the `get` site — `{f}` still contains an unresolved type, so rule R-6a cannot be decided here"
+                            "a Contained plugin export's signature must be concrete at the `get` site — `{}` still contains an unresolved type, so rule R-6a cannot be decided here",
+                            checker.ty(&f)
                         ),
                     )
                     .with_span(span, "annotate this `get` with a concrete function signature")
@@ -1203,7 +1204,7 @@ impl<'a> Checker<'a> {
                     Type::List(inner) => *inner,
                     other => {
                         self.diags.push(
-                            Diagnostic::error("DL0405", format!("cannot index a value of type `{other}`"))
+                            Diagnostic::error("DL0405", format!("cannot index a value of type `{}`", self.ty(&other)))
                                 .with_span(recv.span(), "not indexable"),
                         );
                         self.cx.fresh_type()
@@ -1382,7 +1383,7 @@ impl<'a> Checker<'a> {
             }
             other => {
                 self.diags.push(
-                    Diagnostic::error("DL0404", format!("value of type `{other}` is not callable"))
+                    Diagnostic::error("DL0404", format!("value of type `{}` is not callable", self.ty(&other)))
                         .with_span(callee.span(), "not a function"),
                 );
                 for arg in args {
@@ -1488,7 +1489,7 @@ impl<'a> Checker<'a> {
                 if let Some(t) = ts.first() {
                     if self.is_opaque(t, &mut HashSet::new()) {
                         self.diags.push(
-                            Diagnostic::error("DL0604", format!("value of type `{t}` cannot be stringified"))
+                            Diagnostic::error("DL0604", format!("value of type `{}` cannot be stringified", self.ty(t)))
                                 .with_span(span, "opaque type (Secret/Cap/Root or a value containing one)"),
                         );
                     }
@@ -1693,7 +1694,7 @@ impl<'a> Checker<'a> {
         }
 
         self.diags.push(
-            Diagnostic::error("DL0405", format!("type `{rt}` has no method `{}`", name.name))
+            Diagnostic::error("DL0405", format!("type `{}` has no method `{}`", self.ty(&rt), name.name))
                 .with_span(name.span, "unknown method"),
         );
         (self.cx.fresh_type(), acc)
@@ -1977,7 +1978,7 @@ impl<'a> Checker<'a> {
                         self.diags.push(
                             Diagnostic::error(
                                 "DL0401",
-                                format!("argument type mismatch: Secret.map expects a function, found `{other}`"),
+                                format!("argument type mismatch: Secret.map expects a function, found `{}`", self.ty(&other)),
                             )
                             .with_span(aspan, "type mismatch here"),
                         );
@@ -2027,7 +2028,7 @@ impl<'a> Checker<'a> {
                             self.diags.push(
                                 Diagnostic::error(
                                     "DL0401",
-                                    format!("argument type mismatch: List.map expects a function, found `{other}`"),
+                                    format!("argument type mismatch: List.map expects a function, found `{}`", self.ty(&other)),
                                 )
                                 .with_span(aspan, "type mismatch here"),
                             );
@@ -2093,7 +2094,7 @@ impl<'a> Checker<'a> {
         match args.get(i) {
             Some((t, s)) => self.expect_type(expected, t, *s, "argument type mismatch"),
             None => self.diags.push(
-                Diagnostic::error("DL0403", format!("missing argument {} (expected `{expected}`)", i + 1))
+                Diagnostic::error("DL0403", format!("missing argument {} (expected `{}`)", i + 1, self.ty(expected)))
                     .with_span(call_span, "too few arguments"),
             ),
         }
@@ -2177,7 +2178,7 @@ impl<'a> Checker<'a> {
             }
             other => {
                 self.diags.push(
-                    Diagnostic::error("DL0405", format!("type `{other}` has no field `{}`", field.name))
+                    Diagnostic::error("DL0405", format!("type `{}` has no field `{}`", self.ty(&other), field.name))
                         .with_span(field.span, "not a record"),
                 );
                 self.cx.fresh_type()
@@ -2191,7 +2192,7 @@ impl<'a> Checker<'a> {
         match op {
             UnOp::Neg => {
                 if !t.is_numeric() && !matches!(t, Type::Var(_)) {
-                    self.diags.push(Diagnostic::error("DL0401", format!("cannot negate `{t}`")).with_span(operand.span(), "expected Int or Float"));
+                    self.diags.push(Diagnostic::error("DL0401", format!("cannot negate `{}`", self.ty(&t))).with_span(operand.span(), "expected Int or Float"));
                 }
                 (t, r)
             }
@@ -2367,7 +2368,7 @@ impl<'a> Checker<'a> {
             }
             other => {
                 self.diags.push(
-                    Diagnostic::error("DL0401", format!("cannot match variant `{vname}` against `{other}`"))
+                    Diagnostic::error("DL0401", format!("cannot match variant `{vname}` against `{}`", self.ty(&other)))
                         .with_span(span, "not a sum type"),
                 );
                 vec![]
@@ -2473,7 +2474,7 @@ impl<'a> Checker<'a> {
             }
             other => {
                 self.diags.push(
-                    Diagnostic::error("DL0409", format!("`?` requires a Result value, found `{other}`"))
+                    Diagnostic::error("DL0409", format!("`?` requires a Result value, found `{}`", self.ty(&other)))
                         .with_span(inner.span(), "not a Result"),
                 );
                 (self.cx.fresh_type(), acc)
@@ -2804,6 +2805,14 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Render a type for a diagnostic, naming its records and sums.
+    ///
+    /// Every message that shows a type goes through here. A `Record`/`Sum` is stored as a table
+    /// index, so without the table the printer can only say `T11` — which is what C12 was.
+    fn ty(&self, t: &Type) -> String {
+        t.show(self.table).to_string()
+    }
+
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span, msg: &str) {
         self.expect_type_coded(expected, actual, span, msg, None)
     }
@@ -2828,7 +2837,7 @@ impl<'a> Checker<'a> {
                 // case (§6.4 rule 1) — reported as DL0602, not a generic type mismatch.
                 if secret_mismatch(&ea, &aa) {
                     let inner =
-                        if matches!(ea, Type::Secret(_)) { format!("{aa}") } else { format!("{ea}") };
+                        if matches!(ea, Type::Secret(_)) { self.ty(&aa) } else { self.ty(&ea) };
                     self.diags.push(
                         Diagnostic::error(
                             "DL0602",
@@ -2862,8 +2871,10 @@ impl<'a> Checker<'a> {
                         Diagnostic::error(
                             "DL0601",
                             format!(
-                                "a capability cannot be constructed or forged: `{ea}` is not `{aa}` \
-                                 (capabilities are derived from `Root`)"
+                                "a capability cannot be constructed or forged: `{}` is not `{}` \
+                                 (capabilities are derived from `Root`)",
+                                self.ty(&ea),
+                                self.ty(&aa)
                             ),
                         )
                         .with_span(span, "a capability value has no constructor"),
@@ -2875,7 +2886,7 @@ impl<'a> Checker<'a> {
                     _ => mismatch_code.unwrap_or("DL0401"),
                 };
                 self.diags.push(
-                    Diagnostic::error(code, format!("{msg}: expected `{ea}`, found `{aa}`"))
+                    Diagnostic::error(code, format!("{msg}: expected `{}`, found `{}`", self.ty(&ea), self.ty(&aa)))
                         .with_span(span, "type mismatch here"),
                 );
             }

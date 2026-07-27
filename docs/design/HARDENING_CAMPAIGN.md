@@ -77,7 +77,7 @@ deviations.
 | C9 | **There is no LICENSE** — nobody may legally use the project | **high** (adoption) | **CLOSED** — D27 (owner-approved) |
 | C10 | Runtime — DL0703 refused without naming the grant that would fix it | medium (usability) | **CLOSED** — D25 |
 | C11 | Checker — a user function silently loses to a same-named prelude builtin | **high** (correctness) | **CLOSED** — D25 |
-| C12 | Diagnostics — `DL0401` prints type *variables* where the type names are known | medium (usability) | **DOES NOT REPRODUCE** — see §6; tested monomorphic + generic, both name real types |
+| C12 | Diagnostics — `DL0401` prints a type-table INDEX (`T11`) wherever a record or sum is named — in the checker, the LSP hover, the REPL, **and the published `interface.json`** | **high** (every user-declared type in every message; a machine-readable artifact said `fn(T9) -> Float`) | **CLOSED** — D64. Was wrongly carried as DOES NOT REPRODUCE: the clearing re-test used `Int`/`Str`, the two shapes that cannot fail |
 | C13 | **Runtime — a named function used as a value checks clean and faults at runtime** | **high** (correctness) | **CLOSED** — D25 |
 | C14 | **`DL0907` was titled "match reached no arm" and is raised for a dozen unrelated conditions** — a reader hitting it for an unbound name was told something false about their program | medium (honesty) | **CLOSED** — D42 |
 | C15 | **`delulu fmt` deleted the blank line between two comment paragraphs**, merging them — and the identity law could not see it | medium (fidelity) | **CLOSED** — D41 |
@@ -518,7 +518,7 @@ narrow: other runtime outcomes (an ungranted capability, a missing file) are leg
 test says nothing about them. Verified by removing the fix and observing the gate fail by name,
 along with all three unit witnesses, then restoring it.
 
-### C12 · `DL0401` prints type variables where the names are known — OPEN
+### C12 · `DL0401` printed a table index where the names were known — CLOSED (D64)
 
 Passing a `Cap[Http]` result to a function declared `Result[Str, IoErr]` reports:
 
@@ -529,6 +529,21 @@ expected `Result[Str, T0]`, found `Result[Str, T1]`
 The real answer is `IoErr` versus `NetErr`, and the checker knows both — `T0` and `T1` are
 internal identifiers for builtin sums that the type printer does not resolve back to names. The
 diagnostic is accurate and useless: it names the shape of the disagreement and hides its content.
+
+**This entry was marked DOES NOT REPRODUCE for a year of campaign time, and that was wrong.** The
+reproduction above was re-run verbatim and produced exactly the text above. The clearing re-test had
+used the monomorphic and generic shapes (`Int` versus `Str`) — `Type::Int` and `Type::Str` print
+themselves, and `Type::Record`/`Type::Sum` are the only variants that store an index, so the only
+shapes that could fail were the ones not tested. Rule 2 of this campaign, applied to this campaign.
+
+It was also filed too narrowly. The defect was not a `Cap[Http]` corner: **every user-declared record
+and sum** printed as `T11` — `expected T11, found T12` for `Verdict` versus `Status` — and three
+further surfaces shared the printer: the **LSP hover**, the **REPL** type echo, and the published
+**`interface.json`**, which recorded `"type": "fn(T9) -> Float"` in a file whose purpose is machine
+introspection. **Closed by D64**: `Display for Type` is deleted so the compiler demands names at
+every site, the no-table case renders `<type #11>` (unmistakable rather than plausible), and
+`api_row_hash` — computed from the AST, not from `Type` — was verified byte-identical, so no lockfile
+moved.
 
 ### C15 · The formatter merges comment paragraphs — OPEN (deferred to P9)
 
@@ -2051,8 +2066,9 @@ campaign exists to find.
 
 The campaign ran sixteen phases over three days: a baseline and breadth sweep, the front door, one
 adversarial pass per stage for all ten stages, scale, fuzzing, performance, the Authority + Guard
-capstone, and this. **68 findings have been filed. 64 are closed, 1 is a published limit, 2 are open
-with a current status, and 1 does not reproduce.**
+capstone, and this. **68 findings have been filed. 65 are closed, 1 is a published limit, and 2 are
+open with a current status.** Nothing is now carried as "does not reproduce" — the one entry that was
+(C12) reproduced on re-test and is closed under D64.
 
 *(Those five numbers were counted from the table above by script, not estimated. The first draft of
 this paragraph said "57 filed, 48 closed, 3 limits, 4 open, 2 not reproducing" — written from memory
@@ -2133,11 +2149,11 @@ findings that did not exist then, three of which were found by *writing the corp
 
 ### Does not reproduce
 
-- **C12 — `DL0401` prints type variables where the names are known.** Tested in both the monomorphic
-  and generic shapes; both now report `expected Int, found Str`. Recorded as **not reproducible**
-  rather than closed: something during the campaign appears to have fixed it incidentally, and the
-  original reproduction was never written down precisely enough to be sure that is the same case.
-  Saying "closed" would claim knowledge this ledger does not have.
+- **C12 — CLOSED by D64, after this section wrongly said it did not reproduce.** It reproduced
+  verbatim. The clearing re-test used `Int`/`Str`, which print themselves; the failing shapes —
+  records and sums, the only ones stored as an index — were never re-tested. The caution in the old
+  wording ("saying closed would claim knowledge this ledger does not have") was the right instinct
+  pointed at the wrong risk: the danger was not over-claiming a fix, it was under-testing a clear.
 - **C16 — a cyclic type alias is silently accepted.** Superseded by C54: the declaration is accepted,
   but *using* one crashed the compiler. Closed under D47a with its severity corrected.
 

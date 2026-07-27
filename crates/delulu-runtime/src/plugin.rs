@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 use delulu_broker::{attenuation_check, Authority, GrantId, Holder, Scopes};
 use delulu_check::check::lower_export_signature;
 use delulu_check::resolve::{resolve, DeclTable};
-use delulu_check::ty::Type;
+use delulu_check::ty::{NoTypeNames, Type, TypeNames};
 use delulu_check::Effect;
 use delulu_syntax::parse_type_string;
 
@@ -548,7 +548,7 @@ pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusa
         }
         let manifest_ty = lower_export_signature(&te, &table)
             .map_err(|e| refuse(format!("the manifest signature `{sig_str}` does not lower: {e}")))?;
-        check_export_row(code_ty, &manifest_ty).map_err(refuse)?;
+        check_export_row(code_ty, &manifest_ty, &table).map_err(refuse)?;
     }
 
     Ok(VerifiedPlugin { dir, table })
@@ -557,14 +557,18 @@ pub fn step5_verified(art: &PluginArtifact) -> Result<VerifiedPlugin, LoadRefusa
 /// `verified ⊆ manifest`: identical parameter/return types, and the verified row's effects a
 /// **subset** of the manifest's declared row. A code row that exceeds its manifest is the lie this
 /// check exists to catch.
-fn check_export_row(code: &Type, manifest: &Type) -> Result<(), String> {
+fn check_export_row(code: &Type, manifest: &Type, names: &dyn TypeNames) -> Result<(), String> {
     let (Type::Fn { params: cp, ret: cr, row: crow }, Type::Fn { params: mp, ret: mr, row: mrow }) =
         (code, manifest)
     else {
         return Err("the manifest signature is not a function type".into());
     };
     if cp != mp || cr != mr {
-        return Err(format!("the verified type `{code}` does not match the manifest signature `{manifest}`"));
+        return Err(format!(
+            "the verified type `{}` does not match the manifest signature `{}`",
+            code.show(names),
+            manifest.show(names)
+        ));
     }
     if !crow.effects.is_subset(&mrow.effects) {
         let extra: Vec<&str> =
@@ -601,17 +605,21 @@ pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(),
         // here has been re-verified, so this is a can't-happen — which is exactly why it refuses
         // rather than assumes.
         return Err(PluginErr::VerifyFailed(format!(
-            "export `{name}` has a non-function type `{export}` — exports are functions only"
+            "export `{name}` has a non-function type `{}` — exports are functions only",
+            export.show(&NoTypeNames)
         )));
     };
     let Type::Fn { params: fp, ret: fr, row: frow } = f else {
         return Err(PluginErr::VerifyFailed(format!(
-            "`get` requires a function type; `{f}` is not one"
+            "`get` requires a function type; `{}` is not one",
+            f.show(&NoTypeNames)
         )));
     };
     if ep != fp || er != fr {
         return Err(PluginErr::VerifyFailed(format!(
-            "export `{name}` has type `{export}`, which does not match the requested `{f}`"
+            "export `{name}` has type `{}`, which does not match the requested `{}`",
+            export.show(&NoTypeNames),
+            f.show(&NoTypeNames)
         )));
     }
     // R-Get: the export's row must fit inside the row the caller declared for it. An export that
@@ -619,8 +627,9 @@ pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(),
     if !erow.effects.is_subset(&frow.effects) {
         let extra: Vec<&str> = erow.effects.difference(&frow.effects).map(|e| e.name()).collect();
         return Err(PluginErr::VerifyFailed(format!(
-            "export `{name}` performs `{}`, which the requested type `{f}` does not admit — its row must cover the export's",
-            extra.join(", ")
+            "export `{name}` performs `{}`, which the requested type `{}` does not admit — its row must cover the export's",
+            extra.join(", "),
+            f.show(&NoTypeNames)
         )));
     }
     Ok(())
@@ -637,7 +646,8 @@ pub fn r_get_verified(export: Option<&Type>, f: &Type, name: &str) -> Result<(),
 pub fn r_get_contained(grant: &Grant, f: &Type, name: &str) -> Result<(), PluginErr> {
     let Type::Fn { params, row: frow, .. } = f else {
         return Err(PluginErr::VerifyFailed(format!(
-            "`get` requires a function type; `{f}` is not one"
+            "`get` requires a function type; `{}` is not one",
+            f.show(&NoTypeNames)
         )));
     };
     // R-1: the row the caller asks for must cover the WHOLE grant, not the advertised export row.
@@ -645,8 +655,9 @@ pub fn r_get_contained(grant: &Grant, f: &Type, name: &str) -> Result<(), Plugin
     if !granted.is_subset(&frow.effects) {
         let missing: Vec<&str> = granted.difference(&frow.effects).map(|e| e.name()).collect();
         return Err(PluginErr::VerifyFailed(format!(
-            "contained export `{name}` is typed at its module's FULL grant (rule R-1): the requested type `{f}` must admit `{}`. \
+            "contained export `{name}` is typed at its module's FULL grant (rule R-1): the requested type `{}` must admit `{}`. \
              Containment is module-granular — an opaque module's exports are not bounded per-export, so a \"read-only\" export types as everything the module was granted",
+            f.show(&NoTypeNames),
             missing.join(", ")
         )));
     }
@@ -656,8 +667,9 @@ pub fn r_get_contained(grant: &Grant, f: &Type, name: &str) -> Result<(), Plugin
     for (i, p) in params.iter().enumerate() {
         if !is_contained_marshallable(p) {
             return Err(PluginErr::VerifyFailed(format!(
-                "contained export `{name}` parameter {} has type `{p}`, which cannot cross into an opaque module (only Int, Float, Bool, Str, Unit, and Cap[_] may)",
-                i + 1
+                "contained export `{name}` parameter {} has type `{}`, which cannot cross into an opaque module (only Int, Float, Bool, Str, Unit, and Cap[_] may)",
+                i + 1,
+                p.show(&NoTypeNames)
             )));
         }
     }
@@ -1617,7 +1629,7 @@ mod tests {
         for ok in [Type::Int, Type::Float, Type::Bool, Type::Str, Type::Unit, Type::Cap(delulu_check::ResourceKind::FsRead)] {
             assert!(
                 r_get_contained(&g, &fnty(vec![ok.clone()], Type::Str, &[]), "f").is_ok(),
-                "{ok} must be allowed to cross"
+                "{ok:?} must be allowed to cross"
             );
         }
         for bad in [
@@ -1628,7 +1640,7 @@ mod tests {
         ] {
             assert!(
                 r_get_contained(&g, &fnty(vec![bad.clone()], Type::Str, &[]), "f").is_err(),
-                "{bad} must not cross into an opaque module"
+                "{bad:?} must not cross into an opaque module"
             );
         }
     }

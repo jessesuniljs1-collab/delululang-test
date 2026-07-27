@@ -55,6 +55,7 @@ mod tests {
             fn_types: std::collections::HashMap::new(),
             call_owner,
             entry_module,
+            type_names: checked.table.type_names(),
         };
         let scopes = ScopeInfo::default();
         let authority = authority_report(&root, &checked.result, &scopes);

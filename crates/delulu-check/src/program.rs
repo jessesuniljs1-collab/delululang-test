@@ -29,6 +29,9 @@ pub struct Program {
     /// Per module: which module owns each fn name visible in it (for cross-module reachability).
     pub call_owner: HashMap<String, HashMap<String, String>>,
     pub entry_module: Option<String>,
+    /// Names for the `TypeDefId`s appearing in `fn_types`, so a consumer can print `Sample`
+    /// instead of `T9` (C12). Indexed by id; the registry is global across the program.
+    pub type_names: crate::ty::TypeNameList,
 }
 
 impl Program {
@@ -246,7 +249,8 @@ pub fn check_program(pkg: &Package) -> Program {
     }
 
     let entry_module = pkg.entry_module().map(|u| u.name.clone());
-    Program { diagnostics, facts, fn_types, call_owner, entry_module }
+    let type_names = crate::ty::TypeNameList(gtypes.iter().map(|d| d.name.clone()).collect());
+    Program { diagnostics, facts, fn_types, call_owner, entry_module, type_names }
 }
 
 /// The whole-program authority report (§10.5), computed across the module graph from `main`.

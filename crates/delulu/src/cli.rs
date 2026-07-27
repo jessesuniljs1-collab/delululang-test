@@ -3369,7 +3369,11 @@ fn write_interfaces(ws: &Workspace, program: &Program) {
                         continue;
                     }
                     let key = format!("{}::{}", wm.unit.name, f.name.name);
-                    let ty = program.fn_types.get(&key).map(|t| t.to_string()).unwrap_or_default();
+                    let ty = program
+                        .fn_types
+                        .get(&key)
+                        .map(|t| t.show(&program.type_names).to_string())
+                        .unwrap_or_default();
                     let row = program
                         .facts
                         .get(&key)
@@ -4093,7 +4097,14 @@ fn synth_single_program(checked: &Checked) -> Program {
     let mut call_owner = HashMap::new();
     call_owner.insert(mod_name.clone(), owner);
     let entry_module = if checked.result.main_present { Some(mod_name) } else { None };
-    Program { diagnostics: checked.diagnostics.clone(), facts, fn_types, call_owner, entry_module }
+    Program {
+        diagnostics: checked.diagnostics.clone(),
+        facts,
+        fn_types,
+        call_owner,
+        entry_module,
+        type_names: checked.table.type_names(),
+    }
 }
 
 // ----- run -----------------------------------------------------------------
