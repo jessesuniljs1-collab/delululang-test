@@ -133,13 +133,14 @@ It matters more than it looks: it is a complete second copy of the tree at a dif
 and any tool that walks the repository without excluding it will double every file and silently mix
 two revisions of the same document into one result. The Survey excludes it explicitly and says why.
 
-**Not removed.** Deleting a worktree and its branch is destructive and irreversible, and it is the
-owner's call. To remove it:
+**REMOVED 2026-08-01**, authorized by the owner after this was reported. Two independent checks ran
+first — the branch held zero commits `master` did not and its tip was an ancestor of `master`, and
+the working copy held nothing uncommitted or stashed — so the deletion removed a label and a
+duplicate checkout, not history. `51a378a` is still reachable from `master`. Full record, including
+the recovery command: [`REMOVALS.md`](REMOVALS.md).
 
-```
-git worktree remove .claude/worktrees/agent-a4541bfe777803515
-git branch -D worktree-agent-a4541bfe777803515
-```
+The `.claude` exclusion in the Survey's walker **stays**. It was never a fix for this one worktree;
+the next agent run can create another, and the walker should keep being right about that.
 
 ---
 
