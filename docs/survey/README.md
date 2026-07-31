@@ -52,6 +52,38 @@ The reader's own scepticism is the last check, and it is the one the citations e
 
 ---
 
+## How it is put together
+
+`delulu doctor` is the interface; it is **not** where anything is decided.
+
+```
+delulu (CLI)  ──depends on──▶  delulu-survey  ──depends on──▶  (nothing in this workspace)
+   doctor.rs                     health.rs
+   • environment checks          • build the map, decide if it is behind, write it
+   • orchestration               • the integrity invariants
+   • rendering                   • the discrepancy tally
+                                 • what a DeluluLang checkout looks like
+```
+
+Three properties hold this shape, and each is a test in `crates/delulu-survey/tests/architecture.rs`
+rather than a promise in this paragraph:
+
+1. **The Survey depends on no sibling crate.** Not the checker, not the runtime, not the
+   diagnostics. This is what lets you read the map in the situation where you most need one — the
+   tree is mid-refactor and the compiler does not build. A Survey that needed `delulu-check` would
+   require building the thing the map was going to help you fix.
+2. **The dependency runs one way.** The CLI knows about the Survey; the reverse would be a cycle
+   and would put the map behind the binary it exists to help repair.
+3. **The invariants have exactly one home** — `delulu_survey::integrity`. `delulu doctor` renders
+   whatever that returns and adds nothing; the freshness suite asserts every entry holds. So
+   **adding an invariant is a one-line change that the command reports and the test enforces on the
+   same commit.** They were briefly written twice — once in the CLI, once in the test file — and
+   neither was the source; a fourth added to either would have been invisible to the other.
+
+The environment checks stay in the CLI, and that is the same boundary seen from the other side:
+whether Python is compiled in, or the audit chain verifies, is not something the map knows or
+should learn. Teaching the Survey about the broker would cost it property 1.
+
 ## Not to be confused with the Atlas
 
 `crates/delulu-atlas` is **the Atlas**, and it maps something else:

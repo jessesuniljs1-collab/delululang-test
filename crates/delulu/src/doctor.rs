@@ -94,7 +94,7 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
 
     let mut r = Report::default();
     environment(&mut r);
-    match source_tree() {
+    match delulu_survey::find_source_tree() {
         Some(root) => repository(&mut r, &root, check_only),
         None => r.push(
             "repository",
@@ -227,118 +227,73 @@ fn writable(dir: &Path) -> bool {
 
 // --- repository ----------------------------------------------------------------------------------
 
-/// The DeluluLang source tree, found by walking up from the working directory.
-///
-/// Identified by what it contains rather than by its name: a workspace manifest beside the crate
-/// that owns the diagnostic registry and the crate that builds the map. A directory that merely
-/// happens to be called `DeluluLang` is not one.
-fn source_tree() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
-    loop {
-        if dir.join("Cargo.toml").is_file()
-            && dir.join("crates/delulu-diag/src/codes.rs").is_file()
-            && dir.join("crates/delulu-survey/Cargo.toml").is_file()
-        {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
+// Finding the source tree is knowledge about the repository, so it lives with the map:
+// `delulu_survey::find_source_tree`. The CLI asking "where am I?" should not also be the thing
+// that decides what a DeluluLang checkout looks like.
 
+/// Orchestration only.
+///
+/// Every judgement below is the Survey's: whether the map is behind, whether to rewrite it, which
+/// invariants exist and whether they hold, how the discrepancies tally. This function decides
+/// nothing about the map — it asks once, and turns the answer into lines a person can read. That
+/// separation is the point: an invariant added to `delulu_survey::health::integrity` appears here
+/// with no change to this file, and is enforced by that crate's suite on the same commit.
 fn repository(r: &mut Report, root: &Path, check_only: bool) {
+    use delulu_survey::Repair;
+
     r.push("repository", "delulu source tree", Status::Ok, root.display().to_string());
 
-    let survey = delulu_survey::Survey::build(root);
-    let stale = delulu_survey::stale_outputs(root, &survey);
+    let mode = if check_only { Repair::ReportOnly } else { Repair::Regenerate };
+    let h = delulu_survey::inspect(root, mode);
 
-    if stale.is_empty() {
+    if let Some(e) = &h.write_error {
+        r.push("repository", "survey freshness", Status::Problem, format!("cannot write docs/survey: {e}"));
+    } else if h.stale.is_empty() {
         r.push(
             "repository",
             "survey freshness",
             Status::Ok,
-            format!("the map matches the tree — {} nodes, {} edges", survey.nodes.len(), survey.edges.len()),
+            format!("the map matches the tree — {} nodes, {} edges", h.nodes, h.edges),
         );
-    } else if check_only {
+    } else if h.regenerated.is_empty() {
         r.push(
             "repository",
             "survey freshness",
             Status::Problem,
-            format!("{} behind the tree: {}. Run `delulu doctor` without --check", stale.len(), stale.join(", ")),
+            format!("{} behind the tree: {}. Run `delulu doctor` without --check", h.stale.len(), h.stale.join(", ")),
         );
     } else {
-        match delulu_survey::sync_outputs(root, &survey) {
-            Ok(written) => {
-                r.regenerated = written.clone();
-                r.push(
-                    "repository",
-                    "survey freshness",
-                    Status::Fixed,
-                    format!("was behind the tree; regenerated {} — commit it with the change that caused it", written.join(", ")),
-                );
-            }
-            Err(e) => r.push("repository", "survey freshness", Status::Problem, format!("cannot write docs/survey: {e}")),
-        }
+        r.push(
+            "repository",
+            "survey freshness",
+            Status::Fixed,
+            format!(
+                "was behind the tree; regenerated {} — commit it with the change that caused it",
+                h.regenerated.join(", ")
+            ),
+        );
     }
 
-    integrity(r, &survey);
-
-    let (mut errors, mut warnings, mut notes) = (0, 0, 0);
-    for f in &survey.findings {
-        match f.severity {
-            delulu_survey::Severity::Error => errors += 1,
-            delulu_survey::Severity::Warning => warnings += 1,
-            delulu_survey::Severity::Note => notes += 1,
-        }
+    for check in &h.integrity {
+        r.push(
+            "repository",
+            check.name,
+            if check.ok { Status::Ok } else { Status::Problem },
+            check.detail.clone(),
+        );
     }
-    r.survey = Some((survey.nodes.len(), survey.edges.len(), [errors, warnings, notes]));
+
+    let t = h.tally;
+    r.regenerated = h.regenerated.clone();
+    r.survey = Some((h.nodes, h.edges, [t.errors, t.warnings, t.notes]));
     // A discrepancy is a report, not a verdict: errors fail the run, the rest are for a reader.
-    let status = if errors > 0 { Status::Problem } else if warnings > 0 { Status::Note } else { Status::Ok };
+    let status =
+        if !t.is_healthy() { Status::Problem } else if t.warnings > 0 { Status::Note } else { Status::Ok };
     r.push(
         "repository",
         "discrepancies",
         status,
-        format!("{errors} error, {warnings} warning, {notes} note — docs/survey/DISCREPANCIES.md"),
-    );
-}
-
-/// The map's own standard, checked here for the same reason the test suite checks it: a map that
-/// has stopped checking itself is worse than none, because it is still believed.
-fn integrity(r: &mut Report, survey: &delulu_survey::Survey) {
-    let uncited = survey.edges.iter().filter(|e| e.file.is_empty() || e.line == 0).count();
-    r.push(
-        "repository",
-        "every edge cites a line",
-        if uncited == 0 { Status::Ok } else { Status::Problem },
-        if uncited == 0 {
-            format!("{} edges, all with a file and line", survey.edges.len())
-        } else {
-            format!("{uncited} edge(s) carry no citation")
-        },
-    );
-
-    let dangling =
-        survey.edges.iter().flat_map(|e| [&e.from, &e.to]).filter(|id| survey.node(id).is_none()).count();
-    r.push(
-        "repository",
-        "no edge dangles",
-        if dangling == 0 { Status::Ok } else { Status::Problem },
-        if dangling == 0 { "every endpoint is a node".to_string() } else { format!("{dangling} dangling endpoint(s)") },
-    );
-
-    let crates =
-        survey.nodes.iter().filter(|n| n.kind == delulu_survey::NodeKind::Crate && n.id != "workspace").count();
-    let agrees = survey.facts.crates as usize == crates && survey.facts.crates_shipped <= survey.facts.crates;
-    r.push(
-        "repository",
-        "totals agree with contents",
-        if agrees { Status::Ok } else { Status::Problem },
-        if agrees {
-            format!("{} workspace members, {} shipped", survey.facts.crates, survey.facts.crates_shipped)
-        } else {
-            format!("facts say {} crates; the map holds {crates}", survey.facts.crates)
-        },
+        format!("{} error, {} warning, {} note — docs/survey/DISCREPANCIES.md", t.errors, t.warnings, t.notes),
     );
 }
 

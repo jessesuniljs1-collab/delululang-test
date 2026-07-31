@@ -78,47 +78,53 @@ fn the_map_reaches_a_fixed_point() {
     assert_eq!(first, second, "two builds of the same tree disagree — the Survey is reading something it writes");
 }
 
-/// The provenance law, enforced rather than promised.
+/// Every structural invariant the map claims for itself must actually hold.
+///
+/// The list is **not restated here**. It is `delulu_survey::integrity`, which `delulu doctor` also
+/// reports — so an invariant added there is enforced by this test and shown by that command on the
+/// same commit, and the two can never disagree about what "healthy" means. These properties used
+/// to be written out twice, once here and once in the CLI, which is a divergence waiting for
+/// someone to add a fourth.
 #[test]
-fn every_edge_names_the_line_it_was_read_from() {
+fn the_map_satisfies_every_invariant_it_claims() {
     let s = Survey::build(&repo_root());
-    let bad: Vec<&delulu_survey::Edge> = s.edges.iter().filter(|e| e.file.is_empty() || e.line == 0).collect();
+    let checks = delulu_survey::integrity(&s);
+    assert!(!checks.is_empty(), "the integrity list is empty — nothing is being checked at all");
+
+    let failed: Vec<String> =
+        checks.iter().filter(|c| !c.ok).map(|c| format!("{}: {}", c.name, c.detail)).collect();
     assert!(
-        bad.is_empty(),
-        "{} edge(s) carry no citation, e.g. {:?} — an edge nobody can check is a guess with better \
-         typography, and this map does not publish guesses",
-        bad.len(),
-        bad.first()
+        failed.is_empty(),
+        "{} invariant(s) broken:\n  {}\n\nAn edge nobody can check is a guess with better \
+         typography, and this map does not publish guesses.",
+        failed.len(),
+        failed.join("\n  ")
     );
 }
 
-/// Every edge endpoint must be a node that exists.
+/// `inspect` must never write when asked not to, and must agree with a plain build.
+///
+/// This is the property `delulu doctor --check` rests on, and the one a CI step or a git hook
+/// depends on to be safe. It is tested against the real repository because that is where it is
+/// relied upon.
 #[test]
-fn no_edge_points_at_a_node_that_is_not_there() {
-    let s = Survey::build(&repo_root());
-    let dangling: Vec<String> = s
-        .edges
-        .iter()
-        .flat_map(|e| [&e.from, &e.to])
-        .filter(|id| s.node(id).is_none())
-        .cloned()
+fn report_only_inspection_never_writes() {
+    let root = repo_root();
+    let before = mtimes(&root.join("docs/survey"));
+    let h = delulu_survey::inspect(&root, delulu_survey::Repair::ReportOnly);
+    assert!(h.regenerated.is_empty(), "ReportOnly regenerated {:?}", h.regenerated);
+    assert!(h.write_error.is_none(), "ReportOnly attempted a write: {:?}", h.write_error);
+    assert_eq!(mtimes(&root.join("docs/survey")), before, "ReportOnly touched the generated files");
+}
+
+fn mtimes(dir: &std::path::Path) -> Vec<(String, std::time::SystemTime)> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut out: Vec<(String, std::time::SystemTime)> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| Some((e.file_name().to_string_lossy().to_string(), e.metadata().ok()?.modified().ok()?)))
         .collect();
-    assert!(dangling.is_empty(), "{} dangling endpoint(s), e.g. {:?}", dangling.len(), dangling.first());
-}
-
-/// The map's own totals must agree with the map's own contents. A map that miscounts itself has no
-/// standing to report that another document miscounts.
-#[test]
-fn the_reported_totals_match_what_is_in_the_map() {
-    let s = Survey::build(&repo_root());
-    let crates = s.nodes.iter().filter(|n| n.kind == delulu_survey::NodeKind::Crate && n.id != "workspace").count();
-    assert_eq!(s.facts.crates as usize, crates, "facts.crates disagrees with the crate nodes in the map");
-    assert!(
-        s.facts.crates_shipped <= s.facts.crates,
-        "more shipped crates than crates: {} > {}",
-        s.facts.crates_shipped,
-        s.facts.crates
-    );
+    out.sort();
+    out
 }
 
 /// The tree the Survey actually describes, checked against the tree as Cargo sees it.

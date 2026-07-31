@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 12 |
 | … repository tooling (`publish = false`) | 1 |
-| Rust files | 196 |
-| Rust lines | 94641 |
-| Rust files outside `src/` (test/bench targets) | 73 |
+| Rust files | 198 |
+| Rust lines | 94942 |
+| Rust files outside `src/` (test/bench targets) | 74 |
 | Markdown documents | 119 |
-| Markdown lines | 26617 |
+| Markdown lines | 26649 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
 | Recorded rulings | 88 |
 | Recorded campaign findings | 69 |
-| Nodes / edges in this map | 907 / 8027 |
+| Nodes / edges in this map | 909 / 8028 |
 | Open discrepancies | 7 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 18 files, 16268 lines
+- **Modules:** 18 files, 16223 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -96,7 +96,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
 | `src/cli.rs` | 8665 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
-| `src/doctor.rs` | 406 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
+| `src/doctor.rs` | 361 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 685 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
@@ -291,11 +291,12 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 2907 lines
+- **Modules:** 10 files, 3141 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/lib.rs` | 452 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
+| `src/lib.rs` | 409 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 185 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 231 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |

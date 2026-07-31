@@ -34,6 +34,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+pub mod health;
 pub mod manifest;
 pub mod mdown;
 pub mod paths;
@@ -232,56 +233,12 @@ pub struct Survey {
     pub findings: Vec<Finding>,
 }
 
-/// The three generated files and the content the tree currently implies.
-pub fn outputs(survey: &Survey) -> Vec<(&'static str, String)> {
-    vec![
-        ("SURVEY.md", render::markdown(survey)),
-        ("DISCREPANCIES.md", render::discrepancies(survey)),
-        ("survey.json", render::json(survey)),
-    ]
-}
-
-/// Which generated files are behind the tree. Empty means the committed map is current.
-pub fn stale_outputs(root: &Path, survey: &Survey) -> Vec<&'static str> {
-    let dir = root.join(OUTPUT_DIR);
-    outputs(survey)
-        .into_iter()
-        .filter(|(name, fresh)| std::fs::read_to_string(dir.join(name)).ok().as_deref() != Some(fresh.as_str()))
-        .map(|(name, _)| name)
-        .collect()
-}
-
-/// Write only the files that differ, each through a temporary file and a rename.
-///
-/// Two properties, both learned the hard way in this repository. **Only what differs** is written,
-/// so a healthy tree is untouched and running this is not a change. And each write is **atomic**,
-/// so a concurrent reader — the freshness test, another `delulu doctor`, a parallel suite — sees
-/// either the old file or the new one and never half of either. A short-lived process writing a
-/// shared artifact is how campaign finding C69 corrupted an audit chain; the shape is the same
-/// here and is designed out rather than hoped away.
-pub fn sync_outputs(root: &Path, survey: &Survey) -> std::io::Result<Vec<&'static str>> {
-    let dir = root.join(OUTPUT_DIR);
-    std::fs::create_dir_all(&dir)?;
-    let mut written = Vec::new();
-    for (name, fresh) in outputs(survey) {
-        let path = dir.join(name);
-        if std::fs::read_to_string(&path).ok().as_deref() == Some(fresh.as_str()) {
-            continue;
-        }
-        // The temporary name carries the process id so two writers cannot collide on it.
-        let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
-        std::fs::write(&tmp, &fresh)?;
-        // Windows will not rename onto an existing file; removing first is a narrow window, and
-        // narrower than writing the destination in place.
-        let _ = std::fs::remove_file(&path);
-        if let Err(e) = std::fs::rename(&tmp, &path) {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(e);
-        }
-        written.push(name);
-    }
-    Ok(written)
-}
+/// The health API, re-exported so a caller writes `delulu_survey::inspect` rather than reaching
+/// into a module path. [`health`] documents the boundary these draw.
+pub use health::{
+    find_source_tree, find_source_tree_from, inspect, integrity, outputs, stale_outputs, sync_outputs, tally,
+    Integrity, Repair, RepoHealth, Tally,
+};
 
 impl Survey {
     /// Read `root` and derive the map. Pure with respect to the tree: nothing is written here.
