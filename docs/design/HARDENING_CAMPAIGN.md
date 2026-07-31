@@ -54,9 +54,12 @@ uncontended. This is the line every later claim is measured against.
 | `delulu-conform --check-reference` | exit 0 |
 | `cargo clippy --workspace --all-targets` | exit 0, **65 warnings** (tracked baseline, not a gate) |
 
-Workspace size: **~82,000 lines of Rust** across 12 crates, 175 files. The repository is *not*
-rustfmt-formatted under default settings and has no `rustfmt.toml`; house style is wider than
-rustfmt's default, and `cargo fmt` is therefore **not** a gate. Do not run it.
+Workspace size: **~93,500 lines of Rust** across 12 shipped crates plus one tooling crate, 193
+files. These numbers are no longer maintained by hand — `docs/survey/SURVEY.md` recounts them from
+the tree on every build, and a stale figure here now fails a test rather than sitting quietly (the
+figure this line carried until 2026-08-01 was ~82,000 across 175 files, which had drifted by 14%).
+The repository is *not* rustfmt-formatted under default settings and has no `rustfmt.toml`; house
+style is wider than rustfmt's default, and `cargo fmt` is therefore **not** a gate. Do not run it.
 
 ## 3. Findings ledger
 

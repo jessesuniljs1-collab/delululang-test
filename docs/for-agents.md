@@ -25,6 +25,15 @@ Three rules that will save you time:
    a bug — one such bug is on record (`docs/security/DRILL-001.md`), which is why this warning is
    here.
 
+### [agents.survey] If you are here to change the compiler, not to use it
+
+This page is about *driving* DeluluLang. If you are modifying the implementation, start instead at
+[`docs/survey/SURVEY.md`](survey/SURVEY.md) — a map of the repository generated from the repository,
+where every edge cites the file and line it was read from. `cargo run -p delulu-survey -- rdeps
+crate:delulu-diag` answers "what breaks if I change this" without a single grep, and
+[`docs/survey/DISCREPANCIES.md`](survey/DISCREPANCIES.md) lists where the repository currently
+disagrees with itself — worth reading before you trust a number you found in prose.
+
 ## [agents.exit-codes] Exit codes
 
 | Code | Meaning |
@@ -44,7 +53,7 @@ Every `--json` command emits one object:
 {
   "command": "check",
   "schema": 1,
-  "delulu_version": "0.1.0",
+  "delulu_version": "1.0.0",
   "diagnostics": [ ... ],
   "summary": { "errors": 1, "warnings": 0 }
 }

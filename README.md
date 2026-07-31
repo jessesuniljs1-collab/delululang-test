@@ -31,7 +31,8 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 12 crates, ~82,000 lines of Rust. 93 test suites, 1,190 tests passing. Conformance coverage is a hard per-commit gate at 100%. |
+| **Built and tested** | 12 crates, ~94,000 lines of Rust. 102 test suites, 1,362 tests passing. Conformance coverage is a hard per-commit gate at 100%. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Start there before changing anything. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |
 | **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). |

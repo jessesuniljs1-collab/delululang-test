@@ -1,0 +1,31 @@
+[package]
+name = "delulu-survey"
+description = "The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY — every edge cites the file and line it was read from"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+# Repository tooling, not part of the language surface. Never published: the Survey describes this
+# repository and means nothing outside it.
+publish = false
+
+[[bin]]
+name = "delulu-survey"
+path = "src/main.rs"
+
+[lib]
+name = "delulu_survey"
+path = "src/lib.rs"
+
+[dependencies]
+# Deliberately NO new third-party dependency and no sibling-crate dependency.
+#
+# No sibling crates: the Survey must be able to map a repository whose compiler does not currently
+# build. A map you cannot open while the thing it maps is broken is a map you cannot use to fix it.
+#
+# No `toml`/`syn` parser: every fact is extracted line-wise so it can carry the exact line number it
+# came from. A structural parser would give a better AST and lose the provenance that is the whole
+# point (see `docs/survey/README.md`, "the provenance law"). The cost is honest and stated: this is
+# a LEXICAL reader, and `src/rust.rs` documents what that cannot see.
+serde = { workspace = true }
+serde_json = { workspace = true }

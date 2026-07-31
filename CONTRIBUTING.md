@@ -18,6 +18,10 @@ gate fail on purpose, it is not a gate.
 
 ## 2. Before you write code
 
+- **Read the map first.** [`docs/survey/SURVEY.md`](docs/survey/SURVEY.md) is where the parts are
+  and how they depend on each other, generated from the tree rather than remembered. Before
+  changing anything, `cargo run -p delulu-survey -- rdeps crate:<name>` will tell you what else
+  touches it — with the line that proves each one.
 - **A language change needs an RFC.** From 1.0 the core is frozen except through `rfcs/`. See §5.
 - **A bug fix does not.** Open an issue, or just send the fix with its test.
 - **A suspected vulnerability goes to `SECURITY.md`, never to a public issue.**
@@ -95,7 +99,13 @@ cargo run -p delulu-conform -- --coverage           # the coverage law
 cargo run -p delulu-conform -- --check-reference    # the reference must not be stale
 cargo run -p delulu -- fmt --check examples         # one style, no options
 cargo clippy --workspace --all-targets              # no new warnings
+cargo run -p delulu-survey -- build                 # regenerate the map of the repository
 ```
+
+**Regenerate the Survey with any change that moves the tree, and commit it alongside.** This is not
+a courtesy — `cargo test --workspace` rebuilds the map and compares it to what is committed, so a
+change that leaves `docs/survey/` behind fails the suite and names the first line that differs.
+Nothing about it needs remembering; the command above is the whole remedy.
 
 ## 7. Conduct
 

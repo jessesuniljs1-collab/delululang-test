@@ -180,6 +180,31 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **The Survey — a map of this repository, generated from this repository.** `docs/survey/` now
+  holds the shape of the project as a graph: which crates depend on which, what each module is,
+  which file raises which diagnostic code, and which ruling authorized which line. 904 nodes and
+  7,996 edges, in three channels — `SURVEY.md` for people, `survey.json` (schema `survey/1`) for
+  tools, `DISCREPANCIES.md` for whatever the repository currently gets wrong about itself.
+
+  **Every edge names the file and line it was read from, and nothing is inferred from name
+  similarity or proximity.** A graph that guesses gets more impressive as it gets less true, and
+  you cannot tell a real edge from a confident one; this map cannot state a relation it cannot
+  cite. Where it is unsure it files a discrepancy rather than drawing a fainter line. Extraction is
+  lexical, so nothing it reads is trusted alone: a `use` is checked against the crate's manifest, a
+  `mod` against the filesystem, a `DLxxxx` against the registry, a quoted count against a recount
+  of the tree — and **disagreement is reported, never resolved by picking a winner**.
+
+  It cannot rot. `cargo test --workspace` rebuilds the map and fails if the committed copy is
+  behind, naming the first line that differs; five further tests hold it to its own standard,
+  including that two builds of the same tree agree. `delulu-survey` depends on no other crate in
+  the workspace, deliberately: a map you cannot open while the thing it maps is broken is a map you
+  cannot use to fix it. Not to be confused with the **Atlas** (`crates/delulu-atlas`), which maps a
+  checked Delulu *program* from compiler facts — the Survey maps the repository that implements it.
+
+  The first run found five things wrong in the repository (all corrected below) and, more usefully,
+  five things wrong with itself. Both are recorded in `docs/survey/AUDIT.md`, including the one
+  where this audit stated a finding more confidently than it had checked.
+
 - **`parse_float(s) -> Option[Float]`.** DeluluLang had `parse_int` and no way at all to read a
   `Float` out of text — a program could not read a temperature from a file. Found by writing the
   multi-package corpus, which is what a corpus is for.
@@ -332,6 +357,26 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   a function type is reclassified to **DL1302** (rule R-6a). (C24, ruling D31)
 
 ### Fixed
+
+- **A security-relevant version pin rested on a premise that had stopped being true.** The exact
+  pins on the two post-quantum crates (`=0.1.1`, `=0.3.2`) were justified in
+  `crates/delulu-runtime/Cargo.toml` by "`Cargo.lock` is gitignored in this repo" — but the
+  lockfile has been tracked since D19c, and `.gitignore` says so explicitly. A live comment and a
+  live ignore-file contradicted each other, and the wrong one was the one governing how an
+  unaudited lattice implementation is allowed to change. The pins stand, for a reason that outlived
+  the one originally given: a lockfile binds *this* build, while a `=` requirement binds every
+  consumer and survives `cargo update`. Found by the Survey.
+
+- **Numbers on the front door had drifted 14%, and the repository's own map showed five of twelve
+  crates.** `README.md` and `HARDENING_CAMPAIGN.md` both claimed ~82,000 lines of Rust across 175
+  files (actually ~94,000 across 194), and `README.md` reported a suite that had grown from 1,190
+  tests to 1,361. Separately, `docs/REPOSITORY_STRUCTURE.md` §2 drew the Stage-1 five-crate spine
+  under the heading "Crate dependency graph" — `delulu-broker`, `delulu-atlas`, `delulu-wasm` and
+  the rest appeared nowhere. The C5 re-synchronization had re-checked §1 against the tree and left
+  §2 alone, which is how a map rots: in the section nobody re-reads. Sizes are now recounted from
+  the tree on every build and §2 points at the generated graph. Also corrected: `docs/for-agents.md`
+  advertised `"delulu_version": "0.1.0"` on the page that calls itself part of the stability
+  contract, while the CLI emits `1.0.0`.
 
 - **A package whose public signature named a type it did not re-export blamed the wrong file, in the
   wrong package, for the wrong reason.** It built clean on its own; consuming it produced **25 errors

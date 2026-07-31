@@ -33,10 +33,15 @@ ed25519-dalek = "2"
 # Stage 10 phase 10i (Track G, ruling D14) — vetted RustCrypto lattice implementations, adopted
 # rather than written. Both carry their own "never been independently audited" warning, which is
 # why post-quantum signing ships behind `--unstable` (DL1910) rather than as a stable path.
-# Versions are pinned EXACTLY (`=`), not caret-ranged. `Cargo.lock` is gitignored in this repo, so
-# a fresh clone resolves whatever satisfies the requirement — and "we vetted 0.1.1" is a claim about
-# a specific set of bytes. A caret range would let an unaudited lattice implementation change under
-# a recorded vetting without anyone re-reading it (ruling D14c).
+# Versions are pinned EXACTLY (`=`), not caret-ranged, because "we vetted 0.1.1" is a claim about a
+# specific set of bytes. A caret range would let an unaudited lattice implementation change under a
+# recorded vetting without anyone re-reading it (ruling S10-D14c).
+#
+# This comment used to justify the pins by saying `Cargo.lock` was gitignored. That stopped being
+# true at S10-D19c, which committed the lockfile — and the correction matters, because the two
+# facts do different work. A lockfile binds THIS build; a `=` requirement binds every consumer that
+# depends on this crate and survives `cargo update`. The pins were right for a reason that outlived
+# the reason originally given for them. (Found by the Survey: `docs/survey/`.)
 ml-dsa = { version = "=0.1.1", features = ["zeroize"] }
 ml-kem = { version = "=0.3.2", features = ["zeroize"] }
 # Stage 4 C FFI (spec §4). `libloading` binds a shared library; `libffi` assembles the call because

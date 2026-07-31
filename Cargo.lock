@@ -568,6 +568,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "delulu-survey"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "delulu-syntax"
 version = "1.0.0"
 dependencies = [

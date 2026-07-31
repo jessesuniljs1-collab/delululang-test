@@ -13,6 +13,10 @@ members = [
     "crates/delulu-wasm",
     "crates/delulu-broker",
     "crates/delulu-atlas",
+    # Repository tooling, not language surface (`publish = false`): the Survey maps this repository
+    # to itself. Listed last because nothing depends on it — it depends on nothing either, so that
+    # the map still builds when the compiler does not.
+    "crates/delulu-survey",
 ]
 
 [workspace.package]
