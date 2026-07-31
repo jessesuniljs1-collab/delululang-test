@@ -11,6 +11,7 @@ mod brokerd;
 mod cert_crypto;
 mod cli;
 mod deploy;
+mod doctor;
 mod fleet;
 mod foreign_worker;
 mod locale;

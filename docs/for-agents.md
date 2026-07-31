@@ -27,6 +27,10 @@ Three rules that will save you time:
 
 ### [agents.survey] If you are here to change the compiler, not to use it
 
+One command answers "is this checkout healthy?" — `delulu doctor` checks the environment and, when
+run inside the DeluluLang source tree, regenerates the repository map if it is behind and verifies
+its integrity. `delulu doctor --json` emits one envelope; `--check` never writes.
+
 This page is about *driving* DeluluLang. If you are modifying the implementation, start instead at
 [`docs/survey/SURVEY.md`](survey/SURVEY.md) — a map of the repository generated from the repository,
 where every edge cites the file and line it was read from. `cargo run -p delulu-survey -- rdeps

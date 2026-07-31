@@ -56,6 +56,10 @@ fn contracts() -> Vec<(&'static str, Vec<&'static str>, Vec<&'static str>)> {
         ("secrets", vec!["secrets", "list"], vec!["secrets", "no-such-verb-9a"]),
         ("locale", vec!["locale", "list"], vec!["locale", "no-such-verb-9a"]),
     ]
+    // `doctor` is deliberately NOT here. This file covers subcommands that lack witnesses
+    // elsewhere, and `doctor_cli.rs` carries seven — including the two that `witnesses.toml`
+    // cites for `ref.cli.doctor`. Listing it here as well would make every stale map fail an
+    // interface test whose message points nowhere useful.
 }
 
 /// The ACCEPTING side: every listed subcommand honors a valid invocation (exit 0).

@@ -109,7 +109,14 @@ programs. Two habits worth having here:
 ## Keeping it true
 
 **Regenerate the Survey whenever you change the repository, and commit the result with the change
-that caused it.**
+that caused it.** One command does the whole loop — status, regenerate if behind, integrity checks:
+
+```
+delulu doctor
+```
+
+It writes **nothing** when the map is already current, so running it is not a change to the
+repository. `delulu doctor --check` reports without ever writing, for a hook or a CI step.
 
 This is not a request to remember something. `cargo test --workspace` runs
 `the_committed_map_matches_the_tree`, which rebuilds the map and compares it to what is committed.

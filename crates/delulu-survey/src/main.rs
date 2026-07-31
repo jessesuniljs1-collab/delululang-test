@@ -3,7 +3,7 @@
 //! Exit codes follow the project's convention (`docs/for-agents.md`): `0` success, `1` the check
 //! failed, `2` the invocation was wrong.
 
-use delulu_survey::{render, EdgeKind, Severity, Survey};
+use delulu_survey::{EdgeKind, Severity, Survey};
 use std::path::{Path, PathBuf};
 
 const OUT_DIR: &str = "docs/survey";
@@ -59,30 +59,15 @@ fn repo_root() -> PathBuf {
 
 fn build(root: &Path, check_only: bool) {
     let survey = Survey::build(root);
-    let out = root.join(OUT_DIR);
-
-    let files = [
-        ("survey.json", render::json(&survey)),
-        ("SURVEY.md", render::markdown(&survey)),
-        ("DISCREPANCIES.md", render::discrepancies(&survey)),
-    ];
 
     if check_only {
-        let mut stale = Vec::new();
-        for (name, content) in &files {
-            let path = out.join(name);
-            match std::fs::read_to_string(&path) {
-                Ok(on_disk) if on_disk == *content => {}
-                Ok(_) => stale.push(format!("{OUT_DIR}/{name} is out of date")),
-                Err(_) => stale.push(format!("{OUT_DIR}/{name} is missing")),
-            }
-        }
+        let stale = delulu_survey::stale_outputs(root, &survey);
         if stale.is_empty() {
             println!("ok: the Survey matches the tree ({} nodes, {} edges)", survey.nodes.len(), survey.edges.len());
             return;
         }
         for s in &stale {
-            eprintln!("stale: {s}");
+            eprintln!("stale: {OUT_DIR}/{s} is out of date or missing");
         }
         eprintln!(
             "\nThe repository changed and its map did not. Run `cargo run -p delulu-survey -- build`\n\
@@ -91,15 +76,9 @@ fn build(root: &Path, check_only: bool) {
         std::process::exit(1);
     }
 
-    if let Err(e) = std::fs::create_dir_all(&out) {
-        eprintln!("error: cannot create {}: {e}", out.display());
+    if let Err(e) = delulu_survey::sync_outputs(root, &survey) {
+        eprintln!("error: cannot write {OUT_DIR}: {e}");
         std::process::exit(1);
-    }
-    for (name, content) in &files {
-        if let Err(e) = std::fs::write(out.join(name), content) {
-            eprintln!("error: cannot write {name}: {e}");
-            std::process::exit(1);
-        }
     }
 
     let errors = survey.findings.iter().filter(|f| f.severity == Severity::Error).count();

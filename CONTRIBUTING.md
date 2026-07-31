@@ -99,13 +99,19 @@ cargo run -p delulu-conform -- --coverage           # the coverage law
 cargo run -p delulu-conform -- --check-reference    # the reference must not be stale
 cargo run -p delulu -- fmt --check examples         # one style, no options
 cargo clippy --workspace --all-targets              # no new warnings
-cargo run -p delulu-survey -- build                 # regenerate the map of the repository
+```
+
+**Or run one command instead:**
+
+```
+delulu doctor        # environment + repository: regenerates the map if behind, then checks it
+delulu doctor --check   # the same, but never writes — for a hook or a CI step
 ```
 
 **Regenerate the Survey with any change that moves the tree, and commit it alongside.** This is not
 a courtesy — `cargo test --workspace` rebuilds the map and compares it to what is committed, so a
 change that leaves `docs/survey/` behind fails the suite and names the first line that differs.
-Nothing about it needs remembering; the command above is the whole remedy.
+`delulu doctor` is the whole remedy, and it writes nothing when the map is already current.
 
 ## 7. Conduct
 

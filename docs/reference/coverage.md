@@ -6,7 +6,7 @@
 
 Invariant 42: *the conformance suite is the specification's executable form.* This chapter is the machine's own account of how much of the reference is executable today. It is generated from a live coverage run — it cannot flatter itself.
 
-**317 of 317 anchors (100.0%)** carry both an accepting and a rejecting witness.
+**318 of 318 anchors (100.0%)** carry both an accepting and a rejecting witness.
 
 | Chapter | Anchors | Covered |
 |---|---|---|
@@ -14,7 +14,7 @@ Invariant 42: *the conformance suite is the specification's executable form.* Th
 | prim | 59 | 59 |
 | grammar | 27 | 27 |
 | audit | 7 | 7 |
-| cli | 25 | 25 |
+| cli | 26 | 26 |
 | rule | 54 | 54 |
 
 A `rule` anchor is covered only when *every* diagnostic that enforces it is covered in both directions, so this row is the strictest of the six.

@@ -190,3 +190,11 @@ New at root/created: `Cargo.toml`, `README.md`, `.gitignore`, `crates/`, `tests/
   builtins; see `docs/reference/primitives.md`.
 - A code range (`DLxxxx`) is allocated in exactly one stage and never reused; the registry lives
   in `crates/delulu-diag/src/codes.rs` and grows per stage.
+- **Ruling ids are allocated once per stage, so cite the stage when you mean an earlier one.**
+  `STAGE9_BUILD_ORDER.md` allocates D1–D22 and `STAGE10_BUILD_ORDER.md` allocates D1–D66, so a bare
+  number from 1 to 22 exists in both. The convention is that **a bare `D<n>` means the latest stage**
+  and an earlier one is written `S9-D<n>` — as `CHANGELOG.md` and the Stage-10 ledger heading both
+  state, and as the Stage-10 order does in practice. It is repeated here because 232 citations
+  depend on it and neither of those two places is where a reader meets one. Nothing is currently
+  mis-attributed; `docs/survey/` resolves every citation by this rule and reports how many rely on
+  the default.

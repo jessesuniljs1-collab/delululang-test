@@ -1371,6 +1371,18 @@ test = "every_listed_subcommand_refuses_an_invalid_invocation"
 kind = "negative"
 
 [[witness]]
+anchor = "ref.cli.doctor"
+file = "crates/delulu/tests/doctor_cli.rs"
+test = "doctor_reports_a_healthy_checkout"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.doctor"
+file = "crates/delulu/tests/doctor_cli.rs"
+test = "doctor_refuses_an_option_it_does_not_know"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.cli.explain"
 file = "crates/delulu/tests/cli_contract.rs"
 test = "every_listed_subcommand_honors_a_valid_invocation"

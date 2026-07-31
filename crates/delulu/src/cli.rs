@@ -704,6 +704,7 @@ fn run_inner(args: &[String]) -> i32 {
         "locale" => cmd_locale(rest),
         "morph" => cmd_morph(rest),
         "explain" => cmd_explain(rest),
+        "doctor" => crate::doctor::cmd_doctor(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
             0
@@ -811,6 +812,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
+     \x20 delulu doctor    [--check] [--json]  (is this machine healthy? inside the source tree, is\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the repository map current and sound? regenerates it when behind; --check never writes)\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
      \n\

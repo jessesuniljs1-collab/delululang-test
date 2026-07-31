@@ -180,6 +180,22 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu doctor` — one command for "is this checkout healthy?"** It checks the environment
+  (version, embedded Python, state directory and its writability, broker mode, and it *verifies the
+  audit chain* rather than assuming it) and then, **only when standing inside the DeluluLang source
+  tree**, checks the repository map: regenerates it if it is behind, then runs the map's own
+  integrity checks — every edge cites a line, nothing dangles, the totals agree with the contents.
+  Elsewhere it says the repository section was skipped instead of reporting on a checkout it is not
+  in. `--json` emits one envelope; `--check` never writes.
+
+  **It writes nothing when the map is already current**, so running it is not a change to the
+  repository — and when it does write, each file goes through a temporary file and a rename.
+  That is not tidiness: doctor is short-lived, runs where the map lives, and the suite runs it
+  alongside tests that read those files. A short-lived process writing a shared artifact is exactly
+  how campaign finding C69 corrupted an audit chain, and the shape is designed out here rather than
+  hoped away. For the same reason no test runs doctor in writing mode against a stale tree: it
+  would silently repair the very staleness the freshness gate exists to fail on.
+
 - **The Survey — a map of this repository, generated from this repository.** `docs/survey/` now
   holds the shape of the project as a graph: which crates depend on which, what each module is,
   which file raises which diagnostic code, and which ruling authorized which line. 904 nodes and

@@ -34,6 +34,15 @@ delulu-wasm = { path = "../delulu-wasm" }
 # directly. Chunk 3 (phases 5f/5g): the daemon owns a `Broker` + `AuditLog` + secret store; the
 # client speaks IPC to it.
 delulu-broker = { path = "../delulu-broker" }
+# `delulu doctor`'s repository section. The Survey is repository tooling, so this is the one place
+# the shipped CLI links something that only means anything inside the DeluluLang source tree —
+# doctor detects that tree and skips the section elsewhere, rather than reporting on a checkout it
+# is not standing in. Accepted for a real reason: "is my checkout healthy?" should be ONE command,
+# not one for the environment and another for the map. The cost is honest and small — the Survey
+# has no third-party dependencies of its own, so the SBOM is unchanged and only ~2k lines of
+# dependency-free Rust are linked in. Note the direction: nothing in the Survey depends on the
+# compiler, which is what keeps the map readable when the tree does not build.
+delulu-survey = { path = "../delulu-survey" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 # Stage 8 phase 8h: `delulu keygen` mints an ed25519 signing seed from OS randomness.
