@@ -478,3 +478,124 @@ fn criterion3_latency_150ms_on_10kloc_release() {
     assert!(best <= 150, "criterion 3: ≤150 ms, got {best} ms");
     c.shutdown();
 }
+
+// --- completion ----------------------------------------------------------------------------------
+
+fn complete(c: &mut Client, uri: &str, line: u64, character: u64) -> Vec<Value> {
+    let r = c.request(
+        "textDocument/completion",
+        json!({ "textDocument": { "uri": uri }, "position": { "line": line, "character": character } }),
+    );
+    r["items"].as_array().cloned().unwrap_or_default()
+}
+
+fn labels(items: &[Value]) -> Vec<String> {
+    items.iter().filter_map(|i| i["label"].as_str().map(str::to_string)).collect()
+}
+
+/// Declarations in the file come first, and a function carries its signature AND its row — the row
+/// being the part a reader most often forgets and most needs before calling.
+#[test]
+fn completion_offers_declarations_with_their_signature_and_authority() {
+    let src = "module m\nfn greet(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\ntype Point\nfn g(root: Root) { }\n";
+    let mut c = Client::start();
+    c.open("file:///c.delulu", src);
+    let _ = c.wait_diagnostics("file:///c.delulu");
+
+    // typing `gr` on a fresh line
+    c.notify("textDocument/didChange", json!({
+        "textDocument": { "uri": "file:///c.delulu", "version": 2 },
+        "contentChanges": [{ "text": format!("{src}gr") }],
+    }));
+    let _ = c.wait_diagnostics("file:///c.delulu");
+    let items = complete(&mut c, "file:///c.delulu", 4, 2);
+    let greet = items.iter().find(|i| i["label"] == "greet").expect("`greet` must be offered for prefix `gr`");
+
+    assert_eq!(greet["kind"], 3, "a fn completes as a Function");
+    let detail = greet["detail"].as_str().unwrap_or_default();
+    assert!(detail.contains("Cap[Console]") && detail.contains("Str"), "signature in detail: {detail}");
+    let doc = greet["documentation"]["value"].as_str().unwrap_or_default();
+    assert!(doc.contains("Write"), "the row rides on the completion: {doc}");
+
+    assert!(!labels(&items).contains(&"Point".to_string()), "prefix `gr` must not offer `Point`");
+    c.shutdown();
+}
+
+/// **Inside an effect row, only effects are legal — so only effects are offered.**
+///
+/// A keyword suggested there is a suggestion that cannot compile, and the completion list is the
+/// most-read documentation the language has: it is consulted on every keystroke by people who have
+/// not read the spec.
+#[test]
+fn completion_inside_an_effect_row_offers_effects_and_nothing_else() {
+    let src = "module m\nfn f(root: Root) ! {";
+    let mut c = Client::start();
+    c.open("file:///r.delulu", src);
+    let _ = c.wait_diagnostics("file:///r.delulu");
+
+    let items = complete(&mut c, "file:///r.delulu", 1, 21);
+    let got = labels(&items);
+    assert!(!got.is_empty(), "an effect row must offer something");
+
+    for name in delulu_check::check::CORE_EFFECT_NAMES {
+        assert!(got.contains(&name.to_string()), "core effect `{name}` must be offered inside a row: {got:?}");
+    }
+    for kw in delulu_syntax::morph::MORPHABLE_KEYWORDS {
+        assert!(!got.contains(&kw.to_string()), "keyword `{kw}` is not legal inside a row, so must not be offered");
+    }
+    c.shutdown();
+}
+
+/// Outside a row, the keywords are offered — and they are the canonical set, not a copy.
+#[test]
+fn completion_keywords_are_the_canonical_set() {
+    let src = "module m\n";
+    let mut c = Client::start();
+    c.open("file:///k.delulu", src);
+    let _ = c.wait_diagnostics("file:///k.delulu");
+
+    let got = labels(&complete(&mut c, "file:///k.delulu", 1, 0));
+    for kw in delulu_syntax::morph::MORPHABLE_KEYWORDS {
+        assert!(got.contains(&kw.to_string()), "keyword `{kw}` must be offered: {got:?}");
+    }
+    c.shutdown();
+}
+
+/// A name declared in another open document is offered, and ranked below the local ones.
+#[test]
+fn completion_reaches_other_open_documents_but_ranks_local_names_first() {
+    let mut c = Client::start();
+    c.open("file:///a.delulu", "module a\nfn shared_helper(root: Root) { }\n");
+    let _ = c.wait_diagnostics("file:///a.delulu");
+    c.open("file:///b.delulu", "module b\nfn shared_local(root: Root) { }\n");
+    let _ = c.wait_diagnostics("file:///b.delulu");
+
+    let items = complete(&mut c, "file:///b.delulu", 2, 0);
+    let by = |name: &str| items.iter().find(|i| i["label"] == name).cloned();
+    let local = by("shared_local").expect("the local declaration must be offered");
+    let other = by("shared_helper").expect("a declaration in another open document must be offered");
+    assert!(
+        local["sortText"].as_str() < other["sortText"].as_str(),
+        "a name in this document must sort before one from another: {} vs {}",
+        local["sortText"], other["sortText"]
+    );
+    c.shutdown();
+}
+
+/// Completion must stay usable on a large file — it runs on every keystroke.
+#[test]
+fn completion_answers_promptly_on_10kloc() {
+    let src = ten_kloc();
+    let mut c = Client::start();
+    c.open("file:///big.delulu", &src);
+    let _ = c.wait_diagnostics("file:///big.delulu");
+
+    let t = std::time::Instant::now();
+    let items = complete(&mut c, "file:///big.delulu", 1, 0);
+    let ms = t.elapsed().as_millis();
+    assert!(!items.is_empty(), "completion must answer on a large file");
+    // Debug build, so this is a smoke bound rather than the release criterion: it catches an
+    // accidental quadratic, not a missing optimisation.
+    assert!(ms < 3_000, "completion took {ms} ms on 10kloc — something scales badly");
+    c.shutdown();
+}

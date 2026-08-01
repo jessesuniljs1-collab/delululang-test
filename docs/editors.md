@@ -25,8 +25,16 @@ transport: stdio
 - **Hover** — type, effect row, and (on a function name) the full signature plus its
   transitively computed authority.
 - **The authority lens** — inlay hints show the inferred row on unannotated lambdas.
+- **Completion** — the declarations in scope (a function carries its signature *and* its
+  authority row, so you see what it can do before you call it), then the keywords.
+  **Inside an effect row `! { … }` only effects are offered**, because nothing else is
+  legal there and a suggestion that cannot compile is worse than no suggestion. Names
+  from the file you are in sort above names from other open files. Every list comes from
+  the compiler's own — keywords from the morph table, effects from the checker's core
+  set — so the completion list cannot drift from the language.
 - **Definition / references / rename** for module-level names across open documents
-  (locals refuse rename honestly in v0.8 rather than guessing through shadows).
+  (a local rename is refused rather than guessed: resolving it needs shadow-aware
+  scoping the server does not have).
 - **Semantic tokens** with dedicated kinds for effects, reference capabilities,
   capability types, and secrets.
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.

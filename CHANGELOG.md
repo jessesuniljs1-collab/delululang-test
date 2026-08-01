@@ -180,6 +180,22 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **Completion in the language server.** Typing now offers the declarations in scope — a function
+  carrying its signature **and its authority row**, so you see what it can do before you call it —
+  followed by the keywords, with names from the file you are in sorted above names from other open
+  files.
+
+  **Inside an effect row `! { … }`, only effects are offered.** Nothing else is legal there, and a
+  completion list is the most-read documentation a language has: it is consulted on every keystroke
+  by people who have not read the spec. Suggesting a keyword where a keyword cannot compile teaches
+  the language wrongly, at the worst possible moment.
+
+  Every list is the compiler's own — keywords from `MORPHABLE_KEYWORDS`, effects from
+  `CORE_EFFECT_NAMES`, declarations from the checked module. Nothing is restated, so the completion
+  list cannot drift from the language the way the effect-list error message had. No trigger
+  characters are advertised: naming `.` or `{` would promise member and block completion the server
+  does not have, and a list that appears with nothing useful to say trains people to dismiss it.
+
 - **`delulu doctor` — one command for "is this checkout healthy?"** It checks the environment
   (version, embedded Python, state directory and its writability, broker mode, and it *verifies the
   audit chain* rather than assuming it) and then, **only when standing inside the DeluluLang source

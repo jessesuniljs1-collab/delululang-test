@@ -64,6 +64,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                 let r = server.hover(&msg["params"]);
                 respond(id, r);
             }
+            Some("textDocument/completion") => {
+                let r = server.completion(&msg["params"]);
+                respond(id, r);
+            }
             Some("textDocument/codeAction") => {
                 let r = server.code_actions(&msg["params"]);
                 respond(id, r);
@@ -125,6 +129,12 @@ impl Server {
             "capabilities": {
                 "textDocumentSync": 1, // full
                 "hoverProvider": true,
+                // No trigger characters, deliberately. An editor already asks for completions as
+                // an identifier is typed, which is every context this server answers well. Naming
+                // `.` or `{` as triggers would promise member and block completion it does not
+                // have, and a completion list that appears when it has nothing useful to say
+                // trains people to dismiss it.
+                "completionProvider": { "resolveProvider": false },
                 "codeActionProvider": true,
                 "documentSymbolProvider": true,
                 "inlayHintProvider": true,
@@ -378,6 +388,120 @@ impl Server {
             e += 1;
         }
         Some((text[s..e].to_string(), s as u32, e as u32))
+    }
+
+    /// Completions for the identifier being typed.
+    ///
+    /// Two contexts, and the difference is the point. **Inside an effect row** (`! { … }`) the only
+    /// legal words are effects, so only effects are offered — a keyword suggested there would be a
+    /// suggestion that cannot compile. **Everywhere else**, the declarations in scope come first,
+    /// then the keywords.
+    ///
+    /// Every source is the canonical one: keywords from [`delulu_syntax::morph::MORPHABLE_KEYWORDS`],
+    /// core effects from `delulu_check::check::CORE_EFFECT_NAMES`, declarations from the checked
+    /// module. Nothing here restates a list that lives somewhere else — a completion list that
+    /// drifts from the compiler teaches the language wrongly, and does it at every keystroke.
+    fn completion(&self, params: &Value) -> Value {
+        let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let Some(text) = self.docs.get(uri) else {
+            return json!({ "isIncomplete": false, "items": [] });
+        };
+        let pos = &params["position"];
+        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0))
+            as usize)
+            .min(text.len());
+
+        // The word already typed. The client filters on it too, but sending it as `filterText`
+        // and trimming here keeps the payload small on a big file.
+        let b = text.as_bytes();
+        let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+        let mut start = at;
+        while start > 0 && is_word(b[start - 1]) {
+            start -= 1;
+        }
+        let prefix = &text[start..at];
+
+        let mut items: Vec<Value> = Vec::new();
+        let mut push = |name: &str, kind: u32, rank: u8, detail: String, doc: Option<String>| {
+            if !name.starts_with(prefix) {
+                return;
+            }
+            let mut item = json!({
+                "label": name,
+                "kind": kind,
+                // `sortText` is what actually orders the list; the label never should.
+                "sortText": format!("{rank}{name}"),
+            });
+            if !detail.is_empty() {
+                item["detail"] = json!(detail);
+            }
+            if let Some(d) = doc {
+                item["documentation"] = json!({ "kind": "markdown", "value": d });
+            }
+            items.push(item);
+        };
+
+        if in_effect_row(text, start) {
+            for name in delulu_check::check::CORE_EFFECT_NAMES {
+                push(name, COMPLETION_ENUM_MEMBER, 0, "core effect".to_string(), None);
+            }
+            for decl_text in self.docs.values() {
+                for item in &check_source(0, decl_text).module.items {
+                    if let delulu_syntax::ast::Item::Effect(e) = item {
+                        push(&e.name.name, COMPLETION_ENUM, 1, "declared effect".to_string(), None);
+                    }
+                }
+            }
+            return json!({ "isIncomplete": false, "items": items });
+        }
+
+        // Declarations, this document before the others: a name you can see is likelier than one
+        // you cannot.
+        for (doc_uri, doc_text) in &self.docs {
+            let rank = if doc_uri == uri { 0 } else { 1 };
+            let checked = check_source(0, doc_text);
+            for item in &checked.module.items {
+                use delulu_syntax::ast::Item;
+                match item {
+                    Item::Fn(f) => {
+                        let sig = checked
+                            .result
+                            .fn_types
+                            .get(&f.name.name)
+                            .map(|t| t.show(&checked.table).to_string())
+                            .unwrap_or_else(|| "fn".to_string());
+                        // The row is the part a reader most needs and most often forgets, so it
+                        // rides on the completion rather than waiting for a hover.
+                        let authority = checked
+                            .result
+                            .facts
+                            .get(&f.name.name)
+                            .map(|fa| {
+                                let mut es: Vec<&str> = fa.effects.iter().map(|e| e.name()).collect();
+                                es.sort_unstable();
+                                if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+                            })
+                            .unwrap_or_default();
+                        let doc = format!("```delulu\nfn {}: {sig}\n```\nauthority: {authority}", f.name.name);
+                        push(&f.name.name, COMPLETION_FUNCTION, rank, sig, Some(doc));
+                    }
+                    Item::Type(t) => push(&t.name.name, COMPLETION_STRUCT, rank, "type".into(), None),
+                    Item::Effect(e) => push(&e.name.name, COMPLETION_ENUM, rank, "effect".into(), None),
+                    Item::Const(c) => push(&c.name.name, COMPLETION_CONSTANT, rank, "const".into(), None),
+                    Item::Actor(a) => push(&a.name.name, COMPLETION_CLASS, rank, "actor".into(), None),
+                    Item::Foreign(fd) => {
+                        push(&fd.name.name, COMPLETION_MODULE, rank, "foreign block".into(), None)
+                    }
+                    Item::Test(_) => {}
+                }
+            }
+        }
+
+        for kw in delulu_syntax::morph::MORPHABLE_KEYWORDS {
+            push(kw, COMPLETION_KEYWORD, 2, "keyword".to_string(), None);
+        }
+
+        json!({ "isIncomplete": false, "items": items })
     }
 
     /// Re-check the document and push its diagnostics — the compiler's own, verbatim.
@@ -701,6 +825,51 @@ fn lsp_diagnostic(text: &str, d: &Diagnostic) -> Value {
 
 /// The legend (spec §3): the last four kinds are the ones the spec NAMES as distinct —
 /// effects, rcaps, capability types, secrets.
+// `CompletionItemKind`, from the LSP specification. Named rather than inlined so a reader does not
+// have to know that 3 means a function.
+const COMPLETION_FUNCTION: u32 = 3;
+const COMPLETION_CLASS: u32 = 7;
+const COMPLETION_MODULE: u32 = 9;
+const COMPLETION_ENUM: u32 = 13;
+const COMPLETION_KEYWORD: u32 = 14;
+const COMPLETION_CONSTANT: u32 = 21;
+const COMPLETION_STRUCT: u32 = 22;
+const COMPLETION_ENUM_MEMBER: u32 = 20;
+
+/// Whether the byte offset sits inside an effect row — the `{ … }` of a `! { … }`.
+///
+/// Scans backwards for the innermost unclosed `{` and asks what precedes it. Bounded to
+/// [`ROW_SCAN_LIMIT`] bytes because this runs on every keystroke and a row is never long; without
+/// the bound, completion in a large file would walk the whole document to answer a question that
+/// is decided within a few characters.
+fn in_effect_row(text: &str, upto: usize) -> bool {
+    let b = text.as_bytes();
+    let floor = upto.saturating_sub(ROW_SCAN_LIMIT);
+    let mut depth: i32 = 0;
+    let mut i = upto;
+    while i > floor {
+        i -= 1;
+        match b[i] {
+            b'}' => depth += 1,
+            b'{' => {
+                if depth == 0 {
+                    let mut j = i;
+                    while j > 0 && (b[j - 1] as char).is_ascii_whitespace() {
+                        j -= 1;
+                    }
+                    return j > 0 && b[j - 1] == b'!';
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// How far back [`in_effect_row`] looks. A row spans a few dozen bytes; this is generous.
+const ROW_SCAN_LIMIT: usize = 4096;
+
 const SEMANTIC_TOKEN_TYPES: [&str; 12] = [
     "keyword", "function", "type", "variable", "string", "number", "comment", "operator",
     "effect", "rcap", "capability", "secret",
