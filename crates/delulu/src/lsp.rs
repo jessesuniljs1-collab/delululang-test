@@ -107,7 +107,7 @@ pub fn run_lsp(_args: &[String]) -> i32 {
             // Politely refuse anything unknown that expects an answer.
             _ => {
                 if let Some(id) = id {
-                    respond_err(id, -32601, "method not implemented in v0.8");
+                    respond_err(id, -32601, "method not implemented by this server");
                 }
             }
         }
@@ -168,7 +168,7 @@ impl Server {
     }
 
     /// Rename a MODULE-LEVEL name across every open document. Locals refuse honestly
-    /// (deviation 3): a shadow-aware local rename needs the DefId graph v0.8 doesn't have.
+    /// (deviation 3): a shadow-aware local rename needs a DefId graph the server does not have.
     fn rename(&self, params: &Value) -> Result<Value, &'static str> {
         let Some((word, _, _)) = self.word_at(params) else {
             return Err("nothing renameable at this position");
@@ -186,7 +186,11 @@ impl Server {
             .values()
             .any(|text| decl_name_span(&check_source(0, text).module, &word).is_some());
         if !is_decl {
-            return Err("only module-level names (fn/type/effect/const/actor) rename in v0.8 — locals are refused, not guessed");
+            return Err(
+                "only module-level names (fn/type/effect/const/actor) can be renamed — a local \
+                 rename needs shadow-aware resolution the server does not have, so it is refused \
+                 rather than guessed",
+            );
         }
         let mut changes = serde_json::Map::new();
         for (uri, text) in &self.docs {

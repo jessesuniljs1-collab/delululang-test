@@ -385,7 +385,13 @@ fn rename_of_a_local_is_refused_honestly() {
         let msg = c.read_message();
         if msg.get("id").and_then(Value::as_i64) == Some(id) {
             let e = msg["error"]["message"].as_str().expect("locals refuse rename");
-            assert!(e.contains("locals are refused"), "{e}");
+            // The property is that the refusal is HONEST: it says a local is what was refused,
+            // and that it was refused rather than attempted. Asserted as substance rather than as
+            // one exact phrase — the previous form pinned the sentence, so improving the wording
+            // failed a test that had no quarrel with the new wording.
+            let e_lower = e.to_lowercase();
+            assert!(e_lower.contains("local"), "the refusal must say a LOCAL is what it refused: {e}");
+            assert!(e_lower.contains("refused"), "the refusal must say it refused, not that it failed: {e}");
             break;
         }
     }

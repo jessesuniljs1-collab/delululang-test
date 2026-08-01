@@ -278,3 +278,24 @@ fn repl_evaluates_piped_input_and_reports_errors() {
     assert!(bad.contains("error"), "the REPL reports bad input rather than ignoring it: {bad}");
     assert!(!bad.contains("panicked at"), "the REPL must never panic on bad input: {bad}");
 }
+
+/// The effect list a user is shown must be the list the checker accepts.
+///
+/// It was not. Two error messages hand-wrote "Read, Write, Net, Clock, Rand, Declassify,
+/// ForeignCall" while `CORE_EFFECT_NAMES` held ten — so a reader who mistyped an effect was told a
+/// set that omitted `Load`, `Async` and `Actuate`, and could not discover them from the very error
+/// that exists to teach them. The behaviour was always right; only the teaching was wrong, which is
+/// the kind of defect no test catches unless it compares the message to the source.
+#[test]
+fn the_effect_list_shown_to_a_user_is_the_one_the_checker_accepts() {
+    let home = scratch("effects");
+    let o = delulu(&home, &["why", "NotAnEffect9a", "examples/greeter"]);
+    let msg = text(&o);
+    for name in delulu_check::check::CORE_EFFECT_NAMES {
+        assert!(
+            msg.contains(name),
+            "`{name}` is a core effect the checker accepts, but the error listing the core effects \
+             does not mention it:\n{msg}"
+        );
+    }
+}

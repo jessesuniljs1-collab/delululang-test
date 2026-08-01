@@ -3797,8 +3797,13 @@ fn cmd_why(rest: &[String]) -> i32 {
         || program.facts.values().any(|f| f.effects.iter().any(|e| e.name() == effect_name));
     if !is_known {
         eprintln!(
-            "error: `{effect_name}` is not a known effect (core effects: Read, Write, Net, Clock, Rand, Declassify, ForeignCall; \
-             or a user-declared `effect` visible in this program)"
+            // Derived from CORE_EFFECT_NAMES, never restated. The hand-written list that stood
+            // here named seven effects while the checker accepted ten, so a reader who mistyped
+            // one was told a set omitting `Load`, `Async` and `Actuate` — and could not discover
+            // them from the error that exists to teach them.
+            "error: `{effect_name}` is not a known effect (core effects: {}; \
+             or a user-declared `effect` visible in this program)",
+            delulu_check::check::CORE_EFFECT_NAMES.join(", ")
         );
         return 2;
     }
@@ -5304,7 +5309,10 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // baffling). Validate up front.
     for e in &effects {
         if Effect::core_from_name(e).is_none() {
-            eprintln!("error: unknown effect `{e}` (core effects: Read, Write, Net, Clock, Rand, Declassify, ForeignCall)");
+            eprintln!(
+                "error: unknown effect `{e}` (core effects: {})",
+                delulu_check::check::CORE_EFFECT_NAMES.join(", ")
+            );
             return 2;
         }
     }
