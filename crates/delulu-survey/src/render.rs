@@ -232,12 +232,12 @@ pub fn discrepancies(s: &Survey) -> String {
 
     o.push_str("| Severity | Class | Count |\n|---|---|---:|\n");
     for ((sev, class), items) in &by_class {
-        let _ = writeln!(o, "| {} | `{class}` | {} |", severity_word(sev), items.len());
+        let _ = writeln!(o, "| {} | `{class}` | {} |", sev.word(), items.len());
     }
     o.push('\n');
 
     for ((sev, class), items) in &by_class {
-        let _ = writeln!(o, "## {} — `{class}` ({})\n", severity_word(sev), items.len());
+        let _ = writeln!(o, "## {} — `{class}` ({})\n", sev.word(), items.len());
         if let Some(first) = items.first() {
             if !first.remedy.is_empty() {
                 let _ = writeln!(o, "**What to do:** {}\n", first.remedy);
@@ -253,14 +253,6 @@ pub fn discrepancies(s: &Survey) -> String {
         o.push('\n');
     }
     o
-}
-
-fn severity_word(s: &Severity) -> &'static str {
-    match s {
-        Severity::Error => "error",
-        Severity::Warning => "warning",
-        Severity::Note => "note",
-    }
 }
 
 fn join_code(v: &[&str]) -> String {

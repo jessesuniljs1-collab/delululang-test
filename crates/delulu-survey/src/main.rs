@@ -3,15 +3,23 @@
 //! Exit codes follow the project's convention (`docs/for-agents.md`): `0` success, `1` the check
 //! failed, `2` the invocation was wrong.
 
-use delulu_survey::{EdgeKind, Severity, Survey};
+use delulu_survey::{EdgeKind, Repair, Survey, OUTPUT_DIR};
 use std::path::{Path, PathBuf};
-
-const OUT_DIR: &str = "docs/survey";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let verb = args.first().map(String::as_str).unwrap_or("build");
-    let root = repo_root();
+    if matches!(verb, "--help" | "-h" | "help") {
+        print_help();
+        return;
+    }
+    let Some(root) = repo_root() else {
+        eprintln!(
+            "error: not inside a DeluluLang source tree — there is no repository here to map.\n\
+             The Survey describes THIS repository and means nothing outside it."
+        );
+        std::process::exit(2);
+    };
 
     match verb {
         "build" => build(&root, false),
@@ -21,9 +29,6 @@ fn main() {
             Some(id) => query(&root, id, verb == "rdeps"),
             None => usage("query and rdeps need a node id, e.g. `crate:delulu-check`"),
         },
-        "--help" | "-h" | "help" => {
-            print_help();
-        }
         other => usage(&format!("unknown verb `{other}`")),
     }
 }
@@ -32,7 +37,7 @@ fn print_help() {
     println!(
         "delulu-survey — the map of this repository\n\n\
          USAGE\n  \
-           delulu-survey build       regenerate {OUT_DIR}/\n  \
+           delulu-survey build       regenerate {OUTPUT_DIR}/\n  \
            delulu-survey check       fail if the committed map is out of date\n  \
            delulu-survey findings    print the discrepancy list\n  \
            delulu-survey query <id>  a node, what it points at, and what points at it\n  \
@@ -43,31 +48,28 @@ fn print_help() {
     );
 }
 
-/// Walk up from the working directory to the directory holding the workspace manifest, so the tool
-/// works from anywhere inside the tree.
-fn repo_root() -> PathBuf {
-    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    loop {
-        if dir.join("Cargo.toml").exists() && dir.join("crates").is_dir() {
-            return dir;
-        }
-        if !dir.pop() {
-            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        }
-    }
+/// The source tree this tool is standing in.
+///
+/// Delegates to [`delulu_survey::find_source_tree`] rather than walking up on its own criteria.
+/// It used to accept any directory holding a `Cargo.toml` beside a `crates/` folder, which is a
+/// *different* and weaker test than the one `delulu doctor` applies — so the two commands could
+/// disagree about whether they were in a DeluluLang checkout at all. One definition, one answer.
+fn repo_root() -> Option<PathBuf> {
+    delulu_survey::find_source_tree()
 }
 
 fn build(root: &Path, check_only: bool) {
-    let survey = Survey::build(root);
+    // The same entry point `delulu doctor` uses, so the two commands cannot drift on what "behind
+    // the tree" means or on how the files get written.
+    let h = delulu_survey::inspect(root, if check_only { Repair::ReportOnly } else { Repair::Regenerate });
 
     if check_only {
-        let stale = delulu_survey::stale_outputs(root, &survey);
-        if stale.is_empty() {
-            println!("ok: the Survey matches the tree ({} nodes, {} edges)", survey.nodes.len(), survey.edges.len());
+        if h.stale.is_empty() {
+            println!("ok: the Survey matches the tree ({} nodes, {} edges)", h.nodes, h.edges);
             return;
         }
-        for s in &stale {
-            eprintln!("stale: {OUT_DIR}/{s} is out of date or missing");
+        for s in &h.stale {
+            eprintln!("stale: {OUTPUT_DIR}/{s} is out of date or missing");
         }
         eprintln!(
             "\nThe repository changed and its map did not. Run `cargo run -p delulu-survey -- build`\n\
@@ -76,29 +78,26 @@ fn build(root: &Path, check_only: bool) {
         std::process::exit(1);
     }
 
-    if let Err(e) = delulu_survey::sync_outputs(root, &survey) {
-        eprintln!("error: cannot write {OUT_DIR}: {e}");
+    if let Some(e) = &h.write_error {
+        eprintln!("error: cannot write {OUTPUT_DIR}: {e}");
         std::process::exit(1);
     }
 
-    let errors = survey.findings.iter().filter(|f| f.severity == Severity::Error).count();
-    let warnings = survey.findings.iter().filter(|f| f.severity == Severity::Warning).count();
+    let t = h.tally;
     println!(
-        "wrote {OUT_DIR}/ — {} nodes, {} edges, {} discrepancies ({errors} error, {warnings} warning)",
-        survey.nodes.len(),
-        survey.edges.len(),
-        survey.findings.len()
+        "wrote {OUTPUT_DIR}/ — {} nodes, {} edges, {} discrepancies ({} error, {} warning)",
+        h.nodes,
+        h.edges,
+        t.errors + t.warnings + t.notes,
+        t.errors,
+        t.warnings
     );
 }
 
 fn findings(root: &Path) {
     let survey = Survey::build(root);
     for f in &survey.findings {
-        let sev = match f.severity {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-            Severity::Note => "note",
-        };
+        let sev = f.severity.word();
         if f.line > 0 {
             println!("{sev}: {}:{} [{}] {}", f.file, f.line, f.class, f.message);
         } else {

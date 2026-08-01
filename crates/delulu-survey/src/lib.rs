@@ -188,6 +188,18 @@ pub enum Severity {
     Note,
 }
 
+impl Severity {
+    /// The stable lowercase name. One definition, used by every renderer and by the JSON channel,
+    /// so a severity cannot be spelled one way in the report and another on the terminal.
+    pub fn word(self) -> &'static str {
+        match self {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Note => "note",
+        }
+    }
+}
+
 /// A discrepancy the Survey found while cross-checking its own extractions.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Finding {

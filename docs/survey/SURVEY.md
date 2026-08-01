@@ -23,10 +23,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 12 |
 | … repository tooling (`publish = false`) | 1 |
 | Rust files | 198 |
-| Rust lines | 94942 |
+| Rust lines | 94945 |
 | Rust files outside `src/` (test/bench targets) | 74 |
 | Markdown documents | 119 |
-| Markdown lines | 26649 |
+| Markdown lines | 26651 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
 | Recorded rulings | 88 |
@@ -291,17 +291,17 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 10 files, 3141 lines
+- **Modules:** 10 files, 3144 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 409 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 185 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 421 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 184 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 231 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
-| `src/render.rs` | 287 | The three channels the Survey publishes on. |
+| `src/render.rs` | 279 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 369 | Reading Rust source as text. |
 | `src/scan.rs` | 209 | Walking the tree and deciding what each file *is*. |
 | `src/verify.rs` | 582 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
