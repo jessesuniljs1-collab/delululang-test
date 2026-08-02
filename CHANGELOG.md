@@ -180,6 +180,22 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **Signature help, carrying the authority row.** Writing a call now shows what it takes and
+  **what it is allowed to do**, with the argument you are on highlighted — `authority: {Write}`
+  before you commit to the call rather than after. That line is the part no other language's
+  signature help is able to offer.
+
+  The label is **sliced from the declaring file's own source** rather than re-rendered from the
+  type, so you see the signature exactly as its author wrote it — reference capabilities,
+  generics, row and all — and a renderer that drifts from the language cannot exist here, because
+  there is no renderer. Parameter highlights are UTF-16 offsets into that label, so a client
+  selects the exact characters instead of guessing by substring when two parameters read alike.
+
+  Unlike completion, trigger characters *are* advertised (`(` and `,`): those are the two places a
+  signature becomes relevant and there is a real one to show at both. A trigger is a promise, and
+  this one can be kept. Actor behaviours get signature help too — a `fn` and a `be` are different
+  declarations to the parser and the same thing at a call site.
+
 - **Definition and references now reach the whole project**, not only what is open — jumping to a
   declaration in a file you have not opened yet is the normal case, and it previously returned
   nothing at all.

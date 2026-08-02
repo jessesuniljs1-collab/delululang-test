@@ -73,6 +73,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                 let r = server.completion(&msg["params"]);
                 respond(id, r);
             }
+            Some("textDocument/signatureHelp") => {
+                let r = server.signature_help(&msg["params"]);
+                respond(id, r);
+            }
             Some("textDocument/codeAction") => {
                 let r = server.code_actions(&msg["params"]);
                 respond(id, r);
@@ -419,6 +423,10 @@ impl Server {
                 // have, and a completion list that appears when it has nothing useful to say
                 // trains people to dismiss it.
                 "completionProvider": { "resolveProvider": false },
+                // Trigger characters ARE named here, unlike completion: `(` and `,` are the two
+                // places a signature becomes relevant, and there is a real signature to show at
+                // both. A trigger is a promise, and this one can be kept.
+                "signatureHelpProvider": { "triggerCharacters": ["(", ","] },
                 "codeActionProvider": true,
                 "documentSymbolProvider": true,
                 "inlayHintProvider": true,
@@ -709,6 +717,41 @@ impl Server {
             &a.result,
             &delulu_check::ScopeInfo::default(),
         )
+    }
+
+    /// The signature of the call being written, with the parameter under the cursor marked.
+    ///
+    /// The label is **sliced from the declaring file's own source**, not re-rendered from the
+    /// type. That is deliberate: you see the signature exactly as its author wrote it — reference
+    /// capabilities, generics, the effect row and all — and a renderer that drifts from the
+    /// language cannot exist here, because there is no renderer.
+    ///
+    /// Searched in the same order everything else is: this document, then other open ones, then
+    /// the project.
+    fn signature_help(&self, params: &Value) -> Value {
+        let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let Some(text) = self.text(uri) else { return Value::Null };
+        let pos = &params["position"];
+        let at = (pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0))
+            as usize)
+            .min(text.len());
+        let Some((callee, active)) = enclosing_call(text, at) else { return Value::Null };
+
+        for doc_uri in self.uris_from(uri) {
+            let (Some(t), Some(a)) = (self.text(doc_uri), self.analyze(doc_uri)) else { continue };
+            if let Some(v) = signature_of(t, &a.module, &callee, active) {
+                return v;
+            }
+        }
+        let mut found = Value::Null;
+        self.each_closed_file(|_uri, t, module| {
+            if found.is_null() {
+                if let Some(v) = signature_of(t, module, &callee, active) {
+                    found = v;
+                }
+            }
+        });
+        found
     }
 
     /// Module-level declarations across the whole project, matched against a query.
@@ -1378,6 +1421,147 @@ fn in_effect_row(text: &str, upto: usize) -> bool {
 
 /// How far back [`in_effect_row`] looks. A row spans a few dozen bytes; this is generous.
 const ROW_SCAN_LIMIT: usize = 4096;
+
+/// How far back [`enclosing_call`] looks. An argument list can be longer than an effect row —
+/// a multi-line call with a lambda in it — but not unboundedly so, and this runs per keystroke.
+const CALL_SCAN_LIMIT: usize = 8192;
+
+/// The call being written at `upto`: the callee's name, and which argument the cursor is in.
+///
+/// Scans backwards for the innermost unclosed `(`, counting the commas that separate the
+/// arguments at that level, and reads the identifier immediately before it. Brackets of every
+/// kind share one depth counter, so commas inside a nested call, list or block are not counted
+/// as arguments of this one; an unmatched `[` or `{` means the cursor is in a list or a body
+/// rather than an argument list, and there is no signature to show.
+///
+/// **It reads the text, not the tree** — the tree is not available while the call is still being
+/// typed and therefore does not parse. The known cost is that a bracket inside a comment or a
+/// string literal within the scanned window can mislead it, which shows a wrong signature for as
+/// long as the cursor stays there and nothing else. Recorded rather than hidden, in keeping with
+/// the other deviation-3 approximations.
+fn enclosing_call(text: &str, upto: usize) -> Option<(String, usize)> {
+    let b = text.as_bytes();
+    let floor = upto.saturating_sub(CALL_SCAN_LIMIT);
+    let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut depth: i32 = 0;
+    let mut commas = 0usize;
+    let mut i = upto;
+    while i > floor {
+        i -= 1;
+        match b[i] {
+            b')' | b']' | b'}' => depth += 1,
+            b'(' => {
+                if depth > 0 {
+                    depth -= 1;
+                    continue;
+                }
+                let mut e = i;
+                while e > 0 && b[e - 1].is_ascii_whitespace() {
+                    e -= 1;
+                }
+                let mut s = e;
+                while s > 0 && is_word(b[s - 1]) {
+                    s -= 1;
+                }
+                return (s < e).then(|| (text[s..e].to_string(), commas));
+            }
+            b'[' | b'{' => {
+                if depth == 0 {
+                    return None; // a list or a block, not an argument list
+                }
+                depth -= 1;
+            }
+            b',' if depth == 0 => commas += 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// What a caller needs to know about a callable, whichever kind of declaration it came from.
+///
+/// A `fn` and an actor `be` are different declarations to the parser and the same thing at a call
+/// site — a name, some parameters, and an authority row — so this names those four parts rather
+/// than repeating the work per type.
+type Callable<'a> = (
+    &'a delulu_syntax::ast::Ident,
+    &'a [delulu_syntax::ast::Param],
+    &'a Option<delulu_syntax::ast::RowExpr>,
+    &'a delulu_syntax::ast::Block,
+);
+
+/// A `SignatureHelp` for `name`, if this module declares it — including actor behaviours and
+/// actor functions, which are called the same way and deserve the same help.
+fn signature_of(
+    text: &str,
+    module: &delulu_syntax::ast::Module,
+    name: &str,
+    active: usize,
+) -> Option<Value> {
+    use delulu_syntax::ast::Item;
+    let mut candidates: Vec<Callable> = Vec::new();
+    for item in &module.items {
+        match item {
+            Item::Fn(f) => candidates.push((&f.name, &f.params, &f.row, &f.body)),
+            Item::Actor(a) => {
+                for b in &a.behaviors {
+                    candidates.push((&b.name, &b.params, &b.row, &b.body));
+                }
+                for f in &a.fns {
+                    candidates.push((&f.name, &f.params, &f.row, &f.body));
+                }
+            }
+            _ => {}
+        }
+    }
+    let (ident, params, row, body) = candidates.into_iter().find(|(i, ..)| i.name == name)?;
+
+    // From the name to the opening brace of the body is exactly the signature as written.
+    let base = ident.span.start as usize;
+    let end = (body.span.start as usize).max(base).min(text.len());
+    let label = text.get(base..end)?.trim_end().to_string();
+
+    // Parameter labels are UTF-16 offsets INTO that label, so the client highlights the exact
+    // characters rather than guessing by substring — two parameters can read identically.
+    let width = |s: &str| s.chars().map(char::len_utf16).sum::<usize>();
+    let mut parameters = Vec::new();
+    for p in params {
+        let (ps, pe) = (p.name.span.start as usize, p.ty.span().end as usize);
+        let (Some(before), Some(through)) = (text.get(base..ps), text.get(base..pe)) else {
+            continue;
+        };
+        parameters.push(json!({ "label": [width(before), width(through)] }));
+    }
+
+    Some(json!({
+        "signatures": [{
+            "label": label,
+            "parameters": parameters,
+            "documentation": { "kind": "markdown", "value": authority_line(row) },
+        }],
+        "activeSignature": 0,
+        // Clamped: trailing commas and half-typed arguments are normal while writing a call, and
+        // an index past the end makes some clients highlight nothing at all.
+        "activeParameter": active.min(params.len().saturating_sub(1)),
+    }))
+}
+
+/// What the row on a declaration says, in one line — the part a caller most needs before writing
+/// the call, and the part no other language's signature help is able to tell them.
+fn authority_line(row: &Option<delulu_syntax::ast::RowExpr>) -> String {
+    match row {
+        None => "authority: pure — this call cannot affect anything".to_string(),
+        Some(r) => {
+            let mut es: Vec<String> = r
+                .effects
+                .iter()
+                .map(|p| p.segs.last().map(|s| s.name.clone()).unwrap_or_default())
+                .collect();
+            es.sort();
+            format!("authority: {{{}}}", es.join(", "))
+        }
+    }
+}
 
 const SEMANTIC_TOKEN_TYPES: [&str; 12] = [
     "keyword", "function", "type", "variable", "string", "number", "comment", "operator",

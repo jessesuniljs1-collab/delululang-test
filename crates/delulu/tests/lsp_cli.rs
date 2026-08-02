@@ -683,6 +683,81 @@ fn no_provider_answers_from_a_stale_analysis() {
     c.shutdown();
 }
 
+// ===== signature help ======================================================
+
+fn signature(c: &mut Client, uri: &str, line: u64, ch: u64) -> Value {
+    c.request(
+        "textDocument/signatureHelp",
+        json!({ "textDocument": { "uri": uri }, "position": { "line": line, "character": ch } }),
+    )
+}
+
+/// While writing a call you are told what it takes **and what it is allowed to do**.
+///
+/// The authority row on the documentation line is the part no other language's signature help can
+/// offer, and it is the thing worth knowing before you commit to a call rather than after.
+#[test]
+fn signature_help_shows_the_row_and_tracks_the_active_argument() {
+    let src = "module m\n\
+               fn greet(out: Cap[Console], name: Str) ! {Write} { out.println(name) }\n\
+               fn go(root: Root) ! {Write} { greet(root.console(), \"hi\") }\n";
+    let uri = "file:///sig.delulu";
+    let mut c = Client::start();
+    c.open(uri, src);
+    let _ = c.wait_diagnostics(uri);
+
+    let call = src.lines().nth(2).unwrap();
+    let open_paren = call.find("greet(").unwrap() + "greet(".len();
+
+    // Cursor just inside the parenthesis: first argument.
+    let h = signature(&mut c, uri, 2, open_paren as u64);
+    let sig = &h["signatures"][0];
+    let label = sig["label"].as_str().unwrap_or_default();
+    assert!(label.starts_with("greet(out: Cap[Console], name: Str)"), "label is the source: {label}");
+    assert!(label.contains("! {Write}"), "the row is part of the signature: {label}");
+    assert_eq!(h["activeParameter"], 0, "first argument: {h}");
+    let doc = sig["documentation"]["value"].as_str().unwrap_or_default();
+    assert!(doc.contains("authority: {Write}"), "the authority line: {doc}");
+
+    // Parameter labels are offsets into the label, and must select the real substrings.
+    let spans = sig["parameters"].as_array().unwrap();
+    assert_eq!(spans.len(), 2, "two parameters: {spans:?}");
+    let slice = |i: usize| {
+        let a = spans[i]["label"][0].as_u64().unwrap() as usize;
+        let b = spans[i]["label"][1].as_u64().unwrap() as usize;
+        label[a..b].to_string()
+    };
+    assert_eq!(slice(0), "out: Cap[Console]");
+    assert_eq!(slice(1), "name: Str");
+
+    // After the comma: second argument.
+    let after_comma = call.find("(), \"hi\"").unwrap() + 4;
+    let h2 = signature(&mut c, uri, 2, after_comma as u64);
+    assert_eq!(h2["activeParameter"], 1, "the comma advanced the argument: {h2}");
+
+    // A nested call's own parentheses must not be counted as this call's arguments.
+    let inside_nested = call.find("root.console()").unwrap() + "root.console(".len();
+    let h3 = signature(&mut c, uri, 2, inside_nested as u64);
+    let nested = h3["signatures"][0]["label"].as_str().unwrap_or_default();
+    assert!(
+        nested.is_empty() || !nested.starts_with("greet"),
+        "inside `console(` the answer must not be greet's signature: {h3}"
+    );
+    c.shutdown();
+}
+
+/// Outside a call there is nothing to say, and saying nothing is the correct answer.
+#[test]
+fn signature_help_is_silent_where_there_is_no_call() {
+    let uri = "file:///quiet.delulu";
+    let mut c = Client::start();
+    c.open(uri, "module m\nfn f(a: Int) -> Int { a }\nconst K: Int = 1\n");
+    let _ = c.wait_diagnostics(uri);
+    assert!(signature(&mut c, uri, 2, 8).is_null(), "not in a call");
+    assert!(signature(&mut c, uri, 0, 4).is_null(), "not in a call");
+    c.shutdown();
+}
+
 // ===== the workspace =======================================================
 
 fn workspace_dir(tag: &str) -> std::path::PathBuf {

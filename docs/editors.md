@@ -49,6 +49,10 @@ transport: stdio
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.
 - **`delulu.authority`** (workspace/executeCommand) — the §10.5 authority report as
   JSON over the wire; agent harnesses call this instead of shelling out.
+- **Signature help** — while writing a call, the callee's parameters *and its
+  authority row*, with the argument you are on highlighted. The label is sliced from
+  the declaring file's own source, so you see the signature exactly as its author wrote
+  it and no renderer can drift from the language. Actor behaviours get it too.
 - **Workspace symbols** — every module-level declaration in the project, including in
   files you have never opened. The server indexes `*.delulu` under the workspace folders
   (skipping `target/`, `.git/` and friends), **parsing rather than type-checking** them,
