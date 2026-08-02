@@ -93,6 +93,13 @@ DeluluLang/
 │   ├── conformance/                # Stage-9 coverage law: ≥1 accepting + ≥1 rejecting per rule
 │   │   ├── accept/                 # programs that must check clean (+ expected authority JSON)
 │   │   └── reject/                 # programs that must fail (+ expected DLxxxx code/span/repair)
+│   ├── core-invariance/            # SNAPSHOT.txt — the exact bytes the core answers with, for
+│   │                               #   every program below (108 targets, 360 cases). GENERATED:
+│   │                               #   DELULU_BLESS=1 cargo test -p delulu --test core_invariance
+│   │                               #   Guards what the coverage law does not: the conformance
+│   │                               #   suite pins each DIAGNOSTIC CODE, this pins the MESSAGES,
+│   │                               #   SPANS, REPAIRS and AUTHORITY REPORTS. Tooling built around
+│   │                               #   the language cannot move them without a reviewed diff.
 │   └── corpus/                     # coding-capability tiers (simple → security-expert)
 │       │                           # every file must CHECK clean and every package must BUILD
 │       │                           # clean (conformance.rs); three are also RUN (corpus_cli.rs)

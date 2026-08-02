@@ -94,7 +94,7 @@ Any change to the language core, the stability contract, or Constitution §1/§2
 ## 6. Running the checks
 
 ```
-cargo test --workspace                              # everything
+cargo test --workspace                              # everything, incl. the core-invariance gate
 cargo run -p delulu-conform -- --coverage           # the coverage law
 cargo run -p delulu-conform -- --check-reference    # the reference must not be stale
 cargo run -p delulu -- fmt --check examples         # one style, no options
@@ -112,6 +112,26 @@ delulu doctor --check   # the same, but never writes — for a hook or a CI step
 a courtesy — `cargo test --workspace` rebuilds the map and compares it to what is committed, so a
 change that leaves `docs/survey/` behind fails the suite and names the first line that differs.
 `delulu doctor` is the whole remedy, and it writes nothing when the map is already current.
+
+### If the core's answers move
+
+`tests/core-invariance/SNAPSHOT.txt` records the exact bytes the toolchain produces for every
+program this repository ships — diagnostics, spans, repairs, inferred effect rows, authority
+reports, provenance chains. It is not a set of assertions about what is correct. It is a record of
+what is true today, so that changing it has to be deliberate.
+
+Most of what gets built now sits *around* the language rather than in it. That work must not move
+the language, and a passing suite does not show that it hasn't: the conformance law pins each
+diagnostic **code**, not the message, the span, or the row. This file pins the rest.
+
+If the gate fails, read every case it names. When the change is intended:
+
+```
+DELULU_BLESS=1 cargo test -p delulu --test core_invariance
+```
+
+then commit the re-recorded snapshot **in the same commit as the change that caused it**. If you
+cannot explain a line of that diff, the change that produced it is not finished.
 
 ## 7. Conduct
 

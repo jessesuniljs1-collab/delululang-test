@@ -175,6 +175,33 @@ D19a–e.
   failed, clippy 66/0, every gate exit 0. **macOS unchanged and still not run**: the new module
   (`device_scope.rs`) is pure `std` with no `#[cfg]` and no OS call, so the code both platforms run
   green *is* the macOS path — an argument, not an execution, and not counted as one.
+- **The core-invariance gate — ADDED 2026-08-02, verified on both platforms.** Everything built
+  after 1.0 sits *around* the language; nothing proved it had not moved the language. The new gate
+  records the exact bytes the toolchain answers with for all 108 targets the repository ships
+  (`tests/core-invariance/SNAPSHOT.txt`, 360 cases). **The load-bearing cross-platform fact: the
+  snapshot recorded on Windows passes byte-for-byte on Linux** — 222,762 bytes, md5
+  `bdd56c6a6e40e791c394b4b4e9bc0b99`, unchanged, run against a Linux-built binary. **Windows** 109
+  suites / 1,437 passed / 0 failed, clippy 65/0; **Linux** (WSL, ext4, isolated `CARGO_TARGET_DIR`)
+  109 suites / 1,441 passed / 0 failed, clippy 66/0; both with coverage 100%, reference in sync, fmt
+  0-change, `doctor --check` 12/12.
+
+  One recorded file has to be valid on three platforms, so each way it could have differed was
+  removed and then *checked* rather than assumed:
+
+  | Hazard | How it is removed | What was checked |
+  |---|---|---|
+  | Path separators | paths are passed forward-slash and the CLI echoes back what it was given | zero separators in the file — all 15 backslashes are `\n`, `\"` or `\u{…}` inside message text |
+  | Line endings | `.gitattributes` stores LF (D19d); the test normalises CRLF on both sides | zero CR bytes in the recorded file |
+  | `read_dir` order — NTFS vs ext4 vs **APFS** | relative paths are byte-sorted before use | order is a property of the sort, not of the filesystem |
+  | macOS **NFD vs NFC** filenames | — | no filename in the corpus contains a non-ASCII byte, so there is nothing to normalise differently |
+  | Release version churn | `delulu_version` is rewritten to `<version>` | a version bump does not read as 108 semantic changes |
+  | Platform-conditional output | — | zero occurrences of `windows`, `darwin`, `macos`, `linux` or `.exe` in the file |
+
+  **macOS is still not run**, and this is not a claim that it was. `core_invariance.rs` is pure
+  `std` with no `#[cfg]` and no OS call, and the surfaces it records are the same ones Linux
+  executes green — so the argument is the usual one, and it is an argument. What the audit above
+  *does* establish is narrower and worth stating exactly: there is no known mechanism by which this
+  particular file could differ on macOS. That is a removed hazard, not a passing test.
 - **`broker_unreachable_is_dl1401_fast`** asserts a 10 s wall-clock "fail fast" budget; it passes in
   isolation but can flake under pathological concurrent load (a starved scheduler, not a hang). A
   monotonic-deadline assertion less sensitive to scheduling would harden it.

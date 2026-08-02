@@ -180,6 +180,32 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **The core's answers are now pinned, so tooling built around the language cannot move the
+  language.** Everything added after 1.0 — the language server, `fix`, `new`, `completions`,
+  `add --path`, the Survey, the code dispositions — exists for the people and agents who *build*
+  DeluluLang. The language is what everyone else depends on, and a green suite does not protect it:
+  a passing test proves the assertions someone wrote still hold, not that the compiler still
+  decides the same things about real programs.
+
+  `tests/core-invariance/SNAPSHOT.txt` records the exact bytes the toolchain produces for all
+  **108 targets** the repository ships — every `.delulu` module under `examples/`,
+  `tests/conformance/` and `tests/corpus/`, plus the seven package directories, across **360
+  cases**: `check`, `check --json`, `authority`, `authority --json` and `why`. Any change to what
+  the compiler says about a shipped program becomes a diff in a reviewed file.
+
+  **This catches what the coverage law cannot.** The conformance law pins each diagnostic *code*;
+  every existing assertion about DL0106, for instance, is `x.code == "DL0106"`. Changing one word
+  of that diagnostic's message in `delulu-syntax/src/parser.rs` was **observed** to leave the whole
+  pre-existing suite green and to be caught by this gate alone, which named the two affected cases
+  and printed recorded-vs-current. Package targets carry the most: the tier-4 diamond pins seven
+  merged module rows, three capability scopes, eleven pure functions, and the cross-package
+  provenance chain `main → handle → record (dep:archive/…)` for `Write`.
+
+  Deterministic surfaces only — `run` reaches the clock, the random source and the filesystem, and
+  a gate that is flaky is a gate that gets deleted. Paths are passed forward-slash so the CLI
+  echoes them back identically on all three platforms; the recorded file contains no absolute path,
+  no separator and no host name. Blessing is explicit (`DELULU_BLESS=1`), never automatic.
+
 - **`delulu add --path <dir>` — a dependency whose authority pin is computed, not guessed.** With
   no hosted registry, a real dependency today is a directory beside yours, and declaring one meant
   hand-writing `{ path = …, authority = { effects = […] } }` and guessing the pin — then learning
