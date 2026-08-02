@@ -509,11 +509,19 @@ Phase 2b additions (2026-07-05, 132 tests green) — **Stage 2 now feature-compl
   rejections, zero unexpected rejections** (`delulu-fuzz 100000`). A 4,000-iter campaign runs in
   `cargo test`.
 
-Remaining (deferred, non-blocking for Stage 2's guarantee): `delulu authority <dir>` still uses
-the single-package path (does not resolve cross-package imports for the report); cross-PACKAGE
-`pub import` re-export chains are resolved by `check_workspace` but the per-function
-`api_row_changes` shape of `authority --diff` is per-package (§8 deviation, noted in Phase 2a).
-CI is Windows-only so far (criterion 12 partial — macOS/Linux CI lands with Stage 9 governance).
+Remaining (deferred, non-blocking for Stage 2's guarantee): cross-PACKAGE `pub import` re-export
+chains are resolved by `check_workspace` but the per-function `api_row_changes` shape of
+`authority --diff` is per-package (§8 deviation, noted in Phase 2a).
+
+**Two items that were listed here are no longer true, and are corrected rather than deleted so the
+record still reads as a record.** (1) *"`delulu authority <dir>` still uses the single-package path"*
+— closed by ruling D45a (campaign finding C51): a manifest's presence now selects the workspace
+loader, so the report resolves the dependency graph. The obvious fix would have been worse than the
+bug, because `resolve_workspace` requires a manifest and would have refused a plain directory of
+modules; the loader is chosen, not forced. (2) *"CI is Windows-only so far"* —
+`.github/workflows/ci.yml` declares a three-OS matrix. That is a *declaration*, not a result: the
+workflow **has never executed**, because this repository has never been pushed. See
+`CROSS_PLATFORM_VERIFICATION.md`, which states the same thing in the same words.
 
 *Stage 2 is complete: the dependency graph is a place where authority cannot hide, and the
 Effect-Soundness theorem holds across 83k fuzzed executions.*

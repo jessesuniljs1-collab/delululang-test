@@ -109,7 +109,13 @@ partially.
 (the Deviation-1-approved construction). Multi-module DIR would need a whole-program replay path
 (`check_program`) with cross-module interface metadata — real work with no acceptance-criterion
 coverage: every §9 criterion and the flagship demo use single-module plugins. Deferred, honestly
-refused, and recorded rather than silently half-supported. *Status: **ruled: approved** as
+refused, and recorded rather than silently half-supported.
+
+> **The refusal still stands; its stated blocker no longer does.** `check_program` exists and has for
+> some time (it is what `delulu run <package-dir>` uses, ruling D61). So the reason to keep this
+> deviation is now the *second* one only — no acceptance-criterion coverage and no demand — and not
+> the missing replay path. Recorded here because a deferral whose reason has quietly expired is how a
+> decision turns into an assumption. *Status: **ruled: approved** as
 honest-refusal-and-defer — conditions: (a) the B3/B4 report names the refusal's diagnostic, which
 must say plainly that multi-module plugin packages are unsupported in v0.6 with no fake repair (it
 is DL1004: "plugin packages are single-module in v0.6 — found N module file(s) under `src/`", zero

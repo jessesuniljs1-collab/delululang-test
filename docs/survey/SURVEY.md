@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 212 |
-| Rust lines | 101246 |
+| Rust lines | 101363 |
 | Rust files outside `src/` (test/bench targets) | 83 |
 | Markdown documents | 121 |
-| Markdown lines | 28060 |
+| Markdown lines | 28190 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
-| Recorded rulings | 125 |
-| Recorded campaign findings | 70 |
-| Nodes / edges in this map | 962 / 8356 |
+| Recorded rulings | 126 |
+| Recorded campaign findings | 71 |
+| Nodes / edges in this map | 964 / 8390 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -187,15 +187,15 @@ The DeluluLang conformance coverage law (invariant 42): delulu-conform --coverag
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 5 files, 2107 lines
+- **Modules:** 5 files, 2190 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/lib.rs` | 672 | The conformance coverage law (Stage 9, invariant 42), mechanized. |
 | `src/main.rs` | 109 | `delulu-conform` — the conformance coverage tool (Stage 9, invariant 42). |
-| `src/reference.rs` | 328 | The generated half of the language reference (Stage 9b, spec §2.1). |
+| `src/reference.rs` | 340 | The generated half of the language reference (Stage 9b, spec §2.1). |
 | `src/rules.rs` | 585 | The normative rule index (Stage 9b, spec §2.1) — one entry per normative statement of |
-| `src/tests.rs` | 413 | Tests for the coverage tool itself (Stage 9a, house rule 3 — every check has its skip-branch |
+| `src/tests.rs` | 484 | Tests for the coverage tool itself (Stage 9a, house rule 3 — every check has its skip-branch |
 
 ### `delulu-diag`
 
@@ -317,13 +317,13 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 6567 lines
+- **Modules:** 9 files, 6601 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/ast.rs` | 514 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
 | `src/fmt.rs` | 1529 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
-| `src/grammar.rs` | 91 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
+| `src/grammar.rs` | 125 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
 | `src/lexer.rs` | 882 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 544 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
@@ -386,7 +386,7 @@ Rulings are allocated **one namespace per stage**, so `D21` alone is ambiguous �
 
 | Namespace | Rulings | Allocated in |
 |---|---:|---|
-| `S10` | 69 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S10` | 70 | `docs/design/STAGE10_BUILD_ORDER.md` |
 | `S6` | 8 | `docs/design/STAGE6_BUILD_ORDER.md` |
 | `S7` | 11 | `docs/design/STAGE7_BUILD_ORDER.md` |
 | `S8` | 15 | `docs/design/STAGE8_BUILD_ORDER.md` |

@@ -411,3 +411,74 @@ fn a_rule_is_only_covered_when_every_enforcing_code_is() {
         );
     }
 }
+
+/// **Every published grammar anchor must lead to a grammar.**
+///
+/// `docs/reference/grammar.md` publishes one `ref.grammar.<name>` anchor per production, and
+/// conformance witnesses cite them. The names follow `parser.rs`, because that is what the drift
+/// guard fences them against. The **normative** EBNF lives in the stage specifications and was
+/// written for a reader, so it uses fuller spellings — six of twenty-seven diverge.
+///
+/// The consequence, before this test existed: `ref.grammar.args` was a citable anchor with an
+/// accepting and a rejecting witness, a `parse_args` behind it, and **nothing in any specification
+/// defining anything called `args`**. A reader following the reference to the grammar found nothing.
+/// That is worse than an anchor that does not exist, because a witness can cite it and look
+/// satisfied. `delulu_syntax::grammar::NORMATIVE_NAME` records where each divergent production is
+/// actually written down, and this checks it in both directions.
+#[test]
+fn every_grammar_production_is_defined_in_a_normative_specification() {
+    use delulu_syntax::grammar::{normative_name, GRAMMAR_PRODUCTIONS, NORMATIVE_NAME};
+
+    // The normative grammar text: every `<name> ::= …` or `<name> = …` in the design specs.
+    let design = repo_root().join("docs").join("design");
+    let mut defined: std::collections::BTreeSet<String> = Default::default();
+    for e in std::fs::read_dir(&design).expect("docs/design is readable").flatten() {
+        let p = e.path();
+        if p.extension().is_none_or(|x| x != "md") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&p).unwrap_or_default();
+        for line in text.lines() {
+            let t = line.trim_start();
+            // `name = …` or `name ::= …`, the two spellings the specs use.
+            let Some((head, _)) = t.split_once('=') else { continue };
+            let head = head.trim_end_matches(':').trim();
+            if !head.is_empty()
+                && head.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                && t[head.len()..].trim_start().starts_with(['=', ':'])
+            {
+                defined.insert(head.to_string());
+            }
+        }
+    }
+    assert!(defined.len() > 50, "the EBNF scan found too few productions to be right: {}", defined.len());
+
+    let missing: Vec<String> = GRAMMAR_PRODUCTIONS
+        .iter()
+        .map(|p| (p, normative_name(p)))
+        .filter(|(_, n)| !defined.contains(*n))
+        .map(|(p, n)| format!("{p} (looked for `{n}`)"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "these published grammar anchors have no normative EBNF behind them: {missing:?}\n\
+         Either write the production into a specification, or — if the specs spell it differently — \
+         record the spelling in `delulu_syntax::grammar::NORMATIVE_NAME`. An anchor a witness can \
+         cite and a reader cannot find is the worst of both."
+    );
+
+    // The map must not rot the other way: an entry naming a spelling the specs no longer use would
+    // send a reader somewhere that has since moved.
+    let stale: Vec<&str> = NORMATIVE_NAME
+        .iter()
+        .filter(|(_, n)| !defined.contains(*n))
+        .map(|(p, _)| *p)
+        .collect();
+    assert!(stale.is_empty(), "NORMATIVE_NAME points at productions the specs no longer define: {stale:?}");
+
+    // And no entry may claim a divergence that is not one — that would be noise pretending to be
+    // information.
+    let pointless: Vec<&str> =
+        NORMATIVE_NAME.iter().filter(|(p, n)| p == n).map(|(p, _)| *p).collect();
+    assert!(pointless.is_empty(), "these NORMATIVE_NAME entries map a name to itself: {pointless:?}");
+}

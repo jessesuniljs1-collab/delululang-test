@@ -48,6 +48,40 @@ pub fn anchor(production: &str) -> String {
     format!("ref.grammar.{production}")
 }
 
+/// Where a production is written down, when the **normative grammar calls it something else**.
+///
+/// The names in [`GRAMMAR_PRODUCTIONS`] follow `parser.rs` — they exist to be fenced against a
+/// `fn parse_<name>`. The normative EBNF in the stage specifications was written for a reader, and
+/// uses the fuller `_decl` / `_expr` spellings. Six of the twenty-seven diverge, which meant the
+/// reference published `ref.grammar.args` as a citable anchor while nothing in any specification
+/// defined anything called `args`. **An index that does not lead anywhere is not an index**, and a
+/// conformance anchor whose grammar cannot be found is worse than one that does not exist, because
+/// a witness can cite it and look satisfied.
+///
+/// Only the divergences are listed; a production absent from this table is spelled the same in both
+/// places. `delulu-conform` checks the table in **both** directions against the specification text —
+/// every production must resolve, and no entry here may name a production the specs no longer use.
+pub const NORMATIVE_NAME: &[(&str, &str)] = &[
+    ("module", "module_decl"),
+    ("import", "import_decl"),
+    ("const", "const_decl"),
+    ("if", "if_expr"),
+    // `parse_args` reads the parenthesised argument list; the specs define that shape as `call`.
+    ("args", "call"),
+    // `parse_opt_row` reads the optional `! { … }` effect clause, spelled `effect_row` normatively.
+    ("opt_row", "effect_row"),
+];
+
+/// The name the normative grammar uses for `production` — itself, unless [`NORMATIVE_NAME`] says
+/// otherwise.
+pub fn normative_name(production: &str) -> &str {
+    NORMATIVE_NAME
+        .iter()
+        .find(|(p, _)| *p == production)
+        .map(|(_, n)| *n)
+        .unwrap_or(production)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

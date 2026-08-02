@@ -55,12 +55,15 @@ jobs:
 
       # Stage 9 invariant 42 (the coverage law): the conformance suite is the specification's
       # executable form. `--coverage` maps tests to reference anchors and fails on any anchor
-      # missing an accepting or a rejecting witness, any dangling witness, or any unknown
-      # citation. It exits nonzero until coverage is 100% (release criterion 1), so the step
-      # reports without failing the build today and the ratchet test in delulu-conform
-      # (`coverage_never_regresses`) is what keeps it moving forward. Flip to a hard gate at
-      # the 1.0 cut — see STAGE9_BUILD_ORDER.md D10.
-      - name: Conformance coverage law (report; ratcheted by delulu-conform's own test)
+      # missing an accepting or a rejecting witness, any dangling witness, or any unknown citation.
+      #
+      # `|| true` here is NOT a disabled gate, and the comment that used to sit in this spot said it
+      # would be "flipped to a hard gate at the 1.0 cut". 1.0 shipped, and the flip happened
+      # somewhere better: `release_requires_full_coverage` in delulu-conform's own suite asserts
+      # 100% on EVERY commit, which `cargo test --workspace` above already ran. A per-commit test is
+      # a stronger gate than a per-push workflow step, so this step is a human-readable report of a
+      # number the build has already refused to let regress.
+      - name: Conformance coverage law (report; hard-gated per-commit by delulu-conform's own suite)
         run: cargo run -q -p delulu-conform -- --coverage || true
 
       # Stage 9b: the reference is generated in part, so it cannot drift from the compiler.

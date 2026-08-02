@@ -104,6 +104,30 @@ the first thing to check on the day a Mac exists.
 
 ---
 
+### 2.5 The documentation is more complete than the brief assumed, and its one hole was a broken path
+
+Asked to complete the specification, grammar, semantics, effects, capabilities, ownership,
+diagnostics, package format, plugin architecture and Survey architecture, the audit's answer is that
+**all of them already exist** — the package format in `STAGE2_SPECIFICATION.md`, plugins in
+`STAGE6_PLUGINS_GUIDE.md`, ownership in `semantics-5-9`, capabilities in `semantics-5-4`, the Survey
+in `docs/survey/README.md`, and sixteen generated semantics chapters behind a hard `--check-reference`
+gate. Producing more prose over that would have been motion rather than work, and is recorded here as
+a deliberate non-action.
+
+**One thing was genuinely broken.** The normative EBNF is not in one document — it is
+`STAGE1_SPECIFICATION.md` §3 plus each later stage's *grammar additions* section, 149 production
+lines across eight files. That is defensible as history. What is not defensible is that
+`docs/reference/grammar.md`, the chapter a reader opens looking for the grammar, was a bare index of
+production **names taken from `parser.rs`** — and six of the twenty-seven are spelled differently in
+the normative text. `ref.grammar.args` was a citable anchor, with both witnesses, and no
+specification defined anything called `args`.
+
+Closed by D70 rather than by rewriting the grammar, deliberately: **authoring a fresh consolidated
+EBNF by hand risks shipping one that is wrong, which is C47's exact lesson** — a normative grammar
+that could not describe `delulu fmt`'s own output. Relocating a correct grammar is safe; re-deriving
+one from a 2,000-line recursive-descent parser is not, and would need its own phase and its own
+differential evidence.
+
 ## 3. Corrections — where earlier conclusions, including this review's, were wrong
 
 ### 3.1 C21 was filed under the wrong heading for its whole life
@@ -194,7 +218,8 @@ Recorded because a review that only reports problems is not a review:
 | 3 | CODEOWNERS entrenchment as a Survey **node attribute** | reverses Phase 5 | The map's primary audience is agents; "do not casually change this" is a citable fact it lacks |
 | 4 | Give Stage 6/7/8 decisions stage-qualified ruling ids, additively | Survey note ×3 | Those stages record real decisions as "Deviation *n*" — but **three stages each have a Deviation 3**, so the note is right that they cannot be cited. An index naming each existing deviation as `S6-D1`… makes them citable without renaming anything |
 | 5 | Re-verify and correct every quoted test count | Survey note ×1 | The Survey deliberately will not guess; a reviewer can measure. The front door is where staleness costs most |
-| 6 | Correct the three statements in §2.3 | this review | Docs that outlived their facts |
+| 6 | Correct the three statements in §2.3 | this review | **DONE — D70.** All three corrected in place rather than deleted, so the record still reads as a record |
+| 10 | Make the reference's grammar index reach the grammar | this review (§2.5) | **DONE — D70.** Six of twenty-seven anchors named productions no specification defined; a three-way gate now holds the correspondence |
 | 7 | Name the macOS socket-path limit in a diagnostic rather than surfacing a raw OS error | this review (macOS-1) | Testable on Linux today; turns an obscure failure into a named one on the day a Mac exists |
 | 8 | Decompose `cli.rs` along the seams already established | this review | **PARTLY DONE — D69.** `delulu run` (1,116 lines) extracted after measuring the coupling: 24 of 143 items reached, sixteen of them its own. `cli.rs` 8,856 → 7,740. **Shared helpers deliberately stayed** — moving them would assert a false owner. The remaining clusters (broker-facing commands ≈1,050 lines; authority reporting ≈800) are characterised and mechanical |
 | 9 | Separate "not shipped language surface" from "not publishable" before enforcing either | this review (§3.5) | **DONE — D69**, and it corrected a published count that had been right by coincidence |

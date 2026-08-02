@@ -154,12 +154,24 @@ fn grammar_chapter(cov: &Coverage) -> String {
     let mut s = banner("`delulu_syntax::grammar::GRAMMAR_PRODUCTIONS` (fenced against `parser.rs`)");
     s.push_str("# Grammar productions\n\nThe parser is hand-written recursive descent, so this is \
                 the index of its productions: one row per user-facing production, each backed by a \
-                `parse_<name>` function that a drift guard verifies exists.\n\n");
+                `parse_<name>` function that a drift guard verifies exists.\n\n\
+                **This is an index, not the grammar.** The normative EBNF lives in the stage \
+                specifications — `STAGE1_SPECIFICATION.md` §3 carries the base language and each \
+                later stage's *lexical and grammar additions* section extends it. The **Defined as** \
+                column gives the name to look for there, because six of these productions are \
+                spelled differently in the two places: the names here follow `parser.rs`, which is \
+                what the drift guard fences them against, while the specifications use the fuller \
+                spellings a reader expects. A test \
+                (`every_grammar_production_is_defined_in_a_normative_specification`) checks in both \
+                directions that every anchor below leads to a real production — an index that does \
+                not lead anywhere is not an index.\n\n");
     s.push_str(&coverage_line(cov, Category::Grammar));
-    s.push_str("| Production | Anchor | Coverage |\n|---|---|---|\n");
+    s.push_str("| Production | Defined as | Anchor | Coverage |\n|---|---|---|---|\n");
     for p in delulu_syntax::grammar::GRAMMAR_PRODUCTIONS {
         let anchor = delulu_syntax::grammar::anchor(p);
-        s.push_str(&format!("| `{p}` | `{anchor}` | {} |\n", status(cov, &anchor)));
+        let normative = delulu_syntax::grammar::normative_name(p);
+        let defined = if normative == *p { "—".to_string() } else { format!("`{normative}`") };
+        s.push_str(&format!("| `{p}` | {defined} | `{anchor}` | {} |\n", status(cov, &anchor)));
     }
     s
 }

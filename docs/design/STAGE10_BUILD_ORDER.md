@@ -2827,6 +2827,64 @@ measurement is what says where to stop.
 passed **byte-identical** across all 360 cases and 108 targets, and the file was not re-blessed. That
 is the whole argument that 1,116 relocated lines changed nothing.
 
+**D70 — A published grammar anchor that leads nowhere.** Closes C71. Documentation completeness, and
+the finding is smaller and sharper than the phase's brief suggested.
+
+Asked to complete the specification, grammar, semantics, effects, capabilities, ownership,
+diagnostics, package format, plugin architecture and Survey architecture, the honest answer after
+auditing is that **all of them already exist**: the package format in `STAGE2_SPECIFICATION.md`,
+plugins in `STAGE6_PLUGINS_GUIDE.md`, ownership in `semantics-5-9`, capabilities in `semantics-5-4`,
+the Survey in `docs/survey/README.md`, and sixteen generated semantics chapters gated by
+`--check-reference`. Writing more prose over that would have been motion, not work.
+
+**One thing was genuinely broken, and it is a shape this project has ruled on before.**
+`docs/reference/grammar.md` publishes a `ref.grammar.<name>` anchor per production, and conformance
+witnesses cite them. Those names follow `parser.rs`, because the drift guard fences them against a
+`fn parse_<name>`. The **normative** EBNF lives in the stage specifications and was written for a
+reader, so it uses fuller spellings — and **six of twenty-seven diverge**. `ref.grammar.args` was a
+citable anchor with an accepting witness, a rejecting witness, and a `parse_args` behind it, while
+**nothing in any specification defined anything called `args`**. A reader following the reference to
+the grammar found nothing.
+
+That is worse than a missing anchor, because a witness can cite it and look satisfied — the same
+family as D42a, where the coverage law proved a witness *existed* rather than that it *exercised* its
+anchor. All six turned out to be covered under other names (`module_decl`, `import_decl`,
+`const_decl`, `if_expr`, and — less obviously — `call` for `args` and `effect_row` for `opt_row`), so
+nothing was undocumented. **Only the path from the index to the text was broken.**
+
+RULED: `delulu_syntax::grammar::NORMATIVE_NAME` records the spelling to look for, the generated
+chapter gains a **Defined as** column and says plainly that it is an index rather than the grammar,
+and `every_grammar_production_is_defined_in_a_normative_specification` checks the correspondence in
+**three** directions — every production resolves, no entry points at a production the specs have
+dropped, and no entry claims a divergence that is not one. Verified non-vacuous by deleting the
+`args` mapping and watching it report `args (looked for \`args\`)`.
+
+**A METHOD FAILURE THAT REACHED A COMMITTED FILE, recorded because the mechanism is general.**
+Verifying this gate non-vacuously meant deleting the `("args", "call")` mapping, watching it fail,
+and restoring the file with `Copy-Item` — which gives the destination **the backup's timestamp**.
+That predated the build which had just compiled the broken version, so cargo compared mtimes,
+concluded nothing had changed, and skipped the rebuild. The source on disk was correct; the compiled
+library was not.
+
+**Then a generator ran against it.** `--reference` was invoked in that window and wrote
+`docs/reference/grammar.md` with `| args | — |` — an artifact recording a mapping that existed in the
+source and not in the binary. So after the rebuild finally happened, this gate passed and
+`the_generated_reference_is_not_stale` **still failed, correctly**, because the committed file was
+wrong. One root cause, two different tests failing at different times, which is why it read as two
+unrelated problems and why three successive diagnoses of it were wrong.
+
+The campaign already carries *a patch script must assert its replacement applied*; it now covers a
+**restore**, because a backup can be byte-perfect and still leave a stale artifact. And the sharper
+rule: **a stale build that feeds a generator does not stay in the build directory** — it writes its
+error into the tree, where it outlives the rebuild that fixed the cause.
+
+**Also corrected: three statements that had outlived their facts** — `STAGE2_SPECIFICATION.md`'s
+claim that `delulu authority <dir>` still uses the single-package loader (closed by D45a) and that CI
+is Windows-only (the workflow declares three OSes and has never executed); `STAGE6_BUILD_ORDER.md`
+deviation 3, whose *refusal still stands* but whose stated blocker — a missing `check_program` — has
+existed since D61; and `ci.yml`'s note that the coverage gate would be "flipped at the 1.0 cut",
+which happened, in the test suite, which is the stronger place.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

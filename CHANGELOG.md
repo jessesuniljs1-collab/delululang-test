@@ -23,6 +23,26 @@ The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to f
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Fixed
+
+- **The reference's grammar index now reaches the grammar** (C71, D70). Each production publishes a
+  `ref.grammar.<name>` anchor that conformance witnesses cite. Those names follow `parser.rs`; the
+  normative EBNF in the stage specifications uses fuller spellings, and six of twenty-seven diverge.
+  `ref.grammar.args` had both witnesses and a `parse_args` behind it while **no specification defined
+  anything called `args`** — a reader following the reference to the grammar found nothing.
+
+  All six were in fact documented under other names (`call` for `args`, `effect_row` for `opt_row`,
+  and four `_decl`/`_expr` spellings), so nothing was missing; only the path was broken. The chapter
+  gains a **Defined as** column, says plainly that it is an index rather than the grammar, and a test
+  checks the correspondence in three directions.
+
+- **Three statements that had outlived their facts** (D70): `STAGE2_SPECIFICATION.md` said
+  `delulu authority <dir>` still uses the single-package loader (closed by D45a) and that CI is
+  Windows-only (the workflow declares three OSes — and has never executed);
+  `STAGE6_BUILD_ORDER.md` deviation 3 still refuses multi-module plugin packages, correctly, but its
+  stated blocker has existed since D61; and `ci.yml` promised to flip the coverage gate "at the 1.0
+  cut", which happened in the test suite instead, where it is stronger.
+
 ### Changed
 
 - **Only the CLI is publishable to crates.io** (D69). `STABILITY.md` §2 has always said the Rust
