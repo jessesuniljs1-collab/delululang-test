@@ -180,6 +180,37 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **A diagnostic code you cannot look up now has an answer instead of a dead end.** Sixteen
+  `DLxxxx` were named across this repository — in specifications, in build orders, in the registry's
+  own comments — that `REGISTRY` does not allocate. `delulu explain` answered `unknown code` for
+  every one of them, which is exactly what it answers for a typo. For the population this language
+  is built for, "I cannot tell you" and "that was withdrawn, here is why" are not the same answer,
+  and only one of them means the reader made a mistake.
+
+  A new `UNALLOCATED` table beside the registry gives each one a **disposition** and a reason:
+  `retired` (withdrawn; the rule it named does not exist), `never-allocated` (a number the ranges
+  skip on purpose), `reserved` (held open so the next code need not move), `specified-not-implemented`,
+  and `sentinel`. `delulu explain` answers from it, `docs/reference/diagnostics.md` gained a
+  generated "Codes this compiler cannot emit" chapter, and the Survey subtracts it — that finding
+  is now closed rather than merely explained.
+
+  **Two of the sixteen are a real gap, and are recorded as one rather than tidied away.** Stage 2's
+  rule VIS-1 says referencing a non-visible item is `DL1012` and Stage 3 tabulates `DL1203` for an
+  artifact hash/receipt conflict; neither code exists and nothing raises them. Closing that by
+  inventing the codes, or by editing the specifications to match the implementation, would have
+  been the easy move and the wrong one.
+
+  `sentinel` exists because `DL9999` has two jobs that both depend on it staying unrecognised — the
+  registry guard asserts its absence, and `cli_contract` feeds it to `explain` to prove refusal
+  works. It is recorded so the Survey stops calling it unexplained, and deliberately left
+  *unexplainable*. A test holds both halves.
+
+  A guard test asserts no code is in both tables: codes are never reused, and without it a future
+  reissue would turn this table into a lie that `explain` then repeats. Observed failing.
+
+  The Survey also stopped misreading `DLxxxx–DLyyyy` **range notation** as two citations — prose
+  reserving a block for a later stage was being read as claiming both endpoints exist.
+
 - **`delulu completions <bash|zsh|fish|powershell>` — generated, not maintained.** A completion
   script is a *copy* of the command list, and this repository has already paid for that kind of
   copy once: `deploy` and `fleet` were working commands that `--help` never mentioned, which is how

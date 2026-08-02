@@ -246,6 +246,173 @@ pub fn is_registered(code: &str) -> bool {
     REGISTRY.iter().any(|c| c.code == code)
 }
 
+/// Why a `DLxxxx` that looks like a code is not in [`REGISTRY`].
+///
+/// Four different facts wear the same costume — a code you cannot look up — and until this table
+/// existed, telling them apart meant finding the right comment in the right file. That is no use
+/// to the population this language is built for: an agent that reads `DL1012` in a specification
+/// and asks the toolchain what it means was told `unknown code`, which is exactly what it is told
+/// for a typo. A dead end and a decision are not the same answer.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Disposition {
+    /// Allocated once, then withdrawn — the rule it named no longer exists. Never reissued.
+    Retired,
+    /// A number the ranges skip on purpose. It was never a code and never will be.
+    NeverAllocated,
+    /// Held open deliberately, so the range's next code does not have to move later.
+    Reserved,
+    /// A specification names it and the implementation does not have it. **This is a real gap**,
+    /// kept visible rather than closed by quietly inventing the code or editing the spec.
+    SpecifiedNotImplemented,
+    /// Not a code at all — a number tests use *because* it is guaranteed absent, to prove a
+    /// membership check can fail and that `explain` refuses what it does not know.
+    ///
+    /// Recorded here so the Survey stops calling it an unexplained absence, but deliberately NOT
+    /// explainable: `delulu explain` must keep refusing it, or the canary stops being a canary.
+    Sentinel,
+}
+
+impl Disposition {
+    /// The stable lowercase name, for machine channels and for the Survey.
+    pub fn word(self) -> &'static str {
+        match self {
+            Disposition::Retired => "retired",
+            Disposition::NeverAllocated => "never-allocated",
+            Disposition::Reserved => "reserved",
+            Disposition::SpecifiedNotImplemented => "specified-not-implemented",
+            Disposition::Sentinel => "sentinel",
+        }
+    }
+
+    /// Whether `delulu explain` should answer for a code with this disposition.
+    ///
+    /// Every disposition is explainable except [`Disposition::Sentinel`], whose entire purpose is
+    /// to be a code the toolchain does not recognise.
+    pub fn is_explainable(self) -> bool {
+        self != Disposition::Sentinel
+    }
+}
+
+pub struct UnallocatedCode {
+    pub code: &'static str,
+    pub disposition: Disposition,
+    /// What it was, and why it is not here — written for someone who found the code somewhere in
+    /// the tree and needs to know whether they are looking at a defect.
+    pub why: &'static str,
+}
+
+/// Every `DLxxxx` named somewhere in this repository that [`REGISTRY`] does not allocate.
+///
+/// The Survey reads this table (lexically — it depends on no crate here) so that a code with a
+/// recorded disposition stops being reported as an unexplained absence, and `delulu explain`
+/// answers from it instead of saying `unknown code`. **Adding a row is how you close that loop:**
+/// a code left out of both the registry and this table is, correctly, still reported as a typo.
+pub const UNALLOCATED: &[UnallocatedCode] = &[
+    UnallocatedCode {
+        code: "DL0210",
+        disposition: Disposition::Reserved,
+        why: "The Stage-1 parse range ends at DL0209 and holds DL0210 open, so the next parse \
+              diagnostic can be added without renumbering anything. Listed as `DL0210 reserved` \
+              in the DL02xx allocation table of `docs/design/STAGE1_SPECIFICATION.md`.",
+    },
+    UnallocatedCode {
+        code: "DL0503",
+        disposition: Disposition::Retired,
+        why: "It named an arity rule the checker does not have: a multi-row-variable signature is \
+              legal, row honesty is enforced per variable by DL0501, and a multi-variable row term \
+              is refused at resolution by DL0306. Retired rather than frozen unreachable, so the \
+              coverage law never has to carry a code nothing can emit (ruling D22).",
+    },
+    UnallocatedCode {
+        code: "DL0702",
+        disposition: Disposition::Retired,
+        why: "One of three codes that could never fire, retired at the 1.0 coverage gate rather \
+              than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`.",
+    },
+    UnallocatedCode {
+        code: "DL0906",
+        disposition: Disposition::Retired,
+        why: "One of three codes that could never fire, retired at the 1.0 coverage gate rather \
+              than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`.",
+    },
+    UnallocatedCode {
+        code: "DL1012",
+        disposition: Disposition::SpecifiedNotImplemented,
+        why: "`docs/design/STAGE2_SPECIFICATION.md` rule VIS-1 says that referencing an item which \
+              is not cross-package-visible is DL1012. No such code is allocated and nothing emits \
+              it. Recorded as an open gap rather than closed by inventing a code the checker does \
+              not raise or by editing the specification to match the implementation.",
+    },
+    UnallocatedCode {
+        code: "DL1203",
+        disposition: Disposition::SpecifiedNotImplemented,
+        why: "`docs/design/STAGE3_SPECIFICATION.md` tabulates DL1203 for an artifact hash/receipt \
+              conflict (a receipt exists but the hash differs) with `requires_human: true`. No \
+              such code is allocated. Recorded as an open gap; a tamper-shaped condition is worth \
+              keeping visible rather than silently dropping from the specification.",
+    },
+    UnallocatedCode {
+        code: "DL1404",
+        disposition: Disposition::NeverAllocated,
+        why: "The DL14xx custody range skips it deliberately (spec §8), and the comment above the \
+              range in this file says so. It is the original of the house rule the others below \
+              mirror. Do not invent one.",
+    },
+    UnallocatedCode {
+        code: "DL1419",
+        disposition: Disposition::NeverAllocated,
+        why: "RFC 0001 penciled DL1419/DL1420 in for uplink-lease expiry. Not adding them was the \
+              better answer: an expired uplink is the ordinary DL1402 and a bad bundle the \
+              existing DL1405, so a parallel expiry path would have been a second place for \
+              liveness to be wrong (`docs/design/STAGE10_BUILD_ORDER.md`).",
+    },
+    UnallocatedCode {
+        code: "DL1420",
+        disposition: Disposition::NeverAllocated,
+        why: "The other half of the DL1419/DL1420 pair RFC 0001 penciled in and this project \
+              deliberately did not allocate (`docs/design/STAGE10_BUILD_ORDER.md`).",
+    },
+    UnallocatedCode {
+        code: "DL1609",
+        disposition: Disposition::NeverAllocated,
+        why: "The Stage-7 actor table skips it, mirroring the DL1404 house rule. The comment above \
+              the DL16xx range in this file says so. Do not invent one.",
+    },
+    UnallocatedCode {
+        code: "DL1708",
+        disposition: Disposition::NeverAllocated,
+        why: "The morph loader was given its own DL1710–DL1714 sub-block instead of continuing the \
+              DL170x run, so that a reader seeing a DL171x knows immediately which subsystem \
+              raised it. This code and the one after it were both left unallocated.",
+    },
+    UnallocatedCode {
+        code: "DL1709",
+        disposition: Disposition::NeverAllocated,
+        why: "The other half of the pair skipped when the morph loader was given its own \
+              DL1710–DL1714 sub-block. See DL1708.",
+    },
+    UnallocatedCode {
+        code: "DL1784",
+        disposition: Disposition::NeverAllocated,
+        why: "Never allocated in the Surface addendum's DL178x block, mirroring the DL1404 house \
+              rule. The comment above the DL17xx range in this file says so.",
+    },
+    UnallocatedCode {
+        code: "DL9999",
+        disposition: Disposition::Sentinel,
+        why: "Not a diagnostic at all. It is the deliberately-invalid code the registry guard's own \
+              test asserts is absent (`crates/delulu-conform/src/rules.rs`), and the one \
+              `cli_contract` hands to `delulu explain` to prove it refuses what it does not know. \
+              Both uses depend on it staying unrecognised, so it is recorded here and deliberately \
+              left unexplainable.",
+    },
+];
+
+/// The recorded disposition of a code the registry does not allocate, if there is one.
+pub fn unallocated(code: &str) -> Option<&'static UnallocatedCode> {
+    UNALLOCATED.iter().find(|u| u.code == code)
+}
+
 /// The minimum length that counts as a real explanation rather than a restated title. Chosen so
 /// that a one-sentence paraphrase does not pass: `delulu explain` exists to say what happened, why
 /// the rule is there, and what to do — three things do not fit in a sentence.
@@ -1306,6 +1473,69 @@ pub fn code_explain(code: &str) -> Option<String> {
         Some(format!("{body}\n\n{FOREIGN_CAVEAT}"))
     } else {
         Some(body.to_string())
+    }
+}
+
+#[cfg(test)]
+mod unallocated_tests {
+    use super::*;
+
+    /// **A code cannot be both allocated and unallocated.**
+    ///
+    /// The load-bearing guard. If a future change reissues a retired number, this table quietly
+    /// becomes a lie that `delulu explain` then repeats — telling a reader a live diagnostic was
+    /// withdrawn. Codes are never reused (the header of this file says so); this is what enforces it.
+    #[test]
+    fn no_unallocated_code_is_also_registered() {
+        for u in UNALLOCATED {
+            assert!(
+                !is_registered(u.code),
+                "{} is in UNALLOCATED and in REGISTRY — one of them is wrong, and a code is never reused",
+                u.code
+            );
+        }
+    }
+
+    /// Every entry says something. A disposition with no reason is a shrug on the record.
+    #[test]
+    fn every_unallocated_code_gives_a_real_reason() {
+        for u in UNALLOCATED {
+            assert_eq!(u.code.len(), 6, "{} is not a DLxxxx code", u.code);
+            assert!(u.code.starts_with("DL"), "{} is not a DLxxxx code", u.code);
+            assert!(
+                u.code[2..].chars().all(|c| c.is_ascii_digit()),
+                "{} is not a DLxxxx code",
+                u.code
+            );
+            // Shorter than a registry title would be; long enough that "retired" alone cannot pass.
+            assert!(
+                u.why.len() >= 80,
+                "{} has a {}-char reason — say what it was and why it is not here",
+                u.code,
+                u.why.len()
+            );
+        }
+    }
+
+    /// No duplicates: two rows for one code means two answers to one question.
+    #[test]
+    fn each_code_is_listed_once() {
+        let mut seen: Vec<&str> = UNALLOCATED.iter().map(|u| u.code).collect();
+        let before = seen.len();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), before, "a code is listed twice in UNALLOCATED");
+    }
+
+    /// The sentinel must stay unexplainable, or the tests that rely on it lose their meaning.
+    #[test]
+    fn the_sentinel_is_recorded_but_never_explained() {
+        let s = unallocated("DL9999").expect("the sentinel is recorded, so the Survey can see it");
+        assert_eq!(s.disposition, Disposition::Sentinel);
+        assert!(!s.disposition.is_explainable(), "explaining it would defeat every use of it");
+        for u in UNALLOCATED.iter().filter(|u| u.code != "DL9999") {
+            assert!(u.disposition.is_explainable(), "{} should be explainable", u.code);
+        }
     }
 }
 

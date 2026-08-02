@@ -50,6 +50,7 @@ pub fn extract(idx: &PathIndex, f: &ScannedFile, b: &mut Builder) {
     }
 
     let mut in_registry = false;
+    let mut in_unallocated = false;
     let mut doc_header: Option<String> = None;
     let mut contents: Vec<String> = Vec::new();
 
@@ -98,9 +99,22 @@ pub fn extract(idx: &PathIndex, f: &ScannedFile, b: &mut Builder) {
             } else if in_registry && t == "}" {
                 in_registry = false;
             }
+            // The table beside the registry that records WHY a code is absent from it. Read
+            // lexically, like everything else here — the Survey depends on no crate in this
+            // workspace, so it cannot simply import `delulu_diag::UNALLOCATED`.
+            if t.starts_with("pub const UNALLOCATED") {
+                in_unallocated = true;
+            } else if in_unallocated && t == "];" {
+                in_unallocated = false;
+            }
         }
         for c in diagnostic_codes(&format!("{code} {comment}")) {
             let code_id = format!("code:{c}");
+            if in_unallocated && t.starts_with(&format!("code: \"{c}\"")) {
+                // A code with a recorded disposition. Still a mention, so it still gets a node and
+                // an edge; what changes is that it is no longer an UNEXPLAINED absence.
+                b.dispositioned_codes.insert(c.clone());
+            }
             // Only the registry block *defines*; every other mention cites.
             if in_registry && t.starts_with(&format!("\"{c}\"")) {
                 let title = t.split_once("=> ").map(|(_, s)| s.trim().trim_end_matches(',').trim_matches('"'));
@@ -239,7 +253,16 @@ pub fn diagnostic_codes(s: &str) -> Vec<String> {
         if chars[i] == 'D' && chars[i + 1] == 'L' && chars[i + 2..i + 6].iter().all(|c| c.is_ascii_digit()) {
             let before_ok = i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_');
             let after_ok = chars.get(i + 6).is_none_or(|c| !c.is_ascii_digit());
-            if before_ok && after_ok {
+            // A RANGE, not a citation. Prose that allocates a block writes it as `DLxxxx-DLyyyy`,
+            // and neither endpoint claims those two codes exist: a sentence reserving a block for
+            // a later stage was being read as citing both ends, which then showed up as codes the
+            // registry had failed to allocate. Both ends are skipped. A trailing word like
+            // `DLxxxx-style` is untouched, because the dash there is not followed by another code.
+            //
+            // No literal code appears in this comment, for the reason `diagnostic_codes` gives
+            // below: this file is scanned like any other, so an example here would be indexed as a
+            // real citation from a module that raises nothing.
+            if before_ok && after_ok && !in_range(&chars, i) {
                 out.push(chars[i..i + 6].iter().collect::<String>());
                 i += 6;
                 continue;
@@ -250,6 +273,21 @@ pub fn diagnostic_codes(s: &str) -> Vec<String> {
     out.sort();
     out.dedup();
     out
+}
+
+/// Whether the code beginning at `i` is one end of a `DLxxxx–DLyyyy` range.
+///
+/// Hyphen, en dash and em dash all appear in this repository's prose, so all three count.
+fn in_range(chars: &[char], i: usize) -> bool {
+    let dash = |c: char| c == '-' || c == '\u{2013}' || c == '\u{2014}';
+    let code_at = |j: usize| {
+        chars.get(j) == Some(&'D')
+            && chars.get(j + 1) == Some(&'L')
+            && chars.get(j + 2..j + 6).is_some_and(|w| w.iter().all(char::is_ascii_digit))
+    };
+    let opens = chars.get(i + 6).copied().is_some_and(dash) && code_at(i + 7);
+    let closes = i >= 7 && dash(chars[i - 1]) && code_at(i - 7);
+    opens || closes
 }
 
 /// A public item's name, for the file index.

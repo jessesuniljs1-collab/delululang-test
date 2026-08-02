@@ -105,6 +105,11 @@ is a bug — report it.
 ```
 
 - **`code` is the stable identity.** Match on it, never on `message`.
+- **A code you cannot look up still has an answer.** `delulu explain <code>` resolves codes the
+  registry does not allocate — retired, never allocated, reserved, or named by a specification the
+  implementation never grew — and says which, with the reason. Exit 0 means answered; exit 1 means
+  genuinely unrecorded, which is the only case that should be read as a typo. The full table is
+  `docs/reference/diagnostics.md`, "Codes this compiler cannot emit".
 - **Byte offsets are the truth**; line/column are derived for humans. Edit by byte range.
 - `explanation_id` feeds `delulu explain`.
 

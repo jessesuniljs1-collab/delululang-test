@@ -159,3 +159,26 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0904` | capability scope violation | `ref.diag.DL0904` | covered |
 | `DL0905` | recursion depth exceeded | `ref.diag.DL0905` | covered |
 | `DL0907` | an internal invariant the checker should have guaranteed was violated (compiler-bug class) | `ref.diag.DL0907` | covered |
+
+## Codes this compiler cannot emit
+
+These `DLxxxx` are named somewhere in this repository but are **not** in the table above. Each carries a recorded disposition, so a code you cannot find is an answered question rather than a dead end — `delulu explain <code>` prints the reason, and a code in neither table is reported by the Survey as unexplained.
+
+`specified-not-implemented` marks a **real gap**: a specification names the code and nothing raises it. Those are kept visible rather than closed by inventing a code or editing the specification to match.
+
+| Code | Disposition | Why |
+|---|---|---|
+| `DL0210` | `reserved` | The Stage-1 parse range ends at DL0209 and holds DL0210 open, so the next parse diagnostic can be added without renumbering anything. Listed as `DL0210 reserved` in the DL02xx allocation table of `docs/design/STAGE1_SPECIFICATION.md`. |
+| `DL0503` | `retired` | It named an arity rule the checker does not have: a multi-row-variable signature is legal, row honesty is enforced per variable by DL0501, and a multi-variable row term is refused at resolution by DL0306. Retired rather than frozen unreachable, so the coverage law never has to carry a code nothing can emit (ruling D22). |
+| `DL0702` | `retired` | One of three codes that could never fire, retired at the 1.0 coverage gate rather than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`. |
+| `DL0906` | `retired` | One of three codes that could never fire, retired at the 1.0 coverage gate rather than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`. |
+| `DL1012` | `specified-not-implemented` | `docs/design/STAGE2_SPECIFICATION.md` rule VIS-1 says that referencing an item which is not cross-package-visible is DL1012. No such code is allocated and nothing emits it. Recorded as an open gap rather than closed by inventing a code the checker does not raise or by editing the specification to match the implementation. |
+| `DL1203` | `specified-not-implemented` | `docs/design/STAGE3_SPECIFICATION.md` tabulates DL1203 for an artifact hash/receipt conflict (a receipt exists but the hash differs) with `requires_human: true`. No such code is allocated. Recorded as an open gap; a tamper-shaped condition is worth keeping visible rather than silently dropping from the specification. |
+| `DL1404` | `never-allocated` | The DL14xx custody range skips it deliberately (spec §8), and the comment above the range in this file says so. It is the original of the house rule the others below mirror. Do not invent one. |
+| `DL1419` | `never-allocated` | RFC 0001 penciled DL1419/DL1420 in for uplink-lease expiry. Not adding them was the better answer: an expired uplink is the ordinary DL1402 and a bad bundle the existing DL1405, so a parallel expiry path would have been a second place for liveness to be wrong (`docs/design/STAGE10_BUILD_ORDER.md`). |
+| `DL1420` | `never-allocated` | The other half of the DL1419/DL1420 pair RFC 0001 penciled in and this project deliberately did not allocate (`docs/design/STAGE10_BUILD_ORDER.md`). |
+| `DL1609` | `never-allocated` | The Stage-7 actor table skips it, mirroring the DL1404 house rule. The comment above the DL16xx range in this file says so. Do not invent one. |
+| `DL1708` | `never-allocated` | The morph loader was given its own DL1710–DL1714 sub-block instead of continuing the DL170x run, so that a reader seeing a DL171x knows immediately which subsystem raised it. This code and the one after it were both left unallocated. |
+| `DL1709` | `never-allocated` | The other half of the pair skipped when the morph loader was given its own DL1710–DL1714 sub-block. See DL1708. |
+| `DL1784` | `never-allocated` | Never allocated in the Surface addendum's DL178x block, mirroring the DL1404 house rule. The comment above the DL17xx range in this file says so. |
+| `DL9999` | `sentinel` | Not a diagnostic at all. It is the deliberately-invalid code the registry guard's own test asserts is absent (`crates/delulu-conform/src/rules.rs`), and the one `cli_contract` hands to `delulu explain` to prove it refuses what it does not know. Both uses depend on it staying unrecognised, so it is recorded here and deliberately left unexplainable. |

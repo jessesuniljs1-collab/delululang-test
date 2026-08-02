@@ -320,6 +320,11 @@ pub struct Builder {
     /// Ids the Survey has seen *cited*, for the "is this defined anywhere?" pass.
     pub cited_codes: BTreeSet<String>,
     pub defined_codes: BTreeSet<String>,
+    /// Codes the registry does NOT allocate but which carry a recorded disposition — retired,
+    /// never allocated, reserved, or specified-but-not-implemented. Read from the `UNALLOCATED`
+    /// table beside the registry. A code here is an answered question; a code in neither table is
+    /// the one worth reporting.
+    pub dispositioned_codes: BTreeSet<String>,
     pub defined_rulings: BTreeSet<String>,
     pub defined_findings: BTreeSet<String>,
     /// Ruling citations exactly as written, resolved later.

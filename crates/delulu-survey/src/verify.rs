@@ -287,20 +287,28 @@ fn owning_crate(file: &str) -> Option<String> {
     file.strip_prefix("crates/").and_then(|r| r.split_once('/')).map(|(c, _)| c.to_string())
 }
 
-/// Codes named somewhere in the repository that the registry does not allocate.
+/// Codes named somewhere in the repository that the registry does not allocate **and that nothing
+/// explains**.
 ///
-/// **Deliberately a note, not an error.** Every instance in this repository turned out to be
-/// intentional: codes explicitly *retired* (`DL0503`, `DL0702`, `DL0906` — "retired rather than
-/// frozen unreachable"), codes deliberately never allocated so a range reads cleanly (`DL1404`,
-/// `DL1609`), range endpoints in prose, and one deliberate non-member in a test asserting the
-/// registry's membership check is tight. Calling those errors would train a reader to ignore this
-/// list, which costs more than the list is worth.
+/// This check used to report every such code, because nothing distinguished "retired on purpose"
+/// from "typo" except a sentence in a comment next to it. That record now exists — the
+/// `UNALLOCATED` table beside the registry gives each one a disposition and a reason, `delulu
+/// explain` answers from it, and this check subtracts it.
 ///
-/// What is genuinely missing is a *record*: nothing distinguishes "retired on purpose" from
-/// "typo" except the sentence next to it. The Survey reports the set and says so, rather than
-/// guessing from the surrounding prose — a guess is exactly what this map does not do.
+/// **What is left is the part that was always worth reporting.** A code named in the tree that is
+/// in neither table is either a typo or a decision nobody wrote down, and both are worth a
+/// person's attention. Adding a row to `UNALLOCATED` is how you answer it; there is deliberately
+/// no way to silence it without saying something.
+///
+/// Still a note rather than an error: the remedy is to record a decision, and a check that fails
+/// the build over an unrecorded one would be graded harsher than the facts warrant.
 fn cited_codes_are_registered(b: &mut Builder) {
-    let unregistered: Vec<String> = b.cited_codes.difference(&b.defined_codes).cloned().collect();
+    let unregistered: Vec<String> = b
+        .cited_codes
+        .difference(&b.defined_codes)
+        .filter(|c| !b.dispositioned_codes.contains(*c))
+        .cloned()
+        .collect();
     if unregistered.is_empty() {
         return;
     }
@@ -319,12 +327,12 @@ fn cited_codes_are_registered(b: &mut Builder) {
         crate::rust::CODE_REGISTRY,
         0,
         format!(
-            "{} code(s) are named in the tree but not allocated by the registry — retired, \
-             deliberately skipped, or mistyped, and nothing on record says which: {}",
+            "{} code(s) are named in the tree, are not allocated by the registry, and have no \
+             recorded disposition — so nothing says whether each is a retired code or a typo: {}",
             unregistered.len(),
             sites.join("; ")
         ),
-        "consider a RETIRED list beside REGISTRY so a reader can tell a retired code from a typo",
+        "add a row to `UNALLOCATED` in the registry saying which it is, or fix the citation",
     );
 }
 

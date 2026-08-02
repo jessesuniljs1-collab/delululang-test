@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 12 |
 | … repository tooling (`publish = false`) | 1 |
 | Rust files | 204 |
-| Rust lines | 98349 |
+| Rust lines | 98702 |
 | Rust files outside `src/` (test/bench targets) | 77 |
 | Markdown documents | 119 |
-| Markdown lines | 26931 |
+| Markdown lines | 26990 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
 | Recorded rulings | 88 |
 | Recorded campaign findings | 69 |
-| Nodes / edges in this map | 915 / 8077 |
-| Open discrepancies | 7 |
+| Nodes / edges in this map | 913 / 8106 |
+| Open discrepancies | 6 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 21 files, 18059 lines
+- **Modules:** 21 files, 18069 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -94,7 +94,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_transport.rs` | 426 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 1657 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 8705 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 8715 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 375 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
@@ -186,13 +186,13 @@ The DeluluLang conformance coverage law (invariant 42): delulu-conform --coverag
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 5 files, 2087 lines
+- **Modules:** 5 files, 2107 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/lib.rs` | 672 | The conformance coverage law (Stage 9, invariant 42), mechanized. |
 | `src/main.rs` | 109 | `delulu-conform` — the conformance coverage tool (Stage 9, invariant 42). |
-| `src/reference.rs` | 308 | The generated half of the language reference (Stage 9b, spec §2.1). |
+| `src/reference.rs` | 328 | The generated half of the language reference (Stage 9b, spec §2.1). |
 | `src/rules.rs` | 585 | The normative rule index (Stage 9b, spec §2.1) — one entry per normative statement of |
 | `src/tests.rs` | 413 | Tests for the coverage tool itself (Stage 9a, house rule 3 — every check has its skip-branch |
 
@@ -202,15 +202,15 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3242 lines
+- **Modules:** 9 files, 3473 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 371 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 1581 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 1811 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 167 |  |
 | `src/json.rs` | 144 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
-| `src/lib.rs` | 29 | DeluluLang diagnostics. |
+| `src/lib.rs` | 30 | DeluluLang diagnostics. |
 | `src/palette.rs` | 606 | The Palette — a role-based color system for every human-facing CLI surface (Surface addendum |
 | `src/render.rs` | 228 | Human-facing rendering. This text is presentation, not contract: it may change |
 | `src/source.rs` | 85 |  |
@@ -294,20 +294,20 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 10 files, 3144 lines
+- **Modules:** 10 files, 3195 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 421 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/lib.rs` | 426 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 184 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 231 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
 | `src/render.rs` | 279 | The three channels the Survey publishes on. |
-| `src/rust.rs` | 369 | Reading Rust source as text. |
+| `src/rust.rs` | 407 | Reading Rust source as text. |
 | `src/scan.rs` | 209 | Walking the tree and deciding what each file *is*. |
-| `src/verify.rs` | 582 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
+| `src/verify.rs` | 590 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
 
@@ -362,17 +362,17 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | `DL04xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime` |
-| `DL07xx` | 3 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-wasm` |
+| `DL07xx` | 3 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL08xx` | 3 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime` |
-| `DL09xx` | 7 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-wasm` |
+| `DL09xx` | 7 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
 | `DL10xx` | 12 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-registry` |
 | `DL11xx` | 2 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-runtime` |
 | `DL12xx` | 6 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-wasm` |
 | `DL13xx` | 8 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm` |
-| `DL14xx` | 20 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-wasm` |
+| `DL14xx` | 20 | `delulu`, `delulu-broker`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-wasm` |
 | `DL15xx` | 11 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm` |
-| `DL16xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax` |
-| `DL17xx` | 20 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-registry`, `delulu-runtime`, `delulu-syntax` |
+| `DL16xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-runtime`, `delulu-syntax` |
+| `DL17xx` | 18 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-registry`, `delulu-runtime`, `delulu-syntax` |
 | `DL18xx` | 2 | `delulu`, `delulu-check`, `delulu-diag` |
 | `DL19xx` | 13 | `delulu`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-registry`, `delulu-runtime`, `delulu-syntax` |
 | `DL99xx` | 1 | `delulu`, `delulu-conform`, `delulu-diag` |

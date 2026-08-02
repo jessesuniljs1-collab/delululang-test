@@ -204,6 +204,26 @@ fn diagnostics_chapter(cov: &Coverage) -> String {
             status(cov, &a)
         ));
     }
+
+    // The other half of the question. A reader who meets a code in a specification or an old
+    // build order and looks it up here used to find nothing, which reads identically to a typo.
+    s.push_str("\n## Codes this compiler cannot emit\n\n\
+                These `DLxxxx` are named somewhere in this repository but are **not** in the table \
+                above. Each carries a recorded disposition, so a code you cannot find is an \
+                answered question rather than a dead end — `delulu explain <code>` prints the \
+                reason, and a code in neither table is reported by the Survey as unexplained.\n\n\
+                `specified-not-implemented` marks a **real gap**: a specification names the code \
+                and nothing raises it. Those are kept visible rather than closed by inventing a \
+                code or editing the specification to match.\n\n");
+    s.push_str("| Code | Disposition | Why |\n|---|---|---|\n");
+    for u in delulu_diag::UNALLOCATED {
+        s.push_str(&format!(
+            "| `{}` | `{}` | {} |\n",
+            u.code,
+            u.disposition.word(),
+            u.why.replace('|', "\\|")
+        ));
+    }
     s
 }
 

@@ -15,8 +15,9 @@ mod source;
 mod span;
 
 pub use codes::{
-    code_explain, code_title, is_registered, topic_explain, CodeInfo, GUARD_BYPASS_BANNER,
-    GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY, REGISTRY, REVOCATION_BOUND,
+    code_explain, code_title, is_registered, topic_explain, unallocated, CodeInfo, Disposition,
+    UnallocatedCode, GUARD_BYPASS_BANNER, GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY,
+    REGISTRY, REVOCATION_BOUND, UNALLOCATED,
 };
 pub use diagnostic::{Confidence, Diagnostic, Edit, LabeledSpan, Repair, Severity};
 pub use json::{envelope, envelope_to_string};

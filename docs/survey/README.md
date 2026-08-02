@@ -43,7 +43,7 @@ rather than resolved**.
 |---|---|
 | `use delulu_check::…` in a source file | that crate's `Cargo.toml` dependencies |
 | a `mod x;` declaration | an `x.rs` or `x/mod.rs` actually on disk |
-| a `DLxxxx` cited anywhere | the registry in `crates/delulu-diag/src/codes.rs` |
+| a `DLxxxx` cited anywhere | the registry in `crates/delulu-diag/src/codes.rs`, **and** the `UNALLOCATED` table beside it, which records why a code is absent — retired, never allocated, reserved, specified-but-not-implemented, or a test sentinel. A code in neither is reported. |
 | a path named in prose or a comment | the set of files that exist |
 | a `D<n>` ruling citation | the build order that allocates that number |
 | a count quoted in a document | the tree, recounted |

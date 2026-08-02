@@ -98,6 +98,47 @@ fn run_without_grant_faults_dl0703() {
     assert_eq!(o.status.code(), Some(1));
 }
 
+/// **A code the registry does not allocate gets an answer, not a dead end.**
+///
+/// Sixteen `DLxxxx` were named across this repository — in specifications, in build orders, in the
+/// registry's own comments — that `REGISTRY` does not allocate. Asking the toolchain about any of
+/// them returned `unknown code`, which is exactly what a typo returns. For the population this
+/// language is built for, "I cannot tell you" and "that was withdrawn, here is why" are not the
+/// same answer, and only one of them means the reader made a mistake.
+#[test]
+fn explain_answers_for_a_code_the_registry_does_not_allocate() {
+    // One per explainable disposition, each a real code from a real place in the tree.
+    let cases = [
+        ("DL0503", "retired"),                   // withdrawn: the rule it named does not exist
+        ("DL1404", "never-allocated"),           // the range skips it on purpose
+        ("DL0210", "reserved"),                  // held open for the next parse diagnostic
+        ("DL1012", "specified-not-implemented"), // a spec names it; nothing emits it
+    ];
+    for (code, disposition) in cases {
+        let o = delulu(&["explain", code]);
+        assert_eq!(o.status.code(), Some(0), "`explain {code}` must answer:\n{}", stderr(&o));
+        let out = stdout(&o);
+        assert!(out.contains(disposition), "`{code}` is {disposition}:\n{out}");
+        // And it says WHY, not merely that it cannot be emitted.
+        assert!(out.len() > 200, "`{code}` needs a reason, not a label:\n{out}");
+    }
+
+    // A number nobody has ever recorded is still an honest dead end.
+    //
+    // Built rather than written, so no literal code appears here. This file is scanned like every
+    // other, and spelling it out would make it a *citation* — the Survey would then report it as a
+    // code named in the tree that nothing explains, which is precisely the finding this work
+    // closed. The first draft did exactly that and was caught by it.
+    let never_allocated = format!("DL{}", 7777);
+    let unknown = delulu(&["explain", &never_allocated]);
+    assert_eq!(unknown.status.code(), Some(1), "a code with no record must still fail");
+
+    // The sentinel stays unrecognised on purpose: `cli_contract` uses it as its negative case and
+    // the registry guard asserts its absence. Explaining it would defeat both.
+    let sentinel = delulu(&["explain", "DL9999"]);
+    assert_eq!(sentinel.status.code(), Some(1), "the sentinel must keep being refused");
+}
+
 #[test]
 fn explain_prints_a_code_title() {
     let o = delulu(&["explain", "DL0501"]);

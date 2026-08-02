@@ -11,7 +11,6 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 |---|---|---:|
 | note | `build-order-without-citable-rulings` | 3 |
 | note | `c-token-not-a-campaign-finding` | 1 |
-| note | `code-cited-but-not-allocated` | 1 |
 | note | `ruling-cited-without-its-stage` | 1 |
 | note | `test-count-quoted-but-unverifiable` | 1 |
 
@@ -29,17 +28,11 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 - `docs` — these `C<n>` tokens are not campaign findings and were not linked: C99
 
-## note — `code-cited-but-not-allocated` (1)
-
-**What to do:** consider a RETIRED list beside REGISTRY so a reader can tell a retired code from a typo
-
-- `crates/delulu-diag/src/codes.rs` — 16 code(s) are named in the tree but not allocated by the registry — retired, deliberately skipped, or mistyped, and nothing on record says which: DL0210 (docs/design/STAGE1_SPECIFICATION.md:858); DL0503 (crates/delulu-conform/src/rules.rs:128); DL0702 (crates/delulu-conform/src/tests.rs:281); DL0906 (crates/delulu-conform/src/tests.rs:281); DL1012 (docs/design/STAGE2_SPECIFICATION.md:279); DL1203 (docs/design/STAGE3_SPECIFICATION.md:249); DL1404 (crates/delulu-diag/src/codes.rs:126); DL1419 (docs/design/STAGE10_BUILD_ORDER.md:927); DL1420 (docs/design/STAGE10_BUILD_ORDER.md:927); DL1609 (crates/delulu-diag/src/codes.rs:173); DL1700 (docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md:13); DL1708 (crates/delulu-diag/src/codes.rs:198); DL1779 (docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md:13); DL1784 (crates/delulu-diag/src/codes.rs:174); DL1799 (docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md:13); DL9999 (crates/delulu-conform/src/rules.rs:571)
-
 ## note — `ruling-cited-without-its-stage` (1)
 
 **What to do:** write the stage when you mean an earlier one — `S9-D21` — as the Stage-10 ledger already does
 
-- `docs/design` — 238 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
+- `docs/design` — 241 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
 
 ## note — `test-count-quoted-but-unverifiable` (1)
 

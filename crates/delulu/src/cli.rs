@@ -8369,10 +8369,20 @@ fn cmd_explain(rest: &[String]) -> i32 {
             }
             0
         }
-        None => {
-            eprintln!("unknown code `{code}`");
-            1
-        }
+        // Not in the registry — but "not a code" and "a code that was deliberately not allocated"
+        // are different answers, and only one of them means the reader made a mistake. A code with
+        // a recorded disposition is explained; anything else is still an honest dead end.
+        None => match delulu_diag::unallocated(&code).filter(|u| u.disposition.is_explainable()) {
+            Some(u) => {
+                println!("{code}: {} — this compiler cannot emit it", u.disposition.word());
+                println!("\n{}", u.why);
+                0
+            }
+            None => {
+                eprintln!("unknown code `{code}`");
+                1
+            }
+        },
     }
 }
 
