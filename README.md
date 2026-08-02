@@ -31,7 +31,7 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 12 crates, ~94,000 lines of Rust. 112 test suites, 1,460 tests passing. Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Built and tested** | 12 crates, ~94,000 lines of Rust. 112 test suites, 1,464 tests passing. Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Ask it `impact <id>` before changing anything: it walks the whole blast radius, citing every hop. Start there. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |

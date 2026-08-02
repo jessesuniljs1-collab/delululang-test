@@ -311,6 +311,9 @@ pub struct ActorSystem {
     shared: Arc<Shared>,
     senders: Vec<mpsc::Sender<Job>>,
     handles: Vec<std::thread::JoinHandle<()>>,
+    /// What the workers actually got — see [`ActorSystem::reduced_depth_bound`].
+    worker_stack: usize,
+    worker_max_depth: u32,
 }
 
 impl ActorSystem {
@@ -356,6 +359,8 @@ impl ActorSystem {
             cycle_collected: AtomicU64::new(0),
         });
         let (senders, receivers): (Vec<_>, Vec<_>) = (0..threads).map(|_| mpsc::channel::<Job>()).unzip();
+        // Settled once, before any worker exists — see `usable_worker_stack`.
+        let stack_bytes = usable_worker_stack();
         let mut handles = Vec::new();
         for (wi, rx) in receivers.into_iter().enumerate() {
             let module = module.clone();
@@ -363,14 +368,46 @@ impl ActorSystem {
             let senders_w = senders.clone();
             let trace_w = trace.clone();
             let debug_w = debug_rcaps.clone();
-            handles.push(
-                std::thread::Builder::new()
-                    .name(format!("delulu-actor-{wi}"))
-                    .spawn(move || worker_loop(wi, rx, module, shared_w, senders_w, trace_w, debug_w))
-                    .expect("spawn actor worker"),
-            );
+            handles.push(spawn_worker(
+                wi,
+                rx,
+                WorkerSetup {
+                    module,
+                    shared: shared_w,
+                    senders: senders_w,
+                    trace: trace_w,
+                    debug_rcaps: debug_w,
+                    max_depth: crate::interp::max_depth_for_stack(stack_bytes),
+                },
+                stack_bytes,
+            ));
         }
-        ActorSystem { shared, senders, handles }
+        ActorSystem {
+            shared,
+            senders,
+            handles,
+            worker_stack: stack_bytes,
+            worker_max_depth: crate::interp::max_depth_for_stack(stack_bytes),
+        }
+    }
+
+    /// The depth bound the workers are actually running with, **when it is lower than the
+    /// language's documented one** — otherwise `None`.
+    ///
+    /// **A degraded capability has to name itself.** `ref.rule.portability.isolation-labels-are-
+    /// honest` already settled this shape for isolation profiles: a profile that is unavailable is
+    /// refused or *reported* as a weaker fallback, never silently swapped. The same reasoning
+    /// applies here, and it applies to a hole this repair itself opened. Before D67 a worker on a
+    /// constrained host crashed; after it, the worker quietly enforces a smaller bound. Quietly is
+    /// the part that is wrong: without this, an author whose program recurses 900 deep would see it
+    /// work on one machine and report `DL0905` on another, with nothing anywhere explaining why.
+    ///
+    /// Returns `(stack_bytes, max_depth)` so the caller can state both numbers rather than assert a
+    /// conclusion. Reached only when the full reservation was refused — a strict `RLIMIT_STACK`, a
+    /// container with an address-space cap, a 32-bit host.
+    pub fn reduced_depth_bound(&self) -> Option<(usize, u32)> {
+        (self.worker_max_depth < crate::interp::DEFAULT_MAX_DEPTH)
+            .then_some((self.worker_stack, self.worker_max_depth))
     }
 
     /// A host handle for the calling thread's interpreter.
@@ -434,16 +471,83 @@ struct Cell {
     dead: bool,
 }
 
-fn worker_loop(
+/// Start one actor worker on a stack big enough for the interpreter's own depth bound to be the
+/// limit that fires.
+///
+/// **An actor behavior runs the same tree-walking interpreter `fn main` does, so it needs the same
+/// stack — and it was getting the OS default.** `delulu`'s `main.rs` has reserved
+/// [`INTERPRETER_STACK_BYTES`] since D15 precisely so that deep recursion is `DL0905` and never a
+/// host abort; that reservation belongs to the `delulu-main` thread and a worker inherits none of
+/// it. Measured before this function existed: `down(1000)` printed `1000` from `main` and killed the
+/// process from inside a behavior, at depth **43** in debug and **~350** in release against a
+/// documented bound of 10,000 (`STAGE10_BUILD_ORDER.md` D67).
+///
+/// **The (stack, bound) pair is the invariant.** If the reservation cannot be met — a constrained
+/// container, a low `RLIMIT_STACK`, a 32-bit host — the worker takes the largest stack it *can* get
+/// and [`max_depth_for_stack`] lowers its bound to match, so the guard still fires first. Degrading
+/// the bound is a diagnostic; degrading the stack alone would be the crash. The ladder is descending
+/// and finite, and its last rung is the OS default with a bound sized for it, so this always
+/// returns a worker.
+fn spawn_worker(
     wi: usize,
     rx: mpsc::Receiver<Job>,
+    setup: WorkerSetup,
+    stack_bytes: usize,
+) -> std::thread::JoinHandle<()> {
+    std::thread::Builder::new()
+        .name(format!("delulu-actor-{wi}"))
+        .stack_size(stack_bytes)
+        .spawn(move || worker_loop(wi, rx, setup))
+        .expect("spawn actor worker")
+}
+
+/// Everything a worker needs beyond its own mailbox, cloned per worker at spawn.
+///
+/// These five values always travelled together and were passed one by one; `max_depth` was the sixth
+/// and pushed the parameter list past the point where a reader can keep it straight. Bundling them
+/// also puts `max_depth` where it belongs — **beside the stack it was computed from**, so the pair
+/// that D67 made an invariant is visible in one place instead of at two call sites.
+struct WorkerSetup {
     module: Module,
     shared: Arc<Shared>,
     senders: Vec<mpsc::Sender<Job>>,
     trace: Option<Arc<Mutex<Vec<TraceRecord>>>>,
     debug_rcaps: Option<Arc<std::collections::HashSet<delulu_syntax::ast::NodeId>>>,
-) {
+    /// The depth bound that fits this worker's stack. Never set independently of the reservation —
+    /// see [`spawn_worker`].
+    max_depth: u32,
+}
+
+/// The stack every worker in this system will take, decided **once** by probing.
+///
+/// A worker's receiver is moved into its closure, so a failed `spawn` cannot be retried with the
+/// same job — the size has to be settled before any real work is attached to it. Probing with an
+/// empty closure costs one thread create/join per system and answers the only question that
+/// matters: what will the OS actually give us. The ladder descends so a constrained host (a
+/// container with a low address-space limit, a small `RLIMIT_STACK`) still gets a worker, and
+/// [`max_depth_for_stack`] then lowers that worker's bound to match — a smaller bound is a
+/// diagnostic, a mismatched pair is the crash.
+fn usable_worker_stack() -> usize {
+    const LADDER: [usize; 3] =
+        [crate::interp::INTERPRETER_STACK_BYTES, 64 * 1024 * 1024, 8 * 1024 * 1024];
+    for bytes in LADDER {
+        if let Ok(h) = std::thread::Builder::new()
+            .name("delulu-actor-probe".into())
+            .stack_size(bytes)
+            .spawn(|| {})
+        {
+            let _ = h.join();
+            return bytes;
+        }
+    }
+    // Rust's default. Reached only when even 8 MiB is refused, and the bound shrinks with it.
+    2 * 1024 * 1024
+}
+
+fn worker_loop(wi: usize, rx: mpsc::Receiver<Job>, setup: WorkerSetup) {
+    let WorkerSetup { module, shared, senders, trace, debug_rcaps, max_depth } = setup;
     let mut interp = crate::interp::Interp::new(&module)
+        .with_max_depth(max_depth)
         .with_actors(ActorHost { shared: shared.clone(), senders, me: Some(wi) });
     let local_sink = trace.as_ref().map(|_| TraceSink::new());
     if let Some(s) = &local_sink {
@@ -837,6 +941,141 @@ mod boundary_authority_tests {
     /// listed here has since started crossing. An empty list means "nothing is withheld", which is a
     /// claim that has to keep being true.
     const WITHHELD_FROM_ACTORS: &[&str] = &[];
+
+    /// Thread-creation sites that deliberately do **not** reserve an interpreter-sized stack,
+    /// each with the reason it is safe.
+    ///
+    /// **A thread that runs a DeluluLang program must reserve a stack sized for the interpreter's
+    /// depth bound, or lower the bound to match** — otherwise the guard cannot fire and the process
+    /// dies of a native stack overflow instead of reporting `DL0905`. That rule lived at one site
+    /// (`delulu`'s `main.rs`) and the actor scheduler, which runs the very same interpreter, never
+    /// learned it (ruling D67). This is the seventh instance of the campaign's first design rule:
+    /// *a hand-maintained list of authority- or safety-bearing things falls behind the type that
+    /// defines it.* So the list is now checked instead of remembered.
+    ///
+    /// Keyed by file, because a file's *purpose* is what makes its threads safe. Every entry here
+    /// spawns a thread that never enters the interpreter: it sleeps, reads a pipe, or serves a
+    /// socket.
+    const THREADS_THAT_NEVER_RUN_INTERPRETER_CODE: &[(&str, &str)] = &[
+        ("adapter.rs", "reads the adapter subprocess's stdout so an exchange can have a deadline"),
+        ("device.rs", "the dead-man heartbeat sweeper: sleeps and checks lease state"),
+        ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),
+        ("lib.rs", "the registry's HTTP listener: serves connections, never evaluates a program"),
+    ];
+
+    /// Source files to sweep for thread creation. The interpreter is reachable from the runtime and
+    /// from the CLI; nothing else in the workspace constructs an [`crate::interp::Interp`].
+    fn thread_creating_sources() -> Vec<(String, String)> {
+        let runtime = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        let cli = concat!(env!("CARGO_MANIFEST_DIR"), "/../delulu/src");
+        let wasm = concat!(env!("CARGO_MANIFEST_DIR"), "/../delulu-wasm/src");
+        let registry = concat!(env!("CARGO_MANIFEST_DIR"), "/../delulu-registry/src");
+        let mut out = Vec::new();
+        for dir in [runtime, cli, wasm, registry] {
+            let Ok(entries) = std::fs::read_dir(dir) else { continue };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().is_some_and(|x| x == "rs") {
+                    let name = p.file_name().unwrap().to_string_lossy().into_owned();
+                    if let Ok(text) = std::fs::read_to_string(&p) {
+                        // Cut at the test module. Test threads run test code, not user programs —
+                        // and this scanner lives in one, so without the cut it matches the very
+                        // string literals it searches for. (The Survey shipped that same bug once:
+                        // its first version walked its own output directory.)
+                        let shipped = match text.find("#[cfg(test)]") {
+                            Some(i) => text[..i].to_string(),
+                            None => text,
+                        };
+                        out.push((name, shipped));
+                    }
+                }
+            }
+        }
+        assert!(out.len() > 20, "the source sweep found too few files to be right: {}", out.len());
+        out
+    }
+
+    #[test]
+    fn every_thread_either_sizes_its_stack_or_is_listed_as_never_running_a_program() {
+        let mut unclassified: Vec<String> = Vec::new();
+        for (name, text) in thread_creating_sources() {
+            // Each creation site, with a window big enough to hold the builder chain that follows.
+            for (idx, _) in text.match_indices("thread::spawn(").chain(text.match_indices("thread::Builder::new()")) {
+                let window = &text[idx..text.len().min(idx + 400)];
+                if window.contains(".stack_size(") {
+                    continue; // sized — the rule is satisfied at this site
+                }
+                if THREADS_THAT_NEVER_RUN_INTERPRETER_CODE.iter().any(|(f, _)| *f == name) {
+                    continue; // classified, with a reason, above
+                }
+                let line = text[..idx].lines().count();
+                unclassified.push(format!("{name}:{line}"));
+            }
+        }
+        assert!(
+            unclassified.is_empty(),
+            "these threads neither reserve an interpreter-sized stack nor are listed as never \
+             running one: {unclassified:?}\n\
+             If the thread can evaluate a DeluluLang program, give it `.stack_size(...)` AND pass \
+             `max_depth_for_stack(...)` to its `Interp` — the pair is the invariant, and a big \
+             stack alone only moves the crash deeper. If it cannot, add it to \
+             THREADS_THAT_NEVER_RUN_INTERPRETER_CODE with the reason. Leaving it unclassified is \
+             exactly how the actor scheduler shipped with the OS default stack (D67)."
+        );
+
+        // And the list must not rot the other way: a file that has since started sizing its stacks,
+        // or lost its threads entirely, should not keep an exemption it no longer needs.
+        let sources = thread_creating_sources();
+        let stale: Vec<&str> = THREADS_THAT_NEVER_RUN_INTERPRETER_CODE
+            .iter()
+            .filter(|(f, _)| {
+                !sources.iter().any(|(name, text)| {
+                    name == f
+                        && (text.contains("thread::spawn(") || text.contains("thread::Builder::new()"))
+                })
+            })
+            .map(|(f, _)| *f)
+            .collect();
+        assert!(stale.is_empty(), "these are exempted but no longer create threads: {stale:?}");
+    }
+
+    /// A degraded bound must be *reportable*, and an undegraded one must not cry wolf. The second
+    /// half is the one worth asserting: a warning that fires on every ordinary run teaches readers
+    /// to ignore it, which is how the real one gets missed.
+    #[test]
+    fn an_ordinary_host_reports_no_reduced_bound() {
+        let checked = delulu_check::check_source(0, "module m\n\nfn main(root: Root) {\n}\n");
+        assert!(!checked.has_errors(), "the fixture must check: {:?}", checked.diagnostics);
+        let system = super::ActorSystem::start(&checked.module, 1, false);
+        let reduced = system.reduced_depth_bound();
+        let _ = system.finish();
+        assert!(
+            reduced.is_none(),
+            "a host that granted the full reservation must report nothing, got {reduced:?}"
+        );
+    }
+
+    /// The (stack, bound) pair is the invariant, so the arithmetic that ties them together gets its
+    /// own witness — including the degenerate ends, which is where a divide-and-hope would fail.
+    #[test]
+    fn a_bound_always_fits_the_stack_it_was_sized_for() {
+        use crate::interp::{max_depth_for_stack, DEFAULT_MAX_DEPTH, STACK_BYTES_PER_DEPTH};
+        // The contract's own reservation earns the full default bound.
+        assert_eq!(max_depth_for_stack(crate::interp::INTERPRETER_STACK_BYTES), DEFAULT_MAX_DEPTH);
+        // It is capped there: a larger stack does not raise the language's documented bound.
+        assert_eq!(max_depth_for_stack(usize::MAX), DEFAULT_MAX_DEPTH);
+        // A small stack yields a small bound, and the bound genuinely fits.
+        for bytes in [2 * 1024 * 1024, 8 * 1024 * 1024, 64 * 1024 * 1024] {
+            let d = max_depth_for_stack(bytes) as usize;
+            assert!(d >= 1, "a bound of zero would refuse every call, not bound one");
+            assert!(
+                d * STACK_BYTES_PER_DEPTH <= bytes,
+                "the bound must fit the stack it was computed for: {d} x {STACK_BYTES_PER_DEPTH} > {bytes}"
+            );
+        }
+        // Degenerate: less stack than the fixed reserve still yields a usable, honest bound.
+        assert_eq!(max_depth_for_stack(0), 1);
+    }
 
     fn declared_fields(source: &str, struct_name: &str) -> Vec<String> {
         let start = source

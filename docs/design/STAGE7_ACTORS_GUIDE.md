@@ -119,6 +119,13 @@ delulu run app.delulu --grant console [--actors-threads N] [--on-quiesce report]
   `unsafe` anywhere in the runtime); message payloads move by rebuild, observationally the
   spec's pointer handoff. The WASM engine runs actors cooperatively, single-threaded,
   within the backend's compilable subset, and says so in its output.
+- **Recursion inside a behavior obeys the same depth bound as recursion in `main`, and
+  overrunning it is `DL0905` on both.** A worker thread reserves a stack sized for that
+  bound, exactly as the CLI's main thread does; where a worker cannot get the full
+  reservation it lowers its own bound to match, so the guard still fires as a diagnostic.
+  This was not true before ruling D67 — a behavior recursing past ~43 frames (debug) aborted
+  the process instead — and the pair *(stack reserved, bound enforced)* is now checked by a
+  gate rather than maintained by hand.
 - Platforms: verified on Windows and Linux (criterion 7's ThreadSanitizer lane runs on
   Linux). The actor runtime is platform-gate-free standard-library Rust, so macOS is
   expected to work by construction — but no Mac has run it, and we say exactly that.

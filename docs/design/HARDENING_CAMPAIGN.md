@@ -135,6 +135,7 @@ deviations.
 | C62 | **`.gitattributes` declares `* text=auto eol=lf` and nothing enforced it** — one tracked file (`HARDENING_CAMPAIGN.md`, this document) was stored **CRLF** in its committed blob, created three days after the attribute was adopted and unnoticed for the whole campaign | low (repository hygiene) — but it is rule 2's shape with the gate missing entirely | **CLOSED** — D57 (renormalized, and a test now reads the index) |
 | C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
 | C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | **CLOSED** — D62 (lifted at `val` arguments; the caller gives up write access, and an author-written `ref` is never lifted) |
+| C70 | **A normative runtime rule was false on the concurrency path.** `ref.rule.runtime.faults-are-diagnostics` names recursion depth and promises "a diagnostic with a code, never a host crash"; the reference marked it **covered**. The same function at the same depth printed its answer from `fn main` and aborted the process from inside an actor behavior — above depth **43** (debug) and **~350** (release) against a documented bound of 10,000. The actor scheduler runs the same interpreter on worker threads that reserved no stack | **high** (a shipped normative guarantee, broken by an ordinary recursive helper called from an actor — no embedder, no hostile input) | **CLOSED** — D67 (one budget in `delulu-runtime`, workers reserve it with their bound sized to match, and a source-scanning gate over every thread site). Design rule 1's **7th** instance; design rule 2 in a new costume — *the right signal, on the wrong thread* |
 | C65 | **`delulu authority` could not read a `.dwx`** — the DISTRIBUTION format, whose whole claim is "authority that travels with the code". It fell through to the source loader and died with `stream did not contain valid UTF-8`, while `run` verified the same embedded manifest and printed the effects | **high** (the review surface cannot review what you ship) | **CLOSED** — D59 |
 | C66 | **`delulu fmt notes.txt` reported "reformatted 0 file(s)" and exited 0** — nothing done, success claimed, on a path the user named deliberately | medium (silent success — the C26 class) | **CLOSED** — D59 |
 | C67 | **The authority report's `pure fns:` list is unbounded** — on a 24,630-line program it is 2,536 names on ONE line of 28,242 characters, burying the six lines a reviewer came for. D38 capped diagnostics for exactly this reason; the review surface was never capped | medium (legibility of the review surface at scale — the C32 class) | **CLOSED** — D60 |
@@ -2206,6 +2207,49 @@ Recorded because the next person will otherwise pay for them again:
   that verifies.
 - **A patch script must assert its replacement applied.** A heredoc turned `\n` into a real newline,
   the replacement silently matched nothing, and the script printed success anyway.
+
+## C70 · A normative runtime rule was false on the concurrency path — CLOSED (D67)
+
+Found during the production-readiness review, by asking a question the campaign had never asked of
+this subsystem: *`main.rs` reserves a big stack so the depth guard fires — which other threads run
+interpreter code, and what do they reserve?* The answer was: the actor scheduler's workers, and
+nothing.
+
+```
+$ delulu run main_deep.delulu  --grant console     # down(1000) called from fn main
+1000                                                exit 0
+
+$ delulu run actor_deep.delulu --grant console     # the SAME down(1000), inside a behavior
+thread 'delulu-actor-0' has overflowed its stack    exit 0xC00000FD
+```
+
+Same function, same depth, same process, same binary. `ref.rule.runtime.faults-are-diagnostics`
+promises *"a diagnostic with a code, never a host crash"* and names recursion depth explicitly; the
+reference marked it **covered**. Windows brackets: abort above depth **43** (debug) and between
+**300** and **400** (release), against a documented bound of **10,000**.
+
+**Three things made it survivable for two stages, and all three are already-named patterns:**
+
+1. The rule *"a thread that runs a DeluluLang program reserves a stack sized for the depth bound"*
+   was a private constant in `main.rs` — **design rule 1**, seventh instance.
+2. Its witness recurses in `fn main`, the one thread where the rule already held — **design rule 2**,
+   in a new costume: not a gate keyed on the wrong signal, but a gate keyed on the right signal *on
+   the wrong thread*.
+3. **A stack overflow prints no `panicked at`** (D47a), so no no-panic sweep could see it.
+
+**This also reframes C21, which is the reason it is worth reading twice.** C21 was filed as a
+*library-embedding* residual — a hypothetical embedder on a small stack — and D51 closed it by making
+the bound a contract (`with_max_depth`, `STACK_BYTES_PER_DEPTH`). D51 built exactly the right
+mechanism. **Nothing in the tree was calling it, and the caller that needed it most was not an
+embedder at all — it was DeluluLang's own actor runtime, reachable from the shipped CLI with an
+ordinary program.** A contract with no caller is a contract nobody is keeping.
+
+Closed by D67: one definition of the budget in `delulu-runtime`, actor workers reserving it with
+their bound sized to match, and a source-scanning gate that fails unless every thread-creation site
+in the tree is either sized or classified. D67 also closed a quieter contradiction it exposed — the
+reservation (512 MiB) and the published per-depth budget (80 KiB × 10,000 = 800 MiB) had disagreed
+since Stage 9, in the direction where the advice to embedders was safer than what the toolchain gave
+itself.
 
 ### What this campaign does not claim
 

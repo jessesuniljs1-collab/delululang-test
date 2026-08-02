@@ -55,6 +55,70 @@ pub const DEFAULT_MAX_DEPTH: u32 = 10_000;
 /// crash this contract exists to prevent.
 pub const STACK_BYTES_PER_DEPTH: usize = 80 * 1024;
 
+/// The native stack **every thread that runs interpreter code must reserve**, so that
+/// [`DEFAULT_MAX_DEPTH`] is the limit that fires and deep recursion is DL0905 rather than an abort.
+///
+/// **This constant lives here, next to the bound it pays for, because it had drifted.** It was a
+/// private constant in `delulu`'s `main.rs`, and the rule it encodes — *a thread that runs a
+/// DeluluLang program reserves a stack sized for the depth bound* — was therefore maintained at
+/// exactly one site. The actor scheduler in `actors.rs` spawns worker threads that run the very same
+/// interpreter, and it never set a stack size at all. The consequence was measured, not theorised:
+///
+/// | where the recursion runs | thread | stack | `down(1000)` |
+/// |---|---|---|---|
+/// | `fn main` | `delulu-main` | 512 MiB (explicit) | prints `1000` |
+/// | an actor behavior | `delulu-actor-N` | OS default | **`STATUS_STACK_OVERFLOW`** |
+///
+/// Same function, same depth, same process. On Windows the actor path aborted above depth **43**
+/// (debug) and **~350** (release) — against a documented bound of 10,000 — which made
+/// `ref.rule.runtime.faults-are-diagnostics` false on the concurrency path while the CLI witness for
+/// that rule kept passing, because the witness recurses in `main`.
+///
+/// **It is derived from the two numbers above rather than picked, and that closed a contradiction
+/// the tree had been carrying.** `main.rs` reserved 512 MiB, while [`STACK_BYTES_PER_DEPTH`]
+/// published 80 KiB for a [`DEFAULT_MAX_DEPTH`] of 10,000 — which is 800 MiB. The reservation and
+/// the published budget disagreed by 264 MiB, in the direction where the *advice* was safer than
+/// what the toolchain gave itself. 512 MiB is sufficient for the *measured* per-frame cost, so
+/// nothing crashed and nothing surfaced it; the first thing to actually compare them was
+/// [`max_depth_for_stack`], which computed a bound of 6,550 for the CLI's own thread.
+///
+/// A contract that reserves less than it advises is not a contract, so the reservation now follows
+/// the advice. The reservation is virtual — pages are committed only as they are touched — so a
+/// program that never recurses pays nothing for the difference.
+///
+/// A thread that cannot get this much must lower its bound to match — see [`max_depth_for_stack`].
+pub const INTERPRETER_STACK_BYTES: usize =
+    DEFAULT_MAX_DEPTH as usize * STACK_BYTES_PER_DEPTH + NON_RECURSIVE_RESERVE;
+
+/// Stack that is *not* interpreter recursion: the frames already on the stack when the first
+/// DeluluLang call happens (the worker loop, the actor turn machinery, the host's own callers) plus
+/// headroom for the diagnostic path, which has to run *after* the bound trips.
+const NON_RECURSIVE_RESERVE: usize = 256 * 1024;
+
+/// The largest call-depth bound that fits inside `stack_bytes`, for a thread that could not reserve
+/// [`INTERPRETER_STACK_BYTES`].
+///
+/// **The pair (stack, bound) is the invariant; neither half is meaningful alone.** A thread that
+/// silently keeps [`DEFAULT_MAX_DEPTH`] on a small stack is the crash this whole contract exists to
+/// prevent, so a caller that settles for less stack must pass the result of this function to
+/// [`Interp::with_max_depth`] in the same breath.
+///
+/// Budgeted at the conservative [`STACK_BYTES_PER_DEPTH`], less a fixed reserve for the frames that
+/// are not interpreter recursion (the worker loop, the actor turn machinery, and whatever the host
+/// had on the stack already). The result is clamped to at least 1: a bound of zero would refuse
+/// every call rather than bound the depth of one.
+pub const fn max_depth_for_stack(stack_bytes: usize) -> u32 {
+    let usable = stack_bytes.saturating_sub(NON_RECURSIVE_RESERVE);
+    let depth = usable / STACK_BYTES_PER_DEPTH;
+    if depth == 0 {
+        1
+    } else if depth > DEFAULT_MAX_DEPTH as usize {
+        DEFAULT_MAX_DEPTH
+    } else {
+        depth as u32
+    }
+}
+
 /// Default best-effort step budget for a plugin run when `Limits::fuel == 0` (spec §4/§5.4). A
 /// bound, never "unlimited" — but generous, because the interpreter is a *courtesy* path, not the
 /// enforcement path: a Contained plugin always runs on the WASM engine by construction.

@@ -23,6 +23,37 @@ The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to f
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Fixed
+
+- **Recursion inside an actor behavior is a diagnostic again, not a process abort** (C70, D67).
+  `ref.rule.runtime.faults-are-diagnostics` promises that a runtime fault — including recursion depth
+  — is *"a diagnostic with a code, never a host crash"*. On the actor path it was not. The same
+  function at the same depth printed its answer from `fn main` and killed the process from inside a
+  behavior: on Windows, above depth **43** in a debug build and between **300** and **400** in
+  release, against a documented bound of **10,000**.
+
+  The CLI reserves a large stack so the interpreter's own bound is what fires. That reservation
+  belongs to one thread, and the actor scheduler — which runs the very same interpreter on its own
+  workers — set no stack size at all. Actor workers now reserve the same budget, and their depth
+  bound is sized to whatever stack they actually got: **the pair is the invariant**, because a bigger
+  stack alone only moves the crash deeper and a smaller stack with an unchanged bound *is* the crash.
+
+  The budget now lives in `delulu-runtime` next to the bound it pays for, so there is one definition
+  and both threads read it. A source-scanning gate fails unless every thread-creation site in the
+  tree either sizes its stack or is listed as never running a program, with its reason — and it fails
+  the other way too, so an exemption cannot outlive its fact.
+
+  **Two things worth knowing about how this hid.** The existing witness for the rule was correct and
+  passing — it recurses in `main`, the one thread where the rule already held. And a stack overflow
+  prints no `panicked at`, so every no-panic sweep in the tree was structurally blind to it.
+
+- **The stack the toolchain reserves and the stack it advises now agree** (D67). `main.rs` reserved
+  512 MiB while the published embedder budget was 80 KiB × 10,000 = 800 MiB. Nothing crashed, because
+  512 MiB covers the measured per-frame cost — but the toolchain was giving itself less than it told
+  embedders to take, and the first code to compare the two computed a bound of 6,550 for the CLI's
+  own thread. The reservation is now derived from the published budget. It is virtual memory; a
+  program that never recurses pays nothing for the difference.
+
 ### Security
 
 - **The decision that started a machine is now recorded, not only printed.** A run that spawned a

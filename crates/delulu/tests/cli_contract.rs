@@ -210,6 +210,62 @@ fn recursion_within_the_bound_still_runs() {
     assert!(out.contains("46368"), "fib(24) = 46368, got: {out}");
 }
 
+/// A DeluluLang program with an actor whose behavior recurses. The bare source used by both actor
+/// tests below; `DEPTH` is substituted.
+const ACTOR_RECURSION: &str = "module m\n\n\
+     fn down(n: Int) -> Int {\n  if n <= 0 { 0 } else { down(n - 1) + 1 }\n}\n\n\
+     actor Deep {\n  var seen: Int\n  new() { self.seen = 0 }\n  \
+     be go(n: Int, out: Cap[Console]) ! {Write} {\n    self.seen = down(n)\n    \
+     out.println(str(self.seen))\n  }\n}\n\n\
+     fn main(root: Root) ! {Async, Write} {\n  let d = spawn Deep()\n  \
+     d.go(DEPTH, root.console())\n}\n";
+
+/// **`ref.rule.runtime.faults-are-diagnostics` must hold on the CONCURRENCY path too, and it did
+/// not.** `main.rs` reserves a large stack so the interpreter's own bound is what fires; that
+/// reservation belongs to the `delulu-main` thread, and the actor scheduler spawned its workers
+/// with the OS default and no bound of their own. The same function at the same depth printed its
+/// answer from `main` and killed the process from inside a behavior — measured at depth **43**
+/// (debug) and **~350** (release) against a documented bound of 10,000 (ruling D67).
+///
+/// The existing witness above could not see it: it recurses in `main`, which is the one thread
+/// where the rule was already true. **A gate keyed on the right signal, on the wrong thread.**
+///
+/// This asserts on the EXIT STATUS, not on a message, because a stack overflow prints no
+/// `panicked at` — the whole reason the no-panic sweeps were blind to this class (ruling D47a).
+#[test]
+fn recursion_inside_an_actor_is_not_a_host_crash() {
+    let home = scratch("actor-recursion");
+    let src = home.join("deep_actor.delulu");
+    std::fs::write(&src, ACTOR_RECURSION.replace("DEPTH", "1000")).unwrap();
+    let o = delulu(&home, &["run", src.to_str().unwrap(), "--grant", "console"]);
+    let out = text(&o);
+    assert!(
+        o.status.success(),
+        "a 1,000-deep recursion inside an actor is far inside the bound and must simply run; \
+         exit {:?} means the worker's stack died: {out}",
+        o.status.code()
+    );
+    assert!(out.contains("1000"), "the behavior must compute its answer: {out}");
+    assert!(!out.contains("has overflowed its stack"), "the host must not crash: {out}");
+}
+
+/// THE OTHER HALF: the bound must still BITE on a worker. A fix that only enlarged the stack would
+/// pass the test above while pushing the crash out to a deeper recursion instead of removing it.
+#[test]
+fn recursion_past_the_bound_inside_an_actor_is_dl0905() {
+    let home = scratch("actor-recursion-bound");
+    let src = home.join("deep_actor.delulu");
+    std::fs::write(&src, ACTOR_RECURSION.replace("DEPTH", "60000")).unwrap();
+    let o = delulu(&home, &["run", src.to_str().unwrap(), "--grant", "console"]);
+    let out = text(&o);
+    assert!(out.contains("DL0905"), "the guard must fire on a worker thread too, got: {out}");
+    assert!(!out.contains("has overflowed its stack"), "the host must not crash: {out}");
+    assert!(
+        o.status.code().is_some(),
+        "an aborted process yields no exit code at all; a diagnosed fault always does"
+    );
+}
+
 /// `login` stores a scoped registry token — and never echoes it. A credential printed to a
 /// terminal ends up in a scrollback buffer, a screen recording, and a CI log.
 #[test]

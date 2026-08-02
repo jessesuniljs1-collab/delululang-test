@@ -41,7 +41,13 @@ use std::process::ExitCode;
 /// committed only as they are touched — so this costs nothing for the programs that never recurse.
 ///
 /// Found by Study C: `fib(24)` crashed the process instead of reporting anything.
-const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
+///
+/// **The number now comes from `delulu-runtime`, which owns the depth bound it pays for** (ruling
+/// D67). It was defined here, privately, so the rule *"a thread that runs a DeluluLang program
+/// reserves a stack sized for the depth bound"* existed at exactly one site — and the actor
+/// scheduler, which runs the same interpreter on its own worker threads, was the site that never
+/// learned it.
+use delulu_runtime::INTERPRETER_STACK_BYTES;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

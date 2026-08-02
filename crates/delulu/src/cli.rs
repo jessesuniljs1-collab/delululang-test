@@ -7012,6 +7012,21 @@ fn cmd_run(rest: &[String]) -> i32 {
             mb_default,
             mb_overflow.as_deref() == Some("drop-new"),
         );
+        // An honest label for a degraded capability (D67). Actor workers reserve a stack sized for
+        // the interpreter's documented depth bound; where the host refuses that reservation the
+        // worker takes what it can get and lowers its bound to match, so a deep recursion is still
+        // DL0905 rather than an abort. Saying so matters because the alternative is a program that
+        // works on one machine and reports DL0905 on another with nothing to explain the difference
+        // — the silent-fallback shape `ref.rule.portability.isolation-labels-are-honest` forbids.
+        if let Some((bytes, depth)) = system.reduced_depth_bound() {
+            eprintln!(
+                "warning: this host would not reserve a full interpreter stack for the actor \
+                 workers ({} MiB granted), so recursion inside a behavior is bounded at {depth} \
+                 instead of {} — deeper recursion is DL0905, never a crash",
+                bytes / (1024 * 1024),
+                delulu_runtime::DEFAULT_MAX_DEPTH
+            );
+        }
         interp = interp.with_actors(system.host());
         if let Some(d) = debug_set {
             interp = interp.with_debug_rcaps(d);

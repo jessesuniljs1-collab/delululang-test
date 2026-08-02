@@ -1,0 +1,212 @@
+# Production-readiness review
+
+**Commissioned 2026-08-02.** *"A production readiness and architecture stabilization phase, not
+feature chasing … Do not assume previous conclusions are correct. Challenge them independently."*
+
+**Companion:** `HARDENING_CAMPAIGN.md` (the findings ledger), `STAGE10_BUILD_ORDER.md` (the rulings),
+`AUTHORITY_GUARD_CAPSTONE.md` (the authority/Guard discharge), `CROSS_PLATFORM_VERIFICATION.md`.
+
+This document is the disposition register. Every outstanding recommendation this repository carries —
+from the campaign, from previous reviews, from the Survey's own notes, and from this review — appears
+below with a verdict: **implement**, **improve**, **reject**, or **postpone**. A rejection carries its
+technical reason, because a rejection without one is just an omission that learned to write.
+
+---
+
+## 1. Method, and why it differed
+
+Previous passes audited the code against the specs. This one audited **the claims against the tree**,
+and started from a different question: *not "is this rule enforced?" but "on how many paths does this
+rule have to hold, and does the witness exercise all of them?"*
+
+That question is what found C70, and C70 is why the method is written down here rather than assumed.
+
+Three rules were applied to this review's own output:
+
+1. **A finding is not real until it is reproduced.** Every claim below that says something is broken
+   was run, not read.
+2. **A finding that dissolves under checking is recorded as dissolved**, not quietly dropped. Three
+   did (§3).
+3. **The reviewer's own search is a gate, and gates go blind.** One finding in this review was wrong
+   because a `grep` used the reviewer's vocabulary instead of the document's (§3.3).
+
+---
+
+## 2. What this review found that was new
+
+### 2.1 C70 — a normative rule was false on the concurrency path (**closed**, D67)
+
+`ref.rule.runtime.faults-are-diagnostics` names recursion depth explicitly and promises *"a diagnostic
+with a code, never a host crash."* The reference marked it **covered**. It was false inside an actor.
+
+```
+down(1000) from fn main            → prints 1000, exit 0
+down(1000) inside a behavior       → 0xC00000FD, no diagnostic
+```
+
+Windows brackets: abort above depth **43** (debug), between **300** and **400** (release), against a
+documented bound of **10,000**. Forty-three frames is an ordinary recursive tree walk, and this needs
+no embedder, no hostile input and no unusual configuration — only `spawn`.
+
+Full account in `HARDENING_CAMPAIGN.md` C70 and ruling D67. The three reasons it survived two stages
+are all previously-named patterns, which is the uncomfortable part: the safety rule lived at one site,
+its witness exercised the one thread where it already held, and a stack overflow prints no
+`panicked at` so every no-panic sweep was structurally blind.
+
+**The rest of the rule was checked and holds.** Integer overflow inside a behavior is `DL0901` and the
+actor dies cleanly, so the defect was specific to the one fault class that depends on the *host stack*
+rather than on interpreter logic. Scope confirmed by test, not by argument.
+
+### 2.2 A documented promise with no mechanism — crate publishability
+
+`STABILITY.md` §2 states: *"Internal crate APIs. The Rust crates are an implementation detail; the
+stable interface is the language, the CLI, and the machine schemas."* §6 is an explicit
+**promise → mechanism** table, and this promise is not in it.
+
+Measured: of thirteen crates, **one** sets `publish = false`. The other twelve default to publishable
+at `version = "1.0.0"` — including `delulu-check`, which exposes seventeen modules wholesale, and
+`delulu-runtime`, with 307 public items. `cargo publish -p delulu-check` would today mint a 1.0.0
+semver contract over internals the stability document explicitly disclaims.
+
+The mechanism already exists in the tree and was applied to exactly the crate whose *name* made it
+obvious. **Disposition: implement** (§4).
+
+### 2.3 Documentation that outlived its facts
+
+Three statements that were true when written and are false now. Each verified against the source, not
+against another document:
+
+- `STAGE2_SPECIFICATION.md` — *"`delulu authority <dir>` still uses the single-package path (does not
+  resolve cross-package imports)"*. Closed by D45a; `authority_package` selects `authority_workspace`
+  on a manifest and resolves the graph.
+- `STAGE6_BUILD_ORDER.md` deviation 3 — defers multi-module plugin packages because they *"would need
+  a whole-program replay path (`check_program`)"*. `check_program` exists. The **status** is still
+  accurate (the refusal is still in the code, deliberately); only its stated blocker is gone.
+- `.github/workflows/ci.yml` — *"Flip to a hard gate at the 1.0 cut."* 1.0 shipped. The flip happened,
+  but in the **test suite** (`release_requires_full_coverage`), not in the workflow, so the comment
+  describes an unkept promise that was in fact kept somewhere better.
+
+### 2.4 macOS: what the static audit can and cannot say
+
+Every conditional-compilation site was enumerated and classified. **All are exhaustive for macOS**:
+`cfg(unix)`/`cfg(not(unix))` and `cfg(windows)`/`cfg(not(windows))` pairs cover it, and the two
+Linux-only mechanisms are handled deliberately — `PR_SET_PDEATHSIG` is `cfg(target_os = "linux")` with
+a comment naming the macOS substitute (`WorkerGuard`'s kill-on-drop) and the possible future hardening
+(kqueue `EVFILT_PROC`), and the microVM profile refuses with `DL1408` on the not-Linux arm.
+
+**This is evidence of care, not evidence of working.** The one risk the audit *can* name concretely is
+below (§4, macOS-1): the Unix domain socket path limit is **104 bytes on macOS** against 108 on Linux,
+and macOS temp directories are long. Arithmetic on the longest state dir the test suite builds leaves
+roughly fourteen bytes of margin. That is a real, unverified risk with a number attached, and it is
+the first thing to check on the day a Mac exists.
+
+---
+
+## 3. Corrections — where earlier conclusions, including this review's, were wrong
+
+### 3.1 C21 was filed under the wrong heading for its whole life
+
+C21 was recorded as a **library-embedding** residual: a hypothetical embedder on a small stack. D51
+closed it correctly by making the depth bound a contract (`with_max_depth`, `STACK_BYTES_PER_DEPTH`)
+and the final ledger carried it as *"only a small-stack library EMBEDDING is uncovered."*
+
+That framing was wrong, and it is why the real defect sat behind it. **D51 built exactly the right
+mechanism and nothing in the tree called it.** The caller that needed it most was not an embedder at
+all — it was DeluluLang's own actor runtime, reachable from the shipped CLI by an ordinary program.
+A contract with no caller is a contract nobody is keeping.
+
+### 3.2 CODEOWNERS: the previous disposition is reversed
+
+Phase 5 recorded the entrenchment marker as *"belongs as a node attribute, not a verb … and it is not
+built."* The reasoning for rejecting an `owners` **verb** was and remains correct — every rule names
+the same placeholder, so the verb is a constant function. But the conclusion was applied to the wrong
+thing: rejecting the verb was used to shelve the **attribute** too.
+
+The attribute is a different claim. `.github/CODEOWNERS` names eight paths that require the project
+lead specifically — the constitution, `DELULU_CORE.md`, `STABILITY.md`, `/rfcs/`, `SECURITY.md`,
+`/docs/security/`, the soundness audit and its laundering suite, and the conformance machinery. That
+is a *fact in the tree*, citable to a file and line, and it is precisely the signal an agent needs
+before editing. The Survey exists primarily for AI systems maintaining DeluluLang; *"you may not
+casually change this"* is among the most valuable things it could carry, and it carries nothing.
+
+**Disposition: implement** (§4).
+
+### 3.3 This review's own first reading of `STABILITY.md` was wrong
+
+The first pass concluded that the stability contract *"says nothing about the Rust API surface,"* based
+on a `grep` for `rust api`, `public api`, `crates.io`, `semver` and `publish`. The document says
+**"Internal crate APIs"** and **"The Rust crates"** — the reviewer's vocabulary, not the document's.
+
+The finding survived, in a sharper and smaller form (§2.2: the promise exists and has no mechanism),
+but the process point is the one worth keeping: **a search is a gate, and the rule is to ask what
+signal it keys on and what a real hit would look like if it used different words.** That is D47a's
+lesson, applied to a reviewer instead of a test.
+
+### 3.5 One Cargo field is already answering two different questions
+
+Found while designing the fix for §2.2, and it changes that fix. `publish = false` is not inert here:
+`delulu-survey` reads it to populate `tooling_crates`, and derives
+`crates_shipped = 13 − 1 = 12` — the number README quotes and a test gates.
+
+So the field carries two questions at once:
+
+- **Is this part of the language product?** — the Survey's reading, and the input to a published count.
+- **May this be uploaded to crates.io?** — Cargo's meaning, and what §2.2 needs.
+
+They agree today only because exactly one crate answers "no" to both. The eleven library crates need
+**opposite** answers — they *are* the language product, and `STABILITY.md` §2 says they are not a
+stable interface — so naively adding `publish = false` to them would quietly turn README's "12 crates"
+into "1" and fail its own gate.
+
+That is a duplicate-concept defect, and it has to be untangled *before* either promise can be
+enforced: one signal for product surface, one for publishability. Recorded here rather than fixed in
+passing, because a field with two meanings is exactly the kind of thing that gets "cleaned up" by
+someone who only knows about one of them.
+
+### 3.4 Two claims checked and found already honest
+
+Recorded because a review that only reports problems is not a review:
+
+- **CI's `|| true` on the coverage step is not a hole.** It looks like a disabled gate; the real gate
+  is `release_requires_full_coverage` in the suite, which is stronger (per-commit, not per-push). Only
+  the comment is stale.
+- **The `macos-latest` CI matrix is not an overclaim.** `CROSS_PLATFORM_VERIFICATION.md` §"Nothing in
+  this repository may describe DeluluLang as supported on three platforms" already states that the
+  matrix names macOS and **has never executed**. The project got there first.
+
+---
+
+## 4. The register
+
+**Implement.**
+
+| # | Item | Source | Why |
+|---|---|---|---|
+| 1 | Actor workers reserve an interpreter-sized stack; bound sized to match; thread-site gate | this review (C70) | **DONE — D67.** A normative rule was false on a shipped path |
+| 2 | `publish = false` on every crate but the CLI, plus a gate over the partition | this review | Gives `STABILITY.md` §2 the mechanism its own §6 table demands |
+| 3 | CODEOWNERS entrenchment as a Survey **node attribute** | reverses Phase 5 | The map's primary audience is agents; "do not casually change this" is a citable fact it lacks |
+| 4 | Give Stage 6/7/8 decisions stage-qualified ruling ids, additively | Survey note ×3 | Those stages record real decisions as "Deviation *n*" — but **three stages each have a Deviation 3**, so the note is right that they cannot be cited. An index naming each existing deviation as `S6-D1`… makes them citable without renaming anything |
+| 5 | Re-verify and correct every quoted test count | Survey note ×1 | The Survey deliberately will not guess; a reviewer can measure. The front door is where staleness costs most |
+| 6 | Correct the three statements in §2.3 | this review | Docs that outlived their facts |
+| 7 | Name the macOS socket-path limit in a diagnostic rather than surfacing a raw OS error | this review (macOS-1) | Testable on Linux today; turns an obscure failure into a named one on the day a Mac exists |
+| 8 | Decompose `cli.rs` (8,528 lines) along the seams already established | this review | 13 subcommands already live in their own modules; 22 do not. The stated primary maintainer is an agent with a context window |
+| 9 | Separate "not shipped language surface" from "not publishable" before enforcing either | this review (§3.5) | One Cargo field currently answers two different questions, and the eleven libraries need opposite answers to them |
+
+**Reject, with reasons.**
+
+| Item | Reason |
+|---|---|
+| A Survey `why <id>` verb | Confirmed by inspection: a strict subset of what `query` already returns. Building it would add a second, narrower answer to a question already answered |
+| A Survey `owners <id>` verb | Every CODEOWNERS rule names the same placeholder until public launch, so the verb is a constant function. The *entrenchment* half is real and is item 3 — the verb is not |
+| Suppress the `c-token-not-a-campaign-finding` note | **This review proposed it, then read the code and withdrew it.** The check is already deliberate: it counts an unresolved `C<n>`, never errors, and its own guidance reads *"no action if these are C-language references."* Its only trigger today is `C99`, which appears exactly once in the tree — inside the Survey's **own source comment explaining why `C99` is not a finding**. An allowlist would be strictly worse: **`C11` and `C17` *are* real campaign findings**, so a number-keyed list is wrong, and a context-keyed one is guessing, which is the thing the provenance law exists to forbid |
+| Move `Effect` out of `delulu-check` to drop the broker→check edge | `delulu-broker` uses exactly one item from `delulu-check`: `Effect`. That looks like accidental coupling and is the opposite. Authority is *defined* in terms of effects; one shared definition between the crate that computes rows and the crate that grants them is the "one list referenced by both sides" pattern this project adopted after six drift findings. Relocating it buys build-graph tidiness and risks the exact drift the pattern prevents |
+| Raise `DEFAULT_MAX_DEPTH` now that workers have real stacks | The bound is a published contract and 10,000 is not the constraint anyone hits. Changing it would move an observable limit for no demonstrated need |
+
+**Postpone / accept as a standing limit.**
+
+| Item | Status |
+|---|---|
+| C55 — record field access is O(record width) at runtime | **Accepted limit**, published with its curve. Measured U-shaped with a minimum at width 20; a short `Vec` scan is genuinely faster for ordinary records. The real fix is static field indices through the DIR — a change to the IR, not a patch |
+| macOS execution | **Blocked, not deferred.** There is no Apple hardware. Every cell that mentions macOS says "never run", and none says "untested" or "pending" — those invite a reader to assume someone tried |
+| The optimizer (spec §2.1) and a native backend | **Honestly deferred**, RFC-gated, with published notes. Neither is claimed to exist |
+| Multi-threaded WASM engine | **Deferred with its honesty note** (`THREADED_WASM_DEFERRAL.md`) — the sanctioned passing outcome, not an omission |

@@ -2666,6 +2666,70 @@ RULED:
 Still true, and unchanged: signing buys **provenance, not behaviour**; unpinned, there is no trust
 policy; and this is an operator-supplied subprocess, not spec §5.4's Verified-class signed plugin.
 
+**D67 — An actor behavior runs the same interpreter `fn main` does, so it needs the same stack.**
+Closes C70. `ref.rule.runtime.faults-are-diagnostics` says a runtime fault — *"overflow, division by
+zero, index out of bounds, recursion depth"* — is **"a diagnostic with a code, never a host crash"**.
+It was false on the concurrency path, and had been since Stage 7 shipped actors.
+
+The measurement, before anything was changed. One function, one depth, one process:
+
+| where the recursion runs | thread | stack | `down(1000)` |
+|---|---|---|---|
+| `fn main` | `delulu-main` | 512 MiB, reserved by `main.rs` | prints `1000`, exit 0 |
+| an actor behavior | `delulu-actor-N` | **OS default** | **`0xC00000FD`, no diagnostic** |
+
+Windows thresholds, bracketed: the actor path aborted above depth **43** (debug) and between **300**
+and **400** (release) — against a documented bound of **10,000**. Forty-three is not an exotic depth;
+it is an ordinary recursive tree walk.
+
+**Why nothing caught it, and this is the durable half.** `main.rs` reserves a large stack precisely so
+the interpreter's own bound fires first (S9-D15). That reservation belongs to *one thread*. The rule it
+encodes — *a thread that runs a DeluluLang program reserves a stack sized for the depth bound* — lived
+as a private constant in `main.rs`, so the actor scheduler, added two stages later and running the very
+same `Interp`, never learned it and set no stack size at all. **This is the seventh instance of design
+rule 1** (a hand-maintained safety property falls behind the type that defines it) and the sharpest
+instance yet of **design rule 2**: the witness for the rule, `unbounded_recursion_is_dl0905_not_a_host_
+crash`, was correct, passing, and testing the one thread where the rule already held. *A gate keyed on
+the right signal, on the wrong thread.* And it could not have failed loudly either way — **a stack
+overflow prints no `panicked at`** (D47a), so every no-panic sweep in the tree was blind to it.
+
+RULED:
+
+1. **The budget moves to `delulu-runtime`, beside the bound it pays for.** `INTERPRETER_STACK_BYTES`
+   is public there; `main.rs` imports it instead of defining its own. One definition, both callers.
+2. **Actor workers reserve it**, and `max_depth_for_stack` sizes the bound to whatever stack the
+   worker actually got. **The pair is the invariant** — a bigger stack alone only moves the crash
+   deeper, and a smaller stack with an unchanged bound *is* the crash. A worker that cannot get the
+   full reservation lowers its bound and still reports DL0905.
+3. **The reservation is now derived rather than picked, which closed a second, quieter contradiction.**
+   `main.rs` reserved 512 MiB while `STACK_BYTES_PER_DEPTH` published 80 KiB × 10,000 = 800 MiB. The
+   two disagreed by 264 MiB in the direction where the *advice to embedders* was safer than what the
+   toolchain gave itself; nothing crashed, because 512 MiB covers the *measured* per-frame cost, and
+   nothing compared them until `max_depth_for_stack` computed a bound of **6,550** for the CLI's own
+   thread. A contract that reserves less than it advises is not a contract. It now reserves what it
+   publishes.
+4. **The rule is checked, not remembered.** `every_thread_either_sizes_its_stack_or_is_listed_as_never_
+   running_a_program` sweeps every thread-creation site in the runtime, CLI, WASM and registry crates
+   and fails unless each either sizes its stack or appears in `THREADS_THAT_NEVER_RUN_INTERPRETER_CODE`
+   with a reason. It fails in the other direction too, so an exemption cannot outlive its fact.
+   Verified non-vacuous by deleting the `.stack_size` call and observing it name `actors.rs:471`.
+   *(Writing it produced its own small lesson: the first version matched the string literals in its
+   own source, the same self-reference bug the Survey shipped once when it walked its own output.)*
+
+5. **A reduced bound names itself — and that clause exists because this repair opened the hole it
+   closes.** Before D67 a worker on a host that refuses the reservation crashed; after it, the worker
+   quietly enforces a smaller bound. *Quietly* is the part that is wrong: an author whose program
+   recurses 900 deep would see it work on one machine and report `DL0905` on another, with nothing
+   anywhere explaining the difference. `ActorSystem::reduced_depth_bound` returns the granted stack
+   and the bound it bought, and the CLI states both. This is
+   `ref.rule.portability.isolation-labels-are-honest` applied by analogy — a capability that degrades
+   is *reported* as the weaker thing, never silently swapped — and it is **a repair needing its own
+   skip-branch analysis**, the campaign's third pattern, for the third time.
+
+Behavioural witnesses live beside the one that was blind: `recursion_inside_an_actor_is_not_a_host_
+crash` and `recursion_past_the_bound_inside_an_actor_is_dl0905`. Both assert on **exit status**, never
+on a message, for the reason above.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
