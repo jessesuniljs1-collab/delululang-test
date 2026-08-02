@@ -13,6 +13,19 @@ technical reason, because a rejection without one is just an omission that learn
 
 ---
 
+## 0. Outcome
+
+All five phases are closed. Five commits: `87eca8e` (D67), `47e339e` (D68), `910e9f5` (D69),
+`ed8a769` (D70), and this one (D71). The register in §4 carries each item's disposition.
+
+**The pass found one defect in shipped behaviour** — a normative runtime rule that was false on the
+concurrency path (C70) — and a number of things that were true only by accident: a stability promise
+with no mechanism, a crate count derived from a proxy, an index that led nowhere. It also produced
+four corrections to its *own* earlier conclusions, which are in §3 rather than quietly dropped.
+
+The release state, evidence and remaining limitations are in
+[`docs/release/CHECKPOINT-1.0.md`](../release/CHECKPOINT-1.0.md).
+
 ## 1. Method, and why it differed
 
 Previous passes audited the code against the specs. This one audited **the claims against the tree**,

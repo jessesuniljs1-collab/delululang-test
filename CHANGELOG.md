@@ -23,6 +23,15 @@ The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to f
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Added
+
+- **`docs/release/CHECKPOINT-1.0.md`** (D71) — the state of the project beside the gate that shipped
+  it: architecture and why two odd-looking dependencies are deliberate, the Survey, the compiler, the
+  runtime and exactly how much of it the WASM backend covers, the CLI, the package ecosystem, the
+  testing surface, ten known limitations stated without softening, and a roadmap ordered by what
+  would most change the language's usefulness. Every figure is either recounted from the tree by a
+  gated Survey fact or taken from a named suite run.
+
 ### Fixed
 
 - **The reference's grammar index now reaches the grammar** (C71, D70). Each production publishes a

@@ -25,13 +25,13 @@ files, so it still opens when the tree does not build.
 | Rust files | 212 |
 | Rust lines | 101363 |
 | Rust files outside `src/` (test/bench targets) | 83 |
-| Markdown documents | 121 |
-| Markdown lines | 28190 |
+| Markdown documents | 122 |
+| Markdown lines | 28520 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
-| Recorded rulings | 126 |
+| Recorded rulings | 127 |
 | Recorded campaign findings | 71 |
-| Nodes / edges in this map | 964 / 8390 |
+| Nodes / edges in this map | 966 / 8434 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -386,7 +386,7 @@ Rulings are allocated **one namespace per stage**, so `D21` alone is ambiguous â
 
 | Namespace | Rulings | Allocated in |
 |---|---:|---|
-| `S10` | 70 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S10` | 71 | `docs/design/STAGE10_BUILD_ORDER.md` |
 | `S6` | 8 | `docs/design/STAGE6_BUILD_ORDER.md` |
 | `S7` | 11 | `docs/design/STAGE7_BUILD_ORDER.md` |
 | `S8` | 15 | `docs/design/STAGE8_BUILD_ORDER.md` |

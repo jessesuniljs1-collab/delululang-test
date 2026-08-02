@@ -3,6 +3,10 @@
 **Governs:** `STAGE9_SPECIFICATION.md` §8. This is the gate. A criterion is MET only when a named
 test or a committed artifact says so — never because it looks done.
 
+**Companion:** [`CHECKPOINT-1.0.md`](CHECKPOINT-1.0.md) — the state of the thing rather than the gate:
+architecture, Survey, compiler, runtime, CLI, package ecosystem, testing, known limitations and the
+roadmap, written after the 2026-08-02 production-readiness pass.
+
 Status vocabulary: **MET** / **MET (local form)** / **NOT MET** / **PENDING-PUBLIC**.
 
 ---

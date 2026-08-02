@@ -2268,6 +2268,31 @@ reservation (512 MiB) and the published per-depth budget (80 KiB × 10,000 = 800
 since Stage 9, in the direction where the advice to embedders was safer than what the toolchain gave
 itself.
 
+## The production-readiness pass — 2026-08-02, rulings D67–D71
+
+Commissioned as *"a production readiness and architecture stabilization phase, not feature chasing"*,
+with an explicit instruction to challenge previous conclusions rather than inherit them. Five phases,
+five commits, and the shape of the result is worth stating plainly: **one defect in shipped behaviour,
+and a number of things that were true only by accident.**
+
+| Ruling | What it closed |
+|---|---|
+| **D67** (C70) | A normative runtime rule was **false on the concurrency path** — actor workers reserved no stack, so recursion above depth 43 (debug) aborted the process instead of reporting `DL0905` |
+| **D68** | The map answers *"may I change this?"* (entrenchment from CODEOWNERS); Stage 6/7/8 decisions made citable; C21's embedder ergonomics; the macOS socket-path limit named |
+| **D69** | One Cargo field was answering two questions — `STABILITY.md` §2's promise had no mechanism, and the shipped-crate count was right by coincidence (12 → **9**); `cmd_run` extracted after measuring the seam |
+| **D70** (C71) | A published grammar anchor that led nowhere; three statements that had outlived their facts |
+| **D71** | The release checkpoint, and a clean clone proven to build, test and run the README's front door from nothing |
+
+**The reusable finding is C70's, and it is the campaign's second design rule in a new costume.** The
+witness for `ref.rule.runtime.faults-are-diagnostics` was correct, passing, and recursing in `fn main`
+— the one thread where the rule already held. *A gate keyed on the right signal, on the wrong thread.*
+And it could not have failed loudly either way, because **a stack overflow prints no `panicked at`**,
+so every no-panic sweep in the tree was structurally blind to it.
+
+**Four of the pass's own findings dissolved under checking and are recorded as dissolved**, in
+`PRODUCTION_READINESS_REVIEW.md` §3 — including one where the reviewer's `grep` used the reviewer's
+vocabulary instead of the document's. A review that only reports problems is not a review.
+
 ### What this campaign does not claim
 
 **macOS has never been executed** — not once, in any phase; there is no hardware and nothing was

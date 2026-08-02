@@ -156,6 +156,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/design/CONSTITUTION.md`](docs/design/CONSTITUTION.md) | The v1.0 constitution — identity, semantics, honesty clauses. |
 | [`docs/design/SOUNDNESS_AUDIT.md`](docs/design/SOUNDNESS_AUDIT.md) | Rules R-1…R-8 that keep authority in the type, and the five holes they close. |
 | [`docs/design/STABILITY.md`](docs/design/STABILITY.md) | What is promised to stay put, and what is not. |
+| [`docs/release/CHECKPOINT-1.0.md`](docs/release/CHECKPOINT-1.0.md) | The state of the project in one page: architecture, testing, and ten known limitations named without softening. |
 | [`SECURITY.md`](SECURITY.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`rfcs/`](rfcs/) | Reporting, contributing, and changing the language. |
 
 ## Honesty

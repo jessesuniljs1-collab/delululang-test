@@ -2885,6 +2885,47 @@ deviation 3, whose *refusal still stands* but whose stated blocker — a missing
 existed since D61; and `ci.yml`'s note that the coverage gate would be "flipped at the 1.0 cut",
 which happened, in the test suite, which is the stronger place.
 
+**D71 — The release state is written down beside the gate, and a clean clone was made to prove
+itself.** Closes the production-readiness pass (D67–D71).
+
+**The reproduction is evidence, not an assumption.** `git clone` into a fresh directory with its own
+`target/`, nothing inherited from the working tree: **572 tracked files, `Cargo.lock` present, a cold
+`cargo build --workspace` in 1 m 21 s**, then the full suite at **113 suites / 1,485 passed / 0
+failed**, coverage 100%, reference in sync, `fmt --check` 0 would change, `doctor --check` 12/12.
+
+Then the README's front door was replayed **verbatim in that clone** — the exact commands a newcomer
+is told to type, run from a directory that is not the workspace, using the binary the clone built:
+
+```
+delulu new hello              → hello/src/main.delulu, delulu.toml, .gitignore
+delulu run . --grant console  → hello, world
+delulu check hello.delulu     → ok: hello.delulu checked clean
+delulu authority hello.delulu → effects: Write · capabilities: Console stdio
+delulu run hello.delulu       → error[DL0703]: `console` was not granted
+  … --grant console           → Hello, Delulu
+```
+
+**The refusal is the load-bearing line.** A fresh clone holds zero ambient authority, and the failure
+without `--grant console` is what makes the success with it mean something. The campaign's first
+finding was that the front door was false; this is the front door being true, from nothing.
+
+The deliverable is [`docs/release/CHECKPOINT-1.0.md`](../release/CHECKPOINT-1.0.md): architecture,
+Survey, compiler, runtime, CLI, package ecosystem, testing, **ten known limitations** and a roadmap.
+It is a companion to `CHECKLIST-1.0.md`, which stays the gate. Two things about it are deliberate.
+The architecture section explains why `delulu-broker`'s single-item dependency on `delulu-check` and
+`PluginEngine`'s single implementor are **correct rather than debt**, because both look like defects
+and someone will eventually "fix" them. And the limitations are stated in the same voice as the
+successes — macOS never executed, nothing distributed, certification none, no physical device ever
+commanded, the WASM backend a measured fragment, the mechanized core proof absent.
+
+**Two method failures from this pass are recorded in §D70 and in the campaign's warnings**, because
+they cost four verification rounds between them and neither was a defect in the code under test: a
+`Copy-Item` restore that kept the backup's mtime and left cargo testing a stale artifact — which then
+fed a generator and wrote its error into a committed file — and editing documents while a battery was
+running, which stales the Survey mid-flight and was done five times in one session despite being a
+written rule. **The fix for the second is ordering, not memory: every documentation edit finishes
+before verification starts.**
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
