@@ -2771,6 +2771,62 @@ recorded as unfinished rather than decided.
    is identical, so a Linux path long enough to trip 108 exercises the mechanism. That is a tested
    mechanism plus a reasoned constant, and this sentence is the distinction rather than a blur.
 
+**D69 — One Cargo field was answering two questions, and a published count was right by accident.**
+Architecture stabilization. Two changes, one of which only became visible because of the other.
+
+**(a) `surface` and `publish` are now separate keys.** `STABILITY.md` §2 says the Rust crates are an
+implementation detail and not a stable interface. That promise had **no mechanism** — twelve of
+thirteen crates defaulted to publishable at `version = "1.0.0"`, so one `cargo publish -p
+delulu-check` would have minted a semver contract over seventeen public modules the document
+disclaims. §6 of that file is an explicit promise-to-mechanism table, and this promise had no row.
+
+The naive fix would have broken something. `delulu-survey` read `publish = false` to populate
+`tooling_crates` and derived `crates_shipped = 13 − 1 = 12`, the number README quotes and a test
+gates. So the field carried **two different questions**: *is this part of the language product* and
+*may this go to crates.io*. Adding `publish = false` to the libraries — which is exactly what §2
+requires — would have driven that count to **1**.
+
+Now: `[package.metadata.delulu] surface = "language" | "tooling"` answers the first, `publish`
+answers the second, and every crate but the CLI is unpublishable.
+`every_crate_declares_its_surface_and_only_the_cli_publishes` is the gate and the §6 row; verified
+non-vacuous by deleting one `publish = false` and watching it name `delulu-check`.
+
+**Why the CLI is the exception, stated accurately.** The first draft of this ruling said it was so
+`cargo install delulu` keeps working. **That is false and was caught before it shipped.** Nothing here
+is distributed — README says so plainly — and the CLI could not be published today even deliberately:
+its path dependencies carry no `version` fields, so `cargo publish` refuses the whole crate. The real
+reason is narrower and worth keeping narrow: **the CLI is the only crate that could ever be a
+distributed artifact**, so it is the only one where "not publishable" would be a decision rather than
+a fact, and this gate exists to prevent an *accident*, not to preserve a working install path. Actual
+distribution is a separate decision nobody has made, and it would need its own ruling — versions on
+every path dependency among other things.
+
+**The untangling paid immediately.** Asked directly rather than through a proxy, the tree says
+**nine** language crates and four that only measure or map this repository. The old 12 was derived as
+"thirteen minus the crates that say `publish = false`" and *labelled* "shipped language crates" —
+true only while the sole unpublishable crate happened to also be the sole piece of tooling. **A count
+computed from a proxy is a measurement waiting to be wrong**, and this one was wrong by three before
+anything moved. The Survey flagged the drift the moment the signals separated, which is the map
+doing its job on its own maintainer.
+
+**(b) `delulu run` moves to its own module, and the cut was measured before it was made.** `cli.rs`
+was 8,856 lines; `cmd_run` alone was 945 of them, the largest item in the file. Before moving
+anything, the coupling was counted: of the **143** top-level items in `cli.rs`, this subsystem
+reaches **24** — and sixteen of those are its own helpers. What it needs from the dispatcher is a
+short, stable list (option parsing, diagnostic printing, the palette, the positional refusal), which
+is the shape a seam should have. `cli.rs` is now **7,740** lines.
+
+**What deliberately did NOT move, and this is the ruling's substance.** `mint_device_nodes`,
+`authority_spec_from_grants`, `grants_from_lease` and their neighbours have call sites in
+`grants`/`guard` as well. Moving shared code into one command's module would trade a large file for a
+**false ownership claim** — worse architecture, not better — so they stay where both callers see
+them. The temptation with a file this size is to keep cutting until the number looks good; the
+measurement is what says where to stop.
+
+**A move-only refactor proves itself or it is not worth doing.** `tests/core-invariance/SNAPSHOT.txt`
+passed **byte-identical** across all 360 cases and 108 targets, and the file was not re-blessed. That
+is the whole argument that 1,116 relocated lines changed nothing.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

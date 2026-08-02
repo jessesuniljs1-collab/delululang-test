@@ -54,7 +54,13 @@ particular:
   enforces it). The order records appear in is not.
 - **Anything marked experimental** in the reference.
 - **Internal crate APIs.** The Rust crates are an implementation detail; the stable interface is the
-  language, the CLI, and the machine schemas.
+  language, the CLI, and the machine schemas. **This is now enforced rather than asserted:** every
+  crate but the CLI sets `publish = false`, so nothing can acquire a crates.io semver contract over
+  internals this section disclaims, and §6 names the gate. The CLI is left publishable because it is
+  the only crate that could ever be a distributed artifact — **not** because it is distributed today.
+  Nothing here is: there is no crates.io entry, and the CLI's own path dependencies carry no version
+  numbers, so `cargo publish` would refuse it. The gate prevents an accident; it does not preserve an
+  install path that exists.
 - **Isolation profile *strength* on a given platform.** The *label* is honest and stable (a profile
   that is unavailable is refused or reported as a weaker fallback, `DL1408`); the underlying
   mechanism may improve.
@@ -124,6 +130,7 @@ window closes at 1.0; `STAGE9_BUILD_ORDER.md` D10 records what remains and its d
 | Deprecation policy | `DL1801` + `delulu_check::deprecation` tests |
 | Editions | `DL1802` + the edition tests |
 | CLI exit codes and refusals | `crates/delulu/tests/cli_contract.rs` |
+| Internal crate APIs stay internal (§2) | `every_crate_declares_its_surface_and_only_the_cli_publishes` — sweeps `crates/`, fails if any crate but the CLI is publishable, or if any crate does not declare whether it is language surface or repository tooling |
 
 ## 7. What this contract does not do
 

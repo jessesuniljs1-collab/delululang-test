@@ -196,3 +196,73 @@ fn no_tracked_text_file_is_stored_with_crlf() {
          end."
     );
 }
+
+/// **Every crate declares what it is, and only the CLI may be published.**
+///
+/// `STABILITY.md` §2 says plainly that *"the Rust crates are an implementation detail; the stable
+/// interface is the language, the CLI, and the machine schemas."* That promise had no mechanism:
+/// twelve of thirteen crates defaulted to publishable, at `version = "1.0.0"`, so a single
+/// `cargo publish -p delulu-check` would have minted a semver contract over seventeen public
+/// modules the stability document explicitly disclaims. `STABILITY.md`'s own §6 is a
+/// promise-to-mechanism table; this test is the row that was missing.
+///
+/// The CLI is the exception because it is the only crate that could ever *be* a distributed
+/// artifact — **not** because it is distributed. Nothing here is: there is no crates.io entry, and
+/// the CLI's own path dependencies carry no version numbers, so `cargo publish` would refuse it
+/// regardless. This gate prevents an accident; it does not preserve an install path that exists.
+///
+/// **`surface` and `publish` are deliberately two keys.** They answer different questions — *is this
+/// part of the language product* versus *may this go to crates.io* — and the Survey's "shipped
+/// crates" count rode on `publish` as a proxy for years because a single crate happened to answer
+/// no to both. A count derived from a proxy is a measurement waiting to be wrong.
+#[test]
+fn every_crate_declares_its_surface_and_only_the_cli_publishes() {
+    let crates_dir = root().join("crates");
+    let mut checked = 0;
+    let mut publishable: Vec<String> = Vec::new();
+    let mut undeclared: Vec<String> = Vec::new();
+    let mut language = 0;
+    let mut tooling = 0;
+
+    for entry in std::fs::read_dir(&crates_dir).expect("crates/ is readable").flatten() {
+        let manifest = entry.path().join("Cargo.toml");
+        if !manifest.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let text = std::fs::read_to_string(&manifest).expect("manifest is readable");
+        checked += 1;
+
+        let unpublishable = text.lines().any(|l| l.trim().starts_with("publish") && l.contains("false"));
+        if !unpublishable && name != "delulu" {
+            publishable.push(name.clone());
+        }
+        if unpublishable && name == "delulu" {
+            panic!("the CLI must stay publishable: `cargo install delulu` is how anyone gets it");
+        }
+
+        match text.lines().find_map(|l| l.trim().strip_prefix("surface = ").map(|v| v.trim().trim_matches('"').to_string())) {
+            Some(s) if s == "language" => language += 1,
+            Some(s) if s == "tooling" => tooling += 1,
+            Some(other) => panic!("{name} declares an unknown surface `{other}` — it is \"language\" or \"tooling\""),
+            None => undeclared.push(name),
+        }
+    }
+
+    assert!(checked >= 13, "the crate sweep found too few manifests to be right: {checked}");
+    assert!(
+        publishable.is_empty(),
+        "these crates would be uploaded to crates.io at 1.0.0, minting a semver contract over \
+         internals `STABILITY.md` §2 disclaims: {publishable:?}\n\
+         Add `publish = false`. If a crate is genuinely meant to be a library other people depend \
+         on, that is a change to the stability contract and needs a ruling, not a manifest edit."
+    );
+    assert!(
+        undeclared.is_empty(),
+        "these crates declare no `[package.metadata.delulu] surface`: {undeclared:?}\n\
+         Every crate is either the language product or repository tooling, and the Survey's shipped \
+         count is derived from the answer. Leaving it out is how that count came to ride on \
+         `publish` instead."
+    );
+    assert!(language > 0 && tooling > 0, "both surfaces exist: {language} language, {tooling} tooling");
+}

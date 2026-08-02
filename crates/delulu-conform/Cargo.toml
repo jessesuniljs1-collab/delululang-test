@@ -6,6 +6,17 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+# NOT a crates.io library. `STABILITY.md` §2: the Rust crates are an implementation
+# detail; the stable interface is the language, the CLI and the machine schemas. Only the
+# CLI publishes, so `cargo install delulu` works and nothing else acquires a semver
+# contract the stability document disclaims.
+publish = false
+
+[package.metadata.delulu]
+# Repository tooling: it measures, maps or checks THIS repository and means nothing
+# outside it. Counted separately from the language surface.
+surface = "tooling"
+
 [[bin]]
 name = "delulu-conform"
 path = "src/main.rs"

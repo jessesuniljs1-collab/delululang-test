@@ -63,13 +63,15 @@ rather than on interpreter logic. Scope confirmed by test, not by argument.
 stable interface is the language, the CLI, and the machine schemas."* §6 is an explicit
 **promise → mechanism** table, and this promise is not in it.
 
-Measured: of thirteen crates, **one** sets `publish = false`. The other twelve default to publishable
-at `version = "1.0.0"` — including `delulu-check`, which exposes seventeen modules wholesale, and
-`delulu-runtime`, with 307 public items. `cargo publish -p delulu-check` would today mint a 1.0.0
-semver contract over internals the stability document explicitly disclaims.
+Measured at the time of the review: of thirteen crates, **one** set `publish = false`. The other
+twelve defaulted to publishable at `version = "1.0.0"` — including `delulu-check`, which exposes
+seventeen modules wholesale, and `delulu-runtime`, with 307 public items. `cargo publish -p
+delulu-check` would have minted a 1.0.0 semver contract over internals the stability document
+explicitly disclaims.
 
-The mechanism already exists in the tree and was applied to exactly the crate whose *name* made it
-obvious. **Disposition: implement** (§4).
+The mechanism already existed in the tree and had been applied to exactly the crate whose *name* made
+it obvious. **Closed by D69** — but not before separating the two questions the field was answering
+(§3.5), because the naive fix would have broken a published count.
 
 ### 2.3 Documentation that outlived its facts
 
@@ -153,15 +155,19 @@ So the field carries two questions at once:
 - **Is this part of the language product?** — the Survey's reading, and the input to a published count.
 - **May this be uploaded to crates.io?** — Cargo's meaning, and what §2.2 needs.
 
-They agree today only because exactly one crate answers "no" to both. The eleven library crates need
-**opposite** answers — they *are* the language product, and `STABILITY.md` §2 says they are not a
-stable interface — so naively adding `publish = false` to them would quietly turn README's "12 crates"
-into "1" and fail its own gate.
+They agreed only because exactly one crate answered "no" to both. The library crates need **opposite**
+answers — they *are* the language product, and `STABILITY.md` §2 says they are not a stable interface
+— so naively adding `publish = false` to them would have driven the shipped-crate count to **1** and
+failed its own gate.
 
-That is a duplicate-concept defect, and it has to be untangled *before* either promise can be
-enforced: one signal for product surface, one for publishability. Recorded here rather than fixed in
-passing, because a field with two meanings is exactly the kind of thing that gets "cleaned up" by
-someone who only knows about one of them.
+That is a duplicate-concept defect, and it had to be untangled *before* either promise could be
+enforced: one signal for product surface, one for publishability. **Closed by D69**, and the
+untangling paid immediately — separating them showed the count had been *right by coincidence*. It
+was derived as "thirteen minus the crates that say `publish = false`" and **labelled** "shipped
+language crates", which was true only while the sole unpublishable crate was also the sole piece of
+tooling. Asked directly, the tree says **nine** language crates and four that measure or map this
+repository. A number computed from a proxy is a measurement waiting to be wrong, and this one was
+wrong by three before anything moved.
 
 ### 3.4 Two claims checked and found already honest
 
@@ -190,8 +196,8 @@ Recorded because a review that only reports problems is not a review:
 | 5 | Re-verify and correct every quoted test count | Survey note ×1 | The Survey deliberately will not guess; a reviewer can measure. The front door is where staleness costs most |
 | 6 | Correct the three statements in §2.3 | this review | Docs that outlived their facts |
 | 7 | Name the macOS socket-path limit in a diagnostic rather than surfacing a raw OS error | this review (macOS-1) | Testable on Linux today; turns an obscure failure into a named one on the day a Mac exists |
-| 8 | Decompose `cli.rs` (8,528 lines) along the seams already established | this review | 13 subcommands already live in their own modules; 22 do not. The stated primary maintainer is an agent with a context window |
-| 9 | Separate "not shipped language surface" from "not publishable" before enforcing either | this review (§3.5) | One Cargo field currently answers two different questions, and the eleven libraries need opposite answers to them |
+| 8 | Decompose `cli.rs` along the seams already established | this review | **PARTLY DONE — D69.** `delulu run` (1,116 lines) extracted after measuring the coupling: 24 of 143 items reached, sixteen of them its own. `cli.rs` 8,856 → 7,740. **Shared helpers deliberately stayed** — moving them would assert a false owner. The remaining clusters (broker-facing commands ≈1,050 lines; authority reporting ≈800) are characterised and mechanical |
+| 9 | Separate "not shipped language surface" from "not publishable" before enforcing either | this review (§3.5) | **DONE — D69**, and it corrected a published count that had been right by coincidence |
 
 **Reject, with reasons.**
 
@@ -202,6 +208,8 @@ Recorded because a review that only reports problems is not a review:
 | Suppress the `c-token-not-a-campaign-finding` note | **This review proposed it, then read the code and withdrew it.** The check is already deliberate: it counts an unresolved `C<n>`, never errors, and its own guidance reads *"no action if these are C-language references."* Its only trigger today is `C99`, which appears exactly once in the tree — inside the Survey's **own source comment explaining why `C99` is not a finding**. An allowlist would be strictly worse: **`C11` and `C17` *are* real campaign findings**, so a number-keyed list is wrong, and a context-keyed one is guessing, which is the thing the provenance law exists to forbid |
 | Move `Effect` out of `delulu-check` to drop the broker→check edge | `delulu-broker` uses exactly one item from `delulu-check`: `Effect`. That looks like accidental coupling and is the opposite. Authority is *defined* in terms of effects; one shared definition between the crate that computes rows and the crate that grants them is the "one list referenced by both sides" pattern this project adopted after six drift findings. Relocating it buys build-graph tidiness and risks the exact drift the pattern prevents |
 | Raise `DEFAULT_MAX_DEPTH` now that workers have real stacks | The bound is a published contract and 10,000 is not the constraint anyone hits. Changing it would move an observable limit for no demonstrated need |
+| Split `cli.rs` all the way down | Measured, then stopped. `cmd_run` was a real seam — 24 of 143 items reached, sixteen of them its own. The scattered helpers are **shared** with `grants`/`guard`, and relocating shared code into one command's module asserts an ownership that is not true. A file-size target is not an architecture; the coupling measurement is what says where to stop |
+| Collapse `PluginEngine` because it has one implementor | A single-implementor trait is usually an unnecessary abstraction. Not here: it lives in `delulu-runtime` and is implemented in `delulu-wasm`, which depends on the runtime. The trait exists to **invert that dependency**, and removing it would create a cycle. Verified against the dependency graph, not assumed |
 
 **Postpone / accept as a standing limit.**
 

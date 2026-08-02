@@ -525,7 +525,13 @@ pub struct Builder {
     /// Finding citations as written. Resolved late for a duller reason than rulings: `C99` and
     /// `C11` are the C language, and only the ledger can say which `C<n>` is one of ours.
     pub raw_finding_cites: Vec<(String, u32, String)>,
-    /// Crates marked `publish = false` — repository tooling, not shipped language surface.
+    /// Crates declaring `[package.metadata.delulu] surface = "tooling"` — they measure, map or
+    /// check *this* repository and mean nothing outside it.
+    ///
+    /// **Read from `surface`, not from `publish`.** Those are different questions and this count
+    /// rode on the wrong one until the two were separated: `publish = false` says *do not upload
+    /// to crates.io*, which is true of every library here, while product surface is what makes a
+    /// crate part of the language. They agreed only while a single crate answered no to both.
     pub tooling_crates: BTreeSet<String>,
 }
 

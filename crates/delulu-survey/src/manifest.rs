@@ -67,8 +67,19 @@ pub fn extract(f: &ScannedFile, b: &mut Builder) {
             if let Some(v) = t.strip_prefix("description = ") {
                 description = v.trim().trim_matches('"').to_string();
             }
-            if t.starts_with("publish") && t.contains("false") {
-                b.tooling_crates.insert(name.clone());
+            continue;
+        }
+        // **Product surface is its own question, and it used to ride on `publish`.**
+        // `publish = false` answers *may this go to crates.io*; the count below answers *is this
+        // part of the language*. They agreed only while exactly one crate said no to both, and the
+        // moment the libraries became unpublishable — which `STABILITY.md` §2 has always said they
+        // are — reading `publish` here would have reported one shipped crate out of thirteen.
+        // A count derived from a proxy is a measurement waiting to be wrong.
+        if section == "[package.metadata.delulu]" {
+            if let Some(v) = t.strip_prefix("surface = ") {
+                if v.trim().trim_matches('"') == "tooling" {
+                    b.tooling_crates.insert(name.clone());
+                }
             }
             continue;
         }

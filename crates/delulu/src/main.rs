@@ -27,6 +27,7 @@ mod signing;
 #[cfg(target_os = "linux")]
 mod microvm;
 mod repl;
+mod run_cmd;
 
 use std::process::ExitCode;
 

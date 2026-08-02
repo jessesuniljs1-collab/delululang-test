@@ -6,6 +6,16 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+# NOT a crates.io library. `STABILITY.md` §2: the Rust crates are an implementation
+# detail; the stable interface is the language, the CLI and the machine schemas. Only the
+# CLI publishes, so `cargo install delulu` works and nothing else acquires a semver
+# contract the stability document disclaims.
+publish = false
+
+[package.metadata.delulu]
+# Part of the language product: what a user of DeluluLang runs or depends on.
+surface = "language"
+
 [features]
 # Embedded CPython (Stage 4 phase 4f, spec §5). ENABLED BY DEFAULT — a normal build of delulu
 # includes Python; `--no-default-features` builds a Python-less runtime where `root.python(...)`

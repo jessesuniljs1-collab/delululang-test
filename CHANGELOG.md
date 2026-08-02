@@ -23,6 +23,32 @@ The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to f
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Changed
+
+- **Only the CLI is publishable to crates.io** (D69). `STABILITY.md` §2 has always said the Rust
+  crates are an implementation detail and not a stable interface; twelve of thirteen nonetheless
+  defaulted to publishable at `1.0.0`, so a single `cargo publish -p delulu-check` would have minted
+  a semver contract over seventeen modules the document disclaims. Every crate but `delulu` now sets
+  `publish = false`, and a gate refuses a new one that does not.
+
+  Nothing you can do today changes: the project is not distributed, and the CLI could not be
+  published even on purpose — its path dependencies carry no version numbers, so `cargo publish`
+  refuses it. The CLI is left publishable because it is the only crate that could ever *be* the
+  distributed artifact. This gate prevents an accident; it does not preserve an install path.
+
+- **`[package.metadata.delulu] surface` says whether a crate is the language or repository tooling**
+  (D69), because `publish` was answering that question too and the two need opposite answers. The
+  separation immediately corrected a published number: the shipped-crate count had been derived as
+  "thirteen minus the unpublishable ones" and labelled "language crates", which was true only while
+  one crate happened to be both. Asked directly, the tree says **nine** language crates and four that
+  measure or map this repository. README says nine.
+
+- **`delulu run` lives in its own module** (D69). `cli.rs` was 8,856 lines and `cmd_run` was 945 of
+  them. The coupling was measured before the cut — the subsystem reaches 24 of 143 top-level items,
+  sixteen of which are its own helpers — and shared helpers deliberately stayed put rather than being
+  given a false owner. `cli.rs` is now 7,740 lines. The core-invariance snapshot passed
+  byte-identical and was not re-blessed, which is the whole proof that nothing moved but bytes.
+
 ### Added
 
 - **The Survey answers "may I change this?"** (D68). A handful of paths are entrenched by
