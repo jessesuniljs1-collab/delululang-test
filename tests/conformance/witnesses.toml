@@ -1371,6 +1371,18 @@ test = "every_listed_subcommand_refuses_an_invalid_invocation"
 kind = "negative"
 
 [[witness]]
+anchor = "ref.cli.new"
+file = "crates/delulu/tests/new_cli.rs"
+test = "a_new_binary_package_checks_tests_and_runs"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.new"
+file = "crates/delulu/tests/new_cli.rs"
+test = "new_refuses_an_option_it_does_not_know"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.cli.fix"
 file = "crates/delulu/tests/fix_cli.rs"
 test = "exact_repairs_are_applied_and_the_file_goes_green"

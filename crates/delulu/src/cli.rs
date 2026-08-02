@@ -671,6 +671,7 @@ fn run_inner(args: &[String]) -> i32 {
     }
 
     match cmd.as_str() {
+        "new" => crate::new::cmd_new(rest),
         "check" => cmd_check(rest),
         "fix" => crate::fix::cmd_fix(rest),
         "fmt" => cmd_fmt(rest),
@@ -749,6 +750,8 @@ fn usage() -> &'static str {
     "delulu — the DeluluLang compiler and runtime\n\
      \n\
      USAGE:\n\
+     \x20 delulu new       <name> [--lib] [--json]   (a package that already checks, tests and runs;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 its declared ceiling is exactly what its code does — one effect for a bin, none for a lib)\n\
      \x20 delulu check     <file.delulu | package-dir> [--json]\n\
      \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
      \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\

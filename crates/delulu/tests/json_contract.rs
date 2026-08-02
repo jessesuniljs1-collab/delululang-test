@@ -21,7 +21,7 @@ use std::process::{Command, Output};
 const SUBCOMMANDS: &[&str] = &[
     "add", "atlas", "audit", "authority", "build", "check", "deploy", "explain", "fix", "fleet",
     "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "plugin", "publish",
-    "run", "secrets", "sign", "test", "why",
+    "new", "run", "secrets", "sign", "test", "why",
 ];
 
 /// Every run-once subcommand the dispatcher accepts must appear in [`SUBCOMMANDS`] AND in `--help`.

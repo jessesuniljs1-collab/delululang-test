@@ -180,6 +180,33 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu new` — a package that already checks, tests and runs.** Until now the answer to "I
+  built the compiler, now what?" was to hand-write `delulu.toml` and infer the layout from an
+  example, which is a poor first five minutes for a language whose proposition has to be understood
+  before anything else makes sense.
+
+  **The scaffold is a teaching artifact, and its authority is the lesson.** The generated package
+  declares a ceiling equal to *exactly* what its code does — one effect for a binary, none at all
+  for a library — because tightening that line is the habit worth forming on day one. A template
+  shipping `effects = ["Read", "Write", "Net"]` "to save you time" would teach the opposite of the
+  thing being taught, once per project, forever, so the minimal ceiling is pinned by a test rather
+  than merely produced. There is no `[test-authority]` table either, and the generated test needs
+  none: an absent table grants nothing (invariant 41).
+
+  Running it, then leaving off `--grant console`, produces DL0703 at the exact line — the whole
+  idea, demonstrated in the first thirty seconds.
+
+  Two defects were found by testing rather than by reading. **Every command the printed next-steps
+  names is now executed by a test, and every command executed must appear in the message** — a
+  binding that immediately caught the first draft telling people to run `delulu test`, which
+  refuses without a `./tests` directory. And the name check initially used only
+  `token::is_reserved`, which covers words reserved for *future* use; `fn` sailed through and would
+  have produced a brand-new package containing `module fn`, which does not parse. Both keyword
+  tables are consulted now, `MORPHABLE_KEYWORDS` being the lexer's active set.
+
+  It refuses a name that could not be a module name (suggesting `my_app` for `my-app`), and never
+  writes into a directory that already holds something.
+
 - **`delulu fix` — apply the repairs the checker already computed.** The repairs have carried
   byte-precise edits since Stage 1 and `delulu check --json` has always reported them, but applying
   them without an editor meant re-implementing the byte splicing by hand — which is how a
