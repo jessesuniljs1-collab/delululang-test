@@ -11,12 +11,14 @@
 //! exact `check_source` pipeline; codes, spans, messages, and repairs are the same
 //! objects `delulu check --json` reports — the smoke suite asserts equality.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
+use std::rc::Rc;
 
 use serde_json::{json, Value};
 
-use delulu_check::check_source;
+use delulu_check::{check_source, Checked};
 use delulu_diag::Diagnostic;
 
 pub fn run_lsp(_args: &[String]) -> i32 {
@@ -41,7 +43,7 @@ pub fn run_lsp(_args: &[String]) -> i32 {
             Some("textDocument/didOpen") => {
                 let uri = msg["params"]["textDocument"]["uri"].as_str().unwrap_or("").to_string();
                 let text = msg["params"]["textDocument"]["text"].as_str().unwrap_or("").to_string();
-                server.docs.insert(uri.clone(), text);
+                server.open(uri.clone(), text);
                 server.publish(&uri);
             }
             Some("textDocument/didChange") => {
@@ -52,13 +54,13 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                     .and_then(|a| a.last())
                     .and_then(|c| c["text"].as_str())
                 {
-                    server.docs.insert(uri.clone(), text.to_string());
+                    server.open(uri.clone(), text.to_string());
                     server.publish(&uri);
                 }
             }
             Some("textDocument/didClose") => {
                 let uri = msg["params"]["textDocument"]["uri"].as_str().unwrap_or("");
-                server.docs.remove(uri);
+                server.close(uri);
             }
             Some("textDocument/hover") => {
                 let r = server.hover(&msg["params"]);
@@ -118,12 +120,98 @@ pub fn run_lsp(_args: &[String]) -> i32 {
     }
 }
 
+/// One open document: its text, and the analysis of **exactly that text**.
+///
+/// The two live in one record deliberately. A cache in a map beside the documents has to be kept
+/// in step with them by hand — by a version number, a hash, or a discipline about clearing it —
+/// and every one of those is a way to end up answering a question about a file the user can no
+/// longer see. The first draft of this did use a version counter, and it had the bug that shape
+/// invites: the counter restarted at 1 when a document was closed, so reopening a file that had
+/// changed on disk in the meantime could match a cache entry belonging to its previous
+/// incarnation. Here the analysis cannot outlive the text it describes, because it *is* part of
+/// that text's record — replace or drop the document and the old analysis goes with it.
+struct Doc {
+    text: String,
+    /// `None` until something asks. Interior mutability because every provider takes `&self`:
+    /// answering a question about a document is not a modification of it, and should not have to
+    /// pretend to be one.
+    analysis: RefCell<Option<Rc<Checked>>>,
+}
+
+impl Doc {
+    fn new(text: String) -> Doc {
+        Doc { text, analysis: RefCell::new(None) }
+    }
+
+    /// The checked form of this document — computed at most once per edit.
+    ///
+    /// Every provider used to call `check_source` itself, so a `references` request across ten
+    /// open documents ran ten full type-checks, the `rename` that followed ran twenty more, and
+    /// the next keystroke started over. The compiler is still the sole source of truth; this
+    /// changes *how often* it is asked, never *what it answers*.
+    fn analyze(&self) -> Rc<Checked> {
+        let cached = self.analysis.borrow().clone();
+        if let Some(a) = cached {
+            return a;
+        }
+        let fresh = Rc::new(check_source(0, &self.text));
+        *self.analysis.borrow_mut() = Some(Rc::clone(&fresh));
+        fresh
+    }
+}
+
 struct Server {
-    docs: HashMap<String, String>,
+    docs: HashMap<String, Doc>,
     shutdown_seen: bool,
 }
 
 impl Server {
+    /// Install a document's text. Any previous text — and its analysis — is dropped with it.
+    fn open(&mut self, uri: String, text: String) {
+        self.docs.insert(uri, Doc::new(text));
+    }
+
+    /// Forget a document entirely. One removal, because there is only one place it lives.
+    fn close(&mut self, uri: &str) {
+        self.docs.remove(uri);
+    }
+
+    /// The checked form of an open document. See [`Doc::analyze`].
+    fn analyze(&self, uri: &str) -> Option<Rc<Checked>> {
+        self.docs.get(uri).map(Doc::analyze)
+    }
+
+    /// Every open document, in a stable order.
+    ///
+    /// `HashMap` iteration order varies between processes. A "first match wins" answer computed
+    /// over it — which `definition` is — could therefore differ between two runs of the same
+    /// server on the same files, and the order of a `references` list could too. An answer a tool
+    /// depends on must not depend on a hash seed, so the traversal is sorted by URI.
+    fn uris(&self) -> Vec<&str> {
+        let mut v: Vec<&str> = self.docs.keys().map(String::as_str).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// The same order, with the requesting document moved to the front.
+    ///
+    /// For a first-match-wins answer this is the second half of the rule: a declaration in the
+    /// file you are looking at beats an identically named one somewhere else, because that is
+    /// what you meant. Ties among the rest stay sorted.
+    fn uris_from(&self, first: &str) -> Vec<&str> {
+        let mut v = self.uris();
+        if let Some(i) = v.iter().position(|u| *u == first) {
+            let f = v.remove(i);
+            v.insert(0, f);
+        }
+        v
+    }
+
+    /// The text of an open document.
+    fn text(&self, uri: &str) -> Option<&str> {
+        self.docs.get(uri).map(|d| d.text.as_str())
+    }
+
     fn initialize(&self) -> Value {
         json!({
             "capabilities": {
@@ -154,11 +242,17 @@ impl Server {
 
     /// Definition of the module-level name under the cursor, searched across every open
     /// document (build-order deviation 3: declaration + reference walk, not a DefId graph).
+    ///
+    /// First match wins, over [`Server::uris_from`]'s order — this document, then the rest
+    /// sorted. Both halves matter: without the first, jumping to a name your own file declares
+    /// could land in someone else's file; without the second, the answer would depend on a hash
+    /// seed and two runs of the same server on the same files could disagree.
     fn definition(&self, params: &Value) -> Value {
         let Some((word, _, _)) = self.word_at(params) else { return Value::Null };
-        for (uri, text) in &self.docs {
-            let checked = check_source(0, text);
-            if let Some(sp) = decl_name_span(&checked.module, &word) {
+        let here = params["textDocument"]["uri"].as_str().unwrap_or("");
+        for uri in self.uris_from(here) {
+            let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { continue };
+            if let Some(sp) = decl_name_span(&a.module, &word) {
                 return json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) });
             }
         }
@@ -168,9 +262,9 @@ impl Server {
     fn references(&self, params: &Value) -> Value {
         let Some((word, _, _)) = self.word_at(params) else { return json!([]) };
         let mut out = Vec::new();
-        for (uri, text) in &self.docs {
-            let checked = check_source(0, text);
-            for sp in name_occurrences(&checked.module, &word) {
+        for uri in self.uris() {
+            let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { continue };
+            for sp in name_occurrences(&a.module, &word) {
                 out.push(json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) }));
             }
         }
@@ -192,9 +286,9 @@ impl Server {
             return Err("the new name is not a legal identifier");
         }
         let is_decl = self
-            .docs
-            .values()
-            .any(|text| decl_name_span(&check_source(0, text).module, &word).is_some());
+            .uris()
+            .into_iter()
+            .any(|uri| self.analyze(uri).is_some_and(|a| decl_name_span(&a.module, &word).is_some()));
         if !is_decl {
             return Err(
                 "only module-level names (fn/type/effect/const/actor) can be renamed — a local \
@@ -203,16 +297,16 @@ impl Server {
             );
         }
         let mut changes = serde_json::Map::new();
-        for (uri, text) in &self.docs {
-            let checked = check_source(0, text);
-            let edits: Vec<Value> = name_occurrences(&checked.module, &word)
+        for uri in self.uris() {
+            let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { continue };
+            let edits: Vec<Value> = name_occurrences(&a.module, &word)
                 .into_iter()
                 .map(|sp| {
                     json!({ "range": byte_range(text, sp.start, sp.end), "newText": new_name })
                 })
                 .collect();
             if !edits.is_empty() {
-                changes.insert(uri.clone(), Value::Array(edits));
+                changes.insert(uri.to_string(), Value::Array(edits));
             }
         }
         Ok(json!({ "changes": changes }))
@@ -223,7 +317,9 @@ impl Server {
     /// secrets — from the AST (distinct kinds, criterion: spec §3 table).
     fn semantic_tokens(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return json!({ "data": [] }) };
+        let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else {
+            return json!({ "data": [] });
+        };
         let mut toks: Vec<(u32, u32, u32)> = Vec::new(); // (start_byte, end_byte, type)
 
         let (lexed, _d, comments) = delulu_syntax::lexer::lex_with_comments(0, text);
@@ -243,8 +339,7 @@ impl Server {
             toks.push((c.start, c.start + c.text.len() as u32, TOK_COMMENT));
         }
 
-        let checked = check_source(0, text);
-        for item in &checked.module.items {
+        for item in &a.module.items {
             use delulu_syntax::ast::Item;
             match item {
                 Item::Fn(f) => {
@@ -298,10 +393,9 @@ impl Server {
     /// Code lenses on `fn main` and each `test` (spec §3): `▶ run` + the authority line.
     fn code_lens(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return json!([]) };
-        let checked = check_source(0, text);
+        let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { return json!([]) };
         let mut lenses = Vec::new();
-        for item in &checked.module.items {
+        for item in &a.module.items {
             use delulu_syntax::ast::Item;
             match item {
                 Item::Fn(f) if f.name.name == "main" => {
@@ -310,7 +404,7 @@ impl Server {
                         "range": range,
                         "command": { "title": "▶ run", "command": "delulu.run", "arguments": [uri] }
                     }));
-                    let authority = checked
+                    let authority = a
                         .result
                         .facts
                         .get("main")
@@ -355,14 +449,13 @@ impl Server {
             return Value::Null;
         }
         let Some(uri) = params["arguments"][0].as_str() else { return Value::Null };
-        let Some(text) = self.docs.get(uri) else { return Value::Null };
-        let checked = check_source(0, text);
-        if checked.has_errors() {
+        let Some(a) = self.analyze(uri) else { return Value::Null };
+        if a.has_errors() {
             return json!({ "error": "the document has check errors — fix them first" });
         }
         delulu_check::authority_report(
-            &checked.module.name.dotted(),
-            &checked.result,
+            &a.module.name.dotted(),
+            &a.result,
             &delulu_check::ScopeInfo::default(),
         )
     }
@@ -370,7 +463,7 @@ impl Server {
     /// The identifier word at the request's position: `(word, start, end)` bytes.
     fn word_at(&self, params: &Value) -> Option<(String, u32, u32)> {
         let uri = params["textDocument"]["uri"].as_str()?;
-        let text = self.docs.get(uri)?;
+        let text = self.text(uri)?;
         let pos = &params["position"];
         let byte =
             pos_to_byte(text, pos["line"].as_u64()?, pos["character"].as_u64()?) as usize;
@@ -403,7 +496,7 @@ impl Server {
     /// drifts from the compiler teaches the language wrongly, and does it at every keystroke.
     fn completion(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else {
+        let Some(text) = self.text(uri) else {
             return json!({ "isIncomplete": false, "items": [] });
         };
         let pos = &params["position"];
@@ -445,8 +538,9 @@ impl Server {
             for name in delulu_check::check::CORE_EFFECT_NAMES {
                 push(name, COMPLETION_ENUM_MEMBER, 0, "core effect".to_string(), None);
             }
-            for decl_text in self.docs.values() {
-                for item in &check_source(0, decl_text).module.items {
+            for other in self.uris() {
+                let Some(a) = self.analyze(other) else { continue };
+                for item in &a.module.items {
                     if let delulu_syntax::ast::Item::Effect(e) = item {
                         push(&e.name.name, COMPLETION_ENUM, 1, "declared effect".to_string(), None);
                     }
@@ -457,9 +551,9 @@ impl Server {
 
         // Declarations, this document before the others: a name you can see is likelier than one
         // you cannot.
-        for (doc_uri, doc_text) in &self.docs {
+        for doc_uri in self.uris() {
             let rank = if doc_uri == uri { 0 } else { 1 };
-            let checked = check_source(0, doc_text);
+            let Some(checked) = self.analyze(doc_uri) else { continue };
             for item in &checked.module.items {
                 use delulu_syntax::ast::Item;
                 match item {
@@ -506,8 +600,7 @@ impl Server {
 
     /// Re-check the document and push its diagnostics — the compiler's own, verbatim.
     fn publish(&self, uri: &str) {
-        let Some(text) = self.docs.get(uri) else { return };
-        let checked = check_source(0, text);
+        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else { return };
         let diags: Vec<Value> =
             checked.diagnostics.iter().map(|d| lsp_diagnostic(text, d)).collect();
         notify(
@@ -520,10 +613,11 @@ impl Server {
     /// typed expression shows its settled type.
     fn hover(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return Value::Null };
+        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
+            return Value::Null;
+        };
         let pos = &params["position"];
         let byte = pos_to_byte(text, pos["line"].as_u64().unwrap_or(0), pos["character"].as_u64().unwrap_or(0));
-        let checked = check_source(0, text);
 
         // Function declaration names first: signature + authority.
         for item in &checked.module.items {
@@ -581,11 +675,12 @@ impl Server {
     /// `requires_human` repairs are documentation-only (no edit to apply).
     fn code_actions(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return json!([]) };
+        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
+            return json!([]);
+        };
         let range = &params["range"];
         let lo = pos_to_byte(text, range["start"]["line"].as_u64().unwrap_or(0), range["start"]["character"].as_u64().unwrap_or(0));
         let hi = pos_to_byte(text, range["end"]["line"].as_u64().unwrap_or(0), range["end"]["character"].as_u64().unwrap_or(0));
-        let checked = check_source(0, text);
         let mut actions = Vec::new();
         for d in &checked.diagnostics {
             let overlaps = d
@@ -639,8 +734,9 @@ impl Server {
     fn document_symbols(&self, params: &Value) -> Value {
         use delulu_syntax::ast::Item;
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return json!([]) };
-        let checked = check_source(0, text);
+        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
+            return json!([]);
+        };
         let sym = |name: &str, kind: u32, s: u32, e: u32, text: &str| {
             json!({
                 "name": name,
@@ -680,8 +776,9 @@ impl Server {
     /// The authority lens (criterion 2): inferred rows on unannotated lambdas.
     fn inlay_hints(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let Some(text) = self.docs.get(uri) else { return json!([]) };
-        let checked = check_source(0, text);
+        let (Some(text), Some(checked)) = (self.text(uri), self.analyze(uri)) else {
+            return json!([]);
+        };
         let mut hints = Vec::new();
         walk_exprs(&checked.module, &mut |e| {
             if let delulu_syntax::ast::Expr::Lambda { row: None, body, .. } = e {

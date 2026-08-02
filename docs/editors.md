@@ -34,7 +34,9 @@ transport: stdio
   set — so the completion list cannot drift from the language.
 - **Definition / references / rename** for module-level names across open documents
   (a local rename is refused rather than guessed: resolving it needs shadow-aware
-  scoping the server does not have).
+  scoping the server does not have). When several open files declare the same name,
+  **definition resolves to the one you are in**, and otherwise to the first by URI —
+  the same question always gets the same answer, in this session and the next.
 - **Semantic tokens** with dedicated kinds for effects, reference capabilities,
   capability types, and secrets.
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.

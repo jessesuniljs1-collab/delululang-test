@@ -317,6 +317,21 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
+- **The language server checks a document once per edit, not once per question.** Every provider
+  used to call `check_source` itself, so a `references` request across four open documents ran four
+  full type-checks, the `rename` that followed ran eight more, and the next keystroke started over.
+  Measured on the suite's own fixture: ten read-only requests over four documents cost **962 ms
+  against a 30 ms single-edit baseline — 32× — and now cost a fraction of one.**
+
+  The analysis lives **inside the document record**, not in a cache beside it. That is the whole
+  design: a side cache has to be kept in step with the documents by hand, and the first draft —
+  keyed by a per-document version counter — had exactly the bug that shape invites. The counter
+  restarted at 1 when a document closed, so reopening a file that had changed on disk in between
+  matched the entry belonging to its *previous* incarnation and served an analysis of text that no
+  longer existed. Both failure directions are now fenced by tests that were observed to fail
+  against the code they describe. The compiler remains the sole source of truth; only how often it
+  is asked changed, never what it answers.
+
 - **A numeric literal that is not the value you wrote is refused, in both columns.** The lexer has
   always rejected an integer literal too large for `Int` — "no automatic promotion, because a silent
   widening is a silent change of meaning" — and accepted `1.0e400`, which becomes `inf`. Same defect,
@@ -389,6 +404,16 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   a function type is reclassified to **DL1302** (rule R-6a). (C24, ruling D31)
 
 ### Fixed
+
+- **"Go to definition" could land in a different file after a server restart.** The search for a
+  name across open documents iterated a `HashMap` and took the first match. `HashMap` ordering
+  varies between processes, so with five open files declaring the same name the answer was
+  whichever one the hash seed happened to yield — observed returning `d.delulu` where it must
+  return `a.delulu`. An answer a tool depends on must not depend on a hash seed, least of all for
+  the population this language is aimed at, which cannot notice that yesterday's answer differs
+  from today's. The order is now: **this document first, then sorted by URI.** The first half is a
+  correctness improvement in its own right — a name your own file declares should resolve to your
+  own file, not to an identically named one somewhere else.
 
 - **A security-relevant version pin rested on a premise that had stopped being true.** The exact
   pins on the two post-quantum crates (`=0.1.1`, `=0.3.2`) were justified in

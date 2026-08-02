@@ -599,3 +599,210 @@ fn completion_answers_promptly_on_10kloc() {
     assert!(ms < 3_000, "completion took {ms} ms on 10kloc — something scales badly");
     c.shutdown();
 }
+
+// ===== the analysis cache ==================================================
+//
+// The server keeps the checked form of each open document and reuses it until that document is
+// edited. The win is real (see `repeated_requests_do_not_recheck_every_open_document`) and so is
+// the risk it introduces: a cache that fails to invalidate answers questions about a file the
+// user can no longer see. The staleness test below is the one that matters.
+
+/// Every provider must see the edit — not just the one that published the diagnostics.
+///
+/// Each provider is asked separately rather than trusting one to stand for the rest, because the
+/// nastiest shape this bug takes is the asymmetric one: diagnostics refresh (so the file *looks*
+/// re-analysed) while hover, symbols, definition and lenses go on describing the previous text.
+/// Dropping the version check makes this test report `documentSymbol` still naming a function the
+/// edit deleted, which is the whole hazard a cache introduces.
+#[test]
+fn no_provider_answers_from_a_stale_analysis() {
+    let before = "module m\nfn alpha() -> Int { 1 }\n";
+    let after = "module m\nfn omega() -> Int { 2 }\n";
+    let uri = "file:///stale.delulu";
+    let mut c = Client::start();
+    c.open(uri, before);
+    let _ = c.wait_diagnostics(uri);
+
+    let names = |c: &mut Client| -> Vec<String> {
+        c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": uri } }))
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["name"].as_str().unwrap_or_default().to_string())
+            .collect()
+    };
+    assert!(names(&mut c).contains(&"alpha".to_string()), "precondition: alpha is there first");
+
+    c.notify(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": uri, "version": 2 },
+            "contentChanges": [{ "text": after }]
+        }),
+    );
+    let _ = c.wait_diagnostics(uri);
+
+    let n = names(&mut c);
+    assert!(n.contains(&"omega".to_string()), "documentSymbol must see the edit: {n:?}");
+    assert!(!n.contains(&"alpha".to_string()), "documentSymbol is answering from stale state: {n:?}");
+
+    // Hover on the new name, at the position it now occupies.
+    let hov = c.request(
+        "textDocument/hover",
+        json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }),
+    );
+    let md = hov["contents"]["value"].as_str().unwrap_or_default();
+    assert!(md.contains("omega"), "hover must see the edit: {md}");
+
+    // Definition of the old name must now find nothing anywhere.
+    let def = c.request(
+        "textDocument/definition",
+        json!({ "textDocument": { "uri": uri }, "position": { "line": 1, "character": 4 } }),
+    );
+    assert_eq!(def["uri"], uri, "definition resolves in the edited document: {def}");
+
+    // Semantic tokens are delta-encoded from the text; a stale AST would misplace them.
+    let toks = c.request(
+        "textDocument/semanticTokens/full",
+        json!({ "textDocument": { "uri": uri } }),
+    );
+    assert!(!toks["data"].as_array().unwrap().is_empty(), "tokens must still be produced");
+    c.shutdown();
+}
+
+/// Closing a document and reopening it must not resurrect the analysis of what it used to hold.
+///
+/// This is the ordinary life of a file under an agent or a version-control operation: the editor
+/// closes it, something rewrites it on disk, the editor opens it again at the same URI. A cache
+/// kept beside the documents and keyed by a per-document counter gets this wrong when the counter
+/// restarts on reopen — which is exactly why the analysis now lives inside the document record
+/// and is dropped with it.
+#[test]
+fn reopening_a_changed_document_does_not_serve_the_closed_one() {
+    let uri = "file:///reopen.delulu";
+    let mut c = Client::start();
+    c.open(uri, "module m\nfn before_close() -> Int { 1 }\n");
+    let _ = c.wait_diagnostics(uri);
+    c.notify("textDocument/didClose", json!({ "textDocument": { "uri": uri } }));
+
+    c.open(uri, "module m\nfn after_close() -> Int { 2 }\n");
+    let _ = c.wait_diagnostics(uri);
+    let syms = c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": uri } }));
+    let names: Vec<&str> =
+        syms.as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap_or_default()).collect();
+    assert_eq!(names, ["after_close"], "the reopened document is analysed afresh: {names:?}");
+    c.shutdown();
+}
+
+/// The same question, asked of the same files, must get the same answer every run.
+///
+/// `definition` is first-match-wins across open documents. Iterating a `HashMap` to decide that
+/// makes the answer depend on the process's hash seed, so the same editor session could jump to a
+/// different file after a restart. The order is: this document first, then sorted by URI.
+#[test]
+fn definition_prefers_this_document_then_a_stable_order() {
+    // Five documents all declaring `target`, plus one that merely mentions it.
+    let decls = ["a", "b", "c", "d", "e"];
+    let caller = "module z\nfn caller() -> Int { target() }\n";
+
+    for _run in 0..3 {
+        let mut c = Client::start();
+        for (i, name) in decls.iter().enumerate() {
+            let src = format!("module {name}\nfn target() -> Int {{ {i} }}\n");
+            c.open(&format!("file:///{name}.delulu"), &src);
+            let _ = c.wait_diagnostics(&format!("file:///{name}.delulu"));
+        }
+        c.open("file:///z.delulu", caller);
+        let _ = c.wait_diagnostics("file:///z.delulu");
+
+        // From a document that does NOT declare it: the lexicographically first URI wins.
+        let col = caller.lines().nth(1).unwrap().find("target").unwrap();
+        let def = c.request(
+            "textDocument/definition",
+            json!({
+                "textDocument": { "uri": "file:///z.delulu" },
+                "position": { "line": 1, "character": col }
+            }),
+        );
+        assert_eq!(def["uri"], "file:///a.delulu", "stable order, run {_run}: {def}");
+
+        // From a document that DOES declare it: itself, even though `a` sorts first.
+        let def_local = c.request(
+            "textDocument/definition",
+            json!({
+                "textDocument": { "uri": "file:///c.delulu" },
+                "position": { "line": 1, "character": 4 }
+            }),
+        );
+        assert_eq!(def_local["uri"], "file:///c.delulu", "this document first, run {_run}: {def_local}");
+        c.shutdown();
+    }
+}
+
+/// A request must not re-run the compiler over every open document.
+///
+/// Self-calibrating rather than an absolute millisecond bound, because the ratio is the property:
+/// one edit costs exactly one check (unavoidable — the text changed), and a run of read-only
+/// requests afterwards should cost none at all. Before the cache each `references` request ran a
+/// full check per open document, so this measured about forty times the baseline instead of a
+/// fraction of it.
+#[test]
+fn repeated_requests_do_not_recheck_every_open_document() {
+    let body = |n: usize| {
+        let mut s = format!("module d{n}\n");
+        for i in 0..75 {
+            s.push_str(&format!(
+                "fn f{n}_{i}(a: Int, b: Int) -> Int {{\n    let c = a + b\n    let d = c * 2\n\
+                 \x20   let e = d - a\n    let g = e % 97\n    let h = g + c\n    let k = h - d\n\
+                 \x20   let l = k + e\n    let m2 = l * 3\n    k + m2 + l\n}}\n"
+            ));
+        }
+        s.push_str("fn shared_target() -> Int { 7 }\n");
+        s
+    };
+    let uris: Vec<String> = (0..4).map(|n| format!("file:///d{n}.delulu")).collect();
+
+    let mut c = Client::start();
+    for (n, uri) in uris.iter().enumerate() {
+        c.open(uri, &body(n));
+        let _ = c.wait_diagnostics(uri);
+    }
+
+    // Baseline: one edit, one check. This is the cost the cache can never remove.
+    let edited = format!("{}fn extra() -> Int {{ 0 }}\n", body(0));
+    let t0 = std::time::Instant::now();
+    c.notify(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": &uris[0], "version": 2 },
+            "contentChanges": [{ "text": edited }]
+        }),
+    );
+    let _ = c.wait_diagnostics(&uris[0]);
+    let one_check = t0.elapsed();
+
+    // Ten read-only requests that each used to check all four documents.
+    let line = edited.lines().position(|l| l.contains("fn shared_target")).unwrap();
+    let col = edited.lines().nth(line).unwrap().find("shared_target").unwrap();
+    let t1 = std::time::Instant::now();
+    for _ in 0..10 {
+        let refs = c.request(
+            "textDocument/references",
+            json!({
+                "textDocument": { "uri": &uris[0] },
+                "position": { "line": line, "character": col },
+                "context": { "includeDeclaration": true }
+            }),
+        );
+        assert_eq!(refs.as_array().unwrap().len(), 4, "one declaration per open document");
+    }
+    let ten_requests = t1.elapsed();
+
+    eprintln!("one edit = {one_check:?}; ten cross-document requests = {ten_requests:?}");
+    assert!(
+        ten_requests < one_check * 4,
+        "ten read-only requests took {ten_requests:?} against a {one_check:?} baseline — \
+         the analysis is being recomputed per request"
+    );
+    c.shutdown();
+}
