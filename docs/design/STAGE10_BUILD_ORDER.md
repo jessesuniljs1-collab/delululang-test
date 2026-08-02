@@ -2730,6 +2730,47 @@ Behavioural witnesses live beside the one that was blind: `recursion_inside_an_a
 crash` and `recursion_past_the_bound_inside_an_actor_is_dl0905`. Both assert on **exit status**, never
 on a message, for the reason above.
 
+**D68 — The map answers "may I change this?", and three stages of decisions become citable.**
+Four items from the production-readiness register, each small, each closing something that had been
+recorded as unfinished rather than decided.
+
+1. **Entrenchment is a node ATTRIBUTE, not a verb — reversing a disposition.** An `owners <id>` verb
+   was rejected once, correctly: every `.github/CODEOWNERS` rule names the same deliberate
+   placeholder until public launch, so the verb is a constant function. That rejection then
+   travelled to the *entrenchment marker*, which it does not fit — **"who reviews this" and "is this
+   entrenched" are different claims, and only the first is a placeholder.** `query` now states it
+   before any edge, citing the CODEOWNERS line. Nineteen nodes carry it.
+   Two decisions inside it: **the `*` catch-all is ignored** (a rule matching every path separates
+   nothing, and marking 900-odd nodes would make the word untrue and unreadable at once), and **a
+   rule matching no path is an `error`** — renaming an entrenched file silently un-entrenches it,
+   and a rule guarding nothing reads in a diff exactly like a rule guarding something. That check
+   was verified against a synthetic tree where the rule cannot resolve. A near-miss found while
+   writing it: a directory rule must also cover the directory *itself*, or `/crates/delulu-conform/`
+   marks all five modules and leaves `crate:delulu-conform` — the node an agent names — unmarked.
+2. **Stage 6, 7 and 8 decisions are citable, additively.** Those stages recorded real rulings, as
+   "Deviation *n*" and as numbered ledgers — but **three stages each number from 1**, so a Stage-6
+   decision could not be cited the way a Stage-9 one can. A ruling index in each build order names
+   every existing entry as `S6-D1`…, `S7-D1`…, `S8-D1`… . **Nothing is renamed and no text moved**;
+   the ledgers stay authoritative. This clears three Survey notes legitimately rather than
+   suppressing them, and it adds no ambiguity: the affected bare-`D<n>` numbers are unchanged
+   (D1–D22 were already multi-stage), and the citation count went 244 → 243.
+3. **C21's last residual: the safe path is now the short one.** `on_interpreter_thread` runs a
+   closure on a correctly-sized thread, so an embedder reaches `DEFAULT_MAX_DEPTH` and gets DL0905
+   without knowing that a tree-walker costs several native frames per call. **C21's residual was
+   never a missing mechanism — it was that using the mechanism correctly required knowing a
+   number.** It *reports* a refused reservation rather than degrading, and that asymmetry against
+   the actor scheduler is deliberate: the scheduler owns its threads and must keep running, while a
+   library cannot choose between failing, retrying smaller and running shallow on an application's
+   behalf.
+4. **The macOS socket-path limit is named rather than surfaced raw.** `sun_path` is **104 bytes on
+   macOS against 108 on Linux**, and macOS temp directories are long enough that a state dir that is
+   comfortable here lands within about a dozen bytes of the ceiling there. `UnixListener::bind` would
+   report `ENAMETOOLONG` — "File name too long", no number, no limit, no hint that the platform is
+   the variable. The path is now checked first and refused with both figures and the remedy.
+   **Tested on Linux, where the branch compiles**: the limits differ by four bytes and the arithmetic
+   is identical, so a Linux path long enough to trip 108 exercises the mechanism. That is a tested
+   mechanism plus a reasoned constant, and this sentence is the distinction rather than a blur.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

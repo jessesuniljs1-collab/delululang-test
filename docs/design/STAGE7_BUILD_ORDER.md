@@ -173,3 +173,24 @@ head chef has personally seen.
 6. Multi-threaded WASM (Stage 10) + true stealing scheduler if deviation 3 lands shared-runqueue.
 7. Field-consume (v0.7: locals/params only; DL1602 variant message).
 8. Pointer-handoff iso sends (deviation 7).
+
+## 6. Ruling index — the `S7` namespace
+
+**Additive, and it renames nothing.** Stage 7 recorded its decisions as a numbered ledger in §3. That
+is a real record, but three stages each number from 1, so a Stage-7 decision could not be cited the
+way a Stage-9 or Stage-10 one can. These are stage-qualified names for the entries above; the ledger
+text remains authoritative.
+
+Cite as `S7-D<n>`.
+
+**D1 — Rcaps are a `TypeExpr::Rcap` wrapper variant, not a wrapper struct.** Ledger 1.
+**D2 — Criterion 1 is read as throughput, not as one strictly-alternating pair.** Ledger 2.
+**D3 — Worker-owned actors, not stealing deques.** Ledger 3.
+**D4 — Rcap tracking is kept out of the DIR-serialized `Type`.** Ledger 4.
+**D5 — `consume` and `recover` become true keywords, with DL1608 and its exact repair.** Ledger 5.
+**D6 — `delulu fmt` enters as migration-only in v0.7.** Ledger 6.
+**D7 — An `iso` send moves by rebuild, observationally the spec's pointer handoff.** Ledger 7.
+**D8 — Sums join the default-rcap `val` set.** Ledger 8.
+**D9 — Fn-typed positions default to `box`, not `ref`.** Ledger 9.
+**D10 — The T-Send tail rule, for `Promise[T]`'s `fulfill`.** Ledger 10.
+**D11 — `std.actors` is an injected prelude while actors are single-module.** Ledger 11.

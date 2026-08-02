@@ -34,6 +34,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+pub mod codeowners;
 pub mod health;
 pub mod manifest;
 pub mod mdown;
@@ -163,6 +164,11 @@ pub struct Node {
     /// for Markdown. This is the index that answers "where is X defined?" without a grep.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub contents: Vec<String>,
+    /// Set when `.github/CODEOWNERS` names this path as requiring the **project lead specifically**,
+    /// not any maintainer — Constitution §10's entrenched set, invariant 44. Carries the line it was
+    /// read from; see [`crate::codeowners`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entrenched: Option<codeowners::Entrenchment>,
 }
 
 /// An edge, and the exact place in the text that justifies it.
@@ -283,6 +289,10 @@ impl Survey {
                 _ => {}
             }
         }
+
+        // Entrenchment marks existing nodes rather than creating any, so it runs after every
+        // extractor has had its say and before the cross-check that judges the result.
+        codeowners::extract(&files, &mut b);
 
         // Cross-check before finishing: the checks need what each extractor *claimed*, which is
         // still on the builder. This is the pass that turns a lexical guess into either a
@@ -529,6 +539,7 @@ impl Builder {
             lines: None,
             summary: None,
             contents: Vec::new(),
+            entrenched: None,
         })
     }
 

@@ -241,3 +241,28 @@ honest stance as every prior stage). All ten §9 criteria carry named witnesses.
 - `delulu morph` (syntax skins, AI token-minimizing profiles) — `SYNTAX_MORPH_SPEC.md` is
   written; building it is not in the spec §9 gate. Rule it in only if the owner orders it.
 - Editor plugins beyond the in-repo VS Code skeleton — community via LSP.
+
+## 6. Ruling index — the `S8` namespace
+
+**Additive, and it renames nothing.** Stage 8 recorded its decisions as a numbered ledger in §3.
+Three stages each number from 1, so a Stage-8 decision could not be cited the way a Stage-9 or
+Stage-10 one can. These are stage-qualified names for the entries above; the ledger text remains
+authoritative.
+
+Cite as `S8-D<n>`.
+
+**D1 — The Atlas and the Palette are prior art, not Stage-8 work items.** Ledger 1.
+**D2 — `delulu fmt` grows the existing verb rather than adding one.** Ledger 2.
+**D3 — The LSP is a CLI module with zero new dependencies.** Ledger 3.
+**D4 — The registry client is local-index-only in v0.8, with no network.** Ledger 4.
+**D5 — Assertion failure is DL1707.** Ledger 5.
+**D6 — Tests in plugin artifacts are stripped at build and refused at load.** Ledger 6.
+**D7 — en-US lives in the code, and the build-refusal is literal.** Ledger 7.
+**D8 — The machine envelope is locale-invariant, message text included.** Ledger 8.
+**D9 — Catalogs use a hardened, bounded, zero-dependency TOML subset.** Ledger 9.
+**D10 — First-run mechanics: suppression envs read as presence.** Ledger 10.
+**D11 — Formatter mechanics, and the identity law's executable form.** Ledger 11.
+**D12 — The Stage-7 ping-pong wall-clock bar reflects thermal reality.** Ledger 12.
+**D13 — `locale add` mechanics: the zero-authority gate lives at ADD.** Ledger 13.
+**D14 — Test runner mechanics: an absent `[test-authority]` means PURE.** Ledger 14.
+**D15 — Signing is detached, generalized from the Stage-6 section.** Ledger 15.

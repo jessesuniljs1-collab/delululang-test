@@ -136,6 +136,22 @@ test forbids. The close-out's "1098-0-4 / criterion 10 MET" was a fast-build sna
 heartbeat fix (D19e) makes it robust in both build modes. Full rationale: `STAGE10_BUILD_ORDER.md`
 D19a–e.
 
+**The one macOS-specific hazard the static audit could put a number on (D68).** Every
+conditional-compilation site in the tree was enumerated during the production-readiness review and
+all are **exhaustive for macOS** — `cfg(unix)`/`cfg(not(unix))` and `cfg(windows)`/`cfg(not(windows))`
+pairs cover it, and the two Linux-only mechanisms are handled deliberately (`PR_SET_PDEATHSIG` is
+`cfg(target_os = "linux")` with the macOS substitute named in a comment; the microVM profile refuses
+with `DL1408` on the not-Linux arm). That is evidence of care, not evidence of working.
+
+What the audit *could* quantify is the Unix domain socket path limit: **`sun_path` is 104 bytes on
+macOS against 108 on Linux**, and macOS hands out temp directories like
+`/var/folders/j7/8k3l…0000gn/T/` — roughly fifty characters before a caller names anything. The
+longest broker state directory the test suite builds leaves on the order of a dozen bytes of margin
+there while being comfortable here. The path is now checked before `bind` and refused with both
+figures and the remedy, so if it ever fires on a Mac it fires legibly instead of as
+`ENAMETOOLONG`. **The mechanism is tested on Linux; the macOS constant is reasoned. No Mac has run
+it, and the two claims are not the same.**
+
 **Named, not fixed (future work):**
 
 - **The sim watchdog wall-clock coupling — RESOLVED (D20).** `--broker-profile sim` was

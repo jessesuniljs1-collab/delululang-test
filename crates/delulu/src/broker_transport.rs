@@ -369,6 +369,44 @@ mod imp {
         state_dir.join("broker.sock").to_string_lossy().to_string()
     }
 
+    /// The kernel's limit on a Unix socket path — `sizeof(sun_path)`, including its NUL terminator.
+    ///
+    /// **macOS is 104 and Linux is 108**, and the difference is not academic here: macOS hands out
+    /// temp directories like `/var/folders/j7/8k3l…0000gn/T/`, roughly fifty characters before a
+    /// caller has named anything. A state directory under one of those, plus `broker.sock`, lands
+    /// within about a dozen bytes of the macOS ceiling on paths that are comfortable on Linux.
+    ///
+    /// The project has never run on a Mac, so this is a hazard reasoned about rather than observed —
+    /// which is exactly why it should fail *legibly* if it ever fires. `ENAMETOOLONG` from
+    /// `UnixListener::bind` surfaces as "File name too long" with no number, no limit, and no
+    /// indication that the platform is the variable.
+    const SUN_PATH_MAX: usize = if cfg!(target_os = "macos") { 104 } else { 108 };
+
+    /// Refuse a socket path the kernel cannot hold, naming the limit and the overrun.
+    ///
+    /// Checked *before* `bind` rather than translating its error afterwards, because the failure is
+    /// worth describing in terms the caller can act on: shorten the state directory. Returns the
+    /// address when it fits.
+    fn checked_address(state_dir: &Path) -> io::Result<String> {
+        let address = address_for(state_dir);
+        // The NUL terminator counts against the limit, so a path of exactly SUN_PATH_MAX is already
+        // one byte too long.
+        if address.len() >= SUN_PATH_MAX {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "the broker socket path is {} bytes and this platform allows {} (including the \
+                     terminator): {address}\n  \
+                     use a shorter --state-dir; macOS allows 104 where Linux allows 108, so a path \
+                     that fits on Linux can still be refused on a Mac",
+                    address.len(),
+                    SUN_PATH_MAX - 1,
+                ),
+            ));
+        }
+        Ok(address)
+    }
+
     pub struct Listener {
         inner: UnixListener,
         address: String,
@@ -380,7 +418,7 @@ mod imp {
             std::fs::create_dir_all(state_dir)?;
             // 0700: only the owner (same user) can traverse into the dir and reach the socket.
             let _ = std::fs::set_permissions(state_dir, std::fs::Permissions::from_mode(0o700));
-            let address = address_for(state_dir);
+            let address = checked_address(state_dir)?;
             let _ = std::fs::remove_file(&address); // clear a stale socket from a previous run
             let inner = UnixListener::bind(&address)?;
             Ok(Listener { inner, address })
@@ -418,8 +456,44 @@ mod imp {
     }
 
     pub fn connect(state_dir: &Path) -> io::Result<Connection> {
-        let stream = UnixStream::connect(address_for(state_dir))?;
+        // The same check on the client side: a caller that cannot even name the socket should be
+        // told why, not handed the kernel's word for it.
+        let stream = UnixStream::connect(checked_address(state_dir)?)?;
         Ok(Connection { inner: stream })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// THE WITNESS, and it runs on Linux today. A path the kernel cannot hold is refused with
+        /// the two numbers a reader needs, rather than surfacing as `ENAMETOOLONG`.
+        ///
+        /// The hazard this guards is macOS-specific — 104 bytes there against 108 here — and the
+        /// project has no Mac. So the check is written to be exercised on the platform we *do* run:
+        /// the limit differs by four bytes, the arithmetic is identical, and a Linux path long
+        /// enough to trip 108 proves the branch works. That is a tested mechanism plus a reasoned
+        /// constant, and the distinction is stated rather than blurred.
+        #[test]
+        fn a_socket_path_the_kernel_cannot_hold_is_refused_by_name() {
+            let deep = std::path::PathBuf::from("/tmp").join("x".repeat(200));
+            let err = checked_address(&deep).expect_err("a 200-byte component cannot fit sun_path");
+            let msg = err.to_string();
+            assert!(msg.contains("broker socket path is"), "the error names the problem: {msg}");
+            assert!(
+                msg.contains(&SUN_PATH_MAX.to_string()) || msg.contains(&(SUN_PATH_MAX - 1).to_string()),
+                "and states the platform limit: {msg}"
+            );
+            assert!(msg.contains("--state-dir"), "and what to do about it: {msg}");
+        }
+
+        /// THE SKIP-BRANCH CASE: an ordinary state directory must still bind. A check that refused
+        /// every path would pass the test above and break the broker.
+        #[test]
+        fn an_ordinary_state_directory_is_accepted() {
+            let ok = std::path::PathBuf::from("/tmp/delulu-state");
+            assert!(checked_address(&ok).is_ok(), "a normal path must not be refused");
+        }
     }
 }
 

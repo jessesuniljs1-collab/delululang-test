@@ -26,7 +26,8 @@ pub use device::{
 };
 pub use foreign::{BoundForeign, FKind, FVal, ForeignBinder, ForeignErr, ForeignSig, InProcBinder};
 pub use interp::{
-    max_depth_for_stack, Interp, DEFAULT_MAX_DEPTH, INTERPRETER_STACK_BYTES, STACK_BYTES_PER_DEPTH,
+    max_depth_for_stack, on_interpreter_thread, Interp, DEFAULT_MAX_DEPTH, INTERPRETER_STACK_BYTES,
+    STACK_BYTES_PER_DEPTH,
 };
 pub use plugin::{
     cap_slice, kill_on_limit, load_prepare, load_verified, plugin_err_code, r_get_contained,

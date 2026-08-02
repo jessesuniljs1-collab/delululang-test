@@ -260,6 +260,16 @@ fn query(root: &Path, id: &str, rdeps_only: bool) {
     if !node.contents.is_empty() {
         println!("  holds   {}", node.contents.join(", "));
     }
+    // Printed before the edges, because "may I change this?" is answered before "what breaks if I
+    // do?" is worth asking. Constitution §10 / invariant 44.
+    if let Some(e) = &node.entrenched {
+        println!(
+            "  ENTRENCHED — changing this needs {} specifically, not any maintainer\n\
+             \x20         matched by `{}` at {}:{}\n\
+             \x20         Constitution §10 requires an entrenchment analysis (invariant 44) before it moves",
+            e.owner, e.pattern, e.file, e.line
+        );
+    }
 
     let incoming = survey.into_(id);
     if !rdeps_only {

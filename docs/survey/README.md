@@ -139,6 +139,27 @@ cited `links-to`. Nothing about the code moved. `impact` is unaffected (it follo
 that propagate), and this is why it compares against the structural subset rather than the raw
 count.
 
+### Before you change something: is it entrenched?
+
+Some paths in this repository require the **project lead specifically, not any maintainer** —
+Constitution §10, invariant 44. `query` says so, first, before any edge:
+
+```
+$ delulu-survey query doc:docs/design/CONSTITUTION.md
+  ENTRENCHED — changing this needs @PENDING-PUBLIC-project-lead specifically, not any maintainer
+          matched by `/docs/design/CONSTITUTION.md` at .github/CODEOWNERS:16
+```
+
+Read from `.github/CODEOWNERS`, cited to the line, and the owner string is carried **verbatim** —
+the map has no opinion about who that handle is. Nineteen nodes carry it today: the constitution and
+`DELULU_CORE.md`, `STABILITY.md`, `/rfcs/`, `SECURITY.md` and `/docs/security/`, the soundness audit
+and its laundering suite, and the conformance machinery including `witnesses.toml`.
+
+Two decisions worth knowing. **The `*` catch-all is deliberately ignored** — a rule matching every
+path separates nothing, and marking all 900-odd nodes would make the word meaningless. And **a rule
+that matches no path is an `error`**, not a note: renaming an entrenched file silently un-entrenches
+it, and a rule guarding nothing reads in a diff exactly like a rule guarding something.
+
 Node ids are readable and guessable:
 
 ```
@@ -214,10 +235,12 @@ run had written, and it would never have converged.
   the incoming `cites`, `links-to` and `documents` edges from rulings, findings and specs are
   already there. An `owners` verb would read `.github/CODEOWNERS`, where every rule currently names
   the same deliberate placeholder (`@PENDING-PUBLIC-project-lead`, unassigned until public launch),
-  so it would be a constant function. Neither was built. What CODEOWNERS *does* carry that this map
-  does not is which paths are **entrenched** — the constitution, `STABILITY.md`, `/rfcs/`, the
-  soundness audit, the conformance machinery. Surfacing that belongs on the node, not in a verb,
-  and it is not built.
+  so it would be a constant function. Neither was built.
+
+  **What CODEOWNERS carries that a verb could not is now an attribute — see below.** That was
+  written here as "not built" for one release, on the reasoning that rejected the verb. The
+  reasoning was right about the verb and wrong to travel: *who reviews this* and *is this
+  entrenched* are different claims, and only the first one is a placeholder.
 
 - **It does not judge.** `DISCREPANCIES.md` reports that two things disagree; which one is wrong is
   a person's call.

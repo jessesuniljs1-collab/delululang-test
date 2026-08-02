@@ -107,6 +107,48 @@ const NON_RECURSIVE_RESERVE: usize = 256 * 1024;
 /// are not interpreter recursion (the worker loop, the actor turn machinery, and whatever the host
 /// had on the stack already). The result is clamped to at least 1: a bound of zero would refuse
 /// every call rather than bound the depth of one.
+/// Run `f` on a thread sized for [`DEFAULT_MAX_DEPTH`], so the guard is what fires.
+///
+/// **This exists because a contract nobody calls is a contract nobody is keeping.** C21 was filed as
+/// a library-embedding hazard and D51 closed it by making the depth bound explicit
+/// ([`Interp::with_max_depth`], [`STACK_BYTES_PER_DEPTH`]). That was the right mechanism — and for
+/// the whole of its life nothing in this repository called it, including the one caller that most
+/// needed to (the actor scheduler, C70/D67). The lesson generalizes past that one bug: an embedder
+/// who has to *remember* to size a thread is an embedder who will one day not, and the failure is
+/// not a diagnostic but a `SIGSEGV`. So the safe path is now the short one:
+///
+/// ```no_run
+/// # use delulu_runtime::{on_interpreter_thread, Interp};
+/// let outcome = on_interpreter_thread(move || {
+///     // build and run an `Interp` here; `DEFAULT_MAX_DEPTH` is reachable and DL0905 fires
+///     42
+/// })?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+///
+/// **It reports rather than degrades, and that asymmetry is deliberate.** The actor scheduler, which
+/// owns its own threads and must keep running, walks a ladder down and lowers its bound to match. A
+/// library cannot make that trade on an application's behalf — an embedder may prefer to fail, to
+/// retry smaller, or to run shallow work anyway — so a refused reservation comes back as an `Err`
+/// with the OS's reason, and the caller decides. Deciding for them would be the silent fallback
+/// `ref.rule.portability.isolation-labels-are-honest` exists to forbid.
+///
+/// A panic inside `f` is reported as an error rather than resumed, because the payload is not
+/// `Send`-recoverable in a useful form here; the panic itself has already been printed by the
+/// runtime.
+pub fn on_interpreter_thread<T, F>(f: F) -> std::io::Result<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    std::thread::Builder::new()
+        .name("delulu-interpreter".into())
+        .stack_size(INTERPRETER_STACK_BYTES)
+        .spawn(f)?
+        .join()
+        .map_err(|_| std::io::Error::other("the interpreter thread panicked"))
+}
+
 pub const fn max_depth_for_stack(stack_bytes: usize) -> u32 {
     let usable = stack_bytes.saturating_sub(NON_RECURSIVE_RESERVE);
     let depth = usable / STACK_BYTES_PER_DEPTH;
@@ -1958,6 +2000,36 @@ mod depth_contract_tests {
             })
             .expect("spawn");
         handle.join().expect("the thread must FAIL CLEANLY, never abort on a stack overflow");
+    }
+
+    /// The embedder's short path: `on_interpreter_thread` supplies the stack, so the DEFAULT bound
+    /// is reachable and deep recursion is `DL0905` — without the caller having to know that a
+    /// tree-walker costs several native frames per call, or that Rust's default thread is ~2 MiB.
+    ///
+    /// The test above proves the knob works for someone who knows to reach for it. This one proves
+    /// they no longer have to: **C21's residual was never that the mechanism was missing, it was
+    /// that using it correctly required knowing a number.**
+    #[test]
+    fn an_embedder_gets_the_full_bound_without_sizing_anything_itself() {
+        let code = on_interpreter_thread(|| {
+            let src = "module m\n\nfn down(n: Int) -> Int {\n    if n <= 0 { 0 } else { down(n - 1) + 1 }\n}\n\nfn main(root: Root) ! {} {\n    let x = down(100000)\n}\n";
+            let checked = delulu_check::check_source(0, src);
+            assert!(!checked.has_errors(), "the fixture must check: {:?}", checked.diagnostics);
+            // No `with_max_depth`: the point is that the DEFAULT is safe here.
+            let interp = Interp::new(&checked.module);
+            let root = Value::Root(std::rc::Rc::new(crate::value::RootVal::default()));
+            let fault = interp.run_main(root).expect_err("unbounded recursion must be refused");
+            fault.code
+        })
+        .expect("the interpreter thread must start and return, never abort");
+        assert_eq!(code, "DL0905", "the guard fires as a diagnostic on the supplied stack");
+    }
+
+    /// A value comes back out, so the helper is usable for real work rather than only for its
+    /// side effects.
+    #[test]
+    fn the_thread_helper_returns_its_closures_value() {
+        assert_eq!(on_interpreter_thread(|| 7 * 6).expect("spawn"), 42);
     }
 
     #[test]

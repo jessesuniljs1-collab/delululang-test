@@ -2244,6 +2244,12 @@ mechanism. **Nothing in the tree was calling it, and the caller that needed it m
 embedder at all — it was DeluluLang's own actor runtime, reachable from the shipped CLI with an
 ordinary program.** A contract with no caller is a contract nobody is keeping.
 
+**C21's last residual closed too, one ruling later (D68).** With D67 supplying the missing *caller*,
+what remained was the embedder's ergonomics: using `with_max_depth` correctly required knowing what a
+tree-walking interpreter costs per native frame. `on_interpreter_thread` runs a closure on a
+correctly-sized thread, so the safe path is now the short one. **The residual was never a missing
+mechanism — it was that using the mechanism correctly required knowing a number.**
+
 Closed by D67: one definition of the budget in `delulu-runtime`, actor workers reserving it with
 their bound sized to match, and a source-scanning gate that fails unless every thread-creation site
 in the tree is either sized or classified. D67 also closed a quieter contradiction it exposed — the

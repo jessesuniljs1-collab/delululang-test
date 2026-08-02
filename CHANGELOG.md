@@ -23,7 +23,36 @@ The hardening campaign (commissioned 2026-07-24) pressure-tests every stage to f
 breaks. Nothing here is released; entries land as each phase completes. Full findings ledger:
 `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Added
+
+- **The Survey answers "may I change this?"** (D68). A handful of paths are entrenched by
+  Constitution §10 — the constitution itself, `STABILITY.md`, `/rfcs/`, the soundness audit, the
+  conformance machinery — and `delulu-survey query` now says so before printing a single edge,
+  citing the `.github/CODEOWNERS` line it read. The owner string is carried verbatim; the map has no
+  opinion about who a handle is.
+
+  The `*` catch-all is deliberately ignored, because a rule matching every path separates nothing.
+  A rule matching **no** path is an error: renaming an entrenched file silently un-entrenches it,
+  and a rule guarding nothing reads in a diff exactly like a rule guarding something.
+
+- **`delulu_runtime::on_interpreter_thread`** (D68) runs a closure on a thread sized for the
+  interpreter's depth bound, so an embedder gets `DL0905` instead of a stack overflow without having
+  to know what a tree-walking interpreter costs per call. C21's residual was never a missing
+  mechanism — it was that using the mechanism correctly required knowing a number.
+
+- **Stage 6, 7 and 8 decisions are citable** (D68). Those stages recorded real rulings, but three
+  stages each number from 1, so a Stage-6 decision could not be cited the way a Stage-9 one can. A
+  ruling index in each build order names every existing entry as `S6-D1`…, `S7-D1`…, `S8-D1`… .
+  Nothing was renamed and no text moved.
+
 ### Fixed
+
+- **A Unix socket path the kernel cannot hold is refused by name** (D68). `sun_path` is **104 bytes
+  on macOS against 108 on Linux**, and macOS temp directories are long enough that a state directory
+  that is comfortable on Linux lands close to the ceiling there. The bind would have surfaced
+  `ENAMETOOLONG` — "File name too long", with no number, no limit, and no hint that the platform is
+  the variable. It now names both figures and the remedy. Tested on Linux, where the branch
+  compiles; the constant for macOS is reasoned, and no Mac has run it.
 
 - **Recursion inside an actor behavior is a diagnostic again, not a process abort** (C70, D67).
   `ref.rule.runtime.faults-are-diagnostics` promises that a runtime fault — including recursion depth

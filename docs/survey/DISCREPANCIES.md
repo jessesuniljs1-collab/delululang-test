@@ -9,18 +9,9 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| note | `build-order-without-citable-rulings` | 3 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `ruling-cited-without-its-stage` | 1 |
 | note | `test-count-quoted-but-unverifiable` | 1 |
-
-## note — `build-order-without-citable-rulings` (3)
-
-**What to do:** no action if the stage genuinely took no recorded decisions; otherwise number them
-
-- `docs/design/STAGE6_BUILD_ORDER.md:1` — this build order allocates no numbered rulings, so a Stage-6 decision cannot be cited the way a Stage-9 or Stage-10 one can
-- `docs/design/STAGE7_BUILD_ORDER.md:1` — this build order allocates no numbered rulings, so a Stage-7 decision cannot be cited the way a Stage-9 or Stage-10 one can
-- `docs/design/STAGE8_BUILD_ORDER.md:1` — this build order allocates no numbered rulings, so a Stage-8 decision cannot be cited the way a Stage-9 or Stage-10 one can
 
 ## note — `c-token-not-a-campaign-finding` (1)
 
@@ -32,7 +23,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** write the stage when you mean an earlier one — `S9-D21` — as the Stage-10 ledger already does
 
-- `docs/design` — 244 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
+- `docs/design` — 243 citation(s) of rulings name a ruling number that more than one stage allocates, and rely on the documented default that a bare `D<n>` means the latest stage (`CHANGELOG.md`, `STAGE10_BUILD_ORDER.md` §2). Numbers affected: D1, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D2, D20, D21, D22, D3, D4, D5, D6, D7, D8, D9
 
 ## note — `test-count-quoted-but-unverifiable` (1)
 

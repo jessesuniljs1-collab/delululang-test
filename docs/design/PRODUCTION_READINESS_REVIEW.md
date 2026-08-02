@@ -183,6 +183,7 @@ Recorded because a review that only reports problems is not a review:
 | # | Item | Source | Why |
 |---|---|---|---|
 | 1 | Actor workers reserve an interpreter-sized stack; bound sized to match; thread-site gate | this review (C70) | **DONE — D67.** A normative rule was false on a shipped path |
+| — | *Items 3, 4, 5 (in part) and 7 below shipped together as **D68**; see the ruling for what each closed.* | | |
 | 2 | `publish = false` on every crate but the CLI, plus a gate over the partition | this review | Gives `STABILITY.md` §2 the mechanism its own §6 table demands |
 | 3 | CODEOWNERS entrenchment as a Survey **node attribute** | reverses Phase 5 | The map's primary audience is agents; "do not casually change this" is a citable fact it lacks |
 | 4 | Give Stage 6/7/8 decisions stage-qualified ruling ids, additively | Survey note ×3 | Those stages record real decisions as "Deviation *n*" — but **three stages each have a Deviation 3**, so the note is right that they cannot be cited. An index naming each existing deviation as `S6-D1`… makes them citable without renaming anything |

@@ -59,6 +59,20 @@ structural** edge arriving at it and reaches **134** nodes transitively. Every h
 came from and the file and line it was read from, so a chain can be walked back and disagreed with
 exactly like a single edge.
 
+**`query` answers "may I change this?" before you ask "what breaks if I do?"** A handful of paths are
+**entrenched** — Constitution §10 puts them behind the project lead specifically, not any maintainer,
+and invariant 44 requires an entrenchment analysis before any of them moves. `query` prints that
+first, with the `.github/CODEOWNERS` line it was read from:
+
+```
+ENTRENCHED — changing this needs @PENDING-PUBLIC-project-lead specifically, not any maintainer
+        matched by `/docs/design/CONSTITUTION.md` at .github/CODEOWNERS:16
+```
+
+If you see it, stop and propose the change rather than making it. Nineteen nodes carry it: the
+constitution, `DELULU_CORE.md`, `STABILITY.md`, `/rfcs/`, `SECURITY.md`, `/docs/security/`, the
+soundness audit and its laundering suite, and the conformance machinery.
+
 [`docs/survey/DISCREPANCIES.md`](survey/DISCREPANCIES.md) lists where the repository currently
 disagrees with itself — worth reading before you trust a number you found in prose.
 

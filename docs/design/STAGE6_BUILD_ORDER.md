@@ -310,3 +310,22 @@ Deferred by ruling, recorded so no future builder starts blind:
    thus the signature verification — runs in the program process, so wiring the broker daemon to log
    a client-verified signature server-side is a small future addition (a new IPC note), deferred here
    rather than silently skipped.
+
+## 6. Ruling index — the `S6` namespace
+
+**Additive, and it renames nothing.** Stage 6 recorded its decisions as "Deviation *n*" in §3, which
+is a real ledger — but three stages each have a "Deviation 3", so a Stage-6 decision could not be
+cited the way a Stage-9 or Stage-10 one can. This section gives each existing deviation a
+stage-qualified id so it can be. The deviation text above remains authoritative; these are names for
+it, not restatements of it.
+
+Cite as `S6-D<n>`. The Survey resolves the ids from this section.
+
+**D1 — `dir::verify` reuses the real checker rather than a second one.** Deviation 1 (6b).
+**D2 — DL1508 for a malformed or tampered `.dpx` container.** Deviation 2 (6c).
+**D3 — Plugin packages are single-module in v0.6.** Deviation 3 (6c).
+**D4 — `load[C]` / `p.get[F]` are inference-from-context, not type arguments.** Deviation 4 (6e).
+**D5 — DL1509: R-6a is fail-closed at a Contained `get` site.** Deviation 5 (6e).
+**D6 — `anyhow` becomes a direct dependency of `delulu-wasm`.** Deviation 6 (6f.2).
+**D7 — Windows in-process CPU/wall enforcement is refused, not executed.** Deviation 7 (6f.2b).
+**D8 — DL1510 and DL1511 separate a badly-signed artifact from an unsigned one.** Deviation 8 (6h).

@@ -22,17 +22,17 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 12 |
 | … repository tooling (`publish = false`) | 1 |
-| Rust files | 209 |
-| Rust lines | 100656 |
-| Rust files outside `src/` (test/bench targets) | 82 |
+| Rust files | 211 |
+| Rust lines | 101138 |
+| Rust files outside `src/` (test/bench targets) | 83 |
 | Markdown documents | 121 |
-| Markdown lines | 27768 |
+| Markdown lines | 27963 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
-| Recorded rulings | 89 |
+| Recorded rulings | 124 |
 | Recorded campaign findings | 70 |
-| Nodes / edges in this map | 923 / 8227 |
-| Open discrepancies | 6 |
+| Nodes / edges in this map | 960 / 8341 |
+| Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -84,14 +84,14 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 21 files, 18365 lines
+- **Modules:** 21 files, 18439 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/advisories.rs` | 219 | The advisory-feed detector (Stage 10 phase 10k, Track C, spec §4). |
 | `src/broker_client.rs` | 431 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 370 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
-| `src/broker_transport.rs` | 426 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
+| `src/broker_transport.rs` | 500 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 1657 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
 | `src/cli.rs` | 8856 | Command dispatch and the four Stage-1 commands (§9.5). |
@@ -267,7 +267,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 12152 lines
+- **Modules:** 16 files, 12225 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -279,8 +279,8 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/cycles.rs` | 226 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1355 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/foreign.rs` | 440 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 1973 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
-| `src/lib.rs` | 419 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
+| `src/interp.rs` | 2045 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/lib.rs` | 420 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/plugin.rs` | 2235 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
 | `src/prim.rs` | 620 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
@@ -294,13 +294,14 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 10 files, 3503 lines
+- **Modules:** 11 files, 3721 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
+| `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 603 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 315 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 614 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 325 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 231 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
@@ -384,7 +385,10 @@ Rulings are allocated **one namespace per stage**, so `D21` alone is ambiguous �
 
 | Namespace | Rulings | Allocated in |
 |---|---:|---|
-| `S10` | 67 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S10` | 68 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S6` | 8 | `docs/design/STAGE6_BUILD_ORDER.md` |
+| `S7` | 11 | `docs/design/STAGE7_BUILD_ORDER.md` |
+| `S8` | 15 | `docs/design/STAGE8_BUILD_ORDER.md` |
 | `S9` | 22 | `docs/design/STAGE9_BUILD_ORDER.md` |
 
 ## Where to start
