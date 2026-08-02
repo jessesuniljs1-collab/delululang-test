@@ -12,6 +12,7 @@ mod cert_crypto;
 mod cli;
 mod deploy;
 mod doctor;
+mod fix;
 mod fleet;
 mod foreign_worker;
 mod locale;

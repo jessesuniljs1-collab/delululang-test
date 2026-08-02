@@ -180,6 +180,41 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu fix` — apply the repairs the checker already computed.** The repairs have carried
+  byte-precise edits since Stage 1 and `delulu check --json` has always reported them, but applying
+  them without an editor meant re-implementing the byte splicing by hand — which is how a
+  machine-readable contract stops being followed. Nothing here invents a repair.
+
+  **What it refuses to do is the point**, and the policy is the one `Confidence` already documents:
+  an `Exact` repair is safe to apply blindly *unless* flagged `authority_widening` or
+  `requires_human`.
+
+  - **A repair that would widen what your program may do is never applied on its own.** You may
+    accept one, but you must name it — `--accept-widening <repair-id>`. There is deliberately **no
+    flag that accepts all of them**: on a batch command that means "widen authority everywhere,
+    unattended", and that flag ends up in a CI script. Without this rule the command was observed
+    adding `! {Write}` to a function's row by itself, which is the exact guarantee the language
+    exists to sell.
+  - **A file stored in a surface morph is refused, intact.** Such a file is translated to canonical
+    DeluluLang before it is analysed, so the repaired result is canonical too — writing it back
+    replaces *every keyword the author wrote* with its canonical spelling while leaving the
+    `//! morph:` pragma still claiming their surface. Observed rather than deduced: with the guard
+    removed, a `zh-CN-keywords` file asked to rename one identifier came back entirely in English,
+    and `delulu check` then called it clean, so nothing downstream would have reported the loss.
+    The refusal prints the three-command way through — translate, fix, translate back — and that
+    path is itself tested, because a workaround nobody has run is a suggestion, not a remedy.
+  - **Edits are applied back to front**, the rule `docs/for-agents.md` has always stated. With an
+    ascending sort, two identifier renames one line apart produced `consume_e` and swallowed a
+    space — and the file still parsed, which is what makes that class of bug expensive later.
+  - A repair whose bytes collide with one already applied is skipped and said so; a repair that
+    would break parsing means **nothing is written at all**. That guard is deliberately not "the
+    error count must not rise" — fixing a parse error legitimately reveals the type errors it was
+    masking, and a guard that punished that would block the most useful fixes there are.
+
+  `--dry-run` writes nothing, `--json` emits one envelope carrying a `verdict` for **every** repair
+  including the skipped ones — an agent that cannot see a refused repair concludes there was
+  nothing to do.
+
 - **Signature help, carrying the authority row.** Writing a call now shows what it takes and
   **what it is allowed to do**, with the argument you are on highlighted — `authority: {Write}`
   before you commit to the call rather than after. That line is the part no other language's

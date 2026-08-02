@@ -122,6 +122,12 @@ is a bug — report it.
 
 Apply edits **back to front** by `start_byte`, so earlier offsets stay valid.
 
+**Or do not implement it at all: `delulu fix <file> --json` applies them for you**, under exactly
+the policy below — only `exact` repairs, never an `authority_widening` one unless you name it with
+`--accept-widening <id>`, and never at all if the file is stored in a surface morph (its repairs
+describe the canonical text, not the bytes on disk). Every repair comes back with a `verdict`
+saying what happened to it, so a skipped one is visible rather than looking like nothing to do.
+
 > ### `authority_widening: true` means DO NOT APPLY AUTOMATICALLY.
 >
 > A widening repair silences a diagnostic by giving the program **more authority**. It is exact and

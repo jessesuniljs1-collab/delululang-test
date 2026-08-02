@@ -672,6 +672,7 @@ fn run_inner(args: &[String]) -> i32 {
 
     match cmd.as_str() {
         "check" => cmd_check(rest),
+        "fix" => crate::fix::cmd_fix(rest),
         "fmt" => cmd_fmt(rest),
         "test" => cmd_test(rest),
         // Machine-only by construction: the first-run flow is suppressed for `lsp` in
@@ -794,6 +795,9 @@ fn usage() -> &'static str {
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
      \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
+     \x20 delulu fix       <file.delulu> [--dry-run] [--json] [--accept-widening <repair-id>]...\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (applies the checker's own typed repairs; a repair that would WIDEN what the program\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 may do is never applied unless you name it, and there is no accept-all flag)\n\
      \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
      \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
@@ -1838,7 +1842,12 @@ fn strip_morph_pragma(src: &str) -> String {
 /// permissions problem and sends the user hunting for an ACL that was never involved. Linux says
 /// `Is a directory`, so the misleading text was also platform-dependent. Name the real mistake and
 /// the command that does what they meant.
-fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
+/// Read a source file as the toolchain sees it: canonical text, its `SourceMap`, and its id.
+///
+/// `pub(crate)` for `delulu fix`, which must splice repair offsets into the same text the checker
+/// computed them against — and which compares this result against the bytes on disk to prove the
+/// two are identical before writing anything.
+pub(crate) fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
     let path = std::path::Path::new(file);
     if path.is_dir() {
         eprintln!("error: `{file}` is a directory, and this command takes a single `.delulu` file");
@@ -2009,7 +2018,6 @@ fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, autho
     if json {
         // Machine channel: never colored (addendum §2.5 / criterion 8), never localized
         // (invariant 39 — the envelope API cannot even see a catalog).
-        note_json_emitted();
         note_json_emitted();
         println!("{}", envelope_to_string(command, diags, authority, map));
     } else {
