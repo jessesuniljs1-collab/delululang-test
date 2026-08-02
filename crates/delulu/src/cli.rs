@@ -199,6 +199,14 @@ fn enable_vt() {}
 
 /// Parsed common options.
 struct Opts {
+    /// Every non-flag argument, in the order it was written.
+    ///
+    /// The parser used to keep the first and drop the rest in silence, so
+    /// `delulu check a.delulu b.delulu` printed `ok: a.delulu checked clean` and exited 0 while
+    /// `b.delulu` — never opened — held two errors. A shell glob or an agent got a green light on a
+    /// program nothing had looked at. Keeping them all is what lets `check` do the work and every
+    /// other command refuse rather than ignore.
+    positionals: Vec<String>,
     json: bool,
     grants: Vec<String>,
     grant_manifest: bool,
@@ -312,6 +320,7 @@ struct Opts {
 fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     let mut file = None;
     let mut opts = Opts {
+        positionals: Vec::new(),
         json: false,
         grants: Vec::new(),
         grant_manifest: false,
@@ -571,12 +580,37 @@ fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--grant=") => opts.grants.push(s["--grant=".len()..].to_string()),
-            s if !s.starts_with('-') && file.is_none() => file = Some(s.to_string()),
+            s if !s.starts_with('-') => {
+                if file.is_none() {
+                    file = Some(s.to_string());
+                }
+                opts.positionals.push(s.to_string());
+            }
             _ => {}
         }
         i += 1;
     }
     (file, opts)
+}
+
+/// Refuse the arguments a command was given but cannot act on.
+///
+/// Silently dropping an argument is the failure mode this exists to prevent: the tool reports
+/// success about work it never did, and the reader has no way to tell. Commands that legitimately
+/// take more than one path — `check` — do not call this.
+fn refuse_extra_positionals(cmd: &str, opts: &Opts) -> Option<i32> {
+    let extra = opts.positionals.get(1..)?;
+    if extra.is_empty() {
+        return None;
+    }
+    eprintln!(
+        "error: `{cmd}` takes one path, and was given {}: {}",
+        opts.positionals.len(),
+        opts.positionals.join(", ")
+    );
+    eprintln!("  nothing was done — the extra path is refused rather than silently ignored");
+    eprintln!("note: `delulu check` takes several files in one run; every other command takes one");
+    Some(2)
 }
 
 /// The CLI entry point, and the one place that guarantees the `--json` contract.
@@ -770,7 +804,8 @@ fn usage() -> &'static str {
      USAGE:\n\
      \x20 delulu new       <name> [--lib] [--json]   (a package that already checks, tests and runs;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 its declared ceiling is exactly what its code does — one effect for a bin, none for a lib)\n\
-     \x20 delulu check     <file.delulu | package-dir> [--json]\n\
+     \x20 delulu check     <file.delulu>... | <package-dir> [--json]   (several files in ONE process:\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the per-invocation floor dominates a small check — see measurements/agent-loop/RECORD.md)\n\
      \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
      \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
@@ -1875,6 +1910,18 @@ fn strip_morph_pragma(src: &str) -> String {
 /// computed them against — and which compares this result against the bytes on disk to prove the
 /// two are identical before writing anything.
 pub(crate) fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
+    let mut map = SourceMap::new();
+    let (id, src) = load_into(&mut map, file)?;
+    Ok((map, id, src))
+}
+
+/// The same, adding to a map that may already hold other files.
+///
+/// One map across several files is what lets a single `check` render every span correctly and emit
+/// **one** `--json` envelope, which the machine contract requires (`json_contract.rs`). Splitting
+/// this out changes nothing about a single-file load; it only gives the multi-file caller somewhere
+/// to accumulate.
+pub(crate) fn load_into(map: &mut SourceMap, file: &str) -> Result<(u32, String), i32> {
     let path = std::path::Path::new(file);
     if path.is_dir() {
         eprintln!("error: `{file}` is a directory, and this command takes a single `.delulu` file");
@@ -1927,9 +1974,8 @@ pub(crate) fn load(file: &str) -> Result<(SourceMap, u32, String), i32> {
                     }
                 }
             };
-            let mut map = SourceMap::new();
             let id = map.add_file(file, src.clone());
-            Ok((map, id, src))
+            Ok((id, src))
         }
         Err(e) => {
             // A compiled artifact handed to a source command produced a raw
@@ -2079,27 +2125,80 @@ fn errors(diags: &[Diagnostic]) -> usize {
 
 // ----- check ---------------------------------------------------------------
 
+/// `check` takes **one or more** files, and that is a performance decision made from a measurement.
+///
+/// `measurements/agent-loop/RECORD.md`: on Windows a bare process spawn costs 27.2 ms and this
+/// program's own work on a 35-line file costs 1.1 ms — so an agent checking twenty loose files paid
+/// 654 ms for 22 ms of compiling. One process doing all twenty costs about 54 ms. Nothing was made
+/// faster to get that; the loop just stopped paying the floor twenty times.
+///
+/// It is also a correctness fix. The parser kept the first non-flag argument and dropped the rest in
+/// silence, so `delulu check a.delulu b.delulu` — or a shell glob — printed `ok: a.delulu checked
+/// clean` and exited **0** while `b.delulu` was never opened. Reporting success about work you did
+/// not do is the failure this toolchain exists to refuse.
 fn cmd_check(rest: &[String]) -> i32 {
-    let (file, opts) = parse_opts(rest);
-    let Some(file) = file else {
+    let (first, opts) = parse_opts(rest);
+    let Some(first) = first else {
         eprintln!("error: `check` needs a file or package directory");
         return 2;
     };
-    if std::path::Path::new(&file).is_dir() {
-        return build_workspace(&file, &opts, "check", opts.locked);
+
+    // A package is checked as a whole — that path resolves imports, merges module rows and applies
+    // the manifest ceiling. Mixing one with loose files in a single report would blur which ceiling
+    // applied to what, so it is refused rather than guessed at.
+    if std::path::Path::new(&first).is_dir() {
+        if let Some(code) = refuse_extra_positionals("check", &opts) {
+            return code;
+        }
+        return build_workspace(&first, &opts, "check", opts.locked);
     }
-    let (map, id, src) = match load(&file) {
-        Ok(x) => x,
-        Err(c) => return c,
-    };
-    let checked = check_source(id, &src);
-    let n = errors(&checked.diagnostics);
-    print_diagnostics("check", &checked.diagnostics, &map, None, opts.json);
+
+    // One map, one diagnostic list: the human render keeps its single global cap (C32/D38) and the
+    // machine channel keeps its one-object contract, whether this is one file or fifty.
+    let mut map = SourceMap::new();
+    let mut diags = Vec::new();
+    let mut per_file: Vec<(&str, usize)> = Vec::new();
+    for file in &opts.positionals {
+        let (id, src) = match load_into(&mut map, file) {
+            Ok(x) => x,
+            Err(c) => return c,
+        };
+        let checked = check_source(id, &src);
+        per_file.push((file.as_str(), errors(&checked.diagnostics)));
+        diags.extend(checked.diagnostics);
+    }
+
+    let n = errors(&diags);
+    print_diagnostics("check", &diags, &map, None, opts.json);
     if !opts.json {
-        if n == 0 {
-            ok_line!("ok: {} checked clean", file);
+        if per_file.len() == 1 {
+            if n == 0 {
+                ok_line!("ok: {} checked clean", first);
+            } else {
+                eprintln!("{n} error(s)");
+            }
         } else {
-            eprintln!("{n} error(s)");
+            // Every file is named, including the clean ones. A summary that listed only failures
+            // would leave a reader unable to tell a file that passed from one that was skipped —
+            // which is the defect this multi-file form was written to remove.
+            for (f, e) in &per_file {
+                if *e == 0 {
+                    ok_line!("ok: {f} checked clean");
+                } else {
+                    eprintln!("{f}: {e} error(s)");
+                }
+            }
+            let clean = per_file.iter().filter(|(_, e)| *e == 0).count();
+            let line = format!(
+                "{} file(s) checked — {clean} clean, {} with errors, {n} error(s) total",
+                per_file.len(),
+                per_file.len() - clean
+            );
+            if n == 0 {
+                ok_line!("{}", line);
+            } else {
+                eprintln!("{line}");
+            }
         }
     }
     if n == 0 {
@@ -2113,6 +2212,9 @@ fn cmd_check(rest: &[String]) -> i32 {
 
 fn cmd_authority(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("authority", &opts) {
+        return code;
+    }
     if let Some(old_path) = opts.diff.clone() {
         let Some(new_arg) = file else {
             eprintln!("error: `authority --diff` needs <old.lock> and <new.lock-or-package-dir>");
@@ -2665,6 +2767,9 @@ fn manifest_python_allowlist(file: &str) -> Vec<String> {
 
 fn cmd_build(rest: &[String]) -> i32 {
     let (path, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("build", &opts) {
+        return code;
+    }
     let Some(path) = path else {
         eprintln!("error: `build` needs a source file (`--target wasm`) or a package directory");
         return 2;
@@ -2766,6 +2871,9 @@ fn cmd_plugin(rest: &[String]) -> i32 {
 /// real load** (criterion 9 — no verify/load divergence).
 fn cmd_plugin_verify(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("plugin verify", &opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `plugin verify` needs a `.dpx` file");
         return 2;
@@ -2828,6 +2936,9 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
 /// written — a refused build leaves no partial artifact and never touches an existing output file.
 fn cmd_plugin_build(rest: &[String]) -> i32 {
     let (dir, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("plugin build", &opts) {
+        return code;
+    }
     let Some(dir) = dir else {
         eprintln!("error: `plugin build` needs a package directory (with delulu.toml and src/)");
         return 2;
@@ -3049,6 +3160,9 @@ fn plugin_manifest_json(pm: &delulu_check::PluginManifest) -> Json {
 /// (spec §9.9 — one code path), so a corrupt artifact refuses here exactly as it would at load.
 fn cmd_plugin_inspect(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("plugin inspect", &opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `plugin inspect` needs a `.dpx` file");
         return 2;
@@ -3458,6 +3572,9 @@ fn write_interfaces(ws: &Workspace, program: &Program) {
 /// semver-authority law (DL1003) against the previous lock.
 fn cmd_lock(rest: &[String]) -> i32 {
     let (path, opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("lock", &opts) {
+        return code;
+    }
     let dir = path.unwrap_or_else(|| ".".to_string());
     if !std::path::Path::new(&dir).is_dir() {
         eprintln!("error: `lock` expects a package directory (with src/ and delulu.toml)");
@@ -3789,6 +3906,9 @@ fn cmd_why(rest: &[String]) -> i32 {
         return 2;
     };
     let (path, opts) = parse_opts(&remainder);
+    if let Some(code) = refuse_extra_positionals("why", &opts) {
+        return code;
+    }
     let Some(path) = path else {
         eprintln!("error: `why` needs a file or package directory");
         return 2;
@@ -6171,6 +6291,9 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
 
 fn cmd_run(rest: &[String]) -> i32 {
     let (file, mut opts) = parse_opts(rest);
+    if let Some(code) = refuse_extra_positionals("run", &opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `run` needs a file");
         return 2;

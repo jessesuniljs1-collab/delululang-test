@@ -31,7 +31,7 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 12 crates, ~94,000 lines of Rust. 109 test suites, 1,437 tests passing. Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Built and tested** | 12 crates, ~94,000 lines of Rust. 111 test suites, 1,449 tests passing. Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Start there before changing anything. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |
@@ -120,7 +120,7 @@ Next: [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) walks from here to wr
 ```sh
 delulu new <name> [--lib]            # a package that already checks, tests and runs
 delulu add --path <dir>              # a dependency, pinned at exactly the authority it needs
-delulu check <file|package>          # diagnostics with typed, machine-applicable repairs
+delulu check <file>... | <package>   # diagnostics with typed, machine-applicable repairs
 delulu fix <file>                    # apply them — never one that widens authority unless named
 delulu authority <file|package>      # everything this program can do, computed from the code
 delulu why <Effect> <file|package>   # why it can do that, at function granularity
@@ -132,6 +132,11 @@ delulu fmt <path>                    # one canonical style, zero options
 
 Add `--json` to any of them for the machine-readable envelope. `delulu --help` is the complete
 reference and is kept in sync with the code by a build gate.
+
+**Pass `check` all your files at once.** On Windows 82% of a small `check` is the operating system
+creating a process — the compiler's own work on a 35-line file is under 1.5 ms — so twenty separate
+invocations cost 711 ms where one costs 48. The numbers, the controls that produced them, and what
+they rule out are in [`measurements/agent-loop/RECORD.md`](measurements/agent-loop/RECORD.md).
 
 Shell completion is generated from that same command list, so it can never offer a command that
 does not exist or miss one that does:

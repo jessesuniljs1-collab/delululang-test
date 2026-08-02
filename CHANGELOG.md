@@ -180,6 +180,36 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu check` takes several files in one process — and the argument it used to drop in silence
+  is now refused.** Every performance table this project publishes measures the *marginal* cost of
+  size. None measured the **floor**: what one invocation costs on a program small enough to be free.
+  That floor is what an AI agent pays on every edit→check iteration, and
+  [`measurements/agent-loop/RECORD.md`](measurements/agent-loop/RECORD.md) finds it dominates
+  everything else.
+
+  On a 35-line file, **26.9 of 32.8 ms — 82% — is Windows creating a process**, before a byte of
+  DeluluLang runs; on Linux the share is 46%. The compiler's own work is under 1.5 ms on both. A
+  program must reach roughly **2,080 lines on Windows** (270 on Linux) before compiling it costs as
+  much as starting the process. Making the checker twice as fast would save 1.2% of a Windows loop.
+  The lever is the number of processes, so twenty files in one invocation now cost **48 ms against
+  711** on Windows (**14.8×**) and 14.2 against 119 on Linux (**8.4×**). Nothing was made faster.
+
+  Two hypotheses were killed by controls rather than argued away: the embedded CPython accounts for
+  1–3 ms (real, small, and not why the floor is 26.9 ms — a binary containing no DeluluLang at all
+  costs that), and `main.rs`'s 512 MiB interpreter stack costs 0.5–0.7 ms, below the spread of the
+  control, which is the first evidence for a docstring that has claimed it "costs nothing" since
+  Study C.
+
+  **The correctness half is the part worth remembering.** Asking whether one process could do
+  several files turned up something worse than a missing feature: the parser kept the first non-flag
+  argument and dropped the rest **in silence**. `delulu check a.delulu bad.delulu` printed
+  `ok: a.delulu checked clean` and exited **0** while `bad.delulu` — never opened — held two errors;
+  a shell glob did the same. Observed against the unmodified binary before anything changed. `check`
+  now checks them all and names every file including the clean ones; `authority`, `run`, `why`,
+  `build`, `lock` and the three `plugin` verbs refuse a second path rather than ignoring it. One
+  file behaves exactly as it always did — pinned across all 108 shipped targets by the
+  core-invariance snapshot, which caught nothing here because nothing moved.
+
 - **The core's answers are now pinned, so tooling built around the language cannot move the
   language.** Everything added after 1.0 — the language server, `fix`, `new`, `completions`,
   `add --path`, the Survey, the code dispositions — exists for the people and agents who *build*

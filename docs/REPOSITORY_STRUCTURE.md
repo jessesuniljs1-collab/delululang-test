@@ -83,6 +83,14 @@ DeluluLang/
 ├── morphs/                         # [D35] surface keyword morphs: zh-CN-keywords, compact-ai
 │                                   #   loaded by id from here, $DELULU_MORPH_PATH, or ~/.delulu/morphs
 │
+├── measurements/                   # every published number, with its date and its threats
+│   ├── agent-loop/                 # the FLOOR: what one invocation costs before a program grows
+│   │                               #   (82% of a small `check` on Windows is process creation) —
+│   │                               #   the others measure the MARGINAL cost of size
+│   ├── scale/                      # `check` against lines and shapes; monorepos; runtime widths
+│   ├── study-a/ study-b/ study-c/  # authority verification · agent repair loops · vs C
+│   └── METHODOLOGY.md              # the rules every study follows, incl. its negative controls
+│
 ├── examples/                       # runnable .delulu programs (demo.delulu is the reference)
 │   └── guide/                      # the samples docs/GETTING_STARTED.md is built from; a gate
 │                                   #   checks each one AND runs it (crates/delulu/tests/examples_run.rs)

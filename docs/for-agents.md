@@ -8,14 +8,15 @@
 ## [agents.start] Start here
 
 ```
-delulu check <file|package> --json     # diagnostics, with typed repairs
+delulu check <file>... --json          # diagnostics, with typed repairs — MANY FILES, ONE PROCESS
+delulu check <package> --json          # or a whole package, resolved together
 delulu authority <file|package> --json # what this program can do
 delulu run <file> --json --no-prompt   # run, never block on a human
 delulu test --json                     # run tests under an authority ceiling
 delulu explain DL0501                  # long-form docs for any code
 ```
 
-Three rules that will save you time:
+Four rules that will save you time:
 
 1. **`--json` is the contract; the human text is not.** Prose may improve in any release. The JSON
    envelope's existing fields will not change meaning.
@@ -24,6 +25,16 @@ Three rules that will save you time:
 3. **Read the exit code, not just the output.** A verdict string and an exit code that disagree is
    a bug — one such bug is on record (`docs/security/DRILL-001.md`), which is why this warning is
    here.
+4. **Batch your `check` calls, and do not batch anything else.** Starting the process is the cost,
+   not compiling: on Windows 82% of a small `check` is the operating system creating a process, and
+   the compiler's own work on a 35-line file is under 1.5 ms. Twenty files in twenty invocations
+   cost 711 ms; the same twenty in one cost 48. Still **one** envelope, with every diagnostic
+   carrying the file it came from in `spans[].file`. Every *other* command takes exactly one path
+   and refuses a second rather than silently using the first — measurements and the defect that
+   found this are in [`measurements/agent-loop/RECORD.md`](../measurements/agent-loop/RECORD.md).
+
+   If you are running a long edit→check loop, `delulu lsp` pays the process cost once and every
+   check after that is the sub-millisecond part.
 
 ### [agents.survey] If you are here to change the compiler, not to use it
 
