@@ -180,6 +180,27 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu add --path <dir>` — a dependency whose authority pin is computed, not guessed.** With
+  no hosted registry, a real dependency today is a directory beside yours, and declaring one meant
+  hand-writing `{ path = …, authority = { effects = […] } }` and guessing the pin — then learning
+  the right value by reading DL1001. The toolchain already knew it: the pin written is exactly what
+  `delulu authority <dir>` reports and exactly what `delulu publish` stamps into an index line. One
+  notion of what a package can do, used everywhere.
+
+  **It will not grant authority on your behalf.** A pure dependency is added outright — there is no
+  decision to make, because the package cannot do anything. A dependency that needs an effect is
+  *shown and refused*, with the exact accepting command printed; `--accept-authority` writes the
+  pin. Adding a dependency is the moment a supply chain acquires new authority, and a tool that
+  quietly widened a manifest at that moment would be doing the one thing this language exists to
+  prevent. Without the rule it was observed adding `{Write}` on its own, on both the human and the
+  JSON surface. The rule is the same one `delulu fix` follows for authority-widening repairs.
+
+  The pin is the dependency's authority and nothing more — the tempting shortcut is a permissive
+  pin that makes the first `check` pass, which would never be tightened and would leave
+  `authority --diff` nothing to notice when the dependency later grew. An existing pin is never
+  rewritten (that line is the one a reviewer reads), and a dependency that does not check clean is
+  refused rather than pinned at a value nobody can verify.
+
 - **A diagnostic code you cannot look up now has an answer instead of a dead end.** Sixteen
   `DLxxxx` were named across this repository — in specifications, in build orders, in the registry's
   own comments — that `REGISTRY` does not allocate. `delulu explain` answered `unknown code` for

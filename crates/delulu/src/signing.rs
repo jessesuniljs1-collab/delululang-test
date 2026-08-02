@@ -488,12 +488,19 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
 pub fn cmd_add(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
     let index = flag(rest, "--index");
+    // `--path` is the form that works today: there is no hosted registry, so a real dependency is
+    // a directory beside yours. Until now the only way to declare one was to hand-write the TOML
+    // and guess the authority pin, discovering the right value by reading DL1001.
+    if let Some(dir) = flag(rest, "--path") {
+        return add_path_dependency(&dir, rest.iter().any(|a| a == "--accept-authority"), json);
+    }
     let Some(pkg) = positional(rest) else {
-        eprintln!("error: `add` needs a package name");
+        eprintln!("error: `add` needs a package name, or `--path <dir>` for a local dependency");
         return 2;
     };
     let Some(index) = index else {
         eprintln!("error: `add` needs a local `--index <dir>` in v0.8 (hosted registry is Stage 9)");
+        eprintln!("note: for a package beside yours, `delulu add --path <dir>`");
         return 2;
     };
     let Some(line) = read_index_line(&index, &pkg) else {
@@ -518,6 +525,148 @@ pub fn cmd_add(rest: &[String]) -> i32 {
         println!("  (v0.8 resolves + shows authority from the index line; the download + lockfile write land with the hosted registry in Stage 9)");
     }
     0
+}
+
+/// `delulu add --path <dir>` — declare a dependency on the package in that directory.
+///
+/// **The pin is computed, not guessed.** A dependency line carries `authority = { effects = … }`,
+/// which is the ceiling the *consumer* grants; get it wrong and you learn the right answer by
+/// reading DL1001. The toolchain already knows it — it is exactly what `delulu authority <dir>`
+/// reports and exactly what `delulu publish` stamps into an index line — so this writes that.
+///
+/// **But it will not grant authority on your behalf.** A pure dependency is added outright: there
+/// is no decision to make, because the package cannot do anything. A dependency that needs an
+/// effect is *shown and refused*, with the command to accept it printed. Adding a dependency is
+/// the moment a supply chain acquires new authority, and a tool that quietly widened a manifest at
+/// that moment would be doing the one thing this language exists to prevent. The rule is the same
+/// one `delulu fix` follows for authority-widening repairs.
+fn add_path_dependency(dir: &str, accept: bool, json: bool) -> i32 {
+    let here = std::path::Path::new("delulu.toml");
+    if !here.is_file() {
+        eprintln!("error: no `delulu.toml` here — `add` declares a dependency of the package you are in");
+        eprintln!("note: `cd` into the package, or create one with `delulu new <name>`");
+        return 2;
+    }
+    let dep_dir = std::path::Path::new(dir);
+    if !dep_dir.join("delulu.toml").is_file() {
+        eprintln!("error: `{dir}` is not a DeluluLang package — no `delulu.toml` there");
+        return 2;
+    }
+    let Some(name) = manifest_package_name(&dep_dir.join("delulu.toml")) else {
+        eprintln!("error: `{dir}/delulu.toml` does not name a package (`[package] name = \"…\"`)");
+        return 2;
+    };
+
+    let Ok(current) = std::fs::read_to_string(here) else {
+        eprintln!("error: cannot read `delulu.toml`");
+        return 2;
+    };
+    // Never silently rewrite an existing pin: that is precisely the line a reviewer reads.
+    if current.lines().any(|l| l.trim_start().starts_with(&format!("{name} ="))) {
+        eprintln!("error: `{name}` is already a dependency here");
+        eprintln!("note: `add` never rewrites an existing pin — that line is the one a reviewer reads");
+        return 2;
+    }
+
+    // The dependency's OWN computed authority: the same number `delulu authority` prints and
+    // `publish` stamps. Computing it means checking the dependency, so a broken one is refused
+    // here rather than pinned at a value nobody could verify.
+    let Some(report) = crate::cli::package_authority_value(dir) else {
+        eprintln!("error: `{dir}` does not check clean, so its authority cannot be computed");
+        eprintln!("note: `delulu check {dir}` — a pin nobody can verify is worse than no pin");
+        return 1;
+    };
+    let effects: Vec<String> = report
+        .get("effects")
+        .and_then(|e| e.as_array())
+        .map(|xs| xs.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+
+    let rel = dir.replace('\\', "/");
+    let list = effects.iter().map(|e| format!("\"{e}\"")).collect::<Vec<_>>().join(", ");
+    let line = format!("{name} = {{ path = \"{rel}\", authority = {{ effects = [{list}] }} }}");
+
+    if !effects.is_empty() && !accept {
+        if json {
+            crate::cli::note_json_emitted();
+            println!(
+                "{}",
+                json!({
+                    "command": "add", "name": name, "path": rel, "written": false,
+                    "authority": { "effects": effects },
+                    "refused": "granting authority to a dependency is a decision for a person",
+                })
+            );
+        } else {
+            eprintln!("add: `{name}` needs authority you have not granted — nothing was written.");
+            eprintln!("\n  it can perform: {{{}}}", effects.join(", "));
+            eprintln!("\nAdding it grants your package's supply chain that authority. Review it with");
+            eprintln!("  delulu authority {dir}");
+            eprintln!("and if it is what you intend:");
+            eprintln!("  delulu add --path {dir} --accept-authority");
+        }
+        return 1;
+    }
+
+    let mut next = current.clone();
+    if !next.contains("[dependencies]") {
+        if !next.ends_with('\n') {
+            next.push('\n');
+        }
+        next.push_str("\n# What this package may reach, and what it is granted. The `authority` on\n");
+        next.push_str("# each line is a CEILING the dependency cannot exceed — `delulu check` refuses\n");
+        next.push_str("# with DL1001 when it tries, and `delulu authority --diff` treats a later\n");
+        next.push_str("# widening of one of these lines as the supply-chain event it is.\n");
+        next.push_str("[dependencies]\n");
+    }
+    if !next.ends_with('\n') {
+        next.push('\n');
+    }
+    next.push_str(&line);
+    next.push('\n');
+    if let Err(e) = std::fs::write(here, &next) {
+        eprintln!("error: cannot write `delulu.toml`: {e}");
+        return 2;
+    }
+
+    if json {
+        crate::cli::note_json_emitted();
+        println!(
+            "{}",
+            json!({
+                "command": "add", "name": name, "path": rel, "written": true,
+                "authority": { "effects": effects },
+            })
+        );
+    } else {
+        println!("add: {name} (path {rel})");
+        println!(
+            "  granted: {}",
+            if effects.is_empty() { "nothing — it is provably pure".to_string() } else { format!("{{{}}}", effects.join(", ")) }
+        );
+        println!("  pinned in delulu.toml; `delulu check .` verifies it");
+    }
+    0
+}
+
+/// `[package] name` from a manifest, read line-wise like the rest of this toolchain's TOML.
+fn manifest_package_name(path: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut in_package = false;
+    for raw in text.lines() {
+        let t = raw.trim();
+        if let Some(section) = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            in_package = section.trim() == "package";
+            continue;
+        }
+        if in_package {
+            if let Some(v) = t.strip_prefix("name") {
+                let v = v.trim_start().strip_prefix('=')?.trim();
+                return Some(v.trim_matches('"').to_string());
+            }
+        }
+    }
+    None
 }
 
 /// One JSONL index line (spec §7): the authority summary rides WITH the version, so a

@@ -31,7 +31,7 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 12 crates, ~94,000 lines of Rust. 107 test suites, 1,429 tests passing. Conformance coverage is a hard per-commit gate at 100%. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Built and tested** | 12 crates, ~94,000 lines of Rust. 108 test suites, 1,436 tests passing. Conformance coverage is a hard per-commit gate at 100%. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Start there before changing anything. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |
@@ -119,6 +119,7 @@ Next: [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) walks from here to wr
 
 ```sh
 delulu new <name> [--lib]            # a package that already checks, tests and runs
+delulu add --path <dir>              # a dependency, pinned at exactly the authority it needs
 delulu check <file|package>          # diagnostics with typed, machine-applicable repairs
 delulu fix <file>                    # apply them — never one that widens authority unless named
 delulu authority <file|package>      # everything this program can do, computed from the code
