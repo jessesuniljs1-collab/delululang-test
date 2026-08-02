@@ -670,6 +670,167 @@ fn no_provider_answers_from_a_stale_analysis() {
     c.shutdown();
 }
 
+// ===== incremental synchronisation =========================================
+
+/// A range edit must land the server on exactly the document the editor has.
+///
+/// This is the failure mode incremental sync exists to risk: the server's copy drifts from the
+/// client's by a byte, nothing announces it, and from then on every diagnostic, hover and rename
+/// is computed against text the user cannot see and reported at offsets that no longer line up.
+///
+/// So the test does not check the edits individually — it applies a sequence of them and then
+/// requires the server to say **the same things** about the result as it says about a second
+/// document opened with that text in one go. Semantic tokens carry the most weight: they are
+/// delta-encoded across the whole file including comments, so a single byte of drift moves every
+/// token after it.
+///
+/// The sequence is chosen to hit the four places implementations break: an insert inside a line,
+/// a delete spanning a line boundary, two changes in one notification (the second's range is
+/// expressed against the result of the first, not against the original), and positions past a
+/// multi-byte character — LSP columns are UTF-16 code units, so in `test "λ"` the closing quote
+/// sits at column 7 but byte **8**, and an implementation that treats columns as bytes lands
+/// inside `λ` instead of after it.
+///
+/// The multi-byte edits deliberately land in a **test block's name**, because `documentSymbol`
+/// echoes that name verbatim and so carries the actual characters into the response. An earlier
+/// draft of this test put them in a comment and *passed against a byte-indexed implementation* —
+/// `// λ ok` and `//  okλ` have the same start and the same UTF-16 length, so every derived
+/// artifact matched while the two documents differed. A test that cannot fail is not a test.
+#[test]
+fn incremental_edits_agree_with_a_full_replace() {
+    let start = "module m\n\nfn alpha() -> Int { 1 }\nfn beta() -> Int { 2 }\ntest \"λ\" { assert(true) }\n";
+    let expected =
+        "module m\n\nfn alphaX() -> Int { 1 }\nfn gamma() -> Int { 3 }\ntest \"λABCD\" { assert(true) }\n";
+    let live = "file:///inc.delulu";
+    let reference = "file:///ref.delulu";
+
+    let mut c = Client::start();
+    c.open(live, start);
+    let _ = c.wait_diagnostics(live);
+
+    let edit = |c: &mut Client, version: i64, changes: Value| {
+        c.notify(
+            "textDocument/didChange",
+            json!({ "textDocument": { "uri": live, "version": version }, "contentChanges": changes }),
+        );
+        let _ = c.wait_diagnostics(live);
+    };
+
+    // 1. Insert inside a line: `alpha` becomes `alphaX`.
+    edit(&mut c, 2, json!([{
+        "range": { "start": { "line": 2, "character": 8 }, "end": { "line": 2, "character": 8 } },
+        "text": "X"
+    }]));
+    // 2. Delete a whole line, range spanning the line boundary.
+    edit(&mut c, 3, json!([{
+        "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 4, "character": 0 } },
+        "text": ""
+    }]));
+    // 3. Insert text containing a newline at the end of the document.
+    edit(&mut c, 4, json!([{
+        "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 3, "character": 0 } },
+        "text": "fn gamma() -> Int { 3 }\n"
+    }]));
+    // 4. Two changes in ONE notification, both immediately after the `λ` in the test name.
+    //    Column 7 is the position after `λ` (byte 8); column 9 is the position after `λAB`
+    //    (byte 10) and is only correct if the first change has ALREADY been applied. Counting
+    //    columns in bytes lands inside `λ` on both, putting the inserted text before it:
+    //    `test "ABCDλ"` instead of `test "λABCD"`.
+    edit(&mut c, 5, json!([
+        {
+            "range": { "start": { "line": 4, "character": 7 }, "end": { "line": 4, "character": 7 } },
+            "text": "AB"
+        },
+        {
+            "range": { "start": { "line": 4, "character": 9 }, "end": { "line": 4, "character": 9 } },
+            "text": "CD"
+        }
+    ]));
+
+    c.open(reference, expected);
+    let _ = c.wait_diagnostics(reference);
+
+    let ask = |c: &mut Client, method: &str, uri: &str| {
+        c.request(method, json!({ "textDocument": { "uri": uri } }))
+    };
+    assert_eq!(
+        ask(&mut c, "textDocument/semanticTokens/full", live),
+        ask(&mut c, "textDocument/semanticTokens/full", reference),
+        "the incrementally edited document is not byte-identical to the one opened whole"
+    );
+    assert_eq!(
+        ask(&mut c, "textDocument/documentSymbol", live),
+        ask(&mut c, "textDocument/documentSymbol", reference),
+        "symbols disagree between the incremental and full paths"
+    );
+    let names: Vec<String> = ask(&mut c, "textDocument/documentSymbol", live)
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        ["alphaX", "gamma", "test \"λABCD\""],
+        "the edits produced the intended document: {names:?}"
+    );
+    c.shutdown();
+}
+
+/// The server advertises incremental sync, and `openClose` with it.
+///
+/// Stated as its own test because the omission is silent and total: a client reading the object
+/// form of `textDocumentSync` without `openClose` never sends `didOpen`, so the server ends up
+/// with no documents and answers every request with nothing, while looking perfectly healthy.
+#[test]
+fn incremental_sync_is_advertised_with_open_close() {
+    let mut c = Client::start();
+    let caps = c.request("initialize", json!({ "capabilities": {} }));
+    let sync = &caps["capabilities"]["textDocumentSync"];
+    assert_eq!(sync["change"], 2, "incremental sync: {sync}");
+    assert_eq!(sync["openClose"], true, "openClose must be explicit in the object form: {sync}");
+    c.shutdown();
+}
+
+/// A malformed range must not take the editing session down with it.
+///
+/// The offsets in a `didChange` arrive from another process over a pipe, and `replace_range`
+/// panics on a range it does not like. An inverted range, a line past the end of the file and a
+/// column past the end of a line are all sent here; afterwards the server must still be answering.
+#[test]
+fn a_malformed_range_cannot_kill_the_server() {
+    let uri = "file:///rough.delulu";
+    let mut c = Client::start();
+    c.open(uri, "module m\nfn ok() -> Int { 1 }\n");
+    let _ = c.wait_diagnostics(uri);
+
+    for (n, range) in [
+        // Inverted: end before start.
+        json!({ "start": { "line": 1, "character": 10 }, "end": { "line": 1, "character": 2 } }),
+        // A line that does not exist.
+        json!({ "start": { "line": 99, "character": 0 }, "end": { "line": 99, "character": 5 } }),
+        // A column far past the end of a real line.
+        json!({ "start": { "line": 0, "character": 9999 }, "end": { "line": 0, "character": 9999 } }),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        c.notify(
+            "textDocument/didChange",
+            json!({
+                "textDocument": { "uri": uri, "version": 2 + n },
+                "contentChanges": [{ "range": range, "text": "\n" }]
+            }),
+        );
+        let _ = c.wait_diagnostics(uri);
+    }
+
+    // Still alive, still answering, still shutting down cleanly.
+    let syms = c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": uri } }));
+    assert!(syms.is_array(), "the server survived and still answers: {syms}");
+    c.shutdown();
+}
+
 /// Closing a document and reopening it must not resurrect the analysis of what it used to hold.
 ///
 /// This is the ordinary life of a file under an agent or a version-control operation: the editor

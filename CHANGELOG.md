@@ -317,6 +317,24 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
+- **The language server accepts incremental edits** (`textDocumentSync: 2`): a keystroke sends the
+  range it touched instead of the whole file. A change carrying no range still replaces the
+  document outright, so every full-sync client keeps working untouched and a client that loses
+  track can resynchronise by sending one.
+
+  Applying ranges is where servers quietly corrupt their copy of a file, so the test does not
+  check the edits individually — it applies a sequence and requires the server to say the same
+  things about the result as about a second document opened with that text in one go. The first
+  version of that test **passed against a deliberately byte-indexed implementation**: it put the
+  multi-byte character in a comment, and `// λ ok` and `//  okλ` have the same start and the same
+  UTF-16 length, so every derived artifact matched while the two documents differed. The edits now
+  land in a test block's name, which `documentSymbol` echoes verbatim — `test "ABCDλ"` where
+  `test "λABCD"` was meant is caught, and the same ranges that hid it are still reported.
+
+  Malformed ranges are normalised rather than trusted. An inverted range used to kill the process
+  outright — observed as the client seeing the server hang up mid-session — and a language server
+  that dies on one bad message takes the whole editing session with it.
+
 - **The language server checks a document once per edit, not once per question.** Every provider
   used to call `check_source` itself, so a `references` request across four open documents ran four
   full type-checks, the `rename` that followed ran eight more, and the next keystroke started over.

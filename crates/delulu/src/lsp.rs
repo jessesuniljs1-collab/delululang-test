@@ -48,14 +48,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
             }
             Some("textDocument/didChange") => {
                 let uri = msg["params"]["textDocument"]["uri"].as_str().unwrap_or("").to_string();
-                // Full sync (declared in the capabilities): the last change carries the text.
-                if let Some(text) = msg["params"]["contentChanges"]
-                    .as_array()
-                    .and_then(|a| a.last())
-                    .and_then(|c| c["text"].as_str())
-                {
-                    server.open(uri.clone(), text.to_string());
-                    server.publish(&uri);
+                if let Some(changes) = msg["params"]["contentChanges"].as_array() {
+                    if server.change(&uri, changes) {
+                        server.publish(&uri);
+                    }
                 }
             }
             Some("textDocument/didClose") => {
@@ -143,6 +139,39 @@ impl Doc {
         Doc { text, analysis: RefCell::new(None) }
     }
 
+    /// Apply one `didChange` notification's edits.
+    ///
+    /// This is the **only** path that changes a document's text after it is opened, and it drops
+    /// the analysis in the same breath — so there is no way to update one without invalidating
+    /// the other, which is the property the whole cache rests on.
+    ///
+    /// Each change's range is expressed against the document as it stands *after* every preceding
+    /// change in the same notification, so they are applied one at a time and never batched or
+    /// reordered. A change carrying no `range` replaces the document outright: the protocol
+    /// permits that even under incremental sync, which is what keeps every full-sync client — and
+    /// every client that decides to resynchronise mid-session — working unchanged.
+    fn apply(&mut self, changes: &[Value]) {
+        for ch in changes {
+            let Some(new_text) = ch["text"].as_str() else { continue };
+            let range = ch.get("range").filter(|r| !r.is_null());
+            let Some(r) = range else {
+                self.text = new_text.to_string();
+                continue;
+            };
+            let at = |p: &Value| {
+                pos_to_byte(&self.text, p["line"].as_u64().unwrap_or(0), p["character"].as_u64().unwrap_or(0))
+                    as usize
+            };
+            let (a, b) = (at(&r["start"]), at(&r["end"]));
+            // The protocol says start ≤ end. Normalising rather than trusting it is deliberate:
+            // this is one `replace_range` away from a panic, and a language server that dies on a
+            // single malformed message takes the whole editing session down with it.
+            let (s, e) = (snap(&self.text, a.min(b)), snap(&self.text, a.max(b)));
+            self.text.replace_range(s..e, new_text);
+        }
+        *self.analysis.borrow_mut() = None;
+    }
+
     /// The checked form of this document — computed at most once per edit.
     ///
     /// Every provider used to call `check_source` itself, so a `references` request across ten
@@ -174,6 +203,19 @@ impl Server {
     /// Forget a document entirely. One removal, because there is only one place it lives.
     fn close(&mut self, uri: &str) {
         self.docs.remove(uri);
+    }
+
+    /// Apply a `didChange`. Answers whether the document was open, so the caller knows whether
+    /// there is anything to republish — a change to a document nobody opened is not an error the
+    /// protocol has a reply for, and inventing diagnostics for it would be worse than ignoring it.
+    fn change(&mut self, uri: &str, changes: &[Value]) -> bool {
+        match self.docs.get_mut(uri) {
+            Some(doc) => {
+                doc.apply(changes);
+                true
+            }
+            None => false,
+        }
     }
 
     /// The checked form of an open document. See [`Doc::analyze`].
@@ -215,7 +257,13 @@ impl Server {
     fn initialize(&self) -> Value {
         json!({
             "capabilities": {
-                "textDocumentSync": 1, // full
+                // 2 = incremental: an edit sends the range it touched, not the whole file. A
+                // full-text change is still honoured (see `Doc::apply`), so a client that prefers
+                // to resend everything — or that resynchronises after losing track — keeps
+                // working. `openClose` has to be stated explicitly once this is an object rather
+                // than the bare number, or a client will never send didOpen and the server will
+                // have no documents at all.
+                "textDocumentSync": { "openClose": true, "change": 2 },
                 "hoverProvider": true,
                 // No trigger characters, deliberately. An editor already asks for completions as
                 // an identifier is typed, which is every context this server answers well. Naming
@@ -870,6 +918,19 @@ fn byte_to_pos(text: &str, byte: u32) -> Value {
 
 fn byte_range(text: &str, start: u32, end: u32) -> Value {
     json!({ "start": byte_to_pos(text, start), "end": byte_to_pos(text, end) })
+}
+
+/// The nearest char boundary at or before `i`, clamped to the length of `text`.
+///
+/// `pos_to_byte` already lands on a boundary, so on a well-formed message this changes nothing.
+/// It is here because the alternative to a clamp is a panic: `String::replace_range` requires
+/// boundaries, and the offsets it is given come from another process over a pipe.
+fn snap(text: &str, i: usize) -> usize {
+    let mut i = i.min(text.len());
+    while i > 0 && !text.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 fn pos_to_byte(text: &str, line: u64, character: u64) -> u32 {

@@ -42,6 +42,10 @@ transport: stdio
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.
 - **`delulu.authority`** (workspace/executeCommand) — the §10.5 authority report as
   JSON over the wire; agent harnesses call this instead of shelling out.
+- **Incremental sync** (`textDocumentSync: 2`) — an edit sends the range it touched
+  rather than the whole file, and the document is checked once per edit rather than
+  once per question asked about it. A client that prefers to resend the whole text is
+  still honoured, so nothing needs configuring either way.
 
 ## What the server can NOT do — by construction
 
