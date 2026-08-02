@@ -54,6 +54,12 @@ uncontended. This is the line every later claim is measured against.
 | `delulu-conform --check-reference` | exit 0 |
 | `cargo clippy --workspace --all-targets` | exit 0, **65 warnings** (tracked baseline, not a gate) |
 
+That **65 is left as recorded**, but read it as "the old measure": on 2026-08-03 the counting method
+was found to include cargo's per-crate summary lines and to depend on cache warmth, so it was never a
+count of findings. See the 2026-08-03 subsection of `CROSS_PLATFORM_VERIFICATION.md` §2 for the fault
+and the reproducible command. Cold, findings-only, the same tree measures **14 on Windows / 15 on
+Linux**.
+
 Workspace size: **~93,500 lines of Rust** across 12 shipped crates plus one tooling crate, 193
 files. These numbers are no longer maintained by hand — `docs/survey/SURVEY.md` recounts them from
 the tree on every build, and a stale figure here now fails a test rather than sitting quietly (the
@@ -2297,6 +2303,70 @@ so every no-panic sweep in the tree was structurally blind to it.
 **Four of the pass's own findings dissolved under checking and are recorded as dissolved**, in
 `PRODUCTION_READINESS_REVIEW.md` §3 — including one where the reviewer's `grep` used the reviewer's
 vocabulary instead of the document's. A review that only reports problems is not a review.
+
+## Overnight sweeps, 2026-08-03 — three NEGATIVE results worth as much as the findings
+
+After C72–C76 the same method was pointed at three more surfaces. **All three came back clean**, and
+that is recorded here because a campaign that only writes down its hits cannot tell a robust surface
+from an unexamined one.
+
+- **Subverbs and wrong-shaped arguments — 23/23 refused.** Bogus subverbs across `audit`, `secrets`,
+  `grants`, `guard`, `plugin`, `locale`, `morph`, `broker`, `fleet`, `deploy`, `atlas`; empty-string
+  paths; a file where a directory belongs and the reverse; unknown effects and unallocated codes.
+- **The `--json` contract survived the day's changes.** The nine *new* failure paths (unknown flags,
+  missing values) each emit **exactly one object**. One apparent failure was the sweep's own counter:
+  `doctor` emits a **compact single-line** envelope while others pretty-print, so a `^{$` match misses
+  it. Both are one valid object; not a defect, and worth knowing before someone "fixes" it.
+- **The LSP survived 21 hostile inputs** it had never been given: malformed framing, a
+  `Content-Length` that lies in both directions, negative and non-numeric lengths, truncated bodies,
+  unbalanced JSON, 200-deep nesting, unknown methods, `didChange` before `didOpen`, hover on an
+  unopened file, positions at 99999 and −1. No hang, no panic, no signal. **Verified non-vacuous** —
+  a valid `initialize` returns a properly framed response and exit 0, so "everything exits 1" was not
+  the server being broken.
+
+**The pattern in where the bugs were.** Every defect found in this pass (C72–C76) lived in the
+**authoring and custody CLI** — commands written after the adversarial phases ended, or never fired
+at. The surfaces those phases *did* cover held under the same treatment. That is the clearest
+argument yet for the rule the pass produced: **a command written after a lesson does not inherit it**,
+so new surface needs its own hostile pass rather than the assumption that the house style carried.
+
+**The CLI and the compiler, driven by hand on both platforms.** The suite proves the code; it does not
+prove *the program a person types*. So the shipped binary was driven directly with 21 cases asserting
+**exit status** — a compiler that prints `error` and exits 0 is broken, and a refusal that exits 0 is
+a security defect. **21/21 on Windows and 21/21 on Linux, identical case for case**: `check` rejecting
+a parse error, a type error and an undeclared effect; `run` refused with **DL0703** without the grant
+and succeeding with it; unknown subcommand, unknown flag and a flag **missing its value** all refused;
+`new` refusing the reserved device name `con` **on Linux as well as Windows**, so a package authored on
+Linux cannot become un-checkoutable on Windows. Two of the sweep's own expectations were wrong before
+the product was — it demanded exit 1 where `STABILITY.md` specifies **2 for a usage error**, and it
+treated a second positional to `check` as an extra when `check` takes **many files by design**.
+
+**Clippy — and a measurement that was wrong, not just stale.** The count published for months was
+produced by `grep -cE '^warning:|^error:'`, which also matches cargo's **per-crate summary lines**
+(``warning: `delulu-wasm` (lib) generated 1 warning``). Those are not findings. Worse, a **warm**
+`cargo clippy` does not re-emit warnings for units it did not re-lint, so the same tree measured
+26 and then 42 minutes apart. **A clippy count is only meaningful measured cold, in an isolated
+target dir, with summary lines excluded.** Measured that way, on the same machine, before and after:
+
+| | before (`0c98a58`) | after |
+|---|---|---|
+| Windows | **34** real findings | **14** |
+| Linux | **35** | **15** |
+
+Both platforms fell by exactly 20, and the one-warning Linux surplus held — the same delta the old
+inflated figures showed as 65 vs 66, which is a small piece of evidence that the old numbers were
+consistently wrong rather than randomly wrong.
+
+The reduction came from converting every `let mut g = X::default(); g.f = v;` to the initializer form
+the tree had already chosen — **12 sites, all test-only**, with `mut` deliberately kept where a
+`.insert()`/`.push()` follows. **None of the findings was ever a `clippy::correctness` lint**, and the
+14 that remain are style or design: three complex types, three `while let` loops, a deliberately named
+`eq`, an 8-argument host function, AST variant sizes that boxing would churn every construction site to
+change. Two that looked suspicious were read rather than assumed and are benign — the "assertion has a
+constant value" is a **deliberate static guard** in the test that exists to prove the explain-coverage
+check *can* fail, and the hand-built NUL string is a **test fixture**, not a production FFI path. The
+count is watched for *movement*, not driven to zero, and it is **per platform**: macOS would be a third
+number nobody has seen.
 
 ### What this campaign does not claim
 

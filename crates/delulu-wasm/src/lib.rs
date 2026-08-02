@@ -236,8 +236,7 @@ mod tests {
         let wasm_out = run_main_console(&wasm, true).expect("wasm run");
 
         set_capture(true);
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants { console: true, ..Default::default() };
         let interp = Interp::new(&checked.module);
         interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
         let interp_out = take_capture().expect("capture on");
@@ -266,8 +265,7 @@ mod tests {
         let wasm_out = run_main_console(&wasm, true).expect("wasm run");
 
         set_capture(true);
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants { console: true, ..Default::default() };
         let interp = Interp::new(&checked.module);
         interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
         let interp_out = take_capture().expect("capture on");
@@ -353,9 +351,7 @@ mod tests {
 
         set_capture(true);
         set_fixed_clock_ms(Some(fixed_ms));
-        let mut g = Grants::default();
-        g.console = true;
-        g.clock = true;
+        let g = Grants { console: true, clock: true, ..Default::default() };
         let interp = Interp::new(&checked.module);
         interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
         let interp_out = take_capture().expect("capture on");
@@ -402,9 +398,7 @@ mod tests {
 
         set_capture(true);
         set_rand_seed(seed);
-        let mut g = Grants::default();
-        g.console = true;
-        g.rand = true;
+        let g = Grants { console: true, rand: true, ..Default::default() };
         let interp = Interp::new(&checked.module);
         interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
         let interp_out = take_capture().expect("capture on");
@@ -592,9 +586,7 @@ mod tests {
         let wasm_out = run_main(&wasm, &cfg).expect("wasm run");
 
         set_capture(true);
-        let mut g = Grants::default();
-        g.console = true;
-        g.fs_read = vec![dir.to_string_lossy().to_string()];
+        let g = Grants { console: true, fs_read: vec![dir.to_string_lossy().to_string()], ..Default::default() };
         let interp = Interp::new(&checked.module);
         interp.run_main(Value::Root(std::rc::Rc::new(g.build_root()))).expect("interp run");
         let interp_out = take_capture().expect("capture");

@@ -20,7 +20,9 @@ Python-less build); plus this project's own `delulu-conform --coverage` (invaria
 baseline; it is **not** a CI gate (there is no `-D warnings` anywhere in the tree).
 
 **The lint baseline is per-platform, and the third number has never been seen.** Windows and Linux
-differ (65 vs 66) because Linux compiles four tests Windows skips. macOS would be a *third* count: it
+differ — 14 vs 15 real findings measured cold on 2026-08-03 — because each platform compiles a
+different set of tests (§2 names them, and §2 also explains why every earlier count in this document
+was measured by a method that inflated it). macOS would be a *third* count: it
 takes the `unix` branches Linux takes, but excludes the Linux-only ones (the microVM module,
 `PR_SET_PDEATHSIG`) and the Windows ones. Nobody has run it, so nobody knows it. Quoting "65/66" as
 though it were the whole story would repeat, in miniature, the mistake this document exists to
@@ -61,6 +63,97 @@ Linux side, unrelated to any gate; it is tracked, not blocking.
 | `conform --check-reference` | ✅ 24 chapters in sync | (arch-independent) |
 | macOS | **never run** — see §8 | |
 
+### Re-verified 2026-08-03 (production-readiness pass), with the platform delta NAMED
+
+| Gate | Windows | Linux (WSL Ubuntu-20.04) |
+|---|---|---|
+| `cargo test --workspace` | ✅ **113 suites / 1,488 passed / 0 failed / 4 ignored** (1,492 listed) | ✅ **113 / 1,494 / 0 / 4** (1,498 listed) |
+| `clippy --workspace --all-targets` (cold, findings only) | ✅ **14** / 0 errors (was **34**) | ✅ **15** / 0 errors (was **35**) |
+| `conform --coverage` | ✅ 100% | ✅ 100% |
+| `conform --check-reference` | ✅ 24 chapters in sync | ✅ 24 chapters in sync |
+| `fmt --check examples` | ✅ 0 would change, 13 clean | ✅ 0 would change, 13 clean |
+| `doctor --check` | ✅ 12/12 | ✅ 12/12 |
+| macOS | **never run** — see §5 and §8 | |
+
+**Every clippy number in the older dated tables was measured by a method that inflated it.** Two
+separate faults, found on 2026-08-03 when the same tree reported 26 and then 42 within the hour:
+
+1. **The counter matched cargo's summary lines.** `grep -cE '^warning:|^error:'` also counts
+   ``warning: `delulu-wasm` (lib) generated 1 warning`` — one such line per crate per target, 13–18 of
+   them. They are totals, not findings, so every historical figure includes them.
+2. **A warm `cargo clippy` under-reports.** Cargo does not re-emit warnings for units it did not
+   re-lint, so the count depends on what happened to be cached — which makes a bare number
+   unreproducible and not comparable between runs.
+
+A clippy count is therefore only meaningful **cold, in an isolated target dir, with summary lines
+excluded**:
+
+```
+CARGO_TARGET_DIR=<throwaway> cargo clippy --workspace --all-targets 2>&1 \
+  | grep -E '^warning:|^error:' | grep -vE 'generated [0-9]+ warning' | wc -l
+```
+
+The dated figures earlier in this document and in `STAGE10_BUILD_ORDER.md` are **left as they were
+recorded** — they are the honest output of the method used at the time, and rewriting them would hide
+the mistake rather than fix it. Read them as "the old measure", not as findings. The before/after in
+the table above (34→14 Windows, 35→15 Linux) was taken cold on one machine, at `0c98a58` and at the
+working tree, so it is internally comparable even though it is not comparable to the older numbers.
+
+**The 6-test delta, by name.** Earlier revisions of this document called it "four tests Windows
+skips". Both halves of that had gone stale, so it was re-derived the only way that settles it —
+`cargo test --workspace -- --list` on each platform, sorted under `LC_ALL=C`, and diffed:
+
+| Linux-only (8) | |
+|---|---|
+| `broker_transport::imp::tests::a_socket_path_the_kernel_cannot_hold_is_refused_by_name` | Unix-domain sockets |
+| `broker_transport::imp::tests::an_ordinary_state_directory_is_accepted` | Unix-domain sockets |
+| `limits::tests::live_engine::a_well_behaved_module_returns_its_result_untouched` | real wasmtime engine |
+| `limits::tests::live_engine::criterion5_a_bug_trap_under_generous_limits_is_not_a_limit_through_the_real_engine` | real wasmtime engine |
+| `limits::tests::live_engine::criterion5_infinite_loop_dies_at_fuel_and_the_host_survives` | real wasmtime engine |
+| `limits::tests::live_engine::criterion5_infinite_loop_dies_at_wall_when_fuel_is_generous` | real wasmtime engine |
+| `limits::tests::live_engine::criterion5_memory_bomb_dies_at_mem_mb_and_the_host_survives` | real wasmtime engine |
+| `tests::a_verified_plugin_runs_on_the_wasm_engine_under_the_contained_limits` | real wasmtime engine |
+
+| Windows-only (2) | |
+|---|---|
+| `limits::tests::windows_refuses_contained_execution_rather_than_risk_a_fastfail` | asserts the refusal |
+| `tests::a_verified_plugin_on_wasm_inherits_the_windows_enforcement_refusal` | asserts the refusal |
+
+8 − 2 = 6, which is the whole of it. (`interp::on_interpreter_thread`'s doctest appears in both
+listings under different path separators — `/` versus `\` — and is not part of the delta.)
+
+**"Windows skips" was the misleading word.** Windows does not silently omit contained WASM
+execution: the fastfail-risking path is not compiled there at all, and Windows compiles **its own
+two tests that assert the refusal happens**. The platform difference is a decision with witnesses on
+both sides of it, not a coverage hole on one. Anyone comparing raw suite totals across platforms
+should expect Linux to be ahead by exactly this set, and should re-derive it with `--list` rather
+than trusting a number in prose — including this one.
+
+### The CLI and the compiler, driven by hand on both platforms
+
+The suite proves the code; it does not prove *the program a person actually types*. So the shipped
+binary was driven directly on each platform with 21 cases that assert **exit status**, because a
+compiler that prints `error` and exits 0 is broken and a refusal that exits 0 is a security defect:
+
+| | Windows | Linux |
+|---|---|---|
+| CLI + compiler sweep (21 cases) | ✅ **21 pass / 0 problems** | ✅ **21 pass / 0 problems** |
+
+The results are identical on both, case for case. What it covers: `check` accepting a well-formed
+program and rejecting a **parse error**, a **type error**, and an **undeclared effect** (exit 1 each);
+`authority` reporting the effect row; `fmt --check`; `run` **refused with `DL0703` without the grant**
+and succeeding with it; `--version`, `--help`; an unknown subcommand, an unknown flag, and a flag
+**missing its value** all refused (exit 2); `new` creating a package and **refusing the reserved
+device name `con` on Linux as well as Windows** — so a package authored on Linux cannot become
+un-checkoutable on Windows; `run` on a package directory; `doctor --check`; and `--json` still
+exiting 1 on a refusal while emitting an object on stdout.
+
+Two of the sweep's own expectations were wrong before the product was: it demanded exit 1 where
+§STABILITY.md specifies **2 for a usage error**, and it treated a second positional to `check` as an
+extra argument when `check` accepts **many files by design**. Both were the sweep's defect. This is
+the campaign's recurring shape — in the first feature-health run, sweep bugs outnumbered product
+bugs 6:1 — and it is the reason a sweep's own failures get read before they get reported.
+
 Both baselines held across the float-literal rule, the new `parse_float` prelude function, the
 four-package corpus tier, the adapter signer pin, the line-ending gate, artifact review (D59), the
 bounded authority report and the Book correspondence gate (D60).
@@ -69,8 +162,9 @@ bounded authority report and the Book correspondence gate (D60).
 here because it is a platform-specific claim: DeluluLang called into the real Windows C runtime
 (`msvcrt.dll` and `ucrtbase.dll` both giving `cos(0.0)=1.0`, `sqrt(144.0)=12.0`, `pow(2.0,10.0)=1024.0`)
 and into real embedded CPython (`statistics.pstdev` = 2.0, a `base64` round trip). The C path on macOS —
-`libm.dylib` — remains the one FFI arm that has never compiled or run anywhere (§8). The 4-test Linux surplus is the platform-specific
-set Windows skips, and matches the historical delta.
+`libm.dylib` — remains the one FFI arm that has never compiled or run anywhere (§8). The Linux test
+surplus is the platform-specific set; it is **named**, not estimated, in the 2026-08-03 subsection
+below, and it grows as the campaign adds platform-specific witnesses.
 
 **A reproduction trap, recorded because it cost a run.** Building for Linux *in the Windows working
 tree* (`/mnt/d/...`) fails in `libffi-sys`'s `configure`, which cannot write its own `config.log` on
@@ -280,9 +374,11 @@ committed tree rather than assumed to have survived.
 | `conform --check-reference` | ✅ 24 chapters in sync | ✅ | (arch-independent) |
 
 The clippy figures are unchanged from §2 — **65 on Windows, 66 on Linux** — across roughly 4,000 lines
-added by the campaign. The four-test delta between platforms is the known one: Linux runs four tests
-Windows ignores. Suite counts rose from the campaign's own regression witnesses, every one of which
-was observed failing against the code it now guards.
+added by the campaign. The four-test delta between platforms was the known one *at this date*; it is
+now six, and §2's 2026-08-03 subsection names every test on both sides. "Windows ignores them" was
+never the right description — Windows compiles its own tests asserting the refusal instead. Suite
+counts rose from the campaign's own regression witnesses, every one of which was observed failing
+against the code it now guards.
 
 ### The front door, re-tested rather than assumed
 

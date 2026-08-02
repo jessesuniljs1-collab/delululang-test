@@ -54,8 +54,10 @@ fn run_console(seed: u64, s: &mut Stats) {
     let wr = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() });
 
     set_capture(true);
-    let mut g = Grants::default();
-    g.console = true;
+    let g = Grants {
+        console: true,
+        ..Default::default()
+    };
     let interp = Interp::new(&checked.module);
     let ir = interp.run_main(Value::Root(Rc::new(g.build_root())));
     let io = take_capture().unwrap_or_default();

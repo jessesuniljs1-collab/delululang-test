@@ -132,15 +132,20 @@ diagnostics or a runtime fault, `2` usage error.
 
 | Gate | Windows | Linux |
 |---|---|---|
-| `cargo test --workspace` | **113 suites / 1,479 passed / 0 failed** | **113 / 1,485 / 0** |
-| `cargo clippy --workspace --all-targets` | **65** | **66** |
+| `cargo test --workspace` | **113 suites / 1,488 passed / 0 failed / 4 ignored** | **113 / 1,494 / 0 / 4** |
+| `cargo clippy --workspace --all-targets` (cold, findings only) | **14** | **15** |
 | `delulu-conform --coverage` | 100% | 100% |
 | `delulu-conform --check-reference` | in sync | in sync |
 | `delulu fmt --check examples` | 0 would change | 0 would change |
 | `delulu doctor --check` | 12/12 | 12/12 |
 
-The clippy counts are a *baseline held constant*, not a target: they have not moved across roughly
-6,000 added lines, so a new warning is visible immediately.
+The clippy counts are a *baseline watched for movement*, not a target — none of the findings was ever
+a `clippy::correctness` lint. They must be measured **cold, in a throwaway target dir, excluding
+cargo's per-crate summary lines**; a warm run under-reports and the summary lines are not findings.
+Earlier revisions of this table quoted **65/66**, which was that broken measure, not a regression
+since. The 6-test suite delta between platforms is named test-by-test in
+`docs/design/CROSS_PLATFORM_VERIFICATION.md` §2 — Linux runs 8 the Windows build does not compile,
+Windows runs 2 that assert the corresponding refusal.
 
 Beyond the suite: a **core-invariance snapshot** records the exact bytes the toolchain answers with
 for all 108 programs the repository ships (360 cases), so work on the tooling cannot quietly move the
@@ -162,6 +167,9 @@ from the working tree (2026-08-02, at `ed8a769`, on Linux):
 | `delulu-conform --check-reference` | in sync |
 | `delulu fmt --check examples` | 0 would change |
 | `delulu doctor --check` | 12/12 |
+
+Re-run at `0c98a58` (2026-08-03, Linux): **573 tracked files**, cold build OK, `DL0703` refusal on the
+ungranted run, **113 suites / 1,494 passed / 0 failed**, every gate green.
 
 Then the README's front door, replayed **verbatim** in that clone — the exact commands this page's
 own `README` tells a newcomer to type, run from a directory that is not the workspace:

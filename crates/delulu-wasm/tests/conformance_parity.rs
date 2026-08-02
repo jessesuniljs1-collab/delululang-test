@@ -26,10 +26,12 @@ fn run_both(src: &str, cfg: HostConfig) -> (String, String) {
         set_rand_seed(s);
     }
     set_capture(true);
-    let mut g = Grants::default();
-    g.console = cfg.console;
-    g.clock = cfg.clock;
-    g.rand = cfg.rand;
+    let g = Grants {
+        console: cfg.console,
+        clock: cfg.clock,
+        rand: cfg.rand,
+        ..Default::default()
+    };
     let interp = Interp::new(&checked.module);
     interp.run_main(Value::Root(Rc::new(g.build_root()))).expect("interp run");
     let interp_out = take_capture().expect("capture was on");
@@ -106,8 +108,10 @@ fn random_console_programs_match_across_engines() {
         let wasm_res = run_main(&wasm, &HostConfig { console: true, ..HostConfig::default() });
 
         set_capture(true);
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants {
+            console: true,
+            ..Default::default()
+        };
         let interp = Interp::new(&checked.module);
         let interp_res = interp.run_main(Value::Root(Rc::new(g.build_root())));
         let interp_out = take_capture().unwrap_or_default();

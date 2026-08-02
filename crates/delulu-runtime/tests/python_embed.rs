@@ -16,8 +16,7 @@ use delulu_runtime::{set_capture, take_capture, Fault, Grants, Interp, TraceSink
 fn run_py(src: &str, setup: impl FnOnce(&mut Grants)) -> (Result<Value, Fault>, TraceSink, String) {
     let checked = check_source(0, src);
     assert!(!checked.has_errors(), "check errors: {:?}", checked.diagnostics);
-    let mut grants = Grants::default();
-    grants.console = true;
+    let mut grants = Grants { console: true, ..Default::default() };
     setup(&mut grants);
     let sink = TraceSink::new();
     let interp = Interp::new(&checked.module)

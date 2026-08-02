@@ -221,10 +221,7 @@ fn run_and_check_trace(checked: &delulu_check::Checked) -> Option<String> {
         .map(|e| e.name().to_string())
         .collect();
 
-    let mut grants = Grants::default();
-    grants.console = true;
-    grants.clock = true;
-    grants.rand = true;
+    let grants = Grants { console: true, clock: true, rand: true, ..Default::default() };
 
     let sink = TraceSink::new();
     let interp = Interp::new(&checked.module).with_trace(sink.clone());

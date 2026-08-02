@@ -34,11 +34,21 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Changed
 
-- **Lint findings reduced, and the baseline explained rather than merely held.** `cargo clippy`
-  reported 65 findings on Windows and 66 on Linux; a contributor's first run should not look like
-  that. The mechanically-safe ones are applied. **None of them was ever a `clippy::correctness`
-  lint** — they are style and complexity suggestions, so the count was never evidence of a bug, and
-  the documentation now says which is which instead of quoting a number.
+- **Lint findings reduced — and the way they were counted corrected.** The number published for
+  months was produced by a `grep` that also matched cargo's **per-crate summary lines**
+  (``warning: `delulu-wasm` (lib) generated 1 warning``), which are not findings; and a *warm*
+  `cargo clippy` does not re-emit warnings for units it did not re-lint, so the same tree measured
+  26 and then 42 within the hour. A clippy count is only meaningful **measured cold, in an isolated
+  target dir, with summary lines excluded**. Measured that way on one machine, real findings went
+  **34 → 14** on Windows and to **15** on Linux, by converging on the initializer form the tree had
+  already chosen (`Grants { console: true, ..Default::default() }`) at 12 sites, all test-only.
+  **None of them was ever a `clippy::correctness` lint** — they are style and complexity
+  suggestions, so the count was never evidence of a bug.
+
+  What remains is left deliberately: AST variant sizes that boxing would churn every construction
+  site to change, a deliberately named `eq`, argument counts on functions whose parameters genuinely
+  travel together, and a **static guard** clippy reads as a constant assertion — it is the assertion
+  that proves the explain-coverage test can fail. The count is watched for *movement*, not zero.
 
   Two things worth recording. The auto-fix deleted the comment in `main.rs` explaining why a worker
   panic maps to exit 2 — the mapping campaign finding C49 turned on — and it has been restored with

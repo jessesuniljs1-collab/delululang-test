@@ -31,7 +31,8 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 9 language crates (plus 4 that only measure and map this repository), ~101,000 lines of Rust. 113 test suites, ~1,480 tests passing. Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Built and tested** | 9 language crates (plus 4 that only measure and map this repository), ~101,000 lines of Rust. 113 test suites — 1,488 tests passing on Windows, 1,494 on Linux (the 6-test difference is
+[named test-by-test](docs/design/CROSS_PLATFORM_VERIFICATION.md), not an unexplained gap). Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Ask it `impact <id>` before changing anything: it walks the whole blast radius, citing every hop. Start there. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |

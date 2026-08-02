@@ -112,8 +112,10 @@ mod tests {
 
     #[test]
     fn runs_pure_arithmetic_and_returns_unit() {
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants {
+            console: true,
+            ..Default::default()
+        };
         let out = run(
             "module m\nfn fib(n: Int) -> Int { if n < 2 { n } else { fib(n-1) + fib(n-2) } }\nfn main(root: Root) ! {Write} { let c = root.console()\n c.println(str(fib(10))) }\n",
             g,
@@ -154,8 +156,10 @@ mod tests {
     fn secret_never_reaches_stdout_but_expose_returns_it() {
         // A grant of the secret + declassify; expose returns the value (that is declassification
         // working), while the program without expose can never stringify it (checker DL0604).
-        let mut g = Grants::default();
-        g.declassify = true;
+        let mut g = Grants {
+            declassify: true,
+            ..Default::default()
+        };
         g.secrets.insert("K".into(), "swordfish".into());
         let out = run(
             "module m\nfn main(root: Root) ! {Declassify} { let s = root.secret(\"K\")\n let d = root.declassify()\n let _v = s.expose(d) }\n",
@@ -168,8 +172,10 @@ mod tests {
 
     #[test]
     fn trace_records_write_then_read_in_order() {
-        let mut g = Grants::default();
-        g.console = true;
+        let mut g = Grants {
+            console: true,
+            ..Default::default()
+        };
         g.fs_read.push(".".into());
         let (out, sink) = run_traced(
             "module m\nfn main(root: Root) ! {Write, Read} { let out = root.console()\n out.println(\"hi\")\n let fs = root.fs_read(\".\")\n match fs.read_text(\"nonexistent_file_xyz.delulu.tmp\") { Ok(_) => {}, Err(_) => {} } }\n",
@@ -188,8 +194,10 @@ mod tests {
     #[test]
     fn trace_never_leaks_a_secret_and_redacts_expose() {
         let secret_value = "correct-horse-battery-staple-42";
-        let mut g = Grants::default();
-        g.declassify = true;
+        let mut g = Grants {
+            declassify: true,
+            ..Default::default()
+        };
         g.secrets.insert("K".into(), secret_value.into());
         let (out, sink) = run_traced(
             "module m\nfn main(root: Root) ! {Declassify} { let s = root.secret(\"K\")\n let d = root.declassify()\n let _v = s.expose(d) }\n",
@@ -219,9 +227,11 @@ mod tests {
     // test instead confirms the two effects are wired into tracing end-to-end.
     #[test]
     fn trace_covers_rand_and_clock_effects() {
-        let mut g = Grants::default();
-        g.rand = true;
-        g.clock = true;
+        let g = Grants {
+            rand: true,
+            clock: true,
+            ..Default::default()
+        };
         let (out, sink) = run_traced(
             "module m\nfn main(root: Root) ! {Rand, Clock} { let r = root.rand()\n let _v = r.int(0, 10)\n let c = root.clock()\n let _t = c.now_ms() }\n",
             g,
@@ -298,9 +308,11 @@ mod tests {
             exposed: Rc::clone(&exposed),
         };
 
-        let mut g = Grants::default();
-        g.console = true;
-        g.declassify = true;
+        let g = Grants {
+            console: true,
+            declassify: true,
+            ..Default::default()
+        };
         let mut root = g.build_root();
         root.broker_secrets = vec!["K".to_string()]; // daemon mode: handles, not bytes
         assert!(root.secrets.is_empty(), "no local secret bytes in daemon mode");
@@ -333,8 +345,10 @@ mod tests {
             secrets: HashMap::new(),
             exposed: Rc::new(RefCell::new(Vec::new())),
         };
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants {
+            console: true,
+            ..Default::default()
+        };
 
         set_capture(true);
         let interp = Interp::new(&checked.module).with_custody(Box::new(custody));
@@ -407,8 +421,10 @@ mod tests {
             .map(|e| e.name().to_string())
             .collect();
 
-        let mut g = Grants::default();
-        g.console = true;
+        let g = Grants {
+            console: true,
+            ..Default::default()
+        };
         let (out, sink) = run_traced(src, g);
         assert!(out.is_ok(), "{:?}", out.err());
         let records = sink.records();

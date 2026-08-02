@@ -106,9 +106,11 @@ fn run_both(src: &str, foreign_grants: &[(&str, &str)], max_ret: usize) -> (Run,
     };
 
     // ----- interpreter (reference) -----
-    let mut grants = Grants::default();
-    grants.console = true;
-    grants.foreign_c = grant_map;
+    let grants = Grants {
+        console: true,
+        foreign_c: grant_map,
+        ..Default::default()
+    };
     let isink = TraceSink::new();
     set_capture(true);
     let interp = Interp::new(&checked.module)

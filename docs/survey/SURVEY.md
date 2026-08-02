@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 212 |
-| Rust lines | 102011 |
+| Rust lines | 102022 |
 | Rust files outside `src/` (test/bench targets) | 83 |
 | Markdown documents | 122 |
-| Markdown lines | 28770 |
+| Markdown lines | 28982 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
 | Recorded rulings | 129 |
 | Recorded campaign findings | 76 |
-| Nodes / edges in this map | 973 / 8528 |
+| Nodes / edges in this map | 973 / 8537 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -223,11 +223,11 @@ DeluluLang differential fuzz harness: generate programs, check them, and assert 
 
 - **Depends on:** `delulu-check`, `delulu-runtime`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 2 files, 314 lines
+- **Modules:** 2 files, 311 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/lib.rs` | 279 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
+| `src/lib.rs` | 276 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
 | `src/main.rs` | 35 | `delulu-fuzz [iterations] [seed]` — run a differential fuzz campaign (spec §7.2). Default is |
 
 ### `delulu-measure`
@@ -268,7 +268,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 12225 lines
+- **Modules:** 16 files, 12241 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -281,7 +281,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/device.rs` | 1355 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/foreign.rs` | 440 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
 | `src/interp.rs` | 2045 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
-| `src/lib.rs` | 420 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
+| `src/lib.rs` | 436 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/plugin.rs` | 2235 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
 | `src/prim.rs` | 620 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
@@ -337,7 +337,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 
 - **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-syntax`
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 8 files, 6716 lines
+- **Modules:** 8 files, 6708 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -347,7 +347,7 @@ DeluluLang WASM backend (Stage 3): compile checked programs to WebAssembly and r
 | `src/dpx.rs` | 878 | The `.dpx` plugin artifact container (Stage 6 "Live", spec §2.2). |
 | `src/gen.rs` | 138 | A tiny generator of random *pure* DeluluLang programs, used to differentially test the WASM |
 | `src/host.rs` | 1209 | The embedded Wasmtime host (Phase 3a/3b). |
-| `src/lib.rs` | 846 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
+| `src/lib.rs` | 838 | DeluluLang WASM backend (Stage 3, "Containment"). Compiles checked programs to WebAssembly |
 | `src/limits.rs` | 656 | Contained plugin execution limits and **honest trap attribution** (Stage 6 §5.1, trap 5). |
 
 ## Diagnostic codes

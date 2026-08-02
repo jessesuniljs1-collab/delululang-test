@@ -141,6 +141,33 @@ that could not describe `delulu fmt`'s own output. Relocating a correct grammar 
 one from a 2,000-line recursive-descent parser is not, and would need its own phase and its own
 differential evidence.
 
+### 2.6 A tracked metric was not measuring what it named
+
+The clippy baseline — quoted in five documents and treated as load-bearing across many phases
+("clippy 65/0, the exact pre-federation baseline") — was produced by
+`grep -cE '^warning:|^error:'`. That counter has **two independent faults**, and neither is subtle
+once the number is asked to be reproducible:
+
+1. It also matches cargo's per-crate **summary** lines (``warning: `delulu-wasm` (lib) generated 1
+   warning``) — 13 to 18 of them, depending on how many crates and targets are linted. Those are
+   totals, not findings.
+2. A **warm** `cargo clippy` does not re-emit warnings for units it did not re-lint. The same tree
+   measured **26 and then 42 within the hour**, which is what exposed this at all.
+
+So a figure held constant across phases as evidence that "~4,000 added lines added zero warnings"
+was a number whose value depended on cache state and whose units were wrong. Nothing unsafe followed
+from it — **no finding was ever a `clippy::correctness` lint** — but a metric nobody can reproduce
+cannot support the claim it was being used to support.
+
+Measured properly (cold, isolated target dir, summary lines excluded) on one machine, at `0c98a58`
+and at the working tree: **Windows 34 → 14, Linux 35 → 15.** Both platforms fell by exactly 20 and
+the one-warning Linux surplus survived, which is evidence the old measure was *consistently* wrong
+rather than randomly wrong. The dated historical figures are **left as recorded** with an annotation;
+rewriting them would hide the mistake instead of fixing it.
+
+This is design rule 2 in a new costume — *ask what signal a gate keys on, then what failure produces
+a different signal.* Here the gate keyed on a line prefix, and two different things produce it.
+
 ## 3. Corrections — where earlier conclusions, including this review's, were wrong
 
 ### 3.1 C21 was filed under the wrong heading for its whole life
@@ -181,6 +208,17 @@ but the process point is the one worth keeping: **a search is a gate, and the ru
 signal it keys on and what a real hit would look like if it used different words.** That is D47a's
 lesson, applied to a reviewer instead of a test.
 
+### 3.4 Two claims checked and found already honest
+
+Recorded because a review that only reports problems is not a review:
+
+- **CI's `|| true` on the coverage step is not a hole.** It looks like a disabled gate; the real gate
+  is `release_requires_full_coverage` in the suite, which is stronger (per-commit, not per-push). Only
+  the comment is stale.
+- **The `macos-latest` CI matrix is not an overclaim.** `CROSS_PLATFORM_VERIFICATION.md` §"Nothing in
+  this repository may describe DeluluLang as supported on three platforms" already states that the
+  matrix names macOS and **has never executed**. The project got there first.
+
 ### 3.5 One Cargo field is already answering two different questions
 
 Found while designing the fix for §2.2, and it changes that fix. `publish = false` is not inert here:
@@ -205,17 +243,6 @@ language crates", which was true only while the sole unpublishable crate was als
 tooling. Asked directly, the tree says **nine** language crates and four that measure or map this
 repository. A number computed from a proxy is a measurement waiting to be wrong, and this one was
 wrong by three before anything moved.
-
-### 3.4 Two claims checked and found already honest
-
-Recorded because a review that only reports problems is not a review:
-
-- **CI's `|| true` on the coverage step is not a hole.** It looks like a disabled gate; the real gate
-  is `release_requires_full_coverage` in the suite, which is stronger (per-commit, not per-push). Only
-  the comment is stale.
-- **The `macos-latest` CI matrix is not an overclaim.** `CROSS_PLATFORM_VERIFICATION.md` §"Nothing in
-  this repository may describe DeluluLang as supported on three platforms" already states that the
-  matrix names macOS and **has never executed**. The project got there first.
 
 ---
 

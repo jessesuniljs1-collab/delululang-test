@@ -70,8 +70,7 @@ fn fixture_path() -> &'static str {
 fn run_foreign(src: &str, foreign_grants: &[(&str, &str)], max_ret: usize) -> (Result<Value, Fault>, TraceSink, String) {
     let checked = check_source(0, src);
     assert!(!checked.has_errors(), "check errors: {:?}", checked.diagnostics);
-    let mut grants = Grants::default();
-    grants.console = true;
+    let mut grants = Grants { console: true, ..Default::default() };
     for (lib, path) in foreign_grants {
         grants.foreign_c.insert(lib.to_string(), path.to_string());
     }
