@@ -34,6 +34,31 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Fixed
 
+- **`delulu audit` no longer reads the wrong store when you mistype a flag** (C75, D72). `audit`
+  takes `--dir`; every sibling custody command (`grants`, `guard`, `secrets`) takes `--state-dir`.
+  The parser silently dropped anything it did not recognise, so an operator typing the habitual flag
+  got records from the default `~/.delulu/audit` **printed as the answer to a question about a
+  different store**. Investigating an incident with evidence from somewhere else is not a lesser
+  failure than showing none. Unknown options are refused, and `--state-dir` gets a note explaining
+  why this command differs: it reads files, its siblings talk to the broker.
+
+- **`delulu secrets list` says when the store is empty** (C74, D72). It printed nothing at all and
+  exited 0, so a reader could not tell *there are no secrets* from *the store could not be read*
+  from *the command did nothing* — about a security store. On stderr, so stdout stays a clean,
+  pipeable list of names.
+
+- **`delulu fix` refuses a file it cannot repair** (C73, D72). `fix notes.txt` printed
+  `nothing to repair` and exited 0 while `check` on the same bytes gave `DL0204`. The refusal is
+  deliberately not worded "nothing to repair" — that is the success line for a clean source file,
+  and reusing it is how the two outcomes became indistinguishable.
+
+- **`delulu new` refuses a package name that only works on your platform** (C72, D72). `delulu new
+  con` succeeded on Linux and macOS and produced a directory Windows can never check out — `git
+  clone` fails on the directory itself. On Windows it failed already, with two different raw OS
+  errors for one cause. Reserved device names (`con`, `aux`, `nul`, `prn`, `com1`–`com9`,
+  `lpt1`–`lpt9`) are now refused on **every** platform; names that merely contain them, like
+  `console` and `context`, are untouched.
+
 - **The reference's grammar index now reaches the grammar** (C71, D70). Each production publishes a
   `ref.grammar.<name>` anchor that conformance witnesses cite. Those names follow `parser.rs`; the
   normative EBNF in the stage specifications uses fuller spellings, and six of twenty-seven diverge.

@@ -152,6 +152,16 @@ figures and the remedy, so if it ever fires on a Mac it fires legibly instead of
 `ENAMETOOLONG`. **The mechanism is tested on Linux; the macOS constant is reasoned. No Mac has run
 it, and the two claims are not the same.**
 
+**A portability trap closed in the other direction (D72a).** Cross-platform work usually means *does
+our code run there*. This one was the reverse: `delulu new con` **succeeded** on Linux and macOS and
+produced a package Windows can never check out, because `con`, `aux`, `nul`, `prn`, `com1`–`com9` and
+`lpt1`–`lpt9` are reserved device names there — `git clone` fails on the directory itself. The author
+would not find out; a colleague would. Those names are now refused on **every** platform, including
+the two where they would have worked, because a cross-platform language must not hand you a name that
+only works on yours. On Windows the old failure was two different raw OS errors for one cause
+(`os error 87` for `con`, `os error 2` for `aux`), which is the shape D33 already refused for
+`run <dir>`.
+
 **Named, not fixed (future work):**
 
 - **The sim watchdog wall-clock coupling — RESOLVED (D20).** `--broker-profile sim` was

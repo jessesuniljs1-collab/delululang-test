@@ -2926,6 +2926,56 @@ running, which stales the Survey mid-flight and was done five times in one sessi
 written rule. **The fix for the second is ordering, not memory: every documentation edit finishes
 before verification starts.**
 
+**D72 — Four defects in the surfaces the campaign never attacked.** Closes C72–C75.
+
+The adversarial phases (P2–P11) ran stage by stage over the language. The **authoring and custody
+CLI** — `new`, `fix`, `secrets`, `audit` — was either written afterwards or never fired at, so it had
+never had a hostile pass. One was run. All four findings are the same family the campaign has ruled
+on before, which is the point: **a command written after a lesson does not inherit it.**
+
+**(a) C72 — `delulu new` accepted a name that only works on your platform.** `delulu new con`
+succeeded on Linux and macOS and produced a directory Windows can never check out; `git clone` fails
+on the directory itself, so the author would learn from a colleague. On Windows it failed already,
+with whichever raw OS error came first — `The parameter is incorrect. (os error 87)` for `con`, `The
+system cannot find the file specified. (os error 2)` for `aux`. **Two meaningless texts for one
+cause**, which D33 already refused once for `run <dir>`. The reserved device names are now refused on
+**every** platform, because the point is to stop a Unix author shipping a package that is broken for
+everyone else. *(This project learned the same lesson about its own build when a control binary named
+`nul.exe` would not link.)*
+
+**(b) C73 — `delulu fix` reported success on a file it cannot process.** `delulu fix notes.txt`
+printed `nothing to repair` and exited **0**, while `delulu check` on the same bytes gave `DL0204`.
+That is **C66 exactly** — "nothing done, success claimed, on a path the user named deliberately" —
+which `fmt` was corrected for in D59, and `fix` was written *after* that ruling. The refusal is also
+deliberately **not** worded "nothing to repair": that is the success line for a clean source file, and
+reusing it is how the two outcomes became indistinguishable in the first place.
+
+**(c) C74 — `delulu secrets list` printed nothing at all on an empty store, and exited 0.** A reader
+could not tell *there are no secrets* from *the store could not be read* from *the command did
+nothing* — about a **security** store. `grants list` one command over already said `(no grants — the
+tree is empty)`. The message goes to stderr so stdout stays a clean, pipeable set of names.
+
+**(d) C75 — `delulu audit` silently ignored unknown options, and that meant reading the wrong
+store.** The parser's final arm was `_ => {}`. `audit` takes `--dir`; every sibling custody command
+(`grants`, `guard`, `secrets`) takes `--state-dir`. So an operator typing the habitual flag had it
+dropped and got records from the default `~/.delulu/audit` **printed as the answer to a question
+about a different store**:
+
+```
+$ delulu audit tail 2 --state-dir /some/other/store
+seq 11 … issue  allow …
+seq 12 … expose deny  … target=DB_PASSWORD      ← from ~/.delulu/audit
+```
+
+**Investigating an incident with evidence from somewhere else is not a lesser failure than showing
+none.** This is the campaign's own rule — *security rules die in the `else { continue }` branch* —
+landing on the one subsystem whose entire purpose is accountability. Unknown options are now refused,
+and `--state-dir` specifically gets a note explaining why `audit` differs: it reads files, its
+siblings talk to the broker.
+
+Witnesses for all four, each observed failing against the old code. The two in `new_cli.rs` and
+`fix_cli.rs` were verified non-vacuous by disabling the checks and watching them fail.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

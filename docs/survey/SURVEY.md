@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 212 |
-| Rust lines | 101363 |
+| Rust lines | 101604 |
 | Rust files outside `src/` (test/bench targets) | 83 |
 | Markdown documents | 122 |
-| Markdown lines | 28520 |
+| Markdown lines | 28609 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
-| Recorded rulings | 127 |
-| Recorded campaign findings | 71 |
-| Nodes / edges in this map | 966 / 8434 |
+| Recorded rulings | 128 |
+| Recorded campaign findings | 75 |
+| Nodes / edges in this map | 971 / 8500 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18460 lines
+- **Modules:** 22 files, 18538 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -94,11 +94,11 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_transport.rs` | 500 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 1657 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 7739 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 7772 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 375 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
-| `src/fix.rs` | 411 | `delulu fix` — apply the repairs the checker already computed. |
+| `src/fix.rs` | 429 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 685 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
@@ -106,7 +106,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/main.rs` | 75 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
-| `src/new.rs` | 285 | `delulu new` — start a package that already works. |
+| `src/new.rs` | 312 | `delulu new` — start a package that already works. |
 | `src/repl.rs` | 153 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1137 | `delulu run` — the command that actually executes a program. |
 | `src/signing.rs` | 783 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
@@ -386,7 +386,7 @@ Rulings are allocated **one namespace per stage**, so `D21` alone is ambiguous �
 
 | Namespace | Rulings | Allocated in |
 |---|---:|---|
-| `S10` | 71 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S10` | 72 | `docs/design/STAGE10_BUILD_ORDER.md` |
 | `S6` | 8 | `docs/design/STAGE6_BUILD_ORDER.md` |
 | `S7` | 11 | `docs/design/STAGE7_BUILD_ORDER.md` |
 | `S8` | 15 | `docs/design/STAGE8_BUILD_ORDER.md` |

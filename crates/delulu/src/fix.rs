@@ -130,6 +130,24 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
         );
         return 2;
     }
+    // A file the command cannot act on is REFUSED, not reported as clean. Without this,
+    // `delulu fix notes.txt` printed `nothing to repair` and exited 0 — "nothing done, success
+    // claimed, on a path the user named deliberately" — while `delulu check` on the same file gave
+    // `DL0204`. That is campaign finding **C66** exactly, which `fmt` was corrected for in D59, and
+    // this command was written afterwards and did not inherit the lesson (C73/D72).
+    //
+    // `fix` takes one named file, so unlike `fmt` there is no directory-walk case where filtering
+    // is the point: every path reaching here was typed by a person who meant it.
+    if path.is_file() && path.extension().and_then(|e| e.to_str()) != Some("delulu") {
+        // Deliberately NOT worded with "nothing to repair": that is the *success* line for a clean
+        // source file, and reusing it here is how the two outcomes became indistinguishable in the
+        // first place. A refusal and a clean bill of health must not read alike.
+        eprintln!("error: `{file}` is not a `.delulu` source file — `fix` edits DeluluLang source");
+        if crate::cli::looks_like_dwx(&file) {
+            eprintln!("note: that is a compiled `.dwx` artifact — `fix` edits source, not artifacts");
+        }
+        return 2;
+    }
 
     // `load` owns the good diagnostics for an unreadable file or a `.dwx` handed to a source
     // command, so it goes first and its exit code stands.

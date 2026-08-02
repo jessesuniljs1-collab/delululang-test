@@ -258,3 +258,46 @@ fn help_creates_nothing() {
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(std::fs::read_dir(&w).unwrap().count(), 0, "asking must not create a package");
 }
+
+/// **A name that only works on your platform is not a package name.**
+///
+/// `delulu new con` succeeded on Linux and macOS and produced a directory Windows can never check
+/// out — `git clone` fails on the directory itself, so the author would not find out until a
+/// colleague did. On Windows it failed already, but with whichever raw OS error came first: `The
+/// parameter is incorrect. (os error 87)` for `con`, `The system cannot find the file specified.
+/// (os error 2)` for `aux`. **Two meaningless texts for one cause**, which is the shape D33 refused
+/// once already for `run <dir>`.
+///
+/// Checked on every platform deliberately: the point is to stop a Unix author creating a package
+/// that is broken for everyone else (C72, ruling D72).
+#[test]
+fn a_name_windows_reserves_as_a_device_is_refused_on_every_platform() {
+    let home = scratch("reserved-device");
+    for name in ["con", "aux", "nul", "prn", "com1", "lpt9", "CON", "Aux"] {
+        let o = delulu_in(&home, &["new", name]);
+        let out = format!("{}{}", stdout(&o), stderr(&o));
+        assert!(
+            !o.status.success(),
+            "`delulu new {name}` must be refused — Windows cannot host that directory: {out}"
+        );
+        assert!(
+            out.contains("device name"),
+            "the refusal must say WHY, not leak an OS error: {out}"
+        );
+        assert!(
+            !home.join(name).exists(),
+            "nothing may be created for a name that cannot exist on a supported platform"
+        );
+    }
+}
+
+/// THE SKIP-BRANCH CASE: ordinary names that merely *contain* a reserved word must still work, or
+/// the check would outlaw `console`, `context` and `nullable`.
+#[test]
+fn a_name_that_merely_contains_a_device_word_is_still_fine() {
+    let home = scratch("reserved-device-ok");
+    for name in ["console", "context", "connection", "auxiliary", "nullable", "computer"] {
+        let o = delulu_in(&home, &["new", name]);
+        assert!(o.status.success(), "`{name}` is a perfectly good package name: {}", stderr(&o));
+    }
+}

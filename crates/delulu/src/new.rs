@@ -145,7 +145,34 @@ fn legal_package_name(name: &str) -> Result<(), &'static str> {
     {
         return Err("it is a keyword");
     }
+    if is_reserved_device_name(name) {
+        return Err("Windows reserves it as a device name, so the directory cannot exist there");
+    }
     Ok(())
+}
+
+/// Names Windows reserves for devices, which cannot be directory names on that platform —
+/// with or without an extension, in any case.
+///
+/// **Checked on every platform, and that is the whole point.** `delulu new con` used to succeed on
+/// Linux and macOS and produce a package that Windows can never check out: `git clone` fails on the
+/// directory itself. The author would not find out until a colleague did. On Windows it failed
+/// already, but with the raw OS error for whichever syscall happened to complain first — `The
+/// parameter is incorrect. (os error 87)` for `con`, `The system cannot find the file specified.
+/// (os error 2)` for `aux`. **Two meaningless texts for one cause**, which is the shape ruling D33
+/// already refused once for `run <dir>`.
+///
+/// A cross-platform language must not hand you a name that only works on your platform. This project
+/// learned the same lesson about its own build when a control binary named `nul.exe` refused to link.
+fn is_reserved_device_name(name: &str) -> bool {
+    const RESERVED: &[&str] = &[
+        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+        "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    ];
+    // Windows matches the stem, so `con.txt` is reserved too — though a package name cannot carry a
+    // `.` anyway (refused above), the stem is taken so this stays true if that ever loosens.
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_lowercase();
+    RESERVED.contains(&stem.as_str())
 }
 
 /// The nearest legal name, when there is an obvious one. `my-app` → `my_app`.

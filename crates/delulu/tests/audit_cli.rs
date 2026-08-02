@@ -230,3 +230,79 @@ fn the_json_read_surface_always_states_whether_the_chain_verified() {
         stdout(&broken)
     );
 }
+
+/// **An audit tool may not silently ignore an argument.**
+///
+/// `audit` reads a log directory and takes `--dir`; every sibling custody command (`grants`,
+/// `guard`, `secrets`) talks to the broker and takes `--state-dir`. The parser's final arm was
+/// `_ => {}`, so an operator who typed the habitual flag had it dropped and got records from the
+/// DEFAULT store — `~/.delulu/audit` — printed as the answer to a question about a different one.
+///
+/// Investigating an incident with evidence from somewhere else is not a lesser failure than showing
+/// none. This is the campaign's own rule about the skip branch, landing on the one subsystem whose
+/// entire purpose is accountability (C75, ruling D72).
+#[test]
+fn audit_refuses_an_option_it_does_not_know_instead_of_reading_the_wrong_store() {
+    let empty = std::env::temp_dir().join(format!("delulu-audit-flag-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&empty);
+    std::fs::create_dir_all(&empty).unwrap();
+
+    let o = delulu(&["audit", "tail", "2", "--state-dir", empty.to_str().unwrap()]);
+    let out = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(
+        out.contains("does not know the option"),
+        "the habitual flag must be REFUSED, not dropped: {out}"
+    );
+    assert!(out.contains("--dir"), "and the refusal must name the flag that does work: {out}");
+    assert!(
+        !out.contains("seq "),
+        "no records may be printed for a store the caller did not ask for: {out}"
+    );
+
+    // A flag nobody could mistake for a real one is refused too — the fix is not special-cased.
+    let o = delulu(&["audit", "tail", "2", "--totally-bogus"]);
+    let out = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(out.contains("does not know the option"), "any unknown option is refused: {out}");
+    assert!(!out.contains("seq "), "and nothing is read: {out}");
+}
+
+/// THE SKIP-BRANCH CASE: the real flag still works, and an empty directory says so by name rather
+/// than printing nothing. A refusal that fired on every invocation would pass the test above and
+/// break the command.
+#[test]
+fn audit_still_reads_the_directory_it_was_actually_given() {
+    let empty = std::env::temp_dir().join(format!("delulu-audit-ok-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&empty);
+    std::fs::create_dir_all(&empty).unwrap();
+
+    let o = delulu(&["audit", "tail", "2", "--dir", empty.to_str().unwrap()]);
+    let out = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(out.contains("no matching audit records"), "an empty log says so: {out}");
+    assert!(
+        out.contains(&empty.display().to_string()) || out.contains("delulu-audit-ok"),
+        "and it names the directory it looked in, so the reader can tell which store: {out}"
+    );
+}
+
+/// **`secrets list` on an empty store says so, rather than printing nothing.**
+///
+/// Silence is ambiguous, and here it was ambiguous about a security store: a reader could not tell
+/// "there are no secrets" from "the store could not be read" from "the command did nothing", and it
+/// exited 0 either way. `grants list` one command over already said `(no grants — the tree is
+/// empty)`. This is the "nothing done, success claimed" shape of C26 and C66 (C74, ruling D72).
+#[test]
+fn secrets_list_on_an_empty_store_says_so() {
+    let empty = std::env::temp_dir().join(format!("delulu-secrets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&empty);
+    std::fs::create_dir_all(&empty).unwrap();
+
+    let o = delulu(&["secrets", "list", "--state-dir", empty.to_str().unwrap()]);
+    let out = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(o.status.success(), "an empty store is not an error: {out}");
+    assert!(
+        !out.trim().is_empty(),
+        "a security command that prints NOTHING leaves the reader unable to tell success from a \
+         no-op — that is C26's shape"
+    );
+    assert!(out.contains("no secrets"), "and it says which condition it is: {out}");
+}

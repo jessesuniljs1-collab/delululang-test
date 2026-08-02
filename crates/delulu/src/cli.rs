@@ -2069,7 +2069,7 @@ fn d_slice(d: &Diagnostic) -> [Diagnostic; 1] {
 ///
 /// Checked by CONTENT (the `\0asm` magic) and not only by extension: a `.dwx` renamed to `.delulu`
 /// is the same mistake and deserves the same answer, and an extension is not evidence.
-fn looks_like_dwx(file: &str) -> bool {
+pub(crate) fn looks_like_dwx(file: &str) -> bool {
     if let Ok(bytes) = std::fs::read(file) {
         return bytes.starts_with(b"\0asm");
     }
@@ -4578,7 +4578,18 @@ fn cmd_secrets(rest: &[String]) -> i32 {
             }
         }
         "list" => {
-            for name in store.names() {
+            let names = store.names();
+            if names.is_empty() {
+                // Silence is ambiguous, and here it is ambiguous about a SECURITY store: a reader
+                // cannot tell "there are no secrets" from "the store could not be read" from "the
+                // command did nothing". `grants list` one command over already says
+                // `(no grants — the tree is empty)`; this one printed nothing at all and exited 0,
+                // which is the "nothing done, success claimed" shape of C26 and C66 (C74, D72).
+                //
+                // Written to stderr so the stdout list stays a clean, pipeable set of names.
+                eprintln!("(no secrets in the store at `{}`)", state_dir.display());
+            }
+            for name in names {
                 println!("{name}");
             }
             0
@@ -6751,7 +6762,29 @@ fn cmd_audit(rest: &[String]) -> i32 {
             // reconciling two bundles in one command would need two cross-link records, and
             // silently using the last one would drop a segment.
             s if !s.starts_with('-') && bundle_in.is_none() => bundle_in = Some(s.to_string()),
-            _ => {}
+            // **An audit tool may not silently ignore an argument.** This arm used to be `_ => {}`,
+            // and the consequence was the worst available: every sibling custody command
+            // (`grants`, `guard`, `secrets`) takes `--state-dir`, so an operator who typed the
+            // habitual flag here had it dropped and got records from the DEFAULT store —
+            // `~/.delulu/audit` — presented as the answer to a question about a different one.
+            // Investigating an incident with evidence from somewhere else is not a lesser failure
+            // than showing none (campaign finding C75, ruling D72).
+            other => {
+                eprintln!("error: `audit` does not know the option `{other}`");
+                if other.starts_with("--state-dir") {
+                    eprintln!(
+                        "note: `audit` reads a log directory, not the broker's state root — it is \
+                         `--dir DIR`. The other custody commands take `--state-dir` because they \
+                         talk to the broker; this one reads files."
+                    );
+                }
+                eprintln!(
+                    "note: audit tail [N] | query [--node g_ID] [--action A] [--effect E] | \
+                     verify | bundle [--out F] | reconcile <FILE> [--expect-start HASH] \
+                     [--dir DIR] [--json]"
+                );
+                return 2;
+            }
         }
         i += 1;
     }

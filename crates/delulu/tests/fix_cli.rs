@@ -295,3 +295,47 @@ fn help_does_not_edit_anything() {
         assert_eq!(read(&f), MECHANICAL, "asking what `fix` does must not fix anything: {args:?}");
     }
 }
+
+/// **A file `fix` cannot act on is REFUSED, not reported as clean.**
+///
+/// `delulu fix notes.txt` printed `nothing to repair` and exited **0** — "nothing done, success
+/// claimed, on a path the user named deliberately" — while `delulu check` on the same bytes gave
+/// `DL0204`. That is campaign finding **C66** exactly, which `fmt` was corrected for in D59; `fix`
+/// was written *after* that ruling and did not inherit it (C73/D72).
+///
+/// The comparison is the whole point: three commands, one file, and only one of them was honest.
+#[test]
+fn a_file_that_is_not_delulu_source_is_refused_rather_than_called_clean() {
+    let d = scratch("not-delulu");
+    let notes = d.join("notes.txt");
+    write(&notes, "notes, not delulu\n");
+    let p = notes.to_str().unwrap();
+
+    let o = delulu(&["fix", p]);
+    let out = format!("{}{}", String::from_utf8_lossy(&o.stdout), stderr(&o));
+    assert!(
+        !o.status.success(),
+        "`fix` on a non-source file must refuse; reporting success is C66's exact shape: {out}"
+    );
+    assert!(
+        !out.contains("nothing to repair"),
+        "a file `fix` cannot process is not a file with nothing to repair: {out}"
+    );
+    assert!(out.contains("not a `.delulu` source file"), "the refusal must say why: {out}");
+
+    // And the file is untouched — a refusal that edited something would be worse than the bug.
+    assert_eq!(read(&notes), "notes, not delulu\n", "a refused file is never rewritten");
+}
+
+/// THE SKIP-BRANCH CASE: a real `.delulu` file with nothing to repair must still say so and succeed.
+/// A refusal that fired on every path would pass the test above and break the command.
+#[test]
+fn a_clean_delulu_file_still_reports_nothing_to_repair_and_succeeds() {
+    let d = scratch("clean-source");
+    let src = d.join("clean.delulu");
+    write(&src, "module clean\n\nfn main(root: Root) {\n}\n");
+    let o = delulu(&["fix", src.to_str().unwrap()]);
+    let out = format!("{}{}", String::from_utf8_lossy(&o.stdout), stderr(&o));
+    assert!(o.status.success(), "a clean source file is not an error: {out}");
+    assert!(out.contains("nothing to repair"), "and it says so plainly: {out}");
+}
