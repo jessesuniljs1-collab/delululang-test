@@ -44,8 +44,21 @@ its integrity. `delulu doctor --json` emits one envelope; `--check` never writes
 
 This page is about *driving* DeluluLang. If you are modifying the implementation, start instead at
 [`docs/survey/SURVEY.md`](survey/SURVEY.md) — a map of the repository generated from the repository,
-where every edge cites the file and line it was read from. `cargo run -p delulu-survey -- rdeps
-crate:delulu-diag` answers "what breaks if I change this" without a single grep, and
+where every edge cites the file and line it was read from. Ask it the question you actually have:
+
+```
+cargo run -p delulu-survey -- impact <id>       # everything that breaks if this changes
+cargo run -p delulu-survey -- affected-by <id>  # everything this rests on
+cargo run -p delulu-survey -- path <a> <b>      # how one reaches the other, hop by hop
+cargo run -p delulu-survey -- rdeps <id>        # what points at it — ONE HOP
+```
+
+**Use `impact`, not `rdeps`, when the question is blast radius.** `rdeps` is one hop and says so:
+`mod:crates/delulu-check/src/check.rs` — the module that decides what type-checks — has **one
+structural** edge arriving at it and reaches **134** nodes transitively. Every hop names the node it
+came from and the file and line it was read from, so a chain can be walked back and disagreed with
+exactly like a single edge.
+
 [`docs/survey/DISCREPANCIES.md`](survey/DISCREPANCIES.md) lists where the repository currently
 disagrees with itself — worth reading before you trust a number you found in prose.
 

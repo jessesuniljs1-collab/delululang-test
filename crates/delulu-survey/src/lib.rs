@@ -303,11 +303,188 @@ impl Survey {
         self.edges.iter().filter(|e| e.from == id).collect()
     }
 
-    /// Every edge arriving at `id` — the question "what breaks if I change this?".
+    /// Every edge arriving at `id` — one hop.
+    ///
+    /// One hop is the honest scope of this function and **not** the honest answer to "what breaks
+    /// if I change this?". `mod:crates/delulu-check/src/check.rs` — the module that decides what
+    /// type-checks — has exactly **one structural** edge arriving at it. Use [`Survey::walk`] for the
+    /// transitive question.
     pub fn into_(&self, id: &str) -> Vec<&Edge> {
         self.edges.iter().filter(|e| e.to == id).collect()
     }
+
+    /// Everything reachable from `id`, breadth-first, **with the cited edge that reached it**.
+    ///
+    /// The provenance law does not weaken over distance. A transitive relation is a *chain* of
+    /// edges that were each read from a file and a line, so every node returned here carries the
+    /// one edge that first reached it; following those parents upward reconstructs the whole chain,
+    /// citation by citation. Nothing is inferred, nothing is summarised, and a relation this walk
+    /// cannot cite at every hop is not in the result.
+    ///
+    /// Results are ordered by depth, then by id, so two runs over the same tree print the same
+    /// thing — the property `two builds of the same tree produce the same map` already requires of
+    /// everything else here.
+    pub fn walk<'a>(&'a self, start: &str, dir: Dir, max_depth: u32) -> Vec<Reached<'a>> {
+        // Resolve the caller's string to the map's own id, so everything that escapes borrows from
+        // the map rather than from the argument — and so a walk from a node that does not exist
+        // returns nothing instead of an empty answer that looks like a real one.
+        let Some(start) = self.node(start).map(|n| n.id.as_str()) else {
+            return Vec::new();
+        };
+
+        // One index, built once. `out`/`into_` are linear scans, and a breadth-first walk calling
+        // either per node would be O(nodes × edges) for no reason.
+        let mut adj: BTreeMap<&str, Vec<&Edge>> = BTreeMap::new();
+        for e in self.edges.iter().filter(|e| e.kind.composes()) {
+            let key = match dir {
+                Dir::Outgoing => e.from.as_str(),
+                Dir::Incoming => e.to.as_str(),
+            };
+            adj.entry(key).or_default().push(e);
+        }
+
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        seen.insert(start);
+        let mut out: Vec<Reached<'a>> = Vec::new();
+        let mut frontier: Vec<&'a str> = vec![start];
+
+        for depth in 1..=max_depth {
+            let mut next: BTreeSet<&str> = BTreeSet::new();
+            let mut wave: Vec<Reached<'a>> = Vec::new();
+            for node in &frontier {
+                for e in adj.get(node).map(Vec::as_slice).unwrap_or(&[]) {
+                    // Both ends come off the edge, which is what makes the citation on this hop
+                    // describe exactly the step that was taken.
+                    let (other, came_from) = match dir {
+                        Dir::Outgoing => (e.to.as_str(), e.from.as_str()),
+                        Dir::Incoming => (e.from.as_str(), e.to.as_str()),
+                    };
+                    // First arrival wins, so each node is reported at its SHORTEST distance and a
+                    // cycle terminates the walk instead of circling it.
+                    if seen.contains(other) || !next.insert(other) {
+                        continue;
+                    }
+                    wave.push(Reached { id: other, depth, via: e, from: came_from });
+                }
+            }
+            if wave.is_empty() {
+                break;
+            }
+            wave.sort_by(|a, b| a.id.cmp(b.id));
+            for r in &wave {
+                seen.insert(r.id);
+            }
+            frontier = wave.iter().map(|r| r.id).collect();
+            out.extend(wave);
+        }
+        out
+    }
+
+    /// The shortest chain of cited edges from `from` to `to`, or `None` if the map has none.
+    ///
+    /// Directed: it answers "how does this reach that", which is the question with an architectural
+    /// meaning. A caller that finds nothing should try the reverse before concluding the two are
+    /// unrelated — `delulu-survey path` does exactly that and says which direction it found.
+    pub fn shortest_path<'a>(&'a self, from: &str, to: &str) -> Option<Vec<&'a Edge>> {
+        let from = self.node(from)?.id.as_str();
+        let to = self.node(to)?.id.as_str();
+        if from == to {
+            return Some(Vec::new());
+        }
+        let mut parent: BTreeMap<&'a str, &'a Edge> = BTreeMap::new();
+        for r in self.walk(from, Dir::Outgoing, MAX_WALK_DEPTH) {
+            parent.insert(r.id, r.via);
+            if r.id == to {
+                break;
+            }
+        }
+        parent.get(to)?;
+
+        let mut chain: Vec<&'a Edge> = Vec::new();
+        let mut cur: &str = to;
+        while cur != from {
+            let e = parent.get(cur)?;
+            chain.push(e);
+            cur = e.from.as_str();
+            // A malformed parent map would loop; the map is acyclic along shortest paths by
+            // construction, and this bound says so rather than trusting it.
+            if chain.len() > MAX_WALK_DEPTH as usize {
+                return None;
+            }
+        }
+        chain.reverse();
+        Some(chain)
+    }
 }
+
+impl EdgeKind {
+    /// Whether a **chain** of this relation means anything.
+    ///
+    /// This is the difference between an edge being true and a *path* being true, and getting it
+    /// wrong is how a map becomes more impressive as it becomes less useful. Every edge here is
+    /// read from a file and cited. But composition is a separate claim: `A depends-on B` followed
+    /// by `B depends-on C` genuinely means C's change can reach A, while `README links-to
+    /// CONTRIBUTING` followed by `CONTRIBUTING references cli.rs` means **nothing** about what
+    /// breaks — it is two unrelated sentences laid end to end.
+    ///
+    /// The first version of [`Survey::walk`] composed every kind. Measured on this repository, it
+    /// reported **236 nodes reachable from every starting node**, including `doc:README.md` — a
+    /// confident, precise, meaningless number, arrived at by hopping from a document into the build
+    /// graph through a citation. It saturated because narrative edges connect everything to
+    /// everything eventually.
+    ///
+    /// So a transitive walk follows only the relations that *propagate*: crate dependencies, module
+    /// declarations, use-sites and test targets. Narrative relations — a document citing a file, a
+    /// ruling being referenced, a code being documented — are true, cited, and reported by `query`
+    /// and `rdeps` at **one hop**, which is the distance at which they mean something.
+    pub fn composes(self) -> bool {
+        match self {
+            // Build structure: a change really does travel along these.
+            EdgeKind::DependsOn
+            | EdgeKind::DependsOnExternal
+            | EdgeKind::DeclaresModule
+            | EdgeKind::Uses
+            | EdgeKind::TestsCrate => true,
+            // Narrative and registry relations: true at one hop, meaningless in a chain.
+            EdgeKind::DefinesCode
+            | EdgeKind::RaisesCode
+            | EdgeKind::ExpectsCode
+            | EdgeKind::DocumentsCode
+            | EdgeKind::Defines
+            | EdgeKind::Cites
+            | EdgeKind::LinksTo
+            | EdgeKind::References => false,
+        }
+    }
+}
+
+/// Which way a [`Survey::walk`] follows edges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dir {
+    /// Toward what a node points at — "what does this rest on?".
+    Outgoing,
+    /// Toward what points at a node — "what breaks if I change this?".
+    Incoming,
+}
+
+/// A node a walk reached, and the one cited edge that reached it.
+#[derive(Debug, Clone, Copy)]
+pub struct Reached<'a> {
+    pub id: &'a str,
+    /// Hops from the start. Shortest, because the first arrival wins.
+    pub depth: u32,
+    /// The edge traversed to get here — carrying its file and line, like every other edge.
+    pub via: &'a Edge,
+    /// The node this hop came from, so a reader can walk the chain back to the start.
+    pub from: &'a str,
+}
+
+/// Depth bound for a transitive walk.
+///
+/// This repository's map is 919 nodes deep in the tens, not the thousands, so this is a guard
+/// against a malformed graph rather than a real limit. It is named rather than left implicit
+/// because an unbounded walk over a cyclic graph is how a tool hangs instead of answering.
+pub const MAX_WALK_DEPTH: u32 = 64;
 
 /// Accumulator shared by the extractors. Deduplicates on the way in: the same relation read from
 /// the same line twice is one edge, but the same relation read from two different lines is two,

@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 12 |
 | … repository tooling (`publish = false`) | 1 |
-| Rust files | 208 |
-| Rust lines | 99757 |
-| Rust files outside `src/` (test/bench targets) | 81 |
+| Rust files | 209 |
+| Rust lines | 100274 |
+| Rust files outside `src/` (test/bench targets) | 82 |
 | Markdown documents | 120 |
-| Markdown lines | 27309 |
+| Markdown lines | 27410 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
 | Recorded rulings | 88 |
 | Recorded campaign findings | 69 |
-| Nodes / edges in this map | 919 / 8146 |
+| Nodes / edges in this map | 920 / 8164 |
 | Open discrepancies | 6 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -294,13 +294,13 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 10 files, 3195 lines
+- **Modules:** 10 files, 3503 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 426 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 184 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 603 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 315 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 231 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |

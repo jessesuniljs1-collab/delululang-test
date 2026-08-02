@@ -20,8 +20,13 @@ gate fail on purpose, it is not a gate.
 
 - **Read the map first.** [`docs/survey/SURVEY.md`](docs/survey/SURVEY.md) is where the parts are
   and how they depend on each other, generated from the tree rather than remembered. Before
-  changing anything, `cargo run -p delulu-survey -- rdeps crate:<name>` will tell you what else
-  touches it — with the line that proves each one.
+  changing anything, `cargo run -p delulu-survey -- impact <id>` will tell you what else it reaches
+  — with the line that proves every hop.
+
+  Use `impact`, not `rdeps`, for that question. `rdeps` answers **one hop**, and one hop is not the
+  blast radius: `mod:crates/delulu-check/src/check.rs`, the module that decides what type-checks,
+  has one *structural* edge arriving at it and reaches 134 transitively. `affected-by <id>` is the same
+  walk outward, and `path <a> <b>` prints one chain hop by hop.
 - **A language change needs an RFC.** From 1.0 the core is frozen except through `rfcs/`. See §5.
 - **A bug fix does not.** Open an issue, or just send the fix with its test.
 - **A suspected vulnerability goes to `SECURITY.md`, never to a public issue.**

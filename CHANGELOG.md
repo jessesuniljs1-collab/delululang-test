@@ -180,6 +180,40 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **The Survey answers the transitive questions — `impact`, `affected-by`, `path` — and refuses to
+  compose relations that do not compose.** `rdeps` is one hop. That is the right answer to "what
+  points at this" and the wrong answer to "what breaks if I change this":
+  `mod:crates/delulu-check/src/check.rs`, the module that decides what type-checks, has **one
+  structural** edge arriving at it and reaches **134** nodes transitively. The Survey's own README tells a reader to
+  reach for `rdeps` first when changing anything, so the primary documented use case was returning
+  a confident number that understated blast radius by two orders of magnitude.
+
+  `impact <id>` walks it, `affected-by <id>` is the same walk outward, `path <a> <b>` prints one
+  chain in full, and `--depth N` bounds the first two. **Every hop names the node it came from and
+  the file and line the relation was read from** — the provenance law does not weaken over
+  distance, and a chain that could not be cited at every step would not be admissible here.
+
+  **The first version was wrong, and measuring it is what showed that.** Composing every edge kind
+  reported **236 nodes reachable from every starting node in the repository**, including
+  `doc:README.md` — 236 things that "break" if a README changes. Narrative edges connect everything
+  to everything eventually: `README links-to CONTRIBUTING` followed by `CONTRIBUTING references
+  cli.rs` is two unrelated sentences laid end to end, and calling their composition "what breaks"
+  asserts a relation no file in this repository states. Every individual edge was cited and true;
+  the *path* was not. A walk now follows only relations that propagate — crate dependencies, module
+  declarations, use-sites, test targets — and `EdgeKind::composes` is exhaustive, so a new edge kind
+  cannot compile until someone decides which side it is on. The blast-radius numbers now order the
+  way a dependency graph must: `delulu-diag` 164 > `delulu-syntax` 148 > `check.rs` 134 >
+  `delulu` 62, and a diagnostic code and a document correctly reach **0**.
+
+  **Two proposed verbs were disproved by inspection rather than built.** `why <id>` would print a
+  filtered subset of what `query` already returns — the incoming `cites`/`links-to`/`documents`
+  edges from rulings, findings and specs are already in its output. `owners <id>` would read
+  `.github/CODEOWNERS`, where every rule names the same deliberate placeholder
+  (`@PENDING-PUBLIC-project-lead`, unassigned until public launch), making it a constant function.
+  Both are recorded in `docs/survey/README.md` under what the Survey will not do, with the one
+  thing CODEOWNERS carries that the map does not — which paths are **entrenched** — named as
+  unbuilt rather than quietly dropped.
+
 - **`delulu check` takes several files in one process — and the argument it used to drop in silence
   is now refused.** Every performance table this project publishes measures the *marginal* cost of
   size. None measured the **floor**: what one invocation costs on a program small enough to be free.

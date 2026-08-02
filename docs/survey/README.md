@@ -109,10 +109,35 @@ while the thing it maps is broken is a map you cannot use to fix it.
 
 ```
 cargo run -p delulu-survey -- query crate:delulu-check    # a node, and everything touching it
-cargo run -p delulu-survey -- rdeps crate:delulu-diag     # what breaks if I change this
+cargo run -p delulu-survey -- rdeps crate:delulu-diag     # what points at it — ONE HOP
 cargo run -p delulu-survey -- findings                    # the discrepancy list
 cargo run -p delulu-survey -- check                       # is the committed map current?
 ```
+
+**The transitive questions** — the ones you actually have before changing code:
+
+```
+cargo run -p delulu-survey -- impact mod:crates/delulu-check/src/check.rs
+cargo run -p delulu-survey -- affected-by crate:delulu-check
+cargo run -p delulu-survey -- path crate:delulu crate:delulu-broker
+```
+
+`impact` is the honest form of "what breaks if I change this", and the difference is not small:
+`mod:crates/delulu-check/src/check.rs` — the module that decides what type-checks — has **one
+structural** edge arriving at it and reaches **134** nodes transitively. `rdeps` answers one hop;
+reach for `impact` when the question is blast radius. `affected-by` is the same walk in the other
+direction, and `path` prints one chain in full. `--depth N` bounds the first two.
+
+**Every hop is cited, exactly like a single edge**, and that is what makes a chain admissible here
+at all. Each reached node names the node it came from and the file and line the hop was read from,
+so the whole chain can be walked back and disagreed with.
+
+One caveat worth knowing when you read a raw in-degree: **documents are part of the map, so writing
+about a file changes how many edges point at it.** `check.rs` had one incoming edge before this
+paragraph existed and eight after, because several documents now mention it by name — each a real,
+cited `links-to`. Nothing about the code moved. `impact` is unaffected (it follows only relations
+that propagate), and this is why it compares against the structural subset rather than the raw
+count.
 
 Node ids are readable and guessable:
 
@@ -170,6 +195,30 @@ run had written, and it would never have converged.
 - **It does not count tests.** The number of passing tests comes from `cargo test`, not from
   reading files, and the Survey does not restate numbers it did not measure. It will tell you
   which documents quote a test count so you know what to re-check after a run.
+- **It does not compose relations that do not compose.** Every edge here is read from a file and
+  cited, but a *path* is a separate claim from an *edge*. `A depends-on B` followed by
+  `B depends-on C` genuinely means C's change can reach A. `README links-to CONTRIBUTING` followed
+  by `CONTRIBUTING references cli.rs` means nothing about what breaks — it is two unrelated
+  sentences laid end to end.
+
+  This is not a hypothetical. The first version of `impact` followed every edge kind and reported
+  **236 nodes reachable from every starting node in the repository**, including `doc:README.md` —
+  a confident, precise, meaningless number. So a transitive walk follows only relations that
+  propagate: crate dependencies, module declarations, use-sites, test targets. Narrative relations
+  are reported by `query` and `rdeps` at **one hop**, which is the distance at which they are true.
+  `crates/delulu-survey/tests/traversal.rs` holds that line, because a saturated answer looks
+  exactly like a thorough one.
+
+- **It does not answer "why does this exist" or "who owns this" as separate verbs, and that was
+  measured too.** A `why` verb would print a *filtered subset* of what `query` already returns —
+  the incoming `cites`, `links-to` and `documents` edges from rulings, findings and specs are
+  already there. An `owners` verb would read `.github/CODEOWNERS`, where every rule currently names
+  the same deliberate placeholder (`@PENDING-PUBLIC-project-lead`, unassigned until public launch),
+  so it would be a constant function. Neither was built. What CODEOWNERS *does* carry that this map
+  does not is which paths are **entrenched** — the constitution, `STABILITY.md`, `/rfcs/`, the
+  soundness audit, the conformance machinery. Surfacing that belongs on the node, not in a verb,
+  and it is not built.
+
 - **It does not judge.** `DISCREPANCIES.md` reports that two things disagree; which one is wrong is
   a person's call.
 - **It does not touch the authority model.** The Survey is a reader. It has no opinion about what a
