@@ -707,6 +707,7 @@ fn run_inner(args: &[String]) -> i32 {
         "morph" => cmd_morph(rest),
         "explain" => cmd_explain(rest),
         "doctor" => crate::doctor::cmd_doctor(rest),
+        "completions" => crate::completions::cmd_completions(rest),
         "--help" | "-h" | "help" => {
             println!("{}", usage());
             0
@@ -745,6 +746,23 @@ fn subcommand_help(cmd: &str) -> String {
     }
     format!("delulu {cmd}\n\nUSAGE:\n{}\n", lines.join("\n"))
 }
+
+/// Every subcommand a person types, in the order [`usage`] presents them.
+///
+/// **One list.** A shell-completion script is a copy of this by nature, and a copy is a thing that
+/// drifts: `deploy` and `fleet` were both working commands that `--help` never mentioned, which is
+/// how they escaped the first `--json` contract sweep entirely. `the_command_list_agrees_with_the
+/// _dispatcher_and_the_usage_text` binds all three together so that shape of mistake fails the
+/// build rather than hiding in a completion script nobody re-reads.
+///
+/// The foreign worker is deliberately absent: it is spawned by the host, never typed by a person,
+/// and completing it would advertise an internal protocol as a command.
+pub(crate) const SUBCOMMANDS: &[&str] = &[
+    "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
+    "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
+    "repl", "audit", "grants", "guard", "broker", "fleet", "secrets", "locale", "morph", "explain",
+    "doctor", "completions",
+];
 
 fn usage() -> &'static str {
     "delulu — the DeluluLang compiler and runtime\n\
@@ -809,7 +827,8 @@ fn usage() -> &'static str {
      \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\
      \x20 delulu keygen    [--name N]                          (mint an ed25519 signing key in ~/.delulu/keys)\n\
-     \x20 delulu sign      <artifact> [--hybrid] [--unstable] | verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable]\n\
+     \x20 delulu sign      <artifact> [--hybrid] [--unstable]\n\
+     \x20 delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)\n\
      \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
@@ -821,6 +840,8 @@ fn usage() -> &'static str {
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
      \x20 delulu doctor    [--check] [--json]  (is this machine healthy? inside the source tree, is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the repository map current and sound? regenerates it when behind; --check never writes)\n\
+     \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 list it carries is generated from this help, so the two cannot disagree)\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
      \n\

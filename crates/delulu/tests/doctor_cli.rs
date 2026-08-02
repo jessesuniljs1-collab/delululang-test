@@ -160,9 +160,14 @@ fn outside_the_source_tree_the_repository_section_is_skipped() {
     let out = stdout(&o);
     assert_eq!(o.status.code(), Some(0), "a healthy machine outside the repo is still healthy:\n{out}");
     assert!(out.contains("environment"), "environment checks run everywhere:\n{out}");
+    // Substance, not a phrase. The wording here is user-facing prose and will be improved again;
+    // what must hold is that the section is NAMED rather than silently omitted, that it says which
+    // source tree it means, and that nothing which could not run is reported as having passed.
+    assert!(out.contains("repository"), "the section is named, not dropped:\n{out}");
+    assert!(out.contains("source tree"), "and it says which tree it means:\n{out}");
     assert!(
-        out.contains("repository checks skipped"),
-        "doctor must say why the repository section is absent rather than silently omitting it:\n{out}"
+        !out.contains("survey freshness"),
+        "a check that could not run must not appear at all:\n{out}"
     );
     let _ = std::fs::remove_dir_all(&elsewhere);
 }

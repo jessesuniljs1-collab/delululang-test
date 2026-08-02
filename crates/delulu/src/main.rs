@@ -10,6 +10,7 @@ mod broker_transport;
 mod brokerd;
 mod cert_crypto;
 mod cli;
+mod completions;
 mod deploy;
 mod doctor;
 mod fix;

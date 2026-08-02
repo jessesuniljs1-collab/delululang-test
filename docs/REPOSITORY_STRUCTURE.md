@@ -51,12 +51,28 @@ DeluluLang/
 │   ├── delulu-survey/              # repository tooling (`publish = false`, no sibling deps):
 │   │                               #   derives docs/survey/ — the map of THIS REPOSITORY, with a
 │   │                               #   file:line citation on every edge. Not language surface.
-│   └── delulu/                     # [Stage 1] the `delulu` CLI: check | run | repl | authority
-│       ├── src/{main,cli,repl}.rs  # + [Stage 5] broker_ipc, brokerd, broker_client,
-│       │                           #   broker_transport, foreign_worker, microvm (Linux)
-│       └── tests/                  # binary-level integration: broker_cli, grants_cli, audit_cli,
-│                                   #   foreign_worker, microvm_criterion8, guard_cli, guard_e2e,
-│                                   #   palette_cli, atlas_cli, atlas_e2e, …
+│   └── delulu/                     # [Stage 1] the `delulu` CLI — every user-facing command lives
+│       │                           #   here. `cli.rs` dispatches and owns `usage()`; a test binds
+│       │                           #   the dispatcher, `--help` and the generated completion
+│       │                           #   script to ONE command list, so none of the three can drift
+│       │                           #   (completions_cli.rs). One command per module below:
+│       ├── src/{main,cli}.rs       #   dispatch + the Stage-1 commands (check, fmt, test, run, …)
+│       ├── src/new.rs              #   `new`         scaffold a package; its ceiling is minimal
+│       ├── src/fix.rs              #   `fix`         apply typed repairs; never widens authority
+│       ├── src/doctor.rs           #   `doctor`      is this machine — and this checkout — healthy?
+│       ├── src/completions.rs      #   `completions` generated shell completion (bash/zsh/fish/pwsh)
+│       ├── src/lsp.rs              #   `lsp`         the language server, analysis only (§11)
+│       ├── src/repl.rs             #   `repl`
+│       ├── src/{signing,deploy,fleet}.rs        # keygen/sign/verify-sig/publish/add/login; deploy; fleet
+│       ├── src/{locale,morph_file}.rs           # catalog plugins; surface morphs (see morphs/)
+│       ├── src/{advisories,cert_crypto}.rs      # advisory feed; federation certificate crypto
+│       ├── src/{brokerd,broker_ipc,broker_client,broker_transport}.rs   # [Stage 5] custody
+│       ├── src/{foreign_worker,microvm}.rs      # process isolation; microVM (Linux only)
+│       └── tests/                  # binary-level integration: new_cli, fix_cli, completions_cli,
+│                                   #   doctor_cli, lsp_cli, cli_contract, json_contract,
+│                                   #   broker_cli, grants_cli, audit_cli, foreign_worker,
+│                                   #   microvm_criterion8, guard_cli, guard_e2e, palette_cli,
+│                                   #   atlas_cli, atlas_e2e, …
 │
 │                                   # NOTE: there is NO `stdlib/` directory and NO standard
 │                                   # library written in DeluluLang. Earlier revisions of this

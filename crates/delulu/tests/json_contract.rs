@@ -19,9 +19,9 @@ use std::process::{Command, Output};
 /// Every run-once subcommand. Kept explicit so that adding a subcommand and forgetting the contract
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "atlas", "audit", "authority", "build", "check", "deploy", "explain", "fix", "fleet",
-    "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "plugin", "publish",
-    "new", "run", "secrets", "sign", "test", "why",
+    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "explain",
+    "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
+    "plugin", "publish", "run", "secrets", "sign", "test", "verify-sig", "why",
 ];
 
 /// Every run-once subcommand the dispatcher accepts must appear in [`SUBCOMMANDS`] AND in `--help`.

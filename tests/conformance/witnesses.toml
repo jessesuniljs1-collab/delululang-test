@@ -1371,6 +1371,18 @@ test = "every_listed_subcommand_refuses_an_invalid_invocation"
 kind = "negative"
 
 [[witness]]
+anchor = "ref.cli.completions"
+file = "crates/delulu/tests/completions_cli.rs"
+test = "the_command_list_agrees_with_the_dispatcher_and_the_usage_text"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.cli.completions"
+file = "crates/delulu/tests/completions_cli.rs"
+test = "an_unknown_shell_is_refused"
+kind = "negative"
+
+[[witness]]
 anchor = "ref.cli.new"
 file = "crates/delulu/tests/new_cli.rs"
 test = "a_new_binary_package_checks_tests_and_runs"

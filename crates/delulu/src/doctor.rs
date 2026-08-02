@@ -92,6 +92,19 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
         }
     }
 
+    // **One command, two audiences, and the scope decided by where you are standing.**
+    //
+    // The environment section answers "is my install healthy?" and is for anyone who uses Delulu.
+    // The repository section answers "is DeluluLang's own map current and sound?" and is only for
+    // someone working ON the language — so it runs only inside that source tree.
+    //
+    // These are not two commands. It is one question whose answer has more to say in one place
+    // than the other, the way `git status` says more inside a repository. Splitting them would
+    // either duplicate the environment checks or oblige a contributor to remember two commands,
+    // and the one they would forget is the repository one — which is the one that rots.
+    //
+    // The note below names *whose* repository, so a user with a Delulu project of their own does
+    // not read it as a remark about theirs.
     let mut r = Report::default();
     environment(&mut r);
     match delulu_survey::find_source_tree() {
@@ -100,7 +113,8 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
             "repository",
             "delulu source tree",
             Status::Note,
-            "not inside the DeluluLang source tree — repository checks skipped",
+            "not inside DeluluLang's OWN source tree, so its repository-map checks do not apply \
+             here — nothing about your project is being skipped",
         ),
     }
 

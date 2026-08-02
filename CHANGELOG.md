@@ -180,6 +180,35 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **`delulu completions <bash|zsh|fish|powershell>` — generated, not maintained.** A completion
+  script is a *copy* of the command list, and this repository has already paid for that kind of
+  copy once: `deploy` and `fleet` were working commands that `--help` never mentioned, which is how
+  they escaped the first `--json` contract sweep entirely.
+
+  So the list comes from one constant, and **a test binds that constant to the dispatcher and to
+  the help text** — all three must name the same commands or the build fails saying which is
+  missing. Dropping one entry was observed failing exactly that way. The internal foreign-worker
+  subcommand stays unadvertised; it is spawned by the host, never typed.
+
+  That test immediately found a real wart: `verify-sig` was documented on a line shared with
+  `sign`, so `delulu verify-sig --help` printed the *entire* manual instead of its own usage. It
+  has its own line now and its own focused help.
+
+  No descriptions in the scripts, deliberately — thirty-one sentences restating `usage()` is
+  precisely the second copy this design exists to avoid. There is no `--json` form either, because
+  the output is a shell script and pretending otherwise would emit something no shell can source.
+  The bash and PowerShell scripts were verified by loading them into a real shell and completing
+  against them, not by inspection.
+
+- **`delulu doctor` says whose repository it means.** Outside DeluluLang's own source tree it noted
+  that "repository checks" were skipped, which a user with a Delulu project of their own could read
+  as a remark about *theirs*. It now says the checks do not apply there and that nothing about your
+  project is being skipped. The command stays one command on purpose: the environment section is
+  for anyone who uses Delulu, the repository section for someone working on the language, and it is
+  one question whose answer has more to say in one place than the other — splitting it would either
+  duplicate the environment checks or oblige a contributor to remember two commands, forgetting the
+  one that rots.
+
 - **`delulu new` — a package that already checks, tests and runs.** Until now the answer to "I
   built the compiler, now what?" was to hand-write `delulu.toml` and infer the layout from an
   example, which is a poor first five minutes for a language whose proposition has to be understood

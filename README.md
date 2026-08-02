@@ -31,7 +31,7 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 12 crates, ~94,000 lines of Rust. 106 test suites, 1,417 tests passing. Conformance coverage is a hard per-commit gate at 100%. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
+| **Built and tested** | 12 crates, ~94,000 lines of Rust. 107 test suites, 1,424 tests passing. Conformance coverage is a hard per-commit gate at 100%. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Start there before changing anything. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. |
@@ -131,6 +131,13 @@ delulu fmt <path>                    # one canonical style, zero options
 
 Add `--json` to any of them for the machine-readable envelope. `delulu --help` is the complete
 reference and is kept in sync with the code by a build gate.
+
+Shell completion is generated from that same command list, so it can never offer a command that
+does not exist or miss one that does:
+
+```sh
+delulu completions bash        # also zsh, fish, powershell — see `delulu completions --help`
+```
 
 ## Documentation
 

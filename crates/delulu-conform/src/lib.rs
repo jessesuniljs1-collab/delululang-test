@@ -62,7 +62,7 @@ pub const AUDIT_RULES: &[&str] = &["R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "R-
 pub const CLI_SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish", "add", "login",
     "build", "lock", "run", "plugin", "authority", "why", "atlas", "repl", "audit", "grants",
-    "guard", "broker", "secrets", "locale", "explain", "doctor",
+    "guard", "broker", "secrets", "locale", "explain", "doctor", "completions",
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
