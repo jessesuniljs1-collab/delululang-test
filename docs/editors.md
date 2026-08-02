@@ -42,6 +42,13 @@ transport: stdio
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.
 - **`delulu.authority`** (workspace/executeCommand) — the §10.5 authority report as
   JSON over the wire; agent harnesses call this instead of shelling out.
+- **Workspace symbols** — every module-level declaration in the project, including in
+  files you have never opened. The server indexes `*.delulu` under the workspace folders
+  (skipping `target/`, `.git/` and friends), **parsing rather than type-checking** them,
+  and validates that index against file modification times, so it does not go stale when
+  the editor forgets to say a file changed. An open buffer always wins over its copy on
+  disk — what you are looking at may not be saved. With no workspace folder, only open
+  documents are searched, and nothing is read from disk.
 - **Incremental sync** (`textDocumentSync: 2`) — an edit sends the range it touched
   rather than the whole file, and the document is checked once per edit rather than
   once per question asked about it. A client that prefers to resend the whole text is

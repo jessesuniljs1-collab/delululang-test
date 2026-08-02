@@ -180,6 +180,30 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **Workspace symbols — the language server can now answer questions about files nobody opened.**
+  `workspace/symbol` returns every module-level declaration in the project, so "where is this
+  declared?" stops requiring that you already found the file. Previously the server knew only about
+  open buffers, which is a poor bargain for a human and a useless one for an agent that has opened
+  nothing: it got an empty list with no way to distinguish that from "it does not exist".
+
+  The index **parses rather than type-checks**, because names and spans are all it needs and
+  parsing is a fraction of the cost — indexing a repository is not the moment to run the whole
+  checker over every file in it. It is validated against file modification times rather than
+  against `didChangeWatchedFiles`, which only arrives if the client was configured to send it; an
+  index that rots whenever the editor is not paying attention is worse than none, because it
+  answers confidently. `target/`, `.git/` and their kind are skipped, the walk is capped, and with
+  no workspace folder nothing is read from disk at all.
+
+  **An open buffer always wins over its copy on disk** — what you are looking at may not be saved,
+  and the saved version is not what you would be navigating to. Both of those were observed
+  failing before the rules that fix them: a `target/` copy of a function surfacing in results, and
+  a stale on-disk name reported alongside the unsaved buffer that replaced it.
+
+  The `file:` URI parser is hand-rolled, since this server takes no new dependencies. Its own unit
+  test immediately caught the first version rejecting `file:/path` — the minimal form RFC 8089
+  allows — which would have meant a workspace root that silently failed to register and an index
+  that stayed permanently empty.
+
 - **Completion in the language server.** Typing now offers the declarations in scope — a function
   carrying its signature **and its authority row**, so you see what it can do before you call it —
   followed by the keywords, with names from the file you are in sorted above names from other open

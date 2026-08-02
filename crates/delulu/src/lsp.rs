@@ -24,7 +24,11 @@ use delulu_diag::Diagnostic;
 pub fn run_lsp(_args: &[String]) -> i32 {
     let stdin = std::io::stdin();
     let mut reader = std::io::BufReader::new(stdin.lock());
-    let mut server = Server { docs: HashMap::new(), shutdown_seen: false };
+    let mut server = Server {
+        docs: HashMap::new(),
+        workspace: Workspace { roots: Vec::new(), index: RefCell::new(HashMap::new()) },
+        shutdown_seen: false,
+    };
     loop {
         let Some(raw) = read_message(&mut reader) else {
             // Client hung up. Clean only if shutdown was requested first.
@@ -33,7 +37,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
         let Ok(msg) = serde_json::from_str::<Value>(&raw) else { continue };
         let id = msg.get("id").cloned();
         match msg["method"].as_str() {
-            Some("initialize") => respond(id, server.initialize()),
+            Some("initialize") => {
+                let r = server.initialize(&msg["params"]);
+                respond(id, r);
+            }
             Some("initialized") => {}
             Some("shutdown") => {
                 server.shutdown_seen = true;
@@ -100,6 +107,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
             }
             Some("textDocument/codeLens") => {
                 let r = server.code_lens(&msg["params"]);
+                respond(id, r);
+            }
+            Some("workspace/symbol") => {
+                let r = server.workspace_symbols(&msg["params"]);
                 respond(id, r);
             }
             Some("workspace/executeCommand") => {
@@ -189,8 +200,101 @@ impl Doc {
     }
 }
 
+/// A `.delulu` file on disk that no editor has open.
+///
+/// **Parsed, not checked.** Everything the workspace answers — where a name is declared, what
+/// declarations a project contains — is available from the syntax tree, and parsing is a fraction
+/// of the cost of resolve-and-typecheck. Indexing a repository is not the moment to run the whole
+/// checker over every file in it.
+struct Indexed {
+    uri: String,
+    /// Kept so a symbol's byte span can be turned into an LSP range. Positions are UTF-16 offsets
+    /// into a line, which cannot be recovered from the syntax tree alone.
+    text: String,
+    /// What the file's modification time was when it was parsed. The index is validated against
+    /// this rather than against a notification from the client: `didChangeWatchedFiles` only
+    /// arrives if the client was configured to send it, and an index that silently rots whenever
+    /// the editor is not paying attention is worse than no index, because it answers confidently.
+    mtime: std::time::SystemTime,
+    module: Rc<delulu_syntax::ast::Module>,
+}
+
+/// The files under the workspace roots, kept in step with the filesystem.
+struct Workspace {
+    /// From `workspaceFolders`, or the older `rootUri`, at initialize. Empty is normal — a client
+    /// editing a loose file has no workspace, and then only open documents are searched.
+    roots: Vec<std::path::PathBuf>,
+    index: RefCell<HashMap<std::path::PathBuf, Indexed>>,
+}
+
+/// Directories never worth walking. `target` alone routinely holds more files than the source.
+const SKIPPED_DIRS: [&str; 6] = ["target", ".git", "node_modules", ".claude", "dist", "build"];
+
+/// A ceiling on how many files are indexed.
+///
+/// Not a tuning knob — a promise about the worst case. A language server pointed at the wrong
+/// directory (a home directory, a network mount) should degrade to an incomplete answer rather
+/// than walk until the editor gives up on it.
+const MAX_INDEXED_FILES: usize = 5_000;
+
+/// How many symbols one `workspace/symbol` answer may carry. An empty query means "everything",
+/// and nothing useful happens to a human or a model that is handed ten thousand names.
+const MAX_WORKSPACE_SYMBOLS: usize = 512;
+
+impl Workspace {
+    /// Bring the index in step with the filesystem, re-parsing only what actually changed.
+    ///
+    /// The walk stats every candidate file, which is cheap; the parse — the expensive part — is
+    /// skipped for anything whose modification time is unchanged since it was last read. Files
+    /// that have disappeared are dropped, so a deleted file stops being reported.
+    fn refresh(&self) {
+        if self.roots.is_empty() {
+            return;
+        }
+        let mut seen: Vec<std::path::PathBuf> = Vec::new();
+        for root in &self.roots {
+            collect(root, &mut seen);
+        }
+        let mut index = self.index.borrow_mut();
+        index.retain(|p, _| seen.contains(p));
+        for path in seen {
+            let Ok(mtime) = std::fs::metadata(&path).and_then(|m| m.modified()) else { continue };
+            if index.get(&path).is_some_and(|e| e.mtime == mtime) {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            let (module, _diags) = delulu_syntax::parse_file(0, &text);
+            index.insert(
+                path.clone(),
+                Indexed { uri: path_to_uri(&path), text, mtime, module: Rc::new(module) },
+            );
+        }
+    }
+}
+
+/// Every `.delulu` file under `dir`, depth-first, bounded and skipping the noisy directories.
+fn collect(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    if out.len() >= MAX_INDEXED_FILES {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let path = e.path();
+        let name = e.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            if !name.starts_with('.') && !SKIPPED_DIRS.contains(&name.as_ref()) {
+                collect(&path, out);
+            }
+        } else if name.ends_with(".delulu") && out.len() < MAX_INDEXED_FILES {
+            out.push(path);
+        }
+    }
+}
+
 struct Server {
     docs: HashMap<String, Doc>,
+    workspace: Workspace,
     shutdown_seen: bool,
 }
 
@@ -254,7 +358,31 @@ impl Server {
         self.docs.get(uri).map(|d| d.text.as_str())
     }
 
-    fn initialize(&self) -> Value {
+    /// Record the workspace roots and answer with what this server can do.
+    ///
+    /// `workspaceFolders` is the current form and `rootUri` the one clients have sent for a
+    /// decade; both are read, because refusing the old one would mean silently having no
+    /// workspace under half the editors in use. Neither being present is normal — a loose file
+    /// opened without a project — and then only open documents are ever searched.
+    fn initialize(&mut self, params: &Value) -> Value {
+        let mut roots: Vec<std::path::PathBuf> = Vec::new();
+        if let Some(folders) = params["workspaceFolders"].as_array() {
+            for f in folders {
+                if let Some(p) = f["uri"].as_str().and_then(uri_to_path) {
+                    roots.push(p);
+                }
+            }
+        }
+        if roots.is_empty() {
+            if let Some(p) = params["rootUri"].as_str().and_then(uri_to_path) {
+                roots.push(p);
+            }
+        }
+        self.workspace.roots = roots;
+        self.capabilities()
+    }
+
+    fn capabilities(&self) -> Value {
         json!({
             "capabilities": {
                 // 2 = incremental: an edit sends the range it touched, not the whole file. A
@@ -278,6 +406,7 @@ impl Server {
                 "referencesProvider": true,
                 "renameProvider": true,
                 "codeLensProvider": { "resolveProvider": false },
+                "workspaceSymbolProvider": true,
                 "semanticTokensProvider": {
                     "legend": { "tokenTypes": SEMANTIC_TOKEN_TYPES, "tokenModifiers": [] },
                     "full": true
@@ -506,6 +635,39 @@ impl Server {
             &a.result,
             &delulu_check::ScopeInfo::default(),
         )
+    }
+
+    /// Module-level declarations across the whole project, matched against a query.
+    ///
+    /// This is the answer to "where is X in this codebase?" — the question that previously had no
+    /// answer at all unless you had already opened the file it was in, which is a poor bargain for
+    /// a human and a useless one for an agent that has opened nothing.
+    ///
+    /// Open buffers win over their copy on disk: what you are looking at may not be saved, and the
+    /// saved version is not what you would be navigating to.
+    fn workspace_symbols(&self, params: &Value) -> Value {
+        let query = params["query"].as_str().unwrap_or("").to_lowercase();
+        let mut out: Vec<Value> = Vec::new();
+        let mut open: Vec<&str> = Vec::new();
+
+        for uri in self.uris() {
+            let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { continue };
+            open.push(uri);
+            emit_symbols(&mut out, &query, uri, text, &a.module);
+        }
+
+        self.workspace.refresh();
+        let index = self.workspace.index.borrow();
+        let mut files: Vec<&Indexed> =
+            index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
+        // Sorted, for the same reason `definition` is: an answer must not depend on a hash seed.
+        files.sort_by(|a, b| a.uri.cmp(&b.uri));
+        for e in files {
+            emit_symbols(&mut out, &query, &e.uri, &e.text, &e.module);
+        }
+
+        out.truncate(MAX_WORKSPACE_SYMBOLS);
+        Value::Array(out)
     }
 
     /// The identifier word at the request's position: `(word, start, end)` bytes.
@@ -920,6 +1082,121 @@ fn byte_range(text: &str, start: u32, end: u32) -> Value {
     json!({ "start": byte_to_pos(text, start), "end": byte_to_pos(text, end) })
 }
 
+/// `SymbolKind`, from the LSP specification — the same numbers `document_symbols` uses, so the
+/// flat and hierarchical views of one declaration never disagree about what it is.
+const SYM_MODULE: u32 = 2;
+const SYM_CLASS: u32 = 5;
+const SYM_METHOD: u32 = 6;
+const SYM_INTERFACE: u32 = 11;
+const SYM_FUNCTION: u32 = 12;
+const SYM_CONSTANT: u32 = 14;
+
+/// Every module-level declaration in `module` whose name matches `query`, as `SymbolInformation`.
+///
+/// This is the flat view; `documentSymbol` renders the same declarations as a hierarchy, because
+/// that is what the protocol asks for there. The two are held together by a test asserting that
+/// every name one reports for a file, the other reports too — a stronger guarantee than sharing
+/// the code, since it checks the answers rather than the implementation.
+///
+/// An empty query means "everything", which is what an editor sends when its symbol palette first
+/// opens and what an agent sends to enumerate a project.
+fn emit_symbols(
+    out: &mut Vec<Value>,
+    query: &str,
+    uri: &str,
+    text: &str,
+    module: &delulu_syntax::ast::Module,
+) {
+    use delulu_syntax::ast::Item;
+    let mut push = |name: &str, kind: u32, sp: delulu_diag::Span, container: Option<&str>| {
+        if !query.is_empty() && !name.to_lowercase().contains(query) {
+            return;
+        }
+        let mut v = json!({
+            "name": name,
+            "kind": kind,
+            "location": { "uri": uri, "range": byte_range(text, sp.start, sp.end) },
+        });
+        if let Some(c) = container {
+            v["containerName"] = json!(c);
+        }
+        out.push(v);
+    };
+    for item in &module.items {
+        match item {
+            Item::Fn(f) => push(&f.name.name, SYM_FUNCTION, f.name.span, None),
+            Item::Type(t) => push(&t.name.name, SYM_CLASS, t.name.span, None),
+            Item::Effect(e) => push(&e.name.name, SYM_INTERFACE, e.name.span, None),
+            Item::Const(c) => push(&c.name.name, SYM_CONSTANT, c.name.span, None),
+            Item::Foreign(fd) => push(&fd.name.name, SYM_MODULE, fd.name.span, None),
+            Item::Actor(a) => {
+                push(&a.name.name, SYM_CLASS, a.name.span, None);
+                for b in &a.behaviors {
+                    push(&b.name.name, SYM_METHOD, b.name.span, Some(&a.name.name));
+                }
+                for f in &a.fns {
+                    push(&f.name.name, SYM_METHOD, f.name.span, Some(&a.name.name));
+                }
+            }
+            Item::Test(t) => {
+                push(&format!("test \"{}\"", t.name), SYM_FUNCTION, t.name_span, None)
+            }
+        }
+    }
+}
+
+// ===== file: URIs (hand-rolled — this server takes no new dependencies) =====
+
+/// A `file:` URI turned back into a path, or `None` for any other scheme.
+///
+/// Hand-rolled because the server takes no new dependencies (build-order deviation 3) and the
+/// subset of URI syntax an editor actually emits is small. Percent-escapes are decoded, since a
+/// path containing a space is ordinary and arrives as `%20`; on Windows the leading slash before
+/// a drive letter is dropped, because `/D:/x` is not a path anyone can open.
+fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
+    // `file:///x` is the form every mainstream editor sends; `file:/x` is the minimal form
+    // RFC 8089 allows and some tooling emits. Both name the same file, so both are accepted.
+    let rest = uri.strip_prefix("file://").or_else(|| uri.strip_prefix("file:"))?;
+    let rest = rest.strip_prefix('/').unwrap_or(rest);
+    let decoded = percent_decode(rest);
+    let is_drive = decoded.as_bytes().get(1) == Some(&b':')
+        && decoded.as_bytes().first().is_some_and(u8::is_ascii_alphabetic);
+    Some(std::path::PathBuf::from(if is_drive { decoded } else { format!("/{decoded}") }))
+}
+
+/// The inverse, for files the server discovers itself rather than being handed.
+fn path_to_uri(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy().replace('\\', "/");
+    let mut out = String::from("file:///");
+    for b in s.trim_start_matches('/').bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// The nearest char boundary at or before `i`, clamped to the length of `text`.
 ///
 /// `pos_to_byte` already lands on a boundary, so on a well-formed message this changes nothing.
@@ -1273,6 +1550,60 @@ fn walk_exprs(module: &delulu_syntax::ast::Module, f: &mut impl FnMut(&delulu_sy
             }
             Item::Test(t) => block(&t.body, f),
             _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// URIs are hand-parsed here, so the shapes real clients send are pinned rather than assumed.
+    ///
+    /// The `file:/…` case is not hypothetical: it is what caught the first version of
+    /// [`uri_to_path`], which stripped only `file://` and so returned `None` for a perfectly valid
+    /// URI — a workspace root that silently failed to register and an index that stayed empty.
+    #[test]
+    fn file_uris_decode_to_the_paths_editors_mean() {
+        let cases: [(&str, &str); 5] = [
+            ("file:///home/j/a.delulu", "/home/j/a.delulu"),
+            // Windows: the slash before the drive letter is part of the URI, not the path.
+            ("file:///D:/nelan/a.delulu", "D:/nelan/a.delulu"),
+            // Percent-escapes: a space in a path is ordinary and arrives encoded.
+            ("file:///home/my%20code/a.delulu", "/home/my code/a.delulu"),
+            ("file:///home/%C3%BCber/a.delulu", "/home/über/a.delulu"),
+            // The minimal RFC 8089 form, with the empty authority omitted.
+            ("file:/home/j/a.delulu", "/home/j/a.delulu"),
+        ];
+        for (uri, want) in cases {
+            let got = uri_to_path(uri).unwrap_or_else(|| panic!("{uri} did not parse"));
+            assert_eq!(got.to_string_lossy().replace('\\', "/"), want, "{uri}");
+        }
+        assert!(uri_to_path("http://example.com/x.delulu").is_none(), "only file: is a path");
+        assert!(uri_to_path("untitled:Untitled-1").is_none(), "an unsaved buffer has no path");
+    }
+
+    /// A URI this server generates must come back as the path it was built from — otherwise a file
+    /// found by the index and the same file opened by the editor look like two different files,
+    /// and the buffer stops shadowing its copy on disk.
+    #[test]
+    fn generated_uris_round_trip() {
+        for p in ["/home/my code/a.delulu", "/tmp/plain.delulu", "/x/ü.delulu"] {
+            let path = std::path::PathBuf::from(p);
+            let back = uri_to_path(&path_to_uri(&path)).expect("round trip");
+            assert_eq!(back.to_string_lossy().replace('\\', "/"), p);
+        }
+    }
+
+    /// A malformed range is normalised, not obeyed — the belt on `String::replace_range`.
+    #[test]
+    fn snapping_never_lands_inside_a_character() {
+        let s = "aλb"; // bytes: a=0, λ=1..3, b=3
+        assert_eq!(snap(s, 0), 0);
+        assert_eq!(snap(s, 2), 1, "byte 2 is inside λ and must snap back to its start");
+        assert_eq!(snap(s, 99), s.len(), "past the end clamps to the end");
+        for i in 0..=s.len() + 5 {
+            assert!(s.is_char_boundary(snap(s, i)), "snap({i}) must be a boundary");
         }
     }
 }

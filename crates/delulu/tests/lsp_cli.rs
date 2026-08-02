@@ -15,6 +15,19 @@ struct Client {
 
 impl Client {
     fn start() -> Client {
+        Client::start_with(json!({ "capabilities": {} }))
+    }
+
+    /// A client that tells the server where the project is, the way an editor does.
+    fn start_in(root: &std::path::Path) -> Client {
+        let uri = format!("file:///{}", root.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+        Client::start_with(json!({
+            "capabilities": {},
+            "workspaceFolders": [{ "uri": uri, "name": "test" }]
+        }))
+    }
+
+    fn start_with(init_params: Value) -> Client {
         let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
             .args(["lsp"])
             .env("DELULU_NO_FIRST_RUN", "1")
@@ -26,7 +39,7 @@ impl Client {
         let stdin = child.stdin.take().unwrap();
         let reader = BufReader::new(child.stdout.take().unwrap());
         let mut c = Client { child, stdin, reader, next_id: 1 };
-        let init = c.request("initialize", json!({ "capabilities": {} }));
+        let init = c.request("initialize", init_params);
         assert!(init["capabilities"]["hoverProvider"].as_bool().unwrap_or(false));
         c.notify("initialized", json!({}));
         c
@@ -667,6 +680,129 @@ fn no_provider_answers_from_a_stale_analysis() {
         json!({ "textDocument": { "uri": uri } }),
     );
     assert!(!toks["data"].as_array().unwrap().is_empty(), "tokens must still be produced");
+    c.shutdown();
+}
+
+// ===== the workspace =======================================================
+
+fn workspace_dir(tag: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("delulu-lsp-ws-{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("src")).unwrap();
+    std::fs::create_dir_all(d.join("target")).unwrap();
+    d
+}
+
+fn symbol_names(v: &Value) -> Vec<String> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+/// The question "where is this declared in my project?" must be answerable without having already
+/// opened the file that answers it.
+///
+/// This is the whole point of workspace symbols, and it matters most for the users this language
+/// is aimed at: a human can open files until they find one, but an agent that has opened nothing
+/// previously got an empty list and no way to tell that from "it does not exist".
+#[test]
+fn workspace_symbols_reach_files_that_were_never_opened() {
+    let dir = workspace_dir("reach");
+    std::fs::write(
+        dir.join("src").join("engine.delulu"),
+        "module engine\nfn ignite_thruster() -> Int { 1 }\nactor Governor {\n var n: Int\n new() { self.n = 0 }\n be tick() { self.n = self.n + 1 }\n}\n",
+    )
+    .unwrap();
+    // Noise that must NOT be indexed: a build directory is not source.
+    std::fs::write(dir.join("target").join("stale.delulu"), "module stale\nfn ignite_ghost() -> Int { 0 }\n").unwrap();
+
+    let mut c = Client::start_in(&dir);
+    let found = c.request("workspace/symbol", json!({ "query": "ignite" }));
+    let names = symbol_names(&found);
+    assert_eq!(names, ["ignite_thruster"], "one match, and not the one under target/: {names:?}");
+
+    let loc = &found.as_array().unwrap()[0]["location"];
+    assert!(
+        loc["uri"].as_str().unwrap_or_default().ends_with("src/engine.delulu"),
+        "the location points at the real file: {loc}"
+    );
+
+    // Actor behaviours carry their actor as the container.
+    let ticks = c.request("workspace/symbol", json!({ "query": "tick" }));
+    let t = &ticks.as_array().unwrap()[0];
+    assert_eq!(t["containerName"], "Governor", "a behaviour names its actor: {t}");
+    c.shutdown();
+}
+
+/// An unsaved buffer is what the user is looking at; the file on disk is not.
+#[test]
+fn an_open_buffer_wins_over_its_copy_on_disk() {
+    let dir = workspace_dir("buffer");
+    let path = dir.join("src").join("edit.delulu");
+    std::fs::write(&path, "module edit\nfn on_disk_only() -> Int { 1 }\n").unwrap();
+    let uri = format!("file:///{}", path.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+
+    let mut c = Client::start_in(&dir);
+    // The editor opens it and the user renames the function without saving.
+    c.open(&uri, "module edit\nfn renamed_in_buffer() -> Int { 1 }\n");
+    let _ = c.wait_diagnostics(&uri);
+
+    let all = symbol_names(&c.request("workspace/symbol", json!({ "query": "" })));
+    assert!(all.contains(&"renamed_in_buffer".to_string()), "the buffer is reported: {all:?}");
+    assert!(
+        !all.contains(&"on_disk_only".to_string()),
+        "the stale on-disk copy must not shadow the buffer: {all:?}"
+    );
+    assert_eq!(all.len(), 1, "and the file is reported once, not twice: {all:?}");
+    c.shutdown();
+}
+
+/// The flat and hierarchical views of one file must agree about which declarations exist.
+///
+/// `documentSymbol` and `workspace/symbol` walk the same items through separate code, so this is
+/// the guard against one of them learning about a new kind of declaration and the other not.
+#[test]
+fn workspace_and_document_symbols_agree_on_what_exists() {
+    let dir = workspace_dir("agree");
+    let src = "module m\nfn f() -> Int { 1 }\ntype T = Int\neffect E\nconst C: Int = 1\n\
+               actor A {\n var n: Int\n new() { self.n = 0 }\n be tick() { self.n = 1 }\n}\n\
+               test \"t\" { assert(true) }\n";
+    let path = dir.join("src").join("all.delulu");
+    std::fs::write(&path, src).unwrap();
+    let uri = format!("file:///{}", path.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+
+    let mut c = Client::start_in(&dir);
+    c.open(&uri, src);
+    let _ = c.wait_diagnostics(&uri);
+
+    let doc = c.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": &uri } }));
+    let mut flat: Vec<String> = Vec::new();
+    for s in doc.as_array().unwrap() {
+        flat.push(s["name"].as_str().unwrap_or_default().to_string());
+        for ch in s["children"].as_array().unwrap_or(&vec![]) {
+            flat.push(ch["name"].as_str().unwrap_or_default().to_string());
+        }
+    }
+    let mut ws = symbol_names(&c.request("workspace/symbol", json!({ "query": "" })));
+    flat.sort();
+    ws.sort();
+    assert_eq!(
+        flat, ws,
+        "documentSymbol and workspace/symbol disagree about the declarations in one file"
+    );
+    c.shutdown();
+}
+
+/// A server told nothing about a project must not go looking for one.
+#[test]
+fn without_a_workspace_only_open_documents_are_searched() {
+    let mut c = Client::start(); // no workspaceFolders, no rootUri
+    c.open("file:///loose.delulu", "module loose\nfn only_here() -> Int { 1 }\n");
+    let _ = c.wait_diagnostics("file:///loose.delulu");
+    let names = symbol_names(&c.request("workspace/symbol", json!({ "query": "" })));
+    assert_eq!(names, ["only_here"], "no roots means no filesystem walk: {names:?}");
     c.shutdown();
 }
 
