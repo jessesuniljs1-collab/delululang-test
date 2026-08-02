@@ -340,7 +340,7 @@ mod tests {
         let interp = Interp::new(&checked.module).with_custody(Box::new(custody));
         let out = interp.run_main(Value::Root(Rc::new(g.build_root())));
         let printed = take_capture();
-        let fault = out.err().expect("denied custody must fault");
+        let fault = out.expect_err("denied custody must fault");
         assert_eq!(fault.code, "DL1403");
         assert!(fault.message.contains("42"), "the broker's revoking seq travels to the program: {}", fault.message);
         assert_eq!(printed.unwrap_or_default(), "", "the denied effect was never performed");

@@ -103,6 +103,11 @@ diagnostics or a runtime fault, `2` usage error.
 
 - **Every `--json` command emits exactly one object**, enforced by a sweep that counts — it caught a
   double-emit in three separate commands.
+- **No command silently ignores an argument.** Extra paths are refused, unknown options are refused,
+  and a value-taking option given no value is refused rather than falling back to a default. All
+  three are swept across the whole surface rather than checked per command. This matters most for
+  the machine channel: a person may notice a missing effect, but an agent that mistypes a flag would
+  otherwise get exit 0 for work that never happened.
 - Asking a tool what it does never makes it do the thing: `--help` is answered by the dispatch, after
   `keygen --help` once generated a key.
 - Every dispatched subcommand appears in `--help`, gated — because an undocumented command is a

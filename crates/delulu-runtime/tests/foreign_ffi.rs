@@ -237,7 +237,7 @@ fn invalid_utf8_return_is_a_dl1306_fault_not_a_crash() {
         fn main(root: Root) ! {ForeignCall, Write} { let c = root.console()\n\
         match get(root) { Ok(m) => c.println(m.dl_bad_utf8()), Err(_) => c.println(\"bind failed\") } }\n";
     let (out, _, _) = run_foreign(src, &[("fixture", fixture_path())], MAX);
-    let fault = out.err().expect("invalid UTF-8 must be a defined fault");
+    let fault = out.expect_err("invalid UTF-8 must be a defined fault");
     assert_eq!(fault.code, "DL1306");
     assert!(fault.message.contains("BadReturn"), "{}", fault.message);
 }
@@ -252,7 +252,7 @@ fn oversized_return_is_a_dl1306_fault_bounded_by_max_ret() {
         fn main(root: Root) ! {ForeignCall, Write} { let c = root.console()\n\
         match get(root) { Ok(m) => c.println(m.dl_unterminated()), Err(_) => c.println(\"bind failed\") } }\n";
     let (out, _, printed) = run_foreign(src, &[("fixture", fixture_path())], 64);
-    let fault = out.err().expect("an unterminated oversized return must be a defined fault");
+    let fault = out.expect_err("an unterminated oversized return must be a defined fault");
     assert_eq!(fault.code, "DL1306");
     assert!(fault.message.contains("--foreign-max-ret"), "{}", fault.message);
     assert!(!printed.contains("AAA"), "no truncated partial data may leak: {printed:?}");

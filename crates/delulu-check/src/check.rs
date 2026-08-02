@@ -1247,10 +1247,7 @@ impl<'a> Checker<'a> {
                 return t;
             }
             // Nullary constructors.
-            match name.as_str() {
-                "None" => return Type::Option(Box::new(self.cx.fresh_type())),
-                _ => {}
-            }
+            if name.as_str() == "None" { return Type::Option(Box::new(self.cx.fresh_type())) }
             // A nullary user/prelude variant constructor used as a value (`Red`, `NotFound`, …).
             if let Some((id, fields)) = self.table.variant_ctor(name) {
                 if fields.is_empty() {

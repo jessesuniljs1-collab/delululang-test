@@ -137,7 +137,7 @@ fn rejecting_programs_produce_their_named_code() {
         let src = std::fs::read_to_string(file).unwrap();
         let codes = error_codes(&src);
         assert!(
-            codes.iter().any(|c| *c == want),
+            codes.contains(&want),
             "{} should produce {}, got {:?}",
             file.display(),
             want,

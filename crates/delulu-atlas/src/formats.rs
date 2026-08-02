@@ -287,6 +287,43 @@ canvas{display:block;margin:0 auto;max-width:100%;background:transparent}\
 #tip{position:fixed;pointer-events:none;padding:5px 8px;border-radius:6px;background:#000c;color:#fff;font:12px monospace;opacity:0;transition:opacity .1s}\
 .caveats{padding:8px 20px 24px;font-size:.8rem;opacity:.8}.caveats h2{font-size:.9rem}";
 
+const HTML_JS: &str = r#"
+(function(){
+  const cv=document.getElementById('c'), ctx=cv.getContext('2d'), tip=document.getElementById('tip');
+  const layers=['package','module','type','function','effect','resource','foreign','grant'];
+  const byId={}; ATLAS.nodes.forEach(n=>byId[n.id]=n);
+  // Deterministic layered layout: x by kind-layer, y by index within layer (nodes are id-sorted).
+  const cols={}; layers.forEach(l=>cols[l]=[]);
+  ATLAS.nodes.forEach(n=>{(cols[n.kind]||(cols[n.kind]=[])).push(n)});
+  const W=cv.width, H=cv.height, used=layers.filter(l=>cols[l]&&cols[l].length);
+  const colW=W/(used.length||1);
+  used.forEach((l,li)=>{const arr=cols[l]; const gap=H/(arr.length+1);
+    arr.forEach((n,i)=>{n.x=colW*li+colW/2; n.y=gap*(i+1);});});
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ATLAS.edges.forEach(e=>{const a=byId[e.from],b=byId[e.to]; if(!a||!b)return;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle=e.auth?'#ff595e88':'#88888855'; ctx.lineWidth=1;
+      if(e.auth){ctx.setLineDash([4,3]);}else{ctx.setLineDash([]);} ctx.stroke();});
+    ctx.setLineDash([]);
+    ATLAS.nodes.forEach(n=>{ctx.beginPath(); ctx.arc(n.x,n.y,6,0,7); ctx.fillStyle=n.color; ctx.fill();
+      ctx.fillStyle=getComputedStyle(document.body).color; ctx.font='10px monospace';
+      ctx.fillText(n.name,n.x+8,n.y+3);});
+  }
+  draw();
+  cv.addEventListener('mousemove',ev=>{const r=cv.getBoundingClientRect();
+    const sx=cv.width/r.width, sy=cv.height/r.height, mx=(ev.clientX-r.left)*sx, my=(ev.clientY-r.top)*sy;
+    let hit=null; ATLAS.nodes.forEach(n=>{if((n.x-mx)**2+(n.y-my)**2<64)hit=n;});
+    if(hit){tip.style.opacity=1; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px';
+      tip.textContent=hit.kind+' '+hit.id+(hit.effects?'  !{'+hit.effects+'}':'');}
+    else{tip.style.opacity=0;}});
+  const seen={}; ATLAS.nodes.forEach(n=>{seen[n.kind]=n.color;});
+  document.getElementById('legend').innerHTML=Object.keys(seen).sort().map(k=>
+    '<span><i style="background:'+seen[k]+'"></i>'+k+'</span>').join('')+
+    '<span><i style="background:#ff595e"></i>authority edge (dashed)</span>';
+})();
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,41 +456,4 @@ mod tests {
         assert!(!h.contains("fn:big/big.f00000"), "functions dropped in the collapsed view");
     }
 }
-
-const HTML_JS: &str = r#"
-(function(){
-  const cv=document.getElementById('c'), ctx=cv.getContext('2d'), tip=document.getElementById('tip');
-  const layers=['package','module','type','function','effect','resource','foreign','grant'];
-  const byId={}; ATLAS.nodes.forEach(n=>byId[n.id]=n);
-  // Deterministic layered layout: x by kind-layer, y by index within layer (nodes are id-sorted).
-  const cols={}; layers.forEach(l=>cols[l]=[]);
-  ATLAS.nodes.forEach(n=>{(cols[n.kind]||(cols[n.kind]=[])).push(n)});
-  const W=cv.width, H=cv.height, used=layers.filter(l=>cols[l]&&cols[l].length);
-  const colW=W/(used.length||1);
-  used.forEach((l,li)=>{const arr=cols[l]; const gap=H/(arr.length+1);
-    arr.forEach((n,i)=>{n.x=colW*li+colW/2; n.y=gap*(i+1);});});
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    ATLAS.edges.forEach(e=>{const a=byId[e.from],b=byId[e.to]; if(!a||!b)return;
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle=e.auth?'#ff595e88':'#88888855'; ctx.lineWidth=1;
-      if(e.auth){ctx.setLineDash([4,3]);}else{ctx.setLineDash([]);} ctx.stroke();});
-    ctx.setLineDash([]);
-    ATLAS.nodes.forEach(n=>{ctx.beginPath(); ctx.arc(n.x,n.y,6,0,7); ctx.fillStyle=n.color; ctx.fill();
-      ctx.fillStyle=getComputedStyle(document.body).color; ctx.font='10px monospace';
-      ctx.fillText(n.name,n.x+8,n.y+3);});
-  }
-  draw();
-  cv.addEventListener('mousemove',ev=>{const r=cv.getBoundingClientRect();
-    const sx=cv.width/r.width, sy=cv.height/r.height, mx=(ev.clientX-r.left)*sx, my=(ev.clientY-r.top)*sy;
-    let hit=null; ATLAS.nodes.forEach(n=>{if((n.x-mx)**2+(n.y-my)**2<64)hit=n;});
-    if(hit){tip.style.opacity=1; tip.style.left=(ev.clientX+12)+'px'; tip.style.top=(ev.clientY+12)+'px';
-      tip.textContent=hit.kind+' '+hit.id+(hit.effects?'  !{'+hit.effects+'}':'');}
-    else{tip.style.opacity=0;}});
-  const seen={}; ATLAS.nodes.forEach(n=>{seen[n.kind]=n.color;});
-  document.getElementById('legend').innerHTML=Object.keys(seen).sort().map(k=>
-    '<span><i style="background:'+seen[k]+'"></i>'+k+'</span>').join('')+
-    '<span><i style="background:#ff595e"></i>authority edge (dashed)</span>';
-})();
-"#;
 

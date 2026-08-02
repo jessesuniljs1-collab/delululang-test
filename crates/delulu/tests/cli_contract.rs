@@ -355,3 +355,113 @@ fn the_effect_list_shown_to_a_user_is_the_one_the_checker_accepts() {
         );
     }
 }
+
+/// **No subcommand may silently ignore an option.**
+///
+/// Every command gets a flag that cannot exist. A command that exits **0** accepted an argument it
+/// never understood, which means it reported success for work it did not do.
+///
+/// This is the twin of the positional rule (`refuse_extra_positionals`, D-phase 4) and it was
+/// missing for the whole of 1.0. A sweep found **12 of 22 subcommands** ignoring flags outright —
+/// `check`, `authority`, `why`, `atlas`, `explain`, `run`, `build`, `lock`, `test`, `secrets`,
+/// `locale`, `morph`. `delulu check app.delulu --strict` printed `checked clean` and exited 0.
+///
+/// A person might catch that. **An agent assembling a command from a half-remembered flag name gets
+/// a green light for work that never happened**, and this language's stated primary users are
+/// agents. `audit` reading the wrong store (C75) was the same defect where the consequence was
+/// worst; this is the class (C76, ruling D73).
+#[test]
+fn no_subcommand_silently_ignores_an_unknown_option() {
+    let home = scratch("unknown-flags");
+    let src = home.join("p.delulu");
+    std::fs::write(&src, "module m\n\nfn main(root: Root) {\n}\n").unwrap();
+    let p = src.to_str().unwrap();
+    let pkg = home.join("pkg");
+    let _ = delulu(&home, &["new", pkg.to_str().unwrap()]);
+    let pkg = pkg.to_str().unwrap();
+
+    // (subcommand, a minimally valid invocation) — the impossible flag is appended to each.
+    let cases: Vec<(&str, Vec<&str>)> = vec![
+        ("check", vec!["check", p]),
+        ("fmt", vec!["fmt", "--check", p]),
+        ("authority", vec!["authority", p]),
+        ("why", vec!["why", "Write", p]),
+        ("atlas", vec!["atlas", p]),
+        ("explain", vec!["explain", "DL0703"]),
+        ("run", vec!["run", p]),
+        ("build", vec!["build", pkg]),
+        ("lock", vec!["lock", pkg]),
+        ("test", vec!["test", p]),
+        ("fix", vec!["fix", p]),
+        ("doctor", vec!["doctor", "--check"]),
+        ("audit", vec!["audit", "tail", "1"]),
+        ("secrets", vec!["secrets", "list"]),
+        ("locale", vec!["locale", "list"]),
+        ("morph", vec!["morph", "list"]),
+        ("completions", vec!["completions", "bash"]),
+    ];
+
+    let mut ignored = Vec::new();
+    for (name, argv) in cases {
+        let mut args = argv.clone();
+        args.push("--totally-not-a-real-flag-9z");
+        let o = delulu(&home, &args);
+        if o.status.success() {
+            ignored.push(name);
+        }
+    }
+    assert!(
+        ignored.is_empty(),
+        "these subcommands exited 0 with an option that cannot exist, meaning they dropped an \
+         argument the caller typed and reported success anyway: {ignored:?}\n\
+         Refuse it — `refuse_unknown_flags` for anything using `parse_opts`, `refuse_unlisted_flags` \
+         for a command that scans its own argv."
+    );
+}
+
+/// **A flag that needs a value and is given none must refuse, not fall back to the default.**
+///
+/// The same defect as the sweep above, one position over. Every value-taking arm read
+/// `if i + 1 < rest.len() { take it }` with no `else`, so a flag in final position vanished and the
+/// command ran on its default. Seven did it. The one that matters most:
+///
+/// ```text
+/// delulu run app.delulu --grant console --isolation      → ran with NO isolation, exit 0
+/// ```
+///
+/// A security-relevant setting, dropped in silence, reported as success (C76, ruling D73).
+#[test]
+fn a_value_taking_flag_with_no_value_is_refused() {
+    let home = scratch("missing-values");
+    let src = home.join("p.delulu");
+    std::fs::write(
+        &src,
+        "module m\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"ran\")\n}\n",
+    )
+    .unwrap();
+    let p = src.to_str().unwrap();
+
+    let cases: Vec<Vec<&str>> = vec![
+        vec!["run", p, "--grant"],
+        vec!["run", p, "--grant", "console", "--engine"],
+        vec!["run", p, "--grant", "console", "--isolation"],
+        vec!["run", p, "--grant", "console", "--seed"],
+        vec!["run", p, "--grant", "console", "--lease"],
+        vec!["authority", p, "--diff"],
+        vec!["atlas", p, "--format"],
+        vec!["atlas", p, "--out"],
+    ];
+
+    let mut dropped = Vec::new();
+    for argv in &cases {
+        let o = delulu(&home, argv);
+        if o.status.success() {
+            dropped.push(argv.join(" "));
+        }
+    }
+    assert!(
+        dropped.is_empty(),
+        "these ran successfully with a value-taking option that had no value, which means the \
+         option was discarded and the command used its default instead: {dropped:?}"
+    );
+}

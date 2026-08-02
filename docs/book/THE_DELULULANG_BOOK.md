@@ -613,6 +613,20 @@ The honesty (Chapter 19 makes this a habit): DeluluLang guarantees **race freedo
 Deadlock, livelock, and starvation are still possible — the language prevents the corruption class of
 concurrency bug, not the "it's stuck" class. It says so plainly, everywhere.
 
+**A behavior is ordinary code, and it gets the ordinary guarantees.** Recursion inside a behavior
+obeys the same depth bound recursion in `main` does, and overrunning it is `DL0905` — a diagnostic
+with a code, never a crash. That sentence is here because it was **false until 2026-08-02**: actor
+worker threads reserved no stack of their own, so a behavior recursing past about forty frames killed
+the whole process with no diagnostic at all, while the identical function called from `main` printed
+its answer. One function, one depth, two outcomes.
+
+It is worth knowing how that survived. The rule *"a runtime fault is a diagnostic, never a host
+crash"* is normative, it was marked covered, and its test was correct — the test recursed in `main`,
+which was the one thread where the rule already held. **A gate keyed on the right signal, on the
+wrong thread.** And a stack overflow prints no panic message, so every no-panic sweep in the project
+was structurally blind to it. The fix pairs each worker's stack with the bound it can afford and
+checks every thread in the tree against that rule; the full account is ruling D67.
+
 ---
 
 ## Chapter 12 — Humans and AI, One Law
@@ -964,6 +978,15 @@ different and more useful thing than a promise.
 DeluluLang claims **no** ISO 26262, DO-178C, ECSS, or any other certification. It produces evidence
 a safety case can cite. It is not one, and Chapter 19 is where that habit is spelled out.
 
+**And the plainest fact, which belongs in this chapter more than any other: no physical device has
+ever been commanded by this toolchain.** Every demonstration you have just read — the arm, the
+satellite pass, the fleet rollout — drives the **simulator**. The envelope enforcement, the dead-man
+lease, the fail-state and the hash gate are all real code with real tests, and the one hardware
+adapter that exists is an operator-supplied subprocess rather than the signed Verified-class plugin
+the specification describes. What has been proven is that the *policy layer* behaves as written. What
+has not been proven is anything about a motor. Those are different claims, and a chapter about
+commanding machines is the wrong place to blur them.
+
 ### Beyond the arm
 
 The same four mechanisms — envelope-scoped capabilities, dead-man leases, declared fail-states,
@@ -1095,6 +1118,16 @@ DeluluLang **does not claim**, ever:
   not. Unbounded mailboxes can exhaust memory.
 - **Mechanized soundness.** The soundness argument is design-level, audit-rule-enforced, and
   test-enforced; a machine-checked proof (Delulu Core) is future work, and the release notes say so.
+- **Three-platform support.** DeluluLang is built and tested on **Windows and Linux**. It has
+  **never been executed on macOS** — not once, on any day of its development. The Unix code path is
+  the one Linux runs green and the conditional compilation was audited site by site, but *a path
+  that should work and a path that has been run are different claims*, and only the second one is
+  evidence. Even the lint baseline is per-platform (65 findings on Windows, 66 on Linux, because
+  Linux compiles four tests Windows skips) — the macOS number is simply unknown.
+- **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
+  physical device has ever been commanded by this toolchain, and the one hardware adapter is an
+  operator-supplied subprocess rather than the specification's signed Verified-class plugin.
+  Certification is **none**.
 
 Why be this honest when competitors aren't? Because DeluluLang's product *is* trustworthiness. Every
 overclaim is a crack in the one thing it sells. A guarantee you can rely on, plus a clearly drawn line
@@ -1105,7 +1138,10 @@ building the impossible thing — not in pretending you already have.
 
 ## Chapter 20 — The Road Ahead
 
-DeluluLang is built in stages, each shippable and proven before the next. The sequence:
+DeluluLang was built in stages, each shippable and proven before the next. **All ten are built and
+closed**, and v1.0 was cut on 2026-07-20 — after the release gate refused once, at `rc.1`, with two
+criteria NOT MET and the checklist saying so in those words. A gate that cannot say no is not a gate.
+The sequence, as history rather than plan:
 
 - **Stages 1–3 (built):** the core language — types, effect rows, capabilities, secrets, the authority
   checker; packages, provenance, the authority-versioning laws; the WASM containment floor, the `.dwx`
@@ -1126,9 +1162,34 @@ DeluluLang is built in stages, each shippable and proven before the next. The se
   chains as first-class device classes (a satellite's contact window is literally a lease TTL) —
   plus vendor-neutral heterogeneous compute (any GPU/TPU behind one authority model, honestly
   labeled outside the proof), hybrid post-quantum signing (post-quantum, never "quantum-proof"),
-  and cloud deployments whose full authority is computed *before* launch. All of it is committed
-  design gated on named criteria; none of it is shipped software, and no sentence about it gets to
-  pretend otherwise.
+  and cloud deployments whose full authority is computed *before* launch.
+
+**What of Stage 10 actually shipped, and what did not.** Built and tested: device-scoped grants,
+dead-man actuator leases, the operator e-stop, declared fail-states, the sim-to-hardware hash gate,
+heterogeneous compute behind one authority model, hybrid post-quantum signing (behind `--unstable`,
+because the implementations are unaudited by their own authors), cloud deploy plans, fleet rollouts,
+and broker federation. **Not built:** the optimizing backend described in spec §2.1, any native
+backend, and a multi-threaded WASM engine — each deferred with a published note rather than quietly
+dropped. The JIT exists only as a leash: `exec_native` is hard-coded false on the lease path, so a
+delegation can never confer it.
+
+### What actually remains
+
+Ordered by what would most change the language's usefulness, not by ease:
+
+1. **Run it on a Mac.** Everything else said about the third platform is an argument, not evidence.
+2. **Command one real device.** The physical-stakes story is the differentiator and it rests entirely
+   on simulation (Chapter 16 says so plainly).
+3. **Mechanize Delulu Core.** The soundness argument is design-level and test-enforced; a
+   machine-checked core is what would make the strongest claims safe to state without hedging.
+4. **Widen the WASM backend** past its measured fragment, or retire the parity claim to match it.
+5. **Decide distribution.** Nothing is published anywhere, and that is a decision nobody has made
+   rather than an obstacle anyone has hit.
+6. **A signed Verified-class hardware adapter**, which is what the specification describes and what a
+   real deployment would require.
+
+None of that is a promise with a date. It is the list a maintainer would work from, kept in the same
+voice as the rest of this chapter: what is true, what is not, and which is which.
 
 Beyond v1.0, the language changes only through a public **RFC process**, with entrenchment analysis
 required for anything touching the constitution's core or its honesty limits. The stability contract
@@ -1199,6 +1260,8 @@ that is pure feeling rather than mechanism, and that is deliberate:
 | Industrial: JIT, autonomy, compute, PQC, cloud, LTS | `STAGE10_SPECIFICATION.md` + playbook |
 | The autonomy domains (vehicles/aircraft/satellites/robots) | `docs/design/STAGE10_AUTONOMY_ADDENDUM.md` |
 | Human-language plugins | `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` |
+| What is built, tested, and *not* claimed — in one page | `docs/release/CHECKPOINT-1.0.md` |
+| The map of the repository itself (for maintainers) | `docs/survey/README.md` |
 | Keyword/character syntax skins | `docs/design/SYNTAX_MORPH_SPEC.md` |
 | The AI-native/machine surface | `docs/design/AI_NATIVE_DESIGN.md` |
 | Per-language packs | `docs/lang/<locale>.md` |

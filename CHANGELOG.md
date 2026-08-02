@@ -32,7 +32,35 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   would most change the language's usefulness. Every figure is either recounted from the tree by a
   gated Survey fact or taken from a named suite run.
 
+### Changed
+
+- **Lint findings reduced, and the baseline explained rather than merely held.** `cargo clippy`
+  reported 65 findings on Windows and 66 on Linux; a contributor's first run should not look like
+  that. The mechanically-safe ones are applied. **None of them was ever a `clippy::correctness`
+  lint** — they are style and complexity suggestions, so the count was never evidence of a bug, and
+  the documentation now says which is which instead of quoting a number.
+
+  Two things worth recording. The auto-fix deleted the comment in `main.rs` explaining why a worker
+  panic maps to exit 2 — the mapping campaign finding C49 turned on — and it has been restored with
+  that reason written into it; a tool that optimises code shape does not know which comments are
+  load-bearing. And the baseline is **per-platform**: macOS would be a third number, and no one has
+  ever seen it.
+
 ### Fixed
+
+- **No command silently ignores an option any more** (C76, D73). Twelve of twenty-two subcommands
+  accepted a flag that cannot exist and exited **0** — `check`, `authority`, `why`, `atlas`,
+  `explain`, `run`, `build`, `lock`, `test`, `secrets`, `locale`, `morph`. `delulu check
+  app.delulu --strict` printed `checked clean` having never heard of `--strict`.
+
+  A second position, same defect: a flag that takes a value and is given none was dropped, and the
+  command ran on its default. `delulu run app.delulu --grant console --isolation` **executed with no
+  isolation at all** and reported success.
+
+  A person may notice a missing effect. **An agent assembling a command from a half-remembered flag
+  name gets a green light for work that never happened**, and this language's stated primary users
+  are agents. Both are refused now, and two sweeps over the whole CLI surface hold the line —
+  because a rule applied at each site is a rule the next site forgets.
 
 - **`delulu audit` no longer reads the wrong store when you mistype a flag** (C75, D72). `audit`
   takes `--dir`; every sibling custody command (`grants`, `guard`, `secrets`) takes `--state-dir`.

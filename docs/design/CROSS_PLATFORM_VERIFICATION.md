@@ -19,6 +19,15 @@ Python-less build); plus this project's own `delulu-conform --coverage` (invaria
 `delulu-conform --check-reference` (the hard Book-vs-source gate). `clippy` is tracked as a quality
 baseline; it is **not** a CI gate (there is no `-D warnings` anywhere in the tree).
 
+**The lint baseline is per-platform, and the third number has never been seen.** Windows and Linux
+differ (65 vs 66) because Linux compiles four tests Windows skips. macOS would be a *third* count: it
+takes the `unix` branches Linux takes, but excludes the Linux-only ones (the microVM module,
+`PR_SET_PDEATHSIG`) and the Windows ones. Nobody has run it, so nobody knows it. Quoting "65/66" as
+though it were the whole story would repeat, in miniature, the mistake this document exists to
+prevent. **None of the findings on either known platform is a `clippy::correctness` lint** — they are
+style and complexity suggestions, which is why the count is watched for *movement* rather than driven
+to zero.
+
 Toolchain is pinned by `rust-toolchain.toml` to **rustc 1.96.1** on every platform.
 
 ## 2. Per-platform results (2026-07-21)

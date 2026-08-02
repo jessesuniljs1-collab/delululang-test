@@ -206,6 +206,20 @@ pub(crate) struct Opts {
     /// program nothing had looked at. Keeping them all is what lets `check` do the work and every
     /// other command refuse rather than ignore.
     pub(crate) positionals: Vec<String>,
+    /// Flags that require a value and were given none.
+    ///
+    /// **The same defect as `unknown_flags`, one position over.** Every value-taking arm read
+    /// `if i + 1 < rest.len() { take it }` with no `else`, so a flag in final position simply
+    /// vanished and the command ran on defaults. `delulu run app.delulu --grant console
+    /// --isolation` executed with **no isolation at all** and exited 0 — a security-relevant
+    /// setting, dropped in silence, reported as success.
+    pub(crate) missing_values: Vec<String>,
+    /// Flags the shared parser did not recognise, kept so a command can refuse them.
+    ///
+    /// The exact twin of `positionals` above, and it exists for the same reason one commit later:
+    /// dropping an argument the user typed makes the tool report success for work it never did.
+    /// See [`refuse_unknown_flags`].
+    pub(crate) unknown_flags: Vec<String>,
     pub(crate) json: bool,
     pub(crate) grants: Vec<String>,
     pub(crate) grant_manifest: bool,
@@ -320,6 +334,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     let mut file = None;
     let mut opts = Opts {
         positionals: Vec::new(),
+        unknown_flags: Vec::new(),
+        missing_values: Vec::new(),
         json: false,
         grants: Vec::new(),
         grant_manifest: false,
@@ -370,6 +386,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.accept_authority.push(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--accept-authority".to_string());
                 }
             }
             s if s.starts_with("--accept-authority=") => {
@@ -379,6 +397,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.diff = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--diff".to_string());
                 }
             }
             s if s.starts_with("--diff=") => opts.diff = Some(s["--diff=".len()..].to_string()),
@@ -389,12 +409,16 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.trace_out = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--trace-out".to_string());
                 }
             }
             "--seed" => {
                 if i + 1 < rest.len() {
                     opts.seed = rest[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    opts.missing_values.push("--seed".to_string());
                 }
             }
             // Stage 10 (10f, spec §5.4): the sim-to-real workflow's three flags.
@@ -402,6 +426,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.broker_profile = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--broker-profile".to_string());
                 }
             }
             "--require-signed-adapter" => opts.require_signed_adapter = true,
@@ -410,42 +436,56 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.adapter_cmd = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-cmd".to_string());
                 }
             }
             "--adapter-artifact" => {
                 if i + 1 < rest.len() {
                     opts.adapter_artifact = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-artifact".to_string());
                 }
             }
             "--adapter-signer" => {
                 if i + 1 < rest.len() {
                     opts.adapter_signer = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-signer".to_string());
                 }
             }
             "--adapter-record" => {
                 if i + 1 < rest.len() {
                     opts.adapter_record = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--adapter-record".to_string());
                 }
             }
             "--sim-step" => {
                 if i + 1 < rest.len() {
                     opts.sim_step = rest[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    opts.missing_values.push("--sim-step".to_string());
                 }
             }
             "--signoff" => {
                 if i + 1 < rest.len() {
                     opts.signoff = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--signoff".to_string());
                 }
             }
             "--approved" => {
                 if i + 1 < rest.len() {
                     opts.approved = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--approved".to_string());
                 }
             }
             // Stage 10 (10k, spec §4): the advisory-feed gate.
@@ -454,6 +494,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.advisory_feed = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--advisory-feed".to_string());
                 }
             }
             s if s.starts_with("--advisory-feed=") => {
@@ -463,12 +505,16 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.clock_ms = rest[i + 1].strip_prefix("fixed:").and_then(|s| s.parse().ok());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--clock".to_string());
                 }
             }
             "--engine" => {
                 if i + 1 < rest.len() {
                     opts.engine = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--engine".to_string());
                 }
             }
             s if s.starts_with("--engine=") => opts.engine = Some(s["--engine=".len()..].to_string()),
@@ -477,6 +523,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.actors_threads = rest[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    opts.missing_values.push("--actors-threads".to_string());
                 }
             }
             s if s.starts_with("--actors-threads=") => {
@@ -486,6 +534,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.on_quiesce_report = rest[i + 1] == "report";
                     i += 1;
+                } else {
+                    opts.missing_values.push("--on-quiesce".to_string());
                 }
             }
             // Stage 10 (10c, B3): per-actor mailbox telemetry at quiescence — peaks, drops,
@@ -498,6 +548,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.on_actor_death_abort = rest[i + 1] == "abort";
                     i += 1;
+                } else {
+                    opts.missing_values.push("--on-actor-death".to_string());
                 }
             }
             s if s.starts_with("--on-actor-death=") => {
@@ -507,6 +559,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.target = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--target".to_string());
                 }
             }
             s if s.starts_with("--target=") => opts.target = Some(s["--target=".len()..].to_string()),
@@ -514,6 +568,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.out = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--out".to_string());
                 }
             }
             s if s.starts_with("--out=") => opts.out = Some(s["--out=".len()..].to_string()),
@@ -521,6 +577,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.foreign_max_ret = rest[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    opts.missing_values.push("--foreign-max-ret".to_string());
                 }
             }
             s if s.starts_with("--foreign-max-ret=") => {
@@ -530,6 +588,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.broker = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--broker".to_string());
                 }
             }
             s if s.starts_with("--broker=") => opts.broker = Some(s["--broker=".len()..].to_string()),
@@ -537,6 +597,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.epoch_ms = rest[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    opts.missing_values.push("--epoch-ms".to_string());
                 }
             }
             s if s.starts_with("--epoch-ms=") => opts.epoch_ms = s["--epoch-ms=".len()..].parse().ok(),
@@ -544,6 +606,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.foreign_isolation = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--foreign-isolation".to_string());
                 }
             }
             s if s.starts_with("--foreign-isolation=") => {
@@ -553,6 +617,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.isolation = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--isolation".to_string());
                 }
             }
             s if s.starts_with("--isolation=") => {
@@ -562,6 +628,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.lease = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--lease".to_string());
                 }
             }
             s if s.starts_with("--lease=") => opts.lease = Some(s["--lease=".len()..].to_string()),
@@ -569,6 +637,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.sign = Some(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--sign".to_string());
                 }
             }
             s if s.starts_with("--sign=") => opts.sign = Some(s["--sign=".len()..].to_string()),
@@ -576,6 +646,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
                     i += 1;
+                } else {
+                    opts.missing_values.push("--grant".to_string());
                 }
             }
             s if s.starts_with("--grant=") => opts.grants.push(s["--grant=".len()..].to_string()),
@@ -585,7 +657,16 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
                 opts.positionals.push(s.to_string());
             }
-            _ => {}
+            // **Collected, not discarded.** This arm used to be `_ => {}`, which meant every command
+            // sharing this parser accepted any flag at all and exited 0 — a sweep found **12 of 22
+            // subcommands** doing it, including `check`, `run` and `build`. `delulu check f.delulu
+            // --strict` printed `checked clean` and succeeded while doing nothing of the sort.
+            //
+            // Collecting rather than refusing here is deliberate: a few commands (`locale`, `morph`,
+            // `secrets`) parse their own subverb flags after this runs, so the *decision* belongs to
+            // the command via [`refuse_unknown_flags`]. What must never happen again is the flag
+            // vanishing without anyone holding it.
+            other => opts.unknown_flags.push(other.to_string()),
         }
         i += 1;
     }
@@ -609,6 +690,69 @@ pub(crate) fn refuse_extra_positionals(cmd: &str, opts: &Opts) -> Option<i32> {
     );
     eprintln!("  nothing was done — the extra path is refused rather than silently ignored");
     eprintln!("note: `delulu check` takes several files in one run; every other command takes one");
+    Some(2)
+}
+
+/// Refuse a flag the command does not know, instead of doing the work without it.
+///
+/// **The twin of [`refuse_extra_positionals`], and it was missing for the whole of 1.0.** That
+/// function fixed dropped *paths*; dropped *flags* went unexamined until a sweep gave every
+/// subcommand an impossible option and counted the ones that exited 0. **Twelve of twenty-two did**
+/// — `check`, `authority`, `why`, `atlas`, `explain`, `run`, `build`, `lock`, `test`, `secrets`,
+/// `locale`, `morph`.
+///
+/// The failure is quiet and total: `delulu check app.delulu --strict` printed `checked clean` and
+/// exited 0, having never heard of `--strict`. A person might notice. **An agent constructing a
+/// command from a half-remembered flag name gets a green light for work that did not happen**, and
+/// this language's stated primary users are agents. It is the same defect as `audit` reading the
+/// wrong store (C75) — that one was merely the instance where the consequence was worst.
+///
+/// Called per command rather than inside the parser because a few commands (`locale`, `morph`,
+/// `secrets`) consume their own subverb flags afterwards; the parser collects, the command decides.
+/// The same rule for commands that scan `rest` themselves instead of using [`parse_opts`].
+///
+/// `secrets`, `locale` and `morph` look for the two or three flags they care about with
+/// `iter().any()` and never examine the rest, so an unknown option was simply never seen. They pass
+/// the flags they know and anything else is refused.
+pub(crate) fn refuse_unlisted_flags(cmd: &str, rest: &[String], known: &[&str]) -> Option<i32> {
+    let unknown: Vec<&str> = rest
+        .iter()
+        .map(String::as_str)
+        .filter(|a| a.starts_with('-'))
+        // `--flag=value` is the same flag as `--flag`.
+        .filter(|a| !known.contains(&a.split('=').next().unwrap_or(a)))
+        .collect();
+    if unknown.is_empty() {
+        return None;
+    }
+    eprintln!("error: `{cmd}` does not know: {}", unknown.join(", "));
+    eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+    eprintln!("note: this command accepts {}", known.join(", "));
+    Some(2)
+}
+
+pub(crate) fn refuse_unknown_flags(cmd: &str, opts: &Opts) -> Option<i32> {
+    // A flag that needs a value and was given none is the same failure in a different position: the
+    // setting the caller asked for is discarded and the command proceeds on its default.
+    if !opts.missing_values.is_empty() {
+        eprintln!(
+            "error: `{cmd}` was given {} with no value: {}",
+            if opts.missing_values.len() == 1 { "an option" } else { "options" },
+            opts.missing_values.join(", ")
+        );
+        eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
+        return Some(2);
+    }
+    if opts.unknown_flags.is_empty() {
+        return None;
+    }
+    eprintln!(
+        "error: `{cmd}` does not know {}: {}",
+        if opts.unknown_flags.len() == 1 { "this option" } else { "these options" },
+        opts.unknown_flags.join(", ")
+    );
+    eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+    eprintln!("note: `delulu {cmd} --help` lists what this command accepts");
     Some(2)
 }
 
@@ -1057,7 +1201,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
             Err(diags) => {
                 // Unparseable input is never "formatted" — surface the real diagnostics.
                 let mut map = SourceMap::new();
-                map.add_file(&f.display().to_string(), src.clone());
+                map.add_file(f.display().to_string(), src.clone());
                 print_diagnostics("fmt", &diags, &map, None, false);
                 refused.push(f.display().to_string());
             }
@@ -1251,6 +1395,14 @@ fn cmd_test(rest: &[String]) -> i32 {
                 } else {
                     patterns.push(other.to_string());
                 }
+            }
+            // An unknown option is refused rather than dropped: a mistyped `--seed` or `--filter`
+            // used to run the whole suite unfiltered and report success.
+            other if other.starts_with('-') => {
+                eprintln!("error: `test` does not know the option `{other}`");
+                eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+                eprintln!("note: `delulu test --help` lists what this command accepts");
+                return 2;
             }
             _ => {}
         }
@@ -1496,6 +1648,9 @@ fn cmd_test(rest: &[String]) -> i32 {
 /// class, EMPTY ceiling, one export `catalog() -> Str`. Catalogs are prose — the add
 /// confirmation states the bound: they can never alter codes, repairs, JSON, exit codes.
 fn cmd_locale(rest: &[String]) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("locale", rest, &["--json", "--yes"]) {
+        return code;
+    }
     let map = SourceMap::new();
     let refuse = |msg: String, json: bool| -> i32 {
         let d = Diagnostic::error("DL1704", msg);
@@ -1738,6 +1893,9 @@ fn cmd_locale(rest: &[String]) -> i32 {
 /// converts a file between two surfaces of the same program, and `--to-canonical` is how anything
 /// morphed re-enters the part of the toolchain that only speaks canonical.
 fn cmd_morph(rest: &[String]) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("morph", rest, &["--json", "--to", "--to-canonical"]) {
+        return code;
+    }
     let map = SourceMap::new();
     let json = rest.iter().any(|a| a == "--json");
     let refuse = |diags: Vec<Diagnostic>| -> i32 {
@@ -2137,6 +2295,14 @@ pub(crate) fn errors(diags: &[Diagnostic]) -> usize {
 /// not do is the failure this toolchain exists to refuse.
 fn cmd_check(rest: &[String]) -> i32 {
     let (first, opts) = parse_opts(rest);
+    // Before anything else, and unconditionally. `check` takes MANY paths, so it is the one command
+    // that does not refuse extra positionals — which is exactly why the flag guard has to sit out
+    // here rather than inside the package branch below, where it only covered a directory argument.
+    // `delulu check app.delulu --strict` printed `checked clean` and exited 0, never having heard of
+    // `--strict`; on the most-used command in the toolchain, that is the worst place for it.
+    if let Some(code) = refuse_unknown_flags("check", &opts) {
+        return code;
+    }
     let Some(first) = first else {
         eprintln!("error: `check` needs a file or package directory");
         return 2;
@@ -2147,6 +2313,9 @@ fn cmd_check(rest: &[String]) -> i32 {
     // applied to what, so it is refused rather than guessed at.
     if std::path::Path::new(&first).is_dir() {
         if let Some(code) = refuse_extra_positionals("check", &opts) {
+            return code;
+        }
+        if let Some(code) = refuse_unknown_flags("check", &opts) {
             return code;
         }
         return build_workspace(&first, &opts, "check", opts.locked);
@@ -2212,6 +2381,9 @@ fn cmd_check(rest: &[String]) -> i32 {
 fn cmd_authority(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
     if let Some(code) = refuse_extra_positionals("authority", &opts) {
+        return code;
+    }
+    if let Some(code) = refuse_unknown_flags("authority", &opts) {
         return code;
     }
     if let Some(old_path) = opts.diff.clone() {
@@ -2769,6 +2941,9 @@ fn cmd_build(rest: &[String]) -> i32 {
     if let Some(code) = refuse_extra_positionals("build", &opts) {
         return code;
     }
+    if let Some(code) = refuse_unknown_flags("build", &opts) {
+        return code;
+    }
     let Some(path) = path else {
         eprintln!("error: `build` needs a source file (`--target wasm`) or a package directory");
         return 2;
@@ -2873,6 +3048,9 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
     if let Some(code) = refuse_extra_positionals("plugin verify", &opts) {
         return code;
     }
+    if let Some(code) = refuse_unknown_flags("plugin verify", &opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `plugin verify` needs a `.dpx` file");
         return 2;
@@ -2936,6 +3114,9 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
 fn cmd_plugin_build(rest: &[String]) -> i32 {
     let (dir, opts) = parse_opts(rest);
     if let Some(code) = refuse_extra_positionals("plugin build", &opts) {
+        return code;
+    }
+    if let Some(code) = refuse_unknown_flags("plugin build", &opts) {
         return code;
     }
     let Some(dir) = dir else {
@@ -3160,6 +3341,9 @@ fn plugin_manifest_json(pm: &delulu_check::PluginManifest) -> Json {
 fn cmd_plugin_inspect(rest: &[String]) -> i32 {
     let (file, opts) = parse_opts(rest);
     if let Some(code) = refuse_extra_positionals("plugin inspect", &opts) {
+        return code;
+    }
+    if let Some(code) = refuse_unknown_flags("plugin inspect", &opts) {
         return code;
     }
     let Some(file) = file else {
@@ -3574,6 +3758,9 @@ fn cmd_lock(rest: &[String]) -> i32 {
     if let Some(code) = refuse_extra_positionals("lock", &opts) {
         return code;
     }
+    if let Some(code) = refuse_unknown_flags("lock", &opts) {
+        return code;
+    }
     let dir = path.unwrap_or_else(|| ".".to_string());
     if !std::path::Path::new(&dir).is_dir() {
         eprintln!("error: `lock` expects a package directory (with src/ and delulu.toml)");
@@ -3906,6 +4093,9 @@ fn cmd_why(rest: &[String]) -> i32 {
     };
     let (path, opts) = parse_opts(&remainder);
     if let Some(code) = refuse_extra_positionals("why", &opts) {
+        return code;
+    }
+    if let Some(code) = refuse_unknown_flags("why", &opts) {
         return code;
     }
     let Some(path) = path else {
@@ -4538,6 +4728,9 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
 /// AFTER the write sees the secret (the daemon loads the store at startup — restart to pick up new
 /// names; flagged as a v0.5 limitation).
 fn cmd_secrets(rest: &[String]) -> i32 {
+    if let Some(code) = refuse_unlisted_flags("secrets", rest, &["--state-dir", "--json"]) {
+        return code;
+    }
     let Some(sub) = rest.first().map(String::as_str) else {
         eprintln!("error: `secrets` needs a subcommand: set NAME VALUE | list [--state-dir DIR]");
         return 2;
@@ -7162,6 +7355,12 @@ fn atlas_refusal(n: usize) -> Diagnostic {
 /// Collect atlas flags shared by the graph + query commands.
 struct AtlasFlags {
     positionals: Vec<String>,
+    /// Value-taking flags given no value. `atlas` parses its own argv, so it carries its own copy
+    /// of the rule: `--format` with nothing after it must refuse, not fall back to the default.
+    missing_values: Vec<String>,
+    /// Flags this parser did not recognise. `atlas` parses its own options, so it needs its own
+    /// copy of the rule the shared parser now holds: an option nobody understood is refused.
+    unknown_flags: Vec<String>,
     format: Option<String>,
     out: Option<String>,
     budget: Option<usize>,
@@ -7173,7 +7372,10 @@ struct AtlasFlags {
 fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
     let mut f = AtlasFlags {
         positionals: Vec::new(),
+        unknown_flags: Vec::new(),
+        missing_values: Vec::new(),
         format: None,
+        // (field added below on AtlasFlags itself — atlas parses its own flags)
         out: None,
         budget: None,
         gods: 10,
@@ -7190,6 +7392,8 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                 if i + 1 < args.len() {
                     f.format = Some(args[i + 1].clone());
                     i += 1;
+                } else {
+                    f.missing_values.push("--format".to_string());
                 }
             }
             s if s.starts_with("--format=") => f.format = Some(s["--format=".len()..].to_string()),
@@ -7197,6 +7401,11 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                 if i + 1 < args.len() {
                     f.out = Some(args[i + 1].clone());
                     i += 1;
+                } else {
+                    // The alternation `"--out" | "-o"` is why the sweep's regex missed this one:
+                    // worth noting, because the next value-taking flag written with an alias will
+                    // be missed the same way if nobody checks the behaviour rather than the shape.
+                    f.missing_values.push("--out".to_string());
                 }
             }
             s if s.starts_with("--out=") => f.out = Some(s["--out=".len()..].to_string()),
@@ -7204,6 +7413,8 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                 if i + 1 < args.len() {
                     f.budget = args[i + 1].parse().ok();
                     i += 1;
+                } else {
+                    f.missing_values.push("--budget".to_string());
                 }
             }
             s if s.starts_with("--budget=") => f.budget = s["--budget=".len()..].parse().ok(),
@@ -7213,6 +7424,8 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                         f.gods = n;
                     }
                     i += 1;
+                } else {
+                    f.missing_values.push("--gods".to_string());
                 }
             }
             s if s.starts_with("--gods=") => {
@@ -7221,6 +7434,7 @@ fn parse_atlas_flags(args: &[String]) -> AtlasFlags {
                 }
             }
             s if !s.starts_with('-') => f.positionals.push(s.to_string()),
+            other if other.starts_with('-') => f.unknown_flags.push(other.to_string()),
             _ => {}
         }
         i += 1;
@@ -7271,6 +7485,17 @@ fn atlas_custody_overlay() -> Result<Json, Diagnostic> {
 /// [--gods N] [--custody] [--json]`.
 fn atlas_graph_cmd(args: &[String]) -> i32 {
     let f = parse_atlas_flags(args);
+    if !f.missing_values.is_empty() {
+        eprintln!("error: `atlas` was given options with no value: {}", f.missing_values.join(", "));
+        eprintln!("  nothing was done — falling back to the default would ignore what you asked for");
+        return 2;
+    }
+    if !f.unknown_flags.is_empty() {
+        eprintln!("error: `atlas` does not know these options: {}", f.unknown_flags.join(", "));
+        eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+        eprintln!("note: `delulu atlas --help` lists what this command accepts");
+        return 2;
+    }
     let Some(target) = f.positionals.first().cloned() else {
         eprintln!("error: `atlas` needs a file or package directory (e.g. `delulu atlas examples/demo.delulu`)");
         return 2;
@@ -7404,6 +7629,14 @@ fn colorize_atlas_tree(text: &str, palette: &Palette) -> String {
 }
 
 fn cmd_explain(rest: &[String]) -> i32 {
+    // `explain` takes no options at all, so anything flag-shaped is a mistake worth naming rather
+    // than skipping past to the first bare word.
+    if let Some(bad) = rest.iter().find(|a| a.starts_with('-') && a.as_str() != "--json") {
+        eprintln!("error: `explain` does not know the option `{bad}`");
+        eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+        eprintln!("note: `delulu explain <CODE>` takes a diagnostic code, e.g. `delulu explain DL0501`");
+        return 2;
+    }
     let code = rest.iter().find(|a| !a.starts_with('-')).map(|s| s.trim_start_matches("E-").to_string());
     let Some(code) = code else {
         eprintln!("error: `explain` needs a code, e.g. `delulu explain DL0501`");

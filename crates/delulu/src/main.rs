@@ -57,12 +57,12 @@ fn main() -> ExitCode {
         .stack_size(INTERPRETER_STACK_BYTES)
         .spawn(move || cli::run(&args));
     let code = match worker {
-        Ok(handle) => match handle.join() {
-            Ok(code) => code,
-            // The worker panicked. Rust already printed the panic; exit 2 (internal) rather than
-            // pretending success.
-            Err(_) => 2,
-        },
+        // A worker panic becomes exit 2 (internal), never a pretended success. Rust has already
+        // printed the panic itself. **This mapping is load-bearing and must not be "simplified"
+        // into something that loses it**: `json_contract.rs` once keyed its no-panic sweep on exit
+        // 101 and could therefore not see *any* crash in the path where all the work happens
+        // (campaign finding C49, ruling D44c).
+        Ok(handle) => handle.join().unwrap_or(2),
         // If the thread cannot be spawned, fall back to the main stack rather than refusing to
         // run at all — a shallow program still works, and a deep one now hits DL0905 or the same
         // crash it would have hit anyway.

@@ -872,7 +872,7 @@ pub fn compile_module_with(
     // Reserve the interned literal image plus a fixed bump-allocation heap for runtime strings.
     // The heap has no `memory.grow` yet, so a concatenation-heavy run could exhaust it (a trap =
     // an error, honestly surfaced); HEAP_PAGES keeps everyday programs comfortably within bounds.
-    let data_pages = (data.len() as u64 + 65535) / 65536;
+    let data_pages = (data.len() as u64).div_ceil(65536);
     let min_pages = data_pages + HEAP_PAGES;
     mems.memory(MemoryType { minimum: min_pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
 

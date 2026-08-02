@@ -36,9 +36,17 @@ fn the_committed_map_matches_the_tree() {
         if on_disk != fresh {
             let (a, b) = first_difference(&on_disk, &fresh);
             panic!(
-                "docs/survey/{name} is out of date — the repository changed and its map did not.\n\
-                 Run `cargo run -p delulu-survey -- build` and commit the result alongside the change.\n\n\
+                "docs/survey/{name} does not match the tree.\n\
+                 {}\n\n\
+                 TWO different things cause this, and the remedy is opposite:\n\
+                 \x20 1. THE MAP IS BEHIND. The repository changed and its map did not.\n\
+                 \x20    Run `cargo run -p delulu-survey -- build` and commit the result with the change.\n\
+                 \x20 2. THE TREE MOVED WHILE THIS SUITE WAS RUNNING — an editor, an agent, a script.\n\
+                 \x20    Then the map was fine and the RUN is what is invalid. Finish the edit, then\n\
+                 \x20    regenerate, then re-run. Regenerating now commits a half-finished change.\n\
+                 The line above says which: a file touched seconds ago points at 2, days ago at 1.\n\n\
                  first difference at line {}:\n  committed: {a}\n  current:   {b}",
+                newest_input(),
                 a_line(&on_disk, &fresh)
             );
         }
@@ -152,5 +160,58 @@ fn every_workspace_member_is_in_the_map() {
                 "workspace member `{name}` is missing from the Survey"
             );
         }
+    }
+}
+
+/// The newest file the map is built from, and how long ago it changed.
+///
+/// **This exists to tell two opposite failures apart.** A map/tree mismatch means either the map is
+/// behind (regenerate and commit) or *the tree moved while the suite was running* (finish the edit
+/// first — regenerating now commits a half-finished change). The remedies are opposite, and the
+/// difference is visible in one number: a file touched seconds ago was almost certainly edited by
+/// something still running; a file touched days ago is a map nobody regenerated.
+///
+/// This message was written after the second failure was misdiagnosed as the first **seven times in
+/// one working session**, each time sending the reader to run the wrong remedy. A gate that reports
+/// the wrong cause is not much better than one that stays silent.
+fn newest_input() -> String {
+    fn walk(dir: &std::path::Path, best: &mut Option<(std::time::SystemTime, String)>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = p.file_name().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+            if p.is_dir() {
+                // The generated map is an OUTPUT; including it would always name itself.
+                if name != "target" && name != ".git" && name != "survey" {
+                    walk(&p, best);
+                }
+            } else if matches!(
+                p.extension().and_then(|s| s.to_str()),
+                Some("rs") | Some("md") | Some("toml") | Some("delulu")
+            ) {
+                if let Ok(t) = e.metadata().and_then(|m| m.modified()) {
+                    let rel = p.strip_prefix(repo_root()).unwrap_or(&p).display().to_string();
+                    if best.as_ref().is_none_or(|(bt, _)| t > *bt) {
+                        *best = Some((t, rel.replace('\\', "/")));
+                    }
+                }
+            }
+        }
+    }
+    let mut best = None;
+    walk(&repo_root(), &mut best);
+    match best {
+        Some((t, rel)) => match std::time::SystemTime::now().duration_since(t) {
+            Ok(d) if d.as_secs() < 300 => format!(
+                "The newest input is `{rel}`, modified {} SECONDS ago — while this suite was running.",
+                d.as_secs()
+            ),
+            Ok(d) => format!(
+                "The newest input is `{rel}`, modified {} minutes ago.",
+                d.as_secs() / 60
+            ),
+            Err(_) => format!("The newest input is `{rel}` (its timestamp is in the future)."),
+        },
+        None => "No inputs could be examined to date the change.".to_string(),
     }
 }

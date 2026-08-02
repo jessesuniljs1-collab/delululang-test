@@ -489,7 +489,7 @@ fn scope_bug(span: Span) -> Fault {
 use std::cell::Cell;
 thread_local! {
     static RNG: Cell<u64> = Cell::new(seed());
-    static FIXED_CLOCK: Cell<Option<i64>> = Cell::new(None);
+    static FIXED_CLOCK: Cell<Option<i64>> = const { Cell::new(None) };
     /// When `Some`, `Cap[Console]` output is captured into this buffer instead of stdout — used by
     /// tests and by the WASM backend's two-engine parity harness (§9). Off by default.
     static CAPTURE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };

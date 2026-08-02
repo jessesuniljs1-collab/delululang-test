@@ -42,7 +42,7 @@ impl Program {
 
 /// Check an already-loaded package. Load diagnostics (parse, DL0303/DL0304) are carried in.
 pub fn check_program(pkg: &Package) -> Program {
-    let mut diagnostics: Vec<Diagnostic> = pkg.diagnostics.iter().cloned().collect();
+    let mut diagnostics: Vec<Diagnostic> = pkg.diagnostics.to_vec();
 
     // ----- 1. global type registry (prelude + every module's types) -------------------------
     let mut gtypes: Vec<TypeDef> = Vec::new();

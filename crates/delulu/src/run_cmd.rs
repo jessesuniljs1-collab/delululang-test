@@ -199,6 +199,12 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     if let Some(code) = refuse_extra_positionals("run", &opts) {
         return code;
     }
+    // `run` is the command where a dropped flag costs the most: a mistyped `--grant`, `--engine`
+    // or `--isolation` used to be discarded and the program ran anyway, under whatever the
+    // defaults were, reporting success.
+    if let Some(code) = refuse_unknown_flags("run", &opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `run` needs a file");
         return 2;

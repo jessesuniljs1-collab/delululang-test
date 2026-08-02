@@ -2976,6 +2976,61 @@ siblings talk to the broker.
 Witnesses for all four, each observed failing against the old code. The two in `new_cli.rs` and
 `fix_cli.rs` were verified non-vacuous by disabling the checks and watching them fail.
 
+**D73 — Twelve of twenty-two subcommands silently ignored the options you typed.** Closes C76, and
+generalizes C75 from one command to the class.
+
+D72d fixed `audit`, where a dropped `--state-dir` meant reading the wrong store. That was the
+instance with the worst consequence, not the extent of the problem. Giving every subcommand a flag
+that cannot exist and counting the ones that exit **0**:
+
+```
+IGNORED  check   authority  why    atlas   explain
+IGNORED  run     build      lock   test    secrets
+IGNORED  locale  morph
+```
+
+`delulu check app.delulu --strict` printed `checked clean` and exited 0, having never heard of
+`--strict`.
+
+**A second position, found by the same method.** Every value-taking arm read
+`if i + 1 < rest.len() { take it }` with **no `else`**, so a flag in final position vanished and the
+command ran on its default. Seven did it, and the sharpest was
+`delulu run app.delulu --grant console --isolation` — **executed with no isolation at all, exit 0**.
+A security-relevant setting, discarded in silence, reported as success.
+
+**The twin already existed and had been written for exactly this reason.**
+`refuse_extra_positionals` carries the docstring *"Silently dropping an argument is the failure mode
+this exists to prevent: the tool reports success about work it never did, and the reader has no way
+to tell."* That was built for dropped **paths**. Dropped **flags** were never examined, and the shared
+parser's last arm stayed `_ => {}` — the skip branch, in the one function twelve commands route
+through.
+
+**Why this is severe rather than untidy.** Constitution §8.4 makes the machine channel a first-class
+consumer, and this language's stated primary users are agents. A person mistyping a flag may notice
+the missing effect. **An agent assembling a command from a half-remembered flag name gets exit 0 and
+records the task as done.** The failure is silent, total, and indistinguishable from success on the
+channel that matters most.
+
+RULED:
+
+1. **The parser collects rather than discards** — `Opts::unknown_flags` and `Opts::missing_values`,
+   the exact twins of `positionals`, added for the same reason one release later.
+2. **The command decides, not the parser.** `refuse_unknown_flags` is called per command, because
+   `locale`, `morph` and `secrets` consume their own subverb flags after the shared parse; for those
+   `refuse_unlisted_flags` takes the flags they know. `atlas` and `test` parse their own argv and
+   carry the rule inline.
+3. **Two gates sweep the whole surface**, because a rule applied at each site is a rule the next site
+   forgets: `no_subcommand_silently_ignores_an_unknown_option` (17 subcommands × an impossible flag)
+   and `a_value_taking_flag_with_no_value_is_refused` (8 value-taking flags × no value).
+
+**How it was found is the reusable part.** Not by reading code — by running every command with an
+argument that could not possibly be valid and looking at the exit status. The same sweep found
+C72–C75 an hour earlier. **The authoring and custody CLI had never had a hostile pass**, because the
+adversarial phases walked the *language* stage by stage and these commands were written afterwards.
+One aside worth keeping: the regex that patched the value-taking arms **missed `"--out" | "-o"`**,
+because the alias made the shape different. The behavioural sweep caught what the textual patch did
+not, which is the argument for testing behaviour rather than shape.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
