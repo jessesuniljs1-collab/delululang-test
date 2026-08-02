@@ -97,7 +97,7 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                 Ok(r) => respond(id, r),
                 Err(why) => {
                     if let Some(id) = id {
-                        respond_err(id, -32602, why);
+                        respond_err(id, -32602, &why);
                     }
                 }
             },
@@ -358,6 +358,26 @@ impl Server {
         self.docs.get(uri).map(|d| d.text.as_str())
     }
 
+    /// Indexed files that are **not** open, in a stable order, each visited with `(uri, text,
+    /// module)`.
+    ///
+    /// The open/closed split is the same one `workspace/symbol` makes and for the same reason: an
+    /// unsaved buffer is the truth about a file, and its copy on disk is a previous draft.
+    fn each_closed_file(&self, mut f: impl FnMut(&str, &str, &delulu_syntax::ast::Module)) {
+        if self.workspace.roots.is_empty() {
+            return;
+        }
+        self.workspace.refresh();
+        let open = self.uris();
+        let index = self.workspace.index.borrow();
+        let mut files: Vec<&Indexed> =
+            index.values().filter(|e| !open.contains(&e.uri.as_str())).collect();
+        files.sort_by(|a, b| a.uri.cmp(&b.uri));
+        for e in files {
+            f(&e.uri, &e.text, &e.module);
+        }
+    }
+
     /// Record the workspace roots and answer with what this server can do.
     ///
     /// `workspaceFolders` is the current form and `rootUri` the one clients have sent for a
@@ -433,9 +453,24 @@ impl Server {
                 return json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) });
             }
         }
-        Value::Null
+        // Nothing open declares it. Ask the project — a name is usually defined in a file you
+        // have not opened yet, which is precisely when you most want to be taken to it.
+        let mut found = Value::Null;
+        self.each_closed_file(|uri, text, module| {
+            if found.is_null() {
+                if let Some(sp) = decl_name_span(module, &word) {
+                    found = json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) });
+                }
+            }
+        });
+        found
     }
 
+    /// Every use of the name, across open documents and the rest of the project.
+    ///
+    /// Reading more widely than `rename` writes is deliberate, not an oversight — see
+    /// [`Server::rename`]. A list you can read and judge is safe to make generous; an edit you
+    /// cannot see is not.
     fn references(&self, params: &Value) -> Value {
         let Some((word, _, _)) = self.word_at(params) else { return json!([]) };
         let mut out = Vec::new();
@@ -445,14 +480,40 @@ impl Server {
                 out.push(json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) }));
             }
         }
+        self.each_closed_file(|uri, text, module| {
+            for sp in name_occurrences(module, &word) {
+                out.push(json!({ "uri": uri, "range": byte_range(text, sp.start, sp.end) }));
+            }
+        });
         Value::Array(out)
+    }
+
+    /// Files that are not open but do mention `word`, as a sorted list of URIs.
+    fn closed_files_mentioning(&self, word: &str) -> Vec<String> {
+        let mut hits = Vec::new();
+        self.each_closed_file(|uri, _text, module| {
+            if !name_occurrences(module, word).is_empty() {
+                hits.push(uri.to_string());
+            }
+        });
+        hits
     }
 
     /// Rename a MODULE-LEVEL name across every open document. Locals refuse honestly
     /// (deviation 3): a shadow-aware local rename needs a DefId graph the server does not have.
-    fn rename(&self, params: &Value) -> Result<Value, &'static str> {
+    ///
+    /// **It renames only what you have open, and refuses when that would not be the whole job.**
+    /// The reference walk is an approximation — it matches a qualified path's final segment, so a
+    /// record method with the same name is included, and that is recorded openly in
+    /// [`name_occurrences`]. Across three files you have open, an approximate rename is a diff you
+    /// can read and correct. Across five hundred you have not, it is silent corruption at scale.
+    /// So the refusal names the files instead: open them, see what would change, then rename.
+    ///
+    /// This is the same rule as the local-name refusal one level up. `references` still reports
+    /// the whole project, because reading widely is safe and writing blind is not.
+    fn rename(&self, params: &Value) -> Result<Value, String> {
         let Some((word, _, _)) = self.word_at(params) else {
-            return Err("nothing renameable at this position");
+            return Err("nothing renameable at this position".into());
         };
         let new_name = params["newName"].as_str().unwrap_or("");
         if new_name.is_empty()
@@ -460,18 +521,31 @@ impl Server {
             || !new_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
             || delulu_syntax::token::is_reserved(new_name)
         {
-            return Err("the new name is not a legal identifier");
+            return Err("the new name is not a legal identifier".into());
+        }
+        let elsewhere = self.closed_files_mentioning(&word);
+        if !elsewhere.is_empty() {
+            let shown: Vec<&str> = elsewhere.iter().take(5).map(String::as_str).collect();
+            let more = elsewhere.len().saturating_sub(shown.len());
+            return Err(format!(
+                "`{word}` is also used in {} file(s) that are not open, so renaming here would \
+                 leave those behind: {}{}. Open them first — this server renames only what you \
+                 can see, because the reference walk is an approximation and an edit you cannot \
+                 review is not one worth making.",
+                elsewhere.len(),
+                shown.join(", "),
+                if more > 0 { format!(", and {more} more") } else { String::new() }
+            ));
         }
         let is_decl = self
             .uris()
             .into_iter()
             .any(|uri| self.analyze(uri).is_some_and(|a| decl_name_span(&a.module, &word).is_some()));
         if !is_decl {
-            return Err(
-                "only module-level names (fn/type/effect/const/actor) can be renamed — a local \
-                 rename needs shadow-aware resolution the server does not have, so it is refused \
-                 rather than guessed",
-            );
+            return Err("only module-level names (fn/type/effect/const/actor) can be renamed — a \
+                 local rename needs shadow-aware resolution the server does not have, so it is \
+                 refused rather than guessed"
+                .into());
         }
         let mut changes = serde_json::Map::new();
         for uri in self.uris() {

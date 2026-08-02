@@ -32,11 +32,18 @@ transport: stdio
   from the file you are in sort above names from other open files. Every list comes from
   the compiler's own — keywords from the morph table, effects from the checker's core
   set — so the completion list cannot drift from the language.
-- **Definition / references / rename** for module-level names across open documents
-  (a local rename is refused rather than guessed: resolving it needs shadow-aware
-  scoping the server does not have). When several open files declare the same name,
+- **Definition / references** for module-level names across the whole project —
+  including files you have never opened. When several open files declare the same name,
   **definition resolves to the one you are in**, and otherwise to the first by URI —
   the same question always gets the same answer, in this session and the next.
+- **Rename** for module-level names, **across the documents you have open**. A local
+  rename is refused rather than guessed (resolving it needs shadow-aware scoping the
+  server does not have), and a rename that would leave the name behind in unopened
+  files is refused too — naming those files so you can open them. The reference walk is
+  an approximation: it matches a qualified path's final segment, so an unrelated record
+  method of the same name is included. Across files you have open that is a diff you can
+  read and correct; across a project you have not opened it is silent corruption. So the
+  server reads the whole project and writes only what you can see.
 - **Semantic tokens** with dedicated kinds for effects, reference capabilities,
   capability types, and secrets.
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.

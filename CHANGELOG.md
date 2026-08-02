@@ -180,6 +180,20 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **Definition and references now reach the whole project**, not only what is open — jumping to a
+  declaration in a file you have not opened yet is the normal case, and it previously returned
+  nothing at all.
+
+  **Rename deliberately does not follow.** It edits the documents you have open and *refuses* when
+  that would leave the name behind elsewhere, naming the files to open first. The reference walk is
+  an approximation — it matches a qualified path's final segment, so an unrelated record method of
+  the same name is included, which `name_occurrences` has always said openly. Across three files
+  you have open, an approximate rename is a diff you can read and correct; across five hundred you
+  have not, it is silent corruption at scale. Without the refusal the rename was observed
+  completing on the declaration alone and leaving a second file calling a function that no longer
+  existed. **The server reads the whole project and writes only what you can see** — the same rule
+  as the existing local-name refusal, one level up.
+
 - **Workspace symbols — the language server can now answer questions about files nobody opened.**
   `workspace/symbol` returns every module-level declaration in the project, so "where is this
   declared?" stops requiring that you already found the file. Previously the server knew only about

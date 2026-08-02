@@ -795,6 +795,120 @@ fn workspace_and_document_symbols_agree_on_what_exists() {
     c.shutdown();
 }
 
+/// Jumping to a declaration in a file you have not opened is the normal case, not the exception.
+#[test]
+fn definition_reaches_a_file_that_was_never_opened() {
+    let dir = workspace_dir("jump");
+    std::fs::write(
+        dir.join("src").join("lib.delulu"),
+        "module lib\npub fn shared_thing() -> Int { 7 }\n",
+    )
+    .unwrap();
+    let app = dir.join("src").join("app.delulu");
+    std::fs::write(&app, "module app\nimport lib\nfn use_it() -> Int { lib.shared_thing() }\n").unwrap();
+    let app_uri = format!("file:///{}", app.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+
+    let mut c = Client::start_in(&dir);
+    // Only `app` is open. `lib` has never been opened by anyone.
+    c.open(&app_uri, &std::fs::read_to_string(&app).unwrap());
+    let _ = c.wait_diagnostics(&app_uri);
+
+    let col = "fn use_it() -> Int { lib.shared_thing() }".find("shared_thing").unwrap();
+    let def = c.request(
+        "textDocument/definition",
+        json!({ "textDocument": { "uri": &app_uri }, "position": { "line": 2, "character": col } }),
+    );
+    assert!(
+        def["uri"].as_str().unwrap_or_default().ends_with("src/lib.delulu"),
+        "definition must reach the unopened file that declares it: {def}"
+    );
+
+    // References see the whole project too.
+    let refs = c.request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": &app_uri },
+            "position": { "line": 2, "character": col },
+            "context": { "includeDeclaration": true }
+        }),
+    );
+    let files: Vec<String> = refs
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["uri"].as_str().unwrap_or_default().rsplit('/').next().unwrap().to_string())
+        .collect();
+    assert!(files.contains(&"lib.delulu".to_string()), "references span the project: {files:?}");
+    assert!(files.contains(&"app.delulu".to_string()), "including the open file: {files:?}");
+    c.shutdown();
+}
+
+/// Rename edits only what you can see, and says so rather than doing half the job.
+///
+/// The reference walk is an approximation — it matches a qualified path's final segment, so an
+/// unrelated record method of the same name is included. Across files you have open that is a
+/// diff you can read; across a project you have not opened it is silent corruption. The refusal
+/// has to name the files, or it is just an obstacle.
+#[test]
+fn rename_refuses_rather_than_leaving_other_files_behind() {
+    let dir = workspace_dir("rename");
+    std::fs::write(
+        dir.join("src").join("other.delulu"),
+        "module other\nimport lib\nfn calls_it() -> Int { lib.widely_used() }\n",
+    )
+    .unwrap();
+    let lib = dir.join("src").join("lib.delulu");
+    std::fs::write(&lib, "module lib\npub fn widely_used() -> Int { 1 }\n").unwrap();
+    let lib_uri = format!("file:///{}", lib.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+
+    let mut c = Client::start_in(&dir);
+    c.open(&lib_uri, &std::fs::read_to_string(&lib).unwrap());
+    let _ = c.wait_diagnostics(&lib_uri);
+
+    let col = "pub fn widely_used() -> Int { 1 }".find("widely_used").unwrap();
+    let id = c.next_id;
+    c.next_id += 1;
+    c.send(json!({
+        "jsonrpc": "2.0", "id": id, "method": "textDocument/rename",
+        "params": {
+            "textDocument": { "uri": &lib_uri },
+            "position": { "line": 1, "character": col },
+            "newName": "renamed_thing"
+        }
+    }));
+    let err = loop {
+        let m = c.read_message();
+        if m.get("id").and_then(Value::as_i64) == Some(id) {
+            break m;
+        }
+    };
+    let message = err["error"]["message"].as_str().unwrap_or_default();
+    assert!(err["result"].is_null(), "the rename must not be performed: {err}");
+    assert!(message.contains("not open"), "the refusal explains itself: {message}");
+    assert!(message.contains("other.delulu"), "and names the file to open: {message}");
+
+    // Open the other file, and the same rename now goes through — across both.
+    let other_uri = message
+        .split_whitespace()
+        .find(|w| w.contains("other.delulu"))
+        .unwrap()
+        .trim_end_matches(['.', ','])
+        .to_string();
+    c.open(&other_uri, &std::fs::read_to_string(dir.join("src").join("other.delulu")).unwrap());
+    let _ = c.wait_diagnostics(&other_uri);
+    let ok = c.request(
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": &lib_uri },
+            "position": { "line": 1, "character": col },
+            "newName": "renamed_thing"
+        }),
+    );
+    let changes = ok["changes"].as_object().expect("a workspace edit");
+    assert_eq!(changes.len(), 2, "both files are edited once they are open: {changes:?}");
+    c.shutdown();
+}
+
 /// A server told nothing about a project must not go looking for one.
 #[test]
 fn without_a_workspace_only_open_documents_are_searched() {
