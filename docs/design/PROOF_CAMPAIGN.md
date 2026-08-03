@@ -56,6 +56,96 @@ future work since Stage 2, and it remains open. Nothing in this document upgrade
 
 ## 3. Findings
 
+### P17-IF1 — **CRITICAL** — a secret is fully recoverable with no `Declassify` anywhere
+
+**Observed, reproduced, and not a fixture.** A program that `check` accepts, that `authority`
+reports as `effects: Write`, and for which `delulu why Declassify` answers **"program cannot perform
+`Declassify`"**, recovers the entire plaintext of a secret:
+
+```
+$ delulu check extract.delulu                → ok: extract.delulu checked clean
+$ delulu why Declassify extract.delulu       → program cannot perform `Declassify`
+$ delulu run extract.delulu --grant console --grant secret:API_KEY=hunter2
+  recovered length = 7
+  RECOVERED SECRET = hunter2
+$ delulu run extract.delulu --grant console --grant secret:API_KEY=sk-9f0zq_x
+  recovered length = 10
+  RECOVERED SECRET = sk-9f0zq_x
+```
+
+The whole mechanism is two functions:
+
+```delulu
+// One bit out of the secret: is the plaintext's length exactly n?
+fn len_is(k: Secret[Str], n: Int) -> Bool {
+  let probe = k.map(fn(x: Str) -> Str { if x.len() == n { "Y" } else { "N" } })
+  let yes   = k.map(fn(x: Str) -> Str { "Y" })
+  probe.verify(yes)
+}
+
+// One bit out of the secret: is the plaintext's i-th character c?
+fn char_is(k: Secret[Str], i: Int, c: Str) -> Bool {
+  let probe = k.map(fn(x: Str) -> Str { if x.slice(i, i + 1) == c { "Y" } else { "N" } })
+  let yes   = k.map(fn(x: Str) -> Str { "Y" })
+  probe.verify(yes)
+}
+```
+
+Driven by two loops (recover the length, then each character against an alphabet), this yields the
+full plaintext. The program holds **no `Cap[Declassify]`** and emits **no `Declassify` effect**.
+
+**Why every rule is obeyed and the guarantee still fails.** Three mechanisms compose:
+
+1. `Secret.map` hands the closure the **plaintext** (`check.rs:2006-2018`). Its only restriction is
+   **purity** (DL0603) — and purity does not prevent computing an arbitrary predicate *about* the
+   plaintext and encoding the answer in the returned `Secret[Str]`.
+2. `Secret.verify` (`check.rs:2053-2057`) returns `(Type::Bool, None, None)` — an **ordinary,
+   untainted `Bool` with no effect**. It is the only untainted observation of a secret, and it is
+   enough to read the encoded bit back out.
+3. `check_if` (`check.rs:2333-2350`) types the condition as `Bool` and unions the branch rows. There
+   is **no pc-label** — no notion that a branch taken on a secret-derived value taints what happens
+   inside it. `check_match` (`2352-2370`) is the same.
+
+No rule is violated. DL0603 fires when it should; `verify` is constant-time as designed; `if` types
+its condition correctly. **The composition is the hole**, which is why an audit of the rules one at
+a time could not find it.
+
+**The controls prove the direct route is genuinely closed.** Every straightforward leak is refused,
+so this is not a story about weak opacity:
+
+| Attempt | Result |
+|---|---|
+| `out.println(k)` | **DL0602** refused |
+| `out.println("key=" + k)` | **DL0602** refused |
+| `str(k)` | **DL0604** refused |
+| `k == k` | **DL0605** refused |
+| `w.write_text(path, k)` | **DL0602** refused |
+
+R-5 opacity works. The oracle simply does not need any of those doors.
+
+**`--assert-trace` cannot see this.** The project's dynamic witness for Theorem 3 exits **0**. That
+is correct behaviour and it is the point: the leak **emits no effect at all**, so `trace ⊆ row`
+holds trivially. A runtime check on the effect trace is structurally incapable of detecting a flow
+that never becomes an effect.
+
+**What the project may therefore claim.** Not noninterference — not even
+termination-insensitive noninterference. What `Secret` provides is **opacity against direct
+observation**: a capability gate on `expose`, plus the absence of stringify/compare/serialize
+eliminators. It does **not** track implicit flows, and with `map` + `verify` in the surface, a
+capability-gated `expose` is not the only way out. In the Sabelfeld–Sands declassification taxonomy
+this system controls **WHO** (holds `Cap[Declassify]`) but not **WHAT** is released.
+
+**Candidate fix, stated but NOT applied.** The principled repair follows R-2's own doctrine that
+declassification is an effect: `Secret.verify` genuinely *releases one bit*, so it should carry the
+`Declassify` effect and require `Cap[Declassify]`, exactly as `expose` does. The oracle would still
+run — but `authority` would report `Declassify`, `why Declassify` would name it, and the row would
+be honest, which is the whole guarantee. This changes language semantics for every existing program
+using `verify`, so it belongs in an RFC and is **not** being slipped into a campaign pass. Unlike
+D87/D88, however, this is not a robustness gap: it is a **working exploit against the project's
+headline claim**, and it should be triaged accordingly.
+
+
+
 Each finding was **observed by execution**, not argued. The committed witness is
 `crates/delulu-broker/tests/order_laws.rs`, which enumerates *every* subset of a path universe
 rather than checking hand-picked pairs. Three of its tests are `#[ignore]`d because they currently
