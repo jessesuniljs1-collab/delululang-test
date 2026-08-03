@@ -348,6 +348,23 @@ capability** — observed. The document mentions "actor" zero times.
 None of these means the calculus is *wrong*. It means it is **silent**, and silence is the one thing
 a soundness argument may not be about the construct that failed.
 
+### The repair, machine checked
+
+`design/models/lean/DeluluCore.lean` formalises the **extension** P17-T1 says the calculus needs —
+a primitive that invokes its function argument — and proves two things in Lean 4.32.2:
+
+- **`good_sound`** — with the corrected rule (the callback's latent row surfaces into the caller),
+  every emitted label is in the declared row. Effect Soundness, for this fragment.
+- **`bad_unsound`** — with the rule the calculus actually states, **there exists a well-typed
+  program whose trace escapes its row**. That is C88, mechanized:
+  `ho (lam [write] (op write))` types at row `[]` and emits `write`.
+
+`#print axioms` reports **"does not depend on any axioms"** for both, and for
+`c88_good_row_contains_write` — fully constructive, not even `propext`.
+
+**Category 2, and scoped honestly:** this is the higher-order fragment *only*. It settles the one
+question that cost this project its worst soundness hole, and it settles nothing else.
+
 ---
 
 ## 12. The ledger — which categories are actually non-empty
@@ -355,7 +372,7 @@ a soundness argument may not be about the construct that failed.
 | # | Category | Status |
 |---|---|---|
 | 1 | Mathematically proven | **Non-empty.** The nine-dimension order (Z3, 17 obligations); device containment; actor data-race freedom by construction. |
-| 2 | **Machine checked** | **EMPTY.** No proof assistant is installed. `DELULU_CORE.md` §9's formalization has been open since Stage 2 and does not exist — and P17-T1 means its *target* must change before it is attempted. |
+| 2 | **Machine checked** | **NON-EMPTY, for the first time — but narrowly.** Lean 4.32.2 proves Effect Soundness for the **higher-order fragment**, and proves that the calculus as written admits a program whose trace escapes its row (`design/models/lean/DeluluCore.lean`). `#print axioms` reports **"does not depend on any axioms"** for all three theorems — not even `propext` or `Classical.choice`. **The full type system is still NOT mechanized**: no capabilities, no store, no secrets, no attenuation, no Progress/Preservation. |
 | 3 | Model checked | **Non-empty.** 585,771 + 2,421 distinct states, with three teeth tests reconstructing three real bugs. |
 | 4 | Property tested | **Non-empty.** 250,000 generated programs; exhaustive enumeration of the order laws; the Survey's totality properties. |
 | 5 | Differentially verified | **Non-empty.** Interpreter vs WASM engine, ~1,000 lines of parity tests; fault parity is a tested law. |
@@ -388,11 +405,15 @@ three bugs the project actually shipped. Effect soundness is **property- and fuz
 generated programs** whose grammar now contains the shapes that historically broke it. The Survey is
 a derived graph whose staleness is decidable, which is why it does not rot.
 
-Against that: **the type system has no machine-checked proof**, the core calculus is silent about the
-construct that caused its worst hole, secrets are protected against direct observation but not
-against a program that is trying, the audit chain does not detect deletion, and expiry trusts a clock
-that the target platforms routinely move backwards.
+The **higher-order fragment of the effect calculus is now machine checked in Lean**, with no axioms
+at all — including a mechanized proof that the calculus *as previously written* was unsound for that
+construct.
 
-**The design is mathematical. Two subsystems have machine-checked evidence, bounded and labelled.
-The type system's guarantee is still the tests.** Anything stronger would be a lie of exactly the
-kind this project exists to avoid.
+Against that: **the full type system still has no machine-checked proof**, the core calculus remains
+silent about actors and mutable cells, secrets are protected against direct observation but not
+against a program that is trying, the audit chain does not detect deletion, and expiry trusts a
+clock that the target platforms routinely move backwards.
+
+**The design is mathematical. Several subsystems now have machine-checked, model-checked or
+symbolically proved evidence — each bounded and labelled. The full type system's guarantee is still
+the tests.** Anything stronger would be a lie of exactly the kind this project exists to avoid.

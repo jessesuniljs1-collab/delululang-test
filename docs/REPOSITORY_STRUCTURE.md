@@ -231,6 +231,10 @@ DeluluLang/
     │   │   │                        #   certificate-replay vulnerability at depth 4
     │   │   ├── CustodyC29.cfg       #   TEETH TEST: LIVE_ON_REDEEM=FALSE reconstructs campaign
     │   │   │                        #   finding C29 (redeeming a revoked grant) at depth 5
+    │   │   ├── lean/DeluluCore.lean #   [P17-9] MACHINE CHECKED (Lean 4.32.2, no sorry, no
+    │   │   │                        #   axioms at all): Effect Soundness for the higher-order
+    │   │   │                        #   fragment, AND a proof that the calculus AS WRITTEN admits
+    │   │   │                        #   a program whose trace escapes its row — C88 mechanized.
     │   │   ├── authority_algebra.py #   [P17-8] the NINE-DIMENSION order proved in Z3: 17
     │   │   │                        #   obligations — reflexive, transitive, meet-is-GLB and the
     │   │   │                        #   NO-WIDENING law across all dimensions at once. Localises

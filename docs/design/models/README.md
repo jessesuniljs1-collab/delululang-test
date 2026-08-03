@@ -65,8 +65,6 @@ reconstructs that defect independently, from the guards alone.
 
 ---
 
----
-
 ## `Custody.tla` — leases and certificate adoption
 
 Models `lease.rs` (delegate → mint → redeem, single-use nonces, `rotate_key`) and `cert.rs`
@@ -170,12 +168,56 @@ The real no-widening statement is the lower-bound obligation, proved for every p
 
 ---
 
+## `lean/DeluluCore.lean` — the higher-order fragment, MACHINE CHECKED
+
+```sh
+lean lean/DeluluCore.lean      # silence = every declaration type-checked
+```
+
+**Tool:** Lean **4.32.2** via `elan` (not vendored — `elan` installs it). No mathlib; core only.
+
+This is deliberately **not** a mechanization of `DELULU_CORE.md` §1–§7 as written. Finding **P17-T1**
+showed that would prove the wrong theorem: the document has no construct for a primitive that
+*invokes* a function argument, which is exactly what broke (C88). So this formalises the
+**extension** the calculus needs, and proves both directions:
+
+| Theorem | Statement |
+|---|---|
+| `good_sound` | With the corrected rule (the callback's latent row surfaces), **every emitted label is in the declared row** — Effect Soundness for the fragment. |
+| `bad_unsound` | With the rule the document states, **there EXISTS a well-typed program whose trace escapes its row**: `ho (lam [write] (op write))` types at `[]` and emits `write`. **C88, mechanized.** |
+| `c88_good_row_contains_write` | The corrected rule *refuses* to give that program an empty row. |
+
+### The check that cannot be talked around
+
+A proof using `sorry` still type-checks. What it cannot do is hide from `#print axioms`, which is
+run at the bottom of the file:
+
+```text
+'DeluluCore.good_sound' does not depend on any axioms
+'DeluluCore.bad_unsound' does not depend on any axioms
+'DeluluCore.c88_good_row_contains_write' does not depend on any axioms
+```
+
+Not `sorryAx`, and not even Lean's standard `propext` / `Classical.choice` / `Quot.sound` — these
+are fully constructive.
+
+### Scope, so the result is not read wider than it is
+
+The **higher-order fragment only**. No capabilities, no store, no secrets, no attenuation, no
+Progress, no Preservation. It settles one question — the one that cost this project its worst
+soundness hole — and nothing else.
+
+---
+
 ## What these models do NOT cover
 
 Named so the `model-checked` category is not read wider than it is:
 
 - **Three nodes, two effects, clock ≤ 2, audit ≤ 6, epoch ≤ 2.** Bounded model checking. Invariants
   hold over every reachable state *within that bound*, which is not a proof for all sizes.
+- **The full type system is NOT machine-checked.** `lean/DeluluCore.lean` covers the higher-order
+  fragment only — capabilities, the store, secrets, attenuation, Progress and Preservation are all
+  outside it.
 - ~~Lease tokens, redemption, and certificate adoption are NOT modelled~~ — **now covered by
   `Custody.tla`.** Still absent from it: the MAC itself (key rotation is modelled as an epoch
   counter, not as blake3), audit-chain hashing, and contact receipts extending a deadline.

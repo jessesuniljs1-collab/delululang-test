@@ -260,6 +260,19 @@ runtime enforcement lands in Stage 6.
 > be stated over it.
 >
 > Both findings are recorded in `docs/design/PROOF_CAMPAIGN.md` §10.
+>
+> ### ✅ The higher-order fragment IS now machine checked (P17-9)
+>
+> `docs/design/models/lean/DeluluCore.lean` — Lean 4.32.2, no `sorry`, and `#print axioms` reports
+> **"does not depend on any axioms"** for every theorem (not even `propext`). It formalises the
+> extension described above and proves:
+>
+> - **`good_sound`** — with the corrected rule, `labels(tr) ⊆ ρ`. Effect Soundness for the fragment.
+> - **`bad_unsound`** — with the rule THIS DOCUMENT states, a well-typed program's trace escapes its
+>   row: `ho (lam [write] (op write))` types at row `[]` and emits `write`. **C88, mechanized.**
+>
+> So the gap is no longer only argued — it is proved, in both directions. What remains unmechanized
+> is everything else: capabilities, the store, secrets, attenuation, Progress and Preservation.
 
 A machine-checked development (the natural target is a ~500-line Lean or Coq formalization of §1–§7)
 is **open, invited work** recorded in `CONTRIBUTING.md`. Until it exists, this document and the
