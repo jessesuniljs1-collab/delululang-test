@@ -123,19 +123,59 @@ omitted `device` key. This therefore belongs in an RFC, not in a hardening patch
 Two programs that differ only by **swapping two parameters**:
 
 ```delulu
-fn g[e](p: fn() -> Unit ! {Read | e}, q: fn() -> Unit ! e) -> ...   // REJECTED, DL0504
-fn g[e](q: fn() -> Unit ! e, p: fn() -> Unit ! {Read | e}) -> ...   // checks clean
+module order_a                                    // REJECTED: DL0504
+
+fn g[e](p: fn() -> Unit ! {Read | e}, q: fn() -> Unit ! e) -> Unit ! {Read | e} {
+    p()
+    q()
+}
+
+fn main(root: Root) ! {Read} {
+    let fs = root.fs_read("./")
+    g(fn() -> Unit ! {Read} { let _ = fs.read_text("a") },
+      fn() -> Unit ! {Read} { let _ = fs.read_text("b") })
+}
 ```
 
-Both are called with two `!{Read}` callbacks. `e := {Read}` satisfies both constraints in **both**
-programs — and the second program is itself the proof that the checker accepts `{Read | e}` when
-`e = {Read}`. The first is rejected only because unification binds `e := {}` from the first
-parameter and then fails on the second, never backtracking.
+```delulu
+module order_b                                    // checks clean — only the parameters moved
 
-**Severity: completeness, not soundness.** Rejecting a well-typed program is fail-closed. But for a
-language whose stated audience is AI agents generating code, "reordering two parameters decides
-whether your program compiles" is a real defect, and the absence of principal types should be stated
-in the specification rather than discovered.
+fn g[e](q: fn() -> Unit ! e, p: fn() -> Unit ! {Read | e}) -> Unit ! {Read | e} {
+    q()
+    p()
+}
+
+fn main(root: Root) ! {Read} {
+    let fs = root.fs_read("./")
+    g(fn() -> Unit ! {Read} { let _ = fs.read_text("b") },
+      fn() -> Unit ! {Read} { let _ = fs.read_text("a") })
+}
+```
+
+Reproduce with `delulu check order_a.delulu` and `delulu check order_b.delulu`.
+
+Both are called with two `!{Read}` callbacks. The constraints are `{Read} ∪ e = {Read}` and
+`e = {Read}`, which are **simultaneously satisfiable** by `e := {Read}`. The second program is
+itself the proof that this is admissible: it binds `e := {Read}` first and then accepts
+`{Read | e}` — so the system does treat `{Read | {Read}}` as `{Read}`, idempotent set semantics,
+confirmed by its own behaviour rather than assumed. The first program is rejected only because
+unification binds `e := {}` greedily from the first parameter and never backtracks.
+
+**This is NOT a criticism of R-3b, which is correct.** `SOUNDNESS_AUDIT.md` §R-3b and
+`STAGE1_SPECIFICATION.md:504` deliberately require that conflicting row-variable bindings **fail
+with DL0504 and are never union-merged**, because union-merging would silently widen a row. That
+rule is right and must stay. The gap is upstream of it: greedy binding at an *ambiguous* constraint
+manufactures a spurious conflict, which R-3b then correctly reports. The diagnostic is accurate
+about what the solver found; the solver only found it because of parameter order.
+
+**Severity: completeness and predictability, not soundness.** Rejecting a well-typed program is
+fail-closed — no authority escapes. But for a language whose stated audience is AI agents generating
+code, "reordering two parameters decides whether your program compiles" is a real defect, and the
+absence of principal types is currently **undocumented**: a search of every specification and
+reference document for principality or inference-completeness returns nothing. Either the solver
+should defer ambiguous row bindings until the constraint set is complete, or the specification
+should state plainly that inference is order-dependent and incomplete. Silence is the one option
+that is not acceptable.
 
 ---
 
