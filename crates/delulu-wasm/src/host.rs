@@ -129,7 +129,11 @@ impl WasmError {
 /// out-of-bounds, DL0905 recursion) all collapsed to a generic DL0904 — breaking engine parity
 /// (invariant 15) for exactly the deterministic faults where parity is cheapest to keep. The code
 /// is embedded in the detail so the CLI's exit-code mapper reads it; the backtrace never is.
-pub(crate) fn clean_trap(e: &anyhow::Error) -> String {
+// wasmtime 47 stopped re-exporting `anyhow::Error` and introduced its own `wasmtime::Error`
+// (P17: upgraded from 27 to close RUSTSEC-2026-0096, the aarch64 Cranelift sandbox escape, and
+// RUSTSEC-2026-0222). The body is unchanged — `wasmtime::Error` carries the same `downcast_ref`
+// and `Display` this function relies on.
+pub(crate) fn clean_trap(e: &wasmtime::Error) -> String {
     use wasmtime::Trap;
     let first_line = || e.to_string().lines().next().unwrap_or("wasm trap").to_string();
     match e.downcast_ref::<Trap>() {

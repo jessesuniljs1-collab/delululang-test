@@ -235,9 +235,17 @@ types, and it refuses to imply otherwise.
 
 Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
 
-Secrets have no string form, no equality, and no way out except `expose`, which needs
-`Cap[Declassify]` and carries the `Declassify` effect — so "this function can reveal a secret" is
-visible in its type. `verify` is the constant-time comparison you usually want instead.
+Secrets have no string form and no equality. **Two** operations get information out, and **both
+carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
+its type: `expose` yields the whole value and also needs `Cap[Declassify]`; `verify` yields one bit,
+constant-time, and needs no capability. `verify` is usually the one you want — but it is not free,
+and a function calling it must declare `!{Declassify}`.
+
+**What this does and does not buy.** `Secret.map` hands its closure the plaintext, gated only on
+purity — and purity is not confidentiality — so `map` and `verify` compose into an equality oracle
+against a string you choose. Declaring the effect makes that **visible**, not impossible. Treat
+`Secret` as protection against accidental disclosure and an honest report of deliberate disclosure.
+See `docs/QUESTIONS.md` §1.7.
 
 ## 7. Actors
 

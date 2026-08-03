@@ -208,8 +208,12 @@ very first finding was that this page's front door was *false*; this is it being
 5. **The WASM backend is a fragment** (§4). The interpreter is the language.
 6. **C55, a published limit**: runtime record field access is O(record width). Measured, U-shaped with
    a minimum near width 20; the real fix is static field indices through the DIR.
-7. **The mechanized core proof (Delulu Core) does not exist.** Theorems have paper-proof sketches;
-   mechanization is committed future work and is never claimed as present.
+7. **The mechanized core proof is now PARTIAL, and its target changed.** As of 2026-08-04 Lean
+   4.32.2 machine-checks the **higher-order fragment** with no axioms at all
+   (`docs/design/models/lean/DeluluCore.lean`). Everything else — capabilities, the store, secrets,
+   attenuation, Progress, Preservation — remains a paper sketch, and **two of those sketches are now
+   known to be defective**: the calculus models no primitive that invokes a function argument
+   (P17-T1), and Progress is false as stated for scope violations (P17-T2).
 8. **Three Survey notes remain, and all three are correct.** Bare `D<n>` citations rely on a
    documented latest-stage default; one `C<n>` token is the C language (found, aptly, inside the
    Survey's own comment explaining why it is not a finding); and five lines quote test counts, which
@@ -219,6 +223,44 @@ very first finding was that this page's front door was *false*; this is it being
    static; liveness is not.
 10. **The optimizer described in spec §2.1 is not implemented**, and there is no native backend.
     Both are RFC-gated and published as deferred.
+
+### Added by the P17 proof campaign (2026-08-03→04) — all OPEN
+
+Full accounts with witnesses in [`../design/PROOF_CAMPAIGN.md`](../design/PROOF_CAMPAIGN.md); the
+proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMATICS.md).
+
+11. 🔴 **Four reachable security advisories, and the gate is deliberately red.** `cargo deny` had
+    never been run; the first run found 19. Fourteen cannot reach this project. Four can:
+    **RUSTSEC-2026-0096**, a wasmtime **sandbox escape on aarch64 Cranelift** — never executed here,
+    but this project ships **source**, so anyone building on Apple Silicon or an ARM server is
+    exposed; **RUSTSEC-2026-0222** (stores mixing type indices between engines, and this crate builds
+    several); and **two pyo3 CVEs live in a default build**. Fixes need major bumps
+    (wasmtime 27→36+, pyo3 0.25→0.29) and were not attempted blind.
+12. **Secrets are protected against direct observation, not against a program that is trying.**
+    `Secret.map` hands its closure the plaintext, gated only on purity; `verify` reads a chosen bit
+    back out. `verify` now carries `Declassify` so this is **visible** — but it is not impossible,
+    and `verify` still requires no `Cap[Declassify]`. There is **no implicit-flow tracking**; this is
+    not noninterference.
+13. **The audit chain does not detect truncation.** Every check it performs is local to a link, and
+    nothing anchors the head, so deleting the last *k* records leaves a chain that still verifies.
+    The honest claim is "detects modification and reordering", not "tamper-evident".
+14. **Expiry is judged against a wall clock and is therefore not monotonic.** A backwards step
+    resurrects expired authority with no revocation and no audit event — and on the target platforms
+    (satellites, aircraft, robots) backwards steps are routine: GNSS acquisition, NTP correction, RTC
+    at power-on. The uplink lease, which exists to bound behaviour across a partition, is a
+    wall-clock deadline.
+15. **`⊑` is a preorder, not a partial order, and `⊓` is not symmetric on representations.** Neither
+    is an escalation — the meet is a genuine greatest lower bound and never widens, proved in Z3
+    across all nine dimensions — but `⊑`-equivalent authorities **hash differently**, which reaches
+    the audit chain and certificate signatures. Three tests are committed `#[ignore]`d and failing as
+    evidence.
+16. **Type inference is order-dependent and has no principal types.** Swapping two parameters can
+    decide whether a program compiles. Fail-closed, so no authority escapes.
+17. **Miri has never completed a run** (though `delulu-atlas` passed cleanly, 18 tests, 0 failures).
+    Structurally, the crates Miri *can* run contain **no `unsafe` at all**, and the crates that do —
+    `broker_transport.rs`, `foreign.rs`, `foreign_worker.rs` — are exactly the ones it cannot execute.
+18. **CI carries every campaign gate and has never executed.** The repository is not pushed.
+    "Prepared" and "green" are different claims.
 
 ## 9. Future roadmap
 

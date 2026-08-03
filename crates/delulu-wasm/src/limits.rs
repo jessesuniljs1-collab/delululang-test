@@ -180,7 +180,11 @@ impl Effective {
 /// 4. **Fault** — a `Trap` that is none of the above: a bug. Never DL1506.
 /// 5. **Unattributable** — anything else, including a non-`Trap` error. Honest ignorance.
 pub fn attribute(
-    err: Option<&anyhow::Error>,
+    // wasmtime 47 introduced its own `wasmtime::Error` instead of re-exporting `anyhow::Error`
+    // (P17: upgraded from 27 to close RUSTSEC-2026-0096 and -0222). The call sites that feed this
+    // live in `#[cfg(not(windows))]` code, so Windows compiled clean and only Linux caught it —
+    // which is precisely why both platforms are built every pass.
+    err: Option<&wasmtime::Error>,
     state: &PluginStoreState,
     fuel_remaining: Option<u64>,
 ) -> TrapCause {
@@ -396,14 +400,14 @@ mod tests {
         // Evidence: the limiter recorded it. Even a secondary bug-looking trap does not mask it.
         let s = state(true, false);
         assert_eq!(attribute(None, &s, None), TrapCause::Memory);
-        let boom: anyhow::Error = Trap::MemoryOutOfBounds.into();
+        let boom: wasmtime::Error = Trap::MemoryOutOfBounds.into();
         assert_eq!(attribute(Some(&boom), &s, None), TrapCause::Memory);
     }
 
     #[test]
     fn fuel_is_attributed_from_the_engines_own_discriminant() {
         let s = state(false, false);
-        let e: anyhow::Error = Trap::OutOfFuel.into();
+        let e: wasmtime::Error = Trap::OutOfFuel.into();
         assert_eq!(attribute(Some(&e), &s, None), TrapCause::Fuel);
         // Corroboration path: the store reports zero fuel left.
         assert_eq!(attribute(None, &s, Some(0)), TrapCause::Fuel);
@@ -411,7 +415,7 @@ mod tests {
 
     #[test]
     fn wall_needs_both_our_watchdog_and_an_epoch_interrupt() {
-        let interrupt: anyhow::Error = Trap::Interrupt.into();
+        let interrupt: wasmtime::Error = Trap::Interrupt.into();
         // Watchdog fired AND epoch interrupt → Wall.
         assert_eq!(attribute(Some(&interrupt), &state(false, true), None), TrapCause::Wall);
         // An epoch interrupt we did NOT cause proves nothing — never claim Wall on it.
@@ -431,7 +435,7 @@ mod tests {
             Trap::TableOutOfBounds,
             Trap::StackOverflow,
         ] {
-            let e: anyhow::Error = t.into();
+            let e: wasmtime::Error = t.into();
             let cause = attribute(Some(&e), &s, Some(1_000_000));
             assert!(!cause.is_limit(), "{t} must NOT be attributed to a limit: {cause:?}");
             assert!(matches!(cause, TrapCause::Fault(_)), "{t} is a fault: {cause:?}");
@@ -448,7 +452,7 @@ mod tests {
     fn an_unattributable_stop_claims_nothing_and_advises_no_widening() {
         // "The engine cannot tell why" is sayable, and it is NOT a limit.
         let s = state(false, false);
-        let odd: anyhow::Error = anyhow::anyhow!("host call failed in a way we did not model");
+        let odd: wasmtime::Error = wasmtime::Error::msg("host call failed in a way we did not model");
         let cause = attribute(Some(&odd), &s, Some(500));
         assert!(matches!(cause, TrapCause::Unattributable(_)));
         assert!(!cause.is_limit(), "an unattributable stop is never DL1506");

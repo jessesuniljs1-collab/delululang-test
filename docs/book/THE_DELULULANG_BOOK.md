@@ -281,10 +281,32 @@ let key: Secret[Str] = root.secret("API_KEY")
 
 `Secret[T]` is **opaque**. You cannot print it, compare it with `==`, serialize it, or pass it to
 foreign code. The compiler refuses all of these (DL0602, DL0604, DL0605) — *"a `Secret` value cannot
-flow here; `Secret[Str]` is not `Str`."* The only way to get the bytes out is `expose`, which
-**carries the `Declassify` effect** — so the moment your program reads a secret's contents, it shows
-up in the effect row, in `delulu authority`, in the audit log. Declassification is not forbidden; it
-is *visible*. You can always see, mechanically, every place a program looks inside a secret.
+flow here; `Secret[Str]` is not `Str`."*
+
+**Two** operations get information out, and **both carry the `Declassify` effect** — so the moment
+your program learns anything about a secret's contents, it shows up in the effect row, in
+`delulu authority`, and in the audit log:
+
+- **`expose`** — the whole value. Also requires `Cap[Declassify]`.
+- **`verify`** — one bit (equal / not equal), constant-time. **No capability required.**
+
+Declassification is not forbidden; it is *visible*. You can always see, mechanically, every place a
+program learns something from a secret.
+
+> **This paragraph used to say "the only way to get the bytes out is `expose`", and that was
+> false.** `Secret.map` hands its closure the **plaintext** — gated only on *purity*, and purity is
+> not confidentiality — so a pure closure can compute any predicate about the plaintext and encode
+> the answer in the returned secret. `verify` then reads that answer back out. Composed, they are an
+> equality oracle against an attacker-chosen string, and iterating it recovers the whole value.
+> Campaign finding **IF-1**: a program did exactly that while `delulu why Declassify` reported
+> *"program cannot perform `Declassify`"*.
+>
+> The repair is that `verify` now carries `Declassify` too, so such a program is refused unless it
+> declares the effect. **That buys visibility, not impossibility.** A program that declares
+> `!{Declassify}` may still run the oracle — and `authority` will tell you before you run it. Treat
+> `Secret` as protection against *accidental* disclosure and as an honest *report* of deliberate
+> disclosure — not as a wall against a program that is trying. Full account:
+> `docs/design/PROOF_CAMPAIGN.md` §IF-1.
 
 ### The shape of trust
 

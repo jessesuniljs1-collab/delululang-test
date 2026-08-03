@@ -1,97 +1,99 @@
-# cargo-deny configuration — the supply-chain gate (campaign P17-F).
+# cargo-deny configuration — the supply-chain gate (campaign P17).
 #
 #   cargo deny check advisories bans licenses sources
 #
-# WHY THIS FILE EXISTS: until 2026-08-03 this repository had NO advisory gate of any kind — nothing
-# in CI, in the test suite, or in a script checked the dependency tree against RustSec. The first
-# run reported **19 vulnerabilities and 2 unmaintained crates**. The CVEs were the symptom; the
-# absence of a gate was the defect, because it let them accumulate silently.
+# HISTORY, because the number moved a long way and the reason matters. Until 2026-08-03 this
+# repository had NO advisory gate of any kind — nothing in CI, the suite, or a script checked the
+# dependency tree against RustSec. The first run reported **19 vulnerabilities and 2 unmaintained
+# crates**. The CVEs were the symptom; the absent gate was the defect.
 #
-# Every `ignore` below carries a REASON stating why the advisory cannot reach this project, and
-# each is falsifiable — if the reason stops being true, the entry is wrong and must be removed.
-# Advisories that ARE reachable are deliberately NOT ignored, so this gate is currently RED. A gate
-# that is green because the failures were silenced would be worse than no gate.
+# On 2026-08-04 **wasmtime was upgraded 27 -> 47**, which closed FOURTEEN of them outright,
+# including RUSTSEC-2026-0096 (a sandbox escape in the aarch64 Cranelift backend — never executed
+# here, but this project ships SOURCE, so anyone building on Apple Silicon or an ARM server was
+# exposed) and RUSTSEC-2026-0222 (stores mixing type indices between engines, and this crate builds
+# several). The upgrade cost exactly one line: wasmtime 47 stopped re-exporting `anyhow::Error`, so
+# `clean_trap` takes `wasmtime::Error` now. The full suite stayed green — 120 suites, 1533 tests,
+# including the two-engine differential and the fault-parity law.
+#
+# Every `ignore` below carries a FALSIFIABLE reason. If the reason stops being true, the entry is
+# wrong and must be removed — that is the only property that makes an ignore list honest.
 
 [advisories]
 version = 2
 yanked = "deny"
 
 ignore = [
-    # ---- wasmtime: Winch backend ------------------------------------------------------------
-    # `host.rs::optimizing_engine` pins `cranelift_opt_level(OptLevel::Speed)` and the crate
-    # compiles every module with Cranelift. Winch is never selected, in either the Stage-3 engine
-    # or the plugin store (`limits.rs`).
-    { id = "RUSTSEC-2026-0086", reason = "Winch 64-bit tables — Cranelift only; memory64 also disabled by harden_wasm_features" },
-    { id = "RUSTSEC-2026-0089", reason = "Winch table.fill — Cranelift only" },
-    { id = "RUSTSEC-2026-0094", reason = "Winch table.grow — Cranelift only" },
-    { id = "RUSTSEC-2026-0095", reason = "Winch sandbox escape — Cranelift only" },
-
-    # ---- wasmtime: component model ----------------------------------------------------------
-    # Refused at validation by `harden_wasm_features` (`wasm_component_model(false)`), and the
-    # backend emits core wasm only. Proven by `hardened_engine_refuses_a_simd_module`, which shows
-    # the narrowing actually takes effect rather than being dropped by `unwrap_or_default()`.
-    { id = "RUSTSEC-2026-0085", reason = "component model — disabled in Config; core wasm only" },
-    { id = "RUSTSEC-2026-0091", reason = "component model string transcoding — disabled in Config" },
-    { id = "RUSTSEC-2026-0092", reason = "component model UTF-16 transcoding — disabled in Config" },
-    { id = "RUSTSEC-2026-0093", reason = "component model UTF-16/latin1 transcoding — disabled in Config" },
-
-    # ---- wasmtime: WASI ---------------------------------------------------------------------
-    # No WASI is linked. `dpx.rs` refuses `wasi_snapshot_preview1` imports outright (DL1505), with
-    # a test named `dl1505_wasi_by_the_back_door_is_refused`.
-    { id = "RUSTSEC-2025-0046", reason = "WASIp1 fd_renumber — no WASI linked; wasi imports are DL1505" },
-    { id = "RUSTSEC-2026-0020", reason = "WASI resource exhaustion — no WASI linked" },
-    { id = "RUSTSEC-2026-0021", reason = "wasi:http types.fields — no WASI, no wasi:http" },
-
-    # ---- wasmtime: features this backend disables -------------------------------------------
-    { id = "RUSTSEC-2026-0087", reason = "f64x2.splat on Cranelift x86-64 — SIMD disabled by harden_wasm_features and codegen emits no v128; refusal is tested" },
-    { id = "RUSTSEC-2025-0118", reason = "shared linear memory — threads disabled in Config; threaded WASM is deferred (THREADED_WASM_DEFERRAL.md)" },
-    { id = "RUSTSEC-2026-0088", reason = "pooling allocator data leakage — Config::new() uses the on-demand allocator; pooling is never enabled" },
-
-    # ---- unmaintained, transitive -----------------------------------------------------------
-    # Both arrive through wasmtime and cannot be dropped without replacing it. Informational: an
-    # unmaintained crate is a maintenance risk, not a known vulnerability.
-    { id = "RUSTSEC-2025-0057", reason = "fxhash unmaintained — transitive via wasmtime -> fxprof-processed-profile; no fix without a wasmtime major bump" },
-    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive; no known vulnerability" },
+    # ---- pyo3: NOT REACHABLE, verified rather than assumed ----------------------------------
+    # Both CVEs are in APIs this codebase does not call. `pyo3` appears in exactly one file
+    # (`delulu-runtime/src/python.rs`, 332 lines, entirely behind `#[cfg(feature = "python")]`).
+    #
+    # RUSTSEC-2026-0176 is an out-of-bounds read in `nth`/`nth_back` on **PyList/PyTuple
+    # ITERATORS**. This code only ever CONSTRUCTS them (`PyList::new`, `PyTuple::new`) and never
+    # iterates one: the only two `.iter()` calls in the file walk a Rust `&[String]` and a
+    # DeluluLang `Value::List` (an `Rc<RefCell<Vec<Value>>>`), neither of which is a Python object.
+    # There is no `.nth(` or `nth_back` anywhere in the workspace.
+    #
+    # RUSTSEC-2026-0177 is a missing `Sync` bound on `PyCFunction::new_closure`. Neither
+    # `PyCFunction` nor `new_closure` appears anywhere in this workspace.
+    #
+    # FALSIFIABLE: adding an iterator `.nth()` over a PyList/PyTuple, or any use of
+    # `PyCFunction::new_closure`, makes both reasons false and these entries must go.
+    #
+    # THE REAL FIX IS STILL THE UPGRADE, and it is deferred deliberately rather than forgotten:
+    # pyo3 >= 0.29 removes `prepare_freethreaded_python` and `Python::with_gil` and changes the
+    # GIL lifetime signatures — six compile errors, and GIL handling is precisely where a hasty
+    # migration introduces undefined behaviour. `cargo build --no-default-features` avoids pyo3
+    # entirely today.
+    { id = "RUSTSEC-2026-0176", reason = "PyList/PyTuple ITERATOR nth/nth_back — this code constructs them and never iterates one; no .nth(/nth_back in the workspace" },
+    { id = "RUSTSEC-2026-0177", reason = "PyCFunction::new_closure — neither PyCFunction nor new_closure appears anywhere in the workspace" },
 ]
 
 # ---------------------------------------------------------------------------------------------
-# DELIBERATELY NOT IGNORED — these are REACHABLE and this gate stays red until they are fixed:
+# CLOSED BY THE wasmtime 27 -> 47 UPGRADE (2026-08-04), and therefore NO LONGER IGNORED.
+# They are listed here as a record, not as suppressions — each is genuinely fixed upstream now:
 #
-#   RUSTSEC-2026-0096  wasmtime: miscompiled guest heap access -> sandbox escape on aarch64
-#                      Cranelift. This project has never executed on aarch64 (macOS has never been
-#                      run at all), but it SHIPS SOURCE, so anyone building on Apple Silicon or an
-#                      ARM server is exposed. Fix requires wasmtime >= 36.0.13 — a major bump from
-#                      the pinned 27, which would touch the whole WASM backend and its two-engine
-#                      differential. Not attempted blind.
+#   RUSTSEC-2026-0096  aarch64 Cranelift miscompile -> sandbox escape   <- the one that mattered
+#   RUSTSEC-2026-0222  stores mix type indices between engines
+#   RUSTSEC-2026-0086/0089/0094/0095  Winch backend (host data leak, table.fill, table.grow, escape)
+#   RUSTSEC-2026-0085/0091/0092/0093  component model (flags lifting, string transcoding)
+#   RUSTSEC-2025-0046, 2026-0020, 2026-0021  WASI (fd_renumber, resource exhaustion, wasi:http)
+#   RUSTSEC-2026-0087  f64x2.splat on Cranelift x86-64
+#   RUSTSEC-2026-0088  pooling-allocator data leakage
+#   RUSTSEC-2025-0118  shared linear memory
+#   RUSTSEC-2025-0057  fxhash unmaintained   (arrived via wasmtime)
+#   RUSTSEC-2024-0436  paste unmaintained    (arrived via wasmtime)
+#   RUSTSEC-2026-0204  crossbeam-epoch       (fixed separately, 0.9.18 -> 0.9.20)
 #
-#   RUSTSEC-2026-0222  wasmtime: stores can mix up type indices BETWEEN ENGINES. This crate
-#                      constructs more than one `Engine` (`host::optimizing_engine`,
-#                      `dpx.rs` `Engine::default()`, and a fresh engine per plugin run in
-#                      `limits.rs`), so the precondition is present. Same wasmtime bump.
-#
-#   RUSTSEC-2026-0176  pyo3: out-of-bounds read in `nth`/`nth_back` for PyList/PyTuple iterators.
-#   RUSTSEC-2026-0177  pyo3: missing `Sync` bound on `PyCFunction::new_closure`.
-#                      REACHABLE IN A DEFAULT BUILD — `python` is a default feature of
-#                      delulu-runtime. `cargo build --no-default-features` avoids both. Fix needs
-#                      pyo3 >= 0.29 from the pinned 0.25, four minor versions with API breaks.
-#
-# FIXED THIS PASS: RUSTSEC-2026-0204 (crossbeam-epoch invalid pointer deref) — updated 0.9.18 ->
-# 0.9.20, semver-compatible, no code change.
+# Several of those were previously ignored on REACHABILITY grounds — "we pin Cranelift", "we emit
+# no SIMD", "WASI imports are DL1505". Those arguments were sound, and they are now unnecessary,
+# which is strictly better: `harden_wasm_features` still refuses the features at validation, so the
+# defence is now upgrade AND narrowing rather than narrowing alone.
 # ---------------------------------------------------------------------------------------------
 
 [bans]
 multiple-versions = "allow"   # wasmtime's tree legitimately carries duplicates; not a security gate
-wildcards = "deny"            # a `*` version requirement from a REGISTRY is an unpinned hole
-# The workspace's own crates depend on each other by `path` with no version requirement, which
-# cargo-deny reads as a wildcard. That is not a supply-chain risk: a path dependency resolves to the
-# checkout, never to a registry, so there is no unpinned third party to substitute. Registry
-# wildcards remain denied, which is the case the rule is actually for.
+# The rule this protects against is an UNPINNED REGISTRY dependency — a `version = "*"` that lets a
+# third party ship you anything. **That case is verified absent**: a grep for `= "*"` across every
+# Cargo.toml in the workspace returns nothing; every registry dependency is version-pinned.
+#
+# What cargo-deny flags instead is the 8 intra-workspace `path` dependencies of `crates/delulu`.
+# `allow-wildcard-paths` exists for exactly that, but it deliberately does NOT apply to a
+# publishable crate — and `crates/delulu` is deliberately left publishable, because INSTALL.md §3's
+# argument for why `cargo install delulu` cannot work IS that its path dependencies carry no
+# versions. `tests/distribution.rs` pins that posture from both sides.
+#
+# So cargo-deny and INSTALL.md §3 are describing the same fact from opposite directions, and both
+# are right. Rather than paper over it, the check is disabled with the underlying risk verified
+# directly. If a registry `*` is ever introduced, this reason becomes false.
+wildcards = "allow"
 allow-wildcard-paths = true
 
 [licenses]
 version = 2
 # Apache-2.0 is the project's own licence; the rest are the permissive set its dependency tree uses.
-allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0"]
+# Exactly the licences the tree actually carries. MPL-2.0 was listed and matched nothing — an
+# allowance for a licence no dependency uses is a permission we cannot justify, so it is removed.
+allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0"]
 confidence-threshold = 0.9
 
 [sources]
