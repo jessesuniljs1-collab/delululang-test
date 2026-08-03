@@ -397,9 +397,7 @@ Named so that no reader mistakes a plan for a result:
   remain paper-level sketches, exactly as §9 says.
 - ~~The broker state machine is not yet model-checked.~~ **DONE — see §6 below.** The grant tree is
   now model-checked; **leases, redemption, certificate adoption and federation are still not.**
-- **No property-based program generation yet.** The language is still tested with hand-written
-  examples plus the conformance corpus; `order_laws.rs` is the first exhaustive-enumeration test in
-  the repository.
+- ~~No property-based program generation yet.~~ **DONE — see §7 below.**
 - **Fuzzing, Miri and sanitizers are provisioned but unexercised.**
 - **The other seven audit domains are unstarted** — effect rows/type theory, capability algebra,
   broker state machine, cryptography, information flow, concurrency/distributed, and the theorem
@@ -444,7 +442,66 @@ partitions and clock skew are NOT modelled.** Two real vulnerabilities were prev
 exactly that unmodelled area, which makes it the highest-value place to extend. And the model is
 hand-written: nothing mechanically checks it stays faithful when `tree.rs` changes.
 
-## 7. Method note — why exhaustive enumeration replaced spot-checks
+## 7. Category 4 (property-tested) — the fuzzer could not write the bugs it was hunting
+
+`crates/delulu-fuzz` has existed since Stage 2, generating programs and asserting the runtime trace
+is a subset of the statically computed row — the executable form of Effect Soundness. It has never
+reported a violation. **That was not evidence of soundness, because of what it could not express.**
+
+Reading its generator: it emits exactly **four** program templates. A helper taking three fixed
+capability parameters whose body concatenates three fixed statements, a `main` calling a subset of
+those helpers, and two hard-coded rejection strings. Searching its source for the constructs it can
+emit returns **zero** occurrences of a type parameter, a closure, `.verify(`, `.expose(`, or a row
+variable in any generated string.
+
+**So it could not have found either of this project's two soundness holes:**
+
+| Hole | Needed | Generator could emit it? |
+|---|---|---|
+| **C88** | `fn go[T](xs: List[Int], f: T) { xs.map(f) }` | no type parameters, no higher-order builtins |
+| **IF-1** | `k.map(fn(x) { … })` + `.verify(…)` + `if` | no closures, no `Secret` ops beyond `str(s)`, no branches |
+
+**The grammar IS the coverage.** A generator that cannot express the dangerous shape is not testing
+for it, however many iterations it runs.
+
+`crates/delulu-fuzz/src/danger.rs` adds parameterised families over exactly the shapes that have
+broken the language — higher-order builtins with effectful closures, bare type parameters reaching
+`List.map` **and** `Secret.map` (C88 had a twin), row-polymorphic `apply`, closures capturing
+capabilities, nested higher-order calls, and the `Secret.map`+`verify` oracle. Parameterised, not
+templated: effect sets, declared rows and nesting all vary, and one third of draws deliberately
+under-declare a row so the rejection path is exercised too.
+
+### Result
+
+```text
+$ delulu-fuzz 250000 20260803
+generated=250000 accepted=160694 rejected=89306 unexpected_rejections=0 check_only=9024
+SOUND: no trace escaped its row across 151670 executed programs
+       (9024 more were accept/reject-checked only, never run).
+```
+
+`unexpected_rejections=0` means every program the generator predicted would be accepted **was**,
+and every predicted rejection **was** — the predictions and the checker agree exactly.
+
+**Two tests keep the generator honest**, because a generator that has silently stopped generating is
+indistinguishable from one that finds nothing: `every_danger_family_is_actually_generated` asserts
+each family appears in 4,000 draws and that the C88 shape is predicted `DL0401`, and
+`the_danger_grammar_covers_what_the_original_could_not` asserts the corpus actually contains `[T]`,
+`[e]`, closures, `.map(`, `.verify(`, `.expose(` and `if`.
+
+### Honest limits
+
+- **`Secret` families are check-only.** The harness grants console/clock/rand, not secrets, so those
+  programs are accept/reject-checked but **never executed** — no trace is verified for them. The
+  report counts them separately (`check_only=`) so `accepted` is never mistaken for "traces
+  verified".
+- **Three effects.** `Write`, `Clock`, `Rand` — the ones the harness can grant and run safely.
+  `Net`, `Actuate`, `ForeignCall` are not generated.
+- **No packages, plugins, actors, or foreign calls.** Single-module programs only.
+- **Finding nothing is not proof.** It is now evidence over a grammar that *contains* the historical
+  failures, which is strictly more than before — and strictly less than a proof.
+
+## 8. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

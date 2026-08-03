@@ -18,6 +18,11 @@ use std::rc::Rc;
 use delulu_check::check_source;
 use delulu_runtime::{assert_trace, set_fixed_clock_ms, set_rand_seed, Grants, Interp, TraceSink, Value};
 
+/// The danger-zone families (P17-D): generics, closures, higher-order builtins, row variables and
+/// the `Secret` composition — every shape that has actually broken this language, none of which
+/// the original generator below can express.
+mod danger;
+
 /// A tiny deterministic xorshift PRNG (no dependencies; reproducible from a seed).
 pub struct Rng(u64);
 
@@ -33,28 +38,28 @@ impl Rng {
         self.0 = x;
         x
     }
-    fn below(&mut self, n: u64) -> u64 {
+    pub(crate) fn below(&mut self, n: u64) -> u64 {
         if n == 0 {
             0
         } else {
             self.next() % n
         }
     }
-    fn chance(&mut self, num: u64, den: u64) -> bool {
+    pub(crate) fn chance(&mut self, num: u64, den: u64) -> bool {
         self.below(den) < num
     }
 }
 
 /// What the generator predicts the checker will do with a program.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Expect {
+pub(crate) enum Expect {
     Accept,
     Reject(&'static str), // the diagnostic code we expect
 }
 
-struct Program {
-    src: String,
-    expect: Expect,
+pub(crate) struct Program {
+    pub(crate) src: String,
+    pub(crate) expect: Expect,
 }
 
 /// The three effectful capability operations the generator uses (all runtime-safe: Console prints,
@@ -71,6 +76,13 @@ const CAP_ARGS: &str = "out, clk, rnd";
 /// Generate one program. Most are well-typed (a helper's declared row exactly matches what it
 /// does); a fraction are deliberately unsound to fuzz the rejection paths.
 fn generate(rng: &mut Rng) -> Program {
+    // ~1 in 2: a DANGER-ZONE program (P17-D). These are the shapes that have actually broken the
+    // language — generics reaching higher-order builtins, closures carrying rows, row variables,
+    // the `Secret.map`/`verify` composition. The families below this line cannot express any of
+    // them, so without this branch the harness tests a corner where soundness was never in doubt.
+    if rng.chance(1, 2) {
+        return danger::generate(rng);
+    }
     // ~1 in 6: a known-bad program to exercise a rejection path.
     if rng.chance(1, 6) {
         return generate_reject(rng);
@@ -161,6 +173,10 @@ pub struct Report {
     /// Non-fatal: the generator predicted Accept but the checker rejected (a generator artifact,
     /// not an unsoundness — rejecting is always safe). Tracked to keep the generator honest.
     pub unexpected_rejections: u64,
+    /// Accepted programs whose trace was NOT checked because the harness cannot grant what they
+    /// need (the `Secret` families). Reported separately so `accepted` is never mistaken for
+    /// "this many traces were verified".
+    pub accepted_check_only: u64,
 }
 
 impl Report {
@@ -197,6 +213,15 @@ pub fn run(iterations: u64, start_seed: u64) -> Report {
         report.accepted += 1;
         if let Expect::Reject(code) = prog.expect {
             report.missed_rejections.push((seed, format!("expected {code}, but the program was accepted:\n{}", prog.src)));
+            continue;
+        }
+
+        // Check-only families need grants the harness does not hold (secrets), so running them
+        // would fault for a reason that says nothing about soundness. Their assertion is the
+        // accept/reject verdict already made above, and they are counted separately so the report
+        // never implies a trace was checked when none was.
+        if danger::is_check_only(&prog.src) {
+            report.accepted_check_only += 1;
             continue;
         }
 

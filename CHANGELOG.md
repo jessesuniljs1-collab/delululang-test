@@ -71,6 +71,22 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
 
 ### Added
 
+- **`docs/design/models/Broker.tla` — the custody grant tree is now MODEL-CHECKED.** TLA+/TLC v1.7.4
+  explores **585,771 distinct states** of grant / delegate / revoke / expire and finds no violation
+  of attenuation, revoke-covers-subtree, no-resurrection, inherited expiry, or audit
+  append-onlyness. Every action's guard cites the `tree.rs` line it mirrors and takes the **weaker**
+  guard where the code is ambiguous, so the model can never be kinder than the implementation.
+  **The model is shown to have teeth rather than asserted to:** re-run with the enforcement read
+  switched back to per-node expiry (the pre-RFC-0001-F4 behaviour), TLC reconstructs the **real
+  historical bug** at depth 4 — a `ttl: None` child outliving its parent's expired uplink lease.
+  Bounded (3 nodes, 2 effects, clock ≤ 2); leases, certificate adoption, concurrency and federation
+  are **not** modelled, and that is exactly where both known vulnerabilities were found.
+- **`crates/delulu-fuzz/src/danger.rs` — the fuzzer can now write the bugs it hunts.** The Stage-2
+  generator emitted four templates with no type parameters, no closures, no higher-order builtins,
+  no `Secret` operations beyond `str(s)` and no control flow — so it **could not have found C88 or
+  IF-1**, whatever its iteration count. The grammar is the coverage. Added parameterised families
+  over the shapes that have actually broken the language, including both C88 twins (`List.map` and
+  `Secret.map`), with two tests asserting the generator really emits them.
 - `docs/design/PROOF_CAMPAIGN.md` — the proof-boundary ledger: every guarantee assigned to exactly
   one of seven categories (proven / machine-checked / model-checked / property-tested /
   differentially verified / fuzz verified / outside the boundary), with no grey area permitted.

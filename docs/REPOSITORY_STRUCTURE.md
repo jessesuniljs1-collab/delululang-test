@@ -81,7 +81,17 @@ DeluluLang/
 │   ├── delulu-registry/            # [Stage 2/9] index lines, resolution, server-side authority
 │   ├── delulu-conform/             # [Stage 9] the conformance runner: --coverage, --check-reference
 │   ├── delulu-measure/             # [Stage 9] the measurement harness behind measurements/
-│   ├── delulu-fuzz/                # [Stage 9] fuzz targets for the front end
+│   ├── delulu-fuzz/                # [Stage 2] the differential fuzz harness: generate programs,
+│   │   │                           #   check them, and assert the runtime trace ⊆ the statically
+│   │   │                           #   computed row (Effect Soundness, executable)
+│   │   └── src/{lib,main,danger}.rs
+│   │                               #   danger.rs [P17-D]: the families the original generator
+│   │                               #     COULD NOT EXPRESS — type parameters reaching higher-order
+│   │                               #     builtins (C88, both the List.map and Secret.map twins),
+│   │                               #     closures carrying rows, row variables, and the
+│   │                               #     Secret.map+verify oracle (IF-1). The old grammar had no
+│   │                               #     generics, closures, Secret ops or control flow, so it
+│   │                               #     could not write either hole it was hunting.
 │   ├── delulu-survey/              # repository tooling (`publish = false`, no sibling deps):
 │   │                               #   derives docs/survey/ — the map of THIS REPOSITORY, with a
 │   │                               #   file:line citation on every edge. Not language surface.
@@ -181,6 +191,14 @@ DeluluLang/
     │   │                                #   machine-checked / model-checked / property-tested /
     │   │                                #   differentially verified / fuzz verified / OUTSIDE the
     │   │                                #   boundary). No grey areas. Records IF-1 and F1–F4.
+    │   ├── models/                 # [P17-C] FORMAL MODELS + the checker's verbatim output.
+    │   │   ├── Broker.tla           #   the custody grant tree: grant/delegate/revoke/expire, each
+    │   │   │                        #   guard citing the tree.rs line it mirrors
+    │   │   ├── Broker.cfg           #   today's code — 585,771 distinct states, no error
+    │   │   ├── BrokerBug.cfg        #   THE TEETH TEST: the pre-RFC-0001-F4 read, which TLC must
+    │   │   │                        #   fail — it rediscovers the real historical bug at depth 4
+    │   │   └── README.md            #   results, bounds, and what is NOT modelled (leases, certs,
+    │   │                            #   federation, concurrency). tla2tools.jar is NOT vendored.
     │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; macOS NEVER executed, said plainly
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).

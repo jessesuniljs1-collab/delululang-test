@@ -15,12 +15,24 @@ fn main() -> ExitCode {
     let report = delulu_fuzz::run(iterations, seed);
 
     eprintln!(
-        "generated={} accepted={} rejected={} unexpected_rejections={}",
-        report.generated, report.accepted, report.rejected, report.unexpected_rejections
+        "generated={} accepted={} rejected={} unexpected_rejections={} check_only={}",
+        report.generated,
+        report.accepted,
+        report.rejected,
+        report.unexpected_rejections,
+        report.accepted_check_only
     );
 
     if report.is_sound() {
-        eprintln!("SOUND: no trace escaped its row across {} accepted programs.", report.accepted);
+        // Report the number of programs whose trace was ACTUALLY verified, not the number
+        // accepted. The `Secret` families are checked but never run (the harness cannot grant a
+        // secret), and counting them here would claim a verification that did not happen.
+        let traced = report.accepted.saturating_sub(report.accepted_check_only);
+        eprintln!(
+            "SOUND: no trace escaped its row across {traced} executed programs \
+             ({} more were accept/reject-checked only, never run).",
+            report.accepted_check_only
+        );
         ExitCode::SUCCESS
     } else {
         eprintln!("UNSOUND — {} soundness violation(s), {} missed rejection(s):", report.soundness_violations.len(), report.missed_rejections.len());

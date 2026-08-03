@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 216 |
-| Rust lines | 103935 |
+| Rust files | 217 |
+| Rust lines | 104248 |
 | Rust files outside `src/` (test/bench targets) | 87 |
 | Markdown documents | 126 |
-| Markdown lines | 31426 |
+| Markdown lines | 31500 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 147 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1008 / 8868 |
+| Nodes / edges in this map | 1009 / 8887 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -223,12 +223,13 @@ DeluluLang differential fuzz harness: generate programs, check them, and assert 
 
 - **Depends on:** `delulu-check`, `delulu-runtime`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 2 files, 311 lines
+- **Modules:** 3 files, 624 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/lib.rs` | 276 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
-| `src/main.rs` | 35 | `delulu-fuzz [iterations] [seed]` — run a differential fuzz campaign (spec §7.2). Default is |
+| `src/danger.rs` | 276 | The danger-zone generator (campaign P17-D). |
+| `src/lib.rs` | 301 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
+| `src/main.rs` | 47 | `delulu-fuzz [iterations] [seed]` — run a differential fuzz campaign (spec §7.2). Default is |
 
 ### `delulu-measure`
 
@@ -359,9 +360,9 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | Range | Codes | Raised in |
 |---|---:|---|
 | `DL01xx` | 8 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
-| `DL02xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-syntax` |
+| `DL02xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
 | `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax` |
-| `DL04xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
+| `DL04xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |
 | `DL06xx` | 5 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-runtime` |
 | `DL07xx` | 3 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-wasm` |
