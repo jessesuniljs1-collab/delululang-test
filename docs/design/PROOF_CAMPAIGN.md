@@ -783,7 +783,103 @@ The correct statement is **progress-or-fault**: a well-typed term is a value, st
 configuration. That is a small repair to the theorem and a real one to the development, since the
 fault configuration has to exist before Preservation can be stated over it.
 
-## 11. Method note — why exhaustive enumeration replaced spot-checks
+## 11. Concurrency and actors (P17-7, domain c) — mostly good news
+
+### ✅ Capabilities DO cross actor boundaries, and that is sound
+
+The question was sharp: if capabilities are first-class values and actors exchange values, then
+message passing **is** delegation and must satisfy `⊑`. Measured, by writing and running the
+programs:
+
+| Case | Verdict |
+|---|---|
+| `be say(out: Cap[Console], …)` — no annotation | **accepted**, runs |
+| `be say(out: val Cap[Console], …)` | **accepted**, runs |
+| `be say(out: tag Cap[Console], …)` | accepted |
+| `be say(out: iso Cap[Console], …)` | refused, **DL1601** |
+| `be take(r: val Root)` — the whole root authority | **accepted**, runs |
+| a capability stored in actor `var` state, used by a later behaviour | **accepted**, runs |
+
+So authority does travel in messages. **This is not an escalation, and the reason is structural:
+you can only send a capability you already hold, and capabilities are unforgeable** (`value.rs`'s
+`CapVal` has no constructor from data — broker-only minting). Message passing therefore *shares*
+authority; it cannot widen it, so there is no `⊑` obligation to check. The `⊑` check belongs where
+authority is *minted*, and that is where it is.
+
+**The accounting stays honest, which is the part that actually had to be verified.** Running each
+accepted case, `delulu authority` reports `effects: Async, Write` and `capabilities: Console stdio`
+— including the case where an actor holds `Root` and derives a console from it *inside* the actor.
+The static analysis follows the capability across the boundary rather than losing it there.
+
+### ✅ The actor runtime contains no `unsafe` at all — by construction
+
+`actors.rs` matches on "unsafe" only in comments explaining why there is none. The topology earns
+it: actors are **worker-owned** (pinned at spawn, never migrating), `Value` is `Rc`-based and
+deliberately not `Send`, and messages cross only as `MsgValue`, an owned `Send`-by-construction
+representation. Data races are impossible by construction rather than by discipline — and the
+per-sender-pair FIFO guarantee falls out of `mpsc` rather than being asserted.
+
+### 🔶 P17-T3 — the calculus's §6 faithfulness claim is weaker than stated
+
+`DELULU_CORE.md` §6 justifies its exclusions on the grounds that each "is a Stage-1/2 language
+restriction already enforced, so the calculus faithfully models the implemented language rather than
+an idealized superset". One of those exclusions is:
+
+> **No mutable module state.** The store `σ` holds only capability tokens; there is no ambient
+> mutable cell through which a capability could launder.
+
+**Actor `var` state is exactly such a cell, and it can hold a capability** — observed above. The
+document mentions "actor" **zero times**. So the exclusion is true of *modules* and false of
+*actors*, and the calculus models neither actors nor the cell.
+
+Consistent with **P17-T1**, and the same shape: the calculus is not wrong, it is *silent*, and its
+own §6 argues faithfulness on the strength of exclusions that the surface language has since grown
+past. A mechanization must either model actors or state explicitly that actor state is outside the
+development — the one thing it must not do is inherit §6's faithfulness claim unexamined.
+
+**No dishonesty in the tooling:** the effect rows and the authority report handled every case
+correctly. This is a gap between the *paper model* and the *language*, not between the language and
+its own report.
+
+## 12. Category 1 → the authority order, proved symbolically across all nine dimensions (P17-8)
+
+`docs/design/models/authority_algebra.py`, Z3. **17 obligations, all discharged.**
+
+Phase A proved reflexivity and transitivity over an *abstract* partial order and checked the path
+dimension exhaustively. This proves the conjunction `attenuation_check` actually computes — seven
+exact-set dimensions plus the device dimension, with the path dimensions represented by their set
+laws:
+
+- **Set dimensions:** reflexive, transitive, **antisymmetric**, meet is a lower bound, meet is the
+  **greatest** lower bound, idempotent, commutative, associative.
+- **Device dimension:** reflexive, transitive, meet is a lower bound, meet is the **GLB**, and
+  antisymmetric on its fields — modelled faithfully to `within`/`meet` including the three
+  asymmetries that are easy to invert (smaller heartbeat is *narrower*; smaller ttl is *narrower*;
+  an **unbounded** rate under a **bounded** parent is a **widening**).
+- **The full conjunction:** reflexive, transitive, **meet ⊑ both operands — the no-widening law,
+  all nine dimensions simultaneously** — and meet is the GLB.
+
+Proved means proved *for every value* of the modelled variables, not for a sampled corpus.
+
+**This localises F1 precisely, which is the useful part.** Every dimension modelled here is
+antisymmetric on its own representation. So the preorder finding is **not a property of the
+algebra** — it is a property of the path dimension's *encoding*, where `./data` and `data` are
+distinct `String`s denoting one path. Fixing F1 is therefore a **canonicalization** change, not an
+algebra change, and the algebra needs no repair.
+
+**One obligation was deleted rather than kept.** An earlier draft's "NO WIDENING" line was encoded
+as `Implies(False, True)` — vacuously true. Z3 discharged it and printed `PROVED` while checking
+nothing. **A vacuous obligation reported as proved is worse than a missing one**, because this list
+is the evidence. It is gone, the reason is in the source, and the genuine statement is the
+lower-bound obligation.
+
+**Limits, stated:** set dimensions are bit-vectors of width 4 (all subsets of a 4-element universe);
+the device model carries two envelope dimensions rather than arbitrarily many — the laws are uniform
+in that number, but the uniformity is an argument, not something Z3 checked. And **nothing here
+proves the Rust implements this model**; that link is the `file:line` citations above each
+definition, maintained by hand.
+
+## 13. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

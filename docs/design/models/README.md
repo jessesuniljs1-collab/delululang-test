@@ -128,6 +128,48 @@ which TLC reports as `null` rather than as an error you would notice. The parent
 
 ---
 
+## `authority_algebra.py` — the nine-dimension order, proved in Z3
+
+```sh
+pip install z3-solver
+python docs/design/models/authority_algebra.py
+```
+
+Symbolic verification of what `attenuation_check` actually computes (`authority.rs:150-165`): the
+conjunction of seven exact-set dimensions, two path dimensions and the device dimension. **17
+obligations, all discharged**, `RESULT: every obligation discharged`.
+
+| Group | Proved |
+|---|---|
+| Set dimensions (`authority.rs:151-158`) | reflexive, transitive, **antisymmetric**, meet is a lower bound, meet is the **GLB**, idempotent, commutative, associative |
+| Device (`device_scope.rs::within`/`::meet`) | reflexive, transitive, meet is a lower bound, meet is the **GLB**, antisymmetric on its fields |
+| **The full conjunction** | reflexive, transitive, **meet ⊑ both operands — the no-widening law, all nine dimensions at once**, meet is the GLB |
+
+The device model is faithful to the three asymmetries that are easy to get backwards: a **smaller
+heartbeat is narrower**, a **smaller ttl is narrower**, and an **unbounded rate under a bounded
+parent is a widening** (`device_scope.rs:222-229`). Well-formedness assumes what the parser
+enforces — ordered intervals and `ttl ≥ heartbeat`.
+
+### Where F1 actually comes from
+
+Every dimension modelled here is antisymmetric **on its own representation**, including the device
+fields. So the preorder finding (F1) is **not a property of the algebra** — it comes from the path
+dimension's *encoding*: `./data` and `data` are distinct `String`s denoting one path, so two
+structurally unequal `Authority` values are mutually `⊑`. That is why F1 is proved by exhaustive
+enumeration over real path strings in `crates/delulu-broker/tests/order_laws.rs` and not here.
+Knowing *which layer* the defect lives in is the useful part: fixing it is a canonicalization
+change, not an algebra change.
+
+### An obligation that was removed rather than kept
+
+An earlier draft carried a "NO WIDENING" line encoded as `Implies(Not(Or(..., True)), True)` —
+i.e. `Implies(False, True)`, **vacuously true**. Z3 discharged it and printed `PROVED` while
+checking nothing. It has been deleted and the reason recorded in the source. **A vacuous obligation
+reported as proved is worse than a missing one**, because the list is meant to be the evidence.
+The real no-widening statement is the lower-bound obligation, proved for every pair of values.
+
+---
+
 ## What these models do NOT cover
 
 Named so the `model-checked` category is not read wider than it is:

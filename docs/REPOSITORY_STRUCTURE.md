@@ -222,6 +222,10 @@ DeluluLang/
     │   │   │                        #   certificate-replay vulnerability at depth 4
     │   │   ├── CustodyC29.cfg       #   TEETH TEST: LIVE_ON_REDEEM=FALSE reconstructs campaign
     │   │   │                        #   finding C29 (redeeming a revoked grant) at depth 5
+    │   │   ├── authority_algebra.py #   [P17-8] the NINE-DIMENSION order proved in Z3: 17
+    │   │   │                        #   obligations — reflexive, transitive, meet-is-GLB and the
+    │   │   │                        #   NO-WIDENING law across all dimensions at once. Localises
+    │   │   │                        #   F1 to the path ENCODING, not the algebra.
     │   │   └── README.md            #   results, bounds, and what is NOT modelled (the MAC itself,
     │   │                            #   audit hashing, federation, concurrency, clock skew).
     │   │                            #   tla2tools.jar is NOT vendored — fetch it.
