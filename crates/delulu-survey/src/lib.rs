@@ -57,6 +57,11 @@ pub const EXCLUDED_DIRS: &[(&str, &str)] = &[
     (".git", "version-control internals"),
     (".claude", "agent scratch space, including detached worktrees holding a second copy of the repo"),
     ("target", "build output"),
+    // `scripts/package-toolchain.sh` stages a copy of LICENSE, NOTICE, the examples and more into
+    // `dist/` before archiving them. Walking it maps the *distribution* as if it were source: every
+    // staged file is byte-identical to the one it came from, so the map fills with duplicate-file
+    // warnings that are the packaging working correctly. Build output, like `target/`.
+    ("dist", "packaged distribution archives — a staged copy of files already mapped at their source"),
     ("node_modules", "vendored JavaScript dependencies"),
 ];
 

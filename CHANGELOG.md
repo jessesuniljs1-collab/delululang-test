@@ -34,6 +34,31 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
 
 ### Added
 
+- **The toolchain can now be distributed.** `scripts/package-toolchain.sh` produces a self-contained
+  per-platform archive — binary, `LICENSE`, `NOTICE`, `TRADEMARK.md`, examples (files *and* package
+  directories) and a `SHA256SUMS` generated from the staged tree, so the manifest describes what is
+  actually inside rather than what was intended. Verified the only way that means anything: **unpacked
+  into a directory sharing nothing with the workspace and driven with no cargo, no source tree and no
+  Rust toolchain** — 8/8 front-door steps on Windows and on Linux, checksums verifying, the `DL0703`
+  refusal naming the exact flag that would resolve it, and a package *directory* running.
+
+  **The shipped binary is the `--no-default-features` build, and that is load-bearing.** A default
+  release build embeds CPython through `pyo3` and imports a **specific** interpreter — `python313.dll`
+  on the machine this was written on. Not "Python", that build; anyone without that exact version gets
+  a loader error before `main`, where no diagnostic of ours can reach them. Measured rather than
+  assumed: the default binary carries that import string and the portable one carries none. In the
+  shipped build `root.python(...)` returns `DL1307` (unavailable) — the same behaviour as a machine
+  with no interpreter, reported instead of crashed.
+
+  `INSTALL.md` states all three paths, including the one that **deliberately does not exist**:
+  `cargo install delulu` from crates.io cannot work while every crate but the CLI is `publish = false`,
+  and `STABILITY.md` §2 promises those crates are not a stable interface. Publishing them would trade a
+  written promise for a shorter command. Gated by `crates/delulu/tests/distribution.rs`, which checks
+  that `INSTALL.md` and the archive's own `INSTALL.txt` teach the *same* commands, that both show the
+  refusal, that the packaging script keeps the portable flag and the licence files, and that no
+  document promises the crates.io path. README no longer says "there is no download" — it says
+  nothing is *hosted*, which is the true statement.
+
 - **The Survey answers machines.** Every read-only verb — `query`, `rdeps`, `impact`, `affected-by`,
   `findings`, `check` — now takes `--json` and emits **one object** carrying `tool`, `verb` and
   `schema`. The map every maintainer consults before changing anything existed **only as prose**,

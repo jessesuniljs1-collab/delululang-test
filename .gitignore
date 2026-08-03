@@ -6,3 +6,7 @@ target/
 # Cargo.lock IS tracked (ruling D19c): this workspace ships a binary and a signed release
 # artifact, so the exact dependency resolution is part of the build's reproducibility, not a
 # library's caller-chosen detail. Do not re-add it here by reflex.
+
+# Toolchain distribution archives, produced by scripts/package-toolchain.sh. Build output, not
+# source: the archive is rebuilt from the tree on demand and its checksums come with it.
+/dist

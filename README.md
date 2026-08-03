@@ -31,7 +31,7 @@ What that does and does not mean:
 
 | | |
 |---|---|
-| **Built and tested** | 9 language crates (plus 4 that only measure and map this repository), ~102,600 lines of Rust. 114 test suites — 1,496 tests passing on Windows, 1,502 on Linux (the 6-test difference is
+| **Built and tested** | 9 language crates (plus 4 that only measure and map this repository), ~102,600 lines of Rust. 115 test suites — 1,500 tests passing on Windows, 1,506 on Linux (the 6-test difference is
 [named test-by-test](docs/design/CROSS_PLATFORM_VERIFICATION.md), not an unexplained gap). Conformance coverage is a hard per-commit gate at 100%, and [`tests/core-invariance/SNAPSHOT.txt`](tests/core-invariance/SNAPSHOT.txt) records the exact bytes the toolchain answers with for all 108 programs the repository ships — so work on the tooling cannot quietly move the language. The size figures are recounted from the tree by [the Survey](docs/survey/SURVEY.md) and a test fails when they drift. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Ask it `impact <id>` before changing anything: it walks the whole blast radius, citing every hop. Start there. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
@@ -46,7 +46,19 @@ defects it has found so far and the ones still open.
 
 ## Installing
 
-There is no download. Build it from this source tree.
+**Nothing is hosted yet** — this project publishes to no registry and no download page, so there is
+no URL to fetch. What exists is the ability to *produce* a self-contained archive from this tree:
+
+```sh
+scripts/package-toolchain.sh          # → dist/delulu-<version>-<target>.tar.gz
+```
+
+That archive needs no Rust toolchain to use — binary, licences, examples and `SHA256SUMS` — which is
+what makes the toolchain distributable at all. [`INSTALL.md`](INSTALL.md) covers it, why the shipped
+binary carries no embedded Python, and why `cargo install delulu` from crates.io is deliberately not
+offered.
+
+To build and use it directly from source instead:
 
 **Prerequisites:** [rustup](https://rustup.rs). Nothing else — the toolchain version is pinned by
 `rust-toolchain.toml` and rustup installs it automatically on first build. Do **not** run

@@ -69,9 +69,10 @@ Linux side, unrelated to any gate; it is tracked, not blocking.
 
 | Gate | Windows | Linux (WSL Ubuntu-20.04) |
 |---|---|---|
-| `cargo test --workspace` | ✅ **114 suites / 1,496 passed / 0 failed / 4 ignored** | ✅ **114 / 1,502 / 0 / 4** |
+| `cargo test --workspace` | ✅ **115 suites / 1,500 passed / 0 failed / 4 ignored** | ✅ **115 / 1,506 / 0 / 4** |
 | `clippy --workspace --all-targets` (cold, findings only) | ✅ **14** / 0 errors (was **34**) | ✅ **14** / 0 errors (was **35**) |
 | CLI + compiler sweep (21 cases, exit-status assertions) | ✅ **21/21** | ✅ **21/21** |
+| Packaged archive, run outside the workspace | ✅ **8/8**, 0 problems | ✅ **8/8**, 0 problems |
 | `conform --coverage` | ✅ 100% | ✅ 100% |
 | `conform --check-reference` | ✅ 24 chapters in sync | ✅ 24 chapters in sync |
 | `fmt --check examples` | ✅ 0 would change, 13 clean | ✅ 0 would change, 13 clean |

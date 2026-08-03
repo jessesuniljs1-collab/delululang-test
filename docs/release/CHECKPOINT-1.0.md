@@ -132,9 +132,10 @@ diagnostics or a runtime fault, `2` usage error.
 
 | Gate | Windows | Linux |
 |---|---|---|
-| `cargo test --workspace` | **114 suites / 1,496 passed / 0 failed / 4 ignored** | **114 / 1,502 / 0 / 4** |
+| `cargo test --workspace` | **115 suites / 1,500 passed / 0 failed / 4 ignored** | **115 / 1,506 / 0 / 4** |
 | `cargo clippy --workspace --all-targets` (cold, findings only) | **14** | **14** |
 | CLI + compiler sweep (21 exit-status cases) | **21/21** | **21/21** |
+| Packaged archive, unpacked and run outside the workspace | **8/8** | **8/8** |
 | `delulu-conform --coverage` | 100% | 100% |
 | `delulu-conform --check-reference` | in sync | in sync |
 | `delulu fmt --check examples` | 0 would change | 0 would change |
