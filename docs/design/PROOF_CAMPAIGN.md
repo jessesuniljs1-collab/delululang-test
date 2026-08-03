@@ -702,7 +702,88 @@ rule 1 warns about — a future construction site that keys it wrongly would spl
 attestation silently. A third test pins the re-keying, so if that ever stops holding the finding
 becomes reachable and the test says so.
 
-## 10. Method note — why exhaustive enumeration replaced spot-checks
+## 10. Capability algebra and the theorem sketches (P17-7 continued)
+
+### ✅ P17-B1 — the grant tree never persists, so there is no deserialization vector
+
+Deserialization is the classic escalation vector, so the question was whether the `⊑` invariant is
+re-established when broker state is loaded, or merely assumed from the file. **The question does not
+arise: the grant tree is never written to disk.** `Broker` holds `nodes: HashMap<GrantId, Node>` in
+memory; a search of `delulu-broker` for tree persistence finds none. What *does* persist is the
+guard policy, the audit chain and `broker.key` — not grants.
+
+**This is a genuinely strong property and is recorded as one.** No file can be hand-edited to give a
+child more authority than its parent, because no file describes the tree. Every node in a running
+broker was created through `attenuate_core`, which performs the `⊑` check.
+
+The consequence to state honestly: **a daemon restart drops every grant.** That is fail-closed and
+coherent — authority is re-established by adopting a signed certificate — but it means grants are
+session-scoped in a way an operator should know.
+
+### 🔶 P17-B2 — expiry is judged against a WALL clock, so backwards time resurrects authority (OBSERVED)
+
+`time.rs:14-25`: the production `ClockSource` is `SystemTime::now()`. `effective_state` compares a
+node's absolute deadline against that reading. **A wall clock is not monotonic.**
+
+Observed in `crates/delulu-broker/tests/clock_monotonicity.rs`: a grant with a deadline at
+t=5,000 reports `Live` at t=1,000, `Expired` at t=9,000, and **`Live` again after the clock is set
+back to t=2,000** — with no revocation, no audit event, and nothing recording that authority was
+restored. A control confirms expiry *is* permanent while time only moves forward.
+
+**Why this matters for the stated users rather than being a curiosity:** the target domains are
+satellites, autonomous aircraft and robots, and on exactly those platforms a backwards step is
+**routine, not adversarial** — GNSS time acquisition after a cold start, an NTP correction after
+drift, an RTC read at power-on. The uplink lease sharpens it further: RFC 0001 F4 exists to be *the
+bound that survives a partition*, because revocation cannot cross one — and that bound is a
+wall-clock deadline.
+
+Not claimed: that an attacker can set your clock (usually privileged). The finding is that the
+guarantee **rests on clock monotonicity, an assumption the design never states**. Ruling D20 already
+moved the simulator's dead-man onto a logical clock for this class of reason; broker expiry did not
+get the same treatment.
+
+### 🔴 P17-T1 — the core calculus does not model the construct that broke (mechanization target changed)
+
+`DELULU_CORE.md` §9 records a Lean/Coq formalization of §1–§7 as the project's mechanization target.
+**Mechanizing it as written would not have caught C88.**
+
+Searching the entire document for `higher-order`, `callback`, `invoke`, `R-4` or `map` returns
+**zero occurrences**. The calculus's `Σ` assigns each `op_ℓ[R]` argument types and a *single* emitted
+label, and `E-Op` (§4) reduces in one step emitting exactly that label. **There is no construct for a
+primitive that invokes a function argument.** `T-Op` computes its row as `{ℓ} ⊔ ρ₀ ⊔ ⊔ᵢ ρᵢ` — the
+union of the op's own label and the rows of *evaluating* its arguments, which for a lambda is `{}`,
+because T-Abs makes closure construction pure. A callback's **latent** row never enters the rule.
+
+So Theorem 3 would be provable *and true of the calculus* while the implementation stayed unsound —
+the calculus is simply **silent** about the construct that failed. `SOUNDNESS_AUDIT.md` F-4 knows
+about higher-order builtins; the calculus does not.
+
+**This changes what Phase 9 must target.** A Lean development of §1–§7 as written would prove the
+wrong theorem. The calculus must first be extended with a higher-order primitive form — an `op`
+whose argument is a function it invokes, with `E-Op` emitting the callback's labels too — or the
+mechanization buys confidence in a model that excludes the only soundness hole this project has had.
+
+### 🔶 P17-T2 — Theorem 1 (Progress) is FALSE as stated (OBSERVED)
+
+`E-Op` (§4) carries `(scope of κ permits the arguments)` as a **premise**. When a capability is
+present and well-typed but its *scope* does not cover the argument, `E-Op` does not apply and no
+other rule does — so a well-typed closed term is **stuck**, which Progress forbids.
+
+Observed: a program granted `fs.read=./data` that reads `../outside.txt` **checks clean** and then
+faults at run time with `DL0904: path ... escapes the granted scope`. The implementation has a third
+outcome — a **fault** — and the calculus has no such configuration (`DELULU_CORE.md` contains no
+`fault` at all).
+
+The sketch's own justification does not cover this: it argues *"No stuck state arises from a missing
+capability, because a missing capability makes the term ill-typed, not stuck."* That addresses a
+**missing** capability. A **present** capability with insufficient scope is a different case, and it
+is the one the runtime actually raises. Types do not track scopes — scopes are runtime values.
+
+The correct statement is **progress-or-fault**: a well-typed term is a value, steps, or is a fault
+configuration. That is a small repair to the theorem and a real one to the development, since the
+fault configuration has to exist before Preservation can be stated over it.
+
+## 11. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

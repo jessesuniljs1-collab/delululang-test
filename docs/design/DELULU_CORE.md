@@ -226,6 +226,41 @@ runtime enforcement lands in Stage 6.
 
 ## 9. Mechanization — stated as future work, not as a present claim
 
+> ### 🔴 BEFORE MECHANIZING, READ THIS — campaign finding P17-T1 (2026-08-04)
+>
+> **Mechanizing §1–§7 as written would NOT have caught C88**, the worst soundness hole this project
+> has had. Search this document for `higher-order`, `callback`, `invoke` or `map`: there are **zero
+> occurrences**. `Σ` gives each `op_ℓ[R]` argument types and a *single* emitted label; `E-Op` (§4)
+> reduces in one step emitting exactly that label. **The calculus has no construct for a primitive
+> that invokes a function argument.**
+>
+> `T-Op` computes its row as `{ℓ} ⊔ ρ₀ ⊔ ⊔ᵢ ρᵢ` — the op's label plus the rows of *evaluating* its
+> arguments. For a lambda that is `{}`, because T-Abs makes closure construction pure. **A
+> callback's latent row never enters the rule.** So Theorem 3 is provable and true *of this
+> calculus*, while the implementation was unsound: the calculus is silent about the construct that
+> failed. `SOUNDNESS_AUDIT.md` F-4/R-4 knows about higher-order builtins; §1–§7 does not.
+>
+> **A mechanization must therefore first EXTEND the calculus** with a higher-order primitive form —
+> an `op` whose argument is a function it invokes, whose typing rule unions that function's latent
+> row, and whose `E-Op` emits the callback's labels — or it will buy confidence in a model that
+> excludes the only soundness hole this project has ever had.
+>
+> ### 🔶 Theorem 1 (Progress) is FALSE as stated — campaign finding P17-T2
+>
+> `E-Op` carries `(scope of κ permits the arguments)` as a **premise**. A capability that is present
+> and well-typed but whose *scope* does not cover the argument makes `E-Op` inapplicable, and no
+> other rule applies — so a well-typed closed term is **stuck**, which §7 Theorem 1 forbids.
+> Observed: a program granted `fs.read=./data` reading `../outside.txt` checks clean and faults at
+> run time with `DL0904`. This document contains no `fault` configuration at all.
+>
+> The sketch's justification covers a *missing* capability ("a missing capability makes the term
+> ill-typed, not stuck") — not a *present* one with insufficient scope, which is the case the
+> runtime actually raises. Types do not track scopes; scopes are runtime values. **The correct
+> statement is progress-or-fault**, and the fault configuration must exist before Preservation can
+> be stated over it.
+>
+> Both findings are recorded in `docs/design/PROOF_CAMPAIGN.md` §10.
+
 A machine-checked development (the natural target is a ~500-line Lean or Coq formalization of §1–§7)
 is **open, invited work** recorded in `CONTRIBUTING.md`. Until it exists, this document and the
 test suites are the project's soundness evidence, and the Constitution's honesty clause forbids

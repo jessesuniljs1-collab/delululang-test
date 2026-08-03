@@ -69,6 +69,35 @@ changes released behaviour.
 verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
 reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
 
+### Known — capability-algebra and theorem-sketch findings (P17-7), OBSERVED and NOT fixed
+
+- 🔴 **The core calculus does not model the construct that broke.** `DELULU_CORE.md` §9 names a
+  Lean/Coq formalization of §1–§7 as the mechanization target; **mechanizing it as written would not
+  have caught C88.** The document contains **zero** occurrences of `higher-order`, `callback`,
+  `invoke` or `map`: `Σ` gives each primitive a single emitted label, `E-Op` reduces in one step, and
+  `T-Op` unions only the rows of *evaluating* the arguments — which for a lambda is `{}`, since
+  closure construction is pure. A callback's **latent** row never enters. Theorem 3 is therefore
+  provable and true *of the calculus* while the implementation was unsound. **Phase 9's target has
+  changed:** the calculus must first be extended with a higher-order primitive form. Recorded in a
+  box at the top of `DELULU_CORE.md` §9 so nobody starts the proof without reading it.
+- 🔶 **Theorem 1 (Progress) is false as stated.** `E-Op` carries "(scope of κ permits the arguments)"
+  as a premise, so a present, well-typed capability whose *scope* does not cover the argument leaves
+  the term **stuck** — which Progress forbids. Observed: a program granted `fs.read=./data` reading
+  `../outside.txt` checks clean, then faults with `DL0904`. The calculus has no fault configuration.
+  The sketch's justification only covers a *missing* capability. Correct statement: progress-or-fault.
+- 🔶 **Expiry is judged against a wall clock, so backwards time resurrects authority.** `time.rs`
+  uses `SystemTime::now()`; observed in `crates/delulu-broker/tests/clock_monotonicity.rs` that a
+  grant which reported `Expired` reports `Live` again after the clock steps back — no revocation, no
+  audit event, nothing recording that authority returned. A control confirms expiry is permanent
+  under forward-only time. **This matters for the stated users specifically:** on satellites,
+  aircraft and robots a backwards step is routine (GNSS acquisition, NTP correction, RTC at
+  power-on), and the uplink lease — the bound designed to survive a partition — is a wall-clock
+  deadline. The guarantee rests on clock monotonicity, an assumption the design never states.
+- ✅ **No deserialization escalation vector exists** — the grant tree is never written to disk, so no
+  file can be edited to give a child more authority than its parent. Every node in a running broker
+  came through `attenuate_core` and its `⊑` check. Consequence worth knowing: a daemon restart drops
+  every grant (fail-closed; authority is re-established by adopting a signed certificate).
+
 ### Known — cryptography audit findings (P17-7), OBSERVED and NOT fixed
 
 - **The audit chain does not detect truncation.** `verify` checks each record's `prev_hash` and

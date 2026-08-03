@@ -68,7 +68,7 @@ DeluluLang/
 │   │   ├── src/{lib,authority,path,tree,ids,time,validate,diag,audit,lease,secrets,guard}.rs
 │   │   ├── src/{cert,device_scope}.rs   # [RFC 0001 / D21–D22] federation certificates and the
 │   │   │                           #   `device` scope dimension with interval containment
-│   │   └── tests/{audit_wiring,holder_neutrality,order_laws,audit_truncation,device_identity}.rs
+│   │   └── tests/{audit_wiring,holder_neutrality,order_laws,audit_truncation,device_identity,clock_monotonicity}.rs
 │   │                               #   audit_truncation.rs [P17-7]: the chain detects modification
 │   │                               #     (control) but NOT suffix truncation — observed
 │   │                               #   device_identity.rs [P17-7]: authorization reads the map KEY
