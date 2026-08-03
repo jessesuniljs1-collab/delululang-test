@@ -189,6 +189,76 @@ silently discarding 26 suites. It was caught only because the totals disagreed w
 the third time in this campaign that a truncating pipe has produced a confident wrong number
 (`head -3` hid two panics in P13). **Count first, truncate never.**
 
+
+### Re-verified 2026-08-03, second pass — the P16 adversarial fixes (rulings D78–D88)
+
+P16 changed the **core runtime's filesystem enforcement**, which is the single most
+platform-dependent thing in this codebase: it now calls `std::fs::canonicalize`, whose behaviour
+differs across all three target platforms. So this pass is not a formality.
+
+| Gate | Windows (native) | Linux (WSL) | macOS |
+|---|---|---|---|
+| `cargo test --workspace` | **115 suites, 1512 passed, 0 failed** | **115 suites, 1518 passed, 0 failed** | **never executed** |
+| Conformance coverage | 100% | 100% | — |
+| Generated reference in sync | yes (24 chapters) | yes (24 chapters) | — |
+| `delulu fmt --check examples` | 0 would change, 13 clean | 0 would change, 13 clean | — |
+| `delulu doctor --check` | 12/12 | 12/12 | — |
+| clippy (findings, summary lines excluded) | **14** (cold) | **14** | — |
+| CLI + compiler sweep | **21/21, 0 problems** | **21/21, 0 problems** | — |
+
+The 6-test difference is the same one [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
+
+#### The C84 fix, exercised with each platform's own link type
+
+A lexical path check cannot see a link, so the fix asks the filesystem. Each platform has a
+different link and a different `canonicalize`, so each was attacked with its own:
+
+| | Windows | Linux |
+|---|---|---|
+| Link used | directory **junction** (`New-Item -ItemType Junction`) | real POSIX **symlink** (`ln -s`) |
+| Read through it, granted the parent | `DL0904` — refused | `DL0904` — refused |
+| Control: legitimate in-scope read | `READ OK: public` | `READ OK: public` |
+
+Both were observed **escaping** before the fix and refused after, with the control passing in both
+states — a refusal that also broke ordinary reads would not be a fix.
+
+#### The case-sensitivity trap this fix could have sprung, and did not
+
+`canonicalize` returns the filesystem's *real* casing. On a case-insensitive filesystem — Windows
+**and macOS**, but not typical Linux — canonicalizing `./DATA` yields `./data`, so a naive
+replacement of the lexical test would have silently **widened** scope: a grant of `./data` would
+have started matching a mint of `./DATA`, reversing the deliberate fail-closed choice recorded in
+`delulu-broker/src/path.rs`.
+
+It does not, because the fix **adds** the filesystem check with `&&` rather than replacing the
+lexical one. A conjunction can only ever narrow. Verified on Windows, on a genuinely
+case-insensitive volume: grant `./data`, mint `./DATA` → **`DL0703`, exit 1**, unchanged.
+
+This is the one place where a macOS run would be checking something Linux cannot, and it is worth
+saying which way the risk points: **macOS shares the case-insensitivity that Windows has**, so the
+Windows result above is direct evidence for the same code path — the same conjunction, the same
+`canonicalize` semantics for casing. That is an argument, not an execution, and it is recorded here
+as an argument.
+
+#### macOS, for this pass specifically
+
+Nothing changed about the standing position: **no Apple hardware exists for this project and macOS
+has never been executed, not once, in any phase.** What can honestly be said about the P16 changes
+in particular:
+
+- The new code uses only `std::fs::canonicalize`, `Path::starts_with`, `Path::parent` and
+  `Path::file_name` — all in `std`, all with defined behaviour on macOS, none conditionally compiled.
+- macOS resolves symlinks in `canonicalize` exactly as Linux does (both are POSIX `realpath`
+  semantics); the Linux result above is the direct evidence for that half.
+- macOS's case-insensitivity matches Windows's, and the Windows result above is the direct evidence
+  for that half.
+- Therefore each half of the behaviour has been executed on a platform that shares it — but **no
+  platform has executed both halves in the combination macOS presents**, and that combination is
+  exactly where a surprise would live.
+
+That is the most that can be claimed. It is not "verified on macOS", and this document will not say
+it is.
+
 ## 3. Why it ports — the load-bearing design facts
 
 - **Wire format is endianness-independent.** Every serialized integer uses `to_le_bytes` /
