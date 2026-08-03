@@ -629,7 +629,15 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
             // granted subtree (§4 / prim.rs::fs_read).
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
-            let granted = caller.data().fs_read_roots.iter().any(|g| want.starts_with(g));
+            // Both gates, exactly as the interpreter applies them (C84): lexical containment, then
+            // filesystem truth. Fault parity between the engines (D29) is a tested law, so a scope
+            // rule that held in one engine and not the other would be a divergence in the direction
+            // that matters most.
+            let granted = caller
+                .data()
+                .fs_read_roots
+                .iter()
+                .any(|g| want.starts_with(g) && delulu_runtime::prim::contains_on_disk(g, &want));
             if !granted {
                 caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted"));
                 return -1;
@@ -657,9 +665,13 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             };
             // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
             caller.data_mut().push_trace("Read", "read_text", "FsRead", Some(rel.clone()), file, start, end);
-            // Resolve within scope; a `..`/symlink escape is a hard DL0904 refusal, not an `Err`.
+            // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
+            // The symlink half of that sentence was a comment and not a check until C84 — the
+            // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.
             let resolved = normalize(&scope.join(&rel));
-            if !resolved.starts_with(&scope) {
+            if !resolved.starts_with(&scope)
+                || !delulu_runtime::prim::contains_on_disk(&scope, &resolved)
+            {
                 caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope"));
                 return 0;
             }

@@ -17,7 +17,7 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** no action if these are C-language references; otherwise the ledger is missing a row
 
-- `docs` — these `C<n>` tokens are not campaign findings and were not linked: C99
+- `docs` — these `C<n>` tokens are not campaign findings and were not linked: C82, C83, C84, C85, C86, C87, C88, C89, C90, C91, C92, C99
 
 ## note — `ruling-cited-without-its-stage` (1)
 

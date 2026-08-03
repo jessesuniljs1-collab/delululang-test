@@ -25,6 +25,7 @@ registry! {
     "DL0105" => "unterminated block comment",
     "DL0106" => "reserved word used as a declared name",
     "DL0107" => "bidirectional control character in source",
+    "DL0108" => "line-break-like character in source (renders as a new line, does not act as one)",
 
     // DL02xx — parse
     "DL0201" => "expected a different token",
@@ -194,13 +195,14 @@ registry! {
     "DL1705" => "signature verification failed",
     "DL1706" => "registry index line invalid / semver-authority conflict at publish",
     "DL1707" => "assertion failed (a `test` assertion did not hold at runtime)",
-    // Surface morphs (DL1710–DL1714) — Stage 8 §6.5, SYNTAX_MORPH_SPEC.md. A sub-block rather
+    // Surface morphs (DL1710–DL1715) — Stage 8 §6.5, SYNTAX_MORPH_SPEC.md. A sub-block rather
     // than DL1708/1709 so a reader seeing DL171x knows it is the morph loader.
     "DL1710" => "morph is not bijective (a keyword renamed twice, or two keywords sharing one alias)",
     "DL1711" => "morph alias is another keyword's canonical spelling (the surface would mislead)",
     "DL1712" => "morph alias is not a single valid token",
     "DL1713" => "morph renames something that is not a renameable keyword",
     "DL1714" => "the requested morph is not available",
+    "DL1715" => "the program uses one of the target morph's aliases as a name",
     "DL1780" => "atlas refused: the program has check errors — fix them first (no partial graph)",
     "DL1781" => "custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it",
     "DL1790" => "invalid theme name or malformed theme.toml — using the `default` theme",
@@ -719,6 +721,19 @@ pub fn code_explain(code: &str) -> Option<String> {
              Identifiers are ASCII-only, so the character can only have come from a comment or a \
              string. If a string genuinely needs the code point, write it as an escape (`\\u{202e}`), \
              which is visible in review and accepted.",
+        "DL0108" => "A character that RENDERS as a line break but does not ACT as one was found in \
+             the raw source: vertical tab (U+000B), form feed (U+000C), NEXT LINE (U+0085), LINE \
+             SEPARATOR (U+2028), PARAGRAPH SEPARATOR (U+2029), or a lone carriage return. Editors, \
+             terminals, diff viewers, GitHub and Unicode's own line-splitting all show a new line; \
+             this lexer ends a `//` comment only at `\\n` and inserts a statement terminator only at \
+             `\\n`. Two consequences were observed, both checking clean. First, and the reason this \
+             is refused rather than warned about: a comment SWALLOWS the next rendered line, so a \
+             reviewer sees a line of code — a guard clause, a bounds check — that the compiler never \
+             compiles. That is Trojan Source inverted, and worse, because the reviewer is looking \
+             directly at the protection that is not there. Second, two statements the reviewer sees \
+             on separate lines are silently JOINED. `\\r\\n` is a normal Windows line ending and is \
+             always fine; only a STRAY `\\r` is refused. If a string genuinely needs one of these \
+             code points, write the escape (`\\u{2028}`) — plain ASCII in source, visible in review.",
 
         // ===== DL02xx — parsing ============================================
         "DL0201" => "The parser expected one specific token and found another. The message names \
@@ -1460,6 +1475,19 @@ pub fn code_explain(code: &str) -> Option<String> {
              though it were canonical would produce a wall of unrelated syntax errors, and \
              silently succeeding on the subset that happens to lex would be worse. Install the \
              morph (`delulu morph add`) or convert the file (`delulu fmt --to-canonical`).",
+        "DL1715" => "This program uses one of the target morph's ALIASES as a name. Under a morph \
+             the aliases ARE the keywords, so they are reserved in that surface for exactly the \
+             reason `if` is reserved in the canonical one: a program that names a variable `T` \
+             cannot be written in a morph where `T` means `type`, any more than it could name one \
+             `if`. This is a refusal, not a warning, because the alternative is silent corruption — \
+             `render` copies names through byte-for-byte, so the name would be emitted unchanged \
+             and then read back as the KEYWORD, rewriting `let T = 41` into `let type = 41` while \
+             both commands reported success. Rename the identifier, or render to a morph whose \
+             aliases it does not collide with. Note that a human-language morph (Chinese, Hindi, \
+             emoji) can never raise this: identifiers are ASCII-only, so a non-ASCII alias cannot \
+             collide with one. It is the short-ASCII compact profiles — the ones aimed at agents — \
+             where single letters like `T`, `E`, `R` and `M` are both plausible aliases and \
+             extremely plausible variable names.",
         "DL1790" => "The requested color theme could not be used: either the theme NAME (from \
              `--theme`, `DELULU_THEME`, or `~/.delulu/theme.toml`) is not a built-in \
              (`default`/`bright`/`mono`), or the `theme.toml` file was malformed, or a `[roles]` \

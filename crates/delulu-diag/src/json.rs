@@ -20,6 +20,10 @@ fn diagnostic_json(map: &SourceMap, d: &Diagnostic) -> Value {
     let spans: Vec<Value> = d
         .spans
         .iter()
+        // A span naming a file this map never loaded cannot be positioned, and indexing for it
+        // panicked (C83). Omit the span; `code`, `severity` and `message` — the fields a machine
+        // actually keys on — are unaffected, so the envelope stays useful and stays valid.
+        .filter(|ls| map.has(ls.span.file))
         .map(|ls| {
             let (start, end) = position_json(map, ls.span);
             let mut o = json!({
@@ -40,6 +44,10 @@ fn diagnostic_json(map: &SourceMap, d: &Diagnostic) -> Value {
     let repairs: Vec<Value> = d
         .repairs
         .iter()
+        // All-or-nothing, unlike spans above: dropping ONE edit would emit a repair that applies
+        // only part of itself, and `delulu fix` would then write a half-repair into the user's
+        // source. An omitted repair is safe; a partial one is not.
+        .filter(|r| r.edits.iter().all(|e| map.has(e.file)))
         .map(|r| {
             let edits: Vec<Value> = r
                 .edits
@@ -112,6 +120,39 @@ pub fn envelope_to_string(
 mod tests {
     use super::*;
     use crate::diagnostic::{Confidence, Diagnostic, Edit, Repair};
+
+    /// Campaign finding C83, machine half: the envelope must stay valid when a span names a file
+    /// this map never loaded, and a repair that cannot be fully located must not be offered at all.
+    #[test]
+    fn a_span_or_repair_naming_an_unloaded_file_is_omitted_not_panicked_on() {
+        let mut map = SourceMap::new();
+        let f = map.add_file("src/main.delulu", "fn x() {}\n");
+        let d = Diagnostic::error("DL0501", "about a file this map never loaded")
+            .with_span(Span::new(f, 3, 4), "this one is locatable")
+            .with_span(Span::new(9, 0, 1), "this one is not")
+            .with_repair(Repair {
+                id: "half_locatable",
+                confidence: Confidence::Exact,
+                authority_widening: false,
+                requires_human: false,
+                // One edit IS locatable and one is not. Emitting the locatable half would let
+                // `delulu fix` write a repair that only partly applied.
+                edits: vec![
+                    Edit { file: f, start_byte: 0, end_byte: 0, insert: "a".into() },
+                    Edit { file: 9, start_byte: 0, end_byte: 0, insert: "b".into() },
+                ],
+            });
+        let env = envelope("check", &[d], None, &map);
+        let diag = &env["diagnostics"][0];
+        assert_eq!(diag["code"], "DL0501");
+        assert_eq!(diag["spans"].as_array().unwrap().len(), 1, "only the locatable span survives");
+        assert_eq!(diag["spans"][0]["label"], "this one is locatable");
+        assert_eq!(
+            diag["repairs"].as_array().unwrap().len(),
+            0,
+            "a repair that cannot be fully located must be dropped whole, never partially"
+        );
+    }
 
     #[test]
     fn envelope_shape_is_stable() {

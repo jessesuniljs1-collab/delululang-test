@@ -165,6 +165,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | Install → first program → real programs. Start here. |
 | [`docs/book/THE_DELULULANG_BOOK.md`](docs/book/THE_DELULULANG_BOOK.md) | The complete guide, 20 chapters. Read Ch. 6 if you review AI-written code. |
 | [`docs/for-agents.md`](docs/for-agents.md) | The one page an agent harness should pin. |
+| [`docs/QUESTIONS.md`](docs/QUESTIONS.md) | **Hard questions, answered with evidence** — can authority be bypassed, how it compares to a sandbox, what the maths does and does not prove, whether several agents can share one machine, and the twelve things this project cannot claim. Start here if you are evaluating it. |
 | [`docs/reference/`](docs/reference/) | Generated reference: grammar, tokens, primitives, diagnostics, CLI contracts, coverage. |
 | [`docs/design/CONSTITUTION.md`](docs/design/CONSTITUTION.md) | The v1.0 constitution — identity, semantics, honesty clauses. |
 | [`docs/design/SOUNDNESS_AUDIT.md`](docs/design/SOUNDNESS_AUDIT.md) | Rules R-1…R-8 that keep authority in the type, and the five holes they close. |
@@ -179,7 +180,13 @@ stated relative to a named threat model; strength comes from defense in depth (t
 → WASM/WASI floor → microVM containment → human-held broker keys), and every trust assumption
 (compiler, hardware, hypervisor, side channels) is named. See the constitution, §5.14 and §9.
 
-Three things worth knowing before you evaluate it:
+**The word "unbreakable" is never used, and on 2026-08-03 an adversarial pass showed why.** A
+nine-line program made the toolchain report `effects: (none — provably pure)` for something that
+performed I/O at run time, through one missing `else` in the checker. It is fixed, the witness is
+kept, and [`docs/QUESTIONS.md`](docs/QUESTIONS.md) §1.1 leads with it rather than burying it —
+because a project that only publishes its wins has told you nothing about its losses.
+
+Three more things worth knowing before you evaluate it:
 
 - **Performance is measured, never promised.** v1.0 is **not competitive with C** on the measured
   workloads (2.0×–60.5× slower), and [`measurements/study-c/REPORT.md`](measurements/study-c/REPORT.md)

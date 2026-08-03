@@ -36,6 +36,17 @@ impl SourceMap {
         &self.files[id as usize]
     }
 
+    /// Whether this map has the file a span names.
+    ///
+    /// A renderer must ask before resolving a span it did not create. A command builds its map from
+    /// the files it loaded, while a diagnostic's span comes from whichever component raised it — and
+    /// those two only agree by convention. When they disagreed, `position`/`name` indexed out of
+    /// bounds and the CLI *panicked* on valid user input (campaign finding C83). Degrading to a
+    /// message without a source excerpt is a worse diagnostic; crashing is a worse program.
+    pub fn has(&self, id: FileId) -> bool {
+        (id as usize) < self.files.len()
+    }
+
     pub fn name(&self, id: FileId) -> &str {
         &self.files[id as usize].name
     }

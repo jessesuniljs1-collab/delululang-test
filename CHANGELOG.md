@@ -9,6 +9,83 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+### Fixed — P16 adversarial pass, 2026-08-03 (rulings D78–D88)
+
+- **The effect row could be escaped entirely (C88/D78).** A callback reaching a higher-order builtin
+  through a bare type parameter had its effect row **silently dropped**, and a dropped row is an
+  empty row. Nine ordinary lines produced a program that `check` called clean, that `authority`
+  reported as `effects: (none — provably pure)`, that `why Write` said "cannot perform `Write`" —
+  and that performed I/O at run time. The same branch on `Secret.map` leaked a **plaintext secret**
+  with no `Declassify` effect anywhere, reopening R-2 as well as R-4. The checker now **refuses**
+  what it cannot determine (DL0401) rather than assuming purity. Zero false positives across the
+  conformance corpus. This is the most serious defect the campaign has found; see
+  `SOUNDNESS_AUDIT.md` for why an audit of the *rules* could not have caught it.
+- **Filesystem scope was purely lexical, so a symlink or Windows junction escaped it (C84/D79).**
+  A grant of `./data` refused `../secret/x` and **allowed** `link/x` where `link` pointed outside —
+  for write as well as read, in both custody modes, and with the audit chain recording the
+  in-scope path for a write that landed outside it. `STAGE3_SPECIFICATION.md` §4.3 had always stated
+  symlink resolution as normative host-side law; the rule was written and the code was missing. Both
+  doors are closed — the per-operation check and minting a capability rooted at the link — through
+  one shared, fail-closed `contains_on_disk`, used by the interpreter and the WASM engine alike.
+- **The `net` wildcard had no dot boundary (C85/D80).** `*.example.com` matched `evilexample.com`, a
+  different registrable domain. The project's sibling Python-import matcher already required the
+  separator. Fixed; a real subdomain is still allowed.
+- **URL userinfo confused host extraction (C86/D80).** `https://example.com:8080@evil.com/` was read
+  as `example.com`, so a grant of `example.com` authorized — and the audit chain recorded — the wrong
+  host. Nothing was exfiltrated (v1.x ships no HTTP client); the *decision* and the *record* were
+  wrong. The duplicate copy of the parse in `interp.rs` now delegates to one function.
+- **An empty grant value granted the whole working directory (C87/D81).** `--grant fs.read=` — the
+  shape an unset shell variable produces — joined `""` onto the CWD. Five of eight grant keys already
+  refused it; now all eight do.
+- **`morph render` silently rewrote identifiers into keywords (C82/D82).** A valid program using `T`
+  and `E` as names, rendered through the shipped `compact-ai` morph and back, returned as
+  `let type = 41`, with both directions exiting 0. Under a morph the aliases **are** the keywords, so
+  they are reserved; DL1715 now refuses it. The round-trip gate was replaced with a test of the
+  identity law itself rather than an enumeration of remembered hazards.
+- **The first spanned morph diagnostic crashed the CLI (C83/D83).** `delulu morph` rendered
+  diagnostics against an empty `SourceMap` — safe only under an unstated, unenforced invariant that
+  no morph diagnostic ever carried a span. Fixed at the call site, plus a defensive skip in both the
+  human and JSON renderers; a repair that cannot be fully located is now dropped whole rather than
+  emitted half-applied.
+- **Six characters render as a line break and do not act as one (C89/D84).** VT, FF, NEL, U+2028,
+  U+2029 and a lone CR let a `//` comment swallow the next *visible* line, so a reviewer saw a guard
+  clause the compiler never compiled — Trojan Source inverted, and it survived `fmt --check`. Now
+  DL0108, scanned over raw bytes beside the DL0107 rule. `\r\n` remains a normal line ending.
+- **`delulu fix` filed an accepted widening as "changes nothing" (C90/D85).** `--accept-widening`
+  promoted a widening repair to the plain `applied` verdict and printed "changes nothing about what
+  this program may do", while the same tool's `--dry-run` correctly called it `widens-authority`. A
+  distinct `applied-widening` verdict now reports it honestly. Not an escalation — a false record.
+- **The normative exit-code table omitted a code the CLI uses (C91/D86).** `--assert-trace`
+  violations exit `3`; `STABILITY.md` §1 listed only `0/1/2`.
+
+### Added
+
+- **`docs/QUESTIONS.md`** — hard questions answered with evidence: whether authority can be bypassed
+  (leading with the C88 failure rather than burying it), how Authority and Guard compare with a
+  sandbox and why you want both, what the mathematics does and does not prove, whether several
+  agents can share one machine, whether plugins really work, whether the syntax can be changed, and
+  the twelve things this project cannot claim.
+- **DL0108** — line-break-like character in source.
+- **DL1715** — the program uses one of the target morph's aliases as a name.
+- **`prim::contains_on_disk`** — one fail-closed containment check shared by the interpreter and the
+  WASM host, replacing two lexical prefix tests.
+
+### Known — found, named, and NOT fixed (D87, D88)
+
+- **Multi-tenancy is not provided (C92).** Several agents holding different authority on one machine
+  require **separate OS accounts or containers**. Embedded mode isolates correctly and does so with
+  DeluluLang's own check rather than the OS's; but with a *shared* broker state directory a
+  co-tenant can enumerate the entire grant tree, revoke any node whose id it learns that way, and
+  read `broker.key` — which is enough to mint a valid token for any node offline, including the
+  operator's root. The source already scoped this out (`broker_transport.rs:5`); the documentation
+  now says so wherever the question is asked.
+- **Exponential type inference** on a small class of programs — 28 lines of nested record literals
+  exhaust memory. **Quadratic type checking** in nesting depth — 16 KB of source takes 17.8 s.
+  **Unbounded parser recursion** — ~150k nesting levels overflow the stack and exit outside the
+  `0/1/2/3` contract with no diagnostic and no `--json` envelope. `delulu check` is the agent hot
+  loop, so these are denial-of-service surfaces against the intended workflow. A bound is
+  language-visible and belongs in an RFC, not a hardening pass.
+
 > **Why this file starts at 1.0.0 rather than 0.1.0.** DeluluLang was built stage by stage against
 > per-stage specifications, and the per-stage build orders are the authoritative history of that work
 > — they record not just what changed but what was ruled and why. This changelog begins where the

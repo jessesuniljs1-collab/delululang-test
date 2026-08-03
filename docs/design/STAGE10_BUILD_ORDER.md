@@ -3112,6 +3112,142 @@ previously had a second line behind it. Guarded by
 documents and permits a document to *quote* the old wording only when it names the date it stopped
 being true; the two dated stage documents are annotated **SUPERSEDED**, not rewritten.
 
+
+**D78 — A row the checker cannot determine is not an empty row.** Closes C88, and reopens-then-recloses
+**R-4 and R-2** of `SOUNDNESS_AUDIT.md`. The builtin-callback law's enforcement site was an `if let`
+with no `else`: when a higher-order builtin's function argument was not *syntactically* `Type::Fn` —
+which is the case for every bare type parameter — the callback's row was discarded. Discarded means
+pure. Nine lines of ordinary source therefore produced a program that `check` accepted, that
+`authority` described as "(none — provably pure)", that `why Write` said could not perform `Write`,
+and that performed `Write`; the `Secret.map` twin printed a live secret with no `Declassify` effect.
+
+**Ruling:** the unknown case **refuses** (DL0401). The justification is R-3's own discipline — rows
+unify by equality and there is no subsumption, so a row that cannot be determined is *unknown*, not
+`{}`, and a builtin that will *invoke* the value may not assume the pure case. `Secret.map` is
+excluded from the generic diagnostic because it has its own arm with a message tuned to secrets; a
+test pins that exactly one diagnostic is produced, so the exclusion cannot rot into a gap.
+
+**Recorded, because it is the lesson and not the patch:** both of R-4's stated enforcement clauses
+were satisfied. They constrain the primitive table and a corpus of laundering programs, and the
+defect was in neither — it was in the branch that runs when the checker cannot tell. A checklist of
+mechanisms cannot find a mechanism that is present, correct, and skipped. This is the project's own
+skip-branch discipline, which had already cost it R-6a/DL0803 in Stage 6.
+
+**D79 — A path check that never asks the filesystem is not a path check.** Closes C84. Filesystem
+scope was a lexical prefix test after `.`/`..` normalization, with no disk access, so a symlink or
+Windows directory junction *inside* the granted root escaped it — read and write, both custody
+modes. `STAGE3_SPECIFICATION.md` §4.3 has always stated, as normative host-side law, that symlinks
+are resolved before the check; `delulu-wasm/src/host.rs` repeated the claim in a comment. The rule
+was written and the code was missing, which is the one thing this project's honesty posture forbids.
+
+**Ruling:** one shared `prim::contains_on_disk` canonicalizes **both** sides and **fails closed** if
+either cannot be resolved. It gates *two* doors, because closing one would have left the escape
+intact: the per-operation resolve, and minting a capability rooted at the link (after which every
+read is lexically inside its own root). The WASM host calls the same function — fault parity between
+engines is a tested law (D29), so a scope rule holding in one engine and not the other would diverge
+in the direction that matters most.
+
+**Explicitly NOT changed:** `delulu-broker/src/path.rs` stays pure-lexical. It implements the `⊑`
+lattice's "path is a descendant" relation — a comparison between two grant *specifications*, which
+must be deterministic, machine-independent, and defined for paths that do not exist. Ruling 2 stands.
+
+**D80 — One namespace matcher, not two, and RFC 3986 decides where a host ends.** Closes C85, C86.
+The `net` wildcard was a bare `ends_with`, so `*.example.com` also matched `evilexample.com`; the
+project's sibling Python-import matcher already required the dot boundary, which is what makes this
+an omission rather than a choice. Separately, the authority component was split on `/` or `:` and
+never on `@`, so `https://example.com:8080@evil.com/` yielded `example.com` — the userinfo, not the
+host — and the broker's exact-set check and the audit record inherited the same wrong answer, because
+`interp.rs` kept a **second copy** of the parse in step with the first by a comment.
+
+**Ruling:** the boundary is required, the apex is deliberately not matched by `*.` (narrowing is the
+safe direction), host extraction follows RFC 3986 including bracketed IPv6, and the second copy
+delegates to one `prim::host_of`. Design rule 1: one function referenced by both sides, never two
+lists kept in step by hand.
+
+**D81 — An empty grant value is a mistake, not a grant.** Closes C87. `--grant fs.read=` pushed the
+empty string, and joining `""` onto the working directory yields the working directory — so the
+ordinary shape of an unset shell variable silently handed over the whole tree the command ran in.
+Five of the eight grant keys already refused the identical empty shape. Ruling: all eight do.
+
+**D82 — Under a morph, the aliases ARE the keywords.** Closes C82. `morph render` copied names
+through byte-for-byte, so a program using `T` or `E` as a variable emitted them unchanged and the
+reverse direction lexed them as the *keywords* — turning `let T = 41` into `let type = 41` with both
+commands exiting 0. `SYNTAX_MORPH_SPEC.md` §1 calls that round-trip normative.
+
+**Ruling:** a name colliding with an alias of the target morph is refused (DL1715), for exactly the
+reason `if` cannot be a variable name in the canonical surface. Recorded: the morph aimed at **AI**
+was the unsafe one — human-language morphs cannot collide, because identifiers are ASCII-only. And
+the old gate is replaced rather than extended: it asserted a fixed program against alias sets that
+happened not to collide, with a comment claiming the corpus "deliberately contains the hazards".
+The new gate asserts the **law** — for every program × every morph, render must either refuse or
+round-trip byte-for-byte — and is non-vacuous in both directions, so it cannot go blind the same way.
+
+**D83 — A renderer may not assume the map contains the file a span names.** Closes C83. `delulu
+morph` rendered every diagnostic against an empty `SourceMap`, which was harmless only while every
+morph diagnostic was spanless — an invariant that was never written down and never enforced, living
+in a different file from the code depending on it. The first spanned one panicked. Ruling: the render
+branch uses the map that has the file, **and** both renderers skip an unresolvable span rather than
+indexing. Repairs are all-or-nothing: dropping one edit would emit a repair that applies only part of
+itself, and `delulu fix` would write a half-repair into a user's source.
+
+**D84 — A character that renders as a line break must act as one, or be refused.** Closes C89.
+Six characters — VT, FF, NEL, U+2028, U+2029 and a lone CR — end a line for every editor, diff
+viewer and terminal, and end nothing for this lexer. A `//` comment therefore swallows the next
+*visible* line: the reviewer reads a guard clause the compiler never compiles. That is DL0107's
+threat model inverted, and worse, because the reviewer is looking directly at the protection that is
+not there. A second form turns the same characters against automatic semicolon insertion to join two
+statements silently.
+
+**Ruling:** refused (DL0108), scanned over raw bytes ahead of tokenizing, beside DL0107 and for the
+same reason — one place, reached by every entry point, unable to die in a branch. Refused rather
+than *reinterpreted*: making them terminate a comment would silently promote hidden text into live
+code in any file that already contains one. `\r\n` stays legal; only a stray `\r` is refused. The
+`\u{…}` escape remains the visible way to put the code point in string data.
+
+**D85 — A tool may not describe a widening it just applied as changing nothing.** Closes C90.
+`--accept-widening` promoted a widening repair into the plain `Applied` verdict, whose fixed text is
+"exact, and changes nothing about what this program may do" — while the same tool's `--dry-run` had
+correctly called it `widens-authority`. The operator consented, so this was never an escalation; it
+was a false line in a record the project asks people to rely on. Ruling: a distinct
+`applied-widening` verdict. Both verdicts still write the edit, so the split cannot silently stop
+`--accept-widening` from applying.
+
+**D86 — The normative contract lists every code the CLI actually uses.** Closes C91. `--assert-trace`
+violations exit `3`, specified and tested since Stage 2; `STABILITY.md` §1 listed only `0/1/2`, and
+that page is what a machine reads to learn the contract. Added, with the reason attached: an
+effect-trace assertion failing is a compiler-bug-class event and a harness must be able to tell it
+from an ordinary diagnostic without parsing prose.
+
+**D87 — Robustness defects found by P16 are named and left open.** No finding closed. Type inference
+is exponential on a small class of programs (28 lines of nested record literals exhaust memory:
+223 MB at depth 18, 3.5 GB at 22); type checking is quadratic in nesting depth (16 KB → 17.8 s, while
+`fmt --check` on the same files is linear); and the parser has **no recursion bound**, overflowing
+the stack at ~150k–200k levels and exiting `0xC00000FD` — outside the `0/1/2/3` contract, with no
+diagnostic and, under `--json`, no envelope at all.
+
+**Ruling: named, not fixed here.** A depth or fuel bound is language-visible — it decides which
+programs are accepted — and that belongs in an RFC, not in a hardening pass that is otherwise
+careful to change no semantics. Recorded prominently because `delulu check` is the agent hot loop,
+which makes these denial-of-service surfaces against precisely the workflow the language exists for.
+"It fails safe" is not "it works".
+
+**D88 — Multi-tenancy is out of scope, and the documentation now says so where it is asked.** No
+finding closed; C92 is open. Embedded mode isolates concurrent programs correctly, and does it with
+DeluluLang's own capability check rather than the operating system's — verified with identical
+same-user ACLs on both directories. The broker daemon does not, and its source already said why:
+peer credentials confirm "same user", never multi-tenant auth. Under a *shared* state directory a
+co-tenant can enumerate the whole grant tree, revoke any node whose id it thereby learns (the CLI
+sends `caller == target`, which trivially satisfies the self-or-descendant check), and read
+`broker.key` — sufficient to mint a valid token for any node offline, including the operator's root.
+
+**Ruling:** this is not a defect against the model the project wrote down; it is a gap against a
+question the project had not answered. Real multi-tenancy needs authenticated sessions, per-node
+ownership and key material a co-tenant cannot read — an RFC's worth of surface, and inventing it
+quietly inside a campaign pass is exactly the move this project does not make. What P16 does is stop
+the documents implying otherwise and state the operating condition wherever the question appears:
+**separate OS accounts or containers, one per agent.** Separate directories under one account is not
+sufficient and must not be offered as if it were.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three
@@ -3119,5 +3255,6 @@ retired numbers (DL0503/DL0702/DL0906) are never reused (S9-D22).
 
 Post-close-out additions, each ruled above and allocated in its subsystem's range (not mechanically
 in DL19xx): **DL1415–DL1418** (broker/federation certs, D22); **DL0107** (lexer bidi-control
-refusal, D26). The subsystem-range convention keeps a code's number meaningful — a reader seeing
+refusal, D26); **DL0108** (lexer line-break-lookalike refusal, D84); **DL1715** (a name
+colliding with a morph alias, D82). The subsystem-range convention keeps a code's number meaningful — a reader seeing
 `DL01xx` knows it is lexical without consulting a table.

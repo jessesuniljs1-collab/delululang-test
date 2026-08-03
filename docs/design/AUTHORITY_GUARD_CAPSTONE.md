@@ -9,6 +9,24 @@ by item, and for each says **what was attacked, what the evidence is, and where 
 limit rather than a proof, and the limits are stated in the same voice as the successes. An audit that
 only records wins is not an audit.
 
+> **READ THIS FIRST — this audit passed while the central claim was false (P16, 2026-08-03).**
+>
+> Every item below was true when written and most are still true. But an adversarial pass three
+> weeks later found that a program could **perform an effect that appears in no row anywhere**,
+> using nine lines of ordinary source — no plugin, no FFI, no unsafe corner. `delulu authority`
+> reported "(none — provably pure)" for a program that printed at run time, and a variant leaked a
+> plaintext secret with no `Declassify` effect. See `HARDENING_CAMPAIGN.md` C88 and the reopening box
+> in `SOUNDNESS_AUDIT.md` §F-4.
+>
+> It is closed. The reason it is flagged *here*, at the top of the audit that missed it, is that the
+> miss is instructive and belongs where a reader will see it: **this document audits eighteen
+> authority mechanisms and fourteen surfaces, and the defect was in none of them.** It was in the
+> branch of the type checker that runs when the checker cannot tell what it is looking at. Checklists
+> find missing mechanisms. They do not find a mechanism that is present, correct, and skipped.
+>
+> Item 1.16 below says "there is no route by which a child exceeds a parent". That remains true of
+> *attenuation*. It was never a statement about the effect row, and should not be read as one.
+
 **Method.** Nothing here is asserted from reading code alone. Each row cites either a test that runs on
 every commit, a measurement in `measurements/`, or a ruling in `STAGE10_BUILD_ORDER.md` that records a
 witness observed failing against the pre-fix code. Where a row rests on this phase's own new work, it
@@ -218,7 +236,7 @@ so is the honest discharge — a surface that cannot be reached needs a reason, 
 
 | # | Surface | Status | Evidence |
 |---|---|---|---|
-| 1 | Parser | **Guarded** | Trojan Source refused (DL0107, D26) — raw bidi control characters are a hard error, scanned over raw bytes ahead of tokenizing so the rule cannot be skip-branched. A cyclic type alias no longer aborts the compiler (C54/D47a). 26 hostile programs: no panic, no hang. |
+| 1 | Parser | **Guarded, with one open crash** | Trojan Source refused (DL0107, D26) — raw bidi control characters are a hard error, scanned over raw bytes ahead of tokenizing so the rule cannot be skip-branched. **P16 found the other half of that attack and closed it (C89/D84):** six characters that *render* as a line break without acting as one (VT, FF, NEL, U+2028, U+2029, lone CR) let a `//` comment swallow the next visible line, so a reviewer saw a guard clause the compiler never compiled — Trojan Source inverted. Now DL0108, same raw-byte scan. A cyclic type alias no longer aborts the compiler (C54/D47a). 26 hostile programs: no panic, no hang — **but** the parser has **no recursion bound**, and ~150k–200k nesting levels overflow the stack and exit outside the `0/1/2/3` contract with no diagnostic and no `--json` envelope (P16, open). |
 | 2 | Compiler | **Guarded** | All 16 builtin type names and 10 core effect names are reserved on all three declaration paths (C23/D30) — a shadow used to be accepted and silently inert. Alias targets resolve at their declaration (C53/D47b). |
 | 3 | Optimizer | **Does not exist in v1.x** | Spec §2.1 *describes* a DIR-level optimizer (cross-package inlining, monomorphization); none is implemented. Nothing to guard, and the absence is the reason — not an omission from this audit. |
 | 4 | Runtime | **Guarded** | The custody gate authorizes every effectful op **before** performing it; a denial is a fault (or, for `Actuate` alone and deliberately, a value). Capability scope is re-validated at run time, not merely type-checked. |
@@ -239,6 +257,19 @@ so is the honest discharge — a surface that cannot be reached needs a reason, 
 
 Recorded so no reader mistakes the shape of the claim:
 
+- **Multi-tenancy is not provided, and this audit never asked.** Every item above assumes **one
+  holder per host** — the model the source states (`broker_transport.rs:5`: peer credentials confirm
+  "same user", never multi-tenant auth). P16 asked the other question and found that under a
+  *shared* broker state directory a co-tenant can enumerate the whole grant tree, revoke any node
+  whose id it has thus learned, and read `broker.key` — which is sufficient to mint a valid token
+  for any node, including the operator's root. Several agents holding different authority therefore
+  require **separate OS accounts or containers**; separate directories under one account is not
+  sufficient. Named in `HARDENING_CAMPAIGN.md` C92 and open.
+- **The effect row was escapable until 2026-08-03** (C88, see the box at the top of this document).
+- **Open robustness defects found by P16 and not fixed:** exponential type inference on a small class
+  of programs (28 lines can exhaust memory), quadratic checking in nesting depth, and unbounded
+  parser recursion that crashes outside the exit-code contract. `delulu check` is the agent hot loop,
+  so these are denial-of-service surfaces against the intended workflow.
 - **macOS has never been executed.** Windows and Linux are green at every commit; there is no Mac
   hardware. This is not "supported on three platforms".
 - **No physical device has ever been commanded.** Every demonstration drives the simulator.

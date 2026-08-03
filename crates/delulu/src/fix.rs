@@ -30,6 +30,18 @@ use delulu_diag::{Confidence, Edit, Repair};
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Verdict {
     Applied,
+    /// Applied, but only because the operator named it with `--accept-widening` — and it WIDENS
+    /// what the program may do.
+    ///
+    /// Distinct from [`Verdict::Applied`] because the two are not the same event and this command's
+    /// output is a record someone may later rely on. `--accept-widening` used to promote a widening
+    /// repair into plain `Applied`, which is reported as "exact, and changes nothing about what this
+    /// program may do" — so the one line in the log describing a deliberate authority increase said
+    /// the opposite of what happened, while the same tool's `--dry-run` had correctly called it
+    /// `widens-authority`. The operator consented, so this was never an escalation; it was a false
+    /// audit line, which in a project that sells accountability is its own kind of defect
+    /// (campaign finding C90).
+    AppliedWidening,
     /// It would widen what the program may do. Nameable with `--accept-widening`, never automatic.
     Widening,
     /// Documentation of a decision, not an edit — there is nothing to apply.
@@ -47,6 +59,7 @@ impl Verdict {
     fn word(self) -> &'static str {
         match self {
             Verdict::Applied => "applied",
+            Verdict::AppliedWidening => "applied-widening",
             Verdict::Widening => "widens-authority",
             Verdict::NeedsHuman => "requires-human",
             Verdict::NotExact => "not-exact",
@@ -59,6 +72,10 @@ impl Verdict {
     fn because(self) -> &'static str {
         match self {
             Verdict::Applied => "exact, and changes nothing about what this program may do",
+            Verdict::AppliedWidening => {
+                "WIDENS what this program may do — applied only because you named it with \
+                 `--accept-widening`"
+            }
             Verdict::Widening => {
                 "would widen what this program may do — a tool must not decide that for you"
             }
@@ -207,7 +224,10 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
         for r in &d.repairs {
             let line = r.edits.first().map(|e| line_of(&src, e.start_byte)).unwrap_or(0);
             let verdict = classify(r, id, src.len(), &accept, &claimed);
-            if verdict == Verdict::Applied {
+            // Both verdicts mean "this edit is being written"; they differ only in what the report
+            // says about it. Splitting them without this line would have silently stopped
+            // `--accept-widening` from applying anything at all.
+            if matches!(verdict, Verdict::Applied | Verdict::AppliedWidening) {
                 for e in &r.edits {
                     claimed.push((e.start_byte, e.end_byte));
                 }
@@ -241,7 +261,10 @@ pub fn cmd_fix(rest: &[String]) -> i32 {
     // count must not rise" — fixing a parse error legitimately reveals the type errors it was
     // masking, and a guard that punished that would block the most useful fixes there are.
     let broke_parsing = parse_errors(&src) == 0 && parse_errors(&out) > 0;
-    let applied = decisions.iter().filter(|d| d.verdict == Verdict::Applied).count();
+    let applied = decisions
+        .iter()
+        .filter(|d| matches!(d.verdict, Verdict::Applied | Verdict::AppliedWidening))
+        .count();
     let mut written = false;
 
     if broke_parsing {
@@ -323,6 +346,11 @@ fn classify(
     if r.edits.iter().any(|e| claimed.iter().any(|c| conflicts((e.start_byte, e.end_byte), *c))) {
         return Verdict::Overlaps;
     }
+    // Reaching here with `authority_widening` set means the first test let it through because the
+    // operator named it. It is applied — and it is still a widening, so it is reported as one (C90).
+    if r.authority_widening {
+        return Verdict::AppliedWidening;
+    }
     Verdict::Applied
 }
 
@@ -376,6 +404,7 @@ fn render(
 
     for verdict in [
         Verdict::Applied,
+        Verdict::AppliedWidening,
         Verdict::Widening,
         Verdict::NeedsHuman,
         Verdict::NotExact,
@@ -390,6 +419,7 @@ fn render(
         // small lie that makes someone trust the next report less.
         let heading = match (verdict, dry_run) {
             (Verdict::Applied, true) => "would apply",
+            (Verdict::AppliedWidening, true) => "would apply (widening)",
             _ => verdict.word(),
         };
         eprintln!("\n  {heading} — {}", verdict.because());

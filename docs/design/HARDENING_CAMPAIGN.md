@@ -2520,3 +2520,285 @@ check**. Post-quantum cryptography is gated behind `--unstable` because the adop
 unaudited by their own authors. The full list, in the same voice, is §3 of
 `AUTHORITY_GUARD_CAPSTONE.md`.
 
+
+---
+
+## P16 — the adversarial pass, 2026-08-03 (findings C82–C91, rulings D78–D87)
+
+**The commission, in the owner's words:** *"when NASA makes a new rocket engine, they test the
+rocket engine till it fails completely. So I want u to test delululang till it fails and fix it if
+necessary."* Plus a list of direct questions — can agents bypass Delulu Authority, can hackers or
+rogue agents take it over, is it backed by real maths, can several agents with different authority
+share one machine — answered in `docs/QUESTIONS.md` with the evidence this phase produced.
+
+**Method note.** This phase ran three red-team agents in parallel on separate surfaces (authority,
+guard, multi-tenancy) under one standing rule: *a finding is a hypothesis until the head chef
+reproduces it.* Every finding below was re-observed independently before a line of code changed,
+and the two that mattered most were re-observed **with a control** — a near-identical program that
+must still be accepted — because a "fix" that refuses everything is not a fix.
+
+**This phase found the worst defect of the entire campaign.** It is C88, and the honest summary is
+that the language's central claim was false for any program that used one particular shape.
+
+### C88 · The effect row could be escaped entirely — CLOSED (D78)
+
+`delulu check` clean, `delulu authority` reporting **"(none — provably pure)"**, `delulu why Write`
+answering **"program cannot perform `Write`"** — and the program printing at run time. Nine lines,
+no plugin, no FFI, no unsafe corner: just a callback passed to `List.map` through a **bare type
+parameter**.
+
+The R-4 enforcement site was an `if let` with no `else`. When the argument's type was not
+syntactically `Type::Fn` the callback's row was dropped, and a dropped row is an empty row. The same
+branch existed on `Secret.map`, where it leaked a **plaintext secret** from a function the authority
+report called pure, with no `Declassify` effect and no `Cap[Declassify]` anywhere — so **R-2 was
+reopened as well as R-4**.
+
+Two details make this worse than a bug, and both are recorded rather than softened:
+
+- **`SOUNDNESS_AUDIT.md` §D asserted this could not happen**, and its two enforcement clauses were
+  both satisfied. They constrain the primitive table and a corpus of laundering programs; the defect
+  was in neither. The audit box in that file now says so.
+- **The tool actively advised the exploit.** With `main` honestly declaring `!{Write}`, the checker
+  emitted `DL0502 — declares effect Write it never performs` and offered `remove_effect_from_row`.
+  Taking the tool's own advice produced the witness.
+
+**Closed** by refusing the unknown case (DL0401) instead of assuming purity, at both sites. The
+justification is R-3's own: rows unify by equality and there is no subsumption, so a row the checker
+cannot determine is *unknown*, not `{}`. Verified across the whole suite: **zero false positives** —
+every conformance program, example and test still checks exactly as before.
+
+**Why it survived four months, stated as a rule:** *a rule can be correct while the branch that
+fires when the checker cannot tell is missing, and an audit of the rules cannot find that.* This is
+the project's own skip-branch discipline, which cost it R-6a/DL0803 once already in Stage 6. It
+existed, and it was not applied here.
+
+### C84 · Filesystem scope was purely lexical — a junction escaped it — CLOSED (D79)
+
+`--grant fs.read=./data` with a directory junction at `./data/link` pointing outside: `../secret/x`
+was correctly refused with DL0904, and `link/x` **returned the file and exited 0**. Same file, same
+grant, opposite verdicts, decided by a link the check never resolved. Reproduced for **write** as
+well as read, and in both custody modes.
+
+Worse than an undocumented gap: `STAGE3_SPECIFICATION.md` §4.3 states as **normative host-side law**
+that symlinks are "resolved host-side **before** the check", and `delulu-wasm/src/host.rs` repeated
+the claim in a comment. The rule was written; only the code was missing. This project's honesty
+posture is that a document never promises a defense that does not exist, and here one did.
+
+There were **two doors**, and closing only the obvious one would have left the escape intact: the
+per-operation check, and *minting a capability rooted at the junction*, after which every later read
+is lexically inside its own root. Both now go through one function, `prim::contains_on_disk`, which
+canonicalizes **both** sides and fails closed if either cannot be resolved. The WASM engine calls
+the same function, because fault parity between engines is a tested law (D29).
+
+**A consequence closed with it:** the hash-chained audit log had recorded the *lexical, in-scope*
+path for a write that landed outside the scope, and the chain still verified. An investigator
+reading that log would have concluded the program stayed in bounds. Refusing the escape removes the
+false record.
+
+### C85 · The `net` wildcard had no dot boundary — CLOSED (D80)
+
+`*.example.com` was a bare `ends_with`, so it also matched **`evilexample.com`** — a different
+registrable domain owned by somebody else. The project already had the correct matcher: the Python
+import allowlist (`python::allowlist_allows`) requires the separator. Two sibling namespace
+matchers, one correct — which is what makes this an omission rather than a design choice.
+
+Not covered by P15's 18-item authority checklist, which has no `net`-scope row, and **not exercised
+by a single test or example anywhere in the tree** — which is why it survived. Fixed with the
+boundary required; a control witness confirms `good.example.com` is still allowed, so the wildcard
+still does its job.
+
+### C86 · URL userinfo confused host extraction — CLOSED (D80)
+
+The authority component was split on `/` or `:` and never on `@`, so
+`https://example.com:8080@evil.com/steal` yielded `example.com`. Per RFC 3986 everything before the
+last `@` is *userinfo*; the host is `evil.com`. A grant of `example.com` therefore authorized a
+request to `evil.com` **and the audit record attested the wrong host**.
+
+Bounded, and said plainly: v1.x bundles no HTTP client, so nothing was exfiltrated. What was broken
+is the *decision* and the *record*, which is the accountability the system sells. `interp.rs` held a
+**second copy** of the parse — kept in step with the first by a comment — so the bug was in two
+places at once; there is now one function (design rule 1).
+
+### C87 · An empty grant value granted the whole working directory — CLOSED (D81)
+
+`--grant fs.read=` pushed the empty string, and joining `""` onto the working directory yields the
+working directory. The ordinary way to hit this is an unset shell variable — `--grant
+fs.read=$SHARE_DIR` — which is silent in every shell. Five of the eight grant keys already refused
+the identical empty shape; three did not. Now all eight do.
+
+### C82 · `morph render` silently rewrote identifiers into keywords — CLOSED (D82)
+
+A valid canonical program using `T` and `E` as variable names, rendered through the **shipped**
+`compact-ai` morph and back, came out as `let type = 41` / `let else = type + 1`. Both directions
+exited 0 with no warning. `SYNTAX_MORPH_SPEC.md` §1 calls the round-trip identity **normative**.
+
+The rule that was missing: **under a morph, the aliases ARE the keywords**, so they are reserved in
+that surface for exactly the reason `if` is reserved in the canonical one. DL1715 now refuses it.
+
+Two things worth keeping:
+
+- **The morph aimed at agents was the unsafe one.** A human-language morph (Chinese, Hindi, emoji)
+  can never collide, because identifiers are ASCII-only. It is the short-ASCII compact profiles —
+  `T`, `E`, `R`, `M` — where aliases and ordinary variable names occupy the same space.
+- **The collision was already sitting in the project's own test suite**, undetected: `PROGRAM`'s
+  module is named `m`, and one test morphs `match → "m"`. That test rendered without round-tripping;
+  the test that round-tripped used alias sets without `m`. **Two tests straddled the defect.** The
+  old gate's comment says its corpus "deliberately contains the hazards" and lists the *prefix*
+  collision — the enumeration fell behind the hazard space, and then proved only what was
+  enumerated. Replaced with a test of the **law itself**: for every program × every morph, render
+  must either refuse or round-trip byte-for-byte, asserted non-vacuous in both directions.
+
+### C83 · The first spanned morph diagnostic crashed the CLI — CLOSED (D83)
+
+`delulu morph` rendered every diagnostic against an **empty** `SourceMap`. That was harmless only
+while all morph diagnostics were spanless — an invariant that was never stated and never enforced,
+living in a different file from the code that depended on it. DL1715 arrived carrying a span and the
+renderer indexed out of bounds. A crash is not a refusal.
+
+Fixed at the call site (the render branch has a real map and now uses it) **and** defensively: a
+span naming a file the map never loaded is skipped rather than indexed, in both the human and JSON
+renderers. For repairs the rule is all-or-nothing — dropping one edit would emit a repair that
+applies only part of itself, and `delulu fix` would write a half-repair into a user's source.
+
+### C89 · Six characters render as a line break and do not act as one — CLOSED (D84)
+
+`// note␊  danger()` where `␊` is U+2028: every editor, diff viewer, terminal and GitHub shows two
+lines; the lexer ends a `//` comment only at `\n`, so `danger()` is **inside the comment**. The
+reviewer is looking straight at a line of code the compiler never compiles.
+
+This is Trojan Source **inverted**, and in one way worse than the original: DL0107's attack shows a
+reviewer something that is not there; this one *hides* something that is. A guard clause — `if
+amount > LIMIT { return }` — sitting visibly above a transfer, and simply absent. A second form
+turns the same characters against automatic semicolon insertion, silently **joining** two statements
+the reviewer sees on separate lines.
+
+Six characters, confirmed by measurement rather than assumption: VT, FF, NEL, U+2028, U+2029, and a
+lone CR. All now DL0108. `\r\n` stays legal — refusing it would refuse the language on its primary
+platform — and the `\u{…}` escape remains the visible, reviewable way to put the code point in
+string data. It had also survived `fmt --check`, which preserved the character verbatim and was
+idempotent, so the one accidental defense evaporated after a single format pass.
+
+### C90 · `delulu fix` filed an accepted widening as "changes nothing" — CLOSED (D85)
+
+`--accept-widening` promoted a widening repair to the plain `Applied` verdict, whose fixed text is
+*"exact, and changes nothing about what this program may do"* — while the same tool's `--dry-run`
+had correctly called it `widens-authority`. The operator consented, so this was never an escalation;
+it was a **false line in the record**, which in a project that sells accountability is its own kind
+of defect. There is now a distinct `applied-widening` verdict.
+
+### C91 · The normative exit-code table was missing a code the CLI uses — CLOSED (D86)
+
+`--assert-trace` violations exit **3**, specified and tested in `STAGE2_SPECIFICATION.md`, absent
+from `STABILITY.md` §1 — the page a machine reads to learn the contract. Added, with the reason: an
+effect-trace assertion failing is a compiler-bug-class event, and a harness must be able to tell it
+from an ordinary diagnostic without parsing text.
+
+### Findings recorded and NOT fixed — named, with the reason (D87)
+
+Honesty requires these be as visible as the closures.
+
+- **Type inference is exponential on a small class of programs.** 28 lines of nested record literals
+  (`Pair { l: a, r: a }`, 24 deep) exhaust memory: measured 223 MB peak at depth 18, 875 MB at 20,
+  3.5 GB at 22, killed at 24. There is no fuel bound, no `--max-type-size`, no timeout. **`delulu
+  check` is the agent hot loop**, so this is a denial-of-service surface against exactly the
+  workflow the language exists for. Not fixed in P16: a bound is a language-visible change and
+  belongs in an RFC, not in a hardening pass.
+- **Type checking is quadratic in nesting depth.** 16 KB of nested list literals takes 17.8 s;
+  `fmt --check` on the same files is linear, so it is the checker and not the parser.
+- **The parser has no depth bound and overflows the stack** at roughly 150k–200k nesting levels
+  (~400 KB of source), crashing with a Windows `0xC00000FD` — an exit code outside the `0/1/2/3`
+  contract, with no diagnostic and, under `--json`, **no envelope at all**. Distinct from C21/D51,
+  which bounds the *interpreter*; a `check` never reaches the interpreter. All seven parsing
+  subcommands are affected.
+- **`is_higher_order_method` lists `List.filter`, which does not exist.** A stale entry in a
+  hand-maintained list — design rule 1 again — in the fail-safe direction.
+
+These are real and they are open. They are performance and robustness defects rather than authority
+escapes: a program that exhausts memory has not exceeded its grant. But "it fails safe" is not the
+same as "it works", and the difference belongs in the record.
+
+### What HELD, with evidence
+
+A pass that only lists wins is not a pass. Under direct attack, these did not move.
+
+- **The classic sibling-prefix path bug is absent** — grant `./data`, mint `./data2` → DL0703.
+  Rust's component-wise `Path::starts_with` defeats it.
+- **Windows case variation fails closed** (`./data` vs `./DATA` → DL0703), deliberately, and
+  documented as a conservative choice rather than an accident.
+- **Duplicate device grants intersect**, order-independently — the C40 shape does not exist in the
+  grant parser. Two disjoint envelopes refuse in both orders; two identical ones still allow an
+  in-envelope command, so it is a meet and not a crude "duplicate means deny".
+- **A lease run cannot be widened by a flag** (exit 2), and attenuation violations are DL0802.
+- **`--accept-widening` is airtight** — `*`, `all`, `.*`, empty, wrong case, trailing space: six
+  attempts, file byte-identical each time. No accept-all exists.
+- **Every repair in the tree is correctly classified** — all 12 construction sites read; only
+  `add_effect_to_row` and `insert_dependency_pin` set `authority_widening`.
+- **Direct effect-laundering is refused** through records, lists, `Option`, `Result`, re-ascription
+  (DL0504), differing match-arm rows, and the actor boundary (DL1601).
+- **`--assert-trace` caught C88 in the project's own terms** — `DL1101 … not in the statically
+  computed row — this is a compiler-bug class failure`, exit 3. Invariant 12's backstop worked when
+  the type system did not, which is the entire argument for defense in depth.
+- **The runtime custody gate contained C88's blast radius.** The row could lie, but grants still
+  bounded capability *minting*, so the escaped effects were limited to capabilities the operator had
+  already handed over.
+- **Parser robustness is otherwise excellent** — 26 MB of source checks linearly in 19.9 s;
+  NUL-only files, invalid UTF-8, BOM, CRLF, 200k-character identifiers, 100k-element literals and
+  5000-deep nested block comments all produce the right diagnostic and no panic.
+- **`delulu doctor` does not touch a user's tree** and says so: outside DeluluLang's own repository
+  it reports "nothing about your project is being skipped".
+- **The Survey never reaches a programmer at all** — `publish = false`, and the packaging script
+  builds only `-p delulu`.
+
+### C92 · Many agents on one host: the broker is single-tenant, and nothing said so loudly enough — OPEN, NAMED (D88)
+
+The commission asked directly: *"Can multiple agents do programming in DeluluLang in same system or
+cli with varying authority given by main user?"* A dedicated red-team pass answered it, and the
+answer has to be given in two halves because they differ completely.
+
+**Embedded mode — the default `delulu run --grant …` — held.** Two programs running concurrently
+under different `--grant fs.read=` scopes never reached each other's data, and the refusal was
+**DeluluLang's own**, not the operating system's: `icacls` showed identical same-user permissions on
+both directories, and an ordinary shell could read either file freely. The capability check was the
+only thing standing between them, and it stood — including against the junction vector C84 had just
+closed, re-tested live on the fixed binary.
+
+**Daemon mode with a shared state directory did not hold, and the reason is architectural.**
+`crates/delulu/src/broker_transport.rs:5` states it in the source: *"The broker serves exactly one
+OS user; peer creds only confirm 'same user,' never multi-tenant auth (out of scope, spec §10)."*
+Three consequences were observed, on two separately-built binaries:
+
+- **`delulu grants list` discloses the entire grant tree** — every node id, every fs scope, every
+  holder — to any process that can reach the pipe, with no credential.
+- **`delulu grants revoke <id>` authorizes on knowing the id.** The CLI sends
+  `Revoke { caller: id, target: id }` (`cli.rs:4586`), and caller-equals-target trivially satisfies
+  the tree's self-or-descendant check. Combined with the line above, any co-tenant can enumerate and
+  then destroy any other's grant. The victim's next use fails DL1403 — verified.
+- **`<state-dir>/broker.key` carries ordinary same-user permissions**, and it is the root of trust
+  for lease MACs. Reading it is sufficient to mint a valid non-expiring token for **any** node
+  offline, including the human's own root. Demonstrated end to end.
+
+Also observed, and ordinary robustness rather than authority: two concurrent `delulu broker start`
+invocations — the shape two independent agent launcher scripts naturally produce — raced into **two
+live daemons on one pipe**, splitting clients round-robin, breaking the very first multi-step
+`grants delegate` and **corrupting the shared audit chain**. `delulu audit verify` detected the
+corruption honestly (DL1405, exit 1) rather than passing it, which is the part that worked. And a
+process that connects to the pipe and simply sends nothing makes the broker unreachable to every
+other tenant for as long as it holds the connection — the daemon is single-threaded with no accept
+or read timeout.
+
+**Disposition, and why it is NAMED rather than fixed here.** None of this is a defect against the
+threat model the project actually wrote down: that model is *one holder per host*, and the source
+says so. It is a defect against the question the commission asked, which is a **different and larger
+question** — genuine multi-tenancy needs an authenticated caller identity, per-node ownership, and
+key material the co-tenant cannot read. That is a design change with an RFC's worth of surface, not
+a hardening patch, and inventing it quietly inside a campaign pass would be exactly the kind of
+move this project does not make.
+
+What P16 does instead is stop the documentation from implying otherwise, and state the operating
+condition plainly wherever the question is asked: **several agents may hold different authority on
+one machine only if they are separate OS accounts (or containers/VMs).** Separate *directories*
+under one account is not sufficient and should not be offered as if it were — the state-dir path is
+itself visible in an ordinary process listing, as is any `--lease` token passed on a command line.
+
+Recorded as open: authenticated broker sessions, per-node ownership on revoke, key material outside
+the co-tenant's reach, an accept/read timeout, and an atomic single-daemon start.

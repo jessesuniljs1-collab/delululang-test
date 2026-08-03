@@ -33,6 +33,38 @@ const BIDI_CONTROLS: &[(char, &str)] = &[
     ('\u{2069}', "POP DIRECTIONAL ISOLATE"),
 ];
 
+/// Characters that an editor, a terminal, a diff viewer, GitHub, and Unicode's own `splitlines`
+/// all render as a **line break**, but which this lexer does not treat as one (DL0108).
+///
+/// Same threat model as [`BIDI_CONTROLS`] — a file that renders differently than it runs — reached
+/// by a different door, and campaign finding C89 observed *two* working attacks with them:
+///
+/// 1. **A line comment ends only at `\n`.** So one of these swallows the next *rendered* line into
+///    the comment. This is the INVERSE of Trojan Source and is worse: the reviewer sees a line of
+///    code that the compiler never compiles. A guard clause — `if amount > LIMIT { return }` —
+///    sitting visibly above a transfer, and simply not there.
+/// 2. **Automatic semicolon insertion fires only at `\n`.** So one of these silently JOINS two
+///    statements the reviewer sees on separate lines, changing which expression a binding gets.
+///
+/// Both were observed checking clean, and the first also survived `fmt --check` — `fmt` preserved
+/// the character verbatim and was idempotent, so the one accidental defense evaporated after a
+/// single format pass.
+///
+/// Refused rather than reinterpreted, exactly as DL0107 refuses: making these *end* a comment would
+/// silently promote hidden text into live code in any file that already contains one. A program
+/// that genuinely needs one of these code points in string *data* writes the `\u{…}` escape — plain
+/// ASCII in source, visible to a reviewer, and untouched by this scan.
+///
+/// **CR is not here**, because `\r\n` is an ordinary Windows line ending; a *lone* CR is refused
+/// separately below, where the pair can be told from the stray.
+const LINE_BREAK_LOOKALIKES: &[(char, &str)] = &[
+    ('\u{000B}', "LINE TABULATION (vertical tab)"),
+    ('\u{000C}', "FORM FEED"),
+    ('\u{0085}', "NEXT LINE"),
+    ('\u{2028}', "LINE SEPARATOR"),
+    ('\u{2029}', "PARAGRAPH SEPARATOR"),
+];
+
 pub fn lex(file: FileId, src: &str) -> (Vec<Token>, Vec<Diagnostic>) {
     let (tokens, diags, _comments) = Lexer::new(file, src).run();
     (tokens, diags)
@@ -107,6 +139,7 @@ impl<'a> Lexer<'a> {
         // forget it — the rule lives in exactly one place and cannot die in a branch (the
         // project's skip-branch discipline). See `BIDI_CONTROLS` and HARDENING_CAMPAIGN C3.
         self.check_bidi_controls();
+        self.check_line_break_lookalikes();
         while self.pos < self.src.len() {
             self.skip_trivia();
             if self.pos >= self.src.len() {
@@ -140,6 +173,47 @@ impl<'a> Lexer<'a> {
                         format!("bidirectional control character U+{:04X} ({name}) in source", ch as u32),
                     )
                     .with_span(span, "this can make the code render differently than it runs — use the `\\u{…}` escape if a string truly needs it"),
+                );
+            }
+        }
+    }
+
+    /// Refuse characters that render as a line break but do not act as one (DL0108).
+    ///
+    /// One pass over the raw source, beside [`Self::check_bidi_controls`] and for the same reason:
+    /// the rule lives in exactly one place, ahead of the tokenizer, so it is reached by every entry
+    /// point and cannot die in a per-token branch. See [`LINE_BREAK_LOOKALIKES`] for the two attacks.
+    fn check_line_break_lookalikes(&mut self) {
+        let bytes = self.src.as_bytes();
+        for (off, ch) in self.src.char_indices() {
+            // A lone CR: renders as a line break everywhere, ends nothing here. `\r\n` is an
+            // ordinary Windows line ending and is left alone — the pair is told from the stray by
+            // looking at the next byte, which is why CR is handled here and not in the table.
+            if ch == '\r' && bytes.get(off + 1) != Some(&b'\n') {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0108",
+                        "lone CARRIAGE RETURN (U+000D) in source, not part of a `\\r\\n` line ending",
+                    )
+                    .with_span(
+                        Span::new(self.file, off as u32, (off + 1) as u32),
+                        "editors show a line break here and the compiler does not — anything after it \
+                         on this line stays inside a comment, and two statements can silently join",
+                    ),
+                );
+                continue;
+            }
+            if let Some((_, name)) = LINE_BREAK_LOOKALIKES.iter().find(|(c, _)| *c == ch) {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0108",
+                        format!("line-break-like character U+{:04X} ({name}) in source", ch as u32),
+                    )
+                    .with_span(
+                        Span::new(self.file, off as u32, (off + ch.len_utf8()) as u32),
+                        "editors render this as a new line and the compiler does not — code after it \
+                         can sit invisibly inside a comment; use the `\\u{…}` escape if a string truly needs it",
+                    ),
                 );
             }
         }
@@ -835,6 +909,56 @@ mod tests {
                 hit.message
             );
         }
+    }
+
+    // ----- Line-break lookalikes (HARDENING_CAMPAIGN C89, DL0108) ------------
+
+    /// The attack, kept as the exact program that used to check clean and run.
+    ///
+    /// Rendered in any editor this is four lines and the `println` is one of them. To the lexer the
+    /// comment runs to the next `\n`, so the `println` is *inside it* — the reviewer is looking
+    /// straight at a line of code the compiler never compiles.
+    #[test]
+    fn a_line_break_lookalike_hiding_code_in_a_comment_is_dl0108() {
+        let src = "module m\nfn f() {\n  // note\u{2028}  danger()\n}\n";
+        let (_, diags) = lex(0, src);
+        assert!(diags.iter().any(|d| d.code == "DL0108"), "expected DL0108, got {diags:?}");
+    }
+
+    #[test]
+    fn every_line_break_lookalike_is_refused_by_name() {
+        // Same discipline as the bidi table: a missing entry is a character the scan waves through,
+        // so assert over the table rather than over a list someone has to remember to extend.
+        for (ch, name) in LINE_BREAK_LOOKALIKES {
+            let src = format!("module m\n// x{ch}y\nfn f() {{}}\n");
+            let (_, diags) = lex(0, &src);
+            let hit = diags.iter().find(|d| d.code == "DL0108");
+            let hit = hit.unwrap_or_else(|| panic!("{name} (U+{:04X}) was not refused", *ch as u32));
+            assert!(
+                hit.message.contains(&format!("U+{:04X}", *ch as u32)),
+                "the message must name the code point: {}",
+                hit.message
+            );
+        }
+    }
+
+    #[test]
+    fn a_lone_cr_is_refused_but_crlf_is_a_normal_line_ending() {
+        // The pair must survive: `\r\n` is how most of the world's Windows editors write every
+        // file, and refusing it would refuse the language on its own primary platform.
+        let (_, ok) = lex(0, "module m\r\nfn f() {\r\n  // note\r\n}\r\n");
+        assert!(!ok.iter().any(|d| d.code == "DL0108"), "CRLF must be fine: {ok:?}");
+
+        let (_, bad) = lex(0, "module m\nfn f() {\n  // note\r  danger()\n}\n");
+        assert!(bad.iter().any(|d| d.code == "DL0108"), "a lone CR must be refused: {bad:?}");
+    }
+
+    #[test]
+    fn an_escaped_line_break_lookalike_is_allowed() {
+        // The same escape hatch DL0107 has, for the same reason: the scan reads RAW source, so a
+        // string that genuinely needs the code point writes it visibly.
+        let (_, diags) = lex(0, "module m\nfn f() -> Str { \"a\\u{2028}b\" }\n");
+        assert!(!diags.iter().any(|d| d.code == "DL0108"), "an escaped code point must not fire: {diags:?}");
     }
 
     #[test]

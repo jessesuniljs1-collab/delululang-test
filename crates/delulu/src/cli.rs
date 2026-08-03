@@ -1997,6 +1997,15 @@ fn cmd_morph(rest: &[String]) -> i32 {
                 return 2;
             }
             let Ok((smap, fid, src)) = load(file) else { return 2 };
+            // Diagnostics raised *about this file* carry spans into it, so they must render against
+            // the map that has it registered — not the empty `map` above. Until DL1715 every morph
+            // diagnostic was spanless (they are about a morph `.toml`, not DeluluLang source), so
+            // the empty map was harmless and nothing said so; the first spanned one panicked with
+            // an out-of-bounds file id. Campaign finding C83.
+            let refuse_in_src = |diags: Vec<Diagnostic>| -> i32 {
+                print_diagnostics("morph", &diags, &smap, None, json);
+                1
+            };
             let out = if to_canonical {
                 // The file's own pragma says which surface it is written in.
                 let Some(id) = delulu_syntax::morph::pragma_of(&src) else {
@@ -2011,7 +2020,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                     // Drop the pragma line: the output is canonical, and a stale pragma would make
                     // every later tool read it through a morph it is no longer written in.
                     Ok(text) => strip_morph_pragma(&text),
-                    Err(diags) => return refuse(diags),
+                    Err(diags) => return refuse_in_src(diags),
                 }
             } else {
                 let id = to.unwrap();
@@ -2025,10 +2034,9 @@ fn cmd_morph(rest: &[String]) -> i32 {
                 }
                 match m.render(fid, &src) {
                     Ok(text) => format!("//! morph: {}\n{text}", m.id),
-                    Err(diags) => return refuse(diags),
+                    Err(diags) => return refuse_in_src(diags),
                 }
             };
-            let _ = smap;
             print!("{out}");
             0
         }

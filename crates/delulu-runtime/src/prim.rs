@@ -39,23 +39,115 @@ fn normalize(p: &Path) -> PathBuf {
     out
 }
 
+/// Canonicalize `p`, or — when it does not exist yet — its nearest existing ancestor with the
+/// remaining components re-appended.
+///
+/// A write creates its file, and a granted directory may legitimately not exist until something
+/// makes it, so refusing every path that is not already on disk would refuse ordinary programs.
+/// Walking up to the deepest ancestor that *does* exist still resolves every link along the way,
+/// which is the part that matters: the components that remain are plain names the OS has not yet
+/// been asked to interpret.
+fn canonical_existing(p: &Path) -> Option<PathBuf> {
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return Some(c);
+    }
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = p;
+    loop {
+        let name = cur.file_name()?;
+        let parent = cur.parent()?;
+        tail.push(name.to_owned());
+        if let Ok(mut out) = std::fs::canonicalize(parent) {
+            for n in tail.iter().rev() {
+                out.push(n);
+            }
+            return Some(out);
+        }
+        cur = parent;
+    }
+}
+
+/// Whether `candidate` really lives under `root` **on the filesystem**, not merely lexically.
+///
+/// Campaign finding C84. The lexical test pops `.` and `..` without touching the disk, so it cannot
+/// see a symbolic link or a Windows directory junction *inside* the granted root. With a junction at
+/// `<grant>/link` pointing at a sibling, `read_text("link/crown.txt")` returned a file outside the
+/// grant and exited 0, while the lexically identical `../secret/crown.txt` was correctly refused —
+/// same file, same grant, opposite verdicts, decided by a link the check never resolved.
+///
+/// This was never an undocumented extra: `STAGE3_SPECIFICATION.md` §4.3 has always stated, as
+/// normative host-side law, "path canonicalization then prefix check (symlinks resolved host-side
+/// **before** the check)". The rule was written; only the code was missing.
+///
+/// Both sides are canonicalized so the comparison is between two resolved paths — necessary on
+/// Windows, where `canonicalize` returns a `\\?\` verbatim path that would never prefix-match a
+/// path that had not been through it. **Fails closed:** if either side cannot be resolved at all,
+/// the answer is `false` and the caller refuses.
+pub fn contains_on_disk(root: &Path, candidate: &Path) -> bool {
+    match (canonical_existing(root), canonical_existing(candidate)) {
+        (Some(r), Some(c)) => c.starts_with(&r),
+        _ => false,
+    }
+}
+
 /// Resolve `rel` inside a capability's filesystem scope, refusing escapes (DL0904).
+///
+/// Two gates, and the second is the one a link cannot walk past: the lexical check rejects `..`,
+/// then [`contains_on_disk`] rejects anything that *resolves* outside the root (C84).
 fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault> {
     let joined = normalize(&root.join(rel));
-    if joined.starts_with(root) {
+    if joined.starts_with(root) && contains_on_disk(root, &joined) {
         Ok(joined)
     } else {
         Err(Fault::at("DL0904", format!("path `{rel}` escapes the granted scope"), span))
     }
 }
 
+/// The host component of an `https://` URL, per RFC 3986's authority grammar.
+///
+/// Campaign finding C86. The old extraction split the authority on `/` or `:` and took the first
+/// field, so it never looked for `@` — and in RFC 3986 everything before the last `@` is *userinfo*,
+/// not the host. `https://example.com:8080@evil.com/steal` therefore yielded `example.com`, so a
+/// grant of `example.com` authorized a request whose real destination was `evil.com`, and the
+/// hash-chained audit record attested the wrong host. The bytes never left (v1.x ships no HTTP
+/// client), but the *decision* and the *record* were both wrong, which is the accountability the
+/// system sells.
+///
+/// Public so the custody gate cannot drift from it: `interp.rs` used to re-implement this parse so
+/// that "the broker's exact-set `net` check sees the same host string", which meant one bug in two
+/// places (design rule 1 — the answer is one function referenced by both sides, not two lists kept
+/// in step by hand).
+pub fn host_of(url: &str) -> &str {
+    let rest = url.strip_prefix("https://").unwrap_or(url);
+    // The authority component ends at the first `/`, `?` or `#`.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    // Userinfo is everything up to the LAST `@`; the host follows it.
+    let hostport = match authority.rfind('@') {
+        Some(i) => &authority[i + 1..],
+        None => authority,
+    };
+    // An IPv6 literal is bracketed, and its colons are not port separators.
+    if let Some(end) = hostport.strip_prefix('[').and_then(|r| r.find(']')) {
+        return &hostport[..end + 2];
+    }
+    hostport.split(':').next().unwrap_or(hostport)
+}
+
 fn host_allowed(url: &str, allow: &[String]) -> bool {
-    // Extract host from an https URL; match exact or `*.suffix` patterns.
-    let host = url.strip_prefix("https://").unwrap_or(url);
-    let host = host.split(['/', ':']).next().unwrap_or(host);
+    let host = host_of(url);
     allow.iter().any(|pat| {
         if let Some(suffix) = pat.strip_prefix("*.") {
-            host.ends_with(suffix)
+            // Campaign finding C85 — the dot boundary is the whole point. A bare `ends_with` let
+            // `*.example.com` match `evilexample.com`, which is a different registrable domain
+            // owned by somebody else. The project's sibling matcher for Python imports
+            // (`python::allowlist_allows`) already requires the separator, which is what makes this
+            // an omission rather than a design choice: two namespace matchers, one correct.
+            //
+            // The apex (`example.com` itself) is deliberately NOT matched by `*.example.com`; that
+            // is the ordinary reading of the pattern, and narrowing is the safe direction.
+            host.len() > suffix.len()
+                && host.ends_with(suffix)
+                && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
         } else {
             host == pat
         }
@@ -84,7 +176,14 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_read" => {
             let p = str_arg(args, 0, span)?;
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
-            match root.fs_read.iter().find(|granted| want.starts_with(granted.as_path())) {
+            // Both gates, for the same reason as `resolve_in_scope`: minting the capability
+            // *rooted at* a junction would otherwise put every later read lexically "inside" a
+            // scope that resolves somewhere else entirely (C84, the second door).
+            match root
+                .fs_read
+                .iter()
+                .find(|g| want.starts_with(g.as_path()) && contains_on_disk(g, &want))
+            {
                 Some(_) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false })),
                 None => Err(Fault::at("DL0703", format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"), span)),
             }
@@ -92,7 +191,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "fs_write" => {
             let p = str_arg(args, 0, span)?;
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
-            match root.fs_write.iter().find(|granted| want.starts_with(granted.as_path())) {
+            match root
+                .fs_write
+                .iter()
+                .find(|g| want.starts_with(g.as_path()) && contains_on_disk(g, &want))
+            {
                 Some(_) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true })),
                 None => Err(Fault::at("DL0703", format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"), span)),
             }

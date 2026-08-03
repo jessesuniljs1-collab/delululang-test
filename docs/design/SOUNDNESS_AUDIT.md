@@ -145,6 +145,46 @@ FFI or plugin surface that accepts DeluluLang function values.
 
 **Cost.** None.
 
+> **R-4 WAS REOPENED AND RE-CLOSED — hardening finding C82…C88, 2026-08-03. Read this before
+> relying on anything above.**
+>
+> Both enforcement clauses above were true and both were satisfied, and the rule was still
+> fail-open for four months, because they constrain *the primitive table* and *a corpus of
+> laundering programs* — and the defect was in neither. The **enforcement site** read:
+>
+> ```rust
+> if is_higher_order_method(&rt, &name.name) {
+>     if let Some((Type::Fn { row, .. }, _)) = arg_tys.first() { acc.add_row(&r); }
+> }                                        // ^ no `else`: any other shape drops the row silently
+> ```
+>
+> An argument whose type is a **bare type parameter** is not syntactically `Type::Fn`, so the arm
+> did not match and the callback's row was discarded — and a discarded row is an empty row. Nine
+> lines were enough:
+>
+> ```delulu
+> fn go[T](xs: List[Int], f: T) -> Int { let ys = xs.map(f)  1 }
+> fn main(root: Root) { let out = root.console()
+>   let n = go([1], fn(x: Int) -> Int ! {Write} { out.println("EFFECT ESCAPED"); x }) }
+> ```
+>
+> `delulu check` said **checked clean**; `delulu authority` said **"effects: (none — provably
+> pure)"** and listed `go` and `main` under **pure fns**; `delulu why Write` said **"program cannot
+> perform `Write`"**; and `delulu run --grant console` **printed**. That is verbatim the §D claim
+> negated: a runtime effect in no static row on the stack. The same door reopened **R-2**, because
+> `Secret.map` had the identical skip branch — a plaintext secret was printed with no `Declassify`
+> effect and no `Cap[Declassify]` anywhere, from a function this report called pure.
+>
+> **Now closed** by making the unknown case *refuse* (DL0401) rather than assume purity, at both
+> sites. The reasoning is R-3's own: rows unify by **equality** and there is no subsumption, so a
+> row the checker cannot determine is not `{}` — it is unknown, and a builtin that will *invoke*
+> the value may not assume the pure case.
+>
+> **The lesson, recorded because it generalizes:** every clause of this audit constrains a *rule*,
+> and a rule can be correct while the *branch that fires when the checker cannot tell* is missing.
+> An audit of the rules cannot find that. Only the question "what does this do when it does not
+> know?" finds it — the project's skip-branch discipline, which existed and was not applied here.
+
 ### F-5 · HOLE — generic builtins launder `Secret` (and would launder `Cap`)
 
 `str(x)` was specified generically. `Secret[T]` forbids coercion to `T`, but stringification *is*
@@ -247,6 +287,19 @@ Sketch, by induction on evaluation:
 
 Assumptions carried (never to be dropped from documentation): compiler/runtime/table correctness,
 single-threaded Stage 1, no FFI, sandbox and hardware trust per Constitution §5.14.
+
+**Status of this argument, stated plainly.** It is a *design-level* argument, written by hand, and
+it was **wrong in practice from Stage 1 until 2026-08-03** — not because a step of it is invalid,
+but because step 2 ("T-Call puts `row(callee)` into the caller's inferred row") assumes the checker
+*has* `row(callee)`, and at higher-order builtins it silently did not when the argument's type was
+a bare type parameter (see the R-4 box above). The sketch is sound; the implementation had a hole
+the sketch could not see, and no amount of re-reading the sketch would have found it.
+
+This is the strongest available argument for why "Delulu Core" — the mechanized proof this document
+has promised since Stage 2 — is **not optional and not yet done.** A hand proof of the rules cannot
+tell you which branch the implementation forgot to write. Until that mechanization exists, the
+honest claim is: *the rules are believed sound, the implementation is tested against them, and the
+tests are the actual guarantee.*
 
 ## E. New test obligations (added to the laundering suite)
 

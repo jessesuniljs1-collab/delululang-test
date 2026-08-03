@@ -22,7 +22,7 @@ From 1.0, the following are stable. A breaking change to any of them requires a 
 | **JSON schemas** | Versioned and **additive**. Fields may be added; existing fields never change type or meaning. Consumers must ignore unknown fields. |
 | **DIR major version** | A DIR the toolchain accepts today it accepts tomorrow, within the same major. |
 | **`delulu:cap` / broker protocol majors** | Wire compatibility within a major. |
-| **CLI exit codes** | `0` success, `1` diagnostics/failure, `2` usage error. A command's exit code for a given outcome does not change. |
+| **CLI exit codes** | `0` success, `1` diagnostics/failure, `2` usage error, and `3` for an `--assert-trace` violation only. A command's exit code for a given outcome does not change. `3` is deliberately its own code because an effect-trace assertion failing is a *compiler-bug-class* event, not an ordinary diagnostic, and a harness must be able to tell those apart without parsing text (`STAGE2_SPECIFICATION.md` §320/§470). It was missing from this table until campaign finding C91 — the behavior was specified and tested, the normative contract just did not list it, so a machine reading only this page would have treated a real signal as out of contract. |
 | **Manifest and lockfile formats** | Additive. A lockfile written by 1.x is readable by every later 1.y. |
 | **Catalog key space** | A message key, once shipped, keeps its meaning and its placeholder set. |
 | **The welcome text** | Byte-exact (Stage 8 pinned it). It is not "prose" for the purposes of §2 below. |

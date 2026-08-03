@@ -1554,9 +1554,59 @@ impl<'a> Checker<'a> {
         // surface that argument's effect row into the caller. Without this, an effectful lambda
         // passed to `map` inside a "pure" function would escape the row entirely.
         if is_higher_order_method(&rt, &name.name) {
-            if let Some((Type::Fn { row, .. }, _)) = arg_tys.first() {
-                let r = self.cx.apply_row(row);
-                acc.add_row(&r);
+            match arg_tys.first() {
+                Some((Type::Fn { row, .. }, _)) => {
+                    let r = self.cx.apply_row(row);
+                    acc.add_row(&r);
+                }
+                // FAIL CLOSED — campaign finding C88, and the single worst defect this campaign
+                // found. This used to be an `if let` with no `else`: when the argument's type was
+                // not *syntactically* a function the row was silently dropped, and "silently
+                // dropped" means treated as pure.
+                //
+                // A bare type parameter is enough to reach it, because a rigid generic can never be
+                // known to be a function:
+                //
+                //     fn go[T](xs: List[Int], f: T) -> Int { let ys = xs.map(f)  1 }
+                //     go([1], fn(x: Int) -> Int ! {Write} { out.println("escaped"); x })
+                //
+                // That program checked clean, `delulu authority` reported "(none — provably pure)"
+                // and listed `go` and `main` under "pure fns", `delulu why Write` answered "program
+                // cannot perform `Write`" — and it printed at run time. Verbatim the F-3/F-4 exploit
+                // `SOUNDNESS_AUDIT.md` calls a total soundness failure, reopened through the one
+                // branch the law was never written for.
+                //
+                // R-3's discipline is that rows unify by EQUALITY and there is no subsumption: a row
+                // the checker cannot determine is therefore not `{}`, it is unknown, and a builtin
+                // that will *invoke* this value cannot be allowed to assume the pure case. This is
+                // the project's own skip-branch rule — write the "what if the checker could not
+                // tell" case before claiming the law holds.
+                //
+                // `Secret.map` is deliberately excluded: it has its own arm below that refuses the
+                // same shape with a message tuned to secrets, and reporting both would give two
+                // diagnostics for one mistake. `exactly_one_diagnostic_for_an_unknown_row_on_secret_map`
+                // pins that, so the exclusion cannot rot into a silent gap if that arm ever moves.
+                Some((other, aspan)) if !matches!(rt, Type::Secret(_)) => {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0401",
+                            format!(
+                                "argument type mismatch: `{}` invokes its function argument, so that argument's \
+                                 effect row must be known here — found `{}`",
+                                name.name,
+                                self.ty(other)
+                            ),
+                        )
+                        .with_span(
+                            *aspan,
+                            "give this a function type with an explicit row; a bare type parameter \
+                             hides the row, and an unknown row cannot be assumed empty",
+                        ),
+                    );
+                }
+                // Arity is checked by the ordinary call rules; nothing to add here. The `Secret`
+                // receiver excluded above lands here too, and is refused by its own arm.
+                _ => {}
             }
         }
 
@@ -1965,12 +2015,22 @@ impl<'a> Checker<'a> {
                         }
                         Some((Type::Secret(ret), None, None))
                     }
-                    // An unresolved inference variable cannot be ruled on at this site; the taint
-                    // discipline (result stays `Secret`) holds regardless. Known static gap: a var
-                    // later resolving to an impure fn is not re-checked here.
-                    Some((Type::Var(_), _)) => Some((Type::Secret(inner.clone()), None, None)),
                     // A concrete non-function argument was the fail-open skip branch:
                     // `s.map(42)` checked clean before Stage 9a caught it.
+                    //
+                    // `Type::Var` now falls into this same arm (campaign finding C88). It used to
+                    // have its own arm, admitted on the reasoning that "the taint discipline (result
+                    // stays `Secret`) holds regardless" — which is true and does not help, because
+                    // the mapper is handed the PLAINTEXT and the leak happens inside it, before any
+                    // result exists to be tainted:
+                    //
+                    //     fn go[T](k: Secret[Str], f: T) -> Int { let m = k.map(f)  1 }
+                    //     go(k, fn(x: Str) -> Str ! {Write} { out.println("LEAK " + x); x })
+                    //
+                    // checked clean, reported "(none — provably pure)", and printed the live secret
+                    // with no `Declassify` effect and no `Cap[Declassify]` anywhere — so R-2 was
+                    // reopened as well as R-4. DL0603 is the gate for exactly this and it was
+                    // fail-open on the branch where the checker could not tell.
                     Some((other, aspan)) => {
                         self.diags.push(
                             Diagnostic::error(

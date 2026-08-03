@@ -225,10 +225,17 @@ impl Morph {
     /// lexer did not classify as a keyword — identifiers, literals, comments, whitespace, layout —
     /// is copied through byte-for-byte, so this cannot reflow, reorder, or reformat a program. Any
     /// lexical error in the input is returned rather than rendered around.
+    ///
+    /// Refuses (DL1715) when the source uses one of this morph's aliases as an identifier — see
+    /// [`Self::alias_collisions`] for why that is not a renderable program.
     pub fn render(&self, file: FileId, src: &str) -> Result<String, Vec<Diagnostic>> {
         let (tokens, diags) = crate::lexer::lex(file, src);
         if diags.iter().any(|d| d.is_error()) {
             return Err(diags);
+        }
+        let collisions = self.alias_collisions(file, src, &tokens);
+        if !collisions.is_empty() {
+            return Err(collisions);
         }
         let mut edits: Vec<(usize, usize, &str)> = Vec::new();
         for t in &tokens {
@@ -241,12 +248,75 @@ impl Morph {
         Ok(splice(src, &edits))
     }
 
+    /// Every place canonical `src` uses one of this morph's aliases as a name (DL1715).
+    ///
+    /// **Under a morph, the aliases ARE the keywords.** So they are reserved in the morphed surface
+    /// for exactly the reason `if` is reserved in the canonical one, and a program that names a
+    /// variable `T` cannot be written in a morph where `T` means `type` — any more than it could
+    /// name one `if`. Rendering such a program is not a lossy conversion to warn about; it is not a
+    /// conversion at all.
+    ///
+    /// Without this check `render` emitted the name unchanged (identifiers are copied byte-for-byte)
+    /// and [`Self::to_canonical`] then lexed it as the keyword and spliced the canonical spelling
+    /// over it — so `canonical → morph → canonical` silently turned `let T = 41` into
+    /// `let type = 41`, destroying the program while both commands reported success. The identity
+    /// law in `SYNTAX_MORPH_SPEC.md` §1 held only for programs that happened not to do this, and the
+    /// round-trip property test enumerated the *prefix* hazard (`fnord` under alias `f`) while
+    /// missing the *exact-match* one. Campaign finding C82.
+    ///
+    /// Keyed on every non-keyword token rather than on identifiers specifically: an alias is refused
+    /// wherever it would come back as a keyword, so this stays correct if the token set ever grows.
+    /// One diagnostic per distinct name, at its first occurrence, because a name used twenty times
+    /// is one decision for the author, not twenty.
+    fn alias_collisions(&self, file: FileId, src: &str, tokens: &[crate::token::Token]) -> Vec<Diagnostic> {
+        let mut seen: BTreeMap<&str, ()> = BTreeMap::new();
+        let mut out = Vec::new();
+        for t in tokens {
+            if t.kind.keyword_lexeme().is_some() {
+                continue;
+            }
+            let text = &src[t.span.start as usize..t.span.end as usize];
+            let Some((alias, _)) = self.alias_to_kind.iter().find(|(a, _)| a == text) else {
+                continue;
+            };
+            if seen.insert(text, ()).is_some() {
+                continue;
+            }
+            let canon = self
+                .canon_to_alias
+                .iter()
+                .find(|(_, a)| *a == alias)
+                .map(|(c, _)| c.as_str())
+                .unwrap_or("a keyword");
+            out.push(
+                Diagnostic::error(
+                    "DL1715",
+                    format!(
+                        "`{text}` is used as a name here, but morph `{}` renames the keyword `{canon}` to `{text}`",
+                        self.id
+                    ),
+                )
+                .with_span(
+                    Span::new(file, t.span.start, t.span.end),
+                    format!(
+                        "under this morph `{text}` is the keyword `{canon}`, so this name cannot be \
+                         written in it — rename it, or render to a morph that does not use `{text}`"
+                    ),
+                ),
+            );
+        }
+        out
+    }
+
     /// Render source written in this morph **back** to canonical.
     ///
     /// The mirror of [`Self::render`]: lex with the morph active (so aliases produce keyword tokens)
     /// and splice each keyword token's span with its canonical spelling. Because both directions
-    /// splice spans rather than re-print, `canonical → morph → canonical` is byte-identical for any
-    /// input that lexes — which is the identity law, and is asserted as a property test.
+    /// splice spans rather than re-print, `canonical → morph → canonical` is byte-identical — for
+    /// any input that lexes **and that `render` accepted**. That second condition is load-bearing
+    /// and was missing until C82: a program using an alias as a name lexes perfectly well in
+    /// canonical, and round-tripping it used to rewrite the name into a keyword. `render` now
+    /// refuses it (DL1715), so the identity law holds over exactly the inputs it is stated for.
     pub fn to_canonical(&self, file: FileId, src: &str) -> Result<String, Vec<Diagnostic>> {
         let (tokens, diags) = crate::lexer::lex_with_morph(file, src, Some(self));
         if diags.iter().any(|d| d.is_error()) {
@@ -491,7 +561,12 @@ mod tests {
         // The property the whole design rests on. Under a compact morph, PROGRAM's identifier
         // `fnord`, its string "fn let match return", and its comment must all appear verbatim in
         // the morphed output — only the keyword TOKENS move.
-        let m = morph(&[("fn", "f"), ("let", "l"), ("return", "r"), ("match", "m")]).unwrap();
+        // `match` is aliased to `mt`, not `m`: PROGRAM's module is named `m`, and under an `m`
+        // alias this program cannot be written at all (DL1715 — see the C82 witness below). That
+        // collision sat in this very test until C82 found it, invisible because this test renders
+        // one direction and asserts `contains`, while the test that round-trips used alias sets
+        // without `m`. Two tests straddled the defect.
+        let m = morph(&[("fn", "f"), ("let", "l"), ("return", "r"), ("match", "mt")]).unwrap();
         let out = m.render(0, PROGRAM).expect("render");
         assert!(out.contains("fnord"), "identifier must survive:\n{out}");
         assert!(out.contains("letter"), "identifier must survive:\n{out}");
@@ -530,6 +605,120 @@ mod tests {
         let src = "module m\nf foo() -> Int { 1 }\n";
         let canonical = m.to_canonical(0, src).expect("to_canonical");
         assert_eq!(canonical, "module m\nfn foo() -> Int { 1 }\n");
+    }
+
+    /// Campaign finding C82 — the witness, kept as the exact case that was silently corrupted.
+    #[test]
+    fn an_alias_used_as_a_name_is_refused() {
+        // PROGRAM's module is named `m`. Under a morph where `m` means `match`, rendering used to
+        // emit `module m` unchanged (names are copied byte-for-byte) and reading it back lexed that
+        // `m` as the KEYWORD — so canonical → morph → canonical rewrote the program while both
+        // directions reported success.
+        let m = morph(&[("match", "m")]).unwrap();
+        let e = m.render(0, PROGRAM).expect_err("a name that is an alias must be refused");
+        assert_eq!(e.iter().map(|d| d.code).collect::<Vec<_>>(), vec!["DL1715"]);
+        assert!(e[0].message.contains("`m`"), "must name the identifier: {}", e[0].message);
+        assert!(e[0].message.contains("match"), "must name the keyword: {}", e[0].message);
+    }
+
+    /// A name is reported once, however often it is used — one decision for the author.
+    #[test]
+    fn a_repeated_colliding_name_is_reported_once() {
+        let m = morph(&[("type", "T")]).unwrap();
+        let src = "module a\nfn g(T: Int) -> Int { T + T }\n";
+        let e = m.render(0, src).expect_err("must be refused");
+        assert_eq!(e.len(), 1, "one diagnostic per distinct name, got {e:#?}");
+    }
+
+    /// Whether an alias could collide is decided by the alias's SHAPE, so assert it over the whole
+    /// alias set rather than over a list of hazards someone has to remember to extend.
+    #[test]
+    fn every_identifier_shaped_alias_is_reserved_in_its_morph() {
+        // Identifiers here are ASCII alphanumeric/underscore, not digit-initial.
+        fn identifier_shaped(s: &str) -> bool {
+            !s.is_empty()
+                && !s.starts_with(|c: char| c.is_ascii_digit())
+                && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }
+        // Deliberately mixed: ASCII compact aliases CAN collide; CJK/emoji ones CANNOT, because
+        // identifiers are ASCII-only. Both halves must come out right.
+        let pairs: &[(&str, &str)] =
+            &[("fn", "F"), ("let", "L"), ("type", "T"), ("match", "函数"), ("if", "🤔")];
+        let m = morph(pairs).unwrap();
+        for (canon, alias) in pairs {
+            let src = format!("module a\nfn g({alias}: Int) -> Int {{ {alias} }}\n");
+            if identifier_shaped(alias) {
+                let e = m.render(0, &src).unwrap_err();
+                assert_eq!(
+                    e.iter().map(|d| d.code).collect::<Vec<_>>(),
+                    vec!["DL1715"],
+                    "alias {alias:?} for {canon:?} is identifier-shaped and must be reserved"
+                );
+            } else {
+                // Not identifier-shaped, so this source does not even lex as canonical — which is
+                // the reason such an alias is safe. Assert that, rather than asserting nothing.
+                assert!(
+                    crate::lexer::lex(0, &src).1.iter().any(|d| d.is_error()),
+                    "alias {alias:?} is not identifier-shaped, so it cannot appear as a name"
+                );
+            }
+        }
+    }
+
+    /// The identity law itself, not an enumeration of the hazards someone thought of.
+    ///
+    /// `SYNTAX_MORPH_SPEC.md` §1 promises `canonical → morph → canonical` is the identity. The old
+    /// gate proved that for ONE program against alias sets that happened not to collide with its
+    /// names (C82). This asserts the law over a matrix: for every program and every morph, render
+    /// must either REFUSE or round-trip byte-for-byte. A future hazard of a shape nobody predicted
+    /// still has to land in one of those two buckets, so this cannot go blind the same way.
+    #[test]
+    fn the_identity_law_holds_for_every_input_render_accepts() {
+        let morphs = [
+            vec![("fn", "F"), ("let", "L"), ("type", "T"), ("else", "E"), ("match", "M")],
+            vec![("fn", "f"), ("let", "l"), ("return", "r"), ("if", "i"), ("else", "e")],
+            vec![("fn", "函数"), ("let", "令"), ("return", "返回")],
+            vec![("fn", "🔧"), ("let", "📌")],
+        ];
+        let programs = [
+            PROGRAM,
+            // names that ARE aliases above — the C82 shape, in several positions
+            "module M\nfn g(T: Int) -> Int { let E = T\n E }\n",
+            "module a\nfn F() -> Int { 1 }\n",
+            // names that merely CONTAIN or PREFIX an alias — must round-trip, not be refused
+            "module a\nfn Fold(Length: Int) -> Int { let Ts = Length\n Ts }\n",
+            // keywords inside prose, which must never move
+            "module a\n// fn let type else match\nfn g() -> Str { \"fn let type\" }\n",
+        ];
+        let mut refused = 0usize;
+        let mut round_tripped = 0usize;
+        for pairs in &morphs {
+            let m = morph(pairs).unwrap();
+            for src in &programs {
+                match m.render(0, src) {
+                    Err(diags) => {
+                        assert!(
+                            diags.iter().all(|d| d.code == "DL1715"),
+                            "the only reason to refuse a lexing program is a name collision: {diags:#?}"
+                        );
+                        refused += 1;
+                    }
+                    Ok(morphed) => {
+                        let back = m.to_canonical(0, &morphed).expect("accepted render must read back");
+                        assert_eq!(
+                            &back, src,
+                            "identity law broken for morph {:?}\nmorphed was:\n{morphed}",
+                            m.id
+                        );
+                        round_tripped += 1;
+                    }
+                }
+            }
+        }
+        // Non-vacuity in BOTH directions: if nothing were refused the check would be dead, and if
+        // nothing round-tripped the law would be untested.
+        assert!(refused > 0, "no input was refused — the DL1715 check is not being exercised");
+        assert!(round_tripped > 0, "no input round-tripped — the identity law is not being tested");
     }
 
     #[test]

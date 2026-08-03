@@ -610,6 +610,21 @@ file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"
 kind = "positive"
 
+# DL0108 (campaign finding C89): characters that render as a line break and do not act as one.
+# The positive witness is the CRLF half of the same test — the rule must refuse the stray CR and
+# leave the ordinary Windows line ending alone, so a gate that simply refused every CR would fail.
+[[witness]]
+anchor = "ref.diag.DL0108"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "a_line_break_lookalike_hiding_code_in_a_comment_is_dl0108"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL0108"
+file = "crates/delulu-syntax/src/lexer.rs"
+test = "a_lone_cr_is_refused_but_crlf_is_a_normal_line_ending"
+kind = "positive"
+
 [[witness]]
 anchor = "ref.diag.DL0201"
 file = "crates/delulu/tests/conformance.rs"
@@ -2773,4 +2788,20 @@ kind = "negative"
 anchor = "ref.diag.DL1714"
 file = "crates/delulu/tests/cli.rs"
 test = "a_morph_round_trip_is_byte_identical_and_the_authority_report_does_not_move"
+kind = "positive"
+
+# DL1715 (campaign finding C82): under a morph the aliases ARE the keywords, so a program that
+# uses one as a name cannot be written in that morph. The positive witness is the identity law
+# itself — render must either refuse or round-trip byte-for-byte — so the refusal cannot be
+# "proved" by a gate that simply refuses everything.
+[[witness]]
+anchor = "ref.diag.DL1715"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "an_alias_used_as_a_name_is_refused"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1715"
+file = "crates/delulu-syntax/src/morph.rs"
+test = "the_identity_law_holds_for_every_input_render_accepts"
 kind = "positive"

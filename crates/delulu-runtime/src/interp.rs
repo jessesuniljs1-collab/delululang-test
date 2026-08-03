@@ -1871,11 +1871,15 @@ fn fs_scope_arg(scope: &CapScope, argvals: &[Value]) -> Option<String> {
     Some(prim::resolve_norm(root, &rel).to_string_lossy().to_string())
 }
 
-/// Extract the host from an `https://host[:port][/path]` URL, matching `prim::host_allowed`'s parse
-/// so the broker's exact-set `net` check sees the same host string.
+/// Extract the host from an `https://host[:port][/path]` URL, so the broker's exact-set `net` check
+/// sees the same host string the capability check used.
+///
+/// **Delegates** rather than re-implementing. This was a second copy of the parse, kept in step with
+/// `prim`'s by hand and by a comment — so when the parse turned out to mis-handle userinfo (C86),
+/// the authorization decision and the audit record were wrong in exactly the same way, in two
+/// places. Design rule 1: one function referenced by both sides.
 fn host_of(url: &str) -> String {
-    let host = url.strip_prefix("https://").unwrap_or(url);
-    host.split(['/', ':']).next().unwrap_or(host).to_string()
+    prim::host_of(url).to_string()
 }
 
 fn unwrap_fault(e: Escape) -> Fault {

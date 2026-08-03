@@ -111,6 +111,12 @@ pub fn render_human_localized(
 
     for ls in &d.spans {
         let span = ls.span;
+        // The span may name a file this map never loaded (C83). Skip the excerpt rather than
+        // indexing out of bounds — the message above has already been printed, so the reader still
+        // gets the diagnostic, and the command still exits with the code it chose.
+        if !map.has(span.file) {
+            continue;
+        }
         let (line, col) = map.position(span.file, span.start);
         let arrow = if ls.secondary { "---" } else { "-->" };
         let _ = writeln!(out, "  {} {}:{}:{}", arrow, map.name(span.file), line, col);
@@ -192,6 +198,27 @@ mod tests {
         let d = Diagnostic::error("DL0301", "unknown name `boom`")
             .with_span(Span::new(f, 14, 18), "not found in this scope");
         (map, d)
+    }
+
+    /// Campaign finding C83 — a span naming a file the map never loaded must degrade, not panic.
+    ///
+    /// This happens whenever the component that RAISES a diagnostic and the command that BUILDS the
+    /// source map disagree about which files are loaded, which they can only ever agree on by
+    /// convention. `delulu morph render` hit it for real: its map was empty because every morph
+    /// diagnostic had been spanless until DL1715 arrived with a span.
+    #[test]
+    fn a_span_naming_an_unloaded_file_is_skipped_not_panicked_on() {
+        let mut map = SourceMap::new();
+        map.add_file("src/main.delulu", "fn main() {}\n");
+        let d = Diagnostic::error("DL0501", "raised about a file this map never loaded")
+            .with_span(Span::new(7, 0, 4), "somewhere in a file we do not have");
+        let text = render_human(&d, &map);
+        assert!(text.contains("error[DL0501]"), "the message must still be rendered: {text}");
+        assert!(
+            text.contains("raised about a file this map never loaded"),
+            "the message must still be rendered: {text}"
+        );
+        assert!(!text.contains("-->"), "no source excerpt is possible, so none may be claimed: {text}");
     }
 
     #[test]

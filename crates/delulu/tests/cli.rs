@@ -782,6 +782,78 @@ fn a_morph_round_trip_is_byte_identical_and_the_authority_report_does_not_move()
     );
 }
 
+/// Campaign finding C82 — the identity law used to be false for the morphs aimed at agents.
+///
+/// A compact morph's aliases are short ASCII, and short ASCII words are also the most ordinary
+/// variable names there are. Rendering copied names through byte-for-byte, so `let T = 41` came out
+/// as `let T = 41`; reading it back lexed that `T` as the KEYWORD and spliced `type` over it. Both
+/// commands exited 0, and the program was destroyed in between. The shipped `compact-ai` profile
+/// aliases `type`→`T` and `else`→`E`, so this was reachable with the morphs in the box.
+#[test]
+fn rendering_a_program_that_uses_a_morph_alias_as_a_name_is_refused_not_corrupted() {
+    const COMPACT: &str = "[meta]\nmorph=\"cmp\"\nname=\"cmp\"\nversion=\"1.0.0\"\nkind=\"compact\"\n\
+        [keywords]\nfn=\"F\"\nlet=\"L\"\ntype=\"T\"\nelse=\"E\"\n";
+    let dir = with_morph_dir("delulu_morph_c82", &[("cmp.toml", COMPACT)]);
+    let canonical = "module demo\nfn main(root: Root) ! {Write} { let o = root.console()\n \
+        let T = 41\n let E = T + 1\n o.println(str(E)) }\n";
+    let cf = dir.join("canon.delulu");
+    std::fs::write(&cf, canonical).unwrap();
+
+    // The program itself is perfectly valid canonical DeluluLang — that is what made this bite.
+    let ok = delulu_with_morphs(&dir, &["check", cf.to_str().unwrap()]);
+    assert!(ok.status.success(), "the canonical program must be valid: {}", stderr(&ok));
+
+    let r = delulu_with_morphs(&dir, &["morph", "render", cf.to_str().unwrap(), "--to", "cmp"]);
+    assert_eq!(r.status.code(), Some(1), "must refuse, not succeed: {}", stdout(&r));
+    let err = stderr(&r);
+    assert!(err.contains("DL1715"), "{err}");
+    // Both colliding names are named, and each is tied to the keyword it would become.
+    assert!(err.contains("`T`") && err.contains("type"), "must name `T` and `type`: {err}");
+    assert!(err.contains("`E`") && err.contains("else"), "must name `E` and `else`: {err}");
+    assert!(stdout(&r).is_empty(), "nothing may be emitted for a refused render: {}", stdout(&r));
+
+    // Non-vacuity: the same morph renders and round-trips a program whose names do not collide, so
+    // the refusal above is about the collision and not about compact morphs being rejected wholesale.
+    let fine = "module demo\nfn main(root: Root) ! {Write} { let o = root.console()\n \
+        let n = 41\n o.println(str(n + 1)) }\n";
+    let ff = dir.join("fine.delulu");
+    std::fs::write(&ff, fine).unwrap();
+    let g = delulu_with_morphs(&dir, &["morph", "render", ff.to_str().unwrap(), "--to", "cmp"]);
+    assert!(g.status.success(), "a non-colliding program must still render: {}", stderr(&g));
+    let mf = dir.join("fine_cmp.delulu");
+    std::fs::write(&mf, stdout(&g)).unwrap();
+    let back = delulu_with_morphs(&dir, &["morph", "render", mf.to_str().unwrap(), "--to-canonical"]);
+    assert_eq!(stdout(&back), fine, "round-trip must be byte-identical");
+}
+
+/// Campaign finding C83 — the first morph diagnostic to carry a span crashed the CLI.
+///
+/// `delulu morph` rendered every diagnostic against an empty `SourceMap`, which was harmless only
+/// while all of them were spanless (DL1710–DL1714 are about a morph `.toml`, not about DeluluLang
+/// source). Nothing stated or enforced that invariant, so DL1715 arrived with a span into the file
+/// and the renderer indexed out of bounds. A crash is not a refusal.
+#[test]
+fn a_spanned_morph_diagnostic_renders_instead_of_crashing() {
+    const COMPACT: &str = "[meta]\nmorph=\"cmp\"\nname=\"cmp\"\nversion=\"1.0.0\"\nkind=\"compact\"\n\
+        [keywords]\ntype=\"T\"\n";
+    let dir = with_morph_dir("delulu_morph_c83", &[("cmp.toml", COMPACT)]);
+    let cf = dir.join("canon.delulu");
+    std::fs::write(&cf, "module demo\nfn g(T: Int) -> Int { T }\n").unwrap();
+
+    for extra in [vec![], vec!["--json"]] {
+        let mut args = vec!["morph", "render", cf.to_str().unwrap(), "--to", "cmp"];
+        args.extend(extra.iter().copied());
+        let o = delulu_with_morphs(&dir, &args);
+        let err = stderr(&o);
+        assert!(!err.contains("panicked"), "the CLI must not panic: {err}");
+        assert_eq!(o.status.code(), Some(1), "a refusal exits 1, a panic does not: {err}");
+        // The span must actually be resolved, not silently dropped: the fix was to hand the
+        // renderer the map that has the file, so the excerpt has to be there.
+        let shown = if extra.is_empty() { err } else { stdout(&o) };
+        assert!(shown.contains("canon.delulu"), "the span must name the file: {shown}");
+    }
+}
+
 #[test]
 fn a_morph_whose_alias_is_another_keyword_is_refused() {
     // DL1711 — the review attack. This morph is bijective and its alias is a single token, and a

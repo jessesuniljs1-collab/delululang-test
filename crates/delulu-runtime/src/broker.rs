@@ -164,9 +164,29 @@ impl Grants {
         }
         match spec.split_once('=') {
             Some((k, v)) => match k.trim() {
-                "fs.read" => self.fs_read.push(v.trim().to_string()),
-                "fs.write" => self.fs_write.push(v.trim().to_string()),
-                "net" => self.net.push(v.trim().to_string()),
+                // Campaign finding C87. An EMPTY value is refused here exactly as the five keys
+                // below already refuse it. `--grant fs.read=` is not an empty grant: the path is
+                // joined onto the working directory, and joining `""` yields the working directory
+                // itself — so a `--grant fs.read=$SHARE_DIR` with `SHARE_DIR` unset silently handed
+                // over the whole tree the command was run in. An unset variable is the ordinary way
+                // this happens, and it is silent in every shell.
+                "fs.read" | "fs.write" | "net" => {
+                    let val = v.trim();
+                    if val.is_empty() {
+                        let hint = if k.trim() == "net" { "HOST" } else { "PATH" };
+                        return Err(format!(
+                            "bad grant `{spec}` — the value is empty (use {}={hint}); an empty path \
+                             would grant the whole working directory, so it is refused rather than \
+                             guessed",
+                            k.trim()
+                        ));
+                    }
+                    match k.trim() {
+                        "fs.read" => self.fs_read.push(val.to_string()),
+                        "fs.write" => self.fs_write.push(val.to_string()),
+                        _ => self.net.push(val.to_string()),
+                    }
+                }
                 // `foreign.c=LOGICAL:PATH` — split on the FIRST colon only, so a Windows path like
                 // `mathlib:C:\lib\libm.dll` keeps its drive-letter colon (spec §4.1). A bare name
                 // (`mathlib:libm.dll`) resolves via the OS loader rules at bind time.

@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 145 of 145 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 147 of 147 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -21,6 +21,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0105` | unterminated block comment | `ref.diag.DL0105` | covered |
 | `DL0106` | reserved word used as a declared name | `ref.diag.DL0106` | covered |
 | `DL0107` | bidirectional control character in source | `ref.diag.DL0107` | covered |
+| `DL0108` | line-break-like character in source (renders as a new line, does not act as one) | `ref.diag.DL0108` | covered |
 | `DL0201` | expected a different token | `ref.diag.DL0201` | covered |
 | `DL0202` | expected an expression | `ref.diag.DL0202` | covered |
 | `DL0203` | expected a type | `ref.diag.DL0203` | covered |
@@ -135,6 +136,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1712` | morph alias is not a single valid token | `ref.diag.DL1712` | covered |
 | `DL1713` | morph renames something that is not a renameable keyword | `ref.diag.DL1713` | covered |
 | `DL1714` | the requested morph is not available | `ref.diag.DL1714` | covered |
+| `DL1715` | the program uses one of the target morph's aliases as a name | `ref.diag.DL1715` | covered |
 | `DL1780` | atlas refused: the program has check errors — fix them first (no partial graph) | `ref.diag.DL1780` | covered |
 | `DL1781` | custody overlay unavailable — the broker daemon is not reachable; atlas emitted without it | `ref.diag.DL1781` | covered |
 | `DL1790` | invalid theme name or malformed theme.toml — using the `default` theme | `ref.diag.DL1790` | covered |
