@@ -7,9 +7,15 @@ license.workspace = true
 authors.workspace = true
 
 # NOT a crates.io library. `STABILITY.md` §2: the Rust crates are an implementation
-# detail; the stable interface is the language, the CLI and the machine schemas. Only the
-# CLI publishes, so `cargo install delulu` works and nothing else acquires a semver
-# contract the stability document disclaims.
+# detail; the stable interface is the language, the CLI and the machine schemas. Only the CLI is
+# publishABLE -- and it is not actually publishABLE in practice: `cargo publish -p delulu` fails
+# with "all dependencies must have a version requirement specified when publishing", because it
+# depends on crates like this one by `path` alone. That is exactly the argument `INSTALL.md`
+# section 3 makes for why `cargo install delulu` from crates.io is not offered, and
+# `tests/distribution.rs` pins it from both sides. (This comment previously claimed
+# "`cargo install delulu` works", which contradicted INSTALL.md -- corrected in campaign P17-F
+# after verifying the failure with `--dry-run`.) Distribution is the archive from
+# `scripts/package-toolchain.sh`; from source, `cargo install --path crates/delulu`.
 publish = false
 
 [package.metadata.delulu]

@@ -6,6 +6,18 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+# DELIBERATELY the only crate WITHOUT `publish = false`, and that is load-bearing rather than an
+# oversight: `INSTALL.md` §3's argument is that `cargo install delulu` from crates.io cannot work
+# *because* the CLI's eight sibling dependencies are all `publish = false` and carry no version
+# requirement. `tests/distribution.rs` pins the posture from both sides — one test asserts exactly
+# one crate is publishable, another asserts no document ever PROMISES that install path.
+#
+# Verified rather than assumed (P17-F): `cargo publish -p delulu --dry-run` fails with
+#   "all dependencies must have a version requirement specified when publishing"
+# which is precisely the state §3 describes. Publishable in posture, unpublishable in fact, and
+# documented as such. Distribution is `scripts/package-toolchain.sh`; from source it is
+# `cargo install --path crates/delulu`.
+
 [package.metadata.delulu]
 # Part of the language product: what a user of DeluluLang runs or depends on.
 surface = "language"

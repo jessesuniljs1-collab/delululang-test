@@ -521,3 +521,51 @@ nothing collides, and every other conditional puts macOS on a branch Linux or Wi
 a reading of the source. A path that *should* work and a path that *has been run* are different claims,
 and this project does not get to blur them merely because the reading was careful. Every macOS cell in
 §2 and §8 still reads **never run**, and will until someone runs it on a Mac.
+
+---
+
+## Re-verified 2026-08-03 — the P17 proof campaign, every phase
+
+| Gate | Windows (native) | Linux (WSL) | macOS |
+|---|---|---|---|
+| `cargo test --workspace` | **117 suites, 1526 passed, 0 failed** | **117 suites, 1532 passed, 0 failed** | **never executed** |
+| **CLI + compiler sweep** | **22/22, 0 problems** | **22/22, 0 problems** | — |
+| clippy (findings, summary lines excluded) | **14** (baseline) | — | — |
+| `cargo deny` bans / licenses / sources | ok / ok / ok | ok / ok / ok | — |
+| `cargo deny` advisories | **RED — 4 reachable, named** | same | — |
+
+The 6-test difference is the same platform delta [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
+
+### The sweep is a script now, so this row means something
+
+Previous passes recorded "CLI + compiler sweep 21/21" from a sequence of commands run **by hand**.
+That is a claim only as good as the transcript, and it is precisely the hand-maintained procedure
+design rule 1 says will drift. It is now `scripts/cli-sweep.sh` — 22 cases, each asserting an exact
+exit code, runnable by anyone:
+
+```sh
+scripts/cli-sweep.sh                       # uses target/debug/delulu
+scripts/cli-sweep.sh /path/to/delulu       # or an explicit binary
+```
+
+Writing it immediately caught two errors *in the sweep itself* that the hand version had been
+carrying: two package cases that passed unconditionally, and a bare `delulu test` where the scaffold
+prints `delulu test .`. **A sweep that cannot fail is not a sweep.** Both are fixed and the script
+now refuses the bare form as a usage error (exit 2) as a case in its own right.
+
+### macOS, for this pass specifically
+
+Unchanged and unchangeable without hardware: **never executed, not once.** What the P17 changes add
+to the earlier readiness audit:
+
+- `harden_wasm_features` uses only `wasmtime::Config` methods that exist on every platform, with no
+  `cfg`. macOS would take the identical path.
+- The zeroization change uses `std::ptr::write_volatile` and `std::sync::atomic::compiler_fence` —
+  both `std`, both platform-independent, no conditional compilation.
+- `scripts/cli-sweep.sh` is POSIX `sh` and takes an explicit binary path, so **it will run on macOS
+  the day there is a Mac** — the sweep is no longer a Windows/Linux-shaped procedure.
+- **RUSTSEC-2026-0096 deserves naming here.** It is a sandbox escape in wasmtime's aarch64 Cranelift
+  backend. Apple Silicon is aarch64. This project has never run on macOS *or* on any ARM target, so
+  it has never been exposed — but it ships source, and anyone building on an Apple Silicon Mac would
+  be. That is the first macOS-specific *security* consequence this document has had to record, and
+  it is recorded as an unverified exposure rather than a measured one.

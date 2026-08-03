@@ -69,8 +69,37 @@ changes released behaviour.
 verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
 reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
 
+### Security — supply chain and engine hardening (P17-F)
+
+- **There was no supply-chain gate at all.** `cargo deny` had never been run; there was no
+  `deny.toml`, and nothing in CI, the suite, or any script checked the tree against RustSec. The
+  first run reported **19 vulnerabilities and 2 unmaintained crates**. The CVEs were the symptom —
+  the absent gate was the defect. `deny.toml` now runs advisories/bans/licenses/sources, with a
+  falsifiable reason on every ignore, and the **4 reachable advisories deliberately NOT ignored**,
+  so `advisories` is red on purpose. Reachability triage: 14 of 19 cannot reach this project
+  (Winch, component model, WASI, pooling allocator — none used); the reachable ones are an aarch64
+  Cranelift sandbox escape (this project has never run on ARM but ships source), a
+  mix-type-indices-between-engines issue, and two pyo3 CVEs that are live in a **default** build.
+- **Fixed:** RUSTSEC-2026-0204 (crossbeam-epoch invalid pointer dereference) — 0.9.18 → 0.9.20,
+  semver-compatible.
+- **The WASM engine accepted features the compiler never emits.** `Config::new()` left SIMD,
+  threads, memory64 and the component model at wasmtime's defaults, so the engine would validate a
+  module using them — and it also runs `.dwx` plugin artifacts, which arrive as bytes. The file
+  already argued that `cranelift_opt_level` should be pinned explicitly "so it cannot silently
+  change"; the same argument now applies to the feature set. `harden_wasm_features` disables all
+  four on both the Stage-3 engine and the plugin store, with a test that proves the narrowing takes
+  effect — asserting a control first, that a stock engine *accepts* the same module.
+- **Secret zeroization could be optimized away.** `SecretVal::drop` used a plain `*b = 0` loop; a
+  non-volatile store to memory that is never read again is a dead store and the allocation is freed
+  immediately after, so LLVM may delete the whole loop. Now `write_volatile` + `compiler_fence`,
+  using `std` alone. Limit stated: it zeroes the current allocation only — not an earlier buffer
+  left by a `String` realloc, nor a copy made by `reveal`.
+
 ### Added
 
+- **`scripts/cli-sweep.sh`** — the CLI + compiler sweep as a reproducible script (22 cases, exact
+  exit codes). It had been performed by hand every pass, which is exactly the drift design rule 1
+  warns about. **Windows 22/22, Linux 22/22.**
 - **`docs/design/models/Broker.tla` — the custody grant tree is now MODEL-CHECKED.** TLA+/TLC v1.7.4
   explores **585,771 distinct states** of grant / delegate / revoke / expire and finds no violation
   of attenuation, revoke-covers-subtree, no-resurrection, inherited expiry, or audit

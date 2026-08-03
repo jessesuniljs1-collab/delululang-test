@@ -29,9 +29,41 @@ use wasmtime::{Caller, Config, Engine, Instance, Linker, Module, OptLevel, Store
 pub(crate) fn optimizing_engine() -> Engine {
     let mut config = Config::new();
     config.cranelift_opt_level(OptLevel::Speed);
+    harden_wasm_features(&mut config);
     // `Speed` is an always-valid level, so construction cannot fail on wasmtime 27; fall back to
     // the default engine rather than panic if a future wasmtime ever disagrees.
     Engine::new(&config).unwrap_or_default()
+}
+
+/// Turn off every WebAssembly proposal this backend does not emit (campaign P17-F).
+///
+/// # Why
+///
+/// The doc comment above pins `cranelift_opt_level` **explicitly** rather than inheriting
+/// wasmtime's default, so the tier "cannot silently change if a future wasmtime default does".
+/// That argument was never applied to the *feature set*, and the feature set is the larger
+/// attack surface: `Config::new()` leaves SIMD, threads, memory64 and the component model at
+/// wasmtime's defaults, so the engine happily **accepts** modules using them even though
+/// `codegen.rs` emits none of them (its only float instructions are `F64Const`, `F64Load`,
+/// `F64ReinterpretI64` and `F64Store` — no `v128` anywhere).
+///
+/// That gap is not theoretical. `cargo deny check advisories` on the pinned wasmtime 27 reports
+/// several vulnerabilities in exactly these proposals, including
+/// **RUSTSEC-2026-0087** (`f64x2.splat` on Cranelift x86-64: segfault or out-of-sandbox load) and
+/// the component-model string-transcoding family (0091/0092/0093). "Our compiler does not emit it"
+/// is a fact about *our* front end; the engine also runs `.dwx` plugin artifacts, which arrive as
+/// bytes. Refusing the feature at validation is the fail-closed version of the same claim.
+///
+/// This narrows what the engine accepts. It cannot widen it, so it can only ever turn a program
+/// that would have run into one that is refused — and no program this compiler produces uses any
+/// of these. `hardened_engine_refuses_a_simd_module` proves the setting actually takes effect
+/// rather than being silently dropped by `unwrap_or_default()`.
+pub(crate) fn harden_wasm_features(config: &mut Config) {
+    config.wasm_simd(false);
+    config.wasm_relaxed_simd(false);
+    config.wasm_threads(false);
+    config.wasm_memory64(false);
+    config.wasm_component_model(false);
 }
 
 // Stage 7 phase 7h: the WASM engine's cooperative single-threaded actor scheduler (spec §6.5).
@@ -1218,4 +1250,93 @@ fn poison(store: &mut Store<HostState>, slot: u64) {
 /// Back-compat convenience: run `main` with only the console grant (no clock/rand, wall clock).
 pub fn run_main_console(wasm: &[u8], console_granted: bool) -> Result<String, WasmError> {
     run_main(wasm, &HostConfig { console: console_granted, ..HostConfig::default() })
+}
+
+#[cfg(test)]
+mod feature_hardening_tests {
+    use super::*;
+    use wasm_encoder::{CodeSection, Function, FunctionSection, Instruction, Module as WasmModule, TypeSection};
+
+    /// A minimal but VALID module whose body uses `f64x2.splat` — the exact instruction named by
+    /// RUSTSEC-2026-0087 (Cranelift x86-64: segfault or out-of-sandbox load).
+    fn simd_module() -> Vec<u8> {
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        let mut funcs = FunctionSection::new();
+        funcs.function(0);
+        let mut code = CodeSection::new();
+        let mut f = Function::new([]);
+        f.instruction(&Instruction::F64Const(1.0));
+        f.instruction(&Instruction::F64x2Splat);
+        f.instruction(&Instruction::Drop);
+        f.instruction(&Instruction::End);
+        code.function(&f);
+        let mut m = WasmModule::new();
+        m.section(&types);
+        m.section(&funcs);
+        m.section(&code);
+        m.finish()
+    }
+
+    /// The hardening must actually take effect. `optimizing_engine` ends in
+    /// `Engine::new(&config).unwrap_or_default()`, so a config wasmtime rejected would silently
+    /// fall back to the DEFAULT engine — which still accepts SIMD. Without this test, the
+    /// narrowing could be a no-op and nothing would say so.
+    #[test]
+    fn hardened_engine_refuses_a_simd_module() {
+        let wasm = simd_module();
+
+        // Control FIRST: a stock engine accepts it. This proves the module is well-formed and that
+        // any refusal below comes from our configuration, not from a malformed test fixture.
+        let stock = Engine::default();
+        assert!(
+            wasmtime::Module::new(&stock, &wasm).is_ok(),
+            "the fixture must be VALID wasm on a default engine, otherwise the refusal below \
+             proves nothing about the hardening"
+        );
+
+        // The real assertion. A `match` rather than `expect_err`, because `wasmtime::Module` is not
+        // `Debug` and `expect_err` requires it.
+        let hardened = optimizing_engine();
+        let err = match wasmtime::Module::new(&hardened, &wasm) {
+            Ok(_) => panic!(
+                "the hardened engine must REFUSE a SIMD module — if this passes, \
+                 harden_wasm_features was silently dropped by unwrap_or_default()"
+            ),
+            Err(e) => e,
+        };
+        let msg = format!("{err:#}").to_lowercase();
+        assert!(
+            msg.contains("simd") || msg.contains("not enabled") || msg.contains("disabled"),
+            "expected a feature-disabled validation error, got: {err:#}"
+        );
+    }
+
+    /// Narrowing may not break what the compiler actually emits. `codegen.rs`'s float instructions
+    /// are `F64Const`/`F64Load`/`F64ReinterpretI64`/`F64Store`; a scalar-float module must still
+    /// validate on the hardened engine.
+    #[test]
+    fn hardened_engine_still_accepts_scalar_float_code() {
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        let mut funcs = FunctionSection::new();
+        funcs.function(0);
+        let mut code = CodeSection::new();
+        let mut f = Function::new([]);
+        f.instruction(&Instruction::F64Const(1.5));
+        f.instruction(&Instruction::Drop);
+        f.instruction(&Instruction::End);
+        code.function(&f);
+        let mut m = WasmModule::new();
+        m.section(&types);
+        m.section(&funcs);
+        m.section(&code);
+        let wasm = m.finish();
+
+        let hardened = optimizing_engine();
+        assert!(
+            wasmtime::Module::new(&hardened, &wasm).is_ok(),
+            "scalar f64 is what codegen emits and must keep validating"
+        );
+    }
 }

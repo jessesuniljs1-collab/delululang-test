@@ -583,15 +583,33 @@ impl SecretVal {
 
 impl Drop for SecretVal {
     fn drop(&mut self) {
-        // Best-effort zeroization of any in-process bytes. A daemon handle holds none — the broker
-        // owns the bytes (invariant 23).
+        // Zeroization of any in-process bytes. A daemon handle holds none — the broker owns the
+        // bytes (invariant 23).
+        //
+        // P17-F: this loop used to be a plain `*b = 0`, which the compiler is entitled to DELETE.
+        // A non-volatile store to memory that is never read again is a dead store, and the
+        // allocation is freed on the next line — so LLVM may remove the whole loop and the secret
+        // stays in the freed heap block. "Best-effort" understated it: the effort could be zero,
+        // and nothing in the build would say so. This is exactly why the `zeroize` crate exists.
+        //
+        // `write_volatile` may not be elided, and the fence stops the write being sunk past the
+        // deallocation. `std` alone is enough here, so this adds no dependency (`zeroize` is
+        // already in the tree via ml-dsa/ml-kem, but only for THEIR key material).
+        //
+        // Still honest about the limit: this zeroes the CURRENT allocation only. Any earlier
+        // buffer left behind by a `String` reallocation, and any copy made by `reveal`, is not
+        // reachable from here and is not zeroed. Zeroization bounds exposure; it does not
+        // eliminate it.
         if let SecretInner::Local(v) = &self.inner {
             let mut v = v.borrow_mut();
-            unsafe {
-                for b in v.as_bytes_mut() {
-                    *b = 0;
-                }
+            // SAFETY: writing 0 preserves the UTF-8 invariant (NUL is valid UTF-8), and the
+            // `String` is dropped immediately afterwards regardless.
+            let bytes = unsafe { v.as_bytes_mut() };
+            for b in bytes.iter_mut() {
+                // SAFETY: `b` is a valid, aligned, uniquely-borrowed `u8` from the slice above.
+                unsafe { std::ptr::write_volatile(b, 0) };
             }
+            std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
         }
     }
 }

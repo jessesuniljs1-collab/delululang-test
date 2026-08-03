@@ -1,0 +1,100 @@
+# cargo-deny configuration — the supply-chain gate (campaign P17-F).
+#
+#   cargo deny check advisories bans licenses sources
+#
+# WHY THIS FILE EXISTS: until 2026-08-03 this repository had NO advisory gate of any kind — nothing
+# in CI, in the test suite, or in a script checked the dependency tree against RustSec. The first
+# run reported **19 vulnerabilities and 2 unmaintained crates**. The CVEs were the symptom; the
+# absence of a gate was the defect, because it let them accumulate silently.
+#
+# Every `ignore` below carries a REASON stating why the advisory cannot reach this project, and
+# each is falsifiable — if the reason stops being true, the entry is wrong and must be removed.
+# Advisories that ARE reachable are deliberately NOT ignored, so this gate is currently RED. A gate
+# that is green because the failures were silenced would be worse than no gate.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+ignore = [
+    # ---- wasmtime: Winch backend ------------------------------------------------------------
+    # `host.rs::optimizing_engine` pins `cranelift_opt_level(OptLevel::Speed)` and the crate
+    # compiles every module with Cranelift. Winch is never selected, in either the Stage-3 engine
+    # or the plugin store (`limits.rs`).
+    { id = "RUSTSEC-2026-0086", reason = "Winch 64-bit tables — Cranelift only; memory64 also disabled by harden_wasm_features" },
+    { id = "RUSTSEC-2026-0089", reason = "Winch table.fill — Cranelift only" },
+    { id = "RUSTSEC-2026-0094", reason = "Winch table.grow — Cranelift only" },
+    { id = "RUSTSEC-2026-0095", reason = "Winch sandbox escape — Cranelift only" },
+
+    # ---- wasmtime: component model ----------------------------------------------------------
+    # Refused at validation by `harden_wasm_features` (`wasm_component_model(false)`), and the
+    # backend emits core wasm only. Proven by `hardened_engine_refuses_a_simd_module`, which shows
+    # the narrowing actually takes effect rather than being dropped by `unwrap_or_default()`.
+    { id = "RUSTSEC-2026-0085", reason = "component model — disabled in Config; core wasm only" },
+    { id = "RUSTSEC-2026-0091", reason = "component model string transcoding — disabled in Config" },
+    { id = "RUSTSEC-2026-0092", reason = "component model UTF-16 transcoding — disabled in Config" },
+    { id = "RUSTSEC-2026-0093", reason = "component model UTF-16/latin1 transcoding — disabled in Config" },
+
+    # ---- wasmtime: WASI ---------------------------------------------------------------------
+    # No WASI is linked. `dpx.rs` refuses `wasi_snapshot_preview1` imports outright (DL1505), with
+    # a test named `dl1505_wasi_by_the_back_door_is_refused`.
+    { id = "RUSTSEC-2025-0046", reason = "WASIp1 fd_renumber — no WASI linked; wasi imports are DL1505" },
+    { id = "RUSTSEC-2026-0020", reason = "WASI resource exhaustion — no WASI linked" },
+    { id = "RUSTSEC-2026-0021", reason = "wasi:http types.fields — no WASI, no wasi:http" },
+
+    # ---- wasmtime: features this backend disables -------------------------------------------
+    { id = "RUSTSEC-2026-0087", reason = "f64x2.splat on Cranelift x86-64 — SIMD disabled by harden_wasm_features and codegen emits no v128; refusal is tested" },
+    { id = "RUSTSEC-2025-0118", reason = "shared linear memory — threads disabled in Config; threaded WASM is deferred (THREADED_WASM_DEFERRAL.md)" },
+    { id = "RUSTSEC-2026-0088", reason = "pooling allocator data leakage — Config::new() uses the on-demand allocator; pooling is never enabled" },
+
+    # ---- unmaintained, transitive -----------------------------------------------------------
+    # Both arrive through wasmtime and cannot be dropped without replacing it. Informational: an
+    # unmaintained crate is a maintenance risk, not a known vulnerability.
+    { id = "RUSTSEC-2025-0057", reason = "fxhash unmaintained — transitive via wasmtime -> fxprof-processed-profile; no fix without a wasmtime major bump" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — transitive; no known vulnerability" },
+]
+
+# ---------------------------------------------------------------------------------------------
+# DELIBERATELY NOT IGNORED — these are REACHABLE and this gate stays red until they are fixed:
+#
+#   RUSTSEC-2026-0096  wasmtime: miscompiled guest heap access -> sandbox escape on aarch64
+#                      Cranelift. This project has never executed on aarch64 (macOS has never been
+#                      run at all), but it SHIPS SOURCE, so anyone building on Apple Silicon or an
+#                      ARM server is exposed. Fix requires wasmtime >= 36.0.13 — a major bump from
+#                      the pinned 27, which would touch the whole WASM backend and its two-engine
+#                      differential. Not attempted blind.
+#
+#   RUSTSEC-2026-0222  wasmtime: stores can mix up type indices BETWEEN ENGINES. This crate
+#                      constructs more than one `Engine` (`host::optimizing_engine`,
+#                      `dpx.rs` `Engine::default()`, and a fresh engine per plugin run in
+#                      `limits.rs`), so the precondition is present. Same wasmtime bump.
+#
+#   RUSTSEC-2026-0176  pyo3: out-of-bounds read in `nth`/`nth_back` for PyList/PyTuple iterators.
+#   RUSTSEC-2026-0177  pyo3: missing `Sync` bound on `PyCFunction::new_closure`.
+#                      REACHABLE IN A DEFAULT BUILD — `python` is a default feature of
+#                      delulu-runtime. `cargo build --no-default-features` avoids both. Fix needs
+#                      pyo3 >= 0.29 from the pinned 0.25, four minor versions with API breaks.
+#
+# FIXED THIS PASS: RUSTSEC-2026-0204 (crossbeam-epoch invalid pointer deref) — updated 0.9.18 ->
+# 0.9.20, semver-compatible, no code change.
+# ---------------------------------------------------------------------------------------------
+
+[bans]
+multiple-versions = "allow"   # wasmtime's tree legitimately carries duplicates; not a security gate
+wildcards = "deny"            # a `*` version requirement from a REGISTRY is an unpinned hole
+# The workspace's own crates depend on each other by `path` with no version requirement, which
+# cargo-deny reads as a wildcard. That is not a supply-chain risk: a path dependency resolves to the
+# checkout, never to a registry, so there is no unpinned third party to substitute. Registry
+# wildcards remain denied, which is the case the rule is actually for.
+allow-wildcard-paths = true
+
+[licenses]
+version = 2
+# Apache-2.0 is the project's own licence; the rest are the permissive set its dependency tree uses.
+allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0"]
+confidence-threshold = 0.9
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -501,7 +501,101 @@ each family appears in 4,000 draws and that the C88 shape is predicted `DL0401`,
 - **Finding nothing is not proof.** It is now evidence over a grammar that *contains* the historical
   failures, which is strictly more than before — and strictly less than a proof.
 
-## 8. Method note — why exhaustive enumeration replaced spot-checks
+## 8. Supply chain and engine hardening (P17-F)
+
+### The gate that did not exist
+
+`cargo deny check advisories` had **never been run**. There was no `deny.toml`, and nothing in CI,
+the test suite, or any script checked the dependency tree against RustSec. The first run reported
+**19 vulnerabilities and 2 unmaintained crates**.
+
+**The CVEs are the symptom; the absent gate is the defect** — it is what let them accumulate
+silently. `deny.toml` now exists and runs all four checks.
+
+### Triage, by reachability rather than by count
+
+"19 CVEs" is a number that panics rather than informs. Each was traced against what this project
+actually compiles:
+
+| Class | Count | Reachable? |
+|---|---|---|
+| Winch backend | 4 | **No** — `host.rs:16-31` pins Cranelift for every module |
+| Component model | 4 | **No** — core wasm only, and now refused in `Config` |
+| WASI | 3 | **No** — `wasi_snapshot_preview1` imports are DL1505 (`dpx.rs`) |
+| Pooling allocator | 1 | **No** — `Config::new()` uses the on-demand allocator |
+| SIMD / shared memory | 2 | **No** — codegen emits no `v128`; threads deferred |
+| **aarch64 Cranelift sandbox escape** | 1 | **YES on ARM** — never executed here, but the project ships source |
+| **Stores mix type indices between engines** | 1 | **Possibly** — this crate builds several `Engine`s |
+| **pyo3** | 2 | **YES** — `python` is a *default* feature |
+| Unmaintained (fxhash, paste) | 2 | transitive via wasmtime; no fix without a major bump |
+
+Every ignore in `deny.toml` carries a falsifiable reason. The four reachable ones are **deliberately
+not ignored**, so `advisories` is currently **RED** — a gate that were green because its failures
+were silenced would be worse than no gate.
+
+**Fixed this pass:** RUSTSEC-2026-0204 (crossbeam-epoch invalid pointer deref), 0.9.18 → 0.9.20,
+semver-compatible, no code change.
+
+### Turning "we do not emit it" into "the engine refuses it"
+
+`host.rs` already argued that `cranelift_opt_level` should be pinned **explicitly** rather than
+inherited, so it "cannot silently change if a future wasmtime default does". That argument was never
+applied to the *feature set*, which is the larger surface: `Config::new()` left SIMD, threads,
+memory64 and the component model at wasmtime's defaults, so the engine **accepted** modules using
+them even though codegen emits none — and the engine also runs `.dwx` plugin artifacts, which arrive
+as bytes rather than being compiled here.
+
+`harden_wasm_features` now disables all four, on the Stage-3 engine **and** the plugin store.
+`hardened_engine_refuses_a_simd_module` proves the narrowing takes effect rather than being silently
+dropped by `Engine::new(...).unwrap_or_default()` — and it asserts a **control first**, that a stock
+engine *accepts* the same module, so the refusal is provably ours and not a malformed fixture.
+
+### Secret zeroization was eliminable
+
+`SecretVal::drop` zeroed its bytes with a plain `*b = 0` loop. **A non-volatile store to memory that
+is never read again is a dead store, and the allocation is freed immediately after** — LLVM is
+entitled to delete the whole loop, leaving the secret in the freed heap block. The comment said
+"best-effort"; the effort could have been zero, and nothing in the build would have said so. This is
+exactly why the `zeroize` crate exists.
+
+Now `write_volatile` plus a `compiler_fence`, using `std` alone (no new dependency). Stated limit,
+because zeroization bounds exposure rather than eliminating it: this zeroes the **current**
+allocation only — an earlier buffer left behind by a `String` reallocation, or a copy made by
+`reveal`, is not reachable from `Drop` and is not zeroed.
+
+### The CLI sweep is a script now
+
+`CROSS_PLATFORM_VERIFICATION.md` has recorded a "CLI + compiler sweep 21/21" for several passes,
+performed **by hand each time** — the kind of hand-maintained procedure this project's own design
+rule 1 says will drift. It is now `scripts/cli-sweep.sh`: 22 cases over check / authority / why /
+run / `--assert-trace` / fmt / new / test / explain / help / completions / doctor, each asserting an
+exact exit code, reproducible by anyone on any platform.
+
+**Writing it caught two of my own errors, both times because the project was right and I was not:**
+an early draft passed `true` to the runner for two package cases, so they passed unconditionally —
+a check that cannot fail is not a check; and it used bare `delulu test` where the scaffold's own
+next-steps message prints `delulu test .`, which works. `new.rs` had already documented why, and a
+test named `the_generated_package_does_what_the_message_promises` already executed every printed
+command.
+
+**Two further conclusions I drew and had to withdraw**, recorded because deleting them would be the
+dishonest move: that `crates/delulu` being publishable-but-unpublishable was a defect (it is a
+deliberate, tested premise of `INSTALL.md` §3, pinned from both sides by `tests/distribution.rs`),
+and that `delulu new` fails the README's "already checks, tests and runs" claim (it does not).
+What *was* real: twelve manifests carried a comment asserting "`cargo install delulu` works", which
+contradicts `INSTALL.md` §3 and is false — corrected after verifying the failure with
+`cargo publish --dry-run`.
+
+### Miri
+
+The crates Miri can run — `delulu-diag`, `delulu-syntax`, `delulu-check`, `delulu-broker`,
+`delulu-atlas` — contain **no `unsafe` at all**. The crates that do contain it are precisely the ones
+Miri **cannot** run: `broker_transport.rs` (28 sites, named pipes and Unix sockets),
+`foreign.rs` (11, libffi), `foreign_worker.rs` (6). That is an honest limit of the tool here, not a
+clean bill of health: Miri's verdict covers the compiler front end, and the `unsafe` lives in the
+host boundary.
+
+## 9. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

@@ -270,6 +270,9 @@ fn run_contained_export_impl(
     let mut config = Config::new();
     config.consume_fuel(true);
     config.epoch_interruption(true);
+    // P17-F: the plugin store runs bytes the host did not compile, so it needs the feature
+    // narrowing at least as much as the Stage-3 engine does. See `host::harden_wasm_features`.
+    crate::host::harden_wasm_features(&mut config);
     // --- Windows host-safety by construction (Phase 6f.2b) ------------------------------------
     // Applied to the PLUGIN store's Config ONLY — Stage 3's engine Config is untouched, so its
     // 5,000-program differential is unaffected.

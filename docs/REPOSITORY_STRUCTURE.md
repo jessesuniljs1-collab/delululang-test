@@ -166,6 +166,17 @@ DeluluLang/
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config
 │   └── vscode/
 │
+├── deny.toml                       # [P17-F] the SUPPLY-CHAIN gate: `cargo deny check advisories
+│                                   #   bans licenses sources`. Before it existed nothing checked
+│                                   #   the tree against RustSec, and 19 vulnerabilities had
+│                                   #   accumulated. Every `ignore` carries a falsifiable reason;
+│                                   #   the 4 REACHABLE advisories are deliberately NOT ignored, so
+│                                   #   `advisories` is RED on purpose.
+├── scripts/
+│   ├── package-toolchain.sh        # build the self-contained distributable archive
+│   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (22 cases,
+│                                   #   exact exit codes). It was performed by hand every pass
+│                                   #   before this, which is the drift design rule 1 warns about.
 ├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
