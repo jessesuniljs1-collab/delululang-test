@@ -152,6 +152,64 @@ rather than checking hand-picked pairs. Three of its tests are `#[ignore]`d beca
 fail: they are committed as evidence of an open defect, and run with
 `cargo test -p delulu-broker --test order_laws -- --ignored`.
 
+### P17-IF1 — **CRITICAL** — a secret is fully recoverable while the toolchain says it cannot be
+
+**This is the most serious defect the project has found.** A program recovers an entire plaintext
+secret, character by character, with **no `Declassify` effect and no `Cap[Declassify]` anywhere** —
+and the toolchain, asked directly, states that it cannot declassify.
+
+```text
+$ delulu check     extract.delulu   ->  ok: extract.delulu checked clean
+$ delulu authority extract.delulu   ->  effects: Write          (no Declassify)
+$ delulu why Declassify extract.delulu
+                                    ->  program cannot perform `Declassify`
+$ delulu run extract.delulu --grant console --grant secret:API_KEY=hunter2
+     recovered length = 7
+     RECOVERED SECRET = hunter2
+$ ...                              --grant secret:API_KEY=sk-9f0zq_x
+     RECOVERED SECRET = sk-9f0zq_x
+$ ... --assert-trace                ->  exit 0, no complaint
+```
+
+Unlike C88, which needed a contrived generic signature, **this needs no generics and no unusual
+constructs.** It is ordinary code composing two documented operations, each individually sound:
+
+1. **`Secret.map` hands its closure the PLAINTEXT.** The only gate is purity (DL0603) — and
+   *purity is not confidentiality*. A pure closure may compute any predicate over the plaintext and
+   encode the answer into the returned `Secret[Str]` (`"Y"`/`"N"`).
+2. **`Secret.verify` returns an ordinary, untainted `Bool`** with effect `None`. This is the
+   unsealing step: a value derived from secret data leaves the `Secret` lattice with no
+   declassification recorded anywhere.
+3. **`check_if` carries no pc-label** — there is no implicit-flow tracking — so that `Bool` may
+   drive an observable effect.
+
+Composed, they form an **equality oracle against an attacker-chosen plaintext**
+(`k.verify(k.map(fn(x) { g }))` tests the secret against any `g`), which amplifies to full recovery
+one character at a time. A second witness recovers a PIN by guessing: `PIN IS 4242`, checked clean.
+
+**This reopens R-2 (Declassify-is-an-effect) and R-5 (opacity) simultaneously.** Both rules assert
+this is impossible. The audit missed it because **neither operation is defective in isolation** —
+`map` keeps its result tainted, `verify` compares two secrets. The defect is the *composition*, and
+a rule-by-rule audit cannot see a composition.
+
+**Scoped precisely — the direct surface is NOT implicated and was verified clean.** Printing,
+concatenating, `str()`, `==`, `assert_eq`, writing to a file, and embedding a secret in a record are
+all correctly refused (DL0602 / DL0604 / DL0605 / DL0203). Twelve direct eliminators were tested;
+the three that were accepted (`[k].len()`, a wildcard `match`, `len(k)`) were each **run** and leak
+nothing. R-5's opacity holds for every direct eliminator. The hole is composition, not opacity.
+
+**What the project may therefore claim about secrets, until this is fixed:** that a secret cannot be
+*directly* observed. It may **not** claim that a secret cannot reach an observer without
+declassification, because it can, and the tool that reports otherwise is wrong.
+
+**The fix is a language-semantics change and therefore touches `STABILITY.md`.** `Secret.verify`
+must not yield an untainted `Bool`; a value derived from a secret belongs in the `Secret` lattice,
+so observing it must route through `expose` and emit `Declassify`. That is *hardening* the taint
+discipline to completeness rather than redefining what taint means — but it changes an existing
+signature, so it is recorded here for the owner's decision rather than applied unilaterally.
+The witness is committed at `crates/delulu-check/tests/secret_oracle.rs`, `#[ignore]`d because it
+currently fails, with three controls that must keep passing so the fix cannot be a blanket refusal.
+
 ### P17-F1 — `⊑` is a preorder, not a partial order (206 counterexamples)
 
 `authority.rs` calls itself "the ⊑ attenuation **lattice**". A lattice presupposes a partial order,
