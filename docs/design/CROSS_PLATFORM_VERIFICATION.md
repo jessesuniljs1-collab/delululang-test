@@ -539,6 +539,25 @@ and this project does not get to blur them merely because the reading was carefu
 Re-verified after Phase 6 (2026-08-04). Miri is listed as *incomplete* rather than omitted: it was
 killed by a 50-minute cap partway through, found no UB in what it reached, and produced no summary
 line. Rounding that up to "Miri passes" is exactly the kind of claim this campaign exists to catch.
+**A second, uncapped run was still executing after ~3 hours and had produced no summary either.**
+Miri therefore remains **not a pass**, and the entry above is unchanged.
+
+### CI: PREPARED BUT UNVERIFIED — and the distinction is the point
+
+`.github/workflows/ci.yml` now carries every gate this campaign added: the 22-case CLI sweep, the
+effect-soundness fuzz campaign, `cargo deny`, both TLA+ models, **all three teeth tests** (each
+written to FAIL the build if TLC *succeeds*, because a model that stops catching its bug has lost
+its teeth), the Z3 authority algebra, and the Lean development.
+
+**None of it has ever executed on a runner.** This repository is not pushed and will not be. The
+YAML parses (3 jobs, 28 steps, validated locally) and every command in it has been run by hand on
+this machine — but *"the workflow is written"* and *"the workflow is green"* are different claims,
+and this document does not blur them. The macOS row stays **never executed** for exactly the same
+reason: a matrix entry naming `macos-latest` is a plan, not a result.
+
+One step is deliberately non-blocking: `cargo deny check advisories` runs with
+`continue-on-error`, because four advisories are reachable and are **not** silenced. Reporting them
+without blocking is honest; suppressing them to earn a green tick would not be.
 
 The 6-test difference is the same platform delta [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
 

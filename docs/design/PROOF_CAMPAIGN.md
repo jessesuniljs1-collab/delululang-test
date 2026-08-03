@@ -46,11 +46,16 @@ Claiming a method is available is itself a claim, so each was executed before be
 | **cargo-deny** 0.20.2 | installed | not yet exercised |
 | **Miri** (nightly component) | installed | not yet exercised |
 | **cargo-audit** | **FAILED to build** | superseded — `cargo deny check advisories` reads the same RustSec DB |
-| Lean / Coq / Alloy | **absent** | mechanization (category 2) is therefore **not yet available** |
+| **Lean 4.32.2** (via `elan`) | **working, and used** | `docs/design/models/lean/DeluluCore.lean` type-checks; `#print axioms` reports no axioms at all (added 2026-08-04, P17-9) |
+| Coq / Alloy | absent | not needed — Lean covers the mechanization target |
 
-**Honest consequence:** categories 3 and 4 are reachable today. Category 2 is not, until a proof
-assistant is installed. `DELULU_CORE.md` §9 has recorded a ~500-line Lean/Coq formalization as open
-future work since Stage 2, and it remains open. Nothing in this document upgrades it.
+**Honest consequence, as first written (2026-08-03):** categories 3 and 4 were reachable; category
+2 was not, and `DELULU_CORE.md` §9's formalization had been open since Stage 2.
+
+**Updated 2026-08-04:** Lean is installed and **category 2 is no longer empty** — narrowly. See §13.
+The target changed on the way: P17-T1 showed that mechanizing §1–§7 *as written* would prove the
+wrong theorem, so what is machine-checked is the **extension** the calculus needs, not the document
+as it stood. The full type system remains unmechanized.
 
 ---
 
@@ -393,13 +398,21 @@ Stating what survived attack matters as much as stating what did not.
 
 Named so that no reader mistakes a plan for a result:
 
-- **No mechanized proof exists.** No proof assistant is installed. `DELULU_CORE.md` §7's theorems
-  remain paper-level sketches, exactly as §9 says.
+- ~~No mechanized proof exists. No proof assistant is installed.~~ **PARTLY DONE — see §13.** Lean
+  4.32.2 machine-checks the **higher-order fragment**, with no axioms at all. `DELULU_CORE.md` §7's
+  theorems for everything else — capabilities, the store, secrets, attenuation, Progress,
+  Preservation — **remain paper sketches**, and two of them are now known to be defective
+  (P17-T1, P17-T2).
 - ~~The broker state machine is not yet model-checked.~~ **DONE — see §6 below.** The grant tree is
   now model-checked; **leases, redemption, certificate adoption and federation are still not.**
 - ~~No property-based program generation yet.~~ **DONE — see §7 below.**
-- **Fuzzing, Miri and sanitizers are provisioned but unexercised.**
-- **The other seven audit domains are unstarted** — effect rows/type theory, capability algebra,
+- **Fuzzing is exercised (§7); `cargo-fuzz` TARGETS are still unwritten; sanitizers unexercised.**
+- **Miri: RAN TWICE, NEVER FINISHED — not a pass.** A 50-minute capped run was killed mid-suite; an
+  uncapped run was still executing after ~3 hours. Neither produced a `test result:` line. It found
+  no UB in what it reached, and that is all that may be said.
+- ~~The other seven audit domains are unstarted~~ **ALL FIVE ARE NOW COMPLETE** (§9–§11): crypto,
+  capability algebra, concurrency/distributed, effect-row type theory and the theorem sketches.
+  The original note is kept below because the *reason* they were unstarted matters — effect rows/type theory, capability algebra,
   broker state machine, cryptography, information flow, concurrency/distributed, and the theorem
   sketches. Eight specialist agents were dispatched on 2026-08-03 and **all eight were killed by an
   account session limit during their reading phase**, returning no conclusions. Their surviving
@@ -879,7 +892,45 @@ in that number, but the uniformity is an argument, not something Z3 checked. And
 proves the Rust implements this model**; that link is the `file:line` citations above each
 definition, maintained by hand.
 
-## 13. Method note — why exhaustive enumeration replaced spot-checks
+## 13. Category 2 (machine checked) — no longer empty, and narrowly so
+
+`docs/design/models/lean/DeluluCore.lean`, **Lean 4.32.2, no `sorry`**. Deliberately *not* a
+mechanization of `DELULU_CORE.md` §1–§7 as written — P17-T1 showed that would prove the wrong
+theorem. It formalises the **extension** the calculus needs and proves both directions:
+
+- **`good_sound`** — with the corrected rule, every emitted label is in the declared row.
+- **`bad_unsound`** — with the rule the document states, **a well-typed program's trace escapes its
+  row**: `ho (lam [write] (op write))` types at `[]` and emits `write`. **C88, mechanized.**
+- **`c88_good_row_contains_write`** — the corrected rule refuses that program an empty row.
+
+**The check that cannot be talked around.** A `sorry` proof still type-checks; it cannot hide from
+`#print axioms`, which runs in the file itself:
+
+```text
+'DeluluCore.good_sound' does not depend on any axioms
+'DeluluCore.bad_unsound' does not depend on any axioms
+'DeluluCore.c88_good_row_contains_write' does not depend on any axioms
+```
+
+Not `sorryAx` — and not even `propext` / `Classical.choice` / `Quot.sound`. Fully constructive.
+
+**Scope:** the higher-order fragment ONLY. No capabilities, no store, no secrets, no attenuation,
+no Progress, no Preservation. It settles the one question that cost this project its worst
+soundness hole, and nothing else. `MATHEMATICS.md` category 2 now reads "non-empty, but narrowly"
+rather than "empty", and says exactly which parts remain unmechanized.
+
+## 14. CI — prepared, never executed
+
+`.github/workflows/ci.yml` carries every campaign gate: the CLI sweep, the fuzz campaign,
+`cargo deny`, both TLA+ models, **all three teeth tests** (each fails the build if TLC *succeeds*),
+the Z3 algebra and the Lean development. The YAML validates locally — 3 jobs, 28 steps — and every
+command has been run by hand here.
+
+**It has never run on a runner, because this repository is not pushed.** "Prepared" and "green" are
+different claims. `cargo deny check advisories` is deliberately `continue-on-error`: four advisories
+are reachable and are not silenced, and reporting them without blocking is the honest arrangement.
+
+## 15. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

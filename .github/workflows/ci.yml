@@ -71,3 +71,102 @@ jobs:
       # changed without regenerating, the docs are already wrong and the build says so.
       - name: The generated reference is in sync with the source
         run: cargo run -q -p delulu-conform -- --check-reference
+
+      # ---- P17 proof campaign gates -------------------------------------------------------
+      # Every step below runs a check the campaign added. They are written here so the evidence
+      # is reproducible by anyone; NONE of them has ever executed on a runner, because this
+      # repository is not pushed. See docs/design/CROSS_PLATFORM_VERIFICATION.md — "prepared but
+      # unverified" is a different claim from "green", and this file must not blur them.
+
+      # P17-F: the CLI + compiler sweep, 22 cases with exact exit codes. It replaced a procedure
+      # that had been performed BY HAND every pass, which is the drift design rule 1 warns about.
+      - name: CLI + compiler sweep
+        shell: bash
+        run: sh scripts/cli-sweep.sh
+
+      # P17-D: generated programs, not examples. The grammar now contains the shapes that
+      # historically broke the language (generics reaching higher-order builtins, closures
+      # carrying rows, the Secret.map+verify oracle) — see crates/delulu-fuzz/src/danger.rs.
+      - name: Effect-soundness fuzz campaign (trace ⊆ row)
+        run: cargo run -q -p delulu-fuzz -- 50000 20260804
+
+  # ---- Supply chain -----------------------------------------------------------------------
+  # P17-F: before this campaign `cargo deny` had NEVER been run and 19 advisories had
+  # accumulated. `advisories` is EXPECTED TO FAIL today: four are reachable and are deliberately
+  # not silenced (deny.toml names each). `continue-on-error` reports without blocking, which is
+  # honest; silencing them to get a green tick would not be.
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        continue-on-error: true
+        with:
+          command: check advisories
+      - name: Bans, licences and sources (these DO gate)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans licenses sources
+
+  # ---- Formal models ----------------------------------------------------------------------
+  # P17-C/8/9. Each of these has been executed locally and its verbatim output is recorded in
+  # docs/design/models/README.md; these steps make them reproducible rather than transcribed.
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java (for TLC)
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+
+      - name: Fetch TLA+ tools
+        run: curl -sSfL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+
+      # The grant tree: 585,771 distinct states, no error.
+      - name: Model-check the grant tree
+        working-directory: docs/design/models
+        run: java -XX:+UseParallelGC -cp $GITHUB_WORKSPACE/tla2tools.jar tlc2.TLC -config Broker.cfg Broker.tla
+
+      # Leases + certificates: 2,421 distinct states, no error.
+      - name: Model-check leases and certificate adoption
+        working-directory: docs/design/models
+        run: java -XX:+UseParallelGC -cp $GITHUB_WORKSPACE/tla2tools.jar tlc2.TLC -config Custody.cfg Custody.tla
+
+      # THE TEETH TESTS. Each removes a real fix and REQUIRES TLC to fail, reconstructing a bug
+      # this project actually shipped. A model that has never caught anything is indistinguishable
+      # from one that cannot, so a PASS here is a FAILURE of the model.
+      - name: Teeth test — inherited expiry (TLC must FAIL)
+        working-directory: docs/design/models
+        run: |
+          if java -XX:+UseParallelGC -cp $GITHUB_WORKSPACE/tla2tools.jar tlc2.TLC -config BrokerBug.cfg Broker.tla; then
+            echo "::error::BrokerBug.cfg did NOT fail — the model has lost its teeth"; exit 1
+          fi
+      - name: Teeth test — certificate replay (TLC must FAIL)
+        working-directory: docs/design/models
+        run: |
+          if java -XX:+UseParallelGC -cp $GITHUB_WORKSPACE/tla2tools.jar tlc2.TLC -config CustodyReplay.cfg Custody.tla; then
+            echo "::error::CustodyReplay.cfg did NOT fail — the model has lost its teeth"; exit 1
+          fi
+      - name: Teeth test — C29 dead-grant redemption (TLC must FAIL)
+        working-directory: docs/design/models
+        run: |
+          if java -XX:+UseParallelGC -cp $GITHUB_WORKSPACE/tla2tools.jar tlc2.TLC -config CustodyC29.cfg Custody.tla; then
+            echo "::error::CustodyC29.cfg did NOT fail — the model has lost its teeth"; exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: The nine-dimension authority algebra (Z3, 17 obligations)
+        run: |
+          python -m pip install z3-solver
+          python docs/design/models/authority_algebra.py
+
+      # P17-9: the higher-order fragment, machine checked. Silence means every declaration
+      # type-checked; the file's own `#print axioms` block is what proves no `sorry` is hiding.
+      - name: Machine-check Delulu Core (Lean)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.32.2
+          . "$HOME/.elan/env"
+          cd docs/design/models/lean && lean DeluluCore.lean
