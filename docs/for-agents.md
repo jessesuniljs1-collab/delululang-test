@@ -42,6 +42,13 @@ One command answers "is this checkout healthy?" — `delulu doctor` checks the e
 run inside the DeluluLang source tree, regenerates the repository map if it is behind and verifies
 its integrity. `delulu doctor --json` emits one envelope; `--check` never writes.
 
+That promise was **false until 2026-08-03** on the run you are most likely to care about. `doctor`
+printed its envelope without recording that it had, so any run that *found a problem* exited nonzero
+and collected a second, fallback envelope on top — two objects, exactly when the answer mattered. It
+escaped every sweep because the contract gate checked that each named command appears in `--help` and
+never the reverse, and `doctor` was named in no list at all. Both are fixed and both are now guarded:
+the gate reads the dispatcher itself, so the next command cannot be born unswept.
+
 This page is about *driving* DeluluLang. If you are modifying the implementation, start instead at
 [`docs/survey/SURVEY.md`](survey/SURVEY.md) — a map of the repository generated from the repository,
 where every edge cites the file and line it was read from. Ask it the question you actually have:
@@ -52,6 +59,30 @@ cargo run -p delulu-survey -- affected-by <id>  # everything this rests on
 cargo run -p delulu-survey -- path <a> <b>      # how one reaches the other, hop by hop
 cargo run -p delulu-survey -- rdeps <id>        # what points at it — ONE HOP
 ```
+
+**Every read-only verb takes `--json`** — `query`, `rdeps`, `impact`, `affected-by`, `findings`,
+`check` — and answers with **one object** carrying `tool`, `verb` and `schema`, so you can branch
+before reading anything else. Three properties are worth knowing before you build on it:
+
+- **Every edge and every hop keeps its citation**: `"via": {"kind": …, "file": …, "line": …}`. The
+  provenance law — *a relation that cannot be pointed at in the text is not in the map* — holds in
+  the machine channel exactly as it does in the human one. You can disagree with any single hop by
+  opening the file it names.
+- **`query --json` always carries `entrenched`**, set to `null` for an ordinary node rather than
+  omitted. A missing field cannot be told apart from "this tool did not answer", and those must never
+  look alike — see the entrenchment note below before changing anything it names.
+- **The JSON walk is uncapped.** The human render truncates at 25 children per parent because a
+  saturating list stops informing a reader; a caller that asked for the whole blast radius gets all
+  of it and can page through it itself.
+
+```
+cargo run -p delulu-survey -- impact mod:crates/delulu-check/src/check.rs --json
+  → {"tool":"delulu-survey","verb":"impact","schema":1,"node":…,"reached":135,"hops":[…]}
+```
+
+An option the tool does not know is **refused with exit 2, never ignored**. Until 2026-08-03 `--json`
+was itself in that category — accepted, unimplemented, and answered with prose. If you are reading a
+version that does that, you are on an older build.
 
 **Use `impact`, not `rdeps`, when the question is blast radius.** `rdeps` is one hop and says so:
 `mod:crates/delulu-check/src/check.rs` — the module that decides what type-checks — has **one

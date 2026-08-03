@@ -103,19 +103,94 @@ fn criterion6_the_patch_runbook_has_been_rehearsed() {
     );
 }
 
-/// The AI-contribution policy exists and carries the clauses that matter — especially the ones that
+/// The contribution policy exists and carries the clauses that matter — especially the ones that
 /// constrain this project's own way of working.
+///
+/// The clauses changed on 2026-08-03 by ruling of the project lead: **anyone may maintain and
+/// develop DeluluLang — human, AI, or any other kind of party** — and every rule now keys on the
+/// CHANGE rather than on who or what authored it. The substance was not weakened; each kind-blind
+/// clause is stricter, because a rule applied to one kind of author leaves the rest unexamined.
 #[test]
-fn the_ai_contribution_policy_binds_this_project_too() {
+fn the_contribution_policy_binds_this_project_too() {
     let c = read("CONTRIBUTING.md");
-    assert!(c.contains("Disclosure is required"), "AI authorship must be disclosed");
-    assert!(c.contains("sponsor"), "a named human sponsor must be accountable");
-    assert!(c.contains("No unsupervised autonomous PRs"), "autonomy limit must be stated");
-    assert!(c.contains("sandboxed CI"), "AI-submitted code runs under the project's own isolation");
+    assert!(c.contains("names its author"), "authorship must be attributed — for everyone");
+    assert!(c.contains("sponsor"), "a named sponsor must be accountable");
     assert!(
-        c.contains("advisory only"),
-        "overseer monitoring must never hold merge authority — Constitution §9"
+        c.contains("not the\n   author") || c.contains("not the author") || c.contains("sponsor is not"),
+        "the sponsor must be someone other than the author — that is the independence the rule buys"
     );
+    assert!(
+        c.contains("say-so of its own author"),
+        "no change may merge on the say-so of its own author"
+    );
+    assert!(
+        c.contains("Stage-5 isolation profiles"),
+        "ALL contributed code runs under the project's own isolation"
+    );
+    assert!(
+        c.contains("never merge one"),
+        "unattended automation must never hold merge authority — Constitution §9"
+    );
+}
+
+/// **No governance document may reintroduce a kind-of-party trust hierarchy.**
+///
+/// Constitution invariant 24 rejects such hierarchies as *"discriminatory and fragile"*, and no
+/// decision path in the Guard reads the kind of a grant holder. For a long time the governance
+/// documents did the opposite anyway — the policy was restated in **six** places and five of them
+/// said *"a named **human** sponsor per **AI-authored** PR"*, so the constitution contradicted its
+/// own invariant. Fixing one file would have left the other five to drift back.
+///
+/// This is the campaign's recurring shape once more: a claim restated by hand in many documents
+/// falls out of step with the one that defines it. So the gate reads **all** of them, and fails on
+/// the phrasings that encode the hierarchy rather than trusting any single file to stay correct.
+#[test]
+fn no_governance_document_makes_a_rule_depend_on_the_kind_of_party() {
+    // Phrases that only exist to make a REQUIREMENT apply to one kind of author.
+    const BANNED: &[&str] = &[
+        "named human sponsor",
+        "human sponsor accountable",
+        "No unsupervised autonomous PRs",
+        "AI-submitted code runs only",
+        "A human decides it is submitted",
+    ];
+    // Where the policy is stated or summarised. A new restatement belongs in this list.
+    const RESTATED_IN: &[&str] = &[
+        "CONTRIBUTING.md",
+        "GOVERNANCE.md",
+        "docs/design/CONSTITUTION.md",
+        "docs/design/LANGUAGE_SPECIFICATION.md",
+    ];
+
+    let mut violations: Vec<String> = Vec::new();
+    for file in RESTATED_IN {
+        let text = read(file);
+        for phrase in BANNED {
+            // A document may QUOTE the old wording to record that it changed; what it may not do is
+            // state it as current. The historical form always names the date it stopped being true.
+            for (n, line) in text.lines().enumerate() {
+                if line.contains(phrase) && !line.contains("2026-08-03") && !line.contains("previously") && !line.contains("used to") && !line.contains("Until") {
+                    violations.push(format!("{file}:{} states `{phrase}` as current", n + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "a governance rule may not depend on the KIND of the party it applies to \
+         (Constitution invariant 24):\n  {}",
+        violations.join("\n  ")
+    );
+
+    // And the positive direction: the welcome must actually be stated, not merely implied by the
+    // absence of a prohibition.
+    for file in ["CONTRIBUTING.md", "GOVERNANCE.md", "docs/design/CONSTITUTION.md"] {
+        let text = read(file);
+        assert!(
+            text.contains("human, AI, or any other kind of party"),
+            "{file} must state plainly who may contribute and maintain"
+        );
+    }
 }
 
 /// The RFC template keeps the two analyses the constitution requires: irreducibility for core

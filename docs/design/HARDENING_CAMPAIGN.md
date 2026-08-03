@@ -60,10 +60,30 @@ count of findings. See the 2026-08-03 subsection of `CROSS_PLATFORM_VERIFICATION
 and the reproducible command. Cold, findings-only, the same tree measures **14 on Windows / 15 on
 Linux**.
 
-Workspace size: **~93,500 lines of Rust** across 12 shipped crates plus one tooling crate, 193
-files. These numbers are no longer maintained by hand — `docs/survey/SURVEY.md` recounts them from
-the tree on every build, and a stale figure here now fails a test rather than sitting quietly (the
-figure this line carried until 2026-08-01 was ~82,000 across 175 files, which had drifted by 14%).
+Workspace size: **see `docs/survey/SURVEY.md` § Measured facts**, which recounts it from the tree on
+every build. This line deliberately no longer carries the numbers, and the reason is its own history.
+It read *~82,000 lines across 175 files* until 2026-08-01, drifted 14%, and was corrected to
+*~93,500 lines across 12 shipped crates plus one tooling crate, 193 files* — with the assurance that
+*"a stale figure here now fails a test"*. By 2026-08-03 the tree measured **102,581 lines, 213 files,
+9 shipped language crates and 4 tooling**: every figure wrong again, and the crate split wrong in a
+way that contradicted README. Recorded as **C81**.
+
+**Why the gate did not catch it, which is the part worth keeping.** The `stale-count` check is real
+and correct in intent — but it reads **line by line**, matching a number against the unit that
+*follows it on the same line*. In the committed text `193` ended one line and `files.` began the
+next, so the number and its unit were never on one line and the check could not see them. The
+`~93,500` escaped separately, on the 10% slack that approximate figures are granted: the tree had
+grown 9,081 lines and the tolerance was 10,258.
+
+Two independent escapes, one wrapped by a text formatter and one inside a tolerance — **design rule 2
+again**: the gate keys on *number-then-unit-on-one-line*, and an ordinary line break produces a
+different signal. The first draft of this entry said *"no test gated this line at all"*, which was
+wrong and is corrected here rather than quietly amended; the gate existed and was blind, which is a
+worse problem than absence because it also produced the assurance.
+
+A number restated by hand drifts, an assurance that it cannot is worth less than the number, and a
+gate that a line break defeats will keep issuing that assurance. The fix is not a better figure; it
+is not keeping one here — and teaching the check to read across the wrap.
 The repository is *not* rustfmt-formatted under default settings and has no `rustfmt.toml`; house
 style is wider than rustfmt's default, and `cargo fmt` is therefore **not** a gate. Do not run it.
 
@@ -142,6 +162,11 @@ deviations.
 | C63 | **The Book credits two-engine parity to a fuzzer that cannot run the second engine, with a number 25× too large** — Chapter 9 claimed "tens of thousands of programs on both engines" and "50,000 random programs"; the generative sweep is **2,000**, all inside the WASM fragment, and `delulu-fuzz` depends only on `delulu-check`/`delulu-runtime`. It also never said the WASM backend is a **fragment** — ~a third of entry-point programs compile, and **none of the Book's own guide chapters do** | **high** (front-door claim; the C4/C6 family crossed with C37) | **CLOSED** — D58 (prose corrected with the error left visible; two gates added) |
 | C64 | **A record or list literal bound with `let` cannot be passed to a function** — `let p = P { x: 1 }` then `f(p)` is DL1603, while `f(P { x: 1 })` inlined is fine, and so is the same value arriving from a call's return or a `match` binding. Extract-variable, the most basic refactoring there is, turns a working program into a compile error | **high** (ordinary code refused; hit three times in one session writing the C7 corpus) | **CLOSED** — D62 (lifted at `val` arguments; the caller gives up write access, and an author-written `ref` is never lifted) |
 | C76 | **Twelve of twenty-two subcommands silently ignored unknown options, and seven dropped a value-taking flag given no value.** `delulu check app.delulu --strict` printed `checked clean` and exited 0; `delulu run app --grant console --isolation` ran with **no isolation at all**, exit 0. C75 generalized from one command to the class | **high** (Constitution §8.4 makes the machine channel first-class, and the stated primary users are agents: an agent using a half-remembered flag name gets a green light for work that never happened) | **CLOSED** — D73 (`unknown_flags` + `missing_values` collected by the parser, refused per command, and **two sweeps** over the whole CLI surface so it cannot regress) |
+| C81 | **A line break hid a stale count from the gate built to catch it.** `HARDENING_CAMPAIGN.md` restated the workspace size and promised *"a stale figure here now fails a test"*, while reading ~93,500 lines / 12 shipped + 1 tooling / **193 files** against a tree of **102,581 / 9 shipped + 4 tooling / 213** — and contradicting README's crate split. The `stale-count` check is real, but it matches a number against the unit **on the same line**, and `193` ended one line while `files.` began the next. The `~93,500` escaped separately, inside the 10% slack for approximate figures | medium (the assurance is worse than the drift — a reader who believes a number is machine-checked stops checking it) | **CLOSED** — the line carries no figures at all now, pointing at `SURVEY.md` § Measured facts; the check also learned to read across a wrap. **Design rule 2**: the gate keyed on *number-then-unit-on-one-line*, and a text formatter produced a different signal |
+| C80 | **The governance documents contradicted the constitution they serve.** Invariant 24 rejects kind-of-party trust hierarchies as *"discriminatory and fragile"* and no Guard decision path reads a holder's kind — yet the contribution policy branched on **author kind** in five places, restated by hand in **six documents** including `CONSTITUTION.md` §9 itself | **high** (the project asked the world to trust a kind-blind authority model while running a kind-branching governance model; and a six-place restatement means fixing one leaves five to drift back — design rule 1's **9th** instance, in prose) | **CLOSED** — D77 (every rule keys on the CHANGE; human sponsor a *preference*, never a gate; `sponsor ≠ author` kept as independence; entrenchment analysis recorded; a gate reads all four current documents) |
+| C79 | **`delulu-survey` accepted `--json` and ignored it** — the map every maintainer consults before changing anything answered a machine request with prose and exit 0 | medium (C76/D73's ruling — *"an option nobody understood is refused, never ignored"* — surviving in a **sibling binary written before the lesson**: the same shape pointed sideways instead of forward) | **CLOSED** — D76 (unknown options exit 2 and are named; every read-only verb emits one object, every edge and hop keeps its `via:{kind,file,line}` citation, `entrenched` always present) |
+| C78 | **The `--json` completeness gate could not see a command nobody had written down.** It checked *list ⊆ `--help`* and never *dispatcher ⊆ list*, though its own docstring claimed both — so `doctor`, dispatched and documented but in neither list, was reached by no sweep at all | **high** (it is why C77 lived; a gate that cannot enumerate its own subject proves only that the things it knows about are fine) | **CLOSED** — D75 (the gate now READS the dispatch `match` in `cli.rs`). Design rule 1's **8th** instance |
+| C77 | **`delulu doctor --json` emitted TWO JSON objects on any run that reported a problem** — it printed its envelope without recording the emission, so the nonzero exit collected the C2 fallback on top | **high** (the one-object contract broke precisely when a caller asked a machine question and something was actually wrong — the case an agent hits most and a human hits least) | **CLOSED** — D75. **The hazard C2/D38 had already written down**: `println!("{obj}")`-style emissions are invisible to grep heuristics |
 | C75 | **`delulu audit` silently ignored unknown options — and that meant reading the WRONG STORE.** The parser's last arm was `_ => {}`. `audit` takes `--dir`; every sibling custody command takes `--state-dir`, so an operator typing the habitual flag had it dropped and got records from the default `~/.delulu/audit` printed as the answer about a different store | **high** (accountability: investigating an incident with evidence from somewhere else is not a lesser failure than showing none — the skip-branch rule landing on the audit log) | **CLOSED** — D72d (unknown options refused; `--state-dir` gets a note explaining why `audit` differs) |
 | C74 | **`delulu secrets list` printed NOTHING on an empty store and exited 0.** A reader could not tell "no secrets" from "the store could not be read" from "the command did nothing" — about a security store. `grants list` already said `(no grants — the tree is empty)` | medium (the C26/C66 "nothing done, success claimed" shape, on the secret store) | **CLOSED** — D72c |
 | C73 | **`delulu fix` reported success on a file it cannot process.** `fix notes.txt` printed `nothing to repair` and exited 0 while `check` on the same bytes gave DL0204 | medium (**C66 exactly** — and `fix` was written AFTER C66 was closed for `fmt`) | **CLOSED** — D72b (refusal deliberately not worded "nothing to repair", which is the success line) |
@@ -2367,6 +2392,124 @@ constant value" is a **deliberate static guard** in the test that exists to prov
 check *can* fail, and the hand-built NUL string is a **test fixture**, not a production FFI path. The
 count is watched for *movement*, not driven to zero, and it is **per platform**: macOS would be a third
 number nobody has seen.
+
+## 2026-08-03, second pass — the maintainer's tools, asked whether a MACHINE can use them
+
+Jesse's framing, and it reframes the whole tooling surface: *"I am expecting more ai, llms, agents,
+etc maintainers than human maintainers of the new lang in the future, so the Survey, doctor and other
+features should be more accessible and more understandable to them also"* — followed, when the first
+results came back, by the rule that governs how it is written down: ***"There shall no descrimination
+for human and ai and other maintainers of delululang. Everyone is welcome to maintain and develop
+delululang further and beyond."***
+
+So the question put to each maintainer-facing tool was **"what does a caller get from each of its two
+channels?"** — not "what does a machine get", which smuggles the split back in. A structured answer is
+not a machine's feature: a person writing a CI check needs it, and an agent chasing a bad edge reads
+the prose. Both channels are first-class because **any maintainer may use either**. Three defects,
+all found by asking that, plus a fourth in the governance docs themselves.
+
+- **C77 — `delulu doctor --json` emitted TWO JSON objects on any run that reported a problem.**
+  `doctor.rs` printed its envelope with a bare `println!` and never called `note_json_emitted()`, so
+  the nonzero exit made `cli::run` add its C2 fallback envelope on top. The contract is one object;
+  callers got two **exactly when they had asked a machine question and something was actually
+  wrong** — the case an agent hits most and a human hits least. Fixed by recording the emission
+  before the exit code is decided.
+  ⚠ **This is the hazard C2/D38 wrote down and I still missed**: *"`println!("{obj}")`-style Display
+  emissions are invisible to grep heuristics, so hand-audit when adding one."* One was.
+
+- **C78 — the gate that exists to prevent exactly that could not see it.**
+  `json_contract.rs`'s completeness check verified **list ⊆ `--help`** and never **dispatcher ⊆
+  list**, though its own docstring claimed both. `doctor` is dispatched and in `--help` but appears
+  in neither `SUBCOMMANDS` nor `NOT_SWEPT`, so **no sweep in the file could reach it** — which is why
+  C77 lived. The gate now reads the `match cmd.as_str()` block in `cli.rs` and fails on any arm
+  missing from both lists. **Eighth instance of the recurring pattern** (C31/C34/C35/C44/C52/C57/C70):
+  a hand-maintained list falls behind the thing that defines it. Proven non-vacuous by removing
+  `doctor` from the list and watching the gate name it.
+  `doctor` is listed as NOT swept, with the reason: **it WRITES** (`docs/survey/` is regenerated
+  without `--check`), so a blind argument sweep would rewrite the repository from inside the suite.
+  It gets a dedicated read-only witness instead.
+
+- **C79 — `delulu-survey` accepted `--json` and ignored it.** The map every maintainer consults
+  before changing anything answered a machine request with prose and exit 0. That is C76/D73's
+  ruling — *"an option nobody understood is refused, never ignored"* — surviving in a **sibling
+  binary written before the lesson**, which is the same "a command written after a lesson does not
+  inherit it" shape pointed sideways instead of forward. Unknown options now exit 2 and are named.
+
+- **C80 — the governance documents contradicted the constitution they serve.** Constitution
+  invariant 24 rejects **kind-of-party trust hierarchies** as *"discriminatory and fragile; the grant
+  relation is the durable invariant"*, and no decision path in the Guard reads the *kind* of a grant
+  holder — a property with its own witness. Yet `CONTRIBUTING.md` §4 and `GOVERNANCE.md` §2 branched
+  on author kind in **five** places: an "AI-authored PR" needed a named **human** sponsor, a **human**
+  decided whether an agent's change was submitted, an **AI-authored** RFC needed a human sponsor, only
+  **AI-submitted** code ran sandboxed, and disclosure was demanded of one group. A project cannot hold
+  kind-blindness as a design law for the code it runs and abandon it for the parties who write that
+  code.
+  **Every rule now keys on the CHANGE, and each kind-blind form is STRICTER than what it replaced:**
+  a named sponsor **who is not the author** for every risk-class change (a human-authored authority
+  change previously needed none); no change merges on its own author's say-so (the real hazard is an
+  unreviewed change, whoever wrote it); **all** contributed code runs in the Stage-5 profiles, which
+  is what the original reasoning already demanded — *"if our isolation is not good enough to run code
+  we did not write, it is not good enough to ship"*; every change names its author, so attribution is
+  owed to everyone rather than extracted from one group.
+  **The one line that survives is not human-versus-machine**: an unattended process may label a
+  change and never merge one, because the distinction that carries the weight is *a named party who
+  answers for the decision* versus *automation with nobody behind it*. A human who rubber-stamps
+  without reading fails that test identically. Constitution §9 is intact.
+  **Stated plainly, because it is a real consequence:** this removes the "a human decides it is
+  submitted" backstop. An AI maintainer may now sponsor and merge. That is the owner's decision, and
+  the accountability substance is carried by *sponsor ≠ author* rather than by species.
+  **Refined the same day, on the owner's follow-up** — *"I don't think too much of human approval is
+  needed in the future. Make it preferably human sponsor and accountability is good, but otherwise
+  also allowed. I am expecting ai doing everything by itself in the future."* So the human sponsor is
+  now written as a **preference with its reason stated honestly** — a human party can today be
+  reached and held answerable by institutions that do not yet recognise any other kind of party,
+  which is a fact about the present world and expected to date — and **never as a gate**. A sponsor
+  of any kind satisfies the rule; an AI system may hold every role in the document.
+  What did **not** move is *sponsor ≠ author*, because that clause was never about kind: it is the
+  independence of the review. It is now read as a real distinctness test — two accounts driven by one
+  system is self-approval wearing a hat, while two humans on the same team are two parties.
+  ⚠ **A correction to this entry's own first draft, which was published wrong.** It said
+  *"`CONSTITUTION.md` did not change and needed no entrenchment analysis — it was already right."*
+  **False.** Invariant 24 was right, and I checked only invariant 24. The constitution **also restates
+  the contribution policy at §9**, in the discriminatory form — so the document contradicted *itself*,
+  and the summary was the half that was wrong. The reviewer read the clause that supported the
+  conclusion and stopped, which is the failure mode this campaign has recorded against itself before.
+  **The policy was restated by hand in SIX places** — `CONTRIBUTING.md`, `GOVERNANCE.md`,
+  `CONSTITUTION.md` §9, `LANGUAGE_SPECIFICATION.md`, `STAGE9_SPECIFICATION.md`,
+  `STAGE9_PLAYBOOK.md` — so fixing one would have left five to drift back. The recurring pattern for
+  the **ninth** time, now in prose rather than in code.
+
+  **Entrenchment analysis (invariant 44), since `CONSTITUTION.md` IS entrenched to the project lead:**
+  *What makes this hard to undo?* Nothing structural — it is a governance clause, not a format or a
+  wire protocol, and no artifact encodes it. *Is that acceptable?* Yes: it is reversible by the same
+  authority that made it. *Who authorised it?* The project lead, explicitly and twice — the ruling
+  and then its refinement. *What is the residual risk?* The "a human decides it is submitted"
+  backstop is gone; accountability now rests on *sponsor ≠ author*, and that clause becomes
+  load-bearing where it previously had a second line behind it.
+  The two non-entrenched documents were confirmed non-entrenched with
+  `delulu-survey query <id> --json`, using the field built one finding earlier.
+
+  **Guarded, so it cannot drift back:** `no_governance_document_makes_a_rule_depend_on_the_kind_of_party`
+  reads **all four current documents** and fails on the phrasings that encode a kind hierarchy —
+  while permitting a document to *quote* the old wording when it names the date the wording stopped
+  being true. The historical stage documents are annotated **SUPERSEDED**, not rewritten. Proven
+  non-vacuous by appending "Every RFC requires a named human sponsor." to `GOVERNANCE.md` and
+  watching the gate name the file and line.
+
+**What was built, not just fixed.** Every read-only Survey verb (`query`, `rdeps`, `impact`,
+`affected-by`, `findings`, `check`) now answers `--json` with one object carrying `tool`/`verb`/
+`schema`. The load-bearing decisions:
+1. **Every edge and hop keeps `via: {kind, file, line}`.** The provenance law is not a property of
+   the human rendering; if it does not survive into the machine channel then an agent reading this
+   map has *strictly less* ability to check it than a human reading the same map.
+2. **`entrenched` is always present, `null` when ordinary.** A caller keying on a missing field
+   cannot distinguish "not entrenched" from "this tool did not tell me", and on the question *may I
+   change this?* those two must never look alike.
+3. **The JSON walk is uncapped** (the human render still truncates) — C32's reasoning applied in the
+   right direction for each audience.
+Guarded by `crates/delulu-survey/tests/machine_channel.rs`, 6 tests, including one asserting the
+walk's `--depth` value is not mistaken for a node id — the shape that breaks when a flag parser is
+bolted on after the fact.
 
 ### What this campaign does not claim
 

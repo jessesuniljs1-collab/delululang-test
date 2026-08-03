@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 212 |
-| Rust lines | 102022 |
-| Rust files outside `src/` (test/bench targets) | 83 |
+| Rust files | 213 |
+| Rust lines | 102615 |
+| Rust files outside `src/` (test/bench targets) | 84 |
 | Markdown documents | 122 |
-| Markdown lines | 28982 |
+| Markdown lines | 29360 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 145 |
-| Recorded rulings | 129 |
-| Recorded campaign findings | 76 |
-| Nodes / edges in this map | 973 / 8537 |
+| Recorded rulings | 133 |
+| Recorded campaign findings | 81 |
+| Nodes / edges in this map | 983 / 8615 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18777 lines
+- **Modules:** 22 files, 18780 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -97,10 +97,10 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/cli.rs` | 8005 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
-| `src/doctor.rs` | 375 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
+| `src/doctor.rs` | 380 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/fix.rs` | 429 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
-| `src/foreign_worker.rs` | 685 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
+| `src/foreign_worker.rs` | 683 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1867 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 75 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
@@ -295,21 +295,21 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 3738 lines
+- **Modules:** 11 files, 3987 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
 | `src/lib.rs` | 620 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 325 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 242 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 356 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
 | `src/render.rs` | 279 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 407 | Reading Rust source as text. |
 | `src/scan.rs` | 209 | Walking the tree and deciding what each file *is*. |
-| `src/verify.rs` | 590 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
+| `src/verify.rs` | 624 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
 
@@ -386,7 +386,7 @@ Rulings are allocated **one namespace per stage**, so `D21` alone is ambiguous �
 
 | Namespace | Rulings | Allocated in |
 |---|---:|---|
-| `S10` | 73 | `docs/design/STAGE10_BUILD_ORDER.md` |
+| `S10` | 77 | `docs/design/STAGE10_BUILD_ORDER.md` |
 | `S6` | 8 | `docs/design/STAGE6_BUILD_ORDER.md` |
 | `S7` | 11 | `docs/design/STAGE7_BUILD_ORDER.md` |
 | `S8` | 15 | `docs/design/STAGE8_BUILD_ORDER.md` |

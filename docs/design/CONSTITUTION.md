@@ -550,12 +550,26 @@ Open-source from day one; AI contributions are expected and welcomed — under c
   backdoors fail to typecheck. The language is the strongest defense; process is the second line.
 - **Process defense:** two-person review; signed commits and tags (Sigstore); SLSA provenance;
   reproducible builds; SBOM; OpenSSF Scorecard.
-- **AI-contribution policy:** disclosure required; a named human sponsor accountable per
-  AI-authored PR; no unsupervised autonomous PRs; unchanged quality bar; AI-submitted code runs
-  only in the sandbox, untrusted by default (the curl "AI slop" episode is the warning line).
-- **AI overseeing AI is defense-in-depth only:** trusted monitoring/editing of agent contributions
-  with human audit — but §5's machine-enforced guarantees must hold *even if every AI overseer is
-  compromised or colludes*. Oversight is a layer, never the foundation.
+- **Contribution policy — kind-blind, by ruling of the project lead (2026-08-03):** every change
+  names its author; **every** risk-class change has a named sponsor **who is not its author**; no
+  change merges on its own author's say-so; unchanged quality bar; **all** contributed code runs in
+  the sandbox, untrusted by default (the curl "AI slop" episode is the warning line). **Anyone may
+  maintain and develop DeluluLang — human, AI, or any other kind of party.** A human sponsor is
+  *preferred where one is available* and is **not required**; a sponsor of any kind satisfies the
+  rule, and an AI system may hold every role in this project.
+  This clause previously read *"a named **human** sponsor accountable per **AI-authored** PR; no
+  unsupervised autonomous PRs; **AI-submitted** code runs only in the sandbox"* — a kind-of-party
+  trust hierarchy, which **invariant 24 of this same document rejects** as *"discriminatory and
+  fragile"*. The constitution contradicted itself, and the summary was the half that was wrong. Each
+  replacement clause is **stricter** than what it replaced, because a rule applied to one kind of
+  author leaves every other author unexamined. `CONTRIBUTING.md` §4 is the full statement.
+- **Automated oversight is defense-in-depth only:** monitoring and editing of contributions, audited
+  — but §5's machine-enforced guarantees must hold *even if every overseer is compromised or
+  colludes*. Oversight is a layer, never the foundation. The line that carries the weight is **a
+  named party who answers for a decision** versus **unattended automation with nobody behind it** —
+  not human versus machine. A party of any kind may hold merge authority; an unattended process may
+  label a change and never merge one, and a human who approves without reading fails this test
+  identically.
 - **Honesty clauses (binding on all project communication):** never claim "faster than C"; never
   claim "lowest tokens"; never claim "unbreakable" without naming the threat model; never present
   the FFI or `Plugin[Contained]` boundaries as covered by the proof. Credibility is an asset the

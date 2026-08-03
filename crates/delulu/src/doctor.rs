@@ -119,6 +119,11 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
     }
 
     if json {
+        // Record the emission BEFORE the exit code is decided. `doctor` exits 1 when a check reports
+        // a problem, and `cli::run` adds a fallback envelope on any nonzero exit that has not already
+        // put one on stdout (campaign finding C2). Without this call the caller got TWO objects for
+        // exactly the run they care about most: the one that found something wrong.
+        crate::cli::note_json_emitted();
         println!("{}", envelope(&r));
     } else {
         render(&r);

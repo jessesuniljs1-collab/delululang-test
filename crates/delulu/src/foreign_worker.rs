@@ -289,10 +289,10 @@ impl WorkerConn {
 
         // Kill-on-host-death: assign the worker to a kill-on-close Job Object (Windows). Best-effort:
         // if assignment fails, the guard still kills the child explicitly on drop.
+        // Windows only: elsewhere kill-on-host-death is `PR_SET_PDEATHSIG` (set on the command above)
+        // plus the guard's explicit kill, so there is no handle to carry and no binding to make.
         #[cfg(windows)]
         let job = unsafe { win::assign_kill_on_close(&child) };
-        #[cfg(not(windows))]
-        let job = ();
 
         let mut guard = WorkerGuard {
             child: Some(child),
@@ -300,8 +300,6 @@ impl WorkerConn {
             #[cfg(windows)]
             _job: job,
         };
-        #[cfg(not(windows))]
-        let _ = job;
 
         // Host is the client: connect (bounded) to the worker's server. A worker that never comes up
         // times out → Unavailable (the guard kills it).

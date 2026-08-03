@@ -84,14 +84,46 @@ fn quoted_counts_match_the_tree(files: &[ScannedFile], b: &mut Builder) {
         if f.kind != FileKind::Doc || !describes_the_present(&f.rel) {
             continue;
         }
-        for (i, line) in f.text.lines().enumerate() {
+        let lines: Vec<&str> = f.text.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
             let lineno = i as u32 + 1;
-            for (claimed, unit_at, approx) in numbers_with_units(line) {
+            // A number can be separated from its unit by a **line wrap** — `193` ending one line
+            // and `files.` beginning the next. This check used to read one line at a time, so a
+            // text formatter's line break hid a stale count from it for months, while the
+            // surrounding prose promised that "a stale figure here now fails a test" (C81). Reading
+            // the following line closes that; `num_start` keeps a number that belongs to the next
+            // line from being counted twice, since that line gets its own turn.
+            let joined = match lines.get(i + 1) {
+                Some(next) => format!("{line} {}", next.trim_start()),
+                None => (*line).to_string(),
+            };
+            // This check's own advice is "update the number, or say plainly that it is a snapshot of
+            // a past moment" — and until now there was no way to do the second. A document that
+            // records how a figure CHANGED has to be able to quote the old one. The marker is an
+            // explicit ISO date on the line: deliberate, greppable, and not something a stale figure
+            // acquires by accident.
+            let dated_history = joined
+                .match_indices("20")
+                .any(|(k, _)| {
+                    let b = joined.as_bytes();
+                    k + 10 <= b.len()
+                        && b[k + 2].is_ascii_digit()
+                        && b[k + 3].is_ascii_digit()
+                        && b[k + 4] == b'-'
+                        && b[k + 7] == b'-'
+                });
+            if dated_history {
+                continue;
+            }
+            for (claimed, num_start, unit_at, approx) in numbers_with_units(&joined) {
+                if num_start >= line.len() {
+                    continue; // the number lives on the next line; it is checked there
+                }
                 for (phrases, actual, label, guard) in &facts {
-                    if !phrases.iter().any(|p| line[unit_at..].starts_with(p)) {
+                    if !phrases.iter().any(|p| joined[unit_at..].starts_with(p)) {
                         continue;
                     }
-                    if guard.is_some_and(|g| !line.contains(g)) {
+                    if guard.is_some_and(|g| !joined.contains(g)) {
                         continue;
                     }
                     // An approximate claim is allowed to be approximate; a precise one is not.
@@ -117,7 +149,7 @@ fn quoted_counts_match_the_tree(files: &[ScannedFile], b: &mut Builder) {
                 // lines that genuinely go stale after every suite run.
                 if ["test suites", "tests passing", "suites passing", "tests pass,", "tests green"]
                     .iter()
-                    .any(|p| line[unit_at..].starts_with(p))
+                    .any(|p| joined[unit_at..].starts_with(p))
                 {
                     unverifiable.push((f.rel.clone(), lineno));
                 }
@@ -153,7 +185,9 @@ fn quoted_counts_match_the_tree(files: &[ScannedFile], b: &mut Builder) {
 
 /// `(value, byte offset just past the number and any spaces, approximate?)` for each number in the
 /// line. `~82,000` and "about 82,000" are approximate; `12` is not.
-fn numbers_with_units(line: &str) -> Vec<(u64, usize, bool)> {
+/// Returns `(value, number_start, unit_start, is_approximate)`. `number_start` is carried so a
+/// caller joining two lines can tell which line the number itself came from.
+fn numbers_with_units(line: &str) -> Vec<(u64, usize, usize, bool)> {
     let bytes = line.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -189,7 +223,7 @@ fn numbers_with_units(line: &str) -> Vec<(u64, usize, bool)> {
             || head.ends_with("over ")
             || head.ends_with("more than ")
             || head.ends_with("nearly ");
-        out.push((value, j, approx));
+        out.push((value, start, j, approx));
     }
     out
 }

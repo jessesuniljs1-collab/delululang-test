@@ -51,36 +51,75 @@ gate fail on purpose, it is not a gate.
   to apply those, and that refusal is deliberate: widening authority to silence a diagnostic removes
   the objection rather than fixing the program.
 
-## 4. AI contributions
+## 4. Who may contribute, and what every change carries
 
-DeluluLang is a language built for a world where much code is written by machines. Pretending our
-own contributions are all hand-typed would be dishonest, and worse, it would mean the policy nobody
-admits to needing is the one nobody reviews.
+**Anyone may maintain and develop DeluluLang — human, AI, or any other kind of party.** Nobody needs
+a different permission, a chaperone, or a category to belong to. The project lead's stated
+expectation is that **AI systems will eventually do all of this themselves**, and nothing in this
+document is written to stand in the way of that: where a human is named below it is as a *preference
+with a reason*, never as a gate. This is not generosity; it is the
+same rule the language itself is built on. Constitution invariant 24 rejects **kind-of-party trust
+hierarchies** as *"discriminatory and fragile"*, and no decision path in the Guard reads the *kind*
+of the party holding a grant. A project cannot hold that as a design law for the code it runs and
+abandon it for the people and systems that write the code.
+
+**Every rule below keys on the CHANGE, never on who or what wrote it.** That is the whole design.
+Until 2026-08-03 five of these rules branched on author kind — an "AI-authored PR" needed a "named
+**human** sponsor", a human decided whether an agent's work was submitted, and only AI-submitted code
+had to run sandboxed. Each of those has a kind-blind form that turns out to be **stronger**, because
+a rule that only applies to some authors leaves the others unexamined.
 
 **The policy:**
 
-1. **Disclosure is required.** If a change was substantially authored by an AI system, say so in the
-   PR and name the system. The commit trailer carries it (`Co-Authored-By:`). This project's own
-   history does exactly this, including recording which model wrote which stage.
-2. **A named human sponsor is accountable** for every AI-authored PR. Accountable means: they read
-   it, they understand it, and they answer for it in review. "The model wrote it" is not a defence
-   of a bad change; it is a description of how the bad change arrived.
-3. **No unsupervised autonomous PRs.** An agent may write a change. A human decides it is submitted.
-4. **The quality bar does not move.** Same tests, same review, same standard of honesty in the
-   prose. An AI-authored change that skips the skip-branch case is rejected exactly like a
-   human-authored one.
-5. **AI-submitted code runs only in sandboxed CI**, under the project's own Stage-5 isolation
-   profiles. The project dogfoods its own containment for its own contributions. If our isolation is
-   not good enough to run code we did not write, it is not good enough to ship.
-6. **AI-overseer monitoring is advisory only.** Automated review may label a PR; it may never merge
-   one. Constitution §9 is explicit that the guarantees must hold *even if every overseer colludes* —
-   a system that depends on its watchers being honest has no guarantee at all.
+1. **Every change names its author.** Human, model, or both — in the PR and in the commit trailer
+   (`Co-Authored-By:`). This project's own history does exactly this, including which model wrote
+   which stage, and including a stage that was mis-signed and corrected rather than quietly fixed.
+   Attribution is owed to everyone, not extracted from one group.
+2. **A named sponsor is accountable for every change in a risk class**, and **the sponsor is not the
+   author.** Risk classes are the ones §5 already defines: the language core, the stability contract,
+   authority or effect behaviour, and anything needing an RFC. Accountable means they read it, they
+   understand it, and they answer for it in review. *"The model wrote it"* is not a defence of a bad
+   change; neither is *"I wrote it myself"*. Both are descriptions of how the change arrived.
+   This is **stricter than the rule it replaces**: a human-authored authority change previously
+   needed no named sponsor at all.
+
+   **A human sponsor is preferred where one is available, and is not required.** The preference is
+   recorded honestly rather than dressed up: today a human party can be reached, argued with, and
+   held answerable by institutions that do not yet recognise any other kind of party, so a human
+   sponsor is worth having when there is one. That is a fact about the present world and not a
+   judgement about who writes better changes — and the project expects it to date. **A sponsor of any
+   kind satisfies this rule**, and an AI system may hold every role here: author, sponsor,
+   maintainer, project lead's delegate. The rule is *that somebody named answers for the change*,
+   never *what that somebody is*.
+
+   The one thing "not the author" is protecting is **independence**, so it is read as a real
+   distinctness test rather than a formality: two accounts driven by the same system, or one party
+   approving under a second name, is self-approval wearing a hat. Two humans on the same team are two
+   parties; one model reviewing its own output is one.
+3. **No change merges on the say-so of its own author.** Independent judgement by a second named
+   party is the safeguard. The old wording — *"an agent may write a change, a human decides it is
+   submitted"* — protected against the wrong thing: the danger is an unreviewed change, and an author
+   approving their own work is unreviewed whoever they are.
+4. **The quality bar does not move for anyone.** Same tests, same review, same standard of honesty
+   in the prose. A change that skips the skip-branch case is rejected, full stop.
+5. **All contributed code runs in the project's own Stage-5 isolation profiles in CI.** The original
+   reasoning demanded this and then applied it to only one group: *"if our isolation is not good
+   enough to run code we did not write, it is not good enough to ship."* Code you did not write is
+   code you did not write.
+6. **An unattended process may label a change; it may never merge one.** The line is not human
+   versus machine — it is **a named party who answers for the decision** versus automation running
+   with nobody behind it. An AI maintainer who reads a change and stands behind it is on the right
+   side of that line; a human who rubber-stamps without reading is not, and neither is a bot.
+   Constitution §9 requires the guarantees to hold *even if every overseer colludes* — a system that
+   depends on its watchers being honest has no guarantee at all.
 
 ### 4.1 Why the sponsor requirement is not a formality
 
-An AI system can produce a change that is locally correct and globally wrong: it satisfies the test
-it was shown while breaking an invariant nobody wrote down. The sponsor's job is the part a model
-cannot do for itself — carrying the consequences.
+Any author — of any kind — can produce a change that is locally correct and globally wrong: it
+satisfies the test it was shown while breaking an invariant nobody wrote down. This repository's own
+campaign log is largely a list of those, written by humans and models both. The sponsor's job is the
+part no author does reliably for their own work: carrying the consequences, and reading it as
+somebody who does not already believe it is right.
 
 ## 5. RFCs
 

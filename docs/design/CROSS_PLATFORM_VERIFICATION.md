@@ -20,9 +20,11 @@ Python-less build); plus this project's own `delulu-conform --coverage` (invaria
 baseline; it is **not** a CI gate (there is no `-D warnings` anywhere in the tree).
 
 **The lint baseline is per-platform, and the third number has never been seen.** Windows and Linux
-differ — 14 vs 15 real findings measured cold on 2026-08-03 — because each platform compiles a
-different set of tests (§2 names them, and §2 also explains why every earlier count in this document
-was measured by a method that inflated it). macOS would be a *third* count: it
+**no longer differ**: cold and findings-only they are **14 on both** as of 2026-08-03. The one-warning
+gap that had held since the old 65/66 figures was a single Linux-only lint on a `let job = ();`
+placeholder — the non-Windows arm of a Windows-only Job Object handle — and removing the binding
+closed it. (§2 explains why every earlier count in this document was measured by a method that
+inflated it.) macOS would still be a *third* count: it
 takes the `unix` branches Linux takes, but excludes the Linux-only ones (the microVM module,
 `PR_SET_PDEATHSIG`) and the Windows ones. Nobody has run it, so nobody knows it. Quoting "65/66" as
 though it were the whole story would repeat, in miniature, the mistake this document exists to
@@ -67,8 +69,9 @@ Linux side, unrelated to any gate; it is tracked, not blocking.
 
 | Gate | Windows | Linux (WSL Ubuntu-20.04) |
 |---|---|---|
-| `cargo test --workspace` | ✅ **113 suites / 1,488 passed / 0 failed / 4 ignored** (1,492 listed) | ✅ **113 / 1,494 / 0 / 4** (1,498 listed) |
-| `clippy --workspace --all-targets` (cold, findings only) | ✅ **14** / 0 errors (was **34**) | ✅ **15** / 0 errors (was **35**) |
+| `cargo test --workspace` | ✅ **114 suites / 1,496 passed / 0 failed / 4 ignored** | ✅ **114 / 1,502 / 0 / 4** |
+| `clippy --workspace --all-targets` (cold, findings only) | ✅ **14** / 0 errors (was **34**) | ✅ **14** / 0 errors (was **35**) |
+| CLI + compiler sweep (21 cases, exit-status assertions) | ✅ **21/21** | ✅ **21/21** |
 | `conform --coverage` | ✅ 100% | ✅ 100% |
 | `conform --check-reference` | ✅ 24 chapters in sync | ✅ 24 chapters in sync |
 | `fmt --check examples` | ✅ 0 would change, 13 clean | ✅ 0 would change, 13 clean |
@@ -201,7 +204,10 @@ the third time in this campaign that a truncating pipe has produced a confident 
 
 ## 4. Platforms and isolation modes — what is claimed, and what refuses honestly
 
-Only **Linux, macOS, and Windows** are claimed host platforms. Beyond the big three:
+**Linux and Windows are the platforms this project has evidence for.** macOS is *targeted* — the code
+is written for it and its `cfg` branches were audited — but it has **never been executed**, so it is
+not on the same footing and §5 states that at length. "The big three" below names the three the
+codebase is written against, not three it has run on. Beyond them:
 
 - **`--isolation microvm`** is **Linux x86_64/aarch64 + KVM only.** Everywhere else it *refuses by
   name* — "requires Linux x86_64/aarch64 with KVM; this platform is `<os>`" — and **no code path

@@ -221,9 +221,11 @@ Recorded because a review that only reports problems is not a review:
 
 ### 3.5 One Cargo field is already answering two different questions
 
-Found while designing the fix for §2.2, and it changes that fix. `publish = false` is not inert here:
-`delulu-survey` reads it to populate `tooling_crates`, and derives
-`crates_shipped = 13 − 1 = 12` — the number README quotes and a test gates.
+Found while designing the fix for §2.2, and it changes that fix. `publish = false` was not inert:
+`delulu-survey` read it to populate `tooling_crates` and derived `crates_shipped = 13 − 1 = 12` —
+the number README quoted at the time, and a test gated. (Since D69 the Survey reads
+`[package.metadata.delulu] surface` instead, and measures **9 shipped language crates plus 4
+tooling**, which is what README quotes now. The `12` below is the pre-fix state, not a current count.)
 
 So the field carries two questions at once:
 

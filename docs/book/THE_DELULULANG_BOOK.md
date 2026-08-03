@@ -1122,8 +1122,13 @@ DeluluLang **does not claim**, ever:
   **never been executed on macOS** — not once, on any day of its development. The Unix code path is
   the one Linux runs green and the conditional compilation was audited site by site, but *a path
   that should work and a path that has been run are different claims*, and only the second one is
-  evidence. Even the lint baseline is per-platform (65 findings on Windows, 66 on Linux, because
-  Linux compiles four tests Windows skips) — the macOS number is simply unknown.
+  evidence. Even the lint baseline is per-platform in principle — each platform compiles a different
+  set of code, so each can produce a different count, and **the macOS number has never been seen.**
+  (Windows and Linux happen to agree at **14** findings each as of 2026-08-03, measured cold with
+  cargo's per-crate summary lines excluded. Earlier printings of this chapter said "65 on Windows, 66
+  on Linux, because Linux compiles four tests Windows skips" — every number in that clause was wrong:
+  the counts came from a method that also counted summary lines and depended on build-cache warmth,
+  and the test delta is **six**, named test by test in `docs/design/CROSS_PLATFORM_VERIFICATION.md`.)
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.

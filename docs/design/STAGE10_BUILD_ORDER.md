@@ -3031,6 +3031,87 @@ One aside worth keeping: the regex that patched the value-taking arms **missed `
 because the alias made the shape different. The behavioural sweep caught what the textual patch did
 not, which is the argument for testing behaviour rather than shape.
 
+**D74 — A number the project trusted for months was not counting findings.** No finding closed; a
+*measurement* corrected.
+
+The clippy baseline was quoted in five documents and treated as load-bearing across many phases
+("clippy 65/0, the exact pre-federation baseline"). It came from `grep -cE '^warning:|^error:'`,
+which has two independent faults: it also matches cargo's per-crate **summary** lines
+(``warning: `delulu-wasm` (lib) generated 1 warning``, 13–18 of them), and a **warm** `cargo clippy`
+does not re-emit warnings for units it did not re-lint — the same tree measured **26 and then 42
+within the hour**. Design rule 2 in a new costume: the gate keyed on a line prefix, and two different
+things produce it. Nothing unsafe followed — **no finding was ever a `clippy::correctness` lint** —
+but a metric nobody can reproduce cannot support the claim it was being used to support.
+
+Measured cold, in an isolated target dir, summary lines excluded: **Windows 34 → 14, Linux 35 → 15**,
+and after D75's `let job = ()` removal **14 on both**. The historical figures are **left as recorded**
+with an annotation; rewriting them would hide the mistake rather than fix it. The platform test delta
+was also re-derived rather than estimated — `cargo test -- --list` on each platform, `LC_ALL=C`
+sorted and diffed — and is **named test by test** in `CROSS_PLATFORM_VERIFICATION.md` §2: 8 Linux-only
+minus 2 Windows-only, the latter **asserting the contained-execution refusal** rather than skipping it.
+
+**D75 — A machine question answered twice, and the gate that could not see it.** Closes C77, C78.
+
+`doctor` printed its `--json` envelope with a bare `println!` and never called `note_json_emitted()`,
+so any run that **reported a problem** exited nonzero and collected the C2 fallback envelope on top —
+two objects, precisely when a caller had asked a machine question and something was actually wrong.
+That is the hazard C2/D38 wrote down (*"`println!("{obj}")`-style Display emissions are invisible to
+grep heuristics"*), and one was missed.
+
+It survived because `json_contract.rs`'s completeness gate checked **list ⊆ `--help`** and never
+**dispatcher ⊆ list**, though its docstring claimed both: `doctor` is dispatched and documented but
+named in neither `SUBCOMMANDS` nor `NOT_SWEPT`, so no sweep could reach it. The gate now **reads the
+`match cmd.as_str()` block in `cli.rs`**. Eighth instance of design rule 1. `doctor` is listed as not
+swept, with its reason — it **writes** `docs/survey/` without `--check`, so a blind argument sweep
+would rewrite the repository from inside the suite — and gets a dedicated read-only witness instead.
+Also removes the non-Windows `let job = ();` placeholder that was the entire historical clippy
+platform delta, back to the old 65/66.
+
+**D76 — The map every maintainer consults answered only in prose.** Closes C79.
+
+`delulu-survey` accepted `--json` and **ignored** it, answering with formatted text and exit 0 — the
+C76/D73 ruling (*"an option nobody understood is refused, never ignored"*) surviving in a sibling
+binary written before the lesson. Unknown options now exit 2 and are named.
+
+Every read-only verb — `query`, `rdeps`, `impact`, `affected-by`, `findings`, `check` — now emits
+**one object** carrying `tool`/`verb`/`schema`. Three decisions carry the weight: **every edge and
+hop keeps `via: {kind, file, line}`**, because the provenance law is not a property of the human
+rendering and an agent must be able to disagree with a hop by opening the file it names;
+**`entrenched` is always present, `null` when ordinary**, because a missing field cannot be told
+apart from "this tool did not answer" and on *may I change this?* those must never look alike; and
+**the JSON walk is uncapped** while the human render still truncates — C32's reasoning pointed the
+right way for each audience. A structured channel is **not an AI feature**: a person writing CI needs
+it and an agent chasing a bad edge reads the prose. Both channels are first-class because *any
+maintainer may use either*.
+
+**D77 — The governance documents contradicted the constitution they serve.** Closes C80.
+**Owner's ruling**, 2026-08-03: *"There shall no descrimination for human and ai and other maintainers
+of delululang. Everyone is welcome to maintain and develop delululang further and beyond."*
+
+Invariant 24 rejects **kind-of-party trust hierarchies** as *"discriminatory and fragile"*, and no
+decision path in the Guard reads the kind of a grant holder. Yet the contribution policy branched on
+author kind in five places — and was restated **by hand in six documents**, including
+`CONSTITUTION.md` §9 itself, so the constitution contradicted its own invariant and fixing one file
+would have left five to drift back. Design rule 1 for the **ninth** time, in prose rather than code.
+
+Every rule now keys on the **change**, and each kind-blind form is **stricter** than what it replaced:
+a named sponsor **who is not the author** for every risk-class change (a human-authored authority
+change previously needed none); no change merges on the say-so of its own author; **all** contributed
+code runs in the Stage-5 profiles; every change names its author. Refined the same day on the owner's
+follow-up — a human sponsor is a **preference with its reason stated**, never a gate, and an AI system
+may hold every role. `sponsor ≠ author` is **kept**, because it was never about kind: it is the
+independence of the review, now read as a real distinctness test.
+
+The line that survives is **a named party who answers for a decision** versus **unattended automation
+with nobody behind it** — not human versus machine; a human who rubber-stamps fails it identically.
+Constitution §9 intact. Entrenchment analysis recorded (invariant 44): reversible by the same
+authority that made it, authorised by the project lead explicitly, residual risk named — the "a human
+decides it is submitted" backstop is gone, so `sponsor ≠ author` is now load-bearing where it
+previously had a second line behind it. Guarded by
+`no_governance_document_makes_a_rule_depend_on_the_kind_of_party`, which reads all four current
+documents and permits a document to *quote* the old wording only when it names the date it stopped
+being true; the two dated stage documents are annotated **SUPERSEDED**, not rewritten.
+
 ## 5. Diagnostics budget
 
 DL1901–DL1911 as allocated in spec §10. No other new codes without a ruling here. The three

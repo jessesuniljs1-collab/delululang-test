@@ -112,7 +112,11 @@ SLSA L3 provenance, reproducible builds, SBOM (CycloneDX), OpenSSF Scorecard flo
 autonomous PRs; unchanged quality bar; **AI-submitted code runs only in sandboxed CI using the
 project's own Stage-5 isolation profiles — the project dogfoods its own containment**). AI-overseer
 monitoring as advisory-only defense-in-depth (never merge authority — guarantees hold even if every
-overseer colludes). The `rfcs/` template (motivation, irreducibility analysis for core changes,
+overseer colludes).
+**SUPERSEDED 2026-08-03** and left as recorded: the policy is now **kind-blind** — every rule keys on
+the change rather than on its author's kind, all contributed code runs sandboxed, and a human sponsor
+is a preference, not a requirement. See `CONTRIBUTING.md` §4; the old form contradicted Constitution
+invariant 24. The `rfcs/` template (motivation, irreducibility analysis for core changes,
 entrenchment section per invariant 44, drawbacks, rejected alternatives) + ≥14-day comment period;
 CODEOWNERS gates Constitution changes on the project lead.
 *Test (criterion 6):* **the patch runbook rehearsal** — a staged vulnerability planted in an RC branch

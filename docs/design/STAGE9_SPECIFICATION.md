@@ -124,6 +124,11 @@ Operationalizing Constitution §9 — each item lands as a repo artifact + CI ga
   accountable per AI-authored PR; no unsupervised autonomous PRs; unchanged quality bar;
   AI-submitted code runs only in sandboxed CI (Stage-5 isolation profiles — the project dogfoods
   its own containment for its own contributions).
+  > **SUPERSEDED 2026-08-03**, left as recorded because it is what Stage 9 required at the time. By
+  > ruling of the project lead the policy is now **kind-blind**: every rule keys on the change, not
+  > on who or what authored it, and a human sponsor is a preference rather than a requirement. The
+  > clauses above each have a stricter kind-blind replacement — see `CONTRIBUTING.md` §4. The old
+  > form contradicted Constitution invariant 24, which rejects kind-of-party trust hierarchies.
 - **AI-overseer monitoring** as defense-in-depth on incoming PRs (advisory labels, never
   merge authority — Constitution §9: guarantees hold even if every overseer colludes).
 - **RFC process** (`rfcs/`): template (motivation, irreducibility analysis for core changes,

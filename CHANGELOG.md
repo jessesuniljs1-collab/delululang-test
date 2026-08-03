@@ -32,6 +32,42 @@ breaks. Nothing here is released; entries land as each phase completes. Full fin
   would most change the language's usefulness. Every figure is either recounted from the tree by a
   gated Survey fact or taken from a named suite run.
 
+### Added
+
+- **The Survey answers machines.** Every read-only verb — `query`, `rdeps`, `impact`, `affected-by`,
+  `findings`, `check` — now takes `--json` and emits **one object** carrying `tool`, `verb` and
+  `schema`. The map every maintainer consults before changing anything existed **only as prose**,
+  which made one of its two channels second-class. `--json` is not a feature for machines any more
+  than the human render is a feature for humans: a person writing a CI check needs the structured
+  answer, and an agent debugging a bad edge reads the prose. Both channels are first-class because
+  **any maintainer may use either** — the same no-discrimination rule the language applies to the
+  parties holding its grants. **Every edge and every
+  hop keeps its `via: {kind, file, line}` citation**, so the provenance law holds in the machine
+  channel exactly as in the human one: an agent can disagree with any single hop by opening the file
+  it names. `query --json` always carries `entrenched` — `null` for an ordinary node rather than
+  omitted, because a missing field cannot be told apart from "this tool did not answer". The JSON
+  walk is **uncapped**; only the human render truncates.
+
+### Fixed
+
+- **`delulu doctor --json` emitted TWO objects on any run that reported a problem.** It printed its
+  envelope without recording the emission, so the nonzero exit made the CLI add its documented
+  fallback envelope on top — breaking the one-object contract precisely when a caller had asked a
+  machine question and got a real answer back. Now recorded before the exit code is decided.
+
+- **The contract gate could not see a command nobody had written down.** It verified that every
+  *named* subcommand appears in `--help`, and never the reverse — so `doctor`, which is dispatched
+  and documented but listed in neither the swept nor the excluded set, was reached by no sweep at
+  all. The gate now **reads the dispatch `match` in `cli.rs`** and fails on any arm missing from both
+  lists. This is the campaign's recurring shape for the eighth time: a hand-maintained list falls
+  behind the thing that defines it, so the definition has to be read rather than mirrored.
+
+- **`delulu-survey` accepted `--json` and ignored it**, answering with prose and exit 0 — the exact
+  defect the main CLI closed as C76 (*"an option nobody understood is refused, never ignored"*),
+  surviving in a sibling binary written before the lesson. Unknown options are now refused with exit
+  2 and named. A tool whose audience is machines is the worst place to silently drop a flag: a human
+  notices prose where JSON should be, a pipeline does not.
+
 ### Changed
 
 - **Lint findings reduced — and the way they were counted corrected.** The number published for

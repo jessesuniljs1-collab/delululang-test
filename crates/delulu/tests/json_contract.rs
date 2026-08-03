@@ -34,6 +34,11 @@ const NOT_SWEPT: &[&str] = &[
     "lsp",    // a JSON-RPC server: blocks on stdin by design
     "repl",   // interactive
     "broker", // can start a daemon; not run-once
+    // `doctor` WRITES: without `--check` it regenerates `docs/survey/`. A blind argument sweep would
+    // rewrite the repository from inside the test suite, which is the one thing a test must not do.
+    // It is covered instead by `doctor_reporting_a_problem_still_emits_exactly_one_object`, which
+    // uses the read-only `--check` form.
+    "doctor",
 ];
 
 /// Argument shapes that make a command fail. Each is something a real caller produces: no argument
@@ -184,6 +189,105 @@ fn every_dispatched_subcommand_is_documented_and_swept() {
     assert!(
         missing_from_help.is_empty(),
         "these subcommands exist but `--help` does not list them: {missing_from_help:?}"
+    );
+
+    // The other direction, which this gate did not check for its whole life. Above proves every
+    // NAMED command is documented; it cannot notice a command the dispatcher accepts that nobody
+    // ever wrote down. `doctor` was exactly that — dispatched, in `--help`, in neither list, and
+    // therefore swept by nothing. Its `--json` path had been emitting TWO objects on any run that
+    // reported a problem, and no gate could see it.
+    //
+    // This is the campaign's recurring shape (C31/C34/C35/C44/C52): a hand-maintained list falls
+    // behind the thing that defines it. The definition here is the dispatch `match`, so read it.
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("cli.rs"),
+    )
+    .expect("cli.rs must be readable — it is the definition this gate reads");
+
+    let body = src
+        .split_once("fn run_inner")
+        .and_then(|(_, rest)| rest.split_once("match cmd.as_str() {"))
+        .map(|(_, rest)| rest)
+        .expect("the top-level dispatch must be `match cmd.as_str()` inside `fn run_inner`");
+
+    let mut dispatched: Vec<String> = Vec::new();
+    for line in body.lines() {
+        let t = line.trim();
+        // The catch-all ends the dispatch; everything after belongs to other matches (subverbs).
+        if t.starts_with("other =>") {
+            break;
+        }
+        let Some((pats, _)) = t.split_once("=>") else { continue };
+        if !pats.trim_start().starts_with('"') {
+            continue;
+        }
+        for pat in pats.split('|') {
+            let name = pat.trim().trim_matches('"');
+            // `--help`/`-h`/`--version`/`-V`/`help` are flags on the dispatch, not subcommands.
+            if name.is_empty() || name.starts_with('-') || name == "help" {
+                continue;
+            }
+            dispatched.push(name.to_string());
+        }
+    }
+
+    assert!(
+        dispatched.len() > 20,
+        "the dispatch scan found only {} arms — the parse broke, and a gate that reads nothing \
+         passes everything",
+        dispatched.len()
+    );
+
+    let unswept: Vec<&String> = dispatched
+        .iter()
+        .filter(|d| !SUBCOMMANDS.contains(&d.as_str()) && !NOT_SWEPT.contains(&d.as_str()))
+        .collect();
+    assert!(
+        unswept.is_empty(),
+        "the dispatcher accepts these, but neither SUBCOMMANDS nor NOT_SWEPT names them, so no \
+         sweep in this file can reach them: {unswept:?}\n\
+         Add each to SUBCOMMANDS, or to NOT_SWEPT with the reason it cannot be swept."
+    );
+}
+
+/// A command that **ran correctly and reported a problem** is a different signal from a command that
+/// refused its arguments — and the sweep above can only produce the second. Every `FAILING_SHAPES`
+/// entry is bad input, which a command rejects during argument parsing, before it prints anything of
+/// its own. So the shape that broke here was structurally unreachable: `doctor` parses fine, does its
+/// work, prints its own envelope, and exits 1 because a check failed.
+///
+/// `doctor` printed that envelope with a bare `println!` and never called `note_json_emitted()`, so
+/// the nonzero exit made `cli::run` add its fallback envelope on top — **two objects for any caller
+/// that asked a machine question and got a problem back**. Which is the case an agent hits most.
+///
+/// The fixture uses no repository state: with no home directory there is nowhere to keep state, and
+/// doctor reports that as a problem. The `assert_ne!` on the exit code is deliberate — if the fixture
+/// ever stops producing a problem this test would pass while proving nothing.
+#[test]
+fn doctor_reporting_a_problem_still_emits_exactly_one_object() {
+    let out = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        // `--check` is the READ-ONLY form: plain `doctor` would regenerate `docs/survey/`.
+        .args(["doctor", "--check", "--json"])
+        .env_remove("DELULU_HOME")
+        .env_remove("HOME")
+        .env_remove("USERPROFILE")
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .output()
+        .expect("the delulu binary must run");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let code = out.status.code().unwrap_or(-1);
+
+    assert!(!panicked(&out), "doctor panicked:\n{}", String::from_utf8_lossy(&out.stderr));
+    assert_ne!(
+        code, 0,
+        "the fixture must actually produce a problem, or this test proves nothing:\n{stdout}"
+    );
+    assert_eq!(
+        count_json_values(&stdout),
+        1,
+        "doctor exited {code} and put more than one JSON object on stdout:\n{stdout}"
     );
 }
 

@@ -21,19 +21,30 @@ fn main() {
         std::process::exit(2);
     };
 
+    let f = flags(&args);
+    // A node id never begins with `-`, so the flags cannot swallow one and a flag cannot be
+    // mistaken for one.
+    let pos: Vec<&str> = args[1..].iter().map(String::as_str).filter(|a| !a.starts_with('-')).collect();
+    // `--depth` takes a value, and that value is a positional-looking number that belongs to it.
+    let pos: Vec<&str> = if args.iter().any(|a| a == "--depth") {
+        pos.into_iter().filter(|a| a.parse::<u32>().is_err()).collect()
+    } else {
+        pos
+    };
+
     match verb {
-        "build" => build(&root, false),
-        "check" => build(&root, true),
-        "findings" => findings(&root),
-        "query" | "rdeps" => match args.get(1) {
-            Some(id) => query(&root, id, verb == "rdeps"),
+        "build" => build(&root, false, f.json),
+        "check" => build(&root, true, f.json),
+        "findings" => findings(&root, f.json),
+        "query" | "rdeps" => match pos.first() {
+            Some(id) => query(&root, id, verb == "rdeps", f.json),
             None => usage("query and rdeps need a node id, e.g. `crate:delulu-check`"),
         },
-        "impact" | "affected-by" => match args.get(1) {
-            Some(id) => walk(&root, id, verb == "impact", depth_flag(&args)),
+        "impact" | "affected-by" => match pos.first() {
+            Some(id) => walk(&root, id, verb == "impact", f.depth, f.json),
             None => usage(&format!("{verb} needs a node id, e.g. `crate:delulu-check`")),
         },
-        "path" => match (args.get(1), args.get(2)) {
+        "path" => match (pos.first(), pos.get(1)) {
             (Some(a), Some(b)) => path(&root, a, b),
             _ => usage("path needs two node ids, e.g. `path crate:delulu crate:delulu-broker`"),
         },
@@ -61,23 +72,90 @@ fn print_help() {
          it reaches the whole workspace. Reach for `impact` when the question is blast radius.\n\n\
          IDS\n  \
            crate:delulu-check  mod:crates/delulu-check/src/ty.rs  doc:README.md\n  \
-           code:DL0501         ruling:S10-D64                     finding:C69\n"
+           code:DL0501         ruling:S10-D64                     finding:C69\n\n\
+         MACHINE OUTPUT\n  \
+           Add `--json` to any verb above for ONE object on stdout, carrying `tool`, `verb` and\n  \
+           `schema` so a caller can branch before reading anything else. Every edge and every hop\n  \
+           keeps its `via: {{kind, file, line}}` citation — the map never asserts a relation to a\n  \
+           machine that it would not point a human at. `query --json` always carries `entrenched`,\n  \
+           null when the node is ordinary, so \"may I change this?\" is never merely unanswered.\n  \
+           The JSON walk is UNCAPPED; only the human render is truncated.\n  \
+           An option this tool does not know is refused, never ignored.\n"
     );
 }
 
-/// `--depth N`, bounded by the walk's own guard.
-fn depth_flag(args: &[String]) -> u32 {
-    let mut i = 0;
+/// Everything the flags carry, parsed once.
+struct Flags {
+    json: bool,
+    depth: u32,
+}
+
+/// Parse the flags, and **refuse any option nobody understood**.
+///
+/// This tool used to accept `--json` and print human text anyway: the flag was neither implemented
+/// nor rejected, so a caller that asked for machine output got prose and an exit code of 0. That is
+/// the defect the main CLI closed in campaign finding C76 — *"an option nobody understood is refused,
+/// never ignored"* — and the rule did not reach this binary because it is a separate program written
+/// before the lesson. A tool whose audience is increasingly machines is the worst place to keep it:
+/// a human notices prose where JSON should be, a pipeline does not.
+fn flags(args: &[String]) -> Flags {
+    let mut f = Flags { json: false, depth: delulu_survey::MAX_WALK_DEPTH };
+    let mut unknown: Vec<&str> = Vec::new();
+    let mut i = 1; // args[0] is the verb
     while i < args.len() {
-        if args[i] == "--depth" {
-            if let Some(n) = args.get(i + 1).and_then(|s| s.parse::<u32>().ok()) {
-                return n.clamp(1, delulu_survey::MAX_WALK_DEPTH);
-            }
-            usage("--depth needs a positive number");
+        let a = args[i].as_str();
+        match a {
+            "--json" => f.json = true,
+            "--depth" => match args.get(i + 1).and_then(|s| s.parse::<u32>().ok()) {
+                Some(n) => {
+                    f.depth = n.clamp(1, delulu_survey::MAX_WALK_DEPTH);
+                    i += 1;
+                }
+                None => usage("--depth needs a positive number"),
+            },
+            _ if a.starts_with('-') => unknown.push(a),
+            _ => {} // a positional: a node id
         }
         i += 1;
     }
-    delulu_survey::MAX_WALK_DEPTH
+    if !unknown.is_empty() {
+        eprintln!(
+            "error: delulu-survey does not know {}: {}\n  \
+             nothing was done — an option nobody understood is refused, never ignored\n\
+             note: `delulu-survey --help` lists what this tool accepts",
+            if unknown.len() == 1 { "this option" } else { "these options" },
+            unknown.join(", ")
+        );
+        std::process::exit(2);
+    }
+    f
+}
+
+/// The envelope every `--json` answer is wrapped in, so a caller can branch on `verb` and `schema`
+/// before it knows anything else. Mirrors the CLI's contract in `docs/for-agents.md`: **one object,
+/// on stdout, never coloured, never localized.**
+fn envelope(verb: &str, payload: serde_json::Value) -> String {
+    let mut root = serde_json::json!({
+        "tool": "delulu-survey",
+        "verb": verb,
+        "schema": 1,
+        "delulu_version": env!("CARGO_PKG_VERSION"),
+    });
+    if let (Some(o), Some(p)) = (root.as_object_mut(), payload.as_object()) {
+        for (k, v) in p {
+            o.insert(k.clone(), v.clone());
+        }
+    }
+    serde_json::to_string_pretty(&root).unwrap_or_else(|_| "{}".into())
+}
+
+/// An edge or hop, rendered for machines with the citation intact.
+///
+/// The provenance law — *"a relation that cannot be pointed at in the text is not in the map"* —
+/// is not a property of the human rendering. It has to survive into the machine channel, or an
+/// agent reading this map has strictly less ability to check it than a human reading the same map.
+fn via_json(kind: EdgeKind, file: &str, line: u32) -> serde_json::Value {
+    serde_json::json!({ "kind": kind_word(kind), "file": file, "line": line })
 }
 
 /// Everything reachable, grouped by distance, every hop cited.
@@ -86,7 +164,7 @@ fn depth_flag(args: &[String]) -> u32 {
 /// without weakening it: each line names the node it came from, and that node is listed one group
 /// above, so the whole chain is recoverable by reading upward. `path` prints one chain in full when
 /// that is the question.
-fn walk(root: &Path, id: &str, reverse: bool, depth: u32) {
+fn walk(root: &Path, id: &str, reverse: bool, depth: u32, json: bool) {
     let survey = Survey::build(root);
     if survey.node(id).is_none() {
         not_found(&survey, id);
@@ -95,6 +173,39 @@ fn walk(root: &Path, id: &str, reverse: bool, depth: u32) {
     let reached = survey.walk(id, dir, depth);
 
     let question = if reverse { "what breaks if this changes" } else { "what this rests on" };
+
+    if json {
+        // The machine channel is deliberately UNCAPPED, for the same reason `--json` diagnostics are
+        // (campaign finding C32): the human render is truncated because a saturating list stops
+        // informing a reader, but a caller that asked for the whole blast radius gets it and can
+        // page through it itself. Truncating here would make the answer quietly wrong.
+        let hops: Vec<serde_json::Value> = reached
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.id,
+                    "depth": r.depth,
+                    "from": r.from,
+                    "via": via_json(r.via.kind, &r.via.file, r.via.line),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            envelope(
+                if reverse { "impact" } else { "affected-by" },
+                serde_json::json!({
+                    "node": id,
+                    "question": question,
+                    "depth_limit": depth,
+                    "reached": hops.len(),
+                    "hops": hops,
+                })
+            )
+        );
+        return;
+    }
+
     println!("{id}\n  {question} — {} node(s) reached", reached.len());
     if reached.is_empty() {
         println!("\nnothing. This node is a leaf in that direction.");
@@ -189,12 +300,31 @@ fn repo_root() -> Option<PathBuf> {
     delulu_survey::find_source_tree()
 }
 
-fn build(root: &Path, check_only: bool) {
+fn build(root: &Path, check_only: bool, json: bool) {
     // The same entry point `delulu doctor` uses, so the two commands cannot drift on what "behind
     // the tree" means or on how the files get written.
     let h = delulu_survey::inspect(root, if check_only { Repair::ReportOnly } else { Repair::Regenerate });
+    let t = h.tally;
 
     if check_only {
+        if json {
+            println!(
+                "{}",
+                envelope(
+                    "check",
+                    serde_json::json!({
+                        "fresh": h.stale.is_empty(),
+                        "stale": h.stale,
+                        "nodes": h.nodes,
+                        "edges": h.edges,
+                    })
+                )
+            );
+            if !h.stale.is_empty() {
+                std::process::exit(1);
+            }
+            return;
+        }
         if h.stale.is_empty() {
             println!("ok: the Survey matches the tree ({} nodes, {} edges)", h.nodes, h.edges);
             return;
@@ -210,11 +340,34 @@ fn build(root: &Path, check_only: bool) {
     }
 
     if let Some(e) = &h.write_error {
-        eprintln!("error: cannot write {OUTPUT_DIR}: {e}");
+        if json {
+            println!("{}", envelope("build", serde_json::json!({ "wrote": false, "error": e.to_string() })));
+        } else {
+            eprintln!("error: cannot write {OUTPUT_DIR}: {e}");
+        }
         std::process::exit(1);
     }
 
-    let t = h.tally;
+    if json {
+        println!(
+            "{}",
+            envelope(
+                "build",
+                serde_json::json!({
+                    "wrote": true,
+                    "output_dir": OUTPUT_DIR,
+                    "nodes": h.nodes,
+                    "edges": h.edges,
+                    "discrepancies": {
+                        "error": t.errors, "warning": t.warnings, "note": t.notes,
+                        "total": t.errors + t.warnings + t.notes,
+                    },
+                })
+            )
+        );
+        return;
+    }
+
     println!(
         "wrote {OUTPUT_DIR}/ — {} nodes, {} edges, {} discrepancies ({} error, {} warning)",
         h.nodes,
@@ -225,8 +378,27 @@ fn build(root: &Path, check_only: bool) {
     );
 }
 
-fn findings(root: &Path) {
+fn findings(root: &Path, json: bool) {
     let survey = Survey::build(root);
+    if json {
+        let items: Vec<serde_json::Value> = survey
+            .findings
+            .iter()
+            .map(|f| {
+                serde_json::json!({
+                    "severity": f.severity.word(),
+                    "file": f.file,
+                    // 0 means "this finding is about the file, not a line in it" — said explicitly
+                    // rather than encoded as a line number that does not exist.
+                    "line": if f.line > 0 { serde_json::json!(f.line) } else { serde_json::Value::Null },
+                    "class": f.class,
+                    "message": f.message,
+                })
+            })
+            .collect();
+        println!("{}", envelope("findings", serde_json::json!({ "count": items.len(), "findings": items })));
+        return;
+    }
     for f in &survey.findings {
         let sev = f.severity.word();
         if f.line > 0 {
@@ -238,7 +410,7 @@ fn findings(root: &Path) {
     println!("\n{} discrepancies", survey.findings.len());
 }
 
-fn query(root: &Path, id: &str, rdeps_only: bool) {
+fn query(root: &Path, id: &str, rdeps_only: bool, json: bool) {
     let survey = Survey::build(root);
     let Some(node) = survey.node(id) else {
         eprintln!("error: no node `{id}`");
@@ -249,6 +421,49 @@ fn query(root: &Path, id: &str, rdeps_only: bool) {
         }
         std::process::exit(1);
     };
+
+    if json {
+        let edge_json = |edges: &[&delulu_survey::Edge], incoming: bool| -> Vec<serde_json::Value> {
+            edges
+                .iter()
+                .map(|e| {
+                    let other = if incoming { &e.from } else { &e.to };
+                    serde_json::json!({ "node": other, "via": via_json(e.kind, &e.file, e.line) })
+                })
+                .collect()
+        };
+        let incoming = survey.into_(id);
+        let mut payload = serde_json::json!({
+            "node": {
+                "id": node.id,
+                "kind": format!("{:?}", node.kind),
+                "path": node.path,
+                "lines": node.lines,
+                "summary": node.summary,
+                "holds": node.contents,
+            },
+            "pointed_at_by": edge_json(&incoming, true),
+        });
+        if !rdeps_only {
+            let outgoing = survey.out(id);
+            payload["points_at"] = serde_json::json!(edge_json(&outgoing, false));
+        }
+        // Entrenchment is the one field a maintainer must read BEFORE deciding to act, so it is
+        // always present — `null` when the node is ordinary, rather than absent. An agent that keys
+        // on a missing field cannot tell "not entrenched" from "this tool did not tell me".
+        payload["entrenched"] = match &node.entrenched {
+            Some(e) => serde_json::json!({
+                "owner": e.owner,
+                "pattern": e.pattern,
+                "matched_at": { "file": e.file, "line": e.line },
+                "means": "changing this needs that owner specifically, not any maintainer; \
+                          Constitution §10 requires an entrenchment analysis (invariant 44) first",
+            }),
+            None => serde_json::Value::Null,
+        };
+        println!("{}", envelope(if rdeps_only { "rdeps" } else { "query" }, payload));
+        return;
+    }
 
     println!("{} [{:?}]", node.id, node.kind);
     if let Some(p) = &node.path {

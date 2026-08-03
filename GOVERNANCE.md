@@ -3,8 +3,10 @@
 **Status:** Living. Companion to `CONTRIBUTING.md`, `SECURITY.md`, and `rfcs/`.
 
 DeluluLang is free, open-source software (Apache-2.0) intended for global adoption by humans, AI
-systems, companies, governments, and robots alike, with no discrimination between users. This
-document says how the *project* is run — distinct from the `LICENSE`, which says how the *code* may
+systems, companies, governments, and robots alike, **with no discrimination between users — and none
+between the parties who maintain and develop it.** Everyone is welcome to carry this language
+further: the rules in `CONTRIBUTING.md` §4 key on the change being made, never on who or what made
+it. This document says how the *project* is run — distinct from the `LICENSE`, which says how the *code* may
 be used, and `TRADEMARK.md`, which says how the *name* may be used.
 
 ## 1. Roles
@@ -14,11 +16,16 @@ be used, and `TRADEMARK.md`, which says how the *name* may be used.
   authority for the official project — in particular for anything that changes the language's
   philosophy, its public specification, its governance, its licensing, or its backward
   compatibility. These are explicitly reserved and are never delegated by default.
-- **Contributors.** Anyone — human or AI — who submits code, documentation, tests, or review.
-  Contributions are accepted under Apache-2.0 (§5 of the License); a contributor is credited for
-  their own work and never as the author of the original language.
+- **Contributors.** Anyone — human, AI, or any other kind of party — who submits code,
+  documentation, tests, or review. Contributions are accepted under Apache-2.0 (§5 of the License); a
+  contributor is credited for their own work and never as the author of the original language.
 - **Maintainers.** Contributors whom the project lead has granted commit or review authority over
-  specific areas. Maintainership is a responsibility, not a claim of authorship.
+  specific areas. Maintainership is a responsibility, not a claim of authorship. **Maintainership is
+  not restricted by kind of party**: it is granted on demonstrated judgement and carried by whoever
+  holds it, exactly as the language's own grants are (Constitution invariant 24 — kind-of-party trust
+  hierarchies are rejected as *"discriminatory and fragile"*). Everyone is welcome to maintain and
+  develop DeluluLang; `CONTRIBUTING.md` §4 states the rules, and every one of them keys on the change
+  rather than on its author.
 
 ## 2. How the language changes
 
@@ -27,9 +34,13 @@ through the **RFC process** in `rfcs/` (see `rfcs/README.md`):
 
 - an RFC has a comment period (≥14 days for authority/effect-behavior changes) before it is
   accepted;
-- an AI-authored RFC needs a **named human sponsor** (`CONTRIBUTING.md` §4), who takes
-  responsibility for it — this is a governance safeguard, not a statement that AI contributions are
-  worth less;
+- every RFC needs a **named sponsor who is not its author** (`CONTRIBUTING.md` §4), who takes
+  responsibility for it. This used to be required only of AI-authored RFCs, with a note insisting it
+  was "not a statement that AI contributions are worth less" — but a safeguard applied to one kind of
+  author is a statement about that kind, whatever the note says. Applied to every RFC it is both
+  non-discriminatory and stronger, since a human-authored core change previously needed no sponsor.
+  **A human sponsor is preferred where one is available and is not required**; a sponsor of any kind
+  satisfies the rule, and an AI system may hold every role in this document;
 - the project lead accepts or rejects, on the record.
 
 Bug fixes, documentation, and additive non-behavioral work do not need an RFC, but still go through
