@@ -166,7 +166,8 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | Install → first program → real programs. Start here. |
 | [`docs/book/THE_DELULULANG_BOOK.md`](docs/book/THE_DELULULANG_BOOK.md) | The complete guide, 20 chapters. Read Ch. 6 if you review AI-written code. |
 | [`docs/for-agents.md`](docs/for-agents.md) | The one page an agent harness should pin. |
-| [`docs/QUESTIONS.md`](docs/QUESTIONS.md) | **Hard questions, answered with evidence** — can authority be bypassed, how it compares to a sandbox, what the maths does and does not prove, whether several agents can share one machine, and the twelve things this project cannot claim. Start here if you are evaluating it. |
+| [`docs/QUESTIONS.md`](docs/QUESTIONS.md) | **Hard questions, answered with evidence** — can authority be bypassed, how it compares to a sandbox, what the maths does and does not prove, whether several agents can share one machine, and the things this project cannot claim. Start here if you are evaluating it. |
+| [`docs/MATHEMATICS.md`](docs/MATHEMATICS.md) | **Every mathematical structure the language uses** — what it is, where, why that structure, and *how strong* the result is, with each claim assigned to exactly one of seven proof-boundary categories. Includes the claims this project has **retracted** and the category that is still **empty**. |
 | [`docs/reference/`](docs/reference/) | Generated reference: grammar, tokens, primitives, diagnostics, CLI contracts, coverage. |
 | [`docs/design/CONSTITUTION.md`](docs/design/CONSTITUTION.md) | The v1.0 constitution — identity, semantics, honesty clauses. |
 | [`docs/design/SOUNDNESS_AUDIT.md`](docs/design/SOUNDNESS_AUDIT.md) | Rules R-1…R-8 that keep authority in the type, and the five holes they close. |

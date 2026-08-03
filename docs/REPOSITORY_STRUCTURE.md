@@ -196,6 +196,15 @@ DeluluLang/
     ├── REPOSITORY_STRUCTURE.md     # this file
     ├── GETTING_STARTED.md          # install → first program → real programs (the entry path)
     ├── for-agents.md               # the one page an agent harness should pin
+    ├── MATHEMATICS.md              # [P17 capstone] EVERY mathematical structure the language uses:
+    │                               #   WHAT it is, WHERE (file:line), WHY that structure, and HOW
+    │                               #   STRONG — each claim in exactly ONE of seven proof-boundary
+    │                               #   categories. Names the RETRACTED claims (antisymmetry of ⊑,
+    │                               #   symmetry of ⊓) and the EMPTY category (machine-checked, for
+    │                               #   the type system).
+    ├── QUESTIONS.md                # hard questions answered with evidence — can authority be
+    │                               #   bypassed, how it compares to a sandbox, what the maths does
+    │                               #   and does not prove, and the things this project cannot claim
     ├── editors.md                  # editor/LSP setup
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
