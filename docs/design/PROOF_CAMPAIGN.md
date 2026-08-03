@@ -395,8 +395,8 @@ Named so that no reader mistakes a plan for a result:
 
 - **No mechanized proof exists.** No proof assistant is installed. `DELULU_CORE.md` §7's theorems
   remain paper-level sketches, exactly as §9 says.
-- **The broker state machine is not yet model-checked.** TLC is provisioned and proven to run; no
-  DeluluLang specification has been written for it.
+- ~~The broker state machine is not yet model-checked.~~ **DONE — see §6 below.** The grant tree is
+  now model-checked; **leases, redemption, certificate adoption and federation are still not.**
 - **No property-based program generation yet.** The language is still tested with hand-written
   examples plus the conformance corpus; `order_laws.rs` is the first exhaustive-enumeration test in
   the repository.
@@ -411,7 +411,40 @@ Named so that no reader mistakes a plan for a result:
 
 ---
 
-## 6. Method note — why exhaustive enumeration replaced spot-checks
+## 6. Category 3 (model-checked) — the custody grant tree
+
+**`docs/design/models/Broker.tla`**, checked with TLA+/TLC v1.7.4. Models `tree.rs`'s
+grant / delegate / revoke / expire state machine with a clock; every guard cites the `file:line` it
+mirrors, and takes the **weaker** guard where the code is ambiguous, so the model can never be
+kinder than the implementation.
+
+| Run | Configuration | Result |
+|---|---|---|
+| 1 | `INHERIT_EXPIRY = TRUE` (today's code) | **No error.** 3,306,347 states generated, **585,771 distinct**, depth 8, 53 s |
+| 2 | `INHERIT_EXPIRY = FALSE` (pre-RFC-0001-F4 read) | **`NoUsableOrphan` violated at depth 4** |
+
+**Run 2 is the point.** A model that has never caught anything proves nothing, so the enforcement
+read was switched back to per-node expiry — the behaviour before RFC 0001 F4 — and TLC was required
+to fail. It did, and the counterexample it produced is the **real historical bug**, reconstructed
+from the guards alone:
+
+```text
+State 2: Grant     n0  ttl = 1                 (a bounded root — the uplink lease)
+State 3: Delegate  n1 under n0, ttl = NoTTL    (attenuate bounds authority, NOT the deadline)
+State 4: Tick      clock = 1                   (n0 expired; n1 still usable)  -> VIOLATED
+```
+
+`tree.rs:557-575` describes that same defect in the code's own words. The model found it
+independently.
+
+**Bounds, stated so the category is not read wider than it is:** three nodes, two effects,
+clock ≤ 2. Bounded model checking — the invariants hold over every reachable state *within* that
+bound, which is not a proof for all sizes. **Leases, redemption, certificate adoption, concurrency,
+partitions and clock skew are NOT modelled.** Two real vulnerabilities were previously found in
+exactly that unmodelled area, which makes it the highest-value place to extend. And the model is
+hand-written: nothing mechanically checks it stays faithful when `tree.rs` changes.
+
+## 7. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."

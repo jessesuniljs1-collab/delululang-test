@@ -113,11 +113,21 @@ there are independent layers underneath so one failure is not total.
 - **Effect rows are sets, and the typing rules compose them.** A function's row must contain the
   union of the rows of everything it calls (`ε_body ⊆ ε_declared`). The whole-program answer is
   `row(main)`.
-- **Authority forms a lattice.** `G₁ ⊑ G₂` is a partial order defined as one conjunction over nine
-  dimensions — effects plus eight scope dimensions — where each must be narrower-or-equal (paths are
-  descendants, host sets are subsets, numeric envelopes are ≤). The meet `⊓` is proven never wider
-  than either input, is symmetric, drops non-overlapping dimensions rather than widening them, and
-  preserves the `ttl ≥ heartbeat` invariant.
+- **Authority is ordered, and `⊓` is a genuine greatest lower bound.** `G₁ ⊑ G₂` is one conjunction
+  over nine dimensions — effects plus eight scope dimensions — where each must be narrower-or-equal
+  (paths are descendants, host sets are subsets, numeric envelopes are ≤). That `⊓` is **never wider
+  than either input**, and is in fact the *greatest* lower bound, is now verified **exhaustively over
+  every subset pair** of a path universe rather than spot-checked
+  (`crates/delulu-broker/tests/order_laws.rs`), and reflexivity and transitivity are additionally
+  **proved in Z3** over an abstract partial order, so they are not artifacts of the chosen universe.
+
+  **Two claims this page previously made here were false, and were disproved by those same tests:**
+  `⊑` is a **preorder, not a partial order** — `./data` and `data` resolve to one path but compare
+  unequal structurally, so they attenuate each other while being distinct (206 counterexamples) — and
+  **`⊓` is not symmetric**: `A⊓B = {./data}` where `B⊓A = {data}`, because the first argument's
+  spelling wins when both directions hold (414 counterexamples). Neither is an authority escalation;
+  the no-widening law is untouched. Both are recorded, with a third consequence for audit-chain
+  hashing, in `docs/design/PROOF_CAMPAIGN.md` §F1–F3.
 - **Attenuation is monotone by construction, not by check.** `sub ⊑ parent` holds because
   attenuation is the *only* way a child node can be created. There is no path where a child exceeds
   a parent, because there is no other path.
@@ -138,9 +148,19 @@ there are independent layers underneath so one failure is not total.
   builtins it silently did not (§1.1). A hand proof of the rules cannot tell you which branch the
   implementation forgot to write.
 
-So: **the design is mathematical; the guarantee you actually get is the tests.** That is why the
-conformance suite is a hard per-commit gate at 100% coverage and why every rule requires both an
-accepting and a rejecting witness. Until the mechanization exists, saying anything stronger would be
+**What became machine-established on 2026-08-03** — narrower than "proved", but no longer just tests:
+
+- **The custody grant tree is model-checked.** TLA+/TLC explores **585,771 distinct states** of
+  grant / delegate / revoke / expire and finds no violation of attenuation, revoke-covers-subtree,
+  no-resurrection, or the inherited-expiry law (`docs/design/models/`). The model is shown to have
+  teeth rather than asserted to: re-run against the *pre-fix* enforcement read, TLC reconstructs a
+  **real historical bug** — a `ttl: None` child outliving its parent's expired lease — at depth 4.
+- **Order-theoretic laws are checked exhaustively and symbolically**, as described above.
+
+So: **the design is mathematical; the type system's guarantee is still the tests; two subsystems now
+have machine-checked evidence, bounded and labelled as such.** The conformance suite remains a hard
+per-commit gate at 100% coverage, with an accepting and a rejecting witness per rule. The
+mechanization of the type system does not exist, and until it does, saying anything stronger would be
 a lie of exactly the kind this project is built to avoid.
 
 ### 1.5 Can several agents work on one machine with different authority from one main user?
@@ -482,21 +502,32 @@ Repeated here so no reader has to assemble it from the rest:
 
 1. **Not unbreakable.** The word is forbidden. Guarantees are relative to a named trust base, and
    this campaign broke one of them.
-2. **No mechanized proof.** The design is mathematical; the guarantee you get is the tests.
-3. **macOS has never been executed.**
-4. **No physical device has ever been commanded**, and no real driver ships in-tree.
-5. **No certification, in any regime, for any domain.**
-6. **Multi-tenancy is not provided** — several agents with different authority need separate OS
+2. **No mechanized proof of the type system.** No proof assistant is installed and `Delulu Core`
+   remains unformalized. Two *subsystems* now have machine-checked evidence — the custody grant tree
+   is model-checked (585,771 states) and the order laws are exhaustively and symbolically checked —
+   but both are **bounded**, and neither is the type system.
+3. **Leases, certificate adoption and federation are not model-checked.** The grant tree is; the
+   parts where two real vulnerabilities were previously found are not.
+4. **`Secret.verify` reveals one chosen bit per call without a declassify capability.** It now
+   declares the `Declassify` effect, so it is always visible in the authority report — but visible
+   is not impossible, and holding a secret is not the same as being allowed to read it.
+5. **macOS has never been executed.**
+6. **No physical device has ever been commanded**, and no real driver ships in-tree.
+7. **No certification, in any regime, for any domain.**
+8. **Multi-tenancy is not provided** — several agents with different authority need separate OS
    accounts or containers.
-7. **Not competitive with C** on the measured workloads (2.0×–60.5× slower).
-8. **Foreign calls are outside the proof.** Enumerated, not eliminated.
-9. **Side channels are out of scope.**
-10. **Post-quantum options are unvalidated** and gated behind `--unstable`.
-11. **Nothing is hosted.** No registry, no download page, no public repository — you build from
+9. **Not competitive with C** on the measured workloads (2.0×–60.5× slower).
+10. **Foreign calls are outside the proof.** Enumerated, not eliminated.
+11. **Side channels are out of scope.**
+12. **Post-quantum options are unvalidated** and gated behind `--unstable`.
+13. **Nothing is hosted.** No registry, no download page, no public repository — you build from
     source or produce your own archive.
-12. **Open robustness defects**: exponential type inference on a small class of programs, quadratic
+14. **Open robustness defects**: exponential type inference on a small class of programs, quadratic
     checking in nesting depth, and an unbounded parser recursion that crashes outside the exit-code
     contract.
+15. **Type inference is order-dependent and has no principal types** — swapping two parameters can
+    decide whether a program compiles. Fail-closed, so no authority escapes, but undocumented until
+    now.
 
 ---
 
@@ -505,6 +536,8 @@ Repeated here so no reader has to assemble it from the rest:
 | | |
 |---|---|
 | Every defect this campaign found, with witnesses | [`docs/design/HARDENING_CAMPAIGN.md`](design/HARDENING_CAMPAIGN.md) |
+| The proof-boundary ledger — every guarantee in exactly one of seven categories | [`docs/design/PROOF_CAMPAIGN.md`](design/PROOF_CAMPAIGN.md) |
+| Formal models + the checker's verbatim output, including the run that proves the model has teeth | [`docs/design/models/`](design/models/) |
 | The rules that keep authority in the type, and the R-4 reopening | [`docs/design/SOUNDNESS_AUDIT.md`](design/SOUNDNESS_AUDIT.md) |
 | The 18-item authority and 14-surface Guard audit | [`docs/design/AUTHORITY_GUARD_CAPSTONE.md`](design/AUTHORITY_GUARD_CAPSTONE.md) |
 | Trust assumptions and honesty clauses | [`docs/design/CONSTITUTION.md`](design/CONSTITUTION.md) §5.14, §9 |
