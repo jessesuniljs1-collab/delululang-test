@@ -69,6 +69,31 @@ changes released behaviour.
 verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
 reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
 
+### Known — cryptography audit findings (P17-7), OBSERVED and NOT fixed
+
+- **The audit chain does not detect truncation.** `verify` checks each record's `prev_hash` and
+  recomputes its hash, but every check is *local to a link* — so deleting the last *k* records
+  leaves a chain that still verifies, with a shorter count and an earlier head. Nothing anchors the
+  head: `AuditLog::open` **recovers** it from the files themselves, so the broker resumes chaining
+  from the truncated head and every later record is genuinely valid. Observed with a control (an
+  in-place edit *is* caught) in `crates/delulu-broker/tests/audit_truncation.rs`. Bounded by the
+  threat model — the audit directory is under the operator's own account — but **the honest claim is
+  "detects modification and reordering", not "tamper-evident"**, because the attack it misses is the
+  attractive one: deleting the record of what you did rather than altering it. Closing it means
+  anchoring the head outside the log — a persistence-format change, so an RFC.
+- **The `device` dimension has two sources of truth.** `Scopes::device` is a
+  `BTreeMap<String, DeviceScope>` whose value carries its own `device` field; **authorization reads
+  the map key** (`all_within`, `grants_device`, the meet) while **the signed and audited bytes read
+  the value's field** (`to_json`, `render_compact`). Nothing enforces that they agree. Observed in
+  `crates/delulu-broker/tests/device_identity.rs`. **Not exploitable from outside the process** —
+  `cert::authority_from_json` re-keys on the field, so every certificate load repairs it — but it is
+  a latent divergence of exactly the shape design rule 1 warns about, and a third test pins the
+  re-keying so the day it stops holding is the day this becomes reachable.
+- **What is well done, recorded because an audit that only lists faults is not an audit:** domain
+  separation is present, deliberate and tested (`delulu-grant-v1` vs `delulu-receipt-v1`, with tests
+  that a receipt signature cannot be replayed as a grant); canonical JSON sorts keys recursively; and
+  omit-when-empty is injective, so it introduces no signature collision.
+
 ### Security — supply chain and engine hardening (P17-F)
 
 - **There was no supply-chain gate at all.** `cargo deny` had never been run; there was no

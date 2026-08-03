@@ -639,7 +639,70 @@ So even a completed run would cover the compiler front end while **the `unsafe` 
 boundary**. That is an honest limit of the tool for this codebase, not a clean bill of health, and
 the host boundary needs a different technique (sanitizers on a Linux runner, or targeted review).
 
-## 9. Method note — why exhaustive enumeration replaced spot-checks
+## 9. Cryptography audit (P17-7)
+
+### What is genuinely well done, stated first
+
+- **Domain separation is present, deliberate and tested.** `GRANT_CTX = b"delulu-grant-v1"` and
+  `RECEIPT_CTX = b"delulu-receipt-v1"` prefix the signed bytes (`cert.rs:69-71, 422-424`), with
+  tests pinning that a receipt signature cannot be replayed as a grant, and that neither can be
+  replayed as an artifact signature. This is the thing most projects get wrong and this one does not.
+- **Canonical JSON is genuinely canonical** — keys sorted recursively (`audit.rs:663-677`), so the
+  signed encoding does not depend on map iteration order.
+- **Omit-when-empty is injective.** `to_json` drops `device` when empty and `body_value` drops
+  `uplink_ttl_ms` when `None`. Absent ⟺ empty/None is uniquely recoverable, so no two logical values
+  collide through that route. (The *other* direction — one logical authority, two encodings — is
+  finding F3, already recorded.)
+
+### 🔶 P17-C1 — the audit chain does not detect TRUNCATION (OBSERVED)
+
+`audit::verify` walks forward from `GENESIS_HASH`, checking each record's `prev_hash` against the
+running head and recomputing its hash (`audit.rs:354-396`). **Every check is local to a link.**
+Deleting the last *k* records leaves every remaining link correct, so `verify` returns `Ok` — with
+a smaller count and an earlier head.
+
+**Nothing anchors the head.** `AuditLog::open` *recovers* it by reading the existing day files
+(`audit.rs:216-227`), so after a truncation the broker resumes chaining from the truncated head and
+every later record is genuinely valid. A search of the workspace for any stored head or record-count
+expectation returns nothing.
+
+Observed, with a control, in `crates/delulu-broker/tests/audit_truncation.rs`: five records written,
+last two deleted, `verify` still `Ok` at three records — while an **in-place edit is caught**, which
+is what the chain genuinely provides.
+
+**Severity is bounded and stated:** the audit directory sits under the operator's own state
+directory, and this project already records that it provides no multi-tenancy or same-user
+isolation. But a hash chain is sold as *tamper evidence*, and the attack it fails to detect is the
+attractive one — you do not modify the record of what you did, you delete it. **The honest claim is
+"detects modification and reordering", not "tamper-evident".** Closing it means anchoring the head
+outside the log; `AuditBundle::verify` already takes an `expected_start` (`audit.rs:485`), which is
+the same idea applied to a bundle's beginning. The live chain's end has no equivalent. Persistence-
+format change → RFC, not a patch.
+
+### 🔶 P17-C2 — the `device` dimension has two sources of truth (OBSERVED, latent)
+
+`Scopes::device` is a `BTreeMap<String, DeviceScope>` whose value carries its own `device: String`.
+**Authorization reads the key; the signed bytes read the field.**
+
+| Reads the KEY | Reads the VALUE's `.device` |
+|---|---|
+| `all_within` — the `⊑` check (`device_scope.rs:276`) | `Authority::to_json` (`authority.rs:78`) |
+| `grants_device` — Actuate enforcement (`device_scope.rs:302`) | `render_compact` (`authority.rs:103`) |
+| `intersect_device_sets` — the meet (`device_scope.rs:285`) | — and so certificate signatures and the audit record |
+
+Nothing enforces `key == value.device`. Observed in
+`crates/delulu-broker/tests/device_identity.rs`: a map keyed `sat0/safe` holding a scope describing
+`sat0/arm` makes `grants_device("sat0/safe")` true while `to_json` emits `sat0/arm` — the broker
+would enforce one device and attest another.
+
+**NOT exploitable from outside the process, and not claimed to be.** `cert::authority_from_json`
+re-keys on `d.device` (`cert.rs:286`), so every certificate, audit record and `--json` payload
+repairs the invariant on load. This is a *latent* second source of truth in the exact shape design
+rule 1 warns about — a future construction site that keys it wrongly would split enforcement from
+attestation silently. A third test pins the re-keying, so if that ever stops holding the finding
+becomes reachable and the test says so.
+
+## 10. Method note — why exhaustive enumeration replaced spot-checks
 
 `authority.rs`'s own test carried the comment *"Property spot-check"* over a single pair. A
 spot-check cannot distinguish "this law holds" from "this law holds for the pair I thought of."
