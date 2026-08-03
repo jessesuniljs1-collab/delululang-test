@@ -10,6 +10,18 @@ built and omitted most of what the later stages added. §1 below is now what is 
 was once planned. Anything aspirational is marked as such inline — a map that mixes the two
 silently is worse than no map.
 
+**Re-synchronized again 2026-08-03** (P17 proof campaign), because it had drifted a second time and
+in the same direction: §1 listed `delulu-check` as eight modules when it has seventeen, gave
+`delulu-runtime` a `cap.rs` and a `manifest.rs` that do not exist while omitting `actors`, `custody`,
+`trace` and `pqc`, and omitted `cert.rs` and `device_scope.rs` from `delulu-broker` although the
+federation work (D21–D22) added both. Every crate's module list in §1 is now generated from the
+tree rather than remembered.
+
+**This drifted twice in six weeks, which is the argument for not relying on it.** A hand-maintained
+map falls behind the thing it maps — the project's own design rule 1. `docs/survey/` is derived from
+the tree by `cargo run -p delulu-survey -- build`, cites a `file:line` on every edge, and **a test
+fails when it is stale**. Treat §1 as orientation for a human and the Survey as the current truth.
+
 ---
 
 ## 1. Target directory tree
@@ -28,18 +40,40 @@ DeluluLang/
 ├── crates/                         # the compiler & runtime, one crate per pipeline concern
 │   ├── delulu-diag/                # spans, source map, code registry, JSON envelope, repairs, renderer
 │   │   ├── Cargo.toml              #   + [Stage 8, early] palette.rs — the role-based color system
-│   │   └── src/{lib,span,source,codes,diagnostic,json,render,palette}.rs
+│   │   ├── src/{lib,span,source,codes,catalog,diagnostic,json,render,palette}.rs
+│   │   └── tests/unproducible_witnesses.rs   # every registered code must be producible
 │   ├── delulu-syntax/              # tokens, lexer (Go-style termination), AST, error-recovering parser
 │   │   ├── Cargo.toml
-│   │   └── src/{lib,token,lexer,ast,parser,fmt,grammar,morph}.rs
+│   │   └── src/{lib,token,lexer,ast,parser,num,fmt,grammar,morph}.rs
 │   │                               #   morph.rs [D35]: the canonical-form law for surface morphs
+│   │                               #   lexer.rs also holds the DL0107/DL0108 raw-byte scans
 │   ├── delulu-check/               # [Stage 1] resolve, types, rows, THE effect/authority checker
-│   │   └── src/{lib,resolve,types,row,unify,check,authority,secret}.rs
-│   ├── delulu-runtime/             # [Stage 1] values, capability table, interpreter, grant broker
-│   │   └── src/{lib,value,cap,broker,interp,prim,manifest}.rs
+│   │   ├── src/{lib,resolve,ty,unify,check,authority,program}.rs        # the core pipeline
+│   │   ├── src/{manifest,package,lockfile,deps,deprecation}.rs          # package + dependency layer
+│   │   ├── src/{dir,prim_table,plugin,rcaps,rcap_check}.rs              # DIR/CBOR, §7.3 table,
+│   │   │                           #   plugin typing, reference capabilities (iso/val)
+│   │   └── tests/{laundering,secret_oracle,work_scaling}.rs
+│   │                               #   laundering.rs   — SOUNDNESS_AUDIT F-1…F-6 as rejection tests
+│   │                               #   secret_oracle.rs — P17-IF1: the map+verify declassification
+│   │                               #     oracle, plus controls pinning that the fix is not a
+│   │                               #     blanket refusal (docs/design/PROOF_CAMPAIGN.md §IF-1)
+│   ├── delulu-runtime/             # [Stage 1] values, interpreter, primitives, custody, actors
+│   │   ├── src/{lib,value,interp,prim,broker,custody,trace}.rs          # core execution + trace⊆row
+│   │   ├── src/{actors,cycles,foreign,python,plugin}.rs                 # [Stages 4/6/7]
+│   │   ├── src/{device,compute,adapter,pqc}.rs                          # [Stage 10] physical boundary,
+│   │   │                           #   compute dispatch, the operator-supplied subprocess adapter (D23)
+│   │   └── tests/{actors_pingpong,actors_promise,actors_trace,foreign_ffi,python_embed}.rs
 │   ├── delulu-broker/              # [Stage 5] custody core: ⊑ lattice, grant tree, validation
 │   │   │                           #   classes, audit chain, lease tokens, secrets, THE GUARD
-│   │   └── src/{lib,authority,path,tree,ids,time,validate,diag,audit,lease,secrets,guard}.rs
+│   │   ├── src/{lib,authority,path,tree,ids,time,validate,diag,audit,lease,secrets,guard}.rs
+│   │   ├── src/{cert,device_scope}.rs   # [RFC 0001 / D21–D22] federation certificates and the
+│   │   │                           #   `device` scope dimension with interval containment
+│   │   └── tests/{audit_wiring,holder_neutrality,order_laws}.rs
+│   │                               #   order_laws.rs — P17: the ⊑/⊓ algebra checked by EXHAUSTIVE
+│   │                               #     enumeration, not spot-checks. Three tests are #[ignore]d
+│   │                               #     and FAILING on purpose: they are committed evidence of
+│   │                               #     open findings F1–F3 (PROOF_CAMPAIGN.md). Run them with
+│   │                               #     `cargo test -p delulu-broker --test order_laws -- --ignored`
 │   ├── delulu-atlas/               # [Stage 8, early] the Atlas: typed deterministic code+authority
 │   │   │                           #   graph from compiler facts (atlas/1, digest, query verbs)
 │   │   └── src/{lib,model,build,render,query,formats}.rs
@@ -139,8 +173,20 @@ DeluluLang/
     ├── editors.md                  # editor/LSP setup
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
-    │   ├── SOUNDNESS_AUDIT.md
-    │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled)
+    │   ├── SOUNDNESS_AUDIT.md          # rules R-1…R-8 + R-2b; carries the R-4 and R-2/R-5
+    │   │                                #   REOPENING boxes — findings against the audit itself
+    │   ├── HARDENING_CAMPAIGN.md       # the "test it to failure" campaign (C1…C92, P1…P16)
+    │   ├── PROOF_CAMPAIGN.md           # [P17, 2026-08-03] the PROOF-BOUNDARY LEDGER: every
+    │   │                                #   guarantee in exactly one of seven categories (proven /
+    │   │                                #   machine-checked / model-checked / property-tested /
+    │   │                                #   differentially verified / fuzz verified / OUTSIDE the
+    │   │                                #   boundary). No grey areas. Records IF-1 and F1–F4.
+    │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; macOS NEVER executed, said plainly
+    │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
+    │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).
+    │   │                                #   §9 records a ~500-line Lean/Coq mechanization as open
+    │   │                                #   future work — it does NOT exist (no proof assistant is
+    │   │                                #   installed), so "machine-checked" is currently empty
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
     │   ├── STAGE10_AUTONOMY_ADDENDUM.md # [Stage 10] autonomy domains (spec Rev 2): vehicles/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs
