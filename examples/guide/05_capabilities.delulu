@@ -30,11 +30,13 @@ fn fetch(client: Cap[Http], url: Str) -> Result[Str, NetErr] ! {Net} {
     client.get(url)
 }
 
-// A secret has no string form, no equality, and no way out except `expose` — which
-// needs Cap[Declassify] and carries the `Declassify` effect, so "this function can
-// reveal a secret" is visible in its type. `verify` is the constant-time comparison
-// you almost always want instead.
-fn password_matches(held: Secret[Str], attempt: Secret[Str]) -> Bool {
+// A secret has no string form and no equality. Both ways of getting information out
+// carry the `Declassify` effect, so "this function can reveal something about a secret"
+// is visible in its type: `expose` yields the whole value and also needs
+// Cap[Declassify]; `verify` yields one bit, constant-time, and is the comparison you
+// usually want. `verify` carries the effect too — the bit it returns is derived from the
+// secret, so hiding it would make the row a lie (campaign finding P17-IF1).
+fn password_matches(held: Secret[Str], attempt: Secret[Str]) -> Bool ! {Declassify} {
     held.verify(attempt)
 }
 

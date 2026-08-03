@@ -210,6 +210,59 @@ documented as a designed leak in Constitution §5.4).
 
 **Cost.** None meaningful; `verify` covers the legitimate case.
 
+> ### R-2 AND R-5 WERE REOPENED — 2026-08-03, campaign finding P17-IF1 — **R-2 NOW RE-CLOSED**
+>
+> **The sentence above — "deliberate single-bit channel" — is wrong, and the error is not small.**
+> The channel is not one bit. It is one bit *of a predicate the attacker chooses*, and it can be
+> iterated to recover the entire plaintext.
+>
+> `Secret.map` hands its closure the **plaintext**, gated only on purity (DL0603). *Purity is not
+> confidentiality*: a pure closure computes any predicate over the plaintext and encodes the answer
+> into the returned `Secret[Str]`. `Secret.verify` then returns that answer as an **ordinary,
+> untainted `Bool`** — the unsealing step — and `check_if` carries no pc-label, so the `Bool` drives
+> an observable effect. `k.verify(k.map(fn(x) { g }))` is an equality oracle against **any** `g`.
+>
+> Observed, not argued: `delulu why Declassify` prints *"program cannot perform `Declassify`"* for a
+> program that prints the secret in full. `check` clean, `authority` shows `effects: Write` only, no
+> `Cap[Declassify]` anywhere, `--assert-trace` exit 0.
+>
+> **Why this audit could not have caught it.** R-2 and R-5 are both *satisfied* here. `map` keeps
+> its result tainted, exactly as R-5 requires. `verify` is the constant-time comparison R-5 blesses.
+> `expose` still carries `Declassify`, exactly as R-2 requires. **Every rule holds and the property
+> fails**, because the defect is in the *composition* of two sound operations — and a rule-by-rule
+> audit has no place to look for that. This is the same lesson as the R-4 reopening above, in a new
+> shape: there, a rule was skipped; here, no rule was skipped and none was enough.
+>
+> **What survives.** The direct surface is genuinely closed and was re-verified across twelve
+> eliminators — DL0602/0604/0605/0203 all fire correctly. R-5's opacity claim holds for every
+> *direct* eliminator. What does not survive is the stronger reading, that a secret cannot reach an
+> observer without declassification.
+>
+> **Closing rule R-2b (a secret-derived value carries `Declassify`).** `Secret.verify` now emits
+> `Effect::Declassify` in **both** halves of the primitive table — `check.rs::method_sig` and
+> `trace::effect_for` — which must agree or `--assert-trace` would report a runtime effect absent
+> from the row. This is R-2 applied where it always should have been: `verify` returns a `Bool`
+> *derived from secret data*, that is a declassification, so it carries the effect. Both oracles are
+> now **DL0501**.
+>
+> **How the old belief was protected.** `effect_for_is_none_for_pure_operations` asserted
+> `effect_for("Secret", "verify") == None` under a comment calling verification pure. The premise
+> that made the hole possible was itself a passing test. It has been moved to the effectful list.
+>
+> **R-2: re-closed. R-5: partially — and the difference matters.** Declassification is visible
+> again, which is what R-2 promises. It is *not* impossible: a program declaring `!{Declassify}` may
+> still run the oracle, and `delulu authority` will report `effects: Declassify` plus
+> `exposure: … declassifiable -> files/console`. That is the honest guarantee.
+>
+> **RESIDUE, OPEN.** `verify` declassifies without requiring `Cap[Declassify]`, while `expose`
+> requires it. Closing that asymmetry means `verify` returning `Secret[Bool]`; the runtime cannot
+> represent it today (`SecretVal` is String-only), so it is an RFC, not a patch. Until then: holding
+> a secret grants one chosen bit per call without a declassify capability — but never without
+> declaring the effect.
+>
+> Witness: `crates/delulu-check/tests/secret_oracle.rs`. Full write-up:
+> `docs/design/PROOF_CAMPAIGN.md` §IF-1.
+
 ### F-6 · HOLE (design gap at the Stage-6 boundary) — callbacks into and re-entrancy through plugins
 
 If a host passes a DeluluLang function value into a plugin export: a **Verified** plugin's export

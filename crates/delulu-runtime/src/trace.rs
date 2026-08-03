@@ -239,6 +239,13 @@ pub fn effect_for(cap_kind: &str, method: &str) -> Option<&'static str> {
         ("Clock", "now_ms") => Some("Clock"),
         ("Rand", "int") | ("Rand", "float") => Some("Rand"),
         ("Secret", "expose") => Some("Declassify"),
+        // P17-IF1: `verify` yields an ordinary untainted `Bool` derived from secret data, and the
+        // second operand can be a `map`-produced constant — so it is an equality oracle against an
+        // attacker-chosen plaintext, not the "single designed bit" it was documented as. That is a
+        // declassification, so it carries `Declassify` here exactly as the checker now does
+        // (`check.rs` Secret::verify). The two halves must agree or `--assert-trace` would report a
+        // runtime effect absent from the row.
+        ("Secret", "verify") => Some("Declassify"),
         // Stage 10 (10e): the physical boundary. A command is `Actuate`; a sensor read is plain
         // `Read` (observation is observation — no new effect for it, spec §5.1).
         ("Actuator", "command") => Some("Actuate"),
@@ -350,15 +357,21 @@ mod tests {
         assert_eq!(effect_for("Rand", "int"), Some("Rand"));
         assert_eq!(effect_for("Rand", "float"), Some("Rand"));
         assert_eq!(effect_for("Secret", "expose"), Some("Declassify"));
+        // P17-IF1: `verify` moved here from `effect_for_is_none_for_pure_operations`, where it was
+        // asserted to be pure under a comment calling it "verification". That assertion pinned the
+        // defect: it made the belief that a secret-derived Bool costs nothing a passing test.
+        assert_eq!(effect_for("Secret", "verify"), Some("Declassify"));
         assert_eq!(effect_for("Actuator", "command"), Some("Actuate"));
         assert_eq!(effect_for("Sensor", "read"), Some("Read"));
     }
 
     #[test]
     fn effect_for_is_none_for_pure_operations() {
-        // Attenuation, verification, and pure Str/List/Secret methods carry no effect.
+        // Attenuation and pure Str/List/Secret methods carry no effect. `Secret.verify` is NOT in
+        // this list any more — see P17-IF1 in the effectful test above.
         assert_eq!(effect_for("FsRead", "narrow"), None);
-        assert_eq!(effect_for("Secret", "verify"), None);
+        // `map` stays pure and MUST: it is sealed-in, sealed-out, so it declassifies nothing on its
+        // own. It is only half of IF-1; the half that unsealed was `verify`.
         assert_eq!(effect_for("Secret", "map"), None);
         assert_eq!(effect_for("Str", "len"), None);
         assert_eq!(effect_for("List", "push"), None);

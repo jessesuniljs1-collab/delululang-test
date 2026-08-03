@@ -36,17 +36,27 @@
 //!
 //! The toolchain states the program **cannot** declassify. The program prints the secret.
 //!
-//! ## Status
+//! ## Status: FIXED (visibility restored), with a named residue
 //!
-//! **OPEN.** These tests are `#[ignore]`d because they currently FAIL — they are committed as
-//! evidence, not as a passing gate. Run them with:
+//! `Secret.verify` now carries `Effect::Declassify` in both halves of the primitive table —
+//! `check.rs`'s `method_sig` and `trace::effect_for` — so both oracles above are now refused with
+//! **DL0501** ("performs effect `Declassify` not declared in its row").
 //!
-//! ```text
-//! cargo test -p delulu-check --test secret_oracle -- --ignored
-//! ```
+//! **What the fix buys, stated precisely: the leak is VISIBLE, not IMPOSSIBLE.** A program may
+//! still run this oracle if it *declares* `!{Declassify}` — and then `delulu authority` reports
+//! `effects: Declassify, Write` plus `exposure: API_KEY declassifiable -> files/console`, and
+//! `why Declassify` names the function. That is exactly what R-2 promises: declassification is an
+//! effect, and an effect is in the type. What is fixed is that the toolchain can no longer report
+//! "program cannot perform `Declassify`" for a program that declassifies.
 //!
-//! The fix is a language-semantics change (`Secret.verify` must not yield an untainted `Bool`) and
-//! therefore touches the `STABILITY.md` contract. See `docs/design/PROOF_CAMPAIGN.md` §IF-1.
+//! `the_declared_oracle_is_accepted_but_visible` below pins that distinction deliberately, so no
+//! future reader mistakes this suite for a proof that secrets cannot leak.
+//!
+//! **Residue, OPEN:** `verify` declassifies without requiring `Cap[Declassify]`, while `expose`
+//! requires it. Closing that asymmetry means `verify` returning `Secret[Bool]`, which the runtime
+//! cannot represent today — `SecretVal` is String-only (`SecretInner::Local(RefCell<String>)`,
+//! `reveal() -> String`), so it needs a generic-over-`Value` refactor. That is a `STABILITY.md`
+//! contract change and belongs in an RFC. See `docs/design/PROOF_CAMPAIGN.md` §IF-1.
 //!
 //! The DIRECT surface is NOT implicated and was verified clean: printing, concatenating,
 //! `str()`, `==`, `assert_eq`, writing to a file, and putting a secret in a record are all
@@ -98,12 +108,10 @@ fn main(root: Root) ! {Write} {
 ";
 
 #[test]
-#[ignore = "P17-IF1 OPEN: extracts a secret with no Declassify. Fix changes STABILITY contract; \
-            see docs/design/PROOF_CAMPAIGN.md §IF-1."]
 fn a_pure_predicate_over_the_plaintext_cannot_reach_an_untainted_bool() {
     let cs = error_codes(ONE_BIT_ORACLE);
     assert!(
-        !cs.is_empty(),
+        cs.iter().any(|c| c == "DL0501"),
         "SECRET ORACLE ACCEPTED: a pure closure computed a predicate over the PLAINTEXT and \
          `verify` returned it as an ordinary Bool, which then drove an observable effect — with no \
          `Declassify` effect and no `Cap[Declassify]` in the program. R-2 and R-5 both say this \
@@ -112,12 +120,10 @@ fn a_pure_predicate_over_the_plaintext_cannot_reach_an_untainted_bool() {
 }
 
 #[test]
-#[ignore = "P17-IF1 OPEN: equality oracle against attacker-chosen plaintext. \
-            See docs/design/PROOF_CAMPAIGN.md §IF-1."]
 fn verify_cannot_be_turned_into_an_oracle_against_a_chosen_plaintext() {
     let cs = error_codes(EQUALITY_ORACLE);
     assert!(
-        !cs.is_empty(),
+        cs.iter().any(|c| c == "DL0501"),
         "EQUALITY ORACLE ACCEPTED: `k.verify(k.map(|_| g))` compares the secret against an \
          arbitrary attacker-supplied string `g` and yields an untainted Bool. `verify` is \
          documented as a constant-time comparison of two secrets; a constant `map` supplies the \
@@ -144,6 +150,38 @@ fn mapping_a_secret_to_a_secret_is_still_accepted() {
         "module m\nfn ok(s: Secret[Str]) -> Secret[Str] { s.map(fn(x: Str) -> Str { x.trim() }) }\n",
     );
     assert!(cs.is_empty(), "Secret.map must stay usable, got {cs:?}");
+}
+
+/// **The honest limit of this fix, pinned so nobody overstates it.**
+///
+/// Declaring the effect makes the oracle legal again — and that is CORRECT under R-2, which
+/// promises that declassification is *visible*, not that it is impossible. What changed is that
+/// the toolchain can no longer say "program cannot perform `Declassify`" while it declassifies.
+/// If this test ever starts failing because the oracle became impossible, that is a real
+/// improvement — but it must be a deliberate one, with the RFC written.
+#[test]
+fn the_declared_oracle_is_accepted_but_visible() {
+    let declared = EQUALITY_ORACLE
+        .replace("fn guess(k: Secret[Str], g: Str) -> Bool {", "fn guess(k: Secret[Str], g: Str) -> Bool ! {Declassify} {")
+        .replace("fn main(root: Root) ! {Write} {", "fn main(root: Root) ! {Write, Declassify} {");
+    let cs = error_codes(&declared);
+    assert!(
+        cs.is_empty(),
+        "declaring the effect must keep the program legal — the fix restores VISIBILITY, not \
+         impossibility. Got {cs:?}\nsource:\n{declared}"
+    );
+}
+
+/// `verify` must carry the effect at the point of use, not merely somewhere up the call chain.
+#[test]
+fn verify_alone_requires_the_declassify_declaration() {
+    let cs = error_codes(
+        "module m\nfn cmp(a: Secret[Str], b: Secret[Str]) -> Bool { a.verify(b) }\n",
+    );
+    assert!(
+        cs.iter().any(|c| c == "DL0501"),
+        "a bare `verify` in an undeclared function must be DL0501, got {cs:?}"
+    );
 }
 
 /// An impure mapper is already refused (DL0603) and must stay refused.

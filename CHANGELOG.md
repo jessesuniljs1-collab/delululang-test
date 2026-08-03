@@ -9,6 +9,80 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — P17 proof campaign, 2026-08-03 (findings IF-1, F1–F4)
+
+Findings live in `docs/design/PROOF_CAMPAIGN.md`. This campaign attacks the project's **claims**
+rather than its implementation, so most entries below are *open findings*, not fixes. Nothing here
+changes released behaviour.
+
+### Security — FIXED
+
+- **CRITICAL (IF-1): a secret was fully recoverable while the toolchain said it could not be.**
+  `delulu why Declassify` reported "program cannot perform `Declassify`" for a program that printed
+  an entire API key. `Secret.map` hands its closure the **plaintext** and gates only on purity
+  (DL0603); `Secret.verify` returned the result as an **untainted `Bool`**; `if` carries no
+  pc-label. Composed, they are an equality oracle against an attacker-chosen string
+  (`k.verify(k.map(fn(x) { g }))`), iterable to full plaintext recovery — with no `Cap[Declassify]`
+  anywhere and `--assert-trace` exiting 0. **Reopened R-2 and R-5 simultaneously.** Neither
+  operation is defective alone, which is why a rule-by-rule audit could not see it.
+
+  **Fix (closing rule R-2b): `Secret.verify` now carries `Effect::Declassify`** in both halves of
+  the primitive table — `check.rs::method_sig` and `trace::effect_for` — which must agree or
+  `--assert-trace` would report a runtime effect absent from the row. Both oracles are now DL0501.
+  This is R-2 applied where it always belonged: `verify` returns a value *derived from secret data*,
+  which is a declassification. Typing it pure was an error, not a trade-off — and it had been
+  **pinned as a passing test** (`effect_for_is_none_for_pure_operations` asserted `verify` was pure
+  under a comment calling it so).
+
+  **The fix buys visibility, not impossibility, and says so.** A program declaring `!{Declassify}`
+  may still run the oracle; `delulu authority` then reports `effects: Declassify` and
+  `exposure: … declassifiable -> files/console`. That is what R-2 promises.
+
+  **Residue, open:** `verify` declassifies without requiring `Cap[Declassify]` where `expose`
+  requires it. Closing it means `verify` returning `Secret[Bool]`, which the runtime cannot
+  represent (`SecretVal` is String-only) — an RFC, not a patch.
+
+  **Behaviour change:** a function calling `Secret.verify` must now declare `!{Declassify}`. Four
+  in-repo programs were updated; the core-invariance snapshot moved in 7 cases, each inspected
+  before re-recording. Witness: `crates/delulu-check/tests/secret_oracle.rs`.
+
+### Known — found, named, and NOT fixed
+
+- **`⊑` is a preorder, not a partial order (F1).** `./data` and `data` resolve to the same path but
+  `Authority` derives `PartialEq` structurally, so they attenuate each other while comparing
+  unequal. 206 witnesses. "Lattice" is imprecise; the structure is a preorder whose poset reflection
+  is a meet-semilattice.
+- **`⊓` is not symmetric (F2).** `authority.rs:145` states it is. `A⊓B = {./data}` where
+  `B⊓A = {data}`: `intersect_path_sets` tests `if desc(x,y) … else if desc(y,x)`, so when both hold
+  the first argument's spelling wins. 414 witnesses.
+- **`⊑`-equivalent authorities hash differently (F3).** That spelling reaches `to_json`, the
+  canonical form inside hash-chained audit records and under certificate signatures, so one logical
+  grant hashes two ways. Endangers federation audit reconciliation. Fix is format-affecting (it
+  would change the bytes of existing records) and belongs in an RFC.
+- **Row inference is order-dependent and has no principal types (F4).** Swapping two parameters
+  decides whether a program compiles: `e := {Read}` satisfies both constraints, but unification
+  binds `e := {}` greedily from the first parameter and never backtracks. R-3b is **not** at fault —
+  refusing to union-merge is correct; the greedy choice upstream manufactures the conflict R-3b then
+  correctly reports. Fail-closed, so no authority escapes, but currently undocumented.
+
+**Not** an escalation: F1–F3 are naming, determinism and serialization defects. The meet was
+verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
+reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
+
+### Added
+
+- `docs/design/PROOF_CAMPAIGN.md` — the proof-boundary ledger: every guarantee assigned to exactly
+  one of seven categories (proven / machine-checked / model-checked / property-tested /
+  differentially verified / fuzz verified / outside the boundary), with no grey area permitted.
+- `crates/delulu-broker/tests/order_laws.rs` — the first **exhaustive-enumeration** test in the
+  repository. It replaces a hand-picked pair (commented "Property spot-check") with every subset of
+  a path universe. All three laws it disproves already had passing hand-written tests.
+- `crates/delulu-check/tests/secret_oracle.rs` — the IF-1 witness, with three controls that must keep
+  passing so no future fix can be a blanket refusal.
+- Verification toolchain, each smoke-tested before use: **Z3** 5.0.0, **TLA+/TLC** v1.7.4,
+  cargo-fuzz, cargo-deny, Miri. **No Lean/Coq/Alloy** — so *machine-checked* remains unreachable and
+  `DELULU_CORE.md` §9's promised mechanization is still open.
+
 ### Fixed — P16 adversarial pass, 2026-08-03 (rulings D78–D88)
 
 - **The effect row could be escaped entirely (C88/D78).** A callback reaching a higher-order builtin

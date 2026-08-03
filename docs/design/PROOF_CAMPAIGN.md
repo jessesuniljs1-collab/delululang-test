@@ -152,11 +152,11 @@ rather than checking hand-picked pairs. Three of its tests are `#[ignore]`d beca
 fail: they are committed as evidence of an open defect, and run with
 `cargo test -p delulu-broker --test order_laws -- --ignored`.
 
-### P17-IF1 — **CRITICAL** — a secret is fully recoverable while the toolchain says it cannot be
+### P17-IF1 — **CRITICAL — FIXED 2026-08-03** (visibility restored; one residue named below)
 
-**This is the most serious defect the project has found.** A program recovers an entire plaintext
+**This was the most serious defect the project has found.** A program recovered an entire plaintext
 secret, character by character, with **no `Declassify` effect and no `Cap[Declassify]` anywhere** —
-and the toolchain, asked directly, states that it cannot declassify.
+and the toolchain, asked directly, stated that it could not declassify.
 
 ```text
 $ delulu check     extract.delulu   ->  ok: extract.delulu checked clean
@@ -202,13 +202,54 @@ nothing. R-5's opacity holds for every direct eliminator. The hole is compositio
 *directly* observed. It may **not** claim that a secret cannot reach an observer without
 declassification, because it can, and the tool that reports otherwise is wrong.
 
-**The fix is a language-semantics change and therefore touches `STABILITY.md`.** `Secret.verify`
-must not yield an untainted `Bool`; a value derived from a secret belongs in the `Secret` lattice,
-so observing it must route through `expose` and emit `Declassify`. That is *hardening* the taint
-discipline to completeness rather than redefining what taint means — but it changes an existing
-signature, so it is recorded here for the owner's decision rather than applied unilaterally.
-The witness is committed at `crates/delulu-check/tests/secret_oracle.rs`, `#[ignore]`d because it
-currently fails, with three controls that must keep passing so the fix cannot be a blanket refusal.
+#### The fix, and exactly what it does and does not buy
+
+**`Secret.verify` now carries `Effect::Declassify`** in *both* halves of the primitive table —
+`check.rs`'s `method_sig` and `trace::effect_for` — which must agree or `--assert-trace` would
+report a runtime effect absent from the row.
+
+This follows from R-2 as literally written ("Declassify is an effect"). `verify` returns a `Bool`
+*derived from secret data*; that is a declassification; therefore it must carry the effect. The old
+code violated the project's own rule. Typing it pure was not a design trade-off, it was an error —
+and it had been **pinned as a passing test**: `effect_for_is_none_for_pure_operations` asserted
+`effect_for("Secret", "verify") == None` under a comment calling verification pure. The belief that
+caused the hole was encoded as a gate protecting it.
+
+After the fix, both oracles are refused:
+
+```text
+error[DL0501]: function `len_is`  performs effect `Declassify` not declared in its row
+error[DL0501]: function `char_is` performs effect `Declassify` not declared in its row
+  repair: add_effect_to_row (exact)  [widens authority — review before applying]
+```
+
+**The leak is now VISIBLE, not IMPOSSIBLE — and that distinction is the honest one.** A program may
+still run the oracle if it *declares* `!{Declassify}`. It then checks clean and still recovers the
+secret — but `delulu authority` reports it:
+
+```text
+effects:      Declassify, Write
+exposure:     API_KEY declassifiable -> files/console
+$ why Declassify -> main (declared.delulu:29) -> char_is (declared.delulu:17) — Declassify
+```
+
+That is exactly what R-2 promises: declassification is an effect, and an effect is in the type. What
+is fixed is that the toolchain can no longer report "program cannot perform `Declassify`" for a
+program that declassifies. `the_declared_oracle_is_accepted_but_visible` pins this deliberately so
+no future reader mistakes the suite for a proof that secrets cannot leak.
+
+**RESIDUE, OPEN — `verify` declassifies without requiring `Cap[Declassify]`, while `expose`
+requires it.** Closing that asymmetry means `verify` returning `Secret[Bool]`, so that observing the
+bit routes through `expose`. The runtime cannot represent that today: `SecretVal` is String-only
+(`SecretInner::Local(RefCell<String>)`, `reveal() -> String`), so it needs a generic-over-`Value`
+refactor plus a signature change — a `STABILITY.md` contract change, and therefore an RFC rather
+than a patch. Until then: **holding a secret grants the ability to learn one chosen bit of it per
+call, without a declassify capability, but never without declaring the effect.**
+
+Witness: `crates/delulu-check/tests/secret_oracle.rs` — 2 oracle tests (now passing), 3 controls, and
+the declared-oracle pin. Four in-repo programs that used `verify` gained `!{Declassify}`; the
+core-invariance snapshot moved in 7 cases, each inspected individually before re-recording (6 were
+functions leaving `pure_functions`, 1 was a line-number shift from an added comment).
 
 ### P17-F1 — `⊑` is a preorder, not a partial order (206 counterexamples)
 

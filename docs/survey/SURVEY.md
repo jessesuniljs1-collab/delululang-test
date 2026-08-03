@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 214 |
-| Rust lines | 103478 |
-| Rust files outside `src/` (test/bench targets) | 85 |
-| Markdown documents | 124 |
-| Markdown lines | 30629 |
+| Rust files | 216 |
+| Rust lines | 103935 |
+| Rust files outside `src/` (test/bench targets) | 87 |
+| Markdown documents | 125 |
+| Markdown lines | 31140 |
 | DeluluLang programs | 146 |
 | Registered diagnostic codes | 147 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1000 / 8793 |
+| Nodes / edges in this map | 1003 / 8847 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -159,12 +159,12 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 14233 lines
+- **Modules:** 17 files, 14252 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 120 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 3263 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 3282 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 186 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1379 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 838 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
@@ -268,7 +268,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 12368 lines
+- **Modules:** 16 files, 12381 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -286,7 +286,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
 | `src/prim.rs` | 723 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 332 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
-| `src/trace.rs` | 509 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
+| `src/trace.rs` | 522 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
 | `src/value.rs` | 689 | Runtime values, environments, and capability values (spec §7.1). |
 
 ### `delulu-survey`
@@ -359,7 +359,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | Range | Codes | Raised in |
 |---|---:|---|
 | `DL01xx` | 8 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
-| `DL02xx` | 10 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-syntax` |
+| `DL02xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-syntax` |
 | `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax` |
 | `DL04xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |

@@ -752,9 +752,7 @@ exit 0
     "foreign_calls": [],
     "foreign_isolation": "inproc",
     "program": "guide.capabilities",
-    "pure_functions": [
-      "password_matches"
-    ],
+    "pure_functions": [],
     "secrets": []
   },
   "command": "authority",
@@ -779,14 +777,14 @@ Authority of `guide.capabilities` — what this program can do to your system:
     - Console  stdio
     - Http     (scope granted at runtime)
   secrets:      (none)
-  pure fns:     password_matches
+  pure fns:     (none)
   foreign:      (none — no code outside the guarantee)
 --- stderr ---
 
 ===== examples/guide/05_capabilities.delulu :: why Write =====
 exit 0
 --- stdout ---
-main (examples/guide/05_capabilities.delulu:41) -> save (examples/guide/05_capabilities.delulu:22) — Write
+main (examples/guide/05_capabilities.delulu:43) -> save (examples/guide/05_capabilities.delulu:22) — Write
 --- stderr ---
 
 ===== examples/guide/06_actors.delulu :: check --json =====
@@ -1738,9 +1736,7 @@ exit 0
     "foreign_calls": [],
     "foreign_isolation": "inproc",
     "program": "conf",
-    "pure_functions": [
-      "matches"
-    ],
+    "pure_functions": [],
     "secrets": []
   },
   "command": "authority",
@@ -1761,7 +1757,7 @@ Authority of `conf` — what this program can do to your system:
   effects:      Declassify
   capabilities: (none)
   secrets:      (none)
-  pure fns:     matches
+  pure fns:     (none)
   foreign:      (none — no code outside the guarantee)
 --- stderr ---
 
@@ -9318,7 +9314,6 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "tier5",
     "pure_functions": [
-      "authenticate",
       "derive"
     ],
     "secrets": []
@@ -9341,7 +9336,7 @@ Authority of `tier5` — what this program can do to your system:
   effects:      Declassify
   capabilities: (none)
   secrets:      (none)
-  pure fns:     authenticate, derive
+  pure fns:     derive
   foreign:      (none — no code outside the guarantee)
 --- stderr ---
 

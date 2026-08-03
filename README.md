@@ -180,11 +180,27 @@ stated relative to a named threat model; strength comes from defense in depth (t
 → WASM/WASI floor → microVM containment → human-held broker keys), and every trust assumption
 (compiler, hardware, hypervisor, side channels) is named. See the constitution, §5.14 and §9.
 
-**The word "unbreakable" is never used, and on 2026-08-03 an adversarial pass showed why.** A
+**The word "unbreakable" is never used, and on 2026-08-03 two adversarial passes showed why.** A
 nine-line program made the toolchain report `effects: (none — provably pure)` for something that
 performed I/O at run time, through one missing `else` in the checker. It is fixed, the witness is
 kept, and [`docs/QUESTIONS.md`](docs/QUESTIONS.md) §1.1 leads with it rather than burying it —
 because a project that only publishes its wins has told you nothing about its losses.
+
+**A second one, found and fixed the same day, is worth knowing before you trust `Secret`.**
+`delulu why Declassify` reported *"program cannot perform `Declassify`"* for a program that printed
+an entire API key. `Secret.map` hands its closure the plaintext and gates only on *purity* — and
+purity is not confidentiality — while `Secret.verify` returned the answer as an untainted `Bool`.
+Composed, they are an equality oracle against an attacker-chosen string, iterable to full recovery.
+`verify` now carries the `Declassify` effect, so that program is refused unless it declares it.
+
+**The fix buys visibility, not impossibility, and the difference is stated rather than blurred.** A
+program that declares `!{Declassify}` may still do this — and `delulu authority` then tells you
+before you run it (`exposure: API_KEY declassifiable -> files/console`). That *is* the guarantee:
+declassification is an effect, and effects are in the type. One residue is open — `verify` needs no
+`Cap[Declassify]` where `expose` does — and closing it is an RFC, not a patch. So: holding a secret
+grants the ability to learn one chosen bit per call without a declassify capability, but never
+without declaring the effect. Mechanism and witness:
+[`docs/design/PROOF_CAMPAIGN.md`](docs/design/PROOF_CAMPAIGN.md) §IF-1.
 
 Three more things worth knowing before you evaluate it:
 

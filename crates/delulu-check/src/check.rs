@@ -2049,10 +2049,29 @@ impl<'a> Checker<'a> {
                         Some((Type::Secret(inner.clone()), None, None))
                     }
                 },
-                // verify is a constant-time comparison of two secrets — pure, no reveal.
+                // verify is a constant-time comparison of two secrets. It is NOT pure, and calling
+                // it "no reveal" (as this comment did until P17) was the premise behind campaign
+                // finding IF-1: it returns an ORDINARY UNTAINTED `Bool` derived from secret data,
+                // which is a declassification — so by R-2 it must carry `Declassify`.
+                //
+                // The bit is not the "single designed bit" the docs described, because the second
+                // operand need not be a secret the caller already holds. `Secret.map` hands its
+                // closure the PLAINTEXT and gates only on purity (DL0603) — and purity is not
+                // confidentiality — so `k.verify(k.map(fn(x) { g }))` is an equality oracle against
+                // an ATTACKER-CHOSEN `g`, and iterating it recovers the whole plaintext:
+                //
+                //     $ delulu why Declassify extract.delulu
+                //       program cannot perform `Declassify`
+                //     $ delulu run extract.delulu --grant console --grant secret:API_KEY=hunter2
+                //       RECOVERED SECRET = hunter2
+                //
+                // Emitting the effect does not make the leak impossible — a program may still do
+                // this — but it can no longer do it while the toolchain reports that it cannot.
+                // That is exactly what R-2 buys: declassification is visible in the row.
+                // `trace::effect_for("Secret", "verify")` carries the matching runtime half.
                 "verify" => {
                     self.expect_arg(args, 0, &Type::Secret(inner.clone()), span);
-                    Some((Type::Bool, None, None))
+                    Some((Type::Bool, Some(Effect::Declassify), None))
                 }
                 // expose is the ONLY unwrap; it requires Cap[Declassify] and carries Declassify (R-2).
                 "expose" => {

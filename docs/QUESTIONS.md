@@ -200,9 +200,45 @@ Yes, and they are enumerated rather than implied:
   an ordinary string. This is a designed limit, stated in the report's own text.
 - **A foreign call is a hole in the guarantee.** It is *enumerated*, not hidden. A raw secret cannot
   cross the boundary (DL0602), but foreign code is outside the proof by construction.
-- **`Secret.verify` leaks one bit by design** (equal / not equal), in constant time.
+- **`Secret.verify` leaks one bit by design** (equal / not equal), in constant time — **and as of
+  2026-08-03 that disclosure is known to understate the problem badly. See the entry below.**
 - **`--trace-effects` buffers the whole trace in RAM** — about 70 MB per 100k effects, unbounded.
 - **Side channels are out of scope entirely.**
+
+- **The bit `verify` returns is one you CHOOSE, and it used to be invisible — fixed 2026-08-03.**
+  The "one bit by design" above assumed the bit answers a comparison you did not control. It does
+  not. `Secret.map` hands its closure the **plaintext** and gates only on *purity* (DL0603) — and
+  purity is not confidentiality — so a pure closure computes **any predicate you like** and encodes
+  the answer into the returned secret; `k.verify(k.map(fn(x) { g }))` then tests the secret against
+  an arbitrary `g`. Iterated, that recovers the whole plaintext. Until this fix, none of it emitted
+  `Declassify`: `delulu why Declassify` printed *"program cannot perform `Declassify`"* for a
+  program that printed the key in full.
+
+  **Fixed:** `Secret.verify` now carries the `Declassify` effect in both the checker and the runtime
+  trace table, so such a program is refused with **DL0501** unless it declares the effect. This
+  re-closes **R-2**.
+
+  **Stated honestly, the fix buys visibility, not impossibility.** A program that *declares*
+  `!{Declassify}` may still do this — and then `delulu authority` tells you before you run it:
+
+  ```text
+  effects:      Declassify, Write
+  exposure:     API_KEY declassifiable -> files/console
+  ```
+
+  That is the actual guarantee: declassification is an effect, and effects are in the type. What is
+  fixed is that the toolchain can no longer deny doing something it does.
+
+  **Still open (residue):** `verify` declassifies without needing `Cap[Declassify]`, while `expose`
+  needs it. Closing that requires `verify` to return `Secret[Bool]`, which the runtime cannot
+  represent today (`SecretVal` is String-only) — an RFC, not a patch. **So: holding a secret grants
+  the ability to learn one chosen bit of it per call, without a declassify capability, but never
+  without declaring the effect.** Treat `Secret` accordingly. Mechanism and witness:
+  `docs/design/PROOF_CAMPAIGN.md` §IF-1.
+
+  The **direct** surface was re-verified clean across twelve eliminators — printing, concatenation,
+  `str()`, `==`, `assert_eq`, file writes and record embedding are all correctly refused
+  (DL0602/0604/0605/0203).
 
 ---
 
