@@ -437,10 +437,43 @@ independently.
 
 **Bounds, stated so the category is not read wider than it is:** three nodes, two effects,
 clock ≤ 2. Bounded model checking — the invariants hold over every reachable state *within* that
-bound, which is not a proof for all sizes. **Leases, redemption, certificate adoption, concurrency,
-partitions and clock skew are NOT modelled.** Two real vulnerabilities were previously found in
-exactly that unmodelled area, which makes it the highest-value place to extend. And the model is
-hand-written: nothing mechanically checks it stays faithful when `tree.rs` changes.
+bound, which is not a proof for all sizes. And the model is hand-written: nothing mechanically
+checks it stays faithful when `tree.rs` changes.
+
+### `Custody.tla` — leases and certificate adoption, where both real vulnerabilities lived
+
+`Broker.tla` stopped at the grant tree. **Both of this project's actual vulnerabilities were in the
+part it did not reach**, which made that the highest-value place to extend — so `Custody.tla` models
+`lease.rs` (delegate → mint → redeem, single-use nonces, `rotate_key` as a key epoch) and `cert.rs`
+(adoption, single-adoption-per-broker-lifetime, uplink deadlines).
+
+Both historical fixes are modelled as **switches**, so the model earns trust twice rather than once:
+
+| Run | Configuration | Result |
+|---|---|---|
+| 1 | both fixes on | **No error.** 7,831 states, **2,421 distinct**, depth 9 |
+| 2 | `SINGLE_ADOPTION = FALSE` (`cert.rs:544`) | **`RevocationSurvivesReadoption` violated** at depth 4 |
+| 3 | `LIVE_ON_REDEEM = FALSE` (`lease.rs:207`) | **`NoRedemptionOfADeadGrant` violated** at depth 5 |
+
+Run 2 is the **certificate replay**: one credential adopted twice, so revoking the node it was
+adopted as leaves a second live node with the same authority — precisely what `cert.rs:549` refuses
+in its own words, *"re-presenting a credential must not undo a revocation."*
+
+Run 3 is **campaign finding C29**: adopt → delegate → revoke (transitive, so both nodes die) →
+**redeem succeeds anyway**, which is what wrote `decision: "allow"` into the audit chain for a grant
+an operator had killed. `lease.rs:188-206` describes that defect at length; the model reconstructed
+it from the guards alone, having never been told about it.
+
+**A trap the teeth test caught, recorded because it would otherwise be invisible:**
+`redeemedDead' = redeemedDead \/ X` is wrong in TLA+ — `=` binds tighter than `\/`, so it parses as
+`(redeemedDead' = redeemedDead) \/ X`, a disjunction that leaves the primed variable unconstrained.
+TLC reports `null`, not an error. It was only noticed because a run *expected* to fail failed the
+wrong way. **A model that is never expected to fail cannot reveal this class of mistake in itself.**
+
+Still not modelled: the MAC itself (key rotation is an epoch counter, not blake3), audit-chain
+hashing, contact receipts, and — the significant one — **concurrency, partitions and clock skew**.
+The uplink lease exists precisely to bound behaviour during a partition, and a partition is exactly
+what this model cannot express.
 
 ## 7. Category 4 (property-tested) — the fuzzer could not write the bugs it was hunting
 
@@ -586,14 +619,25 @@ What *was* real: twelve manifests carried a comment asserting "`cargo install de
 contradicts `INSTALL.md` §3 and is false — corrected after verifying the failure with
 `cargo publish --dry-run`.
 
-### Miri
+### Miri — RAN, DID NOT FINISH. Not a pass.
 
-The crates Miri can run — `delulu-diag`, `delulu-syntax`, `delulu-check`, `delulu-broker`,
-`delulu-atlas` — contain **no `unsafe` at all**. The crates that do contain it are precisely the ones
-Miri **cannot** run: `broker_transport.rs` (28 sites, named pipes and Unix sockets),
-`foreign.rs` (11, libffi), `foreign_worker.rs` (6). That is an honest limit of the tool here, not a
-clean bill of health: Miri's verdict covers the compiler front end, and the `unsafe` lives in the
-host boundary.
+**Stated plainly because the temptation is to round this up.** Miri was started on `delulu-check`,
+`delulu-syntax` and `delulu-diag` under a 50-minute cap and was **killed by the timeout partway
+through**. Every test it reached reported `ok` and it found no undefined behaviour — but there is no
+`test result:` summary line, so the run is **incomplete** and does not license the sentence "Miri
+passes". It needs a re-run with a longer budget.
+
+Two structural facts about what Miri could ever tell us here, which matter more than the run:
+
+- The crates Miri **can** run — `delulu-diag`, `delulu-syntax`, `delulu-check`, `delulu-broker`,
+  `delulu-atlas` — contain **no `unsafe` at all**.
+- The crates that **do** contain `unsafe` are precisely the ones Miri **cannot** run:
+  `broker_transport.rs` (28 sites — named pipes and Unix sockets), `foreign.rs` (11 — libffi),
+  `foreign_worker.rs` (6). Miri cannot execute FFI or real OS handles.
+
+So even a completed run would cover the compiler front end while **the `unsafe` lives in the host
+boundary**. That is an honest limit of the tool for this codebase, not a clean bill of health, and
+the host boundary needs a different technique (sanitizers on a Linux runner, or targeted review).
 
 ## 9. Method note — why exhaustive enumeration replaced spot-checks
 

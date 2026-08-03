@@ -65,18 +65,83 @@ reconstructs that defect independently, from the guards alone.
 
 ---
 
+---
+
+## `Custody.tla` — leases and certificate adoption
+
+Models `lease.rs` (delegate → mint → redeem, single-use nonces, `rotate_key`) and `cert.rs`
+(adoption, single-adoption-per-broker-lifetime, uplink deadlines). **This is the part where both of
+this project's real vulnerabilities lived**, and the part `Broker.tla` did not reach.
+
+Two historical fixes are modelled as **switches**, so the model can be shown to have teeth twice:
+
+| Switch | Models | Off = the original defect |
+|---|---|---|
+| `SINGLE_ADOPTION` | `cert.rs:544-554` | certificate replay undoing a revocation |
+| `LIVE_ON_REDEEM` | `lease.rs:207-218` | campaign finding **C29** — redeeming a dead grant |
+
+### Result 1 — today's code (both switches TRUE)
+
+```text
+Model checking completed. No error has been found.
+7831 states generated, 2421 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 9.
+```
+
+Invariants held: `SingleUseHolds` (a non-multi token spends at most once), `NoRedemptionOfADeadGrant`,
+`RotatedTokensAreDead`, `RevocationSurvivesReadoption`.
+
+### Result 2 — teeth test: certificate replay (`SINGLE_ADOPTION = FALSE`)
+
+```text
+Error: Invariant RevocationSurvivesReadoption is violated.
+State 2: <Adopt>   state = (n0 :> "Live")     certOf = (n0 :> c0)   adoptedAs = (c0 :> n0)
+State 3: <Adopt>   state = (n1 :> "Live")     certOf = (n1 :> c0)   adoptedAs = (c0 :> n1)
+State 4: <Revoke>  state = (n0 :> "Revoked" @@ n1 :> "Live")
+```
+
+One credential, adopted twice, so revoking the node it was adopted as leaves a second live node
+carrying the same authority. `cert.rs:549` refuses exactly this, in its own words: *"re-presenting a
+credential must not undo a revocation."*
+
+### Result 3 — teeth test: C29 (`LIVE_ON_REDEEM = FALSE`)
+
+```text
+Error: Invariant NoRedemptionOfADeadGrant is violated.
+State 2: <Adopt>     n0 Live
+State 3: <Delegate>  n1 Live under n0, token t0 bound to n1
+State 4: <Revoke>    n0 AND n1 Revoked  (revocation is transitive at write time)
+State 5: <Redeem>    tokRedeems = (t0 :> 1)   redeemedDead = TRUE
+```
+
+The redemption succeeds against a revoked node — which is what wrote `decision: "allow"` into the
+audit chain for a grant an operator had killed. `lease.rs:188-206` describes the same defect at
+length; the model reconstructs it from the guards alone.
+
+### A trap worth recording
+
+`redeemedDead' = redeemedDead \/ X` is **wrong** in TLA+: `=` binds tighter than `\/`, so it parses
+as `(redeemedDead' = redeemedDead) \/ X` — a disjunction leaving the primed variable unconstrained,
+which TLC reports as `null` rather than as an error you would notice. The parentheses in
+`redeemedDead' = (redeemedDead \/ X)` are load-bearing. Caught here only because the teeth test was
+*expected* to fail and failed the wrong way.
+
+---
+
 ## What these models do NOT cover
 
 Named so the `model-checked` category is not read wider than it is:
 
 - **Three nodes, two effects, clock ≤ 2, audit ≤ 6, epoch ≤ 2.** Bounded model checking. Invariants
   hold over every reachable state *within that bound*, which is not a proof for all sizes.
-- **Lease tokens, redemption, and certificate adoption are NOT modelled yet** — `lease.rs` and
-  `cert.rs` are untouched here. Two real vulnerabilities were previously found in exactly that area
-  (certificate replay undoing a revocation; inherited uplink expiry), so this is the most valuable
-  place to extend.
+- ~~Lease tokens, redemption, and certificate adoption are NOT modelled~~ — **now covered by
+  `Custody.tla`.** Still absent from it: the MAC itself (key rotation is modelled as an epoch
+  counter, not as blake3), audit-chain hashing, and contact receipts extending a deadline.
+- **Authority is abstracted away in `Custody.tla`.** It models the binding, deadline and state
+  machine; the `⊑` lattice is `Broker.tla`'s job and `order_laws.rs`'s.
 - **No concurrency.** Actions are atomic and interleaved by TLC, but the model has no notion of two
-  brokers, a partition, or clock skew. Federation is unmodelled.
+  brokers, a partition, or clock skew. Federation is unmodelled — which matters, because the uplink
+  lease exists precisely to bound what happens during a partition.
 - **The model is hand-written from the code.** Nothing mechanically checks that it stays faithful
   when `tree.rs` changes. The `file:line` citations are the only link, and they are maintained by
   hand — the project's own design rule 1 says such links rot. Treat a passing run as evidence about

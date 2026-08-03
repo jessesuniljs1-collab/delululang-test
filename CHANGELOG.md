@@ -100,6 +100,17 @@ reflexivity and transitivity were additionally proved in Z3 over an abstract par
 - **`scripts/cli-sweep.sh`** — the CLI + compiler sweep as a reproducible script (22 cases, exact
   exit codes). It had been performed by hand every pass, which is exactly the drift design rule 1
   warns about. **Windows 22/22, Linux 22/22.**
+- **`docs/design/models/Custody.tla` — leases and certificate adoption are now MODEL-CHECKED**, which
+  is where **both** of this project's real vulnerabilities lived. Models `lease.rs` (delegate → mint
+  → redeem, single-use nonces, key rotation) and `cert.rs` (adoption, single-adoption per broker
+  lifetime, uplink deadlines). Clean run: 2,421 distinct states, depth 9. **Two teeth tests, not
+  one:** turning off `SINGLE_ADOPTION` makes TLC reconstruct the **certificate-replay** defect at
+  depth 4 (one credential adopted twice, so revoking one node leaves another live with the same
+  authority); turning off `LIVE_ON_REDEEM` makes it reconstruct **campaign finding C29** at depth 5
+  (a token redeemed successfully against a revoked grant, writing `decision: "allow"` into the audit
+  chain). Neither defect was described to the model — both were reconstructed from the guards.
+  Not modelled: the MAC itself, audit hashing, contact receipts, and concurrency/partitions/clock
+  skew — the last matters, because the uplink lease exists to bound behaviour during a partition.
 - **`docs/design/models/Broker.tla` — the custody grant tree is now MODEL-CHECKED.** TLA+/TLC v1.7.4
   explores **585,771 distinct states** of grant / delegate / revoke / expire and finds no violation
   of attenuation, revoke-covers-subtree, no-resurrection, inherited expiry, or audit

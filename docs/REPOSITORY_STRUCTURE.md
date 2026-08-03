@@ -202,14 +202,24 @@ DeluluLang/
     │   │                                #   machine-checked / model-checked / property-tested /
     │   │                                #   differentially verified / fuzz verified / OUTSIDE the
     │   │                                #   boundary). No grey areas. Records IF-1 and F1–F4.
-    │   ├── models/                 # [P17-C] FORMAL MODELS + the checker's verbatim output.
+    │   ├── models/                 # [P17-C/P17-6] FORMAL MODELS + the checker's verbatim output.
     │   │   ├── Broker.tla           #   the custody grant tree: grant/delegate/revoke/expire, each
     │   │   │                        #   guard citing the tree.rs line it mirrors
     │   │   ├── Broker.cfg           #   today's code — 585,771 distinct states, no error
-    │   │   ├── BrokerBug.cfg        #   THE TEETH TEST: the pre-RFC-0001-F4 read, which TLC must
-    │   │   │                        #   fail — it rediscovers the real historical bug at depth 4
-    │   │   └── README.md            #   results, bounds, and what is NOT modelled (leases, certs,
-    │   │                            #   federation, concurrency). tla2tools.jar is NOT vendored.
+    │   │   ├── BrokerBug.cfg        #   TEETH TEST: the pre-RFC-0001-F4 read, which TLC must fail —
+    │   │   │                        #   it rediscovers the real historical bug at depth 4
+    │   │   ├── Custody.tla          #   LEASES + CERTIFICATE ADOPTION — lease.rs (delegate/mint/
+    │   │   │                        #   redeem, single-use nonces, key rotation) and cert.rs
+    │   │   │                        #   (adoption, single-adoption, uplink deadlines). This is
+    │   │   │                        #   where BOTH real vulnerabilities lived.
+    │   │   ├── Custody.cfg          #   both fixes on — 2,421 distinct states, no error
+    │   │   ├── CustodyReplay.cfg    #   TEETH TEST: SINGLE_ADOPTION=FALSE reconstructs the
+    │   │   │                        #   certificate-replay vulnerability at depth 4
+    │   │   ├── CustodyC29.cfg       #   TEETH TEST: LIVE_ON_REDEEM=FALSE reconstructs campaign
+    │   │   │                        #   finding C29 (redeeming a revoked grant) at depth 5
+    │   │   └── README.md            #   results, bounds, and what is NOT modelled (the MAC itself,
+    │   │                            #   audit hashing, federation, concurrency, clock skew).
+    │   │                            #   tla2tools.jar is NOT vendored — fetch it.
     │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; macOS NEVER executed, said plainly
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).

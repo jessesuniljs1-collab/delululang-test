@@ -533,6 +533,12 @@ and this project does not get to blur them merely because the reading was carefu
 | clippy (findings, summary lines excluded) | **14** (baseline) | — | — |
 | `cargo deny` bans / licenses / sources | ok / ok / ok | ok / ok / ok | — |
 | `cargo deny` advisories | **RED — 4 reachable, named** | same | — |
+| TLA+/TLC — grant tree, leases, certificates | 585,771 + 2,421 distinct states, no error; **3 teeth tests reconstruct 3 real historical bugs** | (platform-independent) | — |
+| Miri | **RAN, TIMED OUT — not a pass** | — | — |
+
+Re-verified after Phase 6 (2026-08-04). Miri is listed as *incomplete* rather than omitted: it was
+killed by a 50-minute cap partway through, found no UB in what it reached, and produced no summary
+line. Rounding that up to "Miri passes" is exactly the kind of claim this campaign exists to catch.
 
 The 6-test difference is the same platform delta [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
 

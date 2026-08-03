@@ -150,11 +150,18 @@ there are independent layers underneath so one failure is not total.
 
 **What became machine-established on 2026-08-03** — narrower than "proved", but no longer just tests:
 
-- **The custody grant tree is model-checked.** TLA+/TLC explores **585,771 distinct states** of
-  grant / delegate / revoke / expire and finds no violation of attenuation, revoke-covers-subtree,
-  no-resurrection, or the inherited-expiry law (`docs/design/models/`). The model is shown to have
-  teeth rather than asserted to: re-run against the *pre-fix* enforcement read, TLC reconstructs a
-  **real historical bug** — a `ttl: None` child outliving its parent's expired lease — at depth 4.
+- **The custody broker is model-checked, in two parts** (`docs/design/models/`). The **grant tree**:
+  TLA+/TLC explores **585,771 distinct states** of grant / delegate / revoke / expire with no
+  violation of attenuation, revoke-covers-subtree, no-resurrection or inherited expiry. **Leases and
+  certificate adoption**: 2,421 distinct states of delegate → mint → redeem, single-use nonces, key
+  rotation and adoption, with no violation.
+- **Those models are shown to have teeth rather than asserted to — three times.** Removing a fix and
+  re-running makes TLC reconstruct the corresponding **real historical bug**: a `ttl: None` child
+  outliving its parent's expired lease (depth 4); a certificate re-presented after a revocation,
+  restoring killed authority (depth 4); and a token redeemed successfully against a revoked grant,
+  writing `decision: "allow"` into the audit chain (depth 5). None was described to the model — each
+  was reconstructed from the code's guards. **A model that has never caught anything is
+  indistinguishable from one that cannot.**
 - **Order-theoretic laws are checked exhaustively and symbolically**, as described above.
 
 So: **the design is mathematical; the type system's guarantee is still the tests; two subsystems now
