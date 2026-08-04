@@ -1138,13 +1138,30 @@ DeluluLang **does not claim**, ever:
   interval (≤50ms). Stated in the audit record of every revocation.
 - **Data-race freedom implying deadlock freedom.** It doesn't. Race freedom is guaranteed; liveness is
   not. Unbounded mailboxes can exhaust memory.
-- **Mechanized soundness.** The soundness argument is design-level, audit-rule-enforced, and
-  test-enforced; a machine-checked proof (Delulu Core) is future work, and the release notes say so.
+- **Mechanized soundness — *for the whole language*.** This clause has been **partly discharged** and
+  the remainder still binds. As of the P17 proof campaign there *is* a machine-checked proof: Lean
+  4.32.2, effect soundness for the **higher-order fragment**, with `#print axioms` reporting no
+  axioms at all — and the same file mechanizes C88, proving the calculus as written admits a program
+  whose trace escapes its row. What is **not** mechanized is everything outside that fragment: the
+  full type system, the nine-dimension authority order (proved separately in Z3, which is a
+  different kind of evidence), and the runtime. The soundness argument for the rest remains
+  design-level, audit-rule-enforced, and test-enforced.
+- **A compiler that cannot be crashed.** Until 2026-08-04 it could be: a valid module nested 100,000
+  levels deep overflowed the stack and killed the process, with no diagnostic. It now refuses at 128
+  levels (`DL0210`). The honest clause going forward is *"deep input is refused, not survived
+  indefinitely"* — the limit is a bound, not an absence of bounds, and it **narrowed the accepted
+  language** to get there.
 - **Three-platform support.** DeluluLang is built and tested on **Windows and Linux**. It has
   **never been executed on macOS** — not once, on any day of its development. The Unix code path is
   the one Linux runs green and the conditional compilation was audited site by site, but *a path
   that should work and a path that has been run are different claims*, and only the second one is
-  evidence. Even the lint baseline is per-platform in principle — each platform compiles a different
+  evidence. On 2026-08-04 the evidence moved a little, and only a little: the pure-Rust core now
+  **type-checks** for `x86_64-apple-darwin` (0 errors), which is the first macOS result produced by
+  a compiler rather than by reading code. `aarch64-apple-darwin` could not be checked at all from
+  the Windows host — `blake3` builds a NEON path through a C compiler that does not exist there,
+  which is a limitation of the machine and **not** a defect in this project. Compiling is still not
+  running: nothing about linking, the test suite, or the C-dependent crates is proven, and **the
+  count of macOS executions remains zero.** Even the lint baseline is per-platform in principle — each platform compiles a different
   set of code, so each can produce a different count, and **the macOS number has never been seen.**
   (Windows and Linux happen to agree at **14** findings each as of 2026-08-03, measured cold with
   cargo's per-crate summary lines excluded. Earlier printings of this chapter said "65 on Windows, 66

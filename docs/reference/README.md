@@ -8,7 +8,7 @@ This reference is **generated in part**: the grammar, tokens, primitive table, d
 
 Every normative statement carries a stable anchor id (`ref.rule.*`, `ref.diag.*`, `ref.prim.*`, `ref.grammar.*`, `ref.audit.*`, `ref.cli.*`), and each anchor's conformance status is reported next to it — invariant 42: *a behavior not covered by a test is not stable, and the reference says so per item.*
 
-**Coverage today: 323 of 323 anchors (100.0%).** See [coverage.md](coverage.md).
+**Coverage today: 324 of 324 anchors (100.0%).** See [coverage.md](coverage.md).
 
 ## Semantics (Constitution §5)
 

@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 220 |
-| Rust lines | 104754 |
+| Rust lines | 105112 |
 | Rust files outside `src/` (test/bench targets) | 90 |
-| Markdown documents | 127 |
-| Markdown lines | 32853 |
-| DeluluLang programs | 146 |
-| Registered diagnostic codes | 147 |
+| Markdown documents | 128 |
+| Markdown lines | 33385 |
+| DeluluLang programs | 147 |
+| Registered diagnostic codes | 148 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1021 / 8945 |
+| Nodes / edges in this map | 1023 / 8962 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -134,11 +134,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 7708 lines
+- **Modules:** 14 files, 7859 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/audit.rs` | 905 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
+| `src/audit.rs` | 1021 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 358 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/cert.rs` | 1298 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
@@ -150,7 +150,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/path.rs` | 215 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/secrets.rs` | 511 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
-| `src/tree.rs` | 888 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
+| `src/tree.rs` | 923 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 597 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`
@@ -203,12 +203,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3580 lines
+- **Modules:** 9 files, 3582 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 371 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 1839 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 1841 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 167 |  |
 | `src/json.rs` | 185 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
@@ -318,7 +318,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 6914 lines
+- **Modules:** 9 files, 7042 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -329,7 +329,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 733 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 113 | The language's one rule for turning written decimal text into a `Float`. |
-| `src/parser.rs` | 2430 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
+| `src/parser.rs` | 2558 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
 | `src/token.rs` | 426 | The Stage-1 token model (spec §2). |
 
 ### `delulu-wasm`

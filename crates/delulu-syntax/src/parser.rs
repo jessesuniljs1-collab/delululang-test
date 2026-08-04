@@ -38,6 +38,35 @@ pub fn parse_type_expr(file: FileId, tokens: Vec<Token>) -> (TypeExpr, Vec<Diagn
     (ty, p.diags)
 }
 
+/// The deepest an expression may nest before the parser refuses it with DL0210 (finding P17-F5).
+///
+/// # Why this number
+///
+/// Measured, not guessed. On the `delulu-main` thread — which is given an **explicit 512 MiB**
+/// stack (`delulu/src/main.rs`) — parenthesised nesting parsed cleanly at 70,000 and overflowed the
+/// stack somewhere before 100,000, i.e. roughly **5 KB of stack per level** across the
+/// `parse_bin → parse_unary → parse_primary → parse_expr` cycle.
+///
+/// The limit must hold on the **smallest** stack that might parse, not the largest. A first attempt
+/// at 1,024 was sized against that 512 MiB main thread and promptly crashed this crate's own test
+/// binary with `STATUS_STACK_OVERFLOW (0xc00000fd)` — libtest threads get the ordinary **2 MiB**
+/// default, and so does any LSP or tooling thread where nobody called `.stack_size`. A guard that
+/// only holds on the one thread that was already generously provisioned is not a guard.
+///
+/// The number was then **measured against that 2 MiB floor rather than estimated**, because the
+/// estimate was wrong twice. In a debug build each level of the
+/// `parse_bin → parse_unary → parse_primary → parse_expr` cycle costs roughly **8 KB** of stack —
+/// not the ~5 KB first guessed from the 512 MiB figure. Observed in this crate's own test binary:
+/// 64 levels passed, and a limit of 256 still overflowed, because 256 × 8 KB ≈ 2 MiB is the whole
+/// stack. 128 leaves about half the default stack unused, and debug frames are the worst case
+/// (release frames are smaller), so sizing to debug is the conservative direction.
+///
+/// **This does narrow the accepted language** — a 100,000-deep chain of unary `-` used to compile
+/// and now will not — which is why it is documented here and in `docs/reference/diagnostics.md`
+/// rather than treated as a pure bug fix. Generated code that legitimately needs more depth should
+/// emit a `let` per level instead of one nested expression.
+const MAX_EXPR_DEPTH: u32 = 128;
+
 struct Parser {
     #[allow(dead_code)]
     file: FileId,
@@ -47,11 +76,13 @@ struct Parser {
     diags: Vec<Diagnostic>,
     /// Set once per resync episode so we don't emit a cascade for one mistake.
     panicking: bool,
+    /// Current expression nesting depth, bounded by [`MAX_EXPR_DEPTH`] (finding P17-F5).
+    depth: u32,
 }
 
 impl Parser {
     fn new(file: FileId, tokens: Vec<Token>) -> Self {
-        Parser { file, tokens, pos: 0, next_node: 0, diags: Vec::new(), panicking: false }
+        Parser { file, tokens, pos: 0, next_node: 0, diags: Vec::new(), panicking: false, depth: 0 }
     }
 
     // ----- node ids and cursor --------------------------------------------
@@ -1358,7 +1389,48 @@ impl Parser {
         })
     }
 
+    /// Expression parsing, **depth-limited** (campaign finding P17-F5).
+    ///
+    /// Every nested expression passes through here — `parse_bin` calls it at each precedence level,
+    /// it recurses into itself for unary chains, and `parse_primary` re-enters the whole cycle for
+    /// a parenthesised sub-expression. That makes it the one choke point where depth can be counted
+    /// without scattering counters through the grammar.
+    ///
+    /// Without this guard the parser recursed without bound and the process **died**:
+    ///
+    /// ```text
+    /// $ delulu check deep_100000.delulu     # ((((…1…)))) nested 100,000 deep, a VALID module
+    /// thread 'delulu-main' (26972) has overflowed its stack
+    /// exit 127
+    /// ```
+    ///
+    /// That is worse than a rejection. The abort carries no `DL####`, no span, and nothing a caller
+    /// can catch — it bypasses the diagnostic system completely. `delulu check` is the gate every
+    /// other guarantee is verified through, and a gate that can be made to die instead of answering
+    /// is one that can be skipped. Now the deep input gets a diagnostic like any other refusal.
     fn parse_unary(&mut self, allow_struct: bool) -> Expr {
+        if self.depth >= MAX_EXPR_DEPTH {
+            // Refuse to go deeper. No token is consumed: the placeholder returns through the
+            // callers already on the stack, each of which unwinds normally, and `panicking`
+            // suppresses the cascade of "expected `)`" that the unclosed parens would otherwise
+            // produce. Progress is guaranteed because every caller either consumes a token or
+            // returns — see `error_recovery_surfaces_multiple_diagnostics`.
+            let start = self.span();
+            self.error(
+                "DL0210",
+                format!("expression nests deeper than {MAX_EXPR_DEPTH} levels"),
+                start,
+                "simplify or split this expression",
+            );
+            return Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start };
+        }
+        self.depth += 1;
+        let e = self.parse_unary_inner(allow_struct);
+        self.depth -= 1;
+        e
+    }
+
+    fn parse_unary_inner(&mut self, allow_struct: bool) -> Expr {
         let start = self.span();
         match self.peek() {
             TokenKind::Minus => {
@@ -1450,8 +1522,39 @@ impl Parser {
         self.parse_postfix_on(e)
     }
 
+    /// Postfix chains — `f(x)`, `.m()`, `[i]` — are built **iteratively**, so they never touch the
+    /// [`MAX_EXPR_DEPTH`] descent counter. They still nest the AST: each turn wraps the previous
+    /// expression in a fresh `Box`. That is the second half of P17-F5, and it is why bounding
+    /// recursion alone did not stop the crash.
+    ///
+    /// With only the descent guard in place, `((((…1…))))` at 100,000 deep parsed without
+    /// recursing — the guard returned a placeholder, and this loop then read each following `(` as
+    /// a **call** on it, assembling a 100,000-deep `Box` chain. Nothing overflowed while building
+    /// it. The process died later, in `Drop`, which walks that chain recursively:
+    ///
+    /// ```text
+    /// $ delulu check deep_100000.delulu     # WITH the descent guard, before this one existed
+    /// thread 'delulu-main' (29028) has overflowed its stack
+    /// exit 127
+    /// ```
+    ///
+    /// Confirmed by experiment rather than inspection: `std::mem::forget`ting the parsed module
+    /// made a 50,000-deep input pass, and forgetting the diagnostics alone did not. So the depth
+    /// of the tree is bounded here too — an AST this tool builds must be one it can also free.
     fn parse_postfix_on(&mut self, mut e: Expr) -> Expr {
+        let mut chain = 0u32;
         loop {
+            chain += 1;
+            if chain > MAX_EXPR_DEPTH {
+                let span = e.span();
+                self.error(
+                    "DL0210",
+                    format!("expression nests deeper than {MAX_EXPR_DEPTH} levels"),
+                    span,
+                    "simplify or split this expression",
+                );
+                return e;
+            }
             match self.peek() {
                 TokenKind::LParen => {
                     let args = self.parse_args();
@@ -1785,6 +1888,31 @@ mod tests {
     // close-out. The behavioural tests below pin the fixed outcome; the structural test is
     // the one that matters most, because a reintroduced unguarded loop makes it FAIL rather
     // than HANG — a hanging test tells CI nothing.
+
+    /// P17-F5. The witness: before `MAX_EXPR_DEPTH` existed, a **valid** module nested deeply
+    /// enough did not produce a diagnostic — it overflowed the stack and killed the process
+    /// (`thread 'delulu-main' has overflowed its stack`, exit 127, no code, no span, nothing
+    /// catchable). The input here is the **exact size that crashed** — 100,000 — rather than a
+    /// token amount safely over the limit, because two separate recursions had to be closed to
+    /// survive it and only the real size exercises both: the descent guard bounds how deep the
+    /// parser recurses, and the postfix-chain guard bounds how deep an AST it builds for `Drop` to
+    /// walk. A smaller input passes with only the first fix in place, and would have let the
+    /// second defect through.
+    #[test]
+    fn nesting_past_the_limit_is_refused_with_a_diagnostic_not_a_crash() {
+        let src = format!("module m\nfn f() -> Int {{\n  {}1{}\n}}\n", "(".repeat(100_000), ")".repeat(100_000));
+        let (_, d) = parse_src(&src);
+        assert!(d.iter().any(|x| x.code == "DL0210"), "expected DL0210, got {d:?}");
+    }
+
+    /// The control, without which the limit would be indistinguishable from "reject everything".
+    /// Ordinary nesting — far more than any human writes — must still parse clean.
+    #[test]
+    fn nesting_within_the_limit_still_parses_clean() {
+        let src = format!("module m\nfn f() -> Int {{\n  {}1{}\n}}\n", "(".repeat(64), ")".repeat(64));
+        let (_, d) = parse_src(&src);
+        assert!(d.is_empty(), "64 levels of nesting must still parse, got {d:?}");
+    }
 
     #[test]
     fn an_assignment_in_a_match_arm_terminates_and_names_the_rule() {

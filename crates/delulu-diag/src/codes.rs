@@ -37,6 +37,7 @@ registry! {
     "DL0207" => "invalid assignment target",
     "DL0208" => "expected an item",
     "DL0209" => "expected a statement terminator",
+    "DL0210" => "expression nests too deeply",
 
     // DL03xx — names / modules
     "DL0301" => "unknown name",
@@ -310,13 +311,6 @@ pub struct UnallocatedCode {
 /// answers from it instead of saying `unknown code`. **Adding a row is how you close that loop:**
 /// a code left out of both the registry and this table is, correctly, still reported as a typo.
 pub const UNALLOCATED: &[UnallocatedCode] = &[
-    UnallocatedCode {
-        code: "DL0210",
-        disposition: Disposition::Reserved,
-        why: "The Stage-1 parse range ends at DL0209 and holds DL0210 open, so the next parse \
-              diagnostic can be added without renumbering anything. Listed as `DL0210 reserved` \
-              in the DL02xx allocation table of `docs/design/STAGE1_SPECIFICATION.md`.",
-    },
     UnallocatedCode {
         code: "DL0503",
         disposition: Disposition::Retired,
@@ -766,6 +760,14 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0209" => "Two statements ran together where one had to end. Statements are separated by \
              a newline or a `;`. This usually means a missing newline, or an expression that \
              consumed less than you expected.",
+        "DL0210" => "An expression nested deeper than the parser will follow (1,024 levels). \
+             Parsing is recursive, so unbounded nesting is unbounded stack use: before this limit \
+             existed, a valid module whose body was 100,000 nested parentheses did not produce an \
+             error at all — it overflowed the stack and killed the process, with no code, no span, \
+             and nothing a caller could catch (campaign finding P17-F5). A refusal you can read is \
+             strictly better than a crash you cannot. No hand-written program approaches this \
+             depth; if generated code does, emit a `let` binding per level instead of one nested \
+             expression.",
 
         // ===== DL03xx — resolution =========================================
         "DL0301" => "This name is not defined in any scope reachable from here. Check the spelling, \

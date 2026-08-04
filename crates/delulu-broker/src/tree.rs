@@ -100,6 +100,9 @@ pub struct Broker {
     audit_seq: u64,
     ids: Box<dyn IdSource>,
     clock: Box<dyn ClockSource>,
+    /// The highest reading this broker has ever taken from `clock` — the monotonicity ratchet
+    /// (campaign finding P17-B2). See [`Broker::now`] for why it exists.
+    clock_high_water: std::cell::Cell<i64>,
     /// Optional audit sink (phase 5d). `None` preserves chunk-1 behavior exactly; when attached,
     /// every seq-consuming op emits exactly one record (invariant 26). Observability, not enforcement
     /// (playbook trap 6): a sink write failure is logged, never allowed to change a decision.
@@ -154,6 +157,7 @@ impl Broker {
             audit_seq: 1,
             ids,
             clock,
+            clock_high_water: std::cell::Cell::new(i64::MIN),
             sink: None,
             key: None,
             redeemed: HashSet::new(),
@@ -208,8 +212,39 @@ impl Broker {
         s
     }
 
+    /// "Now" in epoch millis — **ratcheted so it can never move backwards** (P17-B2).
+    ///
+    /// # Why this is not simply `self.clock.now_millis()`
+    ///
+    /// Expiry compares a node's absolute deadline against this reading. The production clock is
+    /// `SystemTime::now()` — a WALL clock, and a wall clock is not monotonic. Observed before this
+    /// ratchet existed: a grant deadlined at t=5000 reported `Live` at 1000, `Expired` at 9000, and
+    /// **`Live` again** once the clock was set back to 2000 — no revocation, no audit event, and
+    /// nothing anywhere recording that authority had been restored.
+    ///
+    /// That is not an exotic scenario for the platforms this project targets. On satellites,
+    /// autonomous aircraft and robots a backwards step is **routine, not adversarial**: GNSS time
+    /// acquisition after a cold start, an NTP correction after drift, an RTC read at power-on. And
+    /// the uplink lease (RFC 0001 F4) — the bound that exists precisely because revocation cannot
+    /// cross a partition — is a wall-clock deadline.
+    ///
+    /// # Why a ratchet rather than a monotonic clock
+    ///
+    /// `Instant` cannot be used: certificate `not_before`/`not_after` are **signed absolute
+    /// epoch-millis**, so the comparison must stay wall-clock-comparable or a certificate minted by
+    /// the ground could not be evaluated here at all. Taking the running maximum keeps the reading
+    /// comparable with signed times while making it non-decreasing:
+    ///
+    /// * a forward jump is accepted and advances the ratchet — correction still works;
+    /// * a backward jump is clamped — **what expired stays expired.**
+    ///
+    /// The ratchet only ever *withholds* authority, never grants it: clamping upward can expire
+    /// something early but can never un-expire it. Fail-closed in the direction that matters.
     fn now(&self) -> i64 {
-        self.clock.now_millis()
+        let reading = self.clock.now_millis();
+        let ratcheted = reading.max(self.clock_high_water.get());
+        self.clock_high_water.set(ratcheted);
+        ratcheted
     }
 
     // ----- pub(crate) accessors for the `validate` module (which cannot see private fields) -----

@@ -9,11 +9,32 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
-## Unreleased — P17 proof campaign, 2026-08-03 (findings IF-1, F1–F4)
+## Unreleased — P17 proof campaign, 2026-08-03 (findings IF-1, F1–F5)
 
 Findings live in `docs/design/PROOF_CAMPAIGN.md`. This campaign attacks the project's **claims**
 rather than its implementation, so most entries below are *open findings*, not fixes. Nothing here
-changes released behaviour.
+changes released behaviour **except P17-F5**, which narrows the accepted language — see below.
+
+### Language — CHANGED (narrows what compiles)
+
+- **`DL0210`: expression nesting is now capped at 128 levels.** Previously the parser recursed
+  without bound and a *valid* module nested 100,000 deep did not produce an error — it overflowed
+  the stack and killed the process (exit 127), with no diagnostic code, no span, and nothing a
+  caller could catch. `delulu check` is the gate every other guarantee is verified through, and a
+  gate that can be made to die instead of answering can be skipped (finding **P17-F5**).
+
+  Two separate unbounded recursions had to be closed. The descent guard alone did not stop the
+  crash: the **iterative** postfix loop went on building a 100,000-deep `Box` chain that `Drop`
+  then unwound recursively. Both are bounded now.
+
+  The limit is measured against a **2 MiB** thread stack — the ordinary default that libtest and
+  tooling threads get — not against `delulu-main`'s explicit 512 MiB. Two earlier values (1,024 and
+  256) crashed the test binary outright and were rejected on evidence.
+
+  **This narrows the accepted language**: expressions nested past 128 levels used to compile and now
+  produce `DL0210`. No hand-written program approaches that depth; generated code that needs more
+  should emit a `let` per level. `DL0210` was the code Stage 1 held reserved for the next parse
+  diagnostic, so nothing was renumbered.
 
 ### Security — FIXED
 
@@ -68,6 +89,29 @@ changes released behaviour.
 **Not** an escalation: F1–F3 are naming, determinism and serialization defects. The meet was
 verified exhaustively to be a genuine **greatest** lower bound that never widens, and the order's
 reflexivity and transitivity were additionally proved in Z3 over an abstract partial order.
+
+### Security — FIXED (P17, 2026-08-04)
+
+- **wasmtime 27 → 47 — nineteen advisories to none.** `cargo deny` now reports
+  `advisories ok, bans ok, licenses ok, sources ok`. The one that mattered was **RUSTSEC-2026-0096**,
+  a miscompile in the aarch64 Cranelift backend enabling a **sandbox escape** — never executed here,
+  but this project ships **source**, so every Apple Silicon or ARM-server build was exposed. Cost:
+  three lines (wasmtime 47 stopped re-exporting `anyhow::Error`). **Half of that only failed on
+  Linux** — the affected call sites live in `#[cfg(not(windows))]` code Windows never compiles, so a
+  single-platform check would have shipped a build that does not compile where most users build.
+- **The audit chain now detects TRUNCATION.** Every check `verify` performed was local to a link, so
+  deleting the last *k* records left a chain that still verified, and nothing anchored the head.
+  `ANCHOR.json` now records head and count outside the log; `verify` compares, and `AuditLog::open`
+  refuses a log that disagrees with its own anchor. **Not tamper-proof and does not claim to be:** an
+  attacker who rewrites both is not caught — pinned as a passing test. What is closed is accidental
+  truncation (partial write, full disk, botched rotation) and naive tampering, and the head is now
+  exportable so an external witness becomes possible.
+- **Expiry can no longer be undone by a backwards clock.** `Broker::now` ratchets to the running
+  maximum of every reading. `Instant` was unavailable — certificate `not_before`/`not_after` are
+  signed absolute epoch-millis — so the reading stays wall-clock-comparable and is merely made
+  non-decreasing. It can only **withhold** authority, never grant it, and that direction is a test.
+  Routine backwards steps on the target platforms (GNSS acquisition, NTP correction, RTC at
+  power-on) no longer resurrect expired grants.
 
 ### Known — capability-algebra and theorem-sketch findings (P17-7), OBSERVED and NOT fixed
 

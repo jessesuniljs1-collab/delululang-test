@@ -231,6 +231,21 @@ Yes, and they are enumerated rather than implied:
   2026-08-03 that disclosure is known to understate the problem badly. See the entry below.**
 - **`--trace-effects` buffers the whole trace in RAM** — about 70 MB per 100k effects, unbounded.
 - **Side channels are out of scope entirely.**
+- **The audit chain now detects truncation as well as modification and reordering** (`ANCHOR.json`),
+  but it is still **not tamper-proof**: an attacker who rewrites the log *and* the anchor is not
+  caught. Genuine tamper-evidence needs an external witness, and the head is now exportable so that
+  one is possible.
+- **Expiry can no longer be undone by moving the clock backwards** — `Broker::now` ratchets. What
+  remains is that monotonicity is not accuracy: a rewind still distorts measured intervals.
+- **The compiler could be crashed by deeply nested input, and now refuses it instead** (`DL0210`,
+  fixed 2026-08-04). A *valid* module nested 100,000 levels deep used to overflow the stack and kill
+  the process — exit 127, no diagnostic code, no span, nothing a caller could catch. That mattered
+  more than an ordinary bug: `delulu check` is the gate every other guarantee here is verified
+  through, and a gate that can be made to die instead of answering is one that can be skipped.
+  Nesting is now capped at 128 levels. Two things are worth stating plainly about it:
+  - The fix **narrows the accepted language.** Expressions past 128 levels used to compile.
+  - It was found by looking at *disk usage*, not by any test. Ten 784 MB crash dumps had been
+    sitting in `%TEMP%` for a day. The fuzzers never generated input that deep.
 
 - **The bit `verify` returns is one you CHOOSE, and it used to be invisible — fixed 2026-08-03.**
   The "one bit by design" above assumed the bit answers a comparison you did not control. It does

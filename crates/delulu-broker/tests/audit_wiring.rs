@@ -217,12 +217,17 @@ fn broker_driven_daily_rotation_cross_links_and_verifies() {
     clock.advance(86_400_000);
     assert!(b.check(&root, Op::FsWrite, Some("./out/b")).is_allow());
 
+    // Filtered to `.jsonl` because the assertion is about DAY-FILE ROTATION, which is what the
+    // message says. The directory also holds `ANCHOR.json` — the head/count anchor added by
+    // P17-C1, deliberately not a day file so `list_day_files` never sees it either.
     let mut files: Vec<String> = std::fs::read_dir(&dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|n| n.ends_with(".jsonl"))
         .collect();
     files.sort();
     assert_eq!(files, vec!["19700102.jsonl", "19700103.jsonl"], "one JSONL per day");
+    assert!(dir.join("ANCHOR.json").exists(), "the chain anchor is written beside the day files");
 
     // The whole cross-linked chain verifies end to end.
     let stats = verify(&dir).unwrap();

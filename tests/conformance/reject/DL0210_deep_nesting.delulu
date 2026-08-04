@@ -1,0 +1,10 @@
+// anchors: ref.diag.DL0210
+// P17-F5: expression nesting is capped at 128 levels. Before the cap, deep nesting did not
+// produce a diagnostic at all — it overflowed the stack and killed the process (exit 127).
+// 200 levels is used rather than the 100,000 that crashed, so this file stays small; the
+// full-size witness lives in delulu-syntax's parser tests.
+module conf
+
+fn f() -> Int {
+  ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+}

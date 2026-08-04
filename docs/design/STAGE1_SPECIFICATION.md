@@ -855,7 +855,7 @@ diagnostic is a bug.
 | Range | Domain |
 |---|---|
 | DL01xx | lexical — allocated: DL0101 unexpected character, DL0102 unterminated string, DL0103 invalid escape, DL0104 invalid numeric literal (an `Int` literal that overflows; a `Float` literal that overflows to `inf` or underflows to `0.0`; a malformed exponent), DL0105 unterminated block comment, DL0106 reserved word declared |
-| DL02xx | parse — allocated: DL0201 expected token, DL0202 expected expression, DL0203 expected type, DL0204 missing `module` header, DL0205 expected pattern, DL0206 chained comparison (non-associative), DL0207 invalid assignment target, DL0208 expected item, DL0209 expected statement terminator, DL0210 reserved |
+| DL02xx | parse — allocated: DL0201 expected token, DL0202 expected expression, DL0203 expected type, DL0204 missing `module` header, DL0205 expected pattern, DL0206 chained comparison (non-associative), DL0207 invalid assignment target, DL0208 expected item, DL0209 expected statement terminator, DL0210 expression nests too deeply (allocated 2026-08-04 for campaign finding P17-F5; the parser recursed without bound and a 100,000-deep expression killed the process instead of producing a diagnostic) |
 | DL03xx | names/modules (DL0304 import cycle, DL0305 module-level `var`) |
 | DL04xx | types (DL0402 numeric mix, DL0407 non-exhaustive match, DL0410 var kind conflict) |
 | DL05xx | effects (DL0501 undeclared effect, DL0502 unused declared effect, DL0503 >1 row var, DL0504 conflicting row-var bindings — never union-merge) |

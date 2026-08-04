@@ -111,7 +111,6 @@ fn explain_answers_for_a_code_the_registry_does_not_allocate() {
     let cases = [
         ("DL0503", "retired"),                   // withdrawn: the rule it named does not exist
         ("DL1404", "never-allocated"),           // the range skips it on purpose
-        ("DL0210", "reserved"),                  // held open for the next parse diagnostic
         ("DL1012", "specified-not-implemented"), // a spec names it; nothing emits it
     ];
     for (code, disposition) in cases {

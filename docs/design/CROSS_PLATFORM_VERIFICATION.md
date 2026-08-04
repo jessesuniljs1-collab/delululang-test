@@ -303,6 +303,44 @@ it links against a macOS Python. The **Python-less build** (`--no-default-featur
 CI-gated configuration) is the macOS-safe path until a real Mac run exists. macOS is "engineered for,
 analyzed, and unproven" — not "supported" in the sense the other two now are.
 
+### First actual macOS *compilation* evidence (2026-08-04)
+
+Until this date, the macOS position rested entirely on reading code. It now rests partly on the
+compiler, which is a real if modest upgrade. Both Apple targets were installed and the pure-Rust
+core (`delulu-syntax`, `delulu-diag`, `delulu-check`, `delulu-broker`) was type-checked against them:
+
+| target | result |
+|---|---|
+| `x86_64-apple-darwin` | **compiles clean** — 0 errors |
+| `aarch64-apple-darwin` | **could not be checked from this host** — see below |
+
+The Apple Silicon result is **not** a defect in this project and must not be read as one. It fails in
+`blake3`'s build script:
+
+```
+error occurred in cc-rs: failed to find tool "cc": program not found
+```
+
+`blake3` compiles a **NEON** path for ARM through `cc-rs`, and this Windows host has no Apple/ARM C
+cross-compiler. On real Apple hardware `cc` is clang from the Xcode command-line tools and the path
+builds normally. The x86_64 target passes because it needs no C for that path.
+
+**`blake3`'s `pure` feature was deliberately NOT enabled to make this check go green.** That feature
+changes which code ships, and turning it on so a verification step passes would be tampering with
+the product to flatter the test.
+
+**What this does and does not add.** It adds: the core's macOS-relevant `cfg` branches now provably
+*type-check* for an Apple target rather than merely having been read. It does not add: any execution,
+any linking, any test result, anything about the C-dependent crates (`delulu-runtime`'s `libffi`,
+`delulu-wasm`'s wasmtime), and nothing at all about Apple Silicon. **Zero macOS executions remain the
+standing position**, and the honest summary is unchanged: engineered for, analyzed, now partly
+type-checked, still unproven.
+
+The remaining macOS work needs Apple hardware and cannot be closed from this machine:
+running the suite, the CLI sweep, the `SUN_PATH_MAX = 104` socket-path guard in
+`broker_transport.rs` (reasoned about, never observed firing), and the `libm.dylib`
+dyld-shared-cache FFI path in `cli.rs`.
+
 ## 6. What this pass fixed (D19) and what it did not
 
 Fixed, verified on Windows + Linux: a Linux/macOS-only dead-code warning (`state_hash` gating); three

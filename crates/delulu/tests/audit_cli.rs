@@ -25,6 +25,26 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).to_string()
 }
 
+/// The single `.jsonl` day file in an audit directory.
+///
+/// **Not** `read_dir(..).next()`. That took whatever entry the filesystem happened to yield first,
+/// which is unspecified order — and once `ANCHOR.json` (the truncation anchor, P17-C1) started
+/// living alongside the log, "first entry" began resolving to the anchor on Linux while still
+/// resolving to the day file on Windows. Two tests here passed on one platform and failed on the
+/// other for that reason alone. Filter by extension and require exactly one match, so an unexpected
+/// second file is a loud failure rather than a coin toss.
+fn day_file(dir: &std::path::Path) -> PathBuf {
+    let mut days: Vec<PathBuf> = std::fs::read_dir(dir)
+        .expect("read audit dir")
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .collect();
+    days.sort();
+    assert_eq!(days.len(), 1, "expected exactly one day file, found {days:?}");
+    days.pop().expect("one day file")
+}
+
 fn eff(names: &[&str]) -> BTreeSet<Effect> {
     names.iter().map(|n| Effect::core_from_name(n).unwrap()).collect()
 }
@@ -75,7 +95,7 @@ fn audit_verify_fails_dl1405_on_a_corrupted_record() {
     let d = dir.to_string_lossy().to_string();
 
     // Corrupt one byte of the seq-2 record on disk (keeps the line valid JSON).
-    let file = std::fs::read_dir(&dir).unwrap().next().unwrap().unwrap().path();
+    let file = day_file(&dir);
     let text = std::fs::read_to_string(&file).unwrap();
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let idx = lines.iter().position(|l| l.contains("\"seq\":2")).expect("seq-2 record exists");
@@ -129,7 +149,7 @@ fn audit_tail_and_query_read_the_records() {
 fn audit_log_header_states_observability_not_enforcement() {
     // Spec §7: the FIRST line of every log file states the log is observability, not enforcement.
     let dir = seeded_dir("header");
-    let file = std::fs::read_dir(&dir).unwrap().next().unwrap().unwrap().path();
+    let file = day_file(&dir);
     let text = std::fs::read_to_string(&file).unwrap();
     let first = text.lines().next().unwrap();
     assert!(

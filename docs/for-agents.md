@@ -342,3 +342,13 @@ overstate it downstream:
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
   v1.0 is **not competitive with C** on the measured workloads (2.0×–60.5× slower), and the report
   says so in those words. Do not let a harness's marketing copy imply otherwise.
+- **Expression nesting is capped at 128 levels (`DL0210`)** — the one limit in this list a code
+  *generator* is realistically able to hit. A human never writes 128-deep nesting; a program
+  emitting one nested expression per element of a large structure can. If you generate DeluluLang,
+  emit a `let` binding per level rather than one deep expression.
+
+  Stated with its history because it is recent: before 2026-08-04 there was no limit, and a valid
+  module nested 100,000 deep did not produce a diagnostic — it overflowed the stack and killed the
+  process (exit 127, no code, no span, nothing catchable). `delulu check` is the gate your harness
+  relies on, so a crash there is worse than a rejection. It now answers. Note that this **narrowed
+  the accepted language**: input that used to compile at extreme depth now returns `DL0210`.

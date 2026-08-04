@@ -373,6 +373,104 @@ that is not acceptable.
 
 ---
 
+### P17-F5 — **FIXED 2026-08-04** — deep nesting crashed the CLI outright; it took *two* fixes
+
+**Category: fuzz verified → moved to a confirmed defect.** Found by accident during machine
+maintenance, which is worth stating plainly: ten WSL crash dumps, each ~784 MB, all from
+`/home/user/delulu-target/debug/delulu`, all with signal suffix **`-11` (SIGSEGV)**, timestamped
+2026-08-03 16:48 through 2026-08-04 04:02 — straight through this campaign. They had been sitting in
+`%TEMP%\wsl-crashes` the whole time, unexamined.
+
+The dumps proved nothing on their own (no symbolication), so the hypothesis was tested:
+
+```
+$ delulu check deep_100000.delulu
+thread 'delulu-main' (26972) has overflowed its stack
+exit 127
+```
+
+The input is a **valid** module whose body is `((((…1…))))` nested *n* deep — not malformed, just
+deep. Bisected:
+
+| nesting | result |
+|---:|---|
+| 2,000 / 10,000 / 30,000 / 50,000 / 70,000 | `ok`, exit 0 |
+| 100,000 | **stack overflow, exit 127** |
+
+The parser succeeds at 70,000 and dies between there and 100,000. A search of `delulu-syntax/src`
+for a depth guard finds none: the only `depth` counters are a **loop** in `lexer.rs:341` for nested
+block comments and a test generator in `fmt.rs`. **Expression parsing is unbounded recursion.**
+
+**Why this is worse than an ordinary panic.** The process aborts with no `DL####` code, no span, and
+nothing catchable — the failure bypasses the entire diagnostic system. Every other refusal in this
+language is a diagnostic; this one is a signal. Two consequences:
+
+* **`delulu check` is the safety gate.** A gate that can be made to die instead of answering is a
+  gate that can be skipped, and the campaign's own rule applies — *a gate that cannot fail is not a
+  gate*, and neither is one that can be crashed instead of failing.
+* **The stated audience makes it worse.** This language is aimed at code written by AI agents and at
+  toolchains that accept input from other machines. "Do not feed the compiler deeply nested input"
+  is not a control that a machine-generated input pipeline can honour.
+
+**Severity: availability, not soundness.** No authority escapes, nothing is mis-typed, and there is
+no evidence of memory unsafety — a Rust stack overflow aborts rather than corrupting. It is a
+denial-of-service surface in the tool that every other guarantee is checked by.
+
+#### The fix — and why the obvious one was only half of it
+
+`DL0210` (the code Stage 1 had held reserved for exactly this) now caps expression nesting at
+`MAX_EXPR_DEPTH = 128`.
+
+**Two distinct unbounded recursions had to be closed, and finding the second one required
+disbelieving the first fix.** After adding the descent guard, `delulu check` on the 100,000-deep
+input *still* died with exit 127. The guard was working — 2,000 and 70,000 both produced `DL0210` —
+so something else was recursing.
+
+It was **`Drop`**, and the mechanism is worth recording because inspection would not have found it:
+
+* The descent guard returns a placeholder expression without consuming a token.
+* The **postfix** loop (`f(x)`, `.m()`, `[i]`) then reads each following `(` as a *call* on that
+  placeholder. That loop is **iterative**, so it never touches the depth counter.
+* It assembles a 100,000-deep chain of `Box`ed `Expr::Call` nodes. Nothing overflows while building
+  it. The process dies later, in `Drop`, which walks the chain recursively.
+
+Established by experiment, not reading: `std::mem::forget`ting the parsed module made a
+50,000-deep input pass, and forgetting the diagnostics alone did not. So the postfix chain is now
+bounded too — **an AST this tool builds must be one it can also free.**
+
+#### Calibration — the limit was measured, after two wrong guesses
+
+| attempt | basis | result |
+|---|---|---|
+| 1,024 | sized against `delulu-main`'s explicit **512 MiB** stack | crashed this crate's own test binary, `STATUS_STACK_OVERFLOW (0xc00000fd)` |
+| 256 | halved | still overflowed — 256 × ~8 KB ≈ the whole 2 MiB default |
+| **128** | measured against the **2 MiB** floor | holds, ~half the default stack unused |
+
+libtest threads — and any LSP or tooling thread where nobody called `.stack_size` — get the ordinary
+2 MiB default. **A guard that only holds on the one thread that was already generously provisioned
+is not a guard.** Debug frames are the worst case, so sizing to debug is the conservative direction.
+
+#### Verified
+
+Every input that previously crashed now returns a diagnostic and exit 1:
+
+| input | before | after |
+|---|---|---|
+| valid module, 100,000 deep | **exit 127, stack overflow** | `DL0210`, exit 1 |
+| 70,000 deep | parsed clean | `DL0210`, exit 1 |
+| 100,000 nested unary `-` | parsed clean | `DL0210`, exit 1 |
+| 64 deep (control) | clean | clean — the limit is not "reject everything" |
+
+**This narrows the accepted language**, which is why it is documented rather than filed as a pure
+bug fix: expressions that used to compile at extreme depth now do not.
+
+**Honest record:** the crash predates its discovery by at least a day. The campaign ran for hours
+with ten core dumps sitting in `%TEMP%` that nobody looked at, and they were found during disk
+maintenance rather than by any test. The fuzzers did not generate input this deep; see §7 for the
+related observation that the generator could not write the bugs it was hunting.
+
+---
+
 ## 4. Confirmed NON-findings
 
 Stating what survived attack matters as much as stating what did not.
@@ -667,7 +765,7 @@ the host boundary needs a different technique (sanitizers on a Linux runner, or 
   collide through that route. (The *other* direction — one logical authority, two encodings — is
   finding F3, already recorded.)
 
-### 🔶 P17-C1 — the audit chain does not detect TRUNCATION (OBSERVED)
+### ✅ P17-C1 — the audit chain did not detect TRUNCATION — **FIXED**
 
 `audit::verify` walks forward from `GENESIS_HASH`, checking each record's `prev_hash` against the
 running head and recomputing its hash (`audit.rs:354-396`). **Every check is local to a link.**
@@ -683,14 +781,22 @@ Observed, with a control, in `crates/delulu-broker/tests/audit_truncation.rs`: f
 last two deleted, `verify` still `Ok` at three records — while an **in-place edit is caught**, which
 is what the chain genuinely provides.
 
-**Severity is bounded and stated:** the audit directory sits under the operator's own state
-directory, and this project already records that it provides no multi-tenancy or same-user
-isolation. But a hash chain is sold as *tamper evidence*, and the attack it fails to detect is the
-attractive one — you do not modify the record of what you did, you delete it. **The honest claim is
-"detects modification and reordering", not "tamper-evident".** Closing it means anchoring the head
-outside the log; `AuditBundle::verify` already takes an `expected_start` (`audit.rs:485`), which is
-the same idea applied to a bundle's beginning. The live chain's end has no equivalent. Persistence-
-format change → RFC, not a patch.
+**THE FIX.** `ANCHOR.json` now records the head hash and the record count **outside the log**,
+refreshed on every append. `verify` compares the chain it computed against it, and `AuditLog::open`
+**refuses to start** on a log that disagrees with its own anchor — silently re-anchoring would erase
+the evidence the anchor exists to keep, and would let the broker resume chaining from a shortened
+head so that every later record was genuinely valid.
+
+**What it buys, and what it does not — because an anchor is easy to oversell.** The anchor lives in
+the same directory as the log, so **an attacker who can delete records can also rewrite the anchor.**
+This is not tamper-proofing. It closes **accidental** truncation (partial write, full disk, botched
+rotation, half-done sync — an ordinary operational failure that used to pass silently) and **naive**
+tampering, and it makes the head **exportable**, which is the only route to genuine tamper-evidence:
+an operator can witness it elsewhere and check a later run against a value the attacker never held.
+That requires an **external** witness, which no file inside the directory can be.
+
+`an_attacker_who_also_rewrites_the_anchor_is_not_caught` pins that limit as a passing test, so the
+boundary is stated in code rather than only in prose.
 
 ### 🔶 P17-C2 — the `device` dimension has two sources of truth (OBSERVED, latent)
 
@@ -733,7 +839,7 @@ The consequence to state honestly: **a daemon restart drops every grant.** That 
 coherent — authority is re-established by adopting a signed certificate — but it means grants are
 session-scoped in a way an operator should know.
 
-### 🔶 P17-B2 — expiry is judged against a WALL clock, so backwards time resurrects authority (OBSERVED)
+### ✅ P17-B2 — expiry was judged against a WALL clock — **FIXED**
 
 `time.rs:14-25`: the production `ClockSource` is `SystemTime::now()`. `effective_state` compares a
 node's absolute deadline against that reading. **A wall clock is not monotonic.**
@@ -750,10 +856,26 @@ drift, an RTC read at power-on. The uplink lease sharpens it further: RFC 0001 F
 bound that survives a partition*, because revocation cannot cross one — and that bound is a
 wall-clock deadline.
 
-Not claimed: that an attacker can set your clock (usually privileged). The finding is that the
-guarantee **rests on clock monotonicity, an assumption the design never states**. Ruling D20 already
-moved the simulator's dead-man onto a logical clock for this class of reason; broker expiry did not
-get the same treatment.
+Not claimed: that an attacker can set your clock (usually privileged). The finding was that the
+guarantee **rested on clock monotonicity, an assumption the design never stated**. Ruling D20 had
+already moved the simulator's dead-man onto a logical clock for this class of reason; broker expiry
+had not had the same treatment.
+
+**THE FIX — a ratchet, not a monotonic clock.** `Broker::now` takes the running maximum of every
+reading it has ever taken. `Instant` was not an option: certificate `not_before`/`not_after` are
+**signed absolute epoch-millis**, so the comparison must stay wall-clock-comparable or a certificate
+minted by the ground could not be evaluated at all. The ratchet keeps it comparable while making it
+non-decreasing — a forward jump is accepted and advances it, a backward jump is clamped, and **what
+expired stays expired**.
+
+**It can only ever withhold authority, never grant it**: clamping upward can expire something early
+but can never un-expire anything. `the_ratchet_only_ever_withholds_authority_never_grants_it` pins
+that direction as a test.
+
+**Residue, stated:** the ratchet guarantees monotonicity, not *accuracy* — a clock set back and
+forward again still measures the interval differently from wall time. And it is per-broker state
+held in memory, so a restart begins afresh; that is sound only because the grant tree does not
+persist either (P17-B1), so every node a restarted broker holds was created after the restart.
 
 ### 🔴 P17-T1 — the core calculus does not model the construct that broke (mechanization target changed)
 

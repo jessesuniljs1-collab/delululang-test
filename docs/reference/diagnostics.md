@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 147 of 147 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 148 of 148 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -31,6 +31,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0207` | invalid assignment target | `ref.diag.DL0207` | covered |
 | `DL0208` | expected an item | `ref.diag.DL0208` | covered |
 | `DL0209` | expected a statement terminator | `ref.diag.DL0209` | covered |
+| `DL0210` | expression nests too deeply | `ref.diag.DL0210` | covered |
 | `DL0301` | unknown name | `ref.diag.DL0301` | covered |
 | `DL0302` | duplicate definition | `ref.diag.DL0302` | covered |
 | `DL0303` | unknown module in import | `ref.diag.DL0303` | covered |
@@ -170,7 +171,6 @@ These `DLxxxx` are named somewhere in this repository but are **not** in the tab
 
 | Code | Disposition | Why |
 |---|---|---|
-| `DL0210` | `reserved` | The Stage-1 parse range ends at DL0209 and holds DL0210 open, so the next parse diagnostic can be added without renumbering anything. Listed as `DL0210 reserved` in the DL02xx allocation table of `docs/design/STAGE1_SPECIFICATION.md`. |
 | `DL0503` | `retired` | It named an arity rule the checker does not have: a multi-row-variable signature is legal, row honesty is enforced per variable by DL0501, and a multi-variable row term is refused at resolution by DL0306. Retired rather than frozen unreachable, so the coverage law never has to carry a code nothing can emit (ruling D22). |
 | `DL0702` | `retired` | One of three codes that could never fire, retired at the 1.0 coverage gate rather than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`. |
 | `DL0906` | `retired` | One of three codes that could never fire, retired at the 1.0 coverage gate rather than frozen unreachable (ruling D22). See `crates/delulu-conform/src/tests.rs`. |

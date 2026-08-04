@@ -241,14 +241,16 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     back out. `verify` now carries `Declassify` so this is **visible** — but it is not impossible,
     and `verify` still requires no `Cap[Declassify]`. There is **no implicit-flow tracking**; this is
     not noninterference.
-13. **The audit chain does not detect truncation.** Every check it performs is local to a link, and
-    nothing anchors the head, so deleting the last *k* records leaves a chain that still verifies.
-    The honest claim is "detects modification and reordering", not "tamper-evident".
-14. **Expiry is judged against a wall clock and is therefore not monotonic.** A backwards step
-    resurrects expired authority with no revocation and no audit event — and on the target platforms
-    (satellites, aircraft, robots) backwards steps are routine: GNSS acquisition, NTP correction, RTC
-    at power-on. The uplink lease, which exists to bound behaviour across a partition, is a
-    wall-clock deadline.
+13. ✅ **Audit-chain truncation — FIXED.** `ANCHOR.json` now records the head and record count
+    outside the log; `verify` compares against it and `AuditLog::open` refuses a log that disagrees
+    with its own anchor. **Still open, and pinned as a passing test:** the anchor sits beside the
+    log, so an attacker who rewrites both is not caught. That needs an **external witness**; what is
+    closed is accidental truncation and naive tampering.
+14. ✅ **Wall-clock expiry — FIXED.** `Broker::now` ratchets to the running maximum, so a backwards
+    step can no longer resurrect expired authority. `Instant` was not an option — certificate
+    validity times are signed absolute epoch-millis — so the reading stays wall-clock-comparable and
+    is merely made non-decreasing. It can only withhold authority, never grant it. **Residue:**
+    monotonicity is not accuracy, and the ratchet is in-memory per broker.
 15. **`⊑` is a preorder, not a partial order, and `⊓` is not symmetric on representations.** Neither
     is an escalation — the meet is a genuine greatest lower bound and never widens, proved in Z3
     across all nine dimensions — but `⊑`-equivalent authorities **hash differently**, which reaches
@@ -261,6 +263,22 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     `broker_transport.rs`, `foreign.rs`, `foreign_worker.rs` — are exactly the ones it cannot execute.
 18. **CI carries every campaign gate and has never executed.** The repository is not pushed.
     "Prepared" and "green" are different claims.
+19. **The compiler could be crashed by deeply nested input — FIXED 2026-08-04 (`DL0210`).** A valid
+    module nested 100,000 levels deep overflowed the stack and killed the process (exit 127) instead
+    of producing a diagnostic. Nesting is now capped at 128. Recorded here rather than quietly
+    closed, for three reasons: the fix **narrows the accepted language** (input that used to compile
+    now returns `DL0210`); it required **two** distinct fixes, because bounding parser recursion left
+    a second unbounded recursion in `Drop` walking the postfix `Box` chain; and it was found by
+    inspecting **disk usage**, not by any test — ten 784 MB crash dumps had sat in `%TEMP%` for a day
+    and the fuzzers never generated input that deep. **Residue:** the limit is sized for a 2 MiB
+    thread stack, so it is conservative on the 512 MiB main thread.
+20. **macOS is now partly type-checked, still never executed.** As of 2026-08-04 the pure-Rust core
+    compiles for `x86_64-apple-darwin` (0 errors) — the first macOS evidence from a compiler rather
+    than from reading code. `aarch64-apple-darwin` **could not be checked from this host**: `blake3`
+    builds a NEON path through `cc-rs` and no Apple/ARM C cross-compiler exists here. That is a host
+    limitation, **not a defect**, and blake3's `pure` feature was deliberately not enabled to force
+    it green. **Zero macOS executions remain the standing position** — nothing about linking, the
+    test suite, the `SUN_PATH_MAX = 104` socket guard, or the C-dependent crates is proven.
 
 ## 9. Future roadmap
 

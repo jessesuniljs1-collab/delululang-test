@@ -16,8 +16,9 @@ and nothing is allowed to sit between them:
 | 6 | **Fuzz verified** | Adversarial input generation finds nothing. |
 | 7 | **Outside the proof boundary** | Explicitly *not* guaranteed, and named as such. |
 
-A claim with no category is a claim to be deleted or demoted. **Category 2 is currently empty for
-the type system**, and §12 says so plainly rather than rounding up.
+A claim with no category is a claim to be deleted or demoted. **Category 2 is non-empty only for
+the higher-order fragment** — the full type system is still unmechanized, and §12 says so plainly
+rather than rounding up.
 
 Findings referenced as `F1`–`F4`, `IF-1`, `P17-*` are recorded with witnesses in
 [`design/PROOF_CAMPAIGN.md`](design/PROOF_CAMPAIGN.md).
@@ -176,15 +177,21 @@ validate as a grant, nor either as an artifact signature.
 | Detects **modification** of any record | **4** | `delulu-broker/tests/audit_truncation.rs` (control) |
 | Detects **reordering** | **4** | `prev_hash` chain break |
 | Signatures are domain-separated | **4** | `cert.rs` tests |
-| Detects **truncation** | **7 — IT DOES NOT** | **P17-C1**, observed |
+| Detects **truncation** | **4 — FIXED** | `ANCHOR.json` + `verify`; regression witness in `audit_truncation.rs` |
+| Resists an attacker who rewrites BOTH log and anchor | **7 — it does not** | needs an EXTERNAL witness; pinned as a passing test |
 
-**P17-C1.** Every check `verify` performs is **local to a link**, so deleting the last *k* records
-leaves a chain in which every remaining link is still correct — `verify` returns `Ok`, just shorter.
-And **nothing anchors the head**: `AuditLog::open` *recovers* it from the files (`audit.rs:216-227`),
-so the broker resumes chaining from the truncated head and every later record is genuinely valid.
+**P17-C1, fixed.** Every check `verify` performs is **local to a link**, so deleting the last *k*
+records left a chain in which every remaining link was still correct — `verify` returned `Ok`, just
+shorter. Nothing anchored the head: `AuditLog::open` *recovered* it from the files, so the broker
+resumed chaining from the truncated head and every later record was genuinely valid.
 
-**The honest claim is "detects modification and reordering", not "tamper-evident"** — because the
-attack it misses is the attractive one: you do not alter the record of what you did, you delete it.
+`ANCHOR.json` now records the head and the record count **outside the log**, refreshed on every
+append; `verify` compares against it and `AuditLog::open` refuses to start on a disagreement.
+
+**The claim is now "detects modification, reordering, and truncation" — but still NOT
+"tamper-proof".** The anchor sits beside the log, so an attacker who deletes records can also
+rewrite it. What is closed is accidental truncation and naive tampering; what remains open needs an
+**external witness**, and that limit is pinned as a passing test rather than left in prose.
 
 ---
 
@@ -207,7 +214,7 @@ transitive, a lower bound, and a genuine **GLB**, with the model faithful to all
 
 ---
 
-## 7. Time — a wall clock, and therefore not monotonic
+## 7. Time — a wall clock, ratcheted so it cannot go backwards
 
 **What.** Expiry compares a node's absolute deadline against `SystemTime::now()` (`time.rs:14-25`),
 folded up the ancestor chain by `effective_state_inherited` (`tree.rs:576-590`).
@@ -222,17 +229,33 @@ receipt extends an adopted root's deadline and the whole subtree must come with 
 | Claim | Category | Evidence |
 |---|---|---|
 | A node is live only if every ancestor is live | **3** | TLA+, and a teeth test reconstructs the pre-fix bug |
-| Expiry is **permanent** | **7 — ONLY under forward-only time** | **P17-B2**, observed |
+| Expiry is **permanent**, under any clock motion | **4 — FIXED** | the ratchet in `Broker::now`; witness in `clock_monotonicity.rs` |
+| The clock is **accurate** | **7 — monotonic, not accurate** | a rewind still distorts measured intervals |
 
-**P17-B2.** A grant deadlined at t=5000 reports `Live` at 1000, `Expired` at 9000, and **`Live`
-again at 2000** — no revocation, no audit event, nothing recording that authority returned
-(`delulu-broker/tests/clock_monotonicity.rs`, with a forward-only control).
+**P17-B2, fixed.** A grant deadlined at t=5,000 reported `Live` at 1,000, `Expired` at 9,000, and
+**`Live` again at 2,000** — no revocation, no audit event, nothing recording that authority had
+returned.
 
-**This matters for the stated users specifically.** On satellites, autonomous aircraft and robots a
-backwards clock step is **routine, not adversarial**: GNSS acquisition after a cold start, an NTP
+**Why it mattered for the stated users specifically.** On satellites, autonomous aircraft and robots
+a backwards clock step is **routine, not adversarial**: GNSS acquisition after a cold start, an NTP
 correction, an RTC read at power-on. And the uplink lease exists precisely to be *the bound that
 survives a partition* — because revocation cannot cross one — and that bound is a wall-clock
-deadline. **The guarantee rests on clock monotonicity, an assumption the design never states.**
+deadline. The guarantee rested on clock monotonicity, an assumption the design never stated.
+
+**The fix is a ratchet, not a monotonic clock.** `Broker::now` takes the running maximum of every
+reading it has ever taken. `Instant` was not available: certificate `not_before`/`not_after` are
+**signed absolute epoch-millis**, so the reading must stay wall-clock-comparable or a certificate
+minted by the ground could not be evaluated here at all. The ratchet keeps it comparable while making
+it non-decreasing — forward jumps advance it, backward jumps are clamped, **and what expired stays
+expired**.
+
+**Direction matters and is pinned as a test:** the ratchet can only ever *withhold* authority, never
+grant it. Clamping upward can expire something early; it can never un-expire anything.
+
+**Residue:** monotonicity is not *accuracy* — a clock set back and forward again still measures the
+interval differently from wall time. And the ratchet is per-broker in-memory state, so a restart
+begins afresh; that is sound only because the grant tree does not persist either (P17-B1), so every
+node a restarted broker holds was created after the restart.
 
 ---
 

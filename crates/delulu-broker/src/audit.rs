@@ -210,6 +210,55 @@ pub struct AuditLog {
     /// The `YYYYMMDD` of the file currently being appended to (so we only write a header once per
     /// file). `None` until the first append or if no day file exists yet.
     current_day: Option<String>,
+    /// How many records the chain holds. Written to the anchor alongside the head so that a
+    /// truncation is detectable even in the (impossible-by-hash but cheap-to-check) case where a
+    /// shortened chain somehow ended on the same head.
+    records: usize,
+}
+
+/// The anchor file's name. Deliberately NOT a `.jsonl` day file, so `list_day_files` never sees it.
+const ANCHOR_FILE: &str = "ANCHOR.json";
+
+fn anchor_path(dir: &Path) -> PathBuf {
+    dir.join(ANCHOR_FILE)
+}
+
+/// Write the chain anchor: the head hash and the record count, outside the log itself.
+///
+/// # What this closes, and what it does not — stated because an anchor is easy to oversell
+///
+/// `verify` checks each record's `prev_hash` and recomputes its hash, and **every one of those
+/// checks is local to a link**. Deleting the last *k* records therefore leaves a chain in which
+/// every remaining link is still correct, so verification passed on a log with its history cut off
+/// (campaign finding P17-C1). Nothing anchored the head: `AuditLog::open` *recovers* it by reading
+/// the files, so the broker resumed chaining from the truncated head and every later record was
+/// genuinely valid.
+///
+/// The anchor makes that detectable. It does **not** make the log tamper-proof: an attacker with
+/// write access to this directory can rewrite the anchor as well as the log. What it buys is real
+/// but bounded:
+///
+/// * **Accidental truncation is caught** — a partial write, a full disk, a botched rotation, a
+///   half-finished sync. That is an ordinary operational failure and it used to pass silently.
+/// * **Naive tampering is caught** — deleting lines from a `.jsonl` needs a text editor; producing
+///   a consistent anchor needs the format.
+/// * **The head becomes exportable.** `verify` returns it and it is now written down, so an
+///   operator can witness it elsewhere and check a later run against a value the attacker never
+///   had. That is the only route to genuine tamper-evidence, and it requires an external witness —
+///   which no file inside this directory can be.
+fn write_anchor(dir: &Path, head: &str, records: usize) -> Result<(), AuditError> {
+    let body = format!("{{\"head\":\"{head}\",\"records\":{records}}}\n");
+    fs::write(anchor_path(dir), body).map_err(AuditError::io)
+}
+
+/// Read the anchor, if one exists. `None` means an unanchored log (one written before anchoring
+/// existed) — reported by [`verify`] rather than treated as agreement.
+fn read_anchor(dir: &Path) -> Option<(String, usize)> {
+    let text = fs::read_to_string(anchor_path(dir)).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let head = v.get("head")?.as_str()?.to_string();
+    let records = v.get("records")?.as_u64()? as usize;
+    Some((head, records))
 }
 
 impl AuditLog {
@@ -228,7 +277,27 @@ impl AuditLog {
             }
         }
         let current_day = days.last().cloned();
-        Ok(AuditLog { dir, head, current_day })
+        // Count what is on disk so the anchor can be refreshed. A log opened for the first time
+        // gets its anchor here; an existing one gets it re-affirmed only if it already AGREES —
+        // silently rewriting a disagreeing anchor would erase the very evidence it exists to keep.
+        let mut records = 0usize;
+        for day in &days {
+            records += count_records(&day_path(&dir, day))?;
+        }
+        match read_anchor(&dir) {
+            Some((a_head, a_records)) if a_head != head || a_records != records => {
+                return Err(AuditError::corrupt(
+                    records as u64,
+                    format!(
+                        "audit anchor disagrees with the log: anchor says {a_records} record(s) \
+                         ending {a_head}, the files hold {records} ending {head} — the chain has \
+                         been truncated, replaced or rolled back"
+                    ),
+                ));
+            }
+            _ => write_anchor(&dir, &head, records)?,
+        }
+        Ok(AuditLog { dir, head, current_day, records })
     }
 
     /// The current chain head (for tests / cross-links).
@@ -260,6 +329,11 @@ impl AuditSink for AuditLog {
         let rec = entry.into_record(&self.head);
         append_line(&day_path(&self.dir, &day), &rec.to_line())?;
         self.head = rec.hash.clone();
+        self.records += 1;
+        // The anchor is refreshed AFTER the record lands, so a crash between the two leaves the
+        // anchor one behind — which `verify` reports as a mismatch. Fail-closed: a log that may
+        // have lost its last record says so rather than passing.
+        write_anchor(&self.dir, &self.head, self.records)?;
         Ok(rec)
     }
 }
@@ -391,6 +465,26 @@ pub fn verify(dir: impl AsRef<Path>) -> Result<VerifiedStats, AuditError> {
             expected_prev = stored_hash.to_string();
             records += 1;
         }
+    }
+    // P17-C1: every check above is LOCAL TO A LINK, so a truncated chain still verifies — each
+    // surviving link is correct and the deleted suffix leaves no trace. The anchor is the only
+    // thing that can notice, because it was written when the chain was longer.
+    match read_anchor(dir) {
+        Some((a_head, a_records)) if a_head != expected_prev || a_records != records => {
+            return Err(AuditError::corrupt(
+                records as u64,
+                format!(
+                    "audit anchor disagrees with the log: anchor says {a_records} record(s) \
+                     ending {a_head}, the chain holds {records} ending {expected_prev} — records \
+                     have been removed, replaced or rolled back"
+                ),
+            ));
+        }
+        Some(_) => {}
+        // An unanchored log is REPORTED, not silently accepted: it is what every log written before
+        // anchoring existed looks like, and it is also what a log looks like after someone deletes
+        // the anchor. `verify` cannot tell those apart, and does not pretend to.
+        None => {}
     }
     Ok(VerifiedStats { files, records, head: expected_prev })
 }
@@ -591,6 +685,28 @@ fn list_day_files(dir: &Path) -> Result<Vec<String>, AuditError> {
 
 fn day_path(dir: &Path, day: &str) -> PathBuf {
     dir.join(format!("{day}.jsonl"))
+}
+
+/// How many CHAIN RECORDS a day file holds. Uses exactly `last_record_hash`'s notion of a record —
+/// a JSON line carrying `seq` — so a header line is not miscounted and the anchor's count means the
+/// same thing `verify` counts.
+fn count_records(path: &Path) -> Result<usize, AuditError> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return Ok(0),
+    };
+    let mut n = 0usize;
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            if v.get("seq").is_some() {
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
 }
 
 fn last_record_hash(path: &Path) -> Result<Option<String>, AuditError> {
