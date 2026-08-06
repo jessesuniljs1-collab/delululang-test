@@ -10,6 +10,9 @@
 node_modules/**
 package-lock.json
 extension.js
+server-resolve.js
+test/**
+e2e.js
 verify-package.js
 .vscode/**
 .gitignore

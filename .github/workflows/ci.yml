@@ -128,8 +128,29 @@ jobs:
   # finished, and an unfinished run is not a pass. `-Zmiri-disable-isolation` is required by the
   # crates whose tests touch the filesystem — without it Miri aborts on `create_dir_all` with
   # "unsupported operation", which is a Miri limitation and NOT a finding.
+  #
+  # Nothing is skipped here, and that took a change in the tests rather than in this file. Miri is
+  # roughly two orders of magnitude slower than native, so the bulk tests — 2,000 generated programs,
+  # the whole repository corpus — did not finish inside a 30-minute budget, and an unfinished run is
+  # not a pass. The first fix written here was `--skip`, which was wrong in an instructive way: it
+  # buys a green tick by interpreting *none* of that code. The tests now shrink themselves under
+  # `cfg!(miri)` instead, so the same code paths are interpreted on a small input. What Miri gives up
+  # is the REPETITION; the native run on every commit still does the full count.
+  #
+  # The corpus test's budget counts files EXAMINED rather than files checked. Counting checked files
+  # bounds nothing — the walk still parses every reject-corpus file it meets, and those are
+  # deliberately parse-dirty and numerous — which is why the first version of that cap ran for forty
+  # minutes without finishing. A limit on the results you keep is not a limit on the work you do.
+  #
+  # `-Zmiri-disable-stacked-borrows` would be a large further speedup and is deliberately NOT used:
+  # it turns off Miri's pointer-aliasing engine, which is its strongest detector. A faster run that
+  # reports "0 UB" while unable to see aliasing violations is weaker evidence wearing the same
+  # sentence, and this repository's rule is that a gate which cannot fail is not a gate.
+  #
+  # `timeout-minutes` makes a regression in this cost surface as a failure rather than a long bill.
   miri:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

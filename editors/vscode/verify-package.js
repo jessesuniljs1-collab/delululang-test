@@ -69,7 +69,14 @@ try {
           for (const m of src.matchAll(/require\(\s*["']([^"']+)["']\s*\)/g)) {
             const spec = m[1];
             if (spec.startsWith(".")) continue;
-            const bare = spec.replace(/^node:/, "");
+            // The `node:` scheme is reserved for built-in modules, so a `node:`-prefixed specifier
+            // is a builtin by definition and needs no package on disk. Checking the prefix rather
+            // than the name matters: `builtinModules` does NOT list the prefix-only builtins
+            // (`node:test`, `node:sqlite`, …), so stripping the prefix and looking the name up
+            // reported `node:test` as a missing third-party package — which is exactly what this
+            // verifier did the first time a test file was accidentally packaged.
+            if (spec.startsWith("node:")) continue;
+            const bare = spec;
             // Keep the scope on scoped packages: `@scope/name`, otherwise the first segment.
             const parts = bare.split("/");
             const name = bare.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];

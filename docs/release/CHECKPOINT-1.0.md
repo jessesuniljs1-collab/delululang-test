@@ -289,6 +289,15 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     `foreign_worker.rs` — are exactly the ones it cannot execute. So "0 UB" means the interpreter
     found nothing wrong in the code least likely to contain it. `delulu-broker` is still the crate
     the security argument rests on, and it is now interpreted end to end.
+
+    **`delulu-syntax` timed out at crate granularity** — the whole `fmt::` module exceeded 30
+    minutes with no result line, which is a timeout and not a pass. Per-module batching then closed
+    `lexer` (25), `num` (4), `token` (3), `grammar` (3) and `morph` (18), all clean. The two bulk
+    tests responsible now shrink under `cfg!(miri)` rather than being skipped: skipping would buy a
+    green tick by interpreting none of that code, while shrinking still interprets the same paths on
+    a small input. **`-Zmiri-disable-stacked-borrows` was refused** — it would speed this up a lot by
+    switching off Miri's pointer-aliasing detector, and a run that reports "0 UB" without being able
+    to see aliasing violations is a weaker claim wearing the same words.
 18. **CI carries every campaign gate and has never executed.** The repository is not pushed.
     "Prepared" and "green" are different claims.
 19. **The compiler could be crashed by deeply nested input — FIXED 2026-08-04 (`DL0210`).** A valid

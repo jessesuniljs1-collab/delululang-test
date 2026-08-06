@@ -1220,6 +1220,48 @@ the system was supposed to do.* Neither would have been found by re-reading the 
   `x86_64-apple-darwin`, and Apple Silicon is *not* entirely uncheckable — three crates compile clean
   for `aarch64-apple-darwin`. See `CROSS_PLATFORM_VERIFICATION.md`.
 
+### Making Miri finish, and one speedup deliberately refused
+
+Running Miri per crate closed three crates but **timed out on `delulu-syntax`**: the whole `fmt::`
+module exceeded a 30-minute budget with no result line. That is recorded as a timeout, not a pass —
+the same distinction that made "Miri has never completed a run" the honest entry for months.
+
+The cause is two bulk tests: one formats the entire repository corpus, the other generates 2,000
+programs. Miri is roughly two orders of magnitude slower than native, so repetition is what kills it.
+
+**The first fix written was `--skip`, and it was wrong in an instructive way.** Skipping buys a green
+tick by interpreting *none* of that code — the run finishes because the work is gone. Both tests now
+shrink themselves under `cfg!(miri)` instead, so the same code paths *are* interpreted, on a small
+input. Miri gives up the **repetition**; the native run on every commit still does the full count.
+Skipping and shrinking produce the same green tick and completely different evidence.
+
+**The first shrink was measured and only half of it worked**, which is the part worth recording.
+`fmt_laws_hold_over_generated_programs` went from never finishing to `ok` — `cfg!(miri)` does fire,
+and 20 generated programs is a tractable budget. `laws_hold_over_the_repository_corpus` still did
+**not** finish: a second 40-minute run ended inside it (`rc=124`, no `test result:` line). The cap
+was written as *"stop after 8 parse-clean files"*, and that bounds nothing, because the walk parses
+every reject-corpus file it meets on the way and those are deliberately parse-dirty and deliberately
+numerous — Miri was still walking, having "checked" almost nothing. The budget now counts files
+**examined**, which makes the cost independent of how the corpus happens to be laid out.
+
+The lesson generalises past Miri: a limit on the *results* you keep is not a limit on the *work* you
+do, and only the second one makes a run terminate.
+
+> **Status.** The generated-programs half is verified `ok` under Miri. The corpus half is a fix whose
+> verifying run had not yet reported when this was written — it is *"changed, not yet confirmed"*,
+> and will be recorded as timing out again if that is what happens.
+
+**`-Zmiri-disable-stacked-borrows` is refused.** It is a large further speedup and it turns off
+Miri's pointer-aliasing engine — its strongest detector. A faster run reporting "0 UB" while unable
+to see aliasing violations is weaker evidence wearing the identical sentence, which is precisely the
+failure mode *"a gate that cannot fail is not a gate"* names. Speed is not worth buying with the
+meaning of the result.
+
+**A correction to guidance received:** the invocation for nextest under Miri is **`cargo miri
+nextest`** — a subcommand of `cargo miri`, confirmed in `cargo miri --help` — not
+`cargo nextest run --miri`. Test partitioning (`--partition hash:i/n`) is real and useful, but it
+splits work across *runners*; on a single machine it buys nothing.
+
 ### `HARDENING_CAMPAIGN.md` advertised eight defects that were already fixed
 
 The README points a reader at that file for *"what is currently known to be wrong with all of this"*.
@@ -1276,6 +1318,24 @@ So "every authority in the tree is canonical" is **structural**, not a property 
 today: there is no third way for one to get in, and no way to change one after it is in. The
 1000-agent stress test then checks the conclusion at scale, and fails all seven scales if any of the
 three canonicalization calls is removed.
+
+**The federation case had no test, and it is the one the format-affecting change actually endangers.**
+Every certificate round-trip test used paths that were already canonical (`/srv/in`), so none of them
+could tell whether a non-canonical spelling survives a signature boundary.
+`a_certificate_carrying_a_non_canonical_path_adopts_canonically_without_changing_meaning` now signs
+`data` at the root and `.\data\sub` at the leaf — spellings a Windows operator would plausibly write —
+and pins three things at once:
+
+1. **The chain still verifies.** Signatures cover the bytes as issued; canonicalization happens on
+   the parsed value *afterwards*, so it cannot invalidate a certificate. `verify_chain` deliberately
+   reports the authority **as signed**, because a verifier that silently normalized would make the
+   signed bytes and the checked value disagree.
+2. **What lands in the local tree is canonical** — so an adopted grant hashes identically to the same
+   grant issued locally, which is exactly what F3 was about and what audit reconciliation rests on.
+3. **The meaning is unchanged** — still inside `./data/sub`, still refusing `./other`.
+
+Falsified: with canonicalization removed the test fails naming the spelling that leaked,
+`{".\\data\\sub"}`.
 
 ### The distributable was actually built, unpacked, and used
 

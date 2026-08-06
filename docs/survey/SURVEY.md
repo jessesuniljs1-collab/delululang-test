@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 222 |
-| Rust lines | 106106 |
+| Rust lines | 106406 |
 | Rust files outside `src/` (test/bench targets) | 92 |
 | Markdown documents | 130 |
-| Markdown lines | 34039 |
+| Markdown lines | 34192 |
 | DeluluLang programs | 147 |
 | Registered diagnostic codes | 148 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1032 / 9022 |
+| Nodes / edges in this map | 1035 / 9028 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18825 lines
+- **Modules:** 22 files, 18848 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -102,7 +102,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 683 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
-| `src/lsp.rs` | 1867 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
+| `src/lsp.rs` | 1890 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 75 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
@@ -134,13 +134,13 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 8304 lines
+- **Modules:** 14 files, 8386 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/audit.rs` | 1057 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 408 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
-| `src/cert.rs` | 1298 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
+| `src/cert.rs` | 1380 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 399 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
 | `src/guard.rs` | 1204 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
@@ -318,12 +318,12 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7042 lines
+- **Modules:** 9 files, 7070 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/ast.rs` | 514 | The Stage-1 AST (spec §4). Every node that can carry a diagnostic has a `Span`; |
-| `src/fmt.rs` | 1529 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
+| `src/fmt.rs` | 1557 | `delulu fmt` — the canonical formatter (Stage 8, spec §4). One style, zero options. |
 | `src/grammar.rs` | 125 | The declarative grammar-production index (Stage 9, invariant 42 — the coverage law). |
 | `src/lexer.rs` | 1006 | The Stage-1 lexer (spec §2), including Go-style automatic statement |
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |

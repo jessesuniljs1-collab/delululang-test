@@ -946,6 +946,88 @@ mod tests {
         );
     }
 
+    /// **The federation case for the P17-F1/F2/F3 canonicalization, which is format-affecting.**
+    ///
+    /// Every other round-trip test here uses paths that are already canonical (`/srv/in`), so none
+    /// of them could tell whether a *non-canonical* spelling survives a signature boundary. This one
+    /// signs `data` at the root and `.\data\sub` at the leaf — two spellings a Windows operator
+    /// would plausibly write — and checks three separate things:
+    ///
+    /// 1. the chain still **verifies**: signatures cover the bytes as issued, and canonicalization
+    ///    happens on the parsed value afterwards, so it cannot invalidate a certificate;
+    /// 2. what lands in the local tree is **canonical**, so the adopted grant hashes the same as an
+    ///    identical grant issued locally — the whole point of F3, and the thing federation audit
+    ///    reconciliation depends on;
+    /// 3. the authority **means the same thing**: still inside `./data`, still not `./other`.
+    #[test]
+    fn a_certificate_carrying_a_non_canonical_path_adopts_canonically_without_changing_meaning() {
+        fn fs_auth(paths: &[&str]) -> Authority {
+            // Struct literal on purpose: `Authority::new` canonicalizes, which would defeat the
+            // test by making the certificate canonical before it was ever signed.
+            Authority {
+                effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
+                scopes: Scopes {
+                    fs_read: paths.iter().map(|s| s.to_string()).collect(),
+                    ..Default::default()
+                },
+            }
+        }
+
+        let root = cert("ground", "vehicle", ANCHOR, fs_auth(&["data"]), (0, 10_000));
+        let leaf =
+            cert("vehicle", "payload", &root.fingerprint(), fs_auth(&[r".\data\sub"]), (0, 10_000));
+        let chain = vec![root, leaf];
+
+        // 1. A non-canonical spelling does not break verification.
+        let got = verify_chain(&chain, &anchors(&["ground"]), &FakeVerifier, 500)
+            .expect("a non-canonical spelling must not invalidate a signature");
+        assert_eq!(
+            got.scopes.fs_read,
+            [r".\data\sub".to_string()].into_iter().collect::<BTreeSet<_>>(),
+            "verification reports the authority AS SIGNED — canonicalization is the broker's job, \
+             not the verifier's, or the signed bytes and the checked value would disagree"
+        );
+
+        // 2. What the local tree stores is canonical.
+        let mut b = broker_at(500);
+        let node = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).expect("adopts");
+        let stored = b.inspect(&node).expect("the node is in the local tree");
+        assert!(
+            stored.authority.is_canonical(),
+            "an adopted certificate entered the tree non-canonically ({:?}) — a federated grant \
+             would then hash differently from the identical grant issued locally",
+            stored.authority.scopes.fs_read
+        );
+        assert_eq!(
+            stored.authority.scopes.fs_read,
+            ["./data/sub".to_string()].into_iter().collect::<BTreeSet<_>>()
+        );
+
+        // 3. And it means exactly what it meant on the wire.
+        let inside = Authority {
+            effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
+            scopes: Scopes {
+                fs_read: ["./data/sub/deep".to_string()].into_iter().collect(),
+                ..Default::default()
+            },
+        };
+        assert!(
+            crate::authority::attenuation_check(&inside, &stored.authority).is_ok(),
+            "a path inside the granted subtree must still attenuate after adoption"
+        );
+        let outside = Authority {
+            effects: [Effect::core_from_name("Read").unwrap()].into_iter().collect(),
+            scopes: Scopes {
+                fs_read: ["./other".to_string()].into_iter().collect(),
+                ..Default::default()
+            },
+        };
+        assert!(
+            crate::authority::attenuation_check(&outside, &stored.authority).is_err(),
+            "canonicalization must not have WIDENED the adopted grant"
+        );
+    }
+
     /// The TTL is the SHORTEST hop's, not the leaf's. A short-lived root must not be outlived by
     /// the authority it delegated.
     #[test]

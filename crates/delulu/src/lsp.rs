@@ -673,11 +673,34 @@ impl Server {
                             if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
                         })
                         .unwrap_or_default();
+                    // The lens names `delulu.showAuthority`, the EDITOR's command — deliberately
+                    // not `delulu.authority`, which is this server's `workspace/executeCommand`
+                    // name. The two must stay distinct. A language client registers a VS Code
+                    // command for every entry in `executeCommandProvider.commands` as part of
+                    // initialization, so an extension that also registers that name collides with
+                    // its own client: `registerCommand` throws "already exists" from inside
+                    // `client.start()`, initialization fails, and the server is shut down. That is
+                    // not hypothetical — it is what this project shipped, and it left the
+                    // extension with no working language server at all until a run in a real
+                    // editor produced the stack trace.
+                    //
+                    // Splitting the names keeps both halves honest: `delulu.authority` answers the
+                    // protocol question and returns data, `delulu.showAuthority` is the affordance
+                    // a person clicks and decides how to present it.
+                    //
+                    // The other side of this contract is `editors/vscode/extension.js`, and
+                    // `crates/delulu/tests/editor_contract.rs` is what fails the build when the two
+                    // disagree. Both are named here on purpose: the survey builds its map from
+                    // paths cited in comments, so writing them down is what makes
+                    // `delulu-survey impact mod:crates/delulu/src/lsp.rs` mention the editor at
+                    // all. Before this, the map showed the lens reaching nothing but `main.rs` —
+                    // and a blast radius that omits the file you are about to break is worse than
+                    // no blast radius, because it is consulted and believed.
                     lenses.push(json!({
                         "range": byte_range(text, f.name.span.start, f.name.span.end),
                         "command": {
                             "title": format!("authority: {authority}"),
-                            "command": "delulu.authority",
+                            "command": "delulu.showAuthority",
                             "arguments": [uri]
                         }
                     }));
