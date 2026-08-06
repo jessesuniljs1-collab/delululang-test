@@ -185,7 +185,19 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 | `docs/REPOSITORY_STRUCTURE.md` | What every directory and significant file is, annotated with *why* it is shaped that way |
 | `docs/MATHEMATICS.md` | The formal claims and, for each, which of the seven evidence categories it sits in. **A claim with no category is a claim to be deleted or demoted.** |
 | `docs/editors.md` | The language server, per-editor setup, and the editor surface's security history |
-| `docs/reference/` | `cli.md`, `diagnostics.md`, `grammar.md`, `primitives.md`, `semantics-5-1.md`, `audit-rules.md`, `coverage.md` |
+| `docs/reference/` | `cli.md`, `diagnostics.md`, `grammar.md`, `tokens.md`, `primitives.md`, the 16 `semantics-5-*.md` chapters, `audit-rules.md`, `coverage.md` |
+
+**If you came to work on the compiler specifically**, read these four in this order:
+
+| File | For |
+| --- | --- |
+| `docs/design/STAGE1_SPECIFICATION.md` **§9** | *Compiler architecture* — why Rust, and the crate-by-crate pipeline |
+| `docs/design/STAGE1_SPECIFICATION.md` **§3** (+ each later stage's additions) | The **normative grammar**. `docs/reference/grammar.md` indexes the productions and names where each is *defined* |
+| `docs/release/CHECKPOINT-1.0.md` **§3** | "The compiler" in one page: the soundness core, the code registry, and the refuse-rather-than-guess rule |
+| `docs/design/SOUNDNESS_AUDIT.md` | Where the soundness argument **is and is not** complete — findings F-1…F-6 are rejection tests in `crates/delulu-check/tests/laundering.rs` |
+
+Then ask the Survey for the blast radius before you touch anything:
+`cargo run -p delulu-survey -- impact mod:crates/delulu-check/src/check.rs`.
 | `docs/book/THE_DELULULANG_BOOK.md` | The tutorial. Its samples are conformance-tested — a sample that stops compiling fails the build. |
 | `docs/lang/` | Localized human prose (`en-US`, `hi-IN`, `ja-JP`, `de-DE`, `fr-FR`, `es-ES`, `ar-SA`, plus `delulu-slang`). **Codes and JSON never localize.** |
 
@@ -742,11 +754,56 @@ decision rather than an assumption.
 
 ## 14. CLI vs compiler vs editor — what each user actually gets
 
-**First, a correction of a common assumption: there is no separate compiler.** There is one binary,
-`delulu`. "The compiler" is `delulu check` (analyse) and `delulu build` (resolve, verify pins,
-optionally emit `.dwx`); "the runtime" is `delulu run`. There is no `deluluc`, no separate driver, and
-nothing you install alongside it. That is why the editor's answers cannot drift from the CLI's — they
-are the same code, reached through a different door.
+**There is a real compiler. There is no separate compiler *binary*.** Those are different statements
+and conflating them misleads in both directions.
+
+**The compiler is a specified component** (`STAGE1_SPECIFICATION.md` §9 "Compiler architecture",
+`docs/release/CHECKPOINT-1.0.md` §3 "The compiler"):
+
+| Stage of the pipeline | Crate | What it does |
+| --- | --- | --- |
+| lex → parse | `delulu-syntax` | tokens, AST, a hand-written recursive-descent parser **with error recovery** — it resyncs and keeps finding faults rather than stopping at the first |
+| resolve → typecheck → effect/authority check | `delulu-check` | names, types, effect rows, the authority lattice, `Secret[T]` opacity, reference capabilities and sendability. The docs call it **"the soundness core"** |
+| diagnostics | `delulu-diag` | spans, the code registry, the JSON envelope, typed repairs, the human renderer |
+| execute | `delulu-runtime` | the tree-walking interpreter — **the interpreter is the language** |
+| compile to WASM | `delulu-wasm` | a *subset* backend under a deny-by-default Wasmtime host |
+
+**148 registered diagnostic codes** (the Survey's measured count today; `CHECKPOINT-1.0.md` says 145
+and is correct *as a 1.0 snapshot* — release documents are deliberately exempt from the
+freshness scan). Codes are **add-only** from 1.0, each with an accepting *and* a rejecting conformance
+witness; coverage is 100% and hard-gated per commit. The grammar is normative
+(`STAGE1_SPECIFICATION.md` §3 plus each stage's additions, indexed by `docs/reference/grammar.md`).
+Where the checker cannot decide, **it refuses rather than guesses**.
+
+### When did the compiler last change?
+
+Two different questions, and the second is the one that matters.
+
+- **Last touched:** 2026-08-07 (today). Three commits edited compiler crates — but only to fix lints
+  (a `zip` replacing a hand-rolled index in `deps.rs`, a `const { assert! }` in `codes.rs`, an
+  `#[allow]` in `ast.rs`, a `while let` in `parser.rs`) and to shrink two **test-only** `cfg!(miri)`
+  budgets in `fmt.rs`.
+- **Last change to what the compiler DECIDES:** 2026-08-04, commit `47393b9` — the `DL0210`
+  deep-nesting guard, so a valid but pathologically nested module is *refused* instead of overflowing
+  the stack. Before that, the P16/P17 soundness fixes of 2026-08-03 (the escapable effect row, and
+  `Secret.verify` being typed pure).
+
+**And that is checked, not asserted.** `tests/core-invariance/SNAPSHOT.txt` records the exact bytes
+the toolchain answers with for all **109** programs the repository ships, across 362 invocations. It
+was last modified on **2026-08-04**, and `the_core_still_answers_exactly_as_recorded` passes against
+today's binary — so today's edits provably moved nothing.
+
+> This is the owner's **core-regression rule**: *tooling is for future developers, the core is the
+> product; a green suite is not proof.* After any tooling-only change, that snapshot is the evidence
+> that the language did not move. Regenerate it deliberately, never incidentally:
+> `DELULU_BLESS=1 cargo test -p delulu --test core_invariance`.
+
+What does *not* exist is a separate driver you invoke yourself. There is one binary, `delulu`, and
+the compiler is reached through `delulu check` (analyse), `delulu build` (resolve deps, verify pins,
+optionally emit `.dwx`) and `delulu run` (check, then execute). There is no `deluluc`, and nothing to
+install alongside. **That is why the editor's answers cannot drift from the CLI's** — the language
+server calls the same `delulu-check`, so a diagnostic in your editor is the diagnostic
+`delulu check --json` prints, not a re-implementation of it.
 
 There are exactly **three doors**:
 
