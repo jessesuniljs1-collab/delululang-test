@@ -147,6 +147,28 @@ delulu fmt <path>                    # one canonical style, zero options
 Add `--json` to any of them for the machine-readable envelope. `delulu --help` is the complete
 reference and is kept in sync with the code by a build gate.
 
+## In your editor
+
+One language server — `delulu lsp`, LSP 3.17 over stdio — and every editor consumes the same one.
+There are no editor-specific features by rule, so the diagnostics you see while typing *are* the
+compiler's: same codes, same spans, same typed repairs as `delulu check --json`. Zed, Helix, Neovim,
+Kate, Emacs and JetBrains need three lines of config; VS Code has a packaged extension in
+[`editors/vscode`](editors/vscode).
+
+You get diagnostics, hover carrying the effect row, completion, signature help, definition,
+references, rename, document and workspace symbols, semantic tokens, inlay hints showing *inferred*
+effect rows, quick fixes from the checker's own repairs, and **Format Document** running the same
+formatter as `delulu fmt` — byte for byte, enforced by a test, so your editor and CI can never
+disagree about whether a file is formatted. Two commands are specific to this language: **Show
+authority report** (what can this program do?) and **Show authority atlas** (the call graph with each
+function's effect row on it).
+
+The editor is part of the attack surface and is treated that way.
+[`docs/editors.md`](docs/editors.md) names what was found there and what refuses it — including a
+setting that let a cloned repository choose which binary the extension launched, and a duplicate
+command registration that left the language server dead in every workspace while the whole test suite
+stayed green.
+
 **Pass `check` all your files at once.** On Windows 82% of a small `check` is the operating system
 creating a process — the compiler's own work on a 35-line file is under 1.5 ms — so twenty separate
 invocations cost 711 ms where one costs 48. The numbers, the controls that produced them, and what

@@ -1255,8 +1255,14 @@ test in it was passing — which reads exactly like a failure and is not one.
 
 Two corrections came out of that, and the second is the one worth keeping:
 
-1. The budgets are now **measured**, not guessed: 4 corpus files and 8 generated programs, ≈15
-   minutes for the pair. Fewer inputs costs *repetition*, not reach.
+1. The budgets are now **measured**, not guessed: 4 corpus files and 8 generated programs.
+   **Verified 2026-08-07: the whole `fmt::` module completes — 16 passed, 0 failed, 1 ignored, in
+   1357 s (22 m 41 s wall).** Fewer inputs costs *repetition*, not reach.
+
+   The prediction from the per-unit costs was ~15 minutes and the truth was ~23, so even the measured
+   estimate was 50% low — the per-unit figures were taken from runs of a single test, and a module
+   pays setup the isolated runs did not. Recorded as it happened rather than as it was projected;
+   it still fits the 45-minute CI budget with room.
 2. **A per-test budget does not bound a per-module run.** Each test was individually within budget
    and the module was not, because nothing was measuring the sum. Three separate attempts were made
    at "make fmt finish under Miri" before anyone measured the per-unit cost; the first two were

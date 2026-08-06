@@ -432,9 +432,29 @@ npm run package     # -> delulu-lang.vsix
 code --install-extension delulu-lang.vsix
 ```
 
-You get diagnostics, hover with the effect row, completion, go-to-definition, rename, semantic
-tokens, and three code lenses on `main` and `test` blocks — **▶ run**, **▶ run test** (that one test,
-by name), and **authority: {…}**, which opens the §10.5 authority report.
+You get diagnostics, hover with the effect row, completion, signature help, go-to-definition,
+find-references, rename, document and workspace symbols, semantic tokens, inlay hints showing
+inferred effect rows, quick fixes from the checker's own typed repairs, and **Format Document**
+running the same formatter as `delulu fmt` — byte for byte, enforced by a test, so your editor and
+`delulu fmt --check` in CI can never disagree about whether a file is formatted.
+
+On top of the server the extension adds snippets (each one carries its effect row), build/test/check
+tasks, a problem matcher, a status bar showing whether the server is up, and two commands worth
+knowing:
+
+- **DeluluLang: Show authority report** — the §10.5 answer to *what can this program do?*
+- **DeluluLang: Show authority atlas** — the call graph with each function's effect row on it,
+  rendered beside the file.
+
+Three code lenses appear on `main` and `test` blocks: **▶ run**, **▶ run test** (that one test, by
+name), and **authority: {…}**.
+
+`delulu.serverPath` tells the extension where the binary is, if it is not on your `PATH`. It is
+**machine-scoped on purpose**: a workspace cannot set it, because the extension launches it as a
+process the moment a `.delulu` file is opened, and a repository that could set it would get code
+execution from nothing more than your opening it. If the server cannot start, the extension says
+which binary it looked for and how many `PATH` entries it searched, rather than leaving you with a
+dead editor.
 
 Zed, Helix, Neovim, Kate, Emacs and JetBrains all work from the three-line config above.
 [`editors.md`](editors.md) has the per-editor detail and the deliberate limits.

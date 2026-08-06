@@ -253,17 +253,25 @@ jobs:
         run: npm run verify
 
   # ---- Supply chain -----------------------------------------------------------------------
-  # P17-F: before this campaign `cargo deny` had NEVER been run and 19 advisories had
-  # accumulated. `advisories` is EXPECTED TO FAIL today: four are reachable and are deliberately
-  # not silenced (deny.toml names each). `continue-on-error` reports without blocking, which is
-  # honest; silencing them to get a green tick would not be.
+  # P17-F: before that campaign `cargo deny` had NEVER been run and 19 advisories had accumulated.
+  # For a while this step was `continue-on-error: true`, because four advisories were reachable and
+  # were deliberately not silenced — reporting without blocking was the honest posture then.
+  #
+  # It is no longer the honest posture. The wasmtime 27 -> 47 upgrade closed the two that mattered
+  # (including RUSTSEC-2026-0096, the aarch64 Cranelift sandbox escape), and a re-run on 2026-08-07
+  # reports "advisories ok". A check that passes and CANNOT FAIL THE BUILD is not a gate, so the
+  # flag is gone: from here a new advisory blocks.
+  #
+  # Two pyo3 entries remain ignored on reachability grounds, and that argument is itself gated by
+  # `governance.rs::the_ignored_pyo3_advisories_are_still_unreachable` — because an `ignore` whose
+  # reason has quietly stopped being true is worse than no gate at all: the tool prints a green
+  # line, and the green line is what people read.
   supply-chain:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: EmbarkStudios/cargo-deny-action@v2
-        continue-on-error: true
         with:
           command: check advisories
       - name: Bans, licences and sources (these DO gate)

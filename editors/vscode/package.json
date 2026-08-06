@@ -8,6 +8,7 @@
   "repository": { "type": "git", "url": "https://github.com/delulu-lang/delulu" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages", "Formatters", "Linters", "Snippets"],
+  "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "activationEvents": ["onLanguage:delulu"],
   "scripts": {
@@ -16,6 +17,7 @@
     "test": "node --test",
     "package": "npm test && npm run licence && npm run build && vsce package --out delulu-lang.vsix && npm run unstage-licence",
     "unstage-licence": "node -e \"require('fs').rmSync('LICENSE',{force:true})\"",
+    "icon": "node media/make-icon.js media/icon.png",
     "verify": "node verify-package.js"
   },
   "contributes": {

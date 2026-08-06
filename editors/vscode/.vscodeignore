@@ -13,6 +13,7 @@ extension.js
 server-resolve.js
 test/**
 e2e.js
+media/make-icon.js
 verify-package.js
 .vscode/**
 .gitignore

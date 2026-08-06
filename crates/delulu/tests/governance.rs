@@ -341,3 +341,99 @@ fn every_crate_declares_its_surface_and_only_the_cli_publishes() {
     );
     assert!(language > 0 && tooling > 0, "both surfaces exist: {language} language, {tooling} tooling");
 }
+
+/// The two ignored advisories in `deny.toml` are ignored on **reachability** grounds, and this test
+/// is what keeps that argument true instead of merely written down.
+///
+/// `cargo deny check advisories` reports "advisories ok", and that verdict is only worth anything
+/// because two `ignore` entries carry a reason. Both say the vulnerable API is never called:
+///
+///   * RUSTSEC-2026-0176 — an out-of-bounds read in `nth`/`nth_back` on **PyList/PyTuple iterators**
+///   * RUSTSEC-2026-0177 — a missing `Sync` bound on `PyCFunction::new_closure`
+///
+/// An ignore entry whose reason has quietly stopped being true is worse than no gate at all: the
+/// tool prints a green line, and the green line is what people read.
+///
+/// **The entries originally justified themselves with a workspace-wide grep** — *"there is no
+/// `.nth(` or `nth_back` anywhere in the workspace"* — and by 2026-08-07 there were sixteen, none of
+/// them anywhere near Python. The criterion was a *proxy* for the real condition, and the proxy
+/// drifted independently of the thing it stood for: a reviewer who ran it would get a false alarm,
+/// and the second time they would stop believing it. This test checks the real condition instead,
+/// which is scoped to the one file that touches pyo3 at all.
+#[test]
+fn the_ignored_pyo3_advisories_are_still_unreachable() {
+    let deny = read("deny.toml");
+    let python = read("crates/delulu-runtime/src/python.rs");
+
+    // If the entries are gone (upgraded past them), there is nothing left to justify.
+    let ignored_176 = deny.contains("RUSTSEC-2026-0176");
+    let ignored_177 = deny.contains("RUSTSEC-2026-0177");
+    if !ignored_176 && !ignored_177 {
+        return;
+    }
+
+    // pyo3 appears in exactly one file. If that stops being true, every reachability argument
+    // written about it is scoped to the wrong place and must be redone.
+    // `use pyo3` / `pyo3::` — an actual dependency on the crate, not the word. The first version
+    // matched any file CONTAINING "pyo3" and so flagged this very file, whose comments discuss it
+    // at length. A scan that cannot tell a mention from a use will always find its own explanation.
+    // Only `src/` is walked for the same reason: a test naming the crate is not a caller of it.
+    let others: Vec<String> = walk_rust_sources()
+        .into_iter()
+        .filter(|(path, src)| {
+            path.contains("/src/")
+                && !path.ends_with("python.rs")
+                && (src.contains("use pyo3") || src.contains("pyo3::"))
+        })
+        .map(|(p, _)| p)
+        .collect();
+    assert!(
+        others.is_empty(),
+        "pyo3 is now used outside `python.rs` ({others:?}), so the reachability reasons in \
+         deny.toml — which only examined that one file — no longer cover the codebase"
+    );
+
+    if ignored_176 {
+        assert!(
+            !python.contains(".nth(") && !python.contains("nth_back"),
+            "RUSTSEC-2026-0176 is ignored because this code never calls `nth`/`nth_back` on a \
+             PyList/PyTuple iterator, and `python.rs` now contains one of them. Either the call is \
+             on a Rust iterator (then narrow this test) or the advisory is now REACHABLE and the \
+             ignore entry must go."
+        );
+    }
+    if ignored_177 {
+        assert!(
+            !python.contains("PyCFunction") && !python.contains("new_closure"),
+            "RUSTSEC-2026-0177 is ignored because `PyCFunction::new_closure` is never used, and \
+             `python.rs` now names it. The ignore entry must go."
+        );
+    }
+}
+
+/// Every first-party `.rs` file, as (repo-relative path, contents).
+fn walk_rust_sources() -> Vec<(String, String)> {
+    let root = root();
+    let mut out = Vec::new();
+    let mut stack = vec![root.join("crates")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let p = e.path();
+            // `.claude` holds a second copy of the repository at an old commit; walking it would
+            // report findings about code that is not this checkout.
+            if p.is_dir() {
+                let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if name != "target" && name != ".claude" {
+                    stack.push(p);
+                }
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                if let Ok(src) = std::fs::read_to_string(&p) {
+                    let rel = p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().to_string();
+                    out.push((rel.replace('\\', "/"), src));
+                }
+            }
+        }
+    }
+    out
+}

@@ -26,11 +26,25 @@ impl Client {
 
     /// A client that tells the server where the project is, the way an editor does.
     fn start_in(root: &std::path::Path) -> Client {
-        let uri = format!("file:///{}", root.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
-        Client::start_with(json!({
-            "capabilities": {},
-            "workspaceFolders": [{ "uri": uri, "name": "test" }]
-        }))
+        Client::start_in_all(&[root])
+    }
+
+    /// A client with SEVERAL workspace folders — a multi-root workspace.
+    ///
+    /// The server has held `roots` as a `Vec` since Stage 8 and every test sent exactly one entry,
+    /// so the plural was implemented and never exercised. A field that is always a singleton in
+    /// testing is a field whose second element has never existed.
+    fn start_in_all(roots: &[&std::path::Path]) -> Client {
+        let folders: Vec<Value> = roots
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let uri =
+                    format!("file:///{}", r.to_string_lossy().replace('\\', "/").trim_start_matches('/'));
+                json!({ "uri": uri, "name": format!("root{i}") })
+            })
+            .collect();
+        Client::start_with(json!({ "capabilities": {}, "workspaceFolders": folders }))
     }
 
     fn start_with(init_params: Value) -> Client {
@@ -1393,4 +1407,51 @@ fn the_server_advertises_whole_document_formatting_and_not_range_formatting() {
         "range formatting is not supported and must not be advertised: {caps}"
     );
     c.shutdown();
+}
+
+/// A multi-root workspace: every folder is indexed, not just the first.
+///
+/// VS Code's multi-root workspaces, and every `code a/ b/` invocation, send several entries in
+/// `workspaceFolders`. The server has stored `roots` as a `Vec` since Stage 8 — and until this test
+/// every client in the suite sent exactly one, so the plural had never been exercised. A collection
+/// that is always a singleton under test is a collection whose second element has never existed:
+/// an index built from `roots[0]`, or a loop that breaks after the first hit, would have passed
+/// everything.
+///
+/// The check is deliberately symmetric. Finding a symbol from the *first* folder proves nothing —
+/// that is what a single-root implementation does too. The test that matters is the one in the
+/// SECOND folder.
+#[test]
+fn a_multi_root_workspace_indexes_every_folder_not_just_the_first() {
+    let tmp = std::env::temp_dir().join(format!("delulu_multiroot_{}", std::process::id()));
+    let alpha = tmp.join("alpha");
+    let beta = tmp.join("beta");
+    std::fs::create_dir_all(&alpha).unwrap();
+    std::fs::create_dir_all(&beta).unwrap();
+    std::fs::write(
+        alpha.join("a.delulu"),
+        "module alpha\n\npub fn alpha_only_symbol() -> Int { 1 }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        beta.join("b.delulu"),
+        "module beta\n\npub fn beta_only_symbol() -> Int { 2 }\n",
+    )
+    .unwrap();
+
+    let mut c = Client::start_in_all(&[alpha.as_path(), beta.as_path()]);
+    let names = symbol_names(&c.request("workspace/symbol", json!({ "query": "only_symbol" })));
+
+    assert!(
+        names.iter().any(|n| n == "alpha_only_symbol"),
+        "the first folder was not indexed: {names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n == "beta_only_symbol"),
+        "the SECOND workspace folder was not indexed — multi-root workspaces would silently show \
+         symbols from only one of their folders: {names:?}"
+    );
+
+    c.shutdown();
+    let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -632,6 +632,23 @@ without blocking is honest; suppressing them to earn a green tick would not be.
 
 The 6-test difference is the same platform delta [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
 
+### Containers: PREPARED, NOT BUILT (2026-08-07)
+
+`Dockerfile` (two-stage: `rust:1-bookworm` build, `debian:bookworm-slim` runtime, non-root user,
+`cargo build --release --locked`) and `.devcontainer/devcontainer.json` now exist. **Neither has ever
+been built.** The Docker CLI is installed on the authoring machine — version 29.5.2 — and its daemon
+was not running, so `docker build` was never executed.
+
+This is the same distinction the CI row above turns on, and it is worth repeating rather than
+assuming the reader carries it down the page: *a Dockerfile that has never been built is a plan.*
+Dockerfiles fail for boring reasons — a base image that moved, a missing `pkg-config`, a `COPY` path
+that does not exist in the build context — and none of those are visible by reading it. The first
+`docker build` should be treated as an experiment with a real chance of failing.
+
+What can be said: every command inside it has been run on this machine outside a container
+(`cargo build --release --locked -p delulu` is the ordinary build, `delulu --version` is in the CLI
+sweep), so the *contents* are not speculative. The **assembly** is.
+
 ### The sweep is a script now, so this row means something
 
 Previous passes recorded "CLI + compiler sweep 21/21" from a sequence of commands run **by hand**.

@@ -229,13 +229,31 @@ very first finding was that this page's front door was *false*; this is it being
 Full accounts with witnesses in [`../design/PROOF_CAMPAIGN.md`](../design/PROOF_CAMPAIGN.md); the
 proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMATICS.md).
 
-11. 🔴 **Four reachable security advisories, and the gate is deliberately red.** `cargo deny` had
-    never been run; the first run found 19. Fourteen cannot reach this project. Four can:
-    **RUSTSEC-2026-0096**, a wasmtime **sandbox escape on aarch64 Cranelift** — never executed here,
-    but this project ships **source**, so anyone building on Apple Silicon or an ARM server is
-    exposed; **RUSTSEC-2026-0222** (stores mixing type indices between engines, and this crate builds
-    several); and **two pyo3 CVEs live in a default build**. Fixes need major bumps
-    (wasmtime 27→36+, pyo3 0.25→0.29) and were not attempted blind.
+11. 🟡 **`cargo deny check advisories` reports "advisories ok" — and the two entries that make it say
+    so are ignores, so the verdict is only as good as their reasons.** Re-measured 2026-08-07 with a
+    freshly installed `cargo-deny`.
+
+    The two **wasmtime** advisories that used to dominate this entry are genuinely gone: the 27 → 47
+    upgrade (2026-08-04) closed **RUSTSEC-2026-0096**, the aarch64 Cranelift sandbox escape, along
+    with sixteen others. `Cargo.lock` pins `wasmtime 47.0.3`. This item previously said "four
+    reachable advisories" and was **stale** — that is documentation drift, found by re-running the
+    tool rather than re-reading the page.
+
+    What remains is **two pyo3 CVEs in a default build** (`pyo3 0.25.1`; `python` is a default
+    feature). They are ignored on **reachability**, verified rather than asserted: RUSTSEC-2026-0176
+    is in `nth`/`nth_back` on PyList/PyTuple *iterators*, which this code never creates — it only
+    constructs those objects — and RUSTSEC-2026-0177 is `PyCFunction::new_closure`, which appears
+    nowhere.
+
+    **That argument is now a test, not a comment** (`governance.rs::the_ignored_pyo3_advisories_are_still_unreachable`).
+    It had to become one: the reasons justified themselves with a workspace-wide grep — *"there is no
+    `.nth(` anywhere in the workspace"* — and there are now sixteen, none of them near Python. The
+    criterion was a **proxy** that drifted independently of the condition it stood for, so a reviewer
+    running it would get a false alarm and, the second time, stop believing it. The test checks the
+    real condition, scoped to the one file that touches pyo3, and fails if pyo3 is ever used
+    elsewhere. The real fix is still the upgrade (pyo3 0.25 → 0.29 removes `Python::with_gil`), and
+    it stays deferred deliberately rather than attempted blind, because GIL handling is exactly where
+    a hasty migration introduces undefined behaviour.
 12. **Secrets are protected against direct observation, not against a program that is trying.**
     `Secret.map` hands its closure the plaintext, gated only on purity; `verify` reads a chosen bit
     back out. `verify` now carries `Declassify` so this is **visible** — but it is not impossible,
@@ -284,18 +302,49 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     tests touch the filesystem. That is a Miri limitation, **not a finding**, and an earlier pass had
     recorded the abort as though it were one.
 
-    Structurally unchanged, and still the honest limit: the crates Miri *can* run contain **no
-    `unsafe` at all**, and the crates that do — `broker_transport.rs`, `foreign.rs`,
-    `foreign_worker.rs` — are exactly the ones it cannot execute. So "0 UB" means the interpreter
-    found nothing wrong in the code least likely to contain it. `delulu-broker` is still the crate
-    the security argument rests on, and it is now interpreted end to end.
+    The honest limit, as stated on 2026-08-06: the crates Miri *can* run contain **no `unsafe` at
+    all**, and the crates that do — `broker_transport.rs`, `foreign.rs`, `foreign_worker.rs` — are
+    the ones it cannot execute. So "0 UB" meant the interpreter found nothing wrong in the code least
+    likely to contain it. `delulu-broker` is still the crate the security argument rests on, and it
+    is interpreted end to end.
+
+    **That limit was stated too strongly, and 2026-08-07 corrected it.** "Exactly the ones it cannot
+    execute" was true of the FFI *calls* and false of the code around them. `validate_c_string` in
+    `foreign.rs` — a hand-rolled NUL scan with `ptr.add` and `slice::from_raw_parts`, the highest-risk
+    function in the tree — takes a raw pointer to **caller-supplied** memory and needs no foreign
+    library to exercise. It already had five tests against crafted Rust-owned buffers, and nothing had
+    ever interpreted them, purely because the crate was not in the matrix. They now run as a dedicated
+    `miri-ffi` job: **6 tests, 0 UB, 2.4 s** — against 26 minutes for a crate containing no `unsafe`.
+
+    The detector was confirmed live rather than assumed. A temporary probe passing a 4-byte buffer
+    with no terminator and a bound of 64 was rejected with *"attempting to access 1 byte, but got
+    alloc+0x4 which is at or beyond the end of the allocation of size 4 bytes"* — so under this
+    project's flags (`-Zmiri-disable-isolation`, Stacked Borrows deliberately ON) Miri still sees an
+    out-of-bounds read here. A gate that cannot fail is not a gate, and that applies to the tool as
+    much as to the test.
+
+    What stays out of reach, as an explicit assumption rather than a to-do: Miri cannot execute
+    `dlopen` or Windows API calls, so the foreign *calls* themselves — and all 37 `unsafe` sites in
+    `delulu`'s Windows transport — remain uninterpreted. **The general lesson is that choosing where
+    to point a checker is a bigger decision than how to configure it.** A tool aimed at code that
+    cannot exhibit the defect reports clean forever, and reads as coverage while doing it.
 
     **`delulu-syntax` timed out at crate granularity** — the whole `fmt::` module exceeded 30
     minutes with no result line, which is a timeout and not a pass. Per-module batching then closed
     `lexer` (25), `num` (4), `token` (3), `grammar` (3) and `morph` (18), all clean. The two bulk
     tests responsible now shrink under `cfg!(miri)` rather than being skipped: skipping would buy a
     green tick by interpreting none of that code, while shrinking still interprets the same paths on
-    a small input. **`-Zmiri-disable-stacked-borrows` was refused** — it would speed this up a lot by
+    a small input.
+
+    **`fmt::` now completes — verified 2026-08-07: 16 passed, 0 failed, 1 ignored, 1357 s.** It took
+    three attempts, and the first two failed for the same reason: they changed a quantity without
+    measuring one. The first cap counted *parse-clean files kept*, which bounds nothing, because the
+    walk still parses every reject-corpus file it meets on the way. The second counted files
+    *examined*, which was the right quantity at the wrong value. Only the third was preceded by a
+    measurement — ~115 s per corpus file, ~54 s per generated program — which showed the two tests
+    together needed ~41 minutes against a 40-minute wall, so the module reported a timeout while
+    every test inside it was passing. **A per-test budget does not bound a per-module run, and
+    nothing was measuring the sum.** One `time` invocation would have replaced all three attempts. **`-Zmiri-disable-stacked-borrows` was refused** — it would speed this up a lot by
     switching off Miri's pointer-aliasing detector, and a run that reports "0 UB" without being able
     to see aliasing violations is a weaker claim wearing the same words.
 18. **CI carries every campaign gate and has never executed.** The repository is not pushed.

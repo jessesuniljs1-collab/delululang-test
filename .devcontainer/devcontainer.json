@@ -1,0 +1,32 @@
+{
+  "//": [
+    "A development container for working ON DeluluLang (not for using it — that is the Dockerfile).",
+    "",
+    "STATUS: WRITTEN, NOT BUILT. No container has been created from this file; the Docker daemon was",
+    "not running on the authoring machine. It is prepared, not verified, and is recorded that way in",
+    "docs/design/CROSS_PLATFORM_VERIFICATION.md.",
+    "",
+    "`delulu.serverPath` is set here because inside the container the toolchain lives at a known",
+    "path and is NOT on PATH until `cargo install` has run. Note that this is a *user*-scope setting",
+    "supplied by the dev container definition, not a workspace setting: `delulu.serverPath` is",
+    "machine-scoped precisely so a repository cannot choose which binary the editor launches.",
+    "A devcontainer.json is trusted infrastructure the user opts into, which is a different thing",
+    "from a .vscode/settings.json that arrives with a clone."
+  ],
+  "name": "DeluluLang",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer"],
+      "settings": {
+        "delulu.serverPath": "/workspaces/DeluluLang/target/release/delulu",
+        "delulu.trace.server": "off"
+      }
+    }
+  },
+  "postCreateCommand": "cargo build --release --locked -p delulu",
+  "remoteUser": "vscode"
+}
