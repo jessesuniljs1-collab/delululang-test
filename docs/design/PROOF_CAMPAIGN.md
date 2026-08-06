@@ -1220,6 +1220,29 @@ the system was supposed to do.* Neither would have been found by re-reading the 
   `x86_64-apple-darwin`, and Apple Silicon is *not* entirely uncheckable — three crates compile clean
   for `aarch64-apple-darwin`. See `CROSS_PLATFORM_VERIFICATION.md`.
 
+### `HARDENING_CAMPAIGN.md` advertised eight defects that were already fixed
+
+The README points a reader at that file for *"what is currently known to be wrong with all of this"*.
+It disagreed with itself: **eight section headings said `— OPEN` while the summary table in the same
+file recorded each as CLOSED with a ruling number** — C2 (D38), C4/C5/C6/C8 (D25), C15 (D41),
+C16 (D47a), and C21 (D51, then D67, then D68).
+
+C21 is the sharpest case, because the *code* had known for longer than the document did:
+`interp.rs`'s own comment reads *"C21 was filed as a library-embedding hazard and D51 closed it"*,
+and the file goes on to describe two further hardenings. A reader scanning headings would have
+concluded the interpreter still SIGSEGVs on small stacks. A reader who checked the table would have
+concluded the opposite. Both were reading the same file.
+
+This is C22's defect wearing different clothes — *"two documents in the same tree disagreed about
+whether a feature exists, and the code sided with the more pessimistic one"* — except here the two
+disagreeing documents are two parts of **one** document. Headings now match the table, each with the
+ruling that closed it; the analysis under each heading is left as filed, because the finding as
+originally written is the thing worth keeping.
+
+**Three headings still say OPEN, correctly:** C46 and C28 are *owner-reserved* — they are decisions
+for the owner, not defects for an agent to close — and C92 (the broker is single-tenant) is a named,
+deliberate limitation rather than a bug.
+
 ### How far the extension was actually verified — and where that stops
 
 Stated precisely, because "production-ready" is the kind of phrase that absorbs more than it earned:

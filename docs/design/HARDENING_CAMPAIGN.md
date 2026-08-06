@@ -267,7 +267,9 @@ in 3.1 s with no stack overflow; 2,000 nested generic types in 0.73 s; a 1 MB st
 which closes the confusable-identifier attack by construction. The two hangs were real and are
 fixed; they were not symptoms of a fragile front end.
 
-### C2 · `--json` emits no object when the input cannot be read — OPEN
+### C2 · `--json` emits no object when the input cannot be read — CLOSED (D38)
+
+**CLOSED — D38.** The heading below said OPEN until 2026-08-06 while the summary table said closed; the text that follows describes the defect as it was found.
 
 `docs/for-agents.md` states "Every `--json` command emits one object" and calls the JSON envelope
 "the contract". When the input file cannot be read — missing, a directory, or not valid UTF-8 —
@@ -321,7 +323,9 @@ scan waves through); an escaped `\u{202e}` does **not** fire; RTL letters do **n
 conformance reject file `tests/conformance/reject/DL0107_bidi_override.delulu`. Verified against the
 old code: the reject file checks **clean** on the pre-fix binary and refuses after.
 
-### C4 · The front door describes a project that no longer exists — OPEN
+### C4 · The front door describes a project that no longer exists — CLOSED (D25)
+
+**CLOSED — D25.**
 
 `README.md`, on a tree tagged **v1.0.0** with Stage 10 closed and 23 rulings, says:
 
@@ -338,7 +342,9 @@ honesty discipline is real and unusually rigorous, but it was aimed inward at sp
 outward at capability claims, and it skipped the one page every new user reads first. Correctness
 in the core does not survive contact with users if the front door is false.
 
-### C5 · The repository map has drifted from the repository — OPEN
+### C5 · The repository map has drifted from the repository — CLOSED (D25)
+
+**CLOSED — D25**, and the drift is now decidable rather than noticed: `delulu-survey check` fails the build when the map and the tree disagree.
 
 `docs/REPOSITORY_STRUCTURE.md` opens with "**this document is the map of the repository**". It
 currently maps a different one.
@@ -361,7 +367,9 @@ currently maps a different one.
 The map also predates the crates added after Stage 1: `delulu-wasm`, `delulu-fuzz`,
 `delulu-registry`, `delulu-conform`, and `delulu-measure` do not appear in the tree it draws.
 
-### C6 · The documented surface is a strict subset of the real one — OPEN
+### C6 · The documented surface is a strict subset of the real one — CLOSED (D25)
+
+**CLOSED — D25.**
 
 **This is P0's headline finding, and it reframes the campaign.** The breadth sweep wrote one
 genuine program per domain — beginner, DSA, compiler, LLM client, robotics control loop, OS-style
@@ -424,7 +432,9 @@ Two things make it evidence rather than volume:
 closed under D54), **C58** (a public signature naming an unexported type), **C59** (a multi-package
 program cannot be run at all), and **C61** (`let _` is refused).
 
-### C8 · The recursion bound is fixed at 10,000 and is undocumented — OPEN
+### C8 · The recursion bound is fixed at 10,000 and is undocumented — CLOSED (D25)
+
+**CLOSED — D25** (documented), and superseded in mechanism by D51/D67 — see C21.
 
 `MAX_DEPTH = 10_000` in `crates/delulu-runtime/src/interp.rs`. Exceeding it is **DL0905**, an
 honest named diagnostic with exit 1 and no host crash — the behaviour is correct and was
@@ -587,7 +597,9 @@ every site, the no-table case renders `<type #11>` (unmistakable rather than pla
 `api_row_hash` — computed from the AST, not from `Type` — was verified byte-identical, so no lockfile
 moved.
 
-### C15 · The formatter merges comment paragraphs — OPEN (deferred to P9)
+### C15 · The formatter merges comment paragraphs — CLOSED (D41)
+
+**CLOSED — D41.**
 
 `delulu fmt` deletes the blank line separating two comment blocks that precede an item:
 
@@ -609,7 +621,9 @@ around the tool rather than for the reader.
 Deferred to P9 (Stage 8, Surface) rather than fixed here: changing canonical output means
 re-formatting the shipped corpus and re-establishing `fmt`'s laws, which deserves its own pass.
 
-### C16 · Cyclic type aliases are silently accepted — OPEN (P2 return)
+### C16 · Cyclic type aliases are silently accepted — CLOSED (D47a)
+
+**CLOSED — D47a**, together with C54.
 
 `type A = A`, and `type A = B; type B = A`, check **clean, exit 0**. A serious language rejects a
 cyclic type alias (Rust: "cycle detected when expanding type alias") because it names no ground
@@ -773,7 +787,9 @@ DL0901 on WASM where the interpreter says DL0902 — a single exotic case, named
 code: the two engines report the same code for divide-by-zero and overflow, and a guest stack
 overflow is a single-line DL0905 with no backtrace.
 
-### C21 · The interpreter's recursion guard overflows the host stack on small stacks — OPEN
+### C21 · The interpreter's recursion guard overflows the host stack on small stacks — CLOSED (D51, D67, D68)
+
+**CLOSED — D51** made the bound a contract (`Interp::with_max_depth`, `STACK_BYTES_PER_DEPTH`); **D67** supplied the caller that had never existed; **D68** closed the last residual with `on_interpreter_thread`, so the safe path is now the short one. The analysis below is the finding as filed.
 
 Found while writing the C20 witness. The interpreter caps recursion at `MAX_DEPTH = 10_000` and then
 reports DL0905 — but a tree-walking interpreter frame is large in a debug build (measured: 10,000

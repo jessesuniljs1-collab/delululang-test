@@ -315,6 +315,130 @@ mod tests {
         "/////", "\\\\\\", "./\\/.\\/",
     ];
 
+    /// A deterministic LCG. Reproducibility beats quality here: a failing case must replay
+    /// identically on every platform, and `rand` is not a dependency of this crate.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 =
+                self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            self.0 >> 16
+        }
+        fn pick<'a>(&mut self, xs: &[&'a str]) -> &'a str {
+            xs[(self.next() % xs.len() as u64) as usize]
+        }
+    }
+
+    /// Build a random path by concatenating fragments — including the ones that make `resolve`
+    /// interesting: separators of both kinds, `.`/`..`, empty segments, and anchor lookalikes.
+    fn random_path(rng: &mut Rng) -> String {
+        const HEAD: &[&str] = &["", "./", "/", "C:", "C:/", ".\\", "//", "d:"];
+        const SEG: &[&str] = &[
+            "a", "data", "sub", "..", ".", "C:", "c:", "...", ".git", "naïve", "x y", "日本", "",
+            "database", "Data",
+        ];
+        const SEP: &[&str] = &["/", "\\", "//", "/./"];
+        let mut s = String::from(rng.pick(HEAD));
+        let n = 1 + (rng.next() % 7) as usize;
+        for i in 0..n {
+            if i > 0 {
+                s.push_str(rng.pick(SEP));
+            }
+            s.push_str(rng.pick(SEG));
+        }
+        if rng.next() % 4 == 0 {
+            s.push_str(rng.pick(SEP));
+        }
+        s
+    }
+
+    /// **The generated counterpart to `CORPUS`, and the reason it exists.** The campaign's own rule
+    /// is *"do not write examples, generate inputs"* — a corpus can only contain the shapes someone
+    /// thought of, and this is the most safety-critical function in the module. Every law the
+    /// hand-written cases check is re-checked here over 20,000 machine-built paths, so a spelling
+    /// nobody imagined has to satisfy them too.
+    #[test]
+    fn canonicalization_laws_hold_on_generated_paths() {
+        let mut rng = Rng(0x0D31_11A1_5EED_1234);
+        let mut seen: Vec<(Vec<Seg>, String)> = Vec::new();
+        for i in 0..20_000u32 {
+            let p = random_path(&mut rng);
+            let c = canonicalize(&p);
+
+            // 1. Authority-preserving: canonicalizing cannot change the resolved path.
+            assert_eq!(
+                resolve(&c),
+                resolve(&p),
+                "iteration {i}: canonicalize({p:?}) = {c:?} resolves differently — authority CHANGED"
+            );
+            // 2. Idempotent, or "store the canonical form" is not a well-defined instruction.
+            assert_eq!(canonicalize(&c), c, "iteration {i}: not idempotent at {p:?}");
+            // 3. An anchor may only ever appear first — `join_tail`'s totality rests on this.
+            for (j, s) in resolve(&p).iter().enumerate() {
+                assert!(
+                    !(matches!(s, Seg::Root | Seg::Drive(_)) && j != 0),
+                    "iteration {i}: {p:?} resolved an anchor at index {j}"
+                );
+            }
+            // 4. Completeness: equal resolved segments ⟹ identical canonical spelling. Checked
+            //    against everything generated so far, which is what makes it a real quotient claim
+            //    rather than a per-input one.
+            let segs = resolve(&p);
+            if let Some((_, prev)) = seen.iter().find(|(s, _)| *s == segs) {
+                assert_eq!(*prev, c, "iteration {i}: {p:?} resolves like an earlier path but canonicalizes apart");
+            } else if seen.len() < 400 {
+                seen.push((segs, c.clone()));
+            }
+        }
+
+        // 5. Containment decisions are identical before and after, over every pair of a sample.
+        let mut rng = Rng(0xC0FFEE_1234_5678);
+        let sample: Vec<String> = (0..90).map(|_| random_path(&mut rng)).collect();
+        for a in &sample {
+            for b in &sample {
+                assert_eq!(
+                    is_descendant_or_equal(a, b),
+                    is_descendant_or_equal(&canonicalize(a), &canonicalize(b)),
+                    "containment of {a:?} in {b:?} flipped under canonicalization"
+                );
+            }
+        }
+    }
+
+    /// The set-level law on generated input: `canonicalize_set` must leave the covered region
+    /// unchanged. Dropping a subsumed element is only sound if nothing that was inside the set
+    /// before falls outside it after.
+    #[test]
+    fn set_canonicalization_preserves_the_covered_region_on_generated_input() {
+        let mut rng = Rng(0xA11CE_5EED);
+        for i in 0..3_000u32 {
+            let raw: BTreeSet<String> =
+                (0..1 + (rng.next() % 4) as usize).map(|_| random_path(&mut rng)).collect();
+            let canon = canonicalize_set(&raw);
+
+            assert!(!canon.is_empty(), "iteration {i}: {raw:?} canonicalized to nothing");
+            // Every probe inside the raw set is inside the canonical one, and vice versa.
+            for probe in raw.iter().chain(canon.iter()) {
+                assert_eq!(
+                    all_within(std::iter::once(probe), &raw),
+                    all_within(std::iter::once(probe), &canon),
+                    "iteration {i}: {probe:?} changed membership; raw={raw:?} canon={canon:?}"
+                );
+            }
+            // It is an antichain: no element lies within another.
+            for x in &canon {
+                for y in &canon {
+                    assert!(
+                        !(x != y && is_descendant_or_equal(x, y)),
+                        "iteration {i}: {x:?} is inside {y:?} — not an antichain: {canon:?}"
+                    );
+                }
+            }
+            assert_eq!(canonicalize_set(&canon), canon, "iteration {i}: set canonicalization not idempotent");
+        }
+    }
+
     /// **THE safety property.** Canonicalization must preserve the resolved path exactly. If it
     /// ever changed `resolve`, a grant's meaning would shift the moment it was stored — silently
     /// widening or narrowing an authority nobody re-approved.
