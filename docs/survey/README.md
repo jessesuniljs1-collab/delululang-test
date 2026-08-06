@@ -184,6 +184,21 @@ programs. Two habits worth having here:
   documents exactly what a lexical reader misses — macro-generated items, `#[cfg]`-gated modules,
   re-export chains. Those produce *missing* edges, never wrong ones.
 
+- **A cross-language coupling nobody wrote down is invisible, and that has already cost a real bug.**
+  The Survey maps what the source *cites*: a `References` edge exists because a comment names a path.
+  So a dependency that crosses out of Rust — the VS Code extension's dependence on `lsp.rs`, say — is
+  in the map only if someone said so in a comment.
+
+  Until 2026-08-07, `delulu-survey impact mod:crates/delulu/src/lsp.rs` reached exactly one node,
+  `main.rs`, while `editors/vscode/extension.js` depended on that file so closely that a change to it
+  left the language server dead in every workspace. The map was not wrong; it was silent, which is
+  worse when it is consulted and believed. **A blast radius that omits the file you are about to
+  break is more dangerous than no blast radius at all.**
+
+  The fix is the one the design already implies: **name the other file in a comment.** `lsp.rs` now
+  cites both `editors/vscode/extension.js` and `crates/delulu/tests/editor_contract.rs`, and the edge
+  appears. If you create a coupling the compiler cannot see, write it down or the map will not know.
+
 ---
 
 ## Keeping it true

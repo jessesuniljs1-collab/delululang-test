@@ -388,3 +388,155 @@ New at root/created: `Cargo.toml`, `README.md`, `.gitignore`, `crates/`, `tests/
   depend on it and neither of those two places is where a reader meets one. Nothing is currently
   mis-attributed; `docs/survey/` resolves every citation by this rule and reports how many rely on
   the default.
+
+## 5. Every document in this repository, and what it is for
+
+**139 markdown files.** This section exists because 83 of them were named nowhere in this document,
+and a structure guide that omits three fifths of the prose is a guide to the code only. Series (the
+16 semantics chapters, the 11 localizations, the per-study measurement records) are grouped where the
+group is the useful unit; every file is accounted for.
+
+### 5.1 Root — the front door
+
+| File | Purpose |
+| --- | --- |
+| `README.md` | The project in one page, including a "not distributed / not certified" table that is deliberately the first thing a reader meets. |
+| `HANDOFF.md` | **Start here in a new session.** Standing rules, what is built, which document to read, the feature explanations, and the open-problem list with reasons. |
+| `INSTALL.md` | Building from source and the portable archive; why the shipped binary embeds no Python, and why `cargo install delulu` from crates.io is deliberately not offered. |
+| `CHANGELOG.md` | Keep-a-Changelog, every entry naming the ruling that authorized it. Versions follow the **semver-authority law**: any widening of what a package may do is a major bump, even with an unchanged API. |
+| `GOVERNANCE.md` | Who decides what, and how a decision is recorded. |
+| `CONTRIBUTING.md` | How to propose a change, and the rules a change must satisfy. It binds this project too, which `governance.rs` tests. |
+| `SECURITY.md` | The disclosure policy and the threat model's edges. |
+| `TRADEMARK.md` | Name and mark usage. Owner-reserved territory. |
+
+### 5.2 `docs/` — what a user or an agent reads
+
+| File | Purpose |
+| --- | --- |
+| `GETTING_STARTED.md` | Install to first program to real programs to your editor. The path a new developer walks. |
+| `for-agents.md` | **Driving the toolchain as an AI agent**: exit codes, JSON envelopes, why to batch `check` and nothing else, and what to ask the language server instead of shelling out. |
+| `QUESTIONS.md` | The hard questions answered with evidence — can an agent bypass Authority, is any of this real mathematics — and an enumerated list of known leaks. |
+| `MATHEMATICS.md` | Every formal claim with its evidence category (1–7). **A claim with no category is a claim to be deleted or demoted.** |
+| `REPOSITORY_STRUCTURE.md` | This file. |
+| `editors.md` | One server, every editor. Per-editor setup, what the server does and cannot do, and the editor surface's security history. |
+
+### 5.3 `docs/design/` — normative specifications and campaign records
+
+**Specifications** — what each stage is contractually required to do. `LANGUAGE_SPECIFICATION.md` is
+the language itself and `DELULU_CORE.md` the irreducible core the rest rests on; the per-stage specs
+are `STAGE1_SPECIFICATION.md` (core language), `STAGE2_SPECIFICATION.md` (packages),
+`STAGE3_SPECIFICATION.md` (WASM), `STAGE4_SPECIFICATION.md` (foreign/Python),
+`STAGE5_SPECIFICATION.md` (custody), `STAGE6_SPECIFICATION.md` (plugins),
+`STAGE7_SPECIFICATION.md` (actors), `STAGE8_SPECIFICATION.md` (editor surface),
+`STAGE9_SPECIFICATION.md` (ecosystem) and `STAGE10_SPECIFICATION.md` (industrial).
+
+**Build orders** — the ruling ledgers (`D<n>`) that authorized each change: `STAGE6_BUILD_ORDER.md`,
+`STAGE7_BUILD_ORDER.md`, `STAGE8_BUILD_ORDER.md`, `STAGE9_BUILD_ORDER.md`, `STAGE10_BUILD_ORDER.md`.
+See §4 for how to cite a bare `D<n>`.
+
+**Addenda and guides** — a subsystem explained rather than specified:
+
+| File | Purpose |
+| --- | --- |
+| `CONSTITUTION.md` | The project's own rules. §8.4 forbids editor-specific server features, and that is load-bearing. |
+| `AUTHORITY_GUARD_CAPSTONE.md` | Authority and the Guard presented together as one argument rather than two subsystems. |
+| `STAGE5_GUARD_ADDENDUM.md` | The Guard's design: three tiers, broker-held permits, owner codes — and what was adopted from and rejected of `dcg`, with credit. |
+| `STAGE6_PLUGINS_GUIDE.md` | Plugins for users: the two classes, and why a Verified plugin that fails re-checking is refused rather than demoted to Contained. |
+| `STAGE7_ACTORS_GUIDE.md` | Actors for users: mailboxes, FIFO ordering, quiescence, and what is *not* prevented. |
+| `STAGE8_SURFACE_GUIDE.md` | The editor surface, carrying the specification's §11 honesty caveats verbatim — a test pins them character-for-character. |
+| `STAGE10_AUTONOMY_ADDENDUM.md` | Autonomy: dead-man timers, sign-off records, e-stop. |
+| `SURFACE_ATLAS_PALETTE_ADDENDUM.md` | The Atlas and the palette as user-facing surfaces. |
+| `SYNTAX_MORPH_SPEC.md` | Morphs — surface keyword skins. The program is unchanged; codes and JSON never pass through one. |
+| `LOCALIZATION_PLUGIN_GUIDE.md` | Catalog plugins: verified-class, **zero authority**, prose only. |
+| `REGISTRY_POLICY.md` | What the registry accepts, and why it recomputes authority server-side rather than trusting the client's claim. |
+| `AI_NATIVE_DESIGN.md` | Why the language is shaped for machine consumers as much as human ones. |
+| `DeluluLang_PROMPT.md` | The original brief the project was built from. Historical. |
+
+**Reviews, audits and campaigns** — the adversarial history:
+
+| File | Purpose |
+| --- | --- |
+| `SOUNDNESS_AUDIT.md` | Where the type system's soundness argument is, and is not, complete. |
+| `HARDENING_CAMPAIGN.md` | **P16.** The `C<n>` finding ledger — the "what is known to be wrong" list README points readers at. |
+| `PROOF_CAMPAIGN.md` | **P17 and P18.** Evidence categories, proof boundaries, the F1–F4 authority findings, and the Miri story end to end. |
+| `P19_ECOSYSTEM_REVIEW.md` | **P19, the most recent pass.** Seven personas; every claim tied to something executed and every gap named. |
+| `PRODUCTION_READINESS_REVIEW.md` | The pre-1.0 readiness pass. |
+| `STAGE10_AUTONOMY_HONESTY_REVIEW.md` | An honesty scrub of the autonomy claims specifically. |
+| `CROSS_PLATFORM_VERIFICATION.md` | **Which platforms have actually been executed**, and which are merely prepared. macOS, CI and containers each have a section saying plainly that they have not run. |
+| `STABILITY.md` | What may change, when, and what is frozen. |
+| `VERSION_COEVOLUTION.md` | How the language, the toolchain and packages move together. |
+| `THREADED_WASM_DEFERRAL.md` | A deferral, recorded rather than dropped. |
+
+### 5.4 `docs/reference/` — the precise surfaces
+
+| File | Purpose |
+| --- | --- |
+| `README.md` | What the reference section covers and how to navigate it. |
+| `cli.md` | Every command and flag. |
+| `diagnostics.md` | Every `DLxxxx` code. |
+| `grammar.md` | The concrete grammar. |
+| `tokens.md` | The token model. |
+| `primitives.md` | **The callable surface.** There is no standard library; this plus the prelude builtins is all of it. |
+| `semantics-5-1.md`, `semantics-5-2.md`, `semantics-5-3.md`, `semantics-5-4.md`, `semantics-5-5.md`, `semantics-5-6.md`, `semantics-5-7.md`, `semantics-5-8.md`, `semantics-5-9.md`, `semantics-5-10.md`, `semantics-5-11.md`, `semantics-5-12.md`, `semantics-5-13.md`, `semantics-5-14.md`, `semantics-5-15.md`, `semantics-5-16.md` | Sixteen chapters of operational semantics, one per §5 subsection of the specification — the normative meaning of each construct. |
+| `audit-rules.md` | What the audit log records, and what verifying it does and does not prove. |
+| `coverage.md` | The conformance coverage law (invariant 42) and how witnesses are counted. |
+
+### 5.5 `docs/book/` — the tutorial
+
+`THE_DELULULANG_BOOK.md` and `samples/`. **The samples are conformance tests.** A tutorial whose
+examples do not compile teaches something false and wastes an afternoon proving it, so `book.rs`
+checks every sample with the real binary on every run.
+
+### 5.6 `docs/lang/` — localized human prose
+
+`en-US.md` (the source of truth), `delulu-slang.md` (an AI-compact profile), and the human
+localizations: `ar-SA.md`, `de-DE.md`, `es-ES.md`, `fr-FR.md`, `hi-IN.md`, `ja-JP.md`, `ko-KR.md`,
+`pt-BR.md`, `zh-CN.md`.
+**Diagnostic codes and JSON never localize** — only prose does, and the machine envelope never passes
+through a morph at all.
+
+### 5.7 `docs/playbooks/` — how a stage was actually built
+
+`README.md` plus `STAGE4_PLAYBOOK.md`, `STAGE5_PLAYBOOK.md`, `STAGE6_PLAYBOOK.md`,
+`STAGE7_PLAYBOOK.md`, `STAGE8_PLAYBOOK.md`, `STAGE9_PLAYBOOK.md` and `STAGE10_PLAYBOOK.md`. Process
+records: the order the work was done in and the decisions taken along the way. Read these when you want to know *why* a stage
+looks the way it does, rather than what it does.
+
+### 5.8 `docs/release/` — the 1.0 artifacts
+
+| File | Purpose |
+| --- | --- |
+| `CHECKPOINT-1.0.md` | **The best single status page**: architecture, testing, and twenty known limitations named without softening. |
+| `CHECKLIST-1.0.md` | The release checklist and its dispositions. |
+| `ANNOUNCEMENT-1.0.md` | The announcement text. Unpublished, because nothing is distributed. |
+| `SUPPORT_MATRIX.md` | Platforms, release trains, and what support means. |
+| `SBOM-1.0.json` | The software bill of materials. |
+| `PROVENANCE-1.0.json` | Build provenance. |
+
+### 5.9 `docs/security/` and `docs/maintenance/`
+
+- `security/DRILL-001.md` — a recorded incident drill: a verdict string and an exit code that
+  disagreed. `for-agents.md` points at it as the reason an agent must read exit codes rather than
+  output.
+- `maintenance/DISK-CLEANUP-2026-08-04.md` — a maintenance action, recorded rather than forgotten.
+
+### 5.10 `measurements/` and `rfcs/`
+
+Every `measurements/*/RECORD.md` (and `study-*/REPORT.md`) is the **reproducible evidence** behind one
+published claim: `agent-loop` (why to batch `check`), `compute`, `dead-man`, `federation-demo`,
+`first-run`, `fleet-update`, `lts-cycle`, `robotics-demo`, `satellite-demo`, `scale`,
+`pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`). These are
+**measurements, not benchmarks**: each records the machine, the method and the numbers, so a reader
+can disagree with the method rather than only with the conclusion.
+
+`rfcs/0000-template.md` is the RFC template — `governance.rs` pins its hard sections so they cannot be
+dropped. `rfcs/0001-broker-federation.md` is the federation RFC: **sponsored, and partly built during
+its own comment period**, which is recorded as a governance deviation and must never be restated as
+compliance.
+
+### 5.11 Generated documents — do not hand-edit
+
+`docs/survey/SURVEY.md`, `survey.json`, `DISCREPANCIES.md` and `REMOVALS.md` are produced by
+`cargo run -p delulu-survey -- build` and **committed**, so the map travels with the tree. A test
+(`the_committed_map_matches_the_tree`) fails when they are stale and `delulu doctor` regenerates them.
+Editing them by hand is editing the output of a scan.
