@@ -914,6 +914,42 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// `verify` reads a file an attacker may have rewritten, and it must **report** corruption
+    /// rather than die on it — a verifier that panics is a verifier that can be silenced.
+    ///
+    /// The subtle one is the JSON array. `verify` does
+    /// `body.as_object_mut().unwrap().remove("hash")`, which is sound only because reaching that
+    /// line requires `v.get("seq")` to have returned `Some`, and a *string* index never matches a
+    /// non-object. That is a real invariant but an **implicit** one, held together by serde_json's
+    /// indexing rules rather than by anything local — so it is pinned here rather than re-derived by
+    /// the next reader of that `unwrap`.
+    #[test]
+    fn a_line_that_is_not_an_object_is_reported_not_panicked_on() {
+        for (tag, line) in [
+            ("array", "[1,2,3]"),
+            ("scalar", "42"),
+            ("string", "\"seq\""),
+            ("null", "null"),
+            ("truncated", "{\"seq\":1,\"hash\":"),
+        ] {
+            let dir = tmp_dir(&format!("verify_nonobject_{tag}"));
+            {
+                let mut log = AuditLog::open(&dir).unwrap();
+                log.append(entry(1, 1000, "use", "g_x", "allow")).unwrap();
+            }
+            let day = day_string(1000);
+            let path = day_path(&dir, &day);
+            let text = fs::read_to_string(&path).unwrap();
+            fs::write(&path, format!("{text}{line}\n")).unwrap();
+
+            // Either outcome is acceptable — refused, or ignored as a non-record. A PANIC is not.
+            match verify(&dir) {
+                Ok(_) | Err(_) => {}
+            }
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
     #[test]
     fn corrupting_one_byte_fails_verify_at_the_correct_seq() {
         let dir = tmp_dir("verify_tamper");

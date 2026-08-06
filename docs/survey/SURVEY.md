@@ -23,10 +23,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 222 |
-| Rust lines | 105946 |
+| Rust lines | 105982 |
 | Rust files outside `src/` (test/bench targets) | 92 |
 | Markdown documents | 130 |
-| Markdown lines | 33928 |
+| Markdown lines | 33950 |
 | DeluluLang programs | 147 |
 | Registered diagnostic codes | 148 |
 | Recorded rulings | 144 |
@@ -134,11 +134,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 8144 lines
+- **Modules:** 14 files, 8180 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/audit.rs` | 1021 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
+| `src/audit.rs` | 1057 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 408 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/cert.rs` | 1298 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |

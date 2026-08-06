@@ -1230,3 +1230,25 @@ the system was supposed to do.* Neither would have been found by re-reading the 
 - **The clock ratchet gives monotonicity, not accuracy**, and is per-broker in-memory state.
 - **F1/F2/F3's fix is format-affecting and shipped without an RFC**, which this document had
   previously said it would not do. That is an owner decision, recorded as a deviation.
+- **No cargo-fuzz targets.** `delulu-fuzz` is a standalone generator binary, not a `fuzz_targets/`
+  tree, so there is no coverage-guided fuzzing and no corpus that persists between runs.
+
+### A claim I made in this pass that was wrong
+
+Commit `7e9c5a3`'s message says *"no benchmark suite exists"*. **That is false**, and the correction
+belongs here rather than in a message that cannot be edited. `measurements/` is a full measurement
+program — fifteen studies, a binding `METHODOLOGY.md`, and a `delulu-measure` binary that regenerates
+them (`cargo run -p delulu-measure -- study-c` is *"the performance honesty baseline"*: 6 benchmarks
+across the `interp`, `wasm`, `c` and `python` lanes, with unrunnable lanes labelled `UNRUN` and given
+a reason rather than dropped). I asserted the gap after checking only for a `benches/` directory —
+looking for one shape of an answer and concluding the answer did not exist.
+
+**The real gap is narrower and worth stating precisely:** the studies are reproducible on demand but
+are **not regression-gated**. Nothing fails when a number gets worse.
+
+**And re-running study-c demonstrated why that gate would need care.** Every lane came out ≈2× the
+committed baseline — `c` 6→11 ms, `interp` 77→153, `python` 24→48, `wasm` 12→21. The **C lane is the
+control**, and a control that moves with everything else means the *machine* was loaded (Miri was
+saturating cores), not that the language regressed. The committed baseline was kept and the loaded
+run discarded. A naive threshold gate on absolute milliseconds would have failed this build for a
+reason that had nothing to do with the code; a useful gate has to normalize against the control lane.
