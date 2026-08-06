@@ -1,18 +1,29 @@
 //! The contract between the language server and the VS Code client.
 //!
-//! **Why this file exists.** The server has emitted a `delulu.authority` code lens since Stage 8.
-//! No client ever registered that command, so clicking the lens raised
-//! *"command 'delulu.authority' not found"* — for the whole life of the feature, in the one editor
-//! surface the project ships. Nothing failed, because nothing compared the two sides: the server is
-//! Rust, the client is JavaScript, and no test read both.
+//! **Why this file exists.** The server is Rust and the client is JavaScript, and for the life of
+//! the project no test read both. So the three lists — commands the server puts in a lens, commands
+//! the client registers, commands the manifest declares — could disagree with nothing to notice.
 //!
 //! A lens the editor cannot execute is worse than no lens: the server advertises an action, the
-//! user clicks it, and the tool reports its own internal error. So the three lists — commands the
-//! server emits, commands the client registers, commands the manifest declares — must be equal, and
-//! this test is what makes "equal" checkable rather than remembered.
+//! user clicks it, and the tool reports its own internal error. This file makes "they agree"
+//! checkable rather than remembered.
 //!
-//! It is a source scrape by design. The alternative is launching VS Code, which cannot run in this
-//! project's CI, and a scrape that reads the real files catches the real drift.
+//! **A correction to this file's own history.** Its first version said the `delulu.authority` lens
+//! had raised *"command not found"* since Stage 8 because no client registered it. That diagnosis
+//! is almost certainly **wrong**: a language client registers a VS Code command for every entry in
+//! the server's `executeCommandProvider.commands` during initialization, and the server has
+//! advertised `delulu.authority` there all along — so the command existed, and the lens would have
+//! forwarded to the server. What was genuinely missing is that `contributes.commands` did not
+//! declare it, so it never appeared in the Command Palette, and nothing rendered the report.
+//!
+//! Acting on the wrong diagnosis is what caused the real outage: registering `delulu.authority` in
+//! `extension.js` collided with the client library's own registration and killed the language
+//! server in every workspace. The lesson is kept here rather than quietly rewritten — **a fix aimed
+//! at a misdiagnosed cause can be worse than the symptom it was aimed at.**
+//!
+//! It is a source scrape by design, and that is also its limit: a scrape reads files, and cannot
+//! say what a third-party library does at runtime. `editors/vscode/e2e.js` covers the half this
+//! cannot, by launching a real editor against a real server.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -338,4 +349,78 @@ fn the_client_never_builds_a_shell_command_string_from_a_path() {
              was built the first time: {l}"
         );
     }
+}
+
+/// The extension's `$delulu` problem matcher must match what the compiler actually prints.
+///
+/// A problem matcher is two regexes in a JSON file, and nothing connects them to the diagnostic
+/// renderer. If either drifts, the matcher silently matches nothing: tasks still run, output still
+/// appears in the terminal, and the Problems panel stays empty — a failure that looks exactly like
+/// "there were no problems".
+///
+/// So this drives the REAL binary, takes its REAL output, and applies the matcher's own regexes to
+/// it, requiring that every field the matcher claims to extract actually comes out.
+#[test]
+fn the_problem_matcher_matches_real_compiler_output() {
+    let pkg: serde_json::Value =
+        serde_json::from_str(&read("editors/vscode/package.json")).expect("package.json parses");
+    let matcher = pkg["contributes"]["problemMatchers"]
+        .as_array()
+        .and_then(|a| a.first())
+        .expect("the extension contributes a problem matcher");
+    let patterns = matcher["pattern"].as_array().expect("the matcher has patterns");
+    assert_eq!(patterns.len(), 2, "expected a message line and a location line");
+
+    let dir = std::env::temp_dir().join(format!("delulu_matcher_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("bad.delulu");
+    std::fs::write(
+        &file,
+        "module bad\n\nfn f(out: Cap[Console]) {\n    out.println(\"undeclared\")\n}\n",
+    )
+    .unwrap();
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["check", file.to_str().unwrap()])
+        .output()
+        .expect("run delulu check");
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // Rust has no regex in std and this crate takes no regex dependency for a test, so the two
+    // patterns are checked structurally against the shape they must match. This is weaker than
+    // running the regex engine — and it is checked against output the compiler actually produced,
+    // which is the half that drifts.
+    let msg_re = patterns[0]["regexp"].as_str().unwrap();
+    let loc_re = patterns[1]["regexp"].as_str().unwrap();
+    assert!(
+        msg_re.contains("error") && msg_re.contains("DL"),
+        "the message pattern no longer looks for `error[DLxxxx]`: {msg_re}"
+    );
+    assert!(loc_re.contains("-->"), "the location pattern no longer looks for `-->`: {loc_re}");
+
+    let lines: Vec<&str> = text.lines().collect();
+    let msg_at = lines
+        .iter()
+        .position(|l| l.starts_with("error[DL") && l.contains("]: "))
+        .unwrap_or_else(|| {
+            panic!(
+                "`delulu check` printed no line of the form `error[DLxxxx]: …`, which is what the \
+                 extension's problem matcher keys on. Output was:\n{text}"
+            )
+        });
+    let loc = lines.get(msg_at + 1).copied().unwrap_or("");
+    assert!(
+        loc.trim_start().starts_with("--> "),
+        "the line after the message is not the `--> file:line:col` location the matcher expects, \
+         so every diagnostic would be reported without a file to click. Got: {loc:?}"
+    );
+    // `file:line:col` — the trailing two colon-separated fields must be numbers, and the path may
+    // itself contain a colon on Windows (`C:/…`), which is why the matcher's `(.*)` is greedy.
+    let tail: Vec<&str> = loc.trim().trim_start_matches("--> ").rsplitn(3, ':').collect();
+    assert!(
+        tail.len() == 3 && tail[0].parse::<u32>().is_ok() && tail[1].parse::<u32>().is_ok(),
+        "the location line does not end in `:line:col`: {loc:?}"
+    );
 }

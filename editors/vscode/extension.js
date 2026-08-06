@@ -320,6 +320,16 @@ function activate(context) {
       runInTerminal("delulu test", serverPath, args);
     }),
 
+    // Analysis, not execution: `atlas` reads and type-checks, it never runs the program. So this is
+    // deliberately NOT trust-gated — the same reasoning that keeps diagnostics working in
+    // Restricted Mode. It does spawn the server binary, which is why it needs `haveServer()`.
+    vscode.commands.registerCommand("delulu.showAtlas", async (uri) => {
+      if (!haveServer()) {
+        return;
+      }
+      await showAtlas(serverPath, uri);
+    }),
+
     // The report is answered by the SERVER (`workspace/executeCommand` → `delulu.authority`); this
     // command is the editor-side affordance that asks for it and decides how to show it.
     //
@@ -331,16 +341,6 @@ function activate(context) {
     // shipped in that state — no diagnostics, no hover, no completion, in every workspace — and
     // nothing caught it, because the packaging tests check that a command is *registered* and the
     // server tests check that it *answers*. Neither one starts a client against a server.
-    // Analysis, not execution: `atlas` reads and type-checks, it never runs the program. So this is
-    // deliberately NOT trust-gated — the same reasoning that keeps diagnostics working in
-    // Restricted Mode. It does spawn the server binary, which is why it needs `haveServer()`.
-    vscode.commands.registerCommand("delulu.showAtlas", async (uri) => {
-      if (!haveServer()) {
-        return;
-      }
-      await showAtlas(serverPath, uri);
-    }),
-
     vscode.commands.registerCommand("delulu.showAuthority", async (uri) => {
       if (!client) {
         vscode.window.showWarningMessage(
