@@ -68,6 +68,86 @@ fn resolve(path: &str) -> Vec<Seg> {
     segs
 }
 
+/// The **canonical spelling** of a path scope — the unique representative of its `⊑`-equivalence
+/// class (P17-F1/F2/F3).
+///
+/// `resolve` is not injective: `./data`, `data`, `./data/` and `.\data` all resolve to the same
+/// segments. A relation defined through a non-injective function is a **preorder** on its domain,
+/// never a partial order — so `⊑` on raw spellings cannot be antisymmetric, and two spellings of
+/// one grant hash differently in the audit chain. The repair is to pick one representative per
+/// class and store *that*; `⊑` is then a genuine partial order on the image of this function.
+///
+/// **The contract is `resolve(canonicalize(p)) == resolve(p)` — canonicalization preserves the
+/// resolved path exactly, so it can neither widen nor narrow any authority.** It normalizes the
+/// *spelling*, never the meaning; it is not a repair for anything `resolve` itself gets wrong.
+/// `canonicalize_is_authority_preserving` checks that exhaustively over the adversarial corpus.
+pub fn canonicalize(path: &str) -> String {
+    render(&resolve(path))
+}
+
+/// The canonical form of a path *set*: canonical spellings, reduced to an **antichain**.
+///
+/// Canonicalizing each element is not enough to make `⊑` antisymmetric, because a path set carries
+/// a second, independent redundancy: `{./data, ./data/sub}` and `{./data}` denote exactly the same
+/// covered region, since `./data/sub` is already inside `./data`. Both directions of `⊑` hold
+/// between them while the sets differ, so the order stays a preorder no matter how well the
+/// individual spellings are normalized. Dropping every element that lies within another leaves the
+/// `⊑`-maximal elements — one representative per class.
+///
+/// **Authority-preserving on both counts.** A subsumed element contributes nothing to the covered
+/// region (anything inside it is already inside the element that subsumes it), so removing it
+/// changes no containment decision. Mutual elimination cannot empty a set: two distinct canonical
+/// paths cannot contain each other, since that would force their resolved segments — and therefore
+/// their canonical spellings — to be equal.
+pub fn canonicalize_set<'a, I>(paths: I) -> std::collections::BTreeSet<String>
+where
+    I: IntoIterator<Item = &'a String>,
+{
+    let spelled: std::collections::BTreeSet<String> =
+        paths.into_iter().map(|p| canonicalize(p)).collect();
+    spelled
+        .iter()
+        .filter(|x| !spelled.iter().any(|y| y != *x && is_descendant_or_equal(x, y)))
+        .cloned()
+        .collect()
+}
+
+/// Render resolved segments back to a path string that re-resolves to the same segments.
+fn render(segs: &[Seg]) -> String {
+    match segs.first() {
+        None => ".".to_string(),
+        Some(Seg::Root) => {
+            let rest = join_tail(&segs[1..]);
+            if rest.is_empty() { "/".to_string() } else { format!("/{rest}") }
+        }
+        Some(Seg::Drive(d)) => {
+            let rest = join_tail(&segs[1..]);
+            if rest.is_empty() { format!("{d}/") } else { format!("{d}/{rest}") }
+        }
+        // A relative path ALWAYS carries the `./` prefix. Without it a leading component that
+        // happens to look like a drive letter re-resolves as a drive: `./C:` is `[Name("C:")]`, a
+        // directory named `C:` beneath the origin, but the bare spelling `C:` is `[Drive("C:")]` —
+        // the whole of drive C. That is a WIDENING, and it is why this cannot just join segments.
+        _ => format!("./{}", join_tail(segs)),
+    }
+}
+
+/// Join the non-anchor segments. `Root`/`Drive` are anchors that [`resolve`] only ever emits at
+/// index 0, where [`render`] has already consumed them; rendering them by their own text here keeps
+/// the function total without a panic branch, and `render_is_total_on_resolved_segments` pins that
+/// the anchor-in-tail case is genuinely unreachable rather than merely unobserved.
+fn join_tail(segs: &[Seg]) -> String {
+    segs.iter()
+        .map(|s| match s {
+            Seg::Up => "..".to_string(),
+            Seg::Name(n) => n.clone(),
+            Seg::Root => "/".to_string(),
+            Seg::Drive(d) => d.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Is `child` a descendant-or-equal of `parent`, purely lexically (spec §A.3)?
 ///
 /// True iff, after normalization, `parent`'s segments are a prefix of `child`'s AND the remaining
@@ -91,6 +171,12 @@ pub fn is_descendant_or_equal(child: &str, parent: &str) -> bool {
 /// For every `(a, b)` pair where one path lies within the other, the deeper (narrower) path is in
 /// the meet. Every element of the result is within BOTH inputs, so the meet is never wider than
 /// either side — exactly what DL0802's "repair never widens" requires (spec §8).
+///
+/// **The result is [`canonicalize`]d (P17-F2).** When `x` and `y` are two spellings of the same
+/// path, *both* descendant tests hold, so the `if`/`else if` inserted whichever side happened to be
+/// the outer loop — making `⊓` depend on argument order, in direct contradiction of the
+/// "note `⊓` is symmetric" comment in `authority.rs`. Emitting the canonical representative makes
+/// the two orders agree by construction rather than by luck.
 pub fn intersect_path_sets<'a, A, B>(a: A, b: B) -> std::collections::BTreeSet<String>
 where
     A: IntoIterator<Item = &'a String> + Clone,
@@ -106,7 +192,7 @@ where
             }
         }
     }
-    out
+    canonicalize_set(&out)
 }
 
 /// Is every path in `child` a descendant-or-equal of some path in `parent`? (Empty `child` is
@@ -202,6 +288,144 @@ mod tests {
             intersect_path_sets(&set(&["./a", "./b/c"]), &set(&["./b", "./z"])),
             set(&["./b/c"])
         );
+    }
+
+    /// Adversarial spellings. Anything whose canonical form could plausibly re-resolve differently
+    /// belongs here — especially components that *look* like anchors (`C:`), runs of dots, and the
+    /// separators/empties that `resolve` silently drops.
+    const CORPUS: &[&str] = &[
+        // empties and bare anchors
+        "", ".", "./", ".//", "/", "//", "///", "\\", ".\\", "..", "../", "./..", "../..", "..\\..",
+        // ordinary relative
+        "data", "./data", "./data/", "data/", ".\\data", ".\\data\\", "./data//sub", "./data/sub",
+        "data/sub/", "./other", "a", "./a/b/c", "a/b/c/",
+        // `..` interactions
+        "./data/../secret", "./data/x/../y", "./data/../../etc", "../foo", "../../foo", "a/../b",
+        "a/../../b", "/..", "/../..", "/a/../..", "/a/../b", "./a/../..", "a/b/../../..",
+        // rooted and drive-anchored
+        "/usr/lib", "/usr/lib/", "/usr//lib", "\\usr\\lib", "C:", "C:/", "C:\\", "C:/a", "C:\\a\\b",
+        "c:/a", "C:extra", "C:/a/../..", "D:\\libs",
+        // components that LOOK like anchors — the widening trap `render`'s `./` prefix exists for
+        "./C:", "./C:/x", "a/C:", "a/../C:", "./c:", "./C:/../D:", "././C:",
+        // dot-ish names that are NOT `.` or `..`
+        "...", "....", "./...", "a..b", "..a", "a..", "./.git", "./.hidden/x",
+        // whitespace and unicode
+        "a b/c", " ", "./ /x", "日本/データ", "./日本/../データ", "./naïve/café",
+        // separators only
+        "/////", "\\\\\\", "./\\/.\\/",
+    ];
+
+    /// **THE safety property.** Canonicalization must preserve the resolved path exactly. If it
+    /// ever changed `resolve`, a grant's meaning would shift the moment it was stored — silently
+    /// widening or narrowing an authority nobody re-approved.
+    #[test]
+    fn canonicalize_is_authority_preserving() {
+        for p in CORPUS {
+            assert_eq!(
+                resolve(&canonicalize(p)),
+                resolve(p),
+                "canonicalize({p:?}) = {:?} resolves differently — the authority CHANGED",
+                canonicalize(p)
+            );
+        }
+    }
+
+    /// A canonical form must be a fixed point, or "store the canonical spelling" would not be a
+    /// well-defined instruction.
+    #[test]
+    fn canonicalize_is_idempotent() {
+        for p in CORPUS {
+            let once = canonicalize(p);
+            assert_eq!(canonicalize(&once), once, "canonicalize is not idempotent at {p:?}");
+        }
+    }
+
+    /// The completeness half: same resolved path ⟹ *identical* canonical spelling. This is what
+    /// makes `⊑` antisymmetric on canonical representatives (P17-F1) and makes ⊑-equivalent
+    /// authorities hash identically in the audit chain (P17-F3).
+    #[test]
+    fn equivalent_spellings_get_one_representative() {
+        for a in CORPUS {
+            for b in CORPUS {
+                if resolve(a) == resolve(b) {
+                    assert_eq!(
+                        canonicalize(a),
+                        canonicalize(b),
+                        "{a:?} and {b:?} resolve alike but canonicalize apart"
+                    );
+                }
+            }
+        }
+        // The four spellings that motivated the finding really are one class.
+        let want = canonicalize("./data");
+        for spelling in ["data", "./data/", r".\data", ".//data//", r"./data\"] {
+            assert_eq!(canonicalize(spelling), want, "{spelling:?} is not in ./data's class");
+        }
+    }
+
+    /// The trap `render`'s mandatory `./` prefix exists for: a component named like a drive letter
+    /// must not be promoted into an *anchor*. Without the prefix, a grant over a subdirectory
+    /// called `C:` would canonicalize to the whole of drive C.
+    #[test]
+    fn a_component_that_looks_like_a_drive_is_not_promoted_to_one() {
+        assert_eq!(canonicalize("./C:"), "./C:");
+        assert_ne!(canonicalize("./C:"), canonicalize("C:"));
+        // The relative name is not within the drive root, and the drive root is not within it.
+        assert!(!is_descendant_or_equal(&canonicalize("./C:"), &canonicalize("C:")));
+        assert!(!is_descendant_or_equal(&canonicalize("C:"), &canonicalize("./C:")));
+        // And the same after a `..` rewrite lands the lookalike at the front.
+        assert_eq!(canonicalize("a/../C:"), "./C:");
+    }
+
+    /// `render` consumes an anchor only at index 0. This pins that `resolve` cannot put one
+    /// anywhere else, so `join_tail`'s anchor arms are unreachable rather than merely untested.
+    #[test]
+    fn render_is_total_on_resolved_segments() {
+        for p in CORPUS {
+            let segs = resolve(p);
+            for (i, s) in segs.iter().enumerate() {
+                if matches!(s, Seg::Root | Seg::Drive(_)) {
+                    assert_eq!(i, 0, "{p:?} resolved an anchor at index {i}, not 0: {segs:?}");
+                }
+            }
+            // `Up` never follows a `Name` — the module doc-comment's claim about the shape.
+            let first_name = segs.iter().position(|s| matches!(s, Seg::Name(_)));
+            if let Some(n) = first_name {
+                assert!(
+                    !segs[n..].iter().any(|s| matches!(s, Seg::Up)),
+                    "{p:?} put an Up after a Name: {segs:?}"
+                );
+            }
+        }
+    }
+
+    /// Canonicalizing either side of the descendant test cannot change its answer — the direct
+    /// consequence of authority-preservation, checked over every ordered pair in the corpus.
+    #[test]
+    fn canonicalizing_never_changes_a_containment_decision() {
+        for c in CORPUS {
+            for p in CORPUS {
+                let raw = is_descendant_or_equal(c, p);
+                assert_eq!(
+                    is_descendant_or_equal(&canonicalize(c), &canonicalize(p)),
+                    raw,
+                    "containment of {c:?} in {p:?} flipped under canonicalization"
+                );
+            }
+        }
+    }
+
+    /// The meet must now be order-independent even when handed raw, differently-spelled input —
+    /// this is P17-F2 closed at its source rather than at the call sites.
+    #[test]
+    fn path_meet_is_symmetric_even_on_mixed_spellings() {
+        let a = set(&["./data"]);
+        let b = set(&["data"]);
+        assert_eq!(intersect_path_sets(&a, &b), intersect_path_sets(&b, &a));
+        assert_eq!(intersect_path_sets(&a, &b), set(&["./data"]));
+        let c = set(&[r".\data\sub"]);
+        assert_eq!(intersect_path_sets(&a, &c), intersect_path_sets(&c, &a));
+        assert_eq!(intersect_path_sets(&a, &c), set(&["./data/sub"]));
     }
 
     #[test]

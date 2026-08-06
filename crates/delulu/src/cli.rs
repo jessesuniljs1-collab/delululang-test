@@ -7609,7 +7609,14 @@ fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
         "calls" => atlas.query_calls(a, f.budget),
         "why" => atlas.query_why(a, f.budget),
         "path" => atlas.query_path(a, b.unwrap_or(""), f.budget),
-        _ => unreachable!(),
+        // Unreachable today: the only caller matches `verb` against exactly these five literals.
+        // It is one edit away from being reachable, though — add a verb at the dispatch site and
+        // forget this arm, and the binary panics instead of answering. A crash is not a refusal
+        // (P17-F5), so this reports and exits 2 like every other unknown-input path here.
+        other => {
+            eprintln!("error: unknown atlas query verb `{other}` (node | callers | calls | why | path)");
+            return 2;
+        }
     };
     print!("{text}");
     0

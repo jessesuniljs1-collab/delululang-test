@@ -2,14 +2,27 @@
   "name": "delulu-lang",
   "displayName": "DeluluLang",
   "description": "DeluluLang language support — one LSP server for every editor (`delulu lsp`).",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "publisher": "delulu-lang",
-  "license": "MIT",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/delulu-lang/delulu" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
-  "main": "./extension.js",
+  "main": "./dist/extension.js",
   "activationEvents": ["onLanguage:delulu"],
+  "scripts": {
+    "build": "esbuild extension.js --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify",
+    "licence": "node -e \"require('fs').copyFileSync('../../LICENSE','LICENSE')\"",
+    "package": "npm run licence && npm run build && vsce package --out delulu-lang.vsix && npm run unstage-licence",
+    "unstage-licence": "node -e \"require('fs').rmSync('LICENSE',{force:true})\"",
+    "verify": "node verify-package.js"
+  },
   "contributes": {
+    "commands": [
+      { "command": "delulu.run", "title": "Run this file", "category": "DeluluLang" },
+      { "command": "delulu.test.run", "title": "Run test", "category": "DeluluLang" },
+      { "command": "delulu.authority", "title": "Show authority report", "category": "DeluluLang" }
+    ],
     "languages": [
       {
         "id": "delulu",
@@ -38,5 +51,9 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.0"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0"
   }
 }

@@ -79,10 +79,21 @@ DeluluLang/
 │   │                               #     while the signed bytes read the value's .device FIELD;
 │   │                               #     latent, since cert loads re-key (a test pins that too)
 │   │                               #   order_laws.rs — P17: the ⊑/⊓ algebra checked by EXHAUSTIVE
-│   │                               #     enumeration, not spot-checks. Three tests are #[ignore]d
-│   │                               #     and FAILING on purpose: they are committed evidence of
-│   │                               #     open findings F1–F3 (PROOF_CAMPAIGN.md). Run them with
-│   │                               #     `cargo test -p delulu-broker --test order_laws -- --ignored`
+│   │                               #     enumeration, not spot-checks. F1–F3 were found FAILING
+│   │                               #     here and are now CLOSED (2026-08-06) by canonicalization
+│   │                               #     at the custody boundary: 9 passed, 0 ignored. Each keeps a
+│   │                               #     companion test that still OBSERVES the raw-spelling
+│   │                               #     preorder, so the reason for canonicalizing cannot become
+│   │                               #     folklore. The canonical form is an ANTICHAIN of canonical
+│   │                               #     spellings — set redundancy ({./data,./data/sub} ≡
+│   │                               #     {./data}) is a second collapse the Z3 model could not see.
+│   │                               #   multi_agent_stress.rs [P18] — random authority graphs at
+│   │                               #     10/50/100/250/500/1000 agents plus 20 topologies, checking
+│   │                               #     attenuation-to-root, inherited revocation, inherited
+│   │                               #     expiry, and that every stored authority is canonical.
+│   │                               #     Deliberately builds authorities by STRUCT LITERAL: using
+│   │                               #     Authority::new made the canonicality law vacuous, and
+│   │                               #     deleting every canonicalization call still passed.
 │   ├── delulu-atlas/               # [Stage 8, early] the Atlas: typed deterministic code+authority
 │   │   │                           #   graph from compiler facts (atlas/1, digest, query verbs)
 │   │   └── src/{lib,model,build,render,query,formats}.rs
@@ -173,7 +184,17 @@ DeluluLang/
 │       └── tier5-security/         # 3 — confinement, secrets, capability attenuation
 │
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config
-│   └── vscode/
+│   └── vscode/                     #   extension.js is the SOURCE; `npm run package` bundles it
+│                                   #   with esbuild into dist/extension.js and packages a .vsix.
+│                                   #   BUNDLED ON PURPOSE: shipping the dependency tree instead
+│                                   #   produced a .vsix that packaged cleanly and would have
+│                                   #   thrown `Cannot find module` on activation (vsce shipped 1
+│                                   #   of the 8 packages npm installed). `verify-package.js`
+│                                   #   unpacks the built archive and refuses one whose requires
+│                                   #   do not resolve — a green package step proves nothing about
+│                                   #   whether the thing inside runs.
+│                                   #   The server/client command contract is gated by
+│                                   #   crates/delulu/tests/editor_contract.rs.
 │
 ├── deny.toml                       # [P17-F] the SUPPLY-CHAIN gate: `cargo deny check advisories
 │                                   #   bans licenses sources`. Before it existed nothing checked

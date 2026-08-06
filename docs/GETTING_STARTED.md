@@ -409,7 +409,37 @@ it. It is refused if two keywords share an alias (DL1710), if an alias is anothe
 (DL1711 — `let = "fn"` would make the word `fn` mean `let`), or if an alias is not a single token
 (DL1712).
 
-## 12. Where to go next
+## 12. Your editor
+
+DeluluLang ships **one** language server — `delulu lsp`, LSP 3.17 over stdio — and every editor
+consumes the same one. There are no editor-specific features by rule, so the diagnostics you see
+while typing are the compiler's own: same codes, same spans, same repairs as `delulu check --json`.
+
+Any LSP-capable editor needs three lines:
+
+```
+command:   delulu lsp
+languages: delulu   (files: *.delulu)
+transport: stdio
+```
+
+**VS Code** has a packaged extension in the repository:
+
+```
+cd editors/vscode
+npm install
+npm run package     # -> delulu-lang.vsix
+code --install-extension delulu-lang.vsix
+```
+
+You get diagnostics, hover with the effect row, completion, go-to-definition, rename, semantic
+tokens, and three code lenses on `main` and `test` blocks — **▶ run**, **▶ run test** (that one test,
+by name), and **authority: {…}**, which opens the §10.5 authority report.
+
+Zed, Helix, Neovim, Kate, Emacs and JetBrains all work from the three-line config above.
+[`editors.md`](editors.md) has the per-editor detail and the deliberate limits.
+
+## 13. Where to go next
 
 - [The DeluluLang Book](book/THE_DELULULANG_BOOK.md) — 20 chapters. Chapter 6, *Reading Authority*,
   is the flagship skill; Chapter 11 is for reviewing AI-written code.

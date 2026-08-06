@@ -1,0 +1,17 @@
+# The extension ships as a single bundled file (`dist/extension.js`, built by esbuild), so no
+# node_modules travels in the .vsix at all.
+#
+# This is not a size optimization. Packaging the dependency tree instead produced a BROKEN vsix:
+# `npm install` placed 8 packages in node_modules, vsce shipped only the one named in
+# `dependencies`, and the three transitive requires (`vscode-languageserver-protocol`, `semver`,
+# `minimatch`) were absent — so the extension threw `Cannot find module` on activation. Bundling
+# removes runtime module resolution, and therefore removes that failure mode rather than
+# re-tuning it. `verify-package.js` checks the built .vsix for exactly this.
+node_modules/**
+package-lock.json
+extension.js
+verify-package.js
+.vscode/**
+.gitignore
+**/*.map
+**/.eslintrc.json

@@ -25,7 +25,7 @@ Findings referenced as `F1`–`F4`, `IF-1`, `P17-*` are recorded with witnesses 
 
 ---
 
-## 1. The authority order — a preorder, not a lattice
+## 1. The authority order — a preorder on spellings, a lattice on canonical forms
 
 **What.** `authority.rs:150-165` defines `child ⊑ parent` as one conjunction over nine dimensions:
 the effect set, seven scope dimensions, and `device`. Each must be narrower-or-equal.
@@ -60,11 +60,50 @@ Two consequences of the same encoding:
 
 > **`⊓` is a genuine GREATEST lower bound and never widens.**
 
+### The repair, 2026-08-06 — and what "canonicalization" turned out to mean
+
+All three are now **closed** by choosing one representative per `⊑`-equivalence class and storing
+*that*, applied at the custody boundary (`Broker::issue`, `attenuate`, `attenuate_core`). The
+quotient and the representation then coincide, so the poset reflection *is* the representation and
+the word "lattice" becomes accurate rather than aspirational.
+
+**The canonical form is an ANTICHAIN of canonical spellings — two collapses, not one.** The
+paragraph above (and the Z3 localisation it rests on) named only the first, and that estimate was
+wrong in a way worth keeping visible:
+
+1. **Spelling.** `./data`, `data`, `./data/`, `.\data` are one path under four names.
+   `path::canonicalize` renders the resolved segments back to a single spelling.
+2. **Set redundancy.** `{"./data", "./data/sub"} ≡ {"./data"}`, because `./data/sub` is already
+   inside `./data` and contributes nothing to the covered region. Normalizing spellings does **not**
+   remove this, so `⊑` stays a preorder if you stop at (1). `path::canonicalize_set` drops every
+   element that lies within another, leaving the `⊑`-maximal ones.
+
+The Z3 model could not have found (2): it abstracts each dimension as a set over an opaque element
+type with an uninterpreted `within`, so it cannot express one *element* of a set subsuming another.
+The counterexample came from the enumerator. **A proof about an abstraction is exactly as strong as
+the abstraction's ability to state the property.**
+
+**The theorem now proved** (`the_order_is_antisymmetric_on_canonical_representatives`):
+`A ⊑ B ∧ B ⊑ A ⟹ canon(A) = canon(B)`. Take `x ∈ canon(A)`; from `A ⊑ B` get `y ∈ canon(B)` with
+`x ⊑ y`, from `B ⊑ A` get `z ∈ canon(A)` with `y ⊑ z`. Then `x ⊑ z` inside the antichain `canon(A)`
+forces `x = z`, so `x ⊑ y ⊑ x`, so `x` and `y` have equal resolved segments and equal canonical
+spellings. Hence `x ∈ canon(B)`; symmetrically `canon(B) ⊆ canon(A)`. ∎
+
+**Safety of the repair.** Canonicalization changes spelling, never meaning:
+`resolve(canonicalize(p)) = resolve(p)` exhaustively over an adversarial corpus, and
+`canonicalizing_an_authority_changes_no_containment_decision` checks every ordered pair in both the
+fully-canonical and the mixed child-canonical/parent-raw shape. One trap had to be designed around:
+a relative component that *looks* like a drive (`./C:`) must not be rendered bare, or it would
+re-resolve as the whole of drive `C:` — a widening. Relative canonical forms therefore always carry
+a `./` prefix.
+
 | Claim | Category | Evidence |
 |---|---|---|
 | `⊓` is the GLB; no widening; reflexive; transitive — **all nine dimensions** | **1 + 4** | **Proved in Z3**, 17 obligations (`design/models/authority_algebra.py`), and enumerated exhaustively over real path strings (`delulu-broker/tests/order_laws.rs`) |
-| `⊑` is antisymmetric | **7 — FALSE, retracted** | F1, 206 counterexamples |
-| `⊓` is symmetric | **7 — FALSE, retracted** | F2, 414 counterexamples |
+| `⊑` is antisymmetric **on raw spellings** | **7 — FALSE, and permanently so** | F1. Not fixable in the comparison: `⊑` is defined through the non-injective `resolve`. Pinned by `raw_spellings_remain_a_preorder_which_is_why_canonicalization_is_required` |
+| `⊑` is antisymmetric **on canonical representatives** | **4 — TRUE**, with a written proof | `the_order_is_antisymmetric_on_canonical_representatives`, exhaustive over the universe |
+| `⊓` is symmetric | **4 — TRUE** (was FALSE, F2) | The meet emits canonical representatives, so argument order cannot decide the result |
+| `⊑`-equivalent authorities hash identically | **4 — TRUE** (was FALSE, F3) | `equivalent_authorities_serialize_identically`; canonicalized at the custody boundary before hashing |
 
 ---
 
@@ -406,9 +445,15 @@ question that cost this project its worst soundness hole, and it settles nothing
 
 1. **Noninterference for secrets.** No implicit-flow tracking; `verify` reveals one chosen bit per
    call without a capability.
-2. **Audit-chain truncation.** Detected: no. Anchored: no.
-3. **Clock monotonicity.** Assumed, never stated, and false on the target platforms.
-4. **Antisymmetry of `⊑`** and **symmetry of `⊓`** — retracted claims, F1/F2.
+2. **Audit-chain truncation.** Detected: no. Anchored: **yes, since 2026-08-05** — an external
+   `ANCHOR.json` holds head and count, and its limit is pinned by a *passing* test showing an
+   attacker who rewrites the anchor too is still not caught.
+3. **Clock monotonicity.** Assumed, never stated, and false on the target platforms. **Since
+   2026-08-05 the broker's reading is ratcheted** (running maximum), so a backwards step can only
+   withhold authority, never resurrect it — the *host* clock is still not monotonic.
+4. **Antisymmetry of `⊑` on raw spellings** — still FALSE and permanently so (F1), because `⊑` is
+   defined through a non-injective resolution. **On canonical representatives it is now proved**,
+   and the broker stores only those, so the structure it is claimed to have is the structure it has.
 5. **Principal types.** Inference is order-dependent (F4).
 6. **Foreign code.** A `ForeignCall` is a hole in the guarantee — enumerated, not eliminated.
 7. **Multi-tenancy.** Not provided; separate OS accounts required.
@@ -421,8 +466,11 @@ question that cost this project its worst soundness hole, and it settles nothing
 ## 13. The one-paragraph answer
 
 DeluluLang's mathematics is **real but uneven, and now honestly labelled**. The authority order is a
-preorder whose poset reflection is a meet-semilattice, and its load-bearing law — *the meet is a
-greatest lower bound and never widens* — is **proved in Z3 across all nine dimensions**. The broker's
+preorder on raw spellings whose poset reflection is a meet-semilattice — and since the broker stores
+only canonical representatives (canonical spellings, reduced to an antichain), the reflection and the
+representation now coincide, so `⊑` is a genuine partial order on everything the system can build.
+Its load-bearing law — *the meet is a greatest lower bound and never widens* — is **proved in Z3
+across all nine dimensions**. The broker's
 state machine is **model checked**, and the models are demonstrated to have teeth by rediscovering
 three bugs the project actually shipped. Effect soundness is **property- and fuzz-tested over 250,000
 generated programs** whose grammar now contains the shapes that historically broke it. The Survey is

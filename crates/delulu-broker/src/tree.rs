@@ -395,6 +395,11 @@ impl Broker {
     /// Issue a **root** grant (spec §3.2 `issue`, CLI-only human action — nothing programmatic
     /// creates root nodes, Constitution §5.16 law 4). Returns the new node's id.
     pub fn issue(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> GrantId {
+        // Canonicalize at the custody boundary (P17-F1/F3). Path scopes have equivalence classes —
+        // `./data` and `data` are one path under two names — so without this the same logical grant
+        // enters the tree, and the hash chain, under two different hashes. Canonicalization
+        // preserves the resolved path exactly, so it cannot change what this grant permits.
+        let authority = authority.canonicalized();
         let id = self.ids.next_id();
         let seq = self.take_seq();
         let auth_json = authority.to_json();
@@ -423,6 +428,7 @@ impl Broker {
         holder: Holder,
         ttl_millis: Option<i64>,
     ) -> Result<GrantId, Denial> {
+        let authority = authority.canonicalized();
         let auth_json = authority.to_json();
         let (seq, res) = self.attenuate_core(parent, authority, holder, ttl_millis);
         match &res {
@@ -459,6 +465,11 @@ impl Broker {
         holder: Holder,
         ttl_millis: Option<i64>,
     ) -> (u64, Result<GrantId, Denial>) {
+        // The real chokepoint: `attenuate` canonicalizes before logging, but `delegate` reaches
+        // this core directly. Canonicalizing here too makes "every node in the tree is canonical"
+        // hold for both callers rather than for whichever one someone remembered. Idempotent, so
+        // the doubled call on the `attenuate` path costs nothing.
+        let authority = authority.canonicalized();
         let now = self.now();
         if !self.nodes.contains_key(parent) {
             let seq = self.take_seq(); // the deny still consumes a seq

@@ -45,10 +45,60 @@ pub struct Authority {
     pub scopes: Scopes,
 }
 
+impl Scopes {
+    /// Replace both path dimensions with their canonical representatives (P17-F1/F2/F3).
+    ///
+    /// Only `fs_read`/`fs_write` are affected: the name dimensions compare by exact string, so they
+    /// have no equivalence classes to collapse, and `device` names are exact-only for the same
+    /// reason. [`path::canonicalize_set`] preserves the covered region exactly, so this can neither
+    /// widen nor narrow the scope — it only removes the choice of spelling and the redundant
+    /// elements that were already inside another.
+    pub fn canonicalized(&self) -> Scopes {
+        let canon = |d: &BTreeSet<String>| path::canonicalize_set(d);
+        Scopes {
+            fs_read: canon(&self.fs_read),
+            fs_write: canon(&self.fs_write),
+            net: self.net.clone(),
+            secrets: self.secrets.clone(),
+            declassify: self.declassify.clone(),
+            foreign_c: self.foreign_c.clone(),
+            foreign_python: self.foreign_python.clone(),
+            device: self.device.clone(),
+        }
+    }
+}
+
 impl Authority {
     /// A convenience builder from effect names + scope lists (mostly for tests/CLI sugar).
+    ///
+    /// Canonicalizes, so an authority built through the documented constructor is canonical by
+    /// construction. Struct-literal construction bypasses this — which is exactly what
+    /// `order_laws.rs` exploits to keep the raw-spelling preorder finding visible.
     pub fn new(effects: impl IntoIterator<Item = Effect>, scopes: Scopes) -> Authority {
-        Authority { effects: effects.into_iter().collect(), scopes }
+        Authority { effects: effects.into_iter().collect(), scopes: scopes.canonicalized() }
+    }
+
+    /// This authority with every path scope replaced by its canonical representative.
+    ///
+    /// **Why this exists (P17-F1/F3).** `⊑` is defined through `path::resolve`, which is not
+    /// injective — `./data`, `data`, `./data/` and `.\data` are one path under four names. A
+    /// relation defined through a non-injective function is a *preorder*, never a partial order, so
+    /// `⊑` on raw spellings cannot be antisymmetric no matter how the comparison is written; and
+    /// the same logical grant, spelled two ways, produced two different audit-chain hashes. Neither
+    /// is fixable inside the comparison. Both dissolve once the system stores one representative
+    /// per class, which is what this does.
+    pub fn canonicalized(&self) -> Authority {
+        Authority { effects: self.effects.clone(), scopes: self.scopes.canonicalized() }
+    }
+
+    /// Is every path scope already its own canonical representative?
+    ///
+    /// Used by the broker's ingest gate to assert the invariant holds at the boundary rather than
+    /// trusting that every caller remembered to canonicalize.
+    pub fn is_canonical(&self) -> bool {
+        let s = &self.scopes;
+        path::canonicalize_set(&s.fs_read) == s.fs_read
+            && path::canonicalize_set(&s.fs_write) == s.fs_write
     }
 
     /// Canonical JSON (sorted keys, sorted arrays). Effects render by their stable `name()` since

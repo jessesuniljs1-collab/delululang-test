@@ -10,3 +10,14 @@ target/
 # Toolchain distribution archives, produced by scripts/package-toolchain.sh. Build output, not
 # source: the archive is rebuilt from the tree on demand and its checksums come with it.
 /dist
+
+# VS Code extension build output. `dist/` is the esbuild bundle, `*.vsix` the package, and
+# `node_modules/` the build-time dependencies — all rebuilt by `npm run package` in
+# editors/vscode. `package-lock.json` IS tracked: it pins what goes into a published extension.
+editors/vscode/node_modules/
+editors/vscode/dist/
+editors/vscode/*.vsix
+# Copied from the repository root by `npm run licence` at package time. Tracked in ONE place only:
+# two byte-identical copies drift the first time one is edited, and a stale copy in a published
+# extension ships the wrong terms (found by the Survey's `duplicated-file` rule).
+editors/vscode/LICENSE

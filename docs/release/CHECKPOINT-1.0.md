@@ -251,16 +251,44 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     validity times are signed absolute epoch-millis — so the reading stays wall-clock-comparable and
     is merely made non-decreasing. It can only withhold authority, never grant it. **Residue:**
     monotonicity is not accuracy, and the ratchet is in-memory per broker.
-15. **`⊑` is a preorder, not a partial order, and `⊓` is not symmetric on representations.** Neither
-    is an escalation — the meet is a genuine greatest lower bound and never widens, proved in Z3
-    across all nine dimensions — but `⊑`-equivalent authorities **hash differently**, which reaches
-    the audit chain and certificate signatures. Three tests are committed `#[ignore]`d and failing as
-    evidence.
+15. ✅ **`⊑` preorder / `⊓` asymmetry / divergent hashes — FIXED 2026-08-06 (F1, F2, F3).** Neither
+    was an escalation — the meet is a genuine greatest lower bound and never widens, proved in Z3
+    across all nine dimensions — but `⊑`-equivalent authorities **hashed differently**, which reaches
+    the audit chain and certificate signatures. All three had one cause: `⊑` is defined through a
+    **non-injective** resolution, and such a relation is a preorder on its domain as a matter of
+    mathematics, not a bug in the comparison. The broker now stores one canonical representative per
+    equivalence class, so the quotient and the representation coincide. **The three committed
+    `#[ignore]`d failing tests are un-ignored and passing**; `order_laws.rs` is 9 passed, 0 ignored.
+    **Two things worth carrying forward.** First, "canonicalization" meant *two* collapses, and only
+    one was predicted: spellings (`./data` ≡ `data`) **and set redundancy**
+    (`{./data, ./data/sub} ≡ {./data}`). The Z3 model could not express the second — it abstracts a
+    dimension as a set over an opaque element type — so the counterexample came from the enumerator,
+    not the proof. Second, **this is format-affecting and shipped without an RFC**, which
+    `PROOF_CAMPAIGN.md` had earlier said it would not do; that is an owner decision, recorded rather
+    than presented as compatible. **Residue:** an authority written before the change with a
+    non-canonical spelling hashes differently from the same authority written after it.
 16. **Type inference is order-dependent and has no principal types.** Swapping two parameters can
     decide whether a program compiles. Fail-closed, so no authority escapes.
-17. **Miri has never completed a run** (though `delulu-atlas` passed cleanly, 18 tests, 0 failures).
-    Structurally, the crates Miri *can* run contain **no `unsafe` at all**, and the crates that do —
-    `broker_transport.rs`, `foreign.rs`, `foreign_worker.rs` — are exactly the ones it cannot execute.
+17. ✅ **Miri now completes — 2026-08-06, three crates, 192 tests, zero undefined behaviour.**
+    Previously it had been started twice and finished neither time, and an unfinished run is not a
+    pass. Run **per crate** rather than over the workspace, on Linux:
+
+    | crate | result | wall time |
+    |---|---|---|
+    | `delulu-diag` | 45 passed, 0 failed | 54 s |
+    | `delulu-broker` | **129 passed, 0 failed** | 1583 s |
+    | `delulu-atlas` | 18 passed, 0 failed | 342 s |
+
+    **`-Zmiri-disable-isolation` is required, and its absence had been misread as a failure.**
+    Without it Miri aborts on `create_dir_all` with *"unsupported operation"* in any crate whose
+    tests touch the filesystem. That is a Miri limitation, **not a finding**, and an earlier pass had
+    recorded the abort as though it were one.
+
+    Structurally unchanged, and still the honest limit: the crates Miri *can* run contain **no
+    `unsafe` at all**, and the crates that do — `broker_transport.rs`, `foreign.rs`,
+    `foreign_worker.rs` — are exactly the ones it cannot execute. So "0 UB" means the interpreter
+    found nothing wrong in the code least likely to contain it. `delulu-broker` is still the crate
+    the security argument rests on, and it is now interpreted end to end.
 18. **CI carries every campaign gate and has never executed.** The repository is not pushed.
     "Prepared" and "green" are different claims.
 19. **The compiler could be crashed by deeply nested input — FIXED 2026-08-04 (`DL0210`).** A valid
@@ -279,6 +307,18 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
     limitation, **not a defect**, and blake3's `pure` feature was deliberately not enabled to force
     it green. **Zero macOS executions remain the standing position** — nothing about linking, the
     test suite, the `SUN_PATH_MAX = 104` socket guard, or the C-dependent crates is proven.
+
+    **Re-verified and widened 2026-08-06.** Reproduced from scratch rather than carried forward, and
+    extended from four crates to all seven that have no C dependency: **`x86_64-apple-darwin` is
+    clean on all seven**. Two corrections, both toward *more* being known: **Apple Silicon is not
+    entirely uncheckable here** — `delulu-diag`, `delulu-syntax` and `delulu-survey` type-check clean
+    for `aarch64-apple-darwin`; the 2026-08-04 pass happened to sample only crates that depend on
+    `blake3`, so a per-crate failure was read as a whole-target one. And every aarch64 failure was
+    read individually rather than assumed alike: all four are the same
+    `failed to find tool "cc"` in blake3's build script. The **full workspace** still cannot be
+    cross-checked for either Apple target, blocked by a *different* third-party build script —
+    `libffi-sys` picks its MSVC path from the host and dies on `Could not locate cl.exe`.
+    Type-checking is not running; the standing position is unchanged.
 
 ## 9. Future roadmap
 

@@ -314,6 +314,39 @@ core (`delulu-syntax`, `delulu-diag`, `delulu-check`, `delulu-broker`) was type-
 | `x86_64-apple-darwin` | **compiles clean** — 0 errors |
 | `aarch64-apple-darwin` | **could not be checked from this host** — see below |
 
+#### Re-verified and widened, 2026-08-06
+
+The 2026-08-04 result was reproduced from scratch rather than carried forward, and extended from the
+four core crates to **every crate in the workspace that has no C dependency** — seven of them:
+
+| crate | `x86_64-apple-darwin` | `aarch64-apple-darwin` |
+|---|---|---|
+| `delulu-diag` | **clean** | **clean** |
+| `delulu-syntax` | **clean** | **clean** |
+| `delulu-survey` | **clean** | **clean** |
+| `delulu-check` | **clean** | blocked — `blake3` build script |
+| `delulu-broker` | **clean** | blocked — `blake3` build script |
+| `delulu-atlas` | **clean** | blocked — `blake3` build script |
+| `delulu-conform` | **clean** | blocked — `blake3` build script |
+
+Two corrections to the entry above, both in the direction of *more* being known:
+
+- **Apple Silicon is not entirely uncheckable from this host.** Three crates type-check clean for
+  `aarch64-apple-darwin`. The 2026-08-04 pass checked only crates that happen to depend on `blake3`,
+  so a per-crate failure was read as a whole-target failure.
+- **Every aarch64 failure has the same single cause**, verified by reading each one rather than
+  assuming they matched: `failed to run custom build command for blake3 v1.8.5` →
+  `failed to find tool "cc"`. It is one missing ARM C cross-compiler, not four problems.
+
+**The full workspace still cannot be cross-checked for either Apple target**, and the blocker there
+is different — `libffi-sys`, an unconditional dependency of `delulu-runtime`, selects its **MSVC**
+build path from the *host* rather than the target and dies on `Could not locate cl.exe`. That is a
+third-party build-script limitation; it says nothing about DeluluLang's macOS correctness, and it
+cannot be worked around from Windows.
+
+**Still zero macOS executions.** Type-checking is not running. Nothing below §5's standing position
+changes.
+
 The Apple Silicon result is **not** a defect in this project and must not be read as one. It fails in
 `blake3`'s build script:
 

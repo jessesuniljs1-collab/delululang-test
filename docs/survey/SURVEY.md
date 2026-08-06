@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 220 |
-| Rust lines | 105112 |
-| Rust files outside `src/` (test/bench targets) | 90 |
-| Markdown documents | 128 |
-| Markdown lines | 33385 |
+| Rust files | 222 |
+| Rust lines | 105946 |
+| Rust files outside `src/` (test/bench targets) | 92 |
+| Markdown documents | 130 |
+| Markdown lines | 33928 |
 | DeluluLang programs | 147 |
 | Registered diagnostic codes | 148 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1023 / 8962 |
+| Nodes / edges in this map | 1032 / 8975 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18818 lines
+- **Modules:** 22 files, 18825 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -94,7 +94,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_transport.rs` | 500 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 1657 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 8013 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 8020 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 380 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
@@ -134,12 +134,12 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 7859 lines
+- **Modules:** 14 files, 8144 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/audit.rs` | 1021 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
-| `src/authority.rs` | 358 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
+| `src/authority.rs` | 408 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/cert.rs` | 1298 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 399 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
@@ -147,10 +147,10 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 636 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 58 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
-| `src/path.rs` | 215 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
+| `src/path.rs` | 439 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/secrets.rs` | 511 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
-| `src/tree.rs` | 923 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
+| `src/tree.rs` | 934 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 597 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`

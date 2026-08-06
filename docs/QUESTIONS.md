@@ -128,6 +128,22 @@ there are independent layers underneath so one failure is not total.
   spelling wins when both directions hold (414 counterexamples). Neither is an authority escalation;
   the no-widening law is untouched. Both are recorded, with a third consequence for audit-chain
   hashing, in `docs/design/PROOF_CAMPAIGN.md` §F1–F3.
+
+  **All three are now FIXED (2026-08-06), and the precise statement matters.** On **raw spellings**
+  `⊑` is *still* a preorder and always will be — it is defined through a non-injective resolution,
+  and that is arithmetic, not a bug anyone can patch out of the comparison. What changed is that the
+  broker now stores exactly one **canonical representative** per equivalence class, so the quotient
+  and the representation coincide and `⊑` is a genuine partial order over everything the system can
+  build. `⊓` is symmetric because the meet emits representatives, and equivalent authorities hash
+  identically because they are now literally equal. The three `#[ignore]`d failing tests are
+  un-ignored and passing; a companion test asserts the raw-spelling counterexamples are *still
+  there*, so the reason canonicalization is required cannot quietly become folklore.
+
+  The canonical form is an **antichain** of canonical spellings, not merely a normalized spelling:
+  `{./data, ./data/sub}` and `{./data}` are also mutually `⊑`, because the first path already
+  contains the second. That second collapse was **not predicted** by the Z3 localisation — the model
+  abstracts a dimension as a set over an opaque element type, so it cannot express one element
+  subsuming another — and it was found by the exhaustive enumerator instead.
 - **Attenuation is monotone by construction, not by check.** `sub ⊑ parent` holds because
   attenuation is the *only* way a child node can be created. There is no path where a child exceeds
   a parent, because there is no other path.

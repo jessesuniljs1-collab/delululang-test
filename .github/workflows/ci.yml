@@ -90,6 +90,80 @@ jobs:
       - name: Effect-soundness fuzz campaign (trace ⊆ row)
         run: cargo run -q -p delulu-fuzz -- 50000 20260804
 
+  # ---- ARM64 -------------------------------------------------------------------------------
+  # The 3-OS matrix above is x86_64 on every runner, so "works on Linux" has only ever meant
+  # "works on x86_64 Linux". Apple Silicon is ARM and cannot be checked from the development host
+  # (blake3 compiles a NEON path through cc-rs, and no Apple/ARM cross-compiler exists there — see
+  # docs/design/CROSS_PLATFORM_VERIFICATION.md §5). An ARM Linux runner does not prove macOS, but it
+  # does exercise every non-Apple-specific ARM code path, which nothing currently does.
+  #
+  # NEVER EXECUTED, like everything else in this file.
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Full workspace test suite (aarch64)
+        run: cargo test --workspace --no-fail-fast
+
+  # ---- Lints -------------------------------------------------------------------------------
+  # The project tracks a clippy count by hand every pass. A number nobody enforces drifts, so
+  # `-D warnings` makes any NEW lint fail the build rather than raise the count.
+  lints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy, rustfmt }
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+      - name: clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # ---- Undefined behaviour -----------------------------------------------------------------
+  # Miri interprets the code and reports UB that a normal build silently tolerates. It is run
+  # PER CRATE rather than over the workspace because a single run had twice been started and never
+  # finished, and an unfinished run is not a pass. `-Zmiri-disable-isolation` is required by the
+  # crates whose tests touch the filesystem — without it Miri aborts on `create_dir_all` with
+  # "unsupported operation", which is a Miri limitation and NOT a finding.
+  miri:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [delulu-diag, delulu-atlas, delulu-broker, delulu-syntax, delulu-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with: { components: miri }
+      - uses: Swatinem/rust-cache@v2
+      - name: Miri — ${{ matrix.crate }}
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo miri test --lib -p ${{ matrix.crate }}
+
+  # ---- Editor surface ----------------------------------------------------------------------
+  # The VS Code extension shipped for the life of the project with a command-injection hole (the
+  # run lens interpolated the open file's path into a shell command STRING), a code lens the client
+  # never registered, and a .vsix that would have thrown `Cannot find module` on activation because
+  # vsce shipped one of the eight packages npm installed. None of it could fail a build, because the
+  # server is Rust, the client is JavaScript, and nothing read both. `editor_contract.rs` (run by the
+  # workspace suite) compares them; this job proves the artifact a user would actually install works.
+  editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Build the extension
+        working-directory: editors/vscode
+        run: npm ci && npm run package
+      - name: The built .vsix would actually activate
+        working-directory: editors/vscode
+        run: npm run verify
+
   # ---- Supply chain -----------------------------------------------------------------------
   # P17-F: before this campaign `cargo deny` had NEVER been run and 19 advisories had
   # accumulated. `advisories` is EXPECTED TO FAIL today: four are reachable and are deliberately
