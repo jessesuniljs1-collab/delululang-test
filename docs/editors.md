@@ -64,6 +64,15 @@ transport: stdio
   the editor forgets to say a file changed. An open buffer always wins over its copy on
   disk — what you are looking at may not be saved. With no workspace folder, only open
   documents are searched, and nothing is read from disk.
+- **Formatting** (`textDocument/formatting`) — *Format Document* and `editor.formatOnSave` run the
+  **same** `format_source` that `delulu fmt` calls, and a test requires byte-identical output, so the
+  editor and `delulu fmt --check` in CI can never disagree about whether a file is formatted. An
+  already-canonical file returns no edits at all, rather than an edit that replaces the text with
+  itself and dirties the buffer. An unparseable file also returns no edits: `fmt` refuses parse-dirty
+  input by design, and format-on-save fires exactly when the file is mid-edit and broken, so the
+  editor-facing shape of that refusal is "no change", not a dialog on every save. **Range formatting
+  is deliberately not offered** — the formatter's contract is over a complete parse, and quietly
+  widening a selection to the whole file would reformat lines you did not choose.
 - **Incremental sync** (`textDocumentSync: 2`) — an edit sends the range it touched
   rather than the whole file, and the document is checked once per edit rather than
   once per question asked about it. A client that prefers to resend the whole text is

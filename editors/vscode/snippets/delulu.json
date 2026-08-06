@@ -1,0 +1,118 @@
+{
+  "$comment": [
+    "Snippets for DeluluLang. Every one carries an EFFECT ROW where the language has one, because",
+    "the row is the point: a snippet that produced `fn f() { ... }` with the row left off would be",
+    "teaching people to write the declaration and then discover the checker's objection afterwards.",
+    "Producing `! {Write}` up front makes the obligation part of the shape of the code.",
+    "",
+    "The tab stops are ordered so the first thing you name is the thing you were thinking about",
+    "(the function's name), not its ceremony."
+  ],
+
+  "module header": {
+    "prefix": "module",
+    "body": ["module ${1:name}", "", "$0"],
+    "description": "A module header — the first line of every .delulu file."
+  },
+
+  "pure function": {
+    "prefix": ["fn", "fnpure"],
+    "body": ["fn ${1:name}(${2:arg}: ${3:Int}) -> ${4:Int} {", "\t$0", "}"],
+    "description": "A pure function. An omitted effect row means !{} — the checker PROVES it performs no effect."
+  },
+
+  "effectful function": {
+    "prefix": ["fneff", "fn!"],
+    "body": [
+      "fn ${1:name}(${2:out}: Cap[${3:Console}]${4:, ${5:arg}: ${6:Str}}) ${7:-> ${8:Unit} }! {${9:Write}} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "A function that performs an effect: the row declares what, the Cap parameter is the permission."
+  },
+
+  "row-polymorphic function": {
+    "prefix": ["fnpoly", "fne"],
+    "body": [
+      "fn ${1:name}[${2:T}, ${3:U}, e](${4:f}: fn(${2:T}) -> ${3:U} ! e, ${5:x}: ${2:T}) -> ${3:U} ! e {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Row polymorphism: this function's effect row is exactly its argument's."
+  },
+
+  "main (pure)": {
+    "prefix": "mainpure",
+    "body": ["fn main() -> Int {", "\t$0", "\t0", "}"],
+    "description": "An entry point that performs nothing at all."
+  },
+
+  "main (effectful)": {
+    "prefix": "main",
+    "body": [
+      "fn main(root: Root) ! {${1:Write}} {",
+      "\tlet ${2:out} = root.console()",
+      "\t${2:out}.println(\"${3:hello, world}\")",
+      "\t$0",
+      "}"
+    ],
+    "description": "An entry point that takes Root — the one place authority enters a program."
+  },
+
+  "fallible function with ?": {
+    "prefix": ["fnres", "result"],
+    "body": [
+      "fn ${1:name}(${2:fs}: Cap[${3:FsRead}]) -> Result[${4:Str}, ${5:IoErr}] ! {${6:Read}} {",
+      "\tlet ${7:text} = ${2:fs}.read_text(\"${8:app.txt}\")?",
+      "\tOk(${7:text})",
+      "}"
+    ],
+    "description": "A Result-returning function; `?` propagates the error without a match."
+  },
+
+  "test block": {
+    "prefix": "test",
+    "body": ["test \"${1:what it should do}\" {", "\tassert(${2:true})", "\t$0", "}"],
+    "description": "A test. Each test holds only its own declared, ceiling-bounded effect row."
+  },
+
+  "actor": {
+    "prefix": "actor",
+    "body": [
+      "actor ${1:Name} {",
+      "\tvar ${2:n}: ${3:Int}",
+      "",
+      "\tnew() { self.${2:n} = ${4:0} }",
+      "",
+      "\tbe ${5:tick}() {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "An actor with one field, a constructor, and a behaviour."
+  },
+
+  "import": {
+    "prefix": "import",
+    "body": ["import ${1:package}.${2:module}"],
+    "description": "Import another module in the package graph."
+  },
+
+  "match": {
+    "prefix": "match",
+    "body": ["match ${1:value} {", "\t${2:pattern} => ${3:result}", "\t_ => $0", "}"],
+    "description": "A match expression."
+  },
+
+  "if / else": {
+    "prefix": "if",
+    "body": ["if ${1:cond} {", "\t${2:then}", "} else {", "\t$0", "}"],
+    "description": "A conditional — an expression, so it has a value."
+  },
+
+  "let binding": {
+    "prefix": "let",
+    "body": ["let ${1:name} = ${0:value}"],
+    "description": "A binding."
+  }
+}

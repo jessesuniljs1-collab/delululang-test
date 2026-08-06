@@ -29,6 +29,43 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   register them — so it did not merely miss the bug, it demanded it. Both halves are fixed, and
   `editors/vscode/e2e.js` now launches a real VS Code against a real server.
 
+### Editor — NEW: Format Document works
+
+- **The language server now implements `textDocument/formatting`.** `delulu fmt` has a canonical
+  style, a law suite and a 100k-program gate behind it, and no editor could reach any of it: the
+  server never advertised `documentFormattingProvider`, so *Format Document* was greyed out and
+  `editor.formatOnSave` did nothing on `.delulu` files. It is the same `format_source` the CLI calls,
+  and a test requires the two to produce byte-identical output — two formatters that drift are worse
+  than one, because saving in the editor and running `delulu fmt --check` in CI would then disagree.
+  An already-canonical file returns **no** edits (an edit that replaces text with itself still dirties
+  the buffer), and an unparseable file returns no edits rather than an error, because format-on-save
+  fires exactly when the file is mid-edit and broken. Range formatting is deliberately **not**
+  advertised: the formatter's contract is over a complete parse.
+
+### CLI — a mistyped command now says what you meant
+
+- **`delulu chekc` answers "did you mean `check`?"** instead of printing the name and then a hundred
+  lines of usage — which answers *what happened* and buries *how to fix it* under everything the tool
+  can do. The edit-distance budget scales with the length of what was typed, and the function
+  **declines to guess** when nothing is close: `delulu package` (a real word for a command that does
+  not exist) gets no suggestion, because a confident wrong suggestion is followed.
+- **`delulu help <cmd>` now shows that command's help.** It ignored its argument and printed the full
+  usage, which made the suggestion above point at something that did not work.
+
+### Verification — Miri was aimed at the wrong crates
+
+- **`delulu-runtime`'s raw-pointer decoding now runs under Miri** (`miri-ffi` job). Counting `unsafe`
+  in first-party sources: `delulu` 37, `delulu-runtime` 13, `delulu-diag` 2 — and **zero** in
+  `delulu-atlas`, `delulu-broker`, `delulu-syntax` and `delulu-check`. Miri was running on four
+  crates containing no `unsafe` at all and skipping the two holding 50 of the 54 sites, so "0 UB" was
+  true and much weaker than it sounded. `validate_c_string` — a hand-rolled NUL scan with `ptr.add`
+  and `from_raw_parts` — is a pure function over caller-supplied memory and needs no FFI to exercise;
+  it already had tests, and nothing had ever interpreted them. They take 2.4 seconds. The detector
+  was confirmed live rather than assumed: a probe reading past a 4-byte allocation was caught as
+  *"at or beyond the end of the allocation of size 4 bytes"*. The FFI calls themselves stay out of
+  reach — Miri cannot execute `dlopen` or Windows API calls — and that is recorded as an explicit
+  assumption, not a to-do.
+
 ### Editor — FIXED: a workspace could choose which binary the extension launched
 
 - **`delulu.serverPath` is now `machine-overridable`.** At VS Code's default scope a repository's own

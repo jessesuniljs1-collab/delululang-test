@@ -465,3 +465,74 @@ fn a_value_taking_flag_with_no_value_is_refused() {
          option was discarded and the command used its default instead: {dropped:?}"
     );
 }
+
+/// Every error the CLI prints starts with `error:`.
+///
+/// This is not cosmetics. The prefix is how a person scanning a terminal finds the line that
+/// matters, and how anything parsing stderr — a CI log scraper, an agent harness, a problem matcher
+/// in an editor — separates a failure from progress chatter. The extension's own problem matcher
+/// keys on it.
+///
+/// It had drifted: 147 sites used the prefix and eleven did not, so `delulu fmt <missing>` said
+/// *"no such file or directory: …"* while `delulu check <missing>` said *"error: cannot read …"*
+/// for the identical condition. Nothing failed, because nothing compared them — which is what makes
+/// a convention held only by habit worth converting into a test.
+#[test]
+fn every_user_facing_error_line_is_prefixed_so_it_can_be_found() {
+    let src = std::fs::read_to_string(workspace_root().join("crates/delulu/src/cli.rs"))
+        .expect("cli.rs is readable");
+
+    // Prefixes that mark a line's role. `error:`/`warning:`/`note:`/`hint:` are the diagnostic
+    // vocabulary; the rest are usage or a rendered diagnostic that carries its own.
+    const KNOWN: [&str; 8] =
+        ["error", "warning", "note", "hint", "usage", "ok", "delulu", "  "];
+
+    // The check is deliberately scoped to lines that READ as failures, not to every `eprintln!`.
+    // stderr legitimately carries progress here too — `wrote …`, `fingerprint: …`, `expires: …` —
+    // and demanding a role prefix on those would be a rule about noise rather than about
+    // findability. The first version of this test did exactly that, flagged eleven innocent
+    // progress lines alongside three real misses, and would have been "fixed" by prefixing
+    // everything, which destroys the signal the prefix carries.
+    const FAILURE_SHAPED: [&str; 12] = [
+        "cannot",
+        "could not",
+        "unable",
+        "no such",
+        "not found",
+        "unknown",
+        "failed",
+        "invalid",
+        "missing",
+        "refus",
+        "violated",
+        "no command",
+    ];
+
+    let mut unprefixed = Vec::new();
+    for (i, line) in src.lines().enumerate() {
+        let t = line.trim_start();
+        if t.starts_with("//") {
+            continue;
+        }
+        let Some(rest) = t.strip_prefix("eprintln!(\"") else { continue };
+        // A bare interpolation (`eprintln!("{msg}")`) forwards a string built elsewhere, which
+        // carries its own prefix; judging it here would be guessing at a value this test cannot see.
+        if rest.starts_with('{') || rest.starts_with('"') {
+            continue;
+        }
+        let lower = rest.to_lowercase();
+        if !FAILURE_SHAPED.iter().any(|w| lower.starts_with(w)) {
+            continue;
+        }
+        if !KNOWN.iter().any(|p| rest.starts_with(p)) {
+            unprefixed.push(format!("cli.rs:{}: {}", i + 1, t.chars().take(90).collect::<String>()));
+        }
+    }
+
+    assert!(
+        unprefixed.is_empty(),
+        "these stderr lines carry no role prefix, so neither a person nor a log parser can tell \
+         them from ordinary output — start them with `error:` (or `warning:`/`note:`/`hint:`):\n  {}",
+        unprefixed.join("\n  ")
+    );
+}

@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 222 |
-| Rust lines | 106406 |
+| Rust lines | 106793 |
 | Rust files outside `src/` (test/bench targets) | 92 |
 | Markdown documents | 130 |
-| Markdown lines | 34192 |
+| Markdown lines | 34319 |
 | DeluluLang programs | 147 |
 | Registered diagnostic codes | 148 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1035 / 9028 |
+| Nodes / edges in this map | 1036 / 9032 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18848 lines
+- **Modules:** 22 files, 19039 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -94,7 +94,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_transport.rs` | 500 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 1657 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 8020 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 8163 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 303 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 380 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
@@ -102,7 +102,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 683 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
-| `src/lsp.rs` | 1890 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
+| `src/lsp.rs` | 1938 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 75 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
@@ -269,7 +269,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 12399 lines
+- **Modules:** 16 files, 12422 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -280,8 +280,8 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/custody.rs` | 246 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 226 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
 | `src/device.rs` | 1355 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
-| `src/foreign.rs` | 440 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
-| `src/interp.rs` | 2049 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
+| `src/foreign.rs` | 453 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
+| `src/interp.rs` | 2059 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 436 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |
 | `src/plugin.rs` | 2235 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |

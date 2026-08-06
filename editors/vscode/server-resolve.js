@@ -9,6 +9,15 @@
 // name delegated to `spawn` can be satisfied by a file sitting in whatever directory the process
 // happens to be standing in. Doing the lookup here makes the outcome a function of this code rather
 // than of the host's working directory.
+//
+// **Do not add "helpfully find the binary in the workspace".** It is the obvious next convenience —
+// a contributor building from source has `target/release/delulu` right there, and the extension
+// could just use it. That feature IS the attack: it makes an executable chosen by the opened
+// repository the language server, which is exactly the hole that `delulu.serverPath`'s default
+// configuration scope opened and that `machine-overridable` closed. It was reproduced, not
+// theorised — a planted binary ran seven seconds after the folder was opened. The right shape for
+// that convenience is to tell the user the path and let them put it in their own settings, which is
+// what `reportUnavailable` in extension.js does.
 
 const fs = require("fs");
 const path = require("path");

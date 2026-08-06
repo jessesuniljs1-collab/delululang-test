@@ -45,6 +45,70 @@ function runInTerminal(name, serverPath, args) {
   t.show();
 }
 
+/// Tasks for the four commands people run in a loop, so ⇧⌘B and the Tasks palette work.
+///
+/// `ProcessExecution` takes an argv array and no shell, which is the same rule the terminal
+/// commands follow — a `ShellExecution` here would reintroduce the injection that the run lens
+/// already had once, this time through the workspace folder's own path.
+///
+/// `delulu fmt --check` rather than `delulu fmt`: a task that silently rewrites your files when you
+/// press the build key is a surprise. The one that reports is safe to bind; the one that edits
+/// should be a deliberate act.
+function makeTaskProvider(serverPath) {
+  const defs = [
+    { command: "check", args: [], group: vscode.TaskGroup.Build, detail: "Type- and effect-check" },
+    { command: "build", args: [], group: vscode.TaskGroup.Build, detail: "Resolve deps, verify pins and authority" },
+    { command: "test", args: [], group: vscode.TaskGroup.Test, detail: "Run the authority-isolated tests" },
+    { command: "fmt", args: ["--check"], group: undefined, detail: "Report unformatted files (does not rewrite)" },
+  ];
+  return {
+    provideTasks() {
+      const folders = vscode.workspace.workspaceFolders;
+      if (!serverPath || !folders || folders.length === 0) {
+        return [];
+      }
+      const tasks = [];
+      // One task per command PER FOLDER: in a multi-root workspace a single task would silently
+      // pick one root, and which one it picked would depend on folder ordering.
+      for (const folder of folders) {
+        for (const d of defs) {
+          const t = new vscode.Task(
+            { type: "delulu", command: d.command, args: d.args },
+            folder,
+            folders.length > 1 ? `${d.command} (${folder.name})` : d.command,
+            "delulu",
+            new vscode.ProcessExecution(serverPath, [d.command, ...d.args, "."], {
+              cwd: folder.uri.fsPath,
+            }),
+            "$delulu"
+          );
+          t.detail = d.detail;
+          if (d.group) {
+            t.group = d.group;
+          }
+          tasks.push(t);
+        }
+      }
+      return tasks;
+    },
+    resolveTask(task) {
+      const cmd = task.definition.command;
+      if (!serverPath || typeof cmd !== "string") {
+        return undefined;
+      }
+      const extra = Array.isArray(task.definition.args) ? task.definition.args : [];
+      return new vscode.Task(
+        task.definition,
+        task.scope ?? vscode.TaskScope.Workspace,
+        task.name || cmd,
+        "delulu",
+        new vscode.ProcessExecution(serverPath, [cmd, ...extra]),
+        "$delulu"
+      );
+    },
+  };
+}
+
 /// Refuse to execute the workspace's own code in a workspace the user has not trusted.
 ///
 /// `delulu run` and `delulu test` compile and execute the files in front of them. Analysis is
@@ -113,6 +177,15 @@ function activate(context) {
         false
       );
     });
+  }
+
+  // Tasks compile and test the workspace's code, so they are gated on trust for the same reason
+  // the run/test commands are. Registering the provider at all in Restricted Mode would put
+  // "delulu: build" in the task list where pressing it would execute untrusted code.
+  if (vscode.workspace.isTrusted) {
+    context.subscriptions.push(
+      vscode.tasks.registerTaskProvider("delulu", makeTaskProvider(serverPath))
+    );
   }
 
   // The codeLens commands invoke the CLI in the integrated terminal — the lens says

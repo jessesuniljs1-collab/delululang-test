@@ -885,8 +885,23 @@ fn run_inner(args: &[String]) -> i32 {
         "explain" => cmd_explain(rest),
         "doctor" => crate::doctor::cmd_doctor(rest),
         "completions" => crate::completions::cmd_completions(rest),
+        // `delulu help <cmd>` is the same answer as `delulu <cmd> --help`, reached the way people
+        // reach for it. It ignored its argument and printed the whole usage, which made the
+        // suggestion printed for a mistyped command point at something that did not work.
         "--help" | "-h" | "help" => {
-            println!("{}", usage());
+            match rest.first() {
+                Some(topic) if SUBCOMMANDS.contains(&topic.as_str()) => {
+                    println!("{}", subcommand_help(topic));
+                }
+                Some(topic) => match nearest_subcommand(topic) {
+                    Some(hit) => {
+                        eprintln!("error: no command `{topic}`\n\ndid you mean `delulu help {hit}`?");
+                        return 2;
+                    }
+                    None => println!("{}", usage()),
+                },
+                None => println!("{}", usage()),
+            }
             0
         }
         "--version" | "-V" => {
@@ -894,7 +909,19 @@ fn run_inner(args: &[String]) -> i32 {
             0
         }
         other => {
-            eprintln!("unknown command `{other}`\n\n{}", usage());
+            // A typo used to print the name and then a hundred lines of usage. That answers "what
+            // happened" and buries "how do I fix it" under everything the tool can do — the reader
+            // has to scan the whole surface to find the word they nearly typed. When there is an
+            // obvious intended command, say it and stop; the full list stays one flag away.
+            match nearest_subcommand(other) {
+                Some(hit) => {
+                    eprintln!(
+                        "unknown command `{other}`\n\ndid you mean `{hit}`?\n\n\
+                         run `delulu --help` for every command, or `delulu help {hit}` for that one"
+                    );
+                }
+                None => eprintln!("unknown command `{other}`\n\n{}", usage()),
+            }
             2
         }
     }
@@ -934,6 +961,55 @@ fn subcommand_help(cmd: &str) -> String {
 ///
 /// The foreign worker is deliberately absent: it is spawned by the host, never typed by a person,
 /// and completing it would advertise an internal protocol as a command.
+/// The subcommand a mistyped word most plausibly meant, or `None` when nothing is close enough.
+///
+/// Ordinary Levenshtein distance, with a threshold that scales with the length of what was typed:
+/// one edit for a short word, two for a longer one. A fixed threshold is wrong in both directions —
+/// at 2 it turns `add` into `and`-adjacent noise and would happily "correct" `run` to `new`
+/// (distance 2 on a three-letter word is most of the word), and at 1 it misses `authorty` for
+/// `authority`. Proportional is the honest middle.
+///
+/// Returning `None` matters as much as returning a name: guessing at something the reader did not
+/// nearly type is worse than admitting there is no guess, because a confident wrong suggestion is
+/// followed.
+pub(crate) fn nearest_subcommand(typed: &str) -> Option<&'static str> {
+    let typed = typed.trim_start_matches('-').to_lowercase();
+    if typed.is_empty() {
+        return None;
+    }
+    let budget = match typed.chars().count() {
+        0..=3 => 1,
+        4..=7 => 2,
+        _ => 3,
+    };
+    SUBCOMMANDS
+        .iter()
+        .map(|c| (edit_distance(&typed, c), *c))
+        // Ties go to the alphabetically-first name, so the same typo always gets the same answer.
+        .min_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)))
+        .filter(|(d, _)| *d <= budget)
+        .map(|(_, c)| c)
+}
+
+/// Levenshtein distance over `char`s, two rows rather than a full matrix.
+///
+/// Counted in `char`s, not bytes: a mistyped command containing a multi-byte character would
+/// otherwise be scored by its UTF-8 length and never match anything.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0usize; b.len() + 1];
+    for (i, ca) in a.chars().enumerate() {
+        cur[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let sub = prev[j] + usize::from(ca != *cb);
+            cur[j + 1] = sub.min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
 pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
@@ -1109,18 +1185,18 @@ fn cmd_fmt(args: &[String]) -> i32 {
             let mut files = Vec::new();
             for p in &paths {
                 if !p.exists() {
-                    eprintln!("no such file or directory: {}", p.display());
+                    eprintln!("error: no such file or directory: {}", p.display());
                     return 2;
                 }
                 if let Err(e) = collect_delulu_files(p, &mut files) {
-                    eprintln!("cannot read {}: {e}", p.display());
+                    eprintln!("error: cannot read {}: {e}", p.display());
                     return 2;
                 }
             }
             return cmd_fmt_migrate(files, json);
         }
         Some(v) => {
-            eprintln!("unknown migration `{v}` — the only migration is `0.7` (consume/recover keywords)");
+            eprintln!("error: unknown migration `{v}` — the only migration is `0.7` (consume/recover keywords)");
             return 2;
         }
         None => {}
@@ -1162,7 +1238,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
     let mut files = Vec::new();
     for p in &paths {
         if !p.exists() {
-            eprintln!("no such file or directory: {}", p.display());
+            eprintln!("error: no such file or directory: {}", p.display());
             return 2;
         }
         // A FILE named explicitly is a request about that file. `collect_delulu_files` keeps only
@@ -1181,7 +1257,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
             return 2;
         }
         if let Err(e) = collect_delulu_files(p, &mut files) {
-            eprintln!("cannot read {}: {e}", p.display());
+            eprintln!("error: cannot read {}: {e}", p.display());
             return 2;
         }
     }
@@ -1193,7 +1269,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
         let src = match std::fs::read_to_string(f) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("cannot read {}: {e}", f.display());
+                eprintln!("error: cannot read {}: {e}", f.display());
                 return 2;
             }
         };
@@ -1221,7 +1297,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
                     changed.push(f.display().to_string());
                 } else {
                     if let Err(e) = std::fs::write(f, &out) {
-                        eprintln!("cannot write {}: {e}", f.display());
+                        eprintln!("error: cannot write {}: {e}", f.display());
                         return 2;
                     }
                     changed.push(f.display().to_string());
@@ -1276,7 +1352,7 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
         let src = match std::fs::read_to_string(f) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("cannot read {}: {e}", f.display());
+                eprintln!("error: cannot read {}: {e}", f.display());
                 return 2;
             }
         };
@@ -1299,7 +1375,7 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
             out.replace_range(*start as usize..*end as usize, insert);
         }
         if let Err(e) = std::fs::write(f, &out) {
-            eprintln!("cannot write {}: {e}", f.display());
+            eprintln!("error: cannot write {}: {e}", f.display());
             return 2;
         }
         total_renames += spans.len();
@@ -1420,7 +1496,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     let mut files = Vec::new();
     for p in &paths {
         if let Err(e) = collect_delulu_files(p, &mut files) {
-            eprintln!("cannot read {}: {e}", p.display());
+            eprintln!("error: cannot read {}: {e}", p.display());
             return 2;
         }
     }
@@ -1772,7 +1848,7 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 let mut line = String::new();
                 let _ = std::io::stdin().read_line(&mut line);
                 if !line.trim().eq_ignore_ascii_case("y") {
-                    eprintln!("not installed");
+                    eprintln!("note: not installed");
                     return 1;
                 }
             }
@@ -3804,7 +3880,7 @@ fn cmd_lock(rest: &[String]) -> i32 {
         if !law.is_empty() {
             print_diagnostics("lock", &law, &ws.source_map, None, opts.json);
             if !opts.json {
-                eprintln!("semver-authority law violated — refusing to write delulu.lock");
+                eprintln!("error: semver-authority law violated — refusing to write delulu.lock");
             }
             return 1;
         }
@@ -7684,7 +7760,7 @@ fn cmd_explain(rest: &[String]) -> i32 {
                 0
             }
             None => {
-                eprintln!("unknown code `{code}`");
+                eprintln!("error: unknown code `{code}`");
                 1
             }
         },
@@ -7951,6 +8027,73 @@ pub(crate) fn check_adapter_signature(
             let d = Diagnostic::error(code, format!("hardware adapter `{prog}`: {reason}"));
             eprint!("{}", render_human_with(&d, &SourceMap::new(), &palette_stderr()));
             (rec("refused-policy", None), Some(1))
+        }
+    }
+}
+
+#[cfg(test)]
+mod suggestion_tests {
+    use super::*;
+
+    #[test]
+    fn an_obvious_typo_gets_the_command_it_meant() {
+        for (typed, want) in [
+            ("chekc", "check"),
+            ("cheeck", "check"),
+            ("buidl", "build"),
+            ("athority", "authority"),
+            ("authorty", "authority"),
+            ("fmtt", "fmt"),
+            ("doctro", "doctor"),
+            ("pluging", "plugin"),
+            ("expalin", "explain"),
+        ] {
+            assert_eq!(
+                nearest_subcommand(typed),
+                Some(want),
+                "`{typed}` should suggest `{want}`"
+            );
+        }
+    }
+
+    /// Declining to guess is a feature, and it is the half that is easy to get wrong.
+    ///
+    /// A confident wrong suggestion is *followed*. `package` is a real word a person might type
+    /// expecting it to exist, and the nearest real command is nothing like it — printing
+    /// "did you mean `add`?" would send them somewhere unrelated with more confidence than the
+    /// tool has any right to.
+    #[test]
+    fn a_word_that_is_not_nearly_a_command_gets_no_guess() {
+        for typed in ["package", "install", "compile", "wibble", "xyzzy", "start", "publishh-all"] {
+            assert_eq!(nearest_subcommand(typed), None, "`{typed}` should get no suggestion");
+        }
+    }
+
+    /// A short word is mostly its own length, so two edits is most of it. Without a proportional
+    /// budget, `run` → `new` (distance 2) would be offered as a correction of a command that is
+    /// itself spelled correctly.
+    #[test]
+    fn the_budget_scales_with_length_so_short_words_are_not_over_corrected() {
+        assert_eq!(nearest_subcommand("run"), Some("run"), "an exact short name is itself");
+        assert_eq!(edit_distance("run", "new"), 3);
+        assert_eq!(edit_distance("add", "and"), 1);
+        // `rnu` is one transposition from `run`, which Levenshtein counts as two edits — over the
+        // budget for a three-character word, and deliberately so.
+        assert_eq!(nearest_subcommand("rnu"), None);
+    }
+
+    #[test]
+    fn the_distance_is_counted_in_chars_not_bytes() {
+        // Multi-byte input must not be scored by its UTF-8 length.
+        assert_eq!(edit_distance("chëck", "check"), 1);
+        assert_eq!(edit_distance("", "check"), 5);
+        assert_eq!(edit_distance("check", "check"), 0);
+    }
+
+    #[test]
+    fn every_real_subcommand_suggests_itself() {
+        for c in SUBCOMMANDS {
+            assert_eq!(nearest_subcommand(c), Some(*c), "`{c}` is a real command");
         }
     }
 }

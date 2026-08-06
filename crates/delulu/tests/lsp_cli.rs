@@ -11,6 +11,12 @@ struct Client {
     stdin: ChildStdin,
     reader: BufReader<ChildStdout>,
     next_id: i64,
+    /// What the server said it could do, kept from `initialize`.
+    ///
+    /// Worth keeping rather than asserting once and dropping: a provider that is implemented but
+    /// never *advertised* is dead code, because no client will ever send the request. That is
+    /// precisely how `textDocument/formatting` came to be missing for the life of the project.
+    capabilities: Value,
 }
 
 impl Client {
@@ -38,9 +44,10 @@ impl Client {
             .expect("spawn delulu lsp");
         let stdin = child.stdin.take().unwrap();
         let reader = BufReader::new(child.stdout.take().unwrap());
-        let mut c = Client { child, stdin, reader, next_id: 1 };
+        let mut c = Client { child, stdin, reader, next_id: 1, capabilities: Value::Null };
         let init = c.request("initialize", init_params);
         assert!(init["capabilities"]["hoverProvider"].as_bool().unwrap_or(false));
+        c.capabilities = init["capabilities"].clone();
         c.notify("initialized", json!({}));
         c
     }
@@ -1289,6 +1296,101 @@ fn repeated_requests_do_not_recheck_every_open_document() {
         ten_requests < one_check * 4,
         "ten read-only requests took {ten_requests:?} against a {one_check:?} baseline — \
          the analysis is being recomputed per request"
+    );
+    c.shutdown();
+}
+
+/// `textDocument/formatting` must be the *same* formatter `delulu fmt` runs, not a second one.
+///
+/// The formatter has a canonical style, a law suite, and a hundred-thousand program gate — and for
+/// the life of the project no editor could reach any of it, because the server never advertised
+/// `documentFormattingProvider`. "Format Document" was greyed out and `editor.formatOnSave` did
+/// nothing on `.delulu` files.
+///
+/// The check that matters is agreement: this test formats the same source through the LSP and
+/// through the CLI and requires byte equality. Two formatters that drift are worse than one, since
+/// saving in the editor and running `delulu fmt --check` in CI would then disagree about whether a
+/// file is formatted.
+#[test]
+fn formatting_returns_exactly_what_the_cli_formatter_produces() {
+    let ugly = "module m\nfn   f( )  ->Int{1}\n";
+    let mut c = Client::start();
+    let uri = "file:///fmt_agreement.delulu";
+    c.open(uri, ugly);
+
+    let edits = c.request(
+        "textDocument/formatting",
+        json!({ "textDocument": { "uri": uri }, "options": { "tabSize": 4, "insertSpaces": true } }),
+    );
+    let arr = edits.as_array().expect("formatting returns an array of edits");
+    assert_eq!(arr.len(), 1, "one whole-document replacement: {edits}");
+
+    let via_lsp = arr[0]["newText"].as_str().unwrap().to_string();
+    let via_cli = delulu_syntax::fmt::format_source(0, ugly).expect("the source parses");
+    assert_eq!(via_lsp, via_cli, "the editor and `delulu fmt` must produce identical bytes");
+    assert_ne!(via_lsp, ugly, "the ugly source really was reformatted");
+
+    // The replaced range must cover the whole document, or the edit lands somewhere unintended.
+    assert_eq!(arr[0]["range"]["start"]["line"], 0);
+    assert_eq!(arr[0]["range"]["start"]["character"], 0);
+    c.shutdown();
+}
+
+/// Formatting an already-canonical document returns NO edits.
+///
+/// An edit that replaces text with itself still marks the buffer dirty and still lands in the undo
+/// stack, so a formatter that always returns something makes every save look like a change.
+#[test]
+fn an_already_formatted_document_produces_no_edits() {
+    let src = delulu_syntax::fmt::format_source(0, "module m\nfn f() -> Int { 1 }\n").unwrap();
+    let mut c = Client::start();
+    let uri = "file:///already_canonical.delulu";
+    c.open(uri, &src);
+    let edits = c.request(
+        "textDocument/formatting",
+        json!({ "textDocument": { "uri": uri }, "options": {} }),
+    );
+    assert_eq!(edits.as_array().unwrap().len(), 0, "canonical text needs no edit: {edits}");
+    c.shutdown();
+}
+
+/// A file that does not parse yields no edits, and above all does not throw.
+///
+/// This is the common case for format-on-save: the moment you hit save, the file is very often
+/// mid-edit and broken. `fmt` refuses parse-dirty input by design — reformatting a broken parse is
+/// how a formatter eats your code — and the editor-facing shape of that refusal is "no change",
+/// not an error dialog on every save.
+#[test]
+fn an_unparseable_document_is_left_exactly_as_written() {
+    let broken = "module m\nfn f( {\n";
+    let mut c = Client::start();
+    let uri = "file:///broken.delulu";
+    c.open(uri, broken);
+    let edits = c.request(
+        "textDocument/formatting",
+        json!({ "textDocument": { "uri": uri }, "options": {} }),
+    );
+    assert_eq!(edits.as_array().unwrap().len(), 0, "a broken parse must not be rewritten: {edits}");
+    c.shutdown();
+}
+
+/// The server must advertise formatting, or none of the above is ever asked for.
+///
+/// This is the failure the feature actually had: the handler is worthless if `initialize` does not
+/// declare it, because a client will never send the request. Range formatting is deliberately NOT
+/// advertised — the formatter's contract is over a complete parse, and quietly widening a selection
+/// to the whole file would reformat lines the user did not choose.
+#[test]
+fn the_server_advertises_whole_document_formatting_and_not_range_formatting() {
+    let c = Client::start();
+    let caps = &c.capabilities;
+    assert_eq!(
+        caps["documentFormattingProvider"], true,
+        "without this the editor never offers Format Document: {caps}"
+    );
+    assert!(
+        caps.get("documentRangeFormattingProvider").is_none(),
+        "range formatting is not supported and must not be advertised: {caps}"
     );
     c.shutdown();
 }

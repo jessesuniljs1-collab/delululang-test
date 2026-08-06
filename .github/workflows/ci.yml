@@ -7,6 +7,12 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  # The heavy gates below are too slow for every push and were therefore `#[ignore]`d — and then
+  # nothing ever ran them. A nightly schedule and a manual button are what turn "run it explicitly"
+  # from an instruction nobody follows into something that actually happens.
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
 
 jobs:
   test:
@@ -164,6 +170,67 @@ jobs:
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
         run: cargo miri test --lib -p ${{ matrix.crate }}
+
+  # ---- The gates that were `#[ignore]`d and then never run -----------------------------------
+  # Two tests carry acceptance criteria the project states about itself, and both were marked
+  # `#[ignore]` so the ordinary suite would stay fast:
+  #
+  #   * `fmt_laws_100k_gate`                      — criterion 4's >=100,000 program formatter gate
+  #   * `criterion3_latency_150ms_on_10kloc_release` — criterion 3's LSP latency gate on 10 kLOC
+  #
+  # Nothing ran either of them. No workflow passed `--ignored`, so the documented way to run them
+  # was a sentence in a doc comment addressed to whoever remembered. A criterion that is asserted in
+  # the specification, implemented as a test, and never executed is a claim, not evidence — and it
+  # is the more dangerous kind, because the test EXISTS and reads as coverage.
+  #
+  # Nightly rather than per-push because they are genuinely slow, and `workflow_dispatch` so a
+  # release can demand them on the spot instead of waiting for the clock.
+  heavy-gates:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Criterion 4 — the 100k-program formatter gate
+        run: cargo test -p delulu-syntax --release -- --ignored fmt_laws_100k
+      - name: Criterion 3 — LSP latency on 10 kLOC, release mode
+        run: cargo test -p delulu --release --test lsp_cli -- --ignored criterion3_latency
+      - name: The differential wasm gate
+        run: cargo test -p delulu-wasm --release --test differential -- --ignored
+
+  # The matrix above is aimed at the wrong crates, and this job is the correction.
+  #
+  # Counting `unsafe` in first-party sources: `delulu` 37 (Windows FFI — SIDs, handle inheritance),
+  # `delulu-runtime` 13 (`ptr.add`, `slice::from_raw_parts`, `dlopen`, `extern "C"` calls),
+  # `delulu-diag` 2, and ZERO in delulu-atlas, delulu-broker, delulu-syntax and delulu-check. Miri
+  # was running on four crates with no `unsafe` at all and skipping the two holding 50 of the 54
+  # sites. "0 UB" was true and much weaker than it sounded.
+  #
+  # Most of that gap is a real boundary that stays open: Miri cannot execute `dlopen` or Windows API
+  # calls, so the FFI itself is beyond it — an explicit assumption, not a to-do. But
+  # `validate_c_string` is a PURE function over caller-supplied memory: a hand-rolled NUL scan with
+  # pointer arithmetic and `from_raw_parts`, the highest-risk code in the tree, needing no foreign
+  # library to exercise. It already had tests against crafted Rust-owned buffers; nothing had ever
+  # run them under the interpreter. They take 2.4 seconds — against 26 minutes for a crate with no
+  # `unsafe` in it.
+  #
+  # The detector was confirmed live rather than assumed: a probe reading past a 4-byte allocation was
+  # caught as "at or beyond the end of the allocation of size 4 bytes". A gate that cannot fail is
+  # not a gate, and that applies to the tool as much as to the test.
+  miri-ffi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with: { components: miri }
+      - uses: Swatinem/rust-cache@v2
+      - name: Miri — the raw-pointer decoding in delulu-runtime
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo miri test --lib -p delulu-runtime -- foreign::tests
 
   # ---- Editor surface ----------------------------------------------------------------------
   # The VS Code extension shipped for the life of the project with a command-injection hole (the

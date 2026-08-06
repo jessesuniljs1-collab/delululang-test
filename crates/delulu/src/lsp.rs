@@ -113,6 +113,10 @@ pub fn run_lsp(_args: &[String]) -> i32 {
                 let r = server.code_lens(&msg["params"]);
                 respond(id, r);
             }
+            Some("textDocument/formatting") => {
+                let r = server.formatting(&msg["params"]);
+                respond(id, r);
+            }
             Some("workspace/symbol") => {
                 let r = server.workspace_symbols(&msg["params"]);
                 respond(id, r);
@@ -434,6 +438,12 @@ impl Server {
                 "referencesProvider": true,
                 "renameProvider": true,
                 "codeLensProvider": { "resolveProvider": false },
+                // Whole-document only. `documentRangeFormattingProvider` is deliberately absent:
+                // the formatter's contract is over a complete parse, and a range handed to it is
+                // not a program. Advertising range formatting and quietly widening to the whole
+                // file would silently reformat lines the user did not select — worse than the
+                // editor greying the action out.
+                "documentFormattingProvider": true,
                 "workspaceSymbolProvider": true,
                 "semanticTokensProvider": {
                     "legend": { "tokenTypes": SEMANTIC_TOKEN_TYPES, "tokenModifiers": [] },
@@ -650,6 +660,44 @@ impl Server {
     }
 
     /// Code lenses on `fn main` and each `test` (spec §3): `▶ run` + the authority line.
+    /// `textDocument/formatting` — the document, formatted by the *same* function `delulu fmt`
+    /// calls.
+    ///
+    /// The formatter already existed, with a law-verified canonical style and a hundred-thousand
+    /// program gate behind it, and no editor could reach it: the server never advertised
+    /// `documentFormattingProvider`, so "Format Document" was greyed out and `editor.formatOnSave`
+    /// did nothing on `.delulu` files. A formatter nobody can run is a formatter nobody uses.
+    ///
+    /// Two decisions worth stating.
+    ///
+    /// **Unparseable input yields no edits, not an error.** `format_source` refuses a file it
+    /// cannot parse, by design — reformatting a broken parse is how a formatter eats your code. But
+    /// the moment that matters is format-on-save, mid-edit, when the file is *usually* broken; an
+    /// error there would raise a dialog on every keystroke-then-save. Returning no edits leaves the
+    /// text exactly as written, which is the same thing the refusal was protecting.
+    ///
+    /// **The edit replaces the whole document**, rather than a computed minimal diff. A diff would
+    /// be smaller on the wire and is a well-known source of off-by-one corruption when the range
+    /// arithmetic disagrees with the editor's; a whole-document replacement cannot land in the
+    /// wrong place. When the text is already canonical the reply is an empty list, so an unchanged
+    /// file does not get marked dirty.
+    fn formatting(&self, params: &Value) -> Value {
+        let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let Some(text) = self.text(uri) else { return json!([]) };
+
+        let Ok(formatted) = delulu_syntax::fmt::format_source(0, text) else {
+            return json!([]); // parse-dirty: fmt refuses, and so do we
+        };
+        if formatted == text {
+            return json!([]);
+        }
+        // `end` is the position one past the last byte — the whole document, however it ends.
+        json!([{
+            "range": byte_range(text, 0, text.len() as u32),
+            "newText": formatted,
+        }])
+    }
+
     fn code_lens(&self, params: &Value) -> Value {
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
         let (Some(text), Some(a)) = (self.text(uri), self.analyze(uri)) else { return json!([]) };

@@ -247,6 +247,14 @@ Yes, and they are enumerated rather than implied:
   2026-08-03 that disclosure is known to understate the problem badly. See the entry below.**
 - **`--trace-effects` buffers the whole trace in RAM** — about 70 MB per 100k effects, unbounded.
 - **Side channels are out of scope entirely.**
+- **The editor was a way in, twice, and the second one needed no click.** The VS Code extension read
+  `delulu.serverPath` at VS Code's default configuration scope, which a repository's own
+  `.vscode/settings.json` can write — and the extension launches that path as a process the moment a
+  `.delulu` file is opened. Opening a cloned repository therefore ran a binary the repository chose.
+  Fixed 2026-08-07 by making the setting machine-scoped, and reproduced end-to-end both ways to be
+  sure the fix was what refused it. The general lesson is recorded here rather than only in the
+  changelog: **the toolchain around a language is part of its attack surface**, and an editor
+  extension is the piece most likely to be trusted without being read.
 - **The audit chain now detects truncation as well as modification and reordering** (`ANCHOR.json`),
   but it is still **not tamper-proof**: an attacker who rewrites the log *and* the anchor is not
   caught. Genuine tamper-evidence needs an external witness, and the head is now exportable so that

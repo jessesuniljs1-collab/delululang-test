@@ -36,6 +36,25 @@ Four rules that will save you time:
    If you are running a long edit→check loop, `delulu lsp` pays the process cost once and every
    check after that is the sub-millisecond part.
 
+5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
+   the same compiler, so its answers cannot drift from `delulu check --json`. Three of them are worth
+   knowing about specifically:
+
+   - `workspace/executeCommand` with `delulu.authority` returns the §10.5 authority report as JSON —
+     what this program can do to the machine — without a second process. **Send this name, not
+     `delulu.showAuthority`**: that one is the *editor's* command, which exists to render the report
+     for a human, and the two are deliberately distinct (a client that registers the protocol name
+     itself collides with its own language client and kills the server — see `docs/editors.md`).
+   - `textDocument/formatting` runs the same formatter as `delulu fmt`, byte for byte, enforced by a
+     test. Format through the server in a loop rather than spawning `fmt` per file.
+   - `textDocument/codeAction` carries the checker's own typed repairs, with
+     `data.authority_widening` and `data.requires_human` set, so a harness can apply the safe ones
+     and refuse the rest **by policy rather than by parsing prose**. A repair that widens what the
+     program may do is never marked preferred.
+
+   The server is analysis-only: it never runs code, never loads a plugin, and holds no broker lease.
+   A compromised workspace cannot use it as an effector.
+
 ### [agents.survey] If you are here to change the compiler, not to use it
 
 One command answers "is this checkout healthy?" — `delulu doctor` checks the environment and, when

@@ -172,6 +172,16 @@ if (!/textDocument\/publishDiagnostics/.test(body)) {
       "file, so the editor would show no problems no matter what the code said"
   );
 }
+// A provider that is implemented but not ADVERTISED is dead code: no client will ever send the
+// request. `documentFormattingProvider` was missing for the life of the project, so Format Document
+// was greyed out while a law-verified formatter sat behind the CLI. Checking the wire here means the
+// claim is made against what the server actually said, not against what the source says it says.
+if (!/"documentFormattingProvider"\s*:\s*true/.test(body)) {
+  problems.push(
+    "the server did not advertise `documentFormattingProvider` — Format Document and " +
+      "editor.formatOnSave would do nothing on .delulu files"
+  );
+}
 
 // …and then the absence check, which is still worth having: the output channel is where the client
 // reports its own failures, and anything at Error level there means a degraded editor.

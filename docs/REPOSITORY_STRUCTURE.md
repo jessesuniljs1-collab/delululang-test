@@ -185,16 +185,32 @@ DeluluLang/
 │
 ├── editors/                        # [Stage 8] VS Code extension + generic LSP config
 │   └── vscode/                     #   extension.js is the SOURCE; `npm run package` bundles it
-│                                   #   with esbuild into dist/extension.js and packages a .vsix.
-│                                   #   BUNDLED ON PURPOSE: shipping the dependency tree instead
-│                                   #   produced a .vsix that packaged cleanly and would have
-│                                   #   thrown `Cannot find module` on activation (vsce shipped 1
-│                                   #   of the 8 packages npm installed). `verify-package.js`
-│                                   #   unpacks the built archive and refuses one whose requires
-│                                   #   do not resolve — a green package step proves nothing about
+│       │                           #   with esbuild into dist/extension.js and packages a .vsix.
+│       │                           #   BUNDLED ON PURPOSE: shipping the dependency tree instead
+│       │                           #   produced a .vsix that packaged cleanly and would have
+│       │                           #   thrown `Cannot find module` on activation (vsce shipped 1
+│       │                           #   of the 8 packages npm installed).
+│       │                           #   The server/client command contract is gated by
+│       │                           #   crates/delulu/tests/editor_contract.rs.
+│       ├── server-resolve.js       #   Which program gets launched. Separate from extension.js and
+│       │                           #   free of the `vscode` API so it is testable without an
+│       │                           #   editor. Refuses relative paths and walks PATH itself: a bare
+│       │                           #   name handed to spawn is resolved by the OS, and on Windows
+│       │                           #   CreateProcess searches the CURRENT DIRECTORY before PATH.
+│       ├── test/resolve.test.js    #   `npm test` — node:test, no framework dependency, because
+│       │                           #   every dependency an extension carries ships to every user.
+│       ├── e2e.js                  #   Launches a REAL VS Code against a REAL server and requires
+│       │                           #   three POSITIVE signals: activation, a live `delulu … lsp`
+│       │                           #   process, and publishDiagnostics in the trace. Written after
+│       │                           #   the extension shipped with a server that never started while
+│       │                           #   every test was green — lsp_cli.rs talks to the server but is
+│       │                           #   not a VS Code client, and editor_contract.rs reads source
+│       │                           #   text, which cannot say what a library does at runtime.
+│       │                           #   NOT in `npm test`: it needs a display. Kept out of test/
+│       │                           #   because node:test treats every file there as a test.
+│       └── verify-package.js       #   Unpacks the built .vsix and refuses one whose requires do
+│                                   #   not resolve — a green package step proves nothing about
 │                                   #   whether the thing inside runs.
-│                                   #   The server/client command contract is gated by
-│                                   #   crates/delulu/tests/editor_contract.rs.
 │
 ├── deny.toml                       # [P17-F] the SUPPLY-CHAIN gate: `cargo deny check advisories
 │                                   #   bans licenses sources`. Before it existed nothing checked

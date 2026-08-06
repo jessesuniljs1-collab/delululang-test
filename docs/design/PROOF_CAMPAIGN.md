@@ -1251,6 +1251,44 @@ do, and only the second one makes a run terminate.
 > verifying run had not yet reported when this was written — it is *"changed, not yet confirmed"*,
 > and will be recorded as timing out again if that is what happens.
 
+### What Miri is pointed at — the finding that matters more than the flags
+
+The question *"we changed how Miri runs, can we trust the results?"* is the right one to ask, and
+answering it honestly turns up something worse than the flags.
+
+The flags are defensible, and they are not equivalent to each other:
+
+| change | what it touches | cost to the claim |
+| --- | --- | --- |
+| `-Zmiri-disable-isolation` | which **host operations** are permitted (real files, clock, randomness) | **None to UB detection.** The memory-model checks — Stacked Borrows, uninitialised reads, alignment, out-of-bounds, data races, invalid values — are untouched. Without it Miri *aborts* on `create_dir_all` as an unsupported operation, which is a limitation, not a finding. |
+| `cfg!(miri)` shrinking | **how many inputs** the same code paths see | **Real, and it is sampling.** Every path is still interpreted; each is hit fewer times. This costs coverage *breadth*, not detector strength. |
+| `-Zmiri-disable-stacked-borrows` | the aliasing detector itself | **Refused** — see below. |
+
+**But the matrix is aimed at the wrong crates.** Counting `unsafe` in first-party sources:
+
+| crate | `unsafe` sites | in the Miri matrix? |
+| --- | --- | --- |
+| `delulu` (Windows FFI: SIDs, handle inheritance, `GetLastError`) | 37 | **no** |
+| `delulu-runtime` (`ptr.add`, `slice::from_raw_parts`, `dlopen`, `extern "C"` calls) | 13 | **no** |
+| `delulu-diag` | 2 | yes |
+| `delulu-conform`, `delulu-survey` | 1 each | no |
+| `delulu-atlas`, `delulu-broker`, `delulu-syntax`, `delulu-check` | **0** | yes |
+
+Miri runs on four crates containing **no `unsafe` at all** and skips the two holding 50 of the 54
+sites. *"192 tests, 0 UB"* is true and it is weaker than it sounds: it is strong evidence about
+safe-Rust logic, which largely cannot exhibit UB in the first place.
+
+Part of the gap is a real boundary and stays open: **Miri cannot execute `dlopen` or Windows API
+calls**, so the FFI itself is permanently beyond it. That is an explicit assumption, not a to-do.
+
+Part of it is not. `validate_c_string` — the highest-risk function in the tree, a hand-rolled NUL
+scan with `ptr.add` and `from_raw_parts` — takes a raw pointer to *caller-supplied* memory and needs
+no FFI to exercise. It already had five tests against crafted Rust-owned buffers. Nothing had ever
+run them under the interpreter, purely because the crate was not in the matrix.
+
+**The general lesson: choosing where to point a checker is a bigger decision than how to configure
+it.** A tool aimed at code that cannot exhibit the defect will report clean forever.
+
 **`-Zmiri-disable-stacked-borrows` is refused.** It is a large further speedup and it turns off
 Miri's pointer-aliasing engine — its strongest detector. A faster run reporting "0 UB" while unable
 to see aliasing violations is weaker evidence wearing the identical sentence, which is precisely the

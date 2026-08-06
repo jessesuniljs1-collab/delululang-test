@@ -1677,7 +1677,17 @@ impl Interp {
             }
             Add | Sub | Mul | Div | Rem => self.arith(op, l, r, span),
             Lt | Le | Gt | Ge => self.compare(op, l, r, span),
-            And | Or => unreachable!(),
+            // Unreachable because the `matches!(op, And | Or)` branch at the top of this function
+            // returns unconditionally for exactly these two operators. That guard is twenty-five
+            // lines away, which is far enough for the argument to rot, so it is written down here:
+            // if that early return is ever narrowed — made conditional on the operand type, say —
+            // this arm becomes live and panics inside the evaluator on ordinary user code. A
+            // panicking arm in the interpreter is a crash, and a crash is not a refusal.
+            //
+            // It is NOT converted to a fault. A fault would let a genuine dispatch bug reach the
+            // user as an ordinary program error and stay hidden; this is an internal invariant, and
+            // the only inputs that could violate it come from this file, not from any program.
+            And | Or => unreachable!("And/Or are short-circuited above and never reach here"),
         }
     }
 

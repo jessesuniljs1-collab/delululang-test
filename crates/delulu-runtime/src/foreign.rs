@@ -381,6 +381,19 @@ mod tests {
     // buffers, independent of any library — the buffers are the adversary. A live-DLL end-to-end test
     // lives in `tests/foreign_ffi.rs`.
 
+    // These run under Miri as well as natively, and that is the point of them.
+    //
+    // `validate_c_string` is the highest-risk function in the tree — a hand-rolled NUL scan over
+    // caller-supplied memory, with `ptr.add` and `from_raw_parts` — and for a long time nothing
+    // interpreted it, because `delulu-runtime` was not in the Miri matrix while four crates
+    // containing no `unsafe` at all were. A checker aimed at code that cannot exhibit the defect
+    // reports clean forever.
+    //
+    // The detector was confirmed live rather than assumed: a temporary probe passing a 4-byte
+    // buffer with no terminator and a bound of 64 was rejected with
+    // *"attempting to access 1 byte, but got alloc+0x4 which is at or beyond the end of the
+    // allocation of size 4 bytes"*. Under this project's flags — `-Zmiri-disable-isolation`, and
+    // Stacked Borrows deliberately left ON — Miri still sees an out-of-bounds read here.
     #[test]
     fn valid_utf8_c_string_is_read_up_to_the_nul() {
         let buf = b"hi there\0trailing garbage".as_ptr();

@@ -24,6 +24,14 @@ if [ ! -x "$DL" ]; then
     exit 2
 fi
 
+# Make the binary path ABSOLUTE before the `cd` below, or a relative one stops resolving the moment
+# we move. `scripts/cli-sweep.sh ./target/release/delulu.exe` is the natural thing to type, and it
+# produced eighteen "FAIL … exit 127" lines that read exactly like eighteen product defects.
+case "$DL" in
+    /*|[A-Za-z]:[/\\]*) ;;                       # already absolute (POSIX or Windows drive)
+    *) DL="$(cd "$(dirname "$DL")" && pwd)/$(basename "$DL")" ;;
+esac
+
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t dlsweep)
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK" || exit 2
@@ -126,6 +134,29 @@ run 0 "--help"                           "$DL" --help
 run 0 "completions bash"                 "$DL" completions bash
 run 0 "completions powershell"           "$DL" completions powershell
 run 2 "usage error (unknown command)"    "$DL" definitely-not-a-command
+run 2 "typo gets a suggestion"           "$DL" chekc
+run 0 "help <subcommand>"                "$DL" help check
+run 2 "help <typo> refuses"              "$DL" help chekc
+
+# The exit code alone cannot tell a suggestion from a hundred lines of usage — both exit 2. The
+# point of the change was WHICH of the two you get, so the content is what has to be asserted.
+"$DL" chekc >out.txt 2>err.txt
+if grep -q 'did you mean `check`' err.txt; then
+    PASS=$((PASS + 1)); printf '  ok    %-46s\n' "typo names the intended command"
+else
+    FAIL=$((FAIL + 1)); printf '  FAIL  %-46s\n' "typo names the intended command"
+    sed 's/^/          /' err.txt | head -3
+fi
+
+# …and the other half: a word that is NOT nearly a command must get no guess. A confident wrong
+# suggestion is followed, so declining is the behaviour under test here.
+"$DL" package >out.txt 2>err.txt
+if grep -q 'did you mean' err.txt; then
+    FAIL=$((FAIL + 1)); printf '  FAIL  %-46s\n' "an unrelated word gets NO guess"
+    sed 's/^/          /' err.txt | head -3
+else
+    PASS=$((PASS + 1)); printf '  ok    %-46s\n' "an unrelated word gets NO guess"
+fi
 
 echo
 echo "-- repository tooling --"
