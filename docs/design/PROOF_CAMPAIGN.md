@@ -1220,6 +1220,56 @@ the system was supposed to do.* Neither would have been found by re-reading the 
   `x86_64-apple-darwin`, and Apple Silicon is *not* entirely uncheckable — three crates compile clean
   for `aarch64-apple-darwin`. See `CROSS_PLATFORM_VERIFICATION.md`.
 
+### How far the extension was actually verified — and where that stops
+
+Stated precisely, because "production-ready" is the kind of phrase that absorbs more than it earned:
+
+| Step | Status |
+|---|---|
+| Bundles and packages (`npm run package`) | **verified** — 9 files, 90.9 KB |
+| Every `require` in every shipped file resolves (`npm run verify`) | **verified** — and the check was falsified against a deliberately broken `.vsix` |
+| Commands the server emits = registers = declares | **verified** — `editor_contract.rs`, each gate falsified |
+| No path reaches a shell as a command string | **verified** — falsified by reintroducing `sendText` |
+| Installs into a real VS Code | **verified** — `code --install-extension` succeeded; `--list-extensions` reports `delulu-lang.delulu-lang@1.0.0` |
+| **Activates and serves a live `.delulu` buffer** | **NOT verified** — no editor session was driven, so nothing here proves the LSP client connects, that the lenses render, or that clicking one does what it now says it does |
+
+The last row is the honest boundary. Everything above it is mechanical and was checked; activation
+needs a live editor session and was not performed.
+
+### Attacking the F1/F2/F3 conclusion rather than restating it
+
+"Canonicalization happens at the custody boundary" is only worth as much as the enumeration behind
+it, so the boundary was enumerated instead of asserted:
+
+- **Exactly two sites insert into the node map** — `tree.rs:416` (in `issue`) and `tree.rs:519` (in
+  `attenuate_core`). Both canonicalize.
+- **Certificate adoption does not bypass them.** `cert.rs:569` routes through `Broker::issue`, so a
+  federated grant arriving over the wire is canonicalized like any local one.
+- **`Node.authority` is write-once.** The three sites that mutate an existing node touch
+  `ttl_millis`, `holder.peer` and `state` — never the authority. The only `.authority =` assignment
+  anywhere in the crate is inside a *test* that tampers with a certificate on purpose.
+
+So "every authority in the tree is canonical" is **structural**, not a property that happens to hold
+today: there is no third way for one to get in, and no way to change one after it is in. The
+1000-agent stress test then checks the conclusion at scale, and fails all seven scales if any of the
+three canonicalization calls is removed.
+
+### The distributable was actually built, unpacked, and used
+
+"Deployable" had never been checked end-to-end in this pass, so it was:
+
+1. `scripts/package-toolchain.sh` → release build (5m14s) → `dist/delulu-1.0.0-x86_64-pc-windows-msvc.tar.gz`, 21 files.
+2. `sha256sum -c` on the published checksum → **OK**.
+3. Unpacked into a directory with no repository and no Rust toolchain.
+4. `./bin/delulu --version` → `delulu 1.0.0`; the shipped `examples/demo.delulu` **checks clean**.
+5. From an empty directory, using *only* the unpacked binary: `delulu new demo2` then
+   `delulu run . --grant console` → **`hello, world`**, exit 0.
+
+The fresh-user path in `README.md` was run the same way and behaves as documented, including the
+refusal: `delulu run .` without `--grant console` **exits 1** with `DL0703`, and with the grant exits
+0. That distinction was checked with a real exit code — an earlier reading of it was `tail`'s status,
+not the program's, which would have made a refusal look like a success.
+
 ### Not closed, and not softened
 
 - **Zero macOS executions.** Type-checking is not running.
