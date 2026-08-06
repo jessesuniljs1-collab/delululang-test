@@ -22,7 +22,8 @@
     "commands": [
       { "command": "delulu.run", "title": "Run this file", "category": "DeluluLang" },
       { "command": "delulu.test.run", "title": "Run test", "category": "DeluluLang" },
-      { "command": "delulu.showAuthority", "title": "Show authority report", "category": "DeluluLang" }
+      { "command": "delulu.showAuthority", "title": "Show authority report", "category": "DeluluLang" },
+      { "command": "delulu.showAtlas", "title": "Show authority atlas (call + effect graph)", "category": "DeluluLang" }
     ],
     "languages": [
       {

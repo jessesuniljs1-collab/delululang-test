@@ -197,6 +197,9 @@ DeluluLang/
 │       │                           #   editor. Refuses relative paths and walks PATH itself: a bare
 │       │                           #   name handed to spawn is resolved by the OS, and on Windows
 │       │                           #   CreateProcess searches the CURRENT DIRECTORY before PATH.
+│       ├── snippets/delulu.json    #   Every snippet that declares a function carries its EFFECT
+│       │                           #   ROW — a snippet producing `fn f() { … }` without one would
+│       │                           #   teach the declaration and leave the checker to object later.
 │       ├── test/resolve.test.js    #   `npm test` — node:test, no framework dependency, because
 │       │                           #   every dependency an extension carries ships to every user.
 │       ├── e2e.js                  #   Launches a REAL VS Code against a REAL server and requires

@@ -1247,9 +1247,22 @@ numerous — Miri was still walking, having "checked" almost nothing. The budget
 The lesson generalises past Miri: a limit on the *results* you keep is not a limit on the *work* you
 do, and only the second one makes a run terminate.
 
-> **Status.** The generated-programs half is verified `ok` under Miri. The corpus half is a fix whose
-> verifying run had not yet reported when this was written — it is *"changed, not yet confirmed"*,
-> and will be recorded as timing out again if that is what happens.
+**It then timed out a second time, and the reason was arithmetic rather than a bug.** Timed
+*individually* under Miri, both halves pass: the corpus test in **1377 s** for 12 files (~115 s per
+file), the generated-programs gate in ~18 minutes for 20 programs (~54 s per program). Together they
+needed roughly **41 minutes against a 40-minute wall**. So the module reported a timeout while every
+test in it was passing — which reads exactly like a failure and is not one.
+
+Two corrections came out of that, and the second is the one worth keeping:
+
+1. The budgets are now **measured**, not guessed: 4 corpus files and 8 generated programs, ≈15
+   minutes for the pair. Fewer inputs costs *repetition*, not reach.
+2. **A per-test budget does not bound a per-module run.** Each test was individually within budget
+   and the module was not, because nothing was measuring the sum. Three separate attempts were made
+   at "make fmt finish under Miri" before anyone measured the per-unit cost; the first two were
+   guesses that changed the wrong quantity (files kept rather than work done) and the third was a
+   guess at the right quantity. **Measure the unit cost before choosing the budget** — it was one
+   command, and it would have replaced all three attempts.
 
 ### What Miri is pointed at — the finding that matters more than the flags
 

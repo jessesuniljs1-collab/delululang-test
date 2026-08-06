@@ -9,6 +9,7 @@
 const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 const { resolveServer } = require("./server-resolve");
+const { execFile } = require("child_process");
 
 let client;
 let status;
@@ -22,14 +23,39 @@ async function reportUnavailable(why, missingFromPath) {
     `DeluluLang: the language server did not start, so there will be no diagnostics, hover, or ` +
       `completion.\n\nWhy: ${why}\n\nFix: ${fix}`,
     "Open Setting",
-    "Installation Guide"
+    "How do I install it?"
   );
   if (choice === "Open Setting") {
     await vscode.commands.executeCommand("workbench.action.openSettings", "delulu.serverPath");
-  } else if (choice === "Installation Guide") {
-    await vscode.env.openExternal(
-      vscode.Uri.parse("https://github.com/delulu-lang/delulu#installation")
-    );
+  } else if (choice === "How do I install it?") {
+    // Deliberately NOT a link to a hosting page. DeluluLang publishes to no registry and no
+    // download page — the README says so in its own first table — so a button opening
+    // `github.com/delulu-lang/delulu#installation` would send a stuck user to a 404 at the exact
+    // moment they needed an answer. The instructions are short enough to simply give them.
+    const doc = await vscode.workspace.openTextDocument({
+      language: "markdown",
+      content: [
+        "# Installing the DeluluLang toolchain",
+        "",
+        "There is no release binary and no package-manager entry yet: you build from source.",
+        "",
+        "```",
+        "git clone <the DeluluLang repository>",
+        "cd DeluluLang",
+        "cargo build --release          # rustup installs the pinned toolchain automatically",
+        "cargo install --path crates/delulu    # puts `delulu` on your PATH (~/.cargo/bin)",
+        "```",
+        "",
+        "If you would rather not install it, point the extension at the binary you just built:",
+        "",
+        "1. Open Settings and search for `delulu.serverPath`.",
+        "2. Set it to the full path of `target/release/delulu` (`delulu.exe` on Windows).",
+        "",
+        "That setting is **machine-scoped on purpose** — a workspace cannot set it, because this",
+        "extension launches it as a process the moment a `.delulu` file is opened.",
+      ].join("\n"),
+    });
+    await vscode.window.showTextDocument(doc, { preview: true });
   }
 }
 
@@ -43,6 +69,88 @@ async function reportUnavailable(why, missingFromPath) {
 function runInTerminal(name, serverPath, args) {
   const t = vscode.window.createTerminal({ name, shellPath: serverPath, shellArgs: args });
   t.show();
+}
+
+/// Run the CLI and capture its stdout. `execFile`, so the argument vector is passed through and
+/// nothing is parsed as shell syntax — the same rule every other execution path here follows.
+function capture(exe, args, cwd) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      exe,
+      args,
+      // A timeout, because without one a server that hangs leaves this promise pending forever and
+      // the user gets no panel and no error — the failure mode that looks like nothing happening.
+      { cwd, maxBuffer: 32 * 1024 * 1024, timeout: 30_000 },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(new Error(String(stderr || err.message).trim()));
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
+  });
+}
+
+/// Put a `Content-Security-Policy` on a generated document, and **fail loudly if it cannot**.
+///
+/// `String.replace` with no match returns the input unchanged, so writing this inline as
+/// `html.replace(/<head>/i, …)` would silently produce an un-policied page the day the generator's
+/// output changed shape. That is fail-open: the security control disappears and everything still
+/// looks like it worked. Returning `undefined` forces the caller to decide, and the caller refuses.
+function withContentSecurityPolicy(html) {
+  const meta =
+    `<meta http-equiv="Content-Security-Policy" ` +
+    `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">`;
+  const at = html.search(/<head[^>]*>/i);
+  if (at === -1) {
+    return undefined;
+  }
+  const end = html.indexOf(">", at) + 1;
+  return html.slice(0, end) + meta + html.slice(end);
+}
+
+/// The authority atlas for a document, rendered in a panel beside it.
+///
+/// `delulu atlas --format html` already emits a **self-contained** document — no scripts, no fonts,
+/// no images fetched from anywhere — which is what makes it safe to show in a webview at all. The
+/// panel is still created with scripts disabled and a `Content-Security-Policy` that permits only
+/// inline styles: the HTML is produced by our own binary from the user's own code, but "trusted
+/// producer" is an argument that stops holding the moment someone adds a feature to that producer,
+/// and a webview with scripting enabled runs with the extension's own reach.
+async function showAtlas(serverPath, uri) {
+  const doc = uri ? vscode.Uri.parse(uri) : vscode.window.activeTextEditor?.document.uri;
+  if (!doc) {
+    vscode.window.showWarningMessage("delulu: open a .delulu file to see its atlas.");
+    return;
+  }
+  const folder = vscode.workspace.getWorkspaceFolder(doc);
+  let html;
+  try {
+    html = await capture(serverPath, ["atlas", doc.fsPath, "--format", "html"], folder?.uri.fsPath);
+  } catch (e) {
+    vscode.window.showErrorMessage(
+      `DeluluLang: could not build the atlas for this file.\n\nWhy: ${e.message}\n\n` +
+        `Fix: the file must parse and type-check first — run \`delulu check\` on it.`
+    );
+    return;
+  }
+  const policed = withContentSecurityPolicy(html);
+  if (!policed) {
+    vscode.window.showErrorMessage(
+      "DeluluLang: refusing to display the atlas — the generated document has no <head>, so no " +
+        "Content-Security-Policy could be applied to it. This is a bug in `delulu atlas`; please " +
+        "report it rather than working around it."
+    );
+    return;
+  }
+  const panel = vscode.window.createWebviewPanel(
+    "deluluAtlas",
+    `Atlas — ${doc.path.split("/").pop()}`,
+    { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+    { enableScripts: false, localResourceRoots: [] }
+  );
+  panel.webview.html = policed;
 }
 
 /// Tasks for the four commands people run in a loop, so ⇧⌘B and the Tasks palette work.
@@ -223,6 +331,16 @@ function activate(context) {
     // shipped in that state — no diagnostics, no hover, no completion, in every workspace — and
     // nothing caught it, because the packaging tests check that a command is *registered* and the
     // server tests check that it *answers*. Neither one starts a client against a server.
+    // Analysis, not execution: `atlas` reads and type-checks, it never runs the program. So this is
+    // deliberately NOT trust-gated — the same reasoning that keeps diagnostics working in
+    // Restricted Mode. It does spawn the server binary, which is why it needs `haveServer()`.
+    vscode.commands.registerCommand("delulu.showAtlas", async (uri) => {
+      if (!haveServer()) {
+        return;
+      }
+      await showAtlas(serverPath, uri);
+    }),
+
     vscode.commands.registerCommand("delulu.showAuthority", async (uri) => {
       if (!client) {
         vscode.window.showWarningMessage(

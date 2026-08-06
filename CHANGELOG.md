@@ -42,6 +42,23 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   fires exactly when the file is mid-edit and broken. Range formatting is deliberately **not**
   advertised: the formatter's contract is over a complete parse.
 
+### Editor — NEW: the atlas, snippets, tasks, a problem matcher and a status bar
+
+- **Authority atlas in a panel.** *DeluluLang: Show authority atlas* renders `delulu atlas --format
+  html` beside the file — the call graph with each function's effect row on it. The generated
+  document is self-contained (nothing fetched from anywhere), which is what makes it displayable at
+  all; the webview is nonetheless created with scripting **disabled** and a `Content-Security-Policy`
+  permitting only inline styles, because "our own binary produced it" is an argument that stops
+  holding the moment someone adds a feature to that binary.
+- **Snippets that carry the effect row.** A snippet emitting `fn f() { … }` without the row would
+  teach people to write the declaration and discover the checker's objection afterwards.
+- **Tasks** for check/build/test/fmt through `ProcessExecution` — an argument vector, never a shell —
+  one per workspace folder so a multi-root workspace does not silently pick one. `fmt` is bound to
+  `--check`, because a task that rewrites files when you press the build key is a surprise.
+- **A `$delulu` problem matcher**, so terminal output becomes clickable Problems entries. It depends
+  on every error line beginning `error:`, which is why that convention is now a test.
+- **A status bar item**, so a language server that failed to start is visible rather than quiet.
+
 ### CLI — a mistyped command now says what you meant
 
 - **`delulu chekc` answers "did you mean `check`?"** instead of printing the name and then a hundred

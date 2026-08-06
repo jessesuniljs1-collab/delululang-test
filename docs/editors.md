@@ -147,6 +147,17 @@ availability is not a security property (spec §11).
   `crates/delulu/tests/editor_contract.rs` fails the build if that shape returns, and if the three
   lists — commands the server emits in lenses, commands the client registers, commands the manifest
   declares — ever disagree.
+  **What the extension adds on top of the server**, all of it built from things the CLI already
+  computes rather than from editor-only logic:
+
+  | | what it is |
+  | --- | --- |
+  | **Authority atlas** | *DeluluLang: Show authority atlas* renders `delulu atlas --format html` in a panel beside the file — the call graph with each function's effect row on it. The generated document is entirely self-contained (no scripts, fonts or images fetched from anywhere), which is what makes it safe to display; the panel is still created with scripting **disabled** and a `Content-Security-Policy` allowing only inline styles, because "our own binary produced it" stops being true the moment someone adds a feature to that binary. |
+  | **Snippets** | Every snippet that declares a function carries its **effect row**. A snippet producing `fn f() { … }` with the row omitted would teach people to write the declaration and meet the checker's objection afterwards. |
+  | **Tasks** | `delulu: check / build / test / fmt` via `ProcessExecution` (an argument vector, never a shell), one task per workspace folder so a multi-root workspace does not silently pick one. `fmt` is bound to `--check`: a task that rewrites your files when you press the build key is a surprise. |
+  | **Problem matcher** | `$delulu` parses `error[DLxxxx]: …` plus the `--> file:line:col` line, so terminal output becomes clickable Problems entries. It depends on every error line starting with `error:`, which `cli_contract.rs` now enforces. |
+  | **Status bar** | `✓ DeluluLang` when the server is up, `✗` with the reason when it is not — so a dead server is visible rather than merely quiet. |
+
 - **Zed / Helix / Neovim (lspconfig) / Kate / Emacs (eglot):** point the editor's LSP
   config at `delulu lsp` for `*.delulu` — the three-line config above is all of it.
 - **JetBrains:** via the native LSP support (2023.2+) or the LSP4IJ plugin; same command.

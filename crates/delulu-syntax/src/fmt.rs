@@ -1346,7 +1346,16 @@ fn f() -> Int { 1 }
     fn laws_hold_over_the_repository_corpus() {
         // Natively unbounded: the floor below (25) is the real contract. Under Miri this is what
         // makes the run terminate at all.
-        let budget = if cfg!(miri) { 12 } else { usize::MAX };
+        //
+        // FOUR, and the number is measured rather than guessed. Timed alone under Miri, this test
+        // costs ~115 s per corpus file (12 files = 1377 s). The generated-programs gate beside it
+        // costs ~54 s per program. At the previous budgets the two together needed ~41 minutes
+        // against a 40-minute wall, so the module timed out with BOTH halves individually passing —
+        // which reads exactly like a failure and is not one. Four files plus eight programs comes to
+        // roughly 15 minutes, which fits with room to spare.
+        //
+        // Fewer files costs REPETITION, not reach: `laws()` interprets the same code either way.
+        let budget = if cfg!(miri) { 4 } else { usize::MAX };
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
         let mut checked = 0;
         let mut examined = 0;
@@ -1539,11 +1548,15 @@ fn f() -> Int { 1 }
     /// The always-on slice of the criterion-4 gate.
     #[test]
     fn fmt_laws_hold_over_generated_programs() {
-        // 2,000 generated programs natively; 20 under Miri. Same generator, same laws, same code
+        // 2,000 generated programs natively; 8 under Miri. Same generator, same laws, same code
         // paths interpreted — only the repetition shrinks. At 2,000 this did not finish inside a
         // 30-minute Miri budget, and an unfinished run is not a pass; the alternative was to skip
         // it under Miri, which would interpret none of the formatter at all.
-        run_fuzz_gate(if cfg!(miri) { 20 } else { 2_000 });
+        //
+        // EIGHT, measured: ~54 s per program under Miri, so 20 cost ~18 minutes and left the corpus
+        // test beside it too little of the 40-minute wall to finish. See the note on `budget` in
+        // `laws_hold_over_the_repository_corpus` for the arithmetic of the pair.
+        run_fuzz_gate(if cfg!(miri) { 8 } else { 2_000 });
     }
 
     /// Criterion 4's full ≥100k gate. `cargo test -p delulu-syntax --release -- --ignored
