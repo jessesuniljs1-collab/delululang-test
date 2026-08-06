@@ -1763,7 +1763,10 @@ mod tests {
             code_explain("DL9999").is_none(),
             "an unregistered code must have no explanation, or the coverage test is vacuous"
         );
-        assert!(MIN_EXPLAIN_BODY > 100, "the threshold must exclude a restated title");
+        // `const` block: this is knowable at compile time, so it should fail the BUILD rather than
+        // wait for someone to run the test. A threshold low enough to admit a restated title would
+        // make the coverage check above vacuous, and that is not a thing to discover at test time.
+        const { assert!(MIN_EXPLAIN_BODY > 100, "the threshold must exclude a restated title") };
     }
 
     /// Stage 8: the full tooling DL range (DL1701–DL1707) is registered with explain bodies,

@@ -254,10 +254,13 @@ mod tests {
     /// A fake daemon custody for unit tests: optionally denies every `check`, serves `expose` from
     /// an in-memory map, and records every expose call (name + span) for assertions. No transport,
     /// no daemon — this exercises the SEAM, not the wire (the wire is tested in the CLI crate).
+    /// Every `expose` call the fake saw: the secret name, and the span it was asked from.
+    type ExposeLog = Rc<RefCell<Vec<(String, Option<String>)>>>;
+
     struct FakeCustody {
         deny: Option<(&'static str, String)>,
         secrets: HashMap<String, String>,
-        exposed: Rc<RefCell<Vec<(String, Option<String>)>>>,
+        exposed: ExposeLog,
     }
 
     impl Custody for FakeCustody {

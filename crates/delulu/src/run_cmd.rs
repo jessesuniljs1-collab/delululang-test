@@ -957,10 +957,12 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         if let (Some(collector), Some(s)) = (&actor_trace, &sink) {
             let mut recs = collector.lock().unwrap().clone();
             recs.sort_by_key(|r| r.turn);
-            let mut seq = s.len() as u64;
-            for mut r in recs {
-                r.seq = seq;
-                seq += 1;
+            // The sequence continues from what the sink already holds, so this is an offset into a
+            // shared log rather than a position in `recs` — `enumerate()` would restart at 0 and
+            // silently renumber records that are already written.
+            let base = s.len() as u64;
+            for (i, mut r) in recs.into_iter().enumerate() {
+                r.seq = base + i as u64;
                 s.append(r);
             }
         }

@@ -145,7 +145,11 @@ impl Registry {
 mod tests {
     use super::*;
 
-    fn record(fields: Vec<(String, Value)>) -> (Value, Rc<RefCell<Vec<(String, Value)>>>) {
+    /// A record's field storage, shared with the caller so a test can mutate it behind the `Value`
+    /// and watch the cycle detector see the change.
+    type Fields = Rc<RefCell<Vec<(String, Value)>>>;
+
+    fn record(fields: Vec<(String, Value)>) -> (Value, Fields) {
         let cell = Rc::new(RefCell::new(fields));
         (Value::Record { name: Rc::from("Pair"), fields: cell.clone() }, cell)
     }

@@ -4194,7 +4194,10 @@ fn cmd_why(rest: &[String]) -> i32 {
         return cmd_why_plugin(&effect_name, &path, &opts);
     }
 
-    let (diags, program, locations, map): (Vec<Diagnostic>, Program, HashMap<String, (String, u32)>, SourceMap) =
+    // Named so the four-member result reads: what went wrong, what was learned, where each name
+    // lives, and the sources those spans point into.
+    type WhyInputs = (Vec<Diagnostic>, Program, HashMap<String, (String, u32)>, SourceMap);
+    let (diags, program, locations, map): WhyInputs =
         if std::path::Path::new(&path).is_dir() {
             let ws = resolve_workspace(&path);
             let program = check_workspace(&ws);
@@ -4264,6 +4267,10 @@ fn cmd_why(rest: &[String]) -> i32 {
     let mut path_nodes = vec![main_key.clone()];
     let mut visited: std::collections::HashSet<String> = std::iter::once(main_key.clone()).collect();
     let mut current = main_key;
+    // Two independent exits before any work happens, so `while let` would only express one of them
+    // and the other would still be a `break` in the body — a shape that reads as though the second
+    // condition were incidental when it is equally a terminating case.
+    #[allow(clippy::while_let_loop)]
     loop {
         let Some((cur_mod, _)) = current.split_once("::") else { break };
         let Some(facts) = program.facts.get(&current) else { break };

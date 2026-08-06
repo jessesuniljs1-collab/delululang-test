@@ -266,6 +266,13 @@ impl HostState {
 
     /// Append one effect `TraceRecord` (no-op without a sink). `seq`/fields mirror the interpreter's
     /// so the two engines' traces are identical.
+    ///
+    /// Eight arguments, one over clippy's threshold, and grouping them would make the two engines
+    /// harder to compare rather than easier: every parameter here corresponds positionally to a
+    /// field the interpreter's own trace call passes, and the differential test that holds the two
+    /// engines to identical traces is read by putting the two call sites side by side. A struct
+    /// here and not there would hide exactly the drift that test exists to catch.
+    #[allow(clippy::too_many_arguments)]
     fn push_trace(&mut self, effect: &str, op: &str, cap_kind: &str, detail: Option<String>, file: i32, start: i32, end: i32) {
         let Some(sink) = &self.trace else { return };
         let seq = self.trace_seq;

@@ -347,7 +347,7 @@ mod tests {
             }
             s.push_str(rng.pick(SEG));
         }
-        if rng.next() % 4 == 0 {
+        if rng.next().is_multiple_of(4) {
             s.push_str(rng.pick(SEP));
         }
         s
@@ -393,7 +393,7 @@ mod tests {
         }
 
         // 5. Containment decisions are identical before and after, over every pair of a sample.
-        let mut rng = Rng(0xC0FFEE_1234_5678);
+        let mut rng = Rng(0x00C0_FFEE_1234_5678);
         let sample: Vec<String> = (0..90).map(|_| random_path(&mut rng)).collect();
         for a in &sample {
             for b in &sample {
@@ -411,7 +411,7 @@ mod tests {
     /// before falls outside it after.
     #[test]
     fn set_canonicalization_preserves_the_covered_region_on_generated_input() {
-        let mut rng = Rng(0xA11CE_5EED);
+        let mut rng = Rng(0x000A_11CE_5EED);
         for i in 0..3_000u32 {
             let raw: BTreeSet<String> =
                 (0..1 + (rng.next() % 4) as usize).map(|_| random_path(&mut rng)).collect();

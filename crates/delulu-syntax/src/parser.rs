@@ -1346,11 +1346,7 @@ impl Parser {
     /// non-associative (DL0206).
     fn parse_bin(&mut self, min_prec: u8, allow_struct: bool) -> Expr {
         let mut lhs = self.parse_unary(allow_struct);
-        loop {
-            let (op, prec, non_assoc) = match self.binop() {
-                Some(x) => x,
-                None => break,
-            };
+        while let Some((op, prec, non_assoc)) = self.binop() {
             if prec < min_prec {
                 break;
             }

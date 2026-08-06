@@ -127,6 +127,14 @@ impl Value {
 
     /// Structural equality for the value types `==` accepts (opaque types are rejected by the
     /// checker with DL0605, so they never reach here in a well-typed program).
+    ///
+    /// Deliberately **not** `PartialEq`. This is DeluluLang's `==`, not Rust's: it is partial by
+    /// design — the checker refuses the cases it does not handle — and implementing `PartialEq`
+    /// would advertise a total, reflexive, symmetric relation that this is not obliged to be
+    /// (`Float` alone breaks reflexivity on NaN). Clippy's warning is that the name can be confused
+    /// for the trait method; the answer is that the confusion runs the other way, and a trait impl
+    /// would let Rust code call it in contexts the language's own rules never sanctioned.
+    #[allow(clippy::should_implement_trait)]
     pub fn eq(&self, other: &Value) -> bool {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => a == b,

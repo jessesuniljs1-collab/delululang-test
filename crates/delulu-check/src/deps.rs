@@ -277,8 +277,8 @@ pub fn check_workspace(ws: &Workspace) -> Program {
         [("IoErr", TypeDefId(0)), ("NetErr", TypeDefId(1))].into_iter().map(|(s, i)| (s.to_string(), i)).collect();
 
     let mut owned_types: Vec<Vec<(String, TypeDefId, bool)>> = vec![Vec::new(); n];
-    for gi in 0..n {
-        let unit = &ws.modules[gi].unit;
+    for (owned, module) in owned_types.iter_mut().zip(&ws.modules) {
+        let unit = &module.unit;
         let mut seen = HashSet::new();
         for item in &unit.module.items {
             if let Item::Type(td) = item {
@@ -298,7 +298,7 @@ pub fn check_workspace(ws: &Workspace) -> Program {
                     generics: td.generics.iter().map(|g| g.name.clone()).collect(),
                     kind: build_kind(&td.kind),
                 });
-                owned_types[gi].push((td.name.name.clone(), id, td.public));
+                owned.push((td.name.name.clone(), id, td.public));
             }
         }
     }

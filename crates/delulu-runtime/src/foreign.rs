@@ -432,6 +432,11 @@ mod tests {
 
     #[test]
     fn empty_c_string_is_ok() {
+        // A byte literal, not `c""`: `validate_c_string` takes `*const u8`, and `c"".as_ptr()`
+        // yields `*const c_char` (signed on this target), so the suggested form would need a cast
+        // that says nothing except "quiet the lint". The bytes under test are what matter here, and
+        // writing them as bytes is what makes the one-byte NUL terminator visible.
+        #[allow(clippy::manual_c_str_literals)]
         let buf = b"\0".as_ptr();
         // SAFETY: a one-byte NUL-terminated buffer.
         let s = unsafe { validate_c_string(buf, DEFAULT_MAX_RET) };

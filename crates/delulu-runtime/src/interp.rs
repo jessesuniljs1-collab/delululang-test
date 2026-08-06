@@ -792,6 +792,12 @@ impl Interp {
                 Ok(Value::Unit)
             }
             Stmt::While { cond, body, .. } => {
+                // `while let Value::Bool(true) = …` reads as though a non-`Bool` condition simply
+                // ends the loop, which is not what is meant: the checker guarantees the condition is
+                // `Bool`, and anything else arriving here is a bug in the checker, not a false
+                // condition. Written this way the `_ => break` is visibly the impossible branch
+                // rather than part of the loop's contract.
+                #[allow(clippy::while_let_loop)]
                 loop {
                     match self.eval_expr(cond, env)? {
                         Value::Bool(true) => {

@@ -189,7 +189,7 @@ impl Report {
 pub fn run(iterations: u64, start_seed: u64) -> Report {
     let mut report = Report::default();
     // Determinism so runs are reproducible and fast.
-    set_rand_seed(0xD3_1u64);
+    set_rand_seed(0x0D31_u64);
     set_fixed_clock_ms(Some(1_000));
 
     for k in 0..iterations {

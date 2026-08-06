@@ -350,6 +350,13 @@ pub enum Stmt {
     Expr(Expr),
 }
 
+/// `Index` is much larger than the other two variants because it carries an `Expr` inline, and
+/// clippy is right that this makes every `LValue` the size of the biggest one. Boxing the `Expr`
+/// would shrink the enum and add an allocation and an indirection to **every indexed assignment**,
+/// on a type the parser builds constantly. The AST is built once per parse and walked many times;
+/// trading a pointer chase per walk for a smaller stack value is the wrong side of that trade here.
+/// Stated rather than silenced: if `Expr` grows, revisit it with a measurement.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LValue {
     Var(Ident),
