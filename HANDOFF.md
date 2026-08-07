@@ -361,9 +361,15 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 
 | | |
 | --- | --- |
-| **The licence** | Apache-2.0 + NOTICE + TRADEMARK is recommended and staged. **Owner-reserved.** Never decide it. |
 | **rustfmt** | *(new, 2026-08-07)* There is no `rustfmt.toml`; rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). The choices are: reformat ~102,000 lines in one unreviewable commit, keep a permanently red CI step, or say the project has not adopted rustfmt. I removed the step and wrote the reason into `ci.yml`, because a permanently red job teaches people that red is normal. **Adopting rustfmt rewrites every file, and this project's comments carry much of its value — it is the owner's call.** Formatting is currently unenforced. |
 | **CODE_OF_CONDUCT.md** | Absent. A policy commitment, not a cleanup task. |
+
+**Settled, and no longer blocking — the licence.** `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`
+and `GOVERNANCE.md` shipped at commit `42702e2` under ruling **D27**, closing hardening finding C9;
+before that, default copyright meant nobody could legally use DeluluLang at all. This row sat in the
+table above as an open owner blocker long after the decision had landed, which is why it is called
+out here rather than silently deleted. **Changing** the licence stays owner-reserved. Deciding it is
+done.
 
 ### Cannot be done on this machine
 
@@ -496,9 +502,10 @@ There are 19 memory topics. Their content is below, organised by what it is for.
 ### 11.1 Standing owner instructions — the ones that never expire
 
 - **NEVER push to GitHub.** No remote, no `git push`, no PR, ever. This is why CI has never executed.
-- **Never auto-decide the licence.** Apache-2.0 + NOTICE + TRADEMARK is the *recommended* strategy and
-  is staged. The decision is **owner-reserved**: present options and wait. (This discharges hardening
-  finding C9.)
+- **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
+  and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
+  hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and
+  wait — but the decision itself is not outstanding.
 - **Harden, never redefine, Authority and Guard.** Closing a hole is welcome. Changing what they mean
   is not, without the owner. The owner has stated this as a guardrail more than once.
 - **The word "graphify" appears nowhere** in the repository or any product surface. Documents were

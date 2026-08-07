@@ -156,15 +156,18 @@ there are independent layers underneath so one failure is not total.
 
 **What is NOT true, and is the honest limit:**
 
-- **There is no mechanized proof.** "Delulu Core" — a formalization checked by a proof assistant —
-  has been promised since Stage 2 and **does not exist**. Nothing here has been verified by Coq,
-  Lean, Isabelle, or anything else.
+- **The FULL type system has no mechanized proof.** "Delulu Core" as a whole — §1–§7 of
+  `docs/design/DELULU_CORE.md`, checked by a proof assistant — has been promised since Stage 2 and
+  **still does not exist**: no capabilities, no store, no secrets, no attenuation, no Progress and no
+  Preservation. One *fragment* of it is machine checked, and it is listed below with the rest of the
+  machine-established evidence rather than counted here.
 - **The hand argument was wrong in practice.** Not invalid as an argument — its step "the caller's
   row contains the callee's row" assumes the checker *has* the callee's row, and at higher-order
   builtins it silently did not (§1.1). A hand proof of the rules cannot tell you which branch the
   implementation forgot to write.
 
-**What became machine-established on 2026-08-03** — narrower than "proved", but no longer just tests:
+**What became machine-established from 2026-08-03 onward** — narrower than "proved", but no longer
+just tests:
 
 - **The custody broker is model-checked, in two parts** (`docs/design/models/`). The **grant tree**:
   TLA+/TLC explores **585,771 distinct states** of grant / delegate / revoke / expire with no
@@ -179,12 +182,26 @@ there are independent layers underneath so one failure is not total.
   was reconstructed from the code's guards. **A model that has never caught anything is
   indistinguishable from one that cannot.**
 - **Order-theoretic laws are checked exhaustively and symbolically**, as described above.
+- **The higher-order fragment of the effect calculus is MACHINE CHECKED, in Lean 4.32.2**
+  (`docs/design/models/lean/DeluluCore.lean`, since 2026-08-04). Two theorems: `good_sound` — with
+  the corrected rule, a callback's latent row surfaces into the caller and every emitted label is in
+  the declared row; and `bad_unsound` — with the rule `DELULU_CORE.md` actually states, there
+  **exists** a well-typed program whose trace escapes its row. The second is **C88 mechanized**: the
+  worst soundness hole this project has had, turned into a theorem. `#print axioms` reports all
+  three theorems *"does not depend on any axioms"* — not even `propext` or `Classical.choice`.
 
-So: **the design is mathematical; the type system's guarantee is still the tests; two subsystems now
-have machine-checked evidence, bounded and labelled as such.** The conformance suite remains a hard
-per-commit gate at 100% coverage, with an accepting and a rejecting witness per rule. The
-mechanization of the type system does not exist, and until it does, saying anything stronger would be
-a lie of exactly the kind this project is built to avoid.
+**Those are three different kinds of evidence, and this page will not blur them.** Model checking
+explores a **bounded** state space; Z3 discharges obligations over an **abstraction** (and an
+abstraction can only be as strong as the properties it can state — the antichain collapse above is
+exactly what it could not see); a Lean development is a **checked derivation**. Only the last is
+"machine checked" in the sense `docs/MATHEMATICS.md` §12 uses, and it covers **one fragment of the
+calculus**, not the type system.
+
+So: **the design is mathematical; the type system's guarantee is still the tests; and three
+subsystems now carry machine evidence of three different strengths, each bounded and labelled.** The
+conformance suite remains a hard per-commit gate at 100% coverage, with an accepting and a rejecting
+witness per rule. The mechanization of the **full** type system does not exist, and until it does,
+saying anything stronger would be a lie of exactly the kind this project is built to avoid.
 
 ### 1.5 Can several agents work on one machine with different authority from one main user?
 
@@ -548,12 +565,15 @@ Repeated here so no reader has to assemble it from the rest:
 
 1. **Not unbreakable.** The word is forbidden. Guarantees are relative to a named trust base, and
    this campaign broke one of them.
-2. **No mechanized proof of the type system.** No proof assistant is installed and `Delulu Core`
-   remains unformalized. Two *subsystems* now have machine-checked evidence — the custody grant tree
-   is model-checked (585,771 states) and the order laws are exhaustively and symbolically checked —
-   but both are **bounded**, and neither is the type system.
-3. **Leases, certificate adoption and federation are not model-checked.** The grant tree is; the
-   parts where two real vulnerabilities were previously found are not.
+2. **No mechanized proof of the FULL type system.** `Delulu Core` §1–§7 remains unformalized — no
+   capabilities, no store, no secrets, no attenuation, no Progress and no Preservation. Lean 4.32.2
+   **is** installed and machine-checks the **higher-order fragment** with no axioms at all; the
+   custody grant tree is **model**-checked; the order laws are **symbolically** checked in Z3. Three
+   different strengths, each bounded, and **none of them is the type system** (§1.4).
+3. **Federation is not model-checked** — nor are concurrency, partitions or clock skew, and that last
+   one matters, because the uplink lease exists to bound behaviour during exactly a partition. Leases
+   and certificate adoption **are** model-checked (`Custody.tla`, 2,421 distinct states), which is
+   where both of this project's real vulnerabilities were found.
 4. **`Secret.verify` reveals one chosen bit per call without a declassify capability.** It now
    declares the `Declassify` effect, so it is always visible in the authority report — but visible
    is not impossible, and holding a secret is not the same as being allowed to read it.

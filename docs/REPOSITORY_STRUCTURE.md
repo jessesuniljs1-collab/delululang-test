@@ -223,9 +223,11 @@ DeluluLang/
 │                                   #   `advisories` is RED on purpose.
 ├── scripts/
 │   ├── package-toolchain.sh        # build the self-contained distributable archive
-│   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (22 cases,
-│                                   #   exact exit codes). It was performed by hand every pass
-│                                   #   before this, which is the drift design rule 1 warns about.
+│   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
+│                                   #   P19; 22 when written at P17-F), each asserting an exact
+│                                   #   exit code. It was performed by hand every pass before
+│                                   #   this, which is the drift design rule 1 warns about. The
+│                                   #   script COUNTS its own cases — read the tail, not this line.
 ├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
@@ -289,9 +291,11 @@ DeluluLang/
     │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; macOS NEVER executed, said plainly
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).
-    │   │                                #   §9 records a ~500-line Lean/Coq mechanization as open
-    │   │                                #   future work — it does NOT exist (no proof assistant is
-    │   │                                #   installed), so "machine-checked" is currently empty
+    │   │                                #   §9's ~500-line Lean/Coq mechanization of §1–§7 is still
+    │   │                                #   OPEN — no capabilities, store, secrets, attenuation,
+    │   │                                #   Progress or Preservation. But category 2 is NOT empty:
+    │   │                                #   models/lean/DeluluCore.lean machine-checks the
+    │   │                                #   HIGHER-ORDER FRAGMENT (Lean 4.32.2, zero axioms).
     │   ├── STAGE1_SPECIFICATION.md … STAGE10_SPECIFICATION.md
     │   ├── STAGE10_AUTONOMY_ADDENDUM.md # [Stage 10] autonomy domains (spec Rev 2): vehicles/
     │   │                                #   aircraft/satellites/robots; energy, safety chains, MCUs
@@ -464,6 +468,7 @@ See §4 for how to cite a bare `D<n>`.
 | `STAGE10_AUTONOMY_HONESTY_REVIEW.md` | An honesty scrub of the autonomy claims specifically. |
 | `CROSS_PLATFORM_VERIFICATION.md` | **Which platforms have actually been executed**, and which are merely prepared. macOS, CI and containers each have a section saying plainly that they have not run. |
 | `STABILITY.md` | What may change, when, and what is frozen. |
+| `ENTRENCHED_CHANGE_RECORD.md` | **The approval log for CODEOWNERS-protected paths.** Every change to a path Constitution §10 reserves to the project lead, with who approved it, what was verified first, why it was or was not an RFC, and the revert command. Shaped after `docs/survey/REMOVALS.md`. |
 | `VERSION_COEVOLUTION.md` | How the language, the toolchain and packages move together. |
 | `THREADED_WASM_DEFERRAL.md` | A deferral, recorded rather than dropped. |
 

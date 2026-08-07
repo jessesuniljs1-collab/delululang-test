@@ -653,8 +653,8 @@ sweep), so the *contents* are not speculative. The **assembly** is.
 
 Previous passes recorded "CLI + compiler sweep 21/21" from a sequence of commands run **by hand**.
 That is a claim only as good as the transcript, and it is precisely the hand-maintained procedure
-design rule 1 says will drift. It is now `scripts/cli-sweep.sh` — 22 cases, each asserting an exact
-exit code, runnable by anyone:
+design rule 1 says will drift. It is now `scripts/cli-sweep.sh` — **27 cases** today, each asserting
+an exact exit code, runnable by anyone:
 
 ```sh
 scripts/cli-sweep.sh                       # uses target/debug/delulu
@@ -665,6 +665,13 @@ Writing it immediately caught two errors *in the sweep itself* that the hand ver
 carrying: two package cases that passed unconditionally, and a bare `delulu test` where the scaffold
 prints `delulu test .`. **A sweep that cannot fail is not a sweep.** Both are fixed and the script
 now refuses the bare form as a usage error (exit 2) as a case in its own right.
+
+**It was 22 cases when written at P17-F and is 27 now**, P19 having added `help <subcommand>`, the
+two typo-suggestion *content* assertions (exit code alone cannot tell a suggestion from a wall of
+usage — both exit 2) and `doctor --check`. The earlier records that say 22 were **true when
+written** and are deliberately left alone: this project does not rewrite a measurement that was
+correct at the time. The script counts its own cases and prints the total, so the number to trust
+is the one in its output — never one copied into prose, which is how this line came to be wrong.
 
 ### macOS, for this pass specifically
 

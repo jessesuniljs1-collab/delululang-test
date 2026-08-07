@@ -9,6 +9,86 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — P20 evidence-honesty campaign, 2026-08-08
+
+### Documentation — FIXED: the evidence documents denied evidence that exists
+
+- **Five statements across three documents said this project has no machine-checked proof. It has
+  one, and re-running it takes 35 seconds.** `docs/QUESTIONS.md` — the page README sends an evaluator
+  to — said in its *"What is NOT true, and is the honest limit"* block: *"Nothing here has been
+  verified by Coq, Lean, Isabelle, or anything else."* Its Part 5 said *"No proof assistant is
+  installed."* `docs/REPOSITORY_STRUCTURE.md` said `"machine-checked" is currently empty`. Each was
+  false from 2026-08-04, when Lean 4.32.2 began machine-checking the higher-order fragment with
+  **no axioms at all**. Verified by execution rather than by reading the record: `lean
+  DeluluCore.lean` → three theorems, *"does not depend on any axioms"*, exit 0, 34.9 s.
+
+  **Two of them contradicted their own file.** `QUESTIONS.md` Part 5 said leases and certificate
+  adoption *"are not model-checked"* while line 171 of the same document reports 2,421 distinct
+  states of exactly that; `REPOSITORY_STRUCTURE.md` line 293 said category 2 was empty fifteen lines
+  after line 278 called `lean/DeluluCore.lean` machine checked.
+
+  **The root cause is precise, and it is not carelessness.** Commit `7e9c5a3` corrected this sentence
+  in `README.md` **and edited both other files in the same commit** without correcting it there. The
+  claim lived in five places; one was fixed. Nothing detected the other four, because — measured, not
+  assumed — **`QUESTIONS.md` and `MATHEMATICS.md` are referenced by zero tests**, the only major
+  documents in the repository with no freshness gate, while README, the Book, `STABILITY.md`,
+  `INSTALL.md`, `for-agents.md` and `CHECKPOINT-1.0.md` all have one.
+
+- **The correction went the *understating* way, and that is still a defect.** Two of the five also
+  called model checking (category 3) and Z3 (category 1) "machine-checked evidence" — the exact
+  category conflation `docs/MATHEMATICS.md` forbids, in the document that exists to tell a reader how
+  strong the evidence is. Both surfaces now name the three strengths separately and say which is
+  which: a bounded state space, an abstraction, and a checked derivation are not the same claim.
+
+- **`docs/MATHEMATICS.md` §13 carried two limits that its own §5 and §7 had already retired.** The
+  closing paragraph said *"the audit chain does not detect deletion"* against §5's
+  `Detects truncation | 4 — FIXED`, and *"expiry trusts a clock that the target platforms routinely
+  move backwards"* against §7's ratchet. Both are now stated at their true width, with the residues
+  kept: an attacker who rewrites the anchor too is still not caught, and monotonicity is not
+  accuracy. §12's terse *"Detected: no"* now says detected **by the chain's own links**: no.
+
+### Documentation — FIXED: two counts, one of which was right all along
+
+- **`scripts/cli-sweep.sh` is 27 cases, and two of the four documents saying "22" were correct when
+  written.** Measured by running it — `SWEEP OK — 27/27 cases, 0 problems` — and traced through
+  history: 18 `run` + 4 inline = **22 at P17-F** (`cc4c75a`), 21 + 6 = **27 at P19** (`3cf7f20`). So
+  `CHANGELOG.md` and `PROOF_CAMPAIGN.md` are dated records that were true at the time and are
+  **deliberately left alone**; only the two living documents were stale.
+  `CROSS_PLATFORM_VERIFICATION.md` now records both numbers and the reason, and says the number to
+  trust is the one the script prints, never one copied into prose.
+
+- **`HANDOFF.md` listed the licence as an open owner blocker.** It shipped at `42702e2` under ruling
+  **D27** — `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`, `GOVERNANCE.md` — closing hardening
+  finding C9. The row is removed from *"Blocked on the owner"* and the fact recorded in its place
+  rather than silently deleted. Changing the licence stays owner-reserved; deciding it is done.
+
+### Documentation — FIXED under lead approval, inside an ENTRENCHED file
+
+- **`docs/design/DELULU_CORE.md`'s binding honesty clause contradicted its own §9.** The Status
+  block said a machine-checked proof *"is **not** claimed to exist yet"*; the §9 box 260 lines later
+  is headed *"✅ The higher-order fragment IS now machine checked"* and was added at `aec3643`
+  without the Status block being touched. Constitution Appendix A decision 19 makes honesty clauses
+  **binding on all communication**, which makes a false binding honesty clause the worst place in
+  the repository for this defect to sit.
+
+  The file is **ENTRENCHED** — `.github/CODEOWNERS:17` reserves it to the project lead specifically,
+  not any maintainer — and `delulu-survey query` reports that **before printing a single edge**,
+  which is how it was caught rather than edited. **Approved by the project lead on 2026-08-08**, and
+  recorded in the new `docs/design/ENTRENCHED_CHANGE_RECORD.md` with what was verified first, the
+  invariant-44 entrenchment analysis, and the revert command.
+
+  **Not an RFC, and the reason is written down rather than assumed.** `CONTRIBUTING.md` §5 scopes
+  RFCs to the language core, the stability contract, or Constitution §1/§2/§5.14. This diff is
+  **7 insertions and 3 deletions, entirely inside the Status block** — §1–§9 of the calculus are
+  byte-identical, no rule, judgment, theorem or reduction moves, and the edit *narrows* the
+  document's claim of what is unmechanized to exactly what §9 already said.
+
+### Added
+
+- **`docs/design/ENTRENCHED_CHANGE_RECORD.md`** — the approval log for CODEOWNERS-protected paths,
+  shaped after `docs/survey/REMOVALS.md` for the same reason that file exists: the one thing you
+  cannot reconstruct after the fact is **what the person doing it checked first**.
+
 ## Unreleased — P19 ecosystem campaign, 2026-08-07 (editor surface)
 
 ### Editor — FIXED: the language server never started (regression from P18)

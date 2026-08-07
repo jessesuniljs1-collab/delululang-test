@@ -2,9 +2,13 @@
 
 **Status:** Normative companion to `STAGE2_SPECIFICATION.md` §7.1. This document states the core
 calculus and the theorems that justify the phrase "authority cannot escape the type." **Honesty
-clause (binding, per Constitution §9):** the proofs here are **paper-level sketches**, not a
-mechanized development. The theorems are stated precisely so they *can* be mechanized; a machine-
-checked proof (Coq/Lean/Agda) is committed future work and is **not** claimed to exist yet. The
+clause (binding, per Constitution §9):** the proofs **in this document** are **paper-level
+sketches**, not a mechanized development, and **§1–§7 as a whole remain unmechanized** — no
+capabilities, no store, no secrets, no attenuation, no Progress and no Preservation. That is still
+committed future work. **One fragment is no longer a sketch:** `models/lean/DeluluCore.lean`
+machine-checks the higher-order extension in **Lean 4.32.2**, with `#print axioms` reporting *"does
+not depend on any axioms"* for every theorem — see the box in §9, and read it before starting the
+rest, because it also proves this document's own `T-Op` unsound for that construct. The
 implementation's soundness is additionally guarded by the laundering suite
 (`crates/delulu-check/tests/laundering.rs`), the conformance corpus, and the executable
 `trace ⊆ row` witness (`--assert-trace`), which are evidence, not proof.

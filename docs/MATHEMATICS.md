@@ -445,9 +445,10 @@ question that cost this project its worst soundness hole, and it settles nothing
 
 1. **Noninterference for secrets.** No implicit-flow tracking; `verify` reveals one chosen bit per
    call without a capability.
-2. **Audit-chain truncation.** Detected: no. Anchored: **yes, since 2026-08-05** — an external
-   `ANCHOR.json` holds head and count, and its limit is pinned by a *passing* test showing an
-   attacker who rewrites the anchor too is still not caught.
+2. **Audit-chain truncation.** Detected *by the chain's own links*: **no** — every check `verify`
+   performs is local to a link, so a shortened chain still verifies. Detected *at all*: **yes, since
+   2026-08-05** — an external `ANCHOR.json` holds head and count. What stays outside the boundary is
+   an attacker who rewrites the anchor too, and that limit is pinned by a *passing* test.
 3. **Clock monotonicity.** Assumed, never stated, and false on the target platforms. **Since
    2026-08-05 the broker's reading is ratcheted** (running maximum), so a backwards step can only
    withhold authority, never resurrect it — the *host* clock is still not monotonic.
@@ -480,10 +481,18 @@ The **higher-order fragment of the effect calculus is now machine checked in Lea
 at all — including a mechanized proof that the calculus *as previously written* was unsound for that
 construct.
 
-Against that: **the full type system still has no machine-checked proof**, the core calculus remains
-silent about actors and mutable cells, secrets are protected against direct observation but not
-against a program that is trying, the audit chain does not detect deletion, and expiry trusts a
-clock that the target platforms routinely move backwards.
+Against that: **the full type system still has no machine-checked proof** — only the higher-order
+fragment has one — the core calculus remains silent about actors and mutable cells, and secrets are
+protected against direct observation but not against a program that is trying.
+
+**Two limits this paragraph used to overstate are now narrower, and §5 and §7 state them at their
+true width.** Deletion of trailing audit records **is** detected, by a head-and-count anchor held
+outside the log; what stays open is an attacker who rewrites the anchor as well, which needs an
+external witness. And a backwards clock can **no longer** resurrect expired authority, because the
+broker's reading is ratcheted to its running maximum; what stays open is that monotonicity is not
+*accuracy* — a clock set back and forward again still mismeasures the interval. Both were left
+reading as unfixed here after the fixes landed, which is the same drift this document exists to
+prevent, appearing in its own summary.
 
 **The design is mathematical. Several subsystems now have machine-checked, model-checked or
 symbolically proved evidence — each bounded and labelled. The full type system's guarantee is still
