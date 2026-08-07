@@ -721,3 +721,130 @@ mod determinism_tests {
         }
     }
 }
+
+/// Filesystem containment — the boundary [`contains_on_disk`] draws, and the one it does NOT.
+///
+/// Found by the P20 red team, 2026-08-08. C84 closed the *reparse-point* escape: a symlink or
+/// junction inside a granted directory, pointing outside it, is refused because
+/// `std::fs::canonicalize` resolves it and the resolved path no longer prefixes the root. These
+/// tests lock that (regression) **and** pin the boundary a hardlink sits on the far side of, so a
+/// future reader meets it as an executed fact rather than discovering it the way the red team did.
+///
+/// **Why a hardlink is different, and why this is a documented boundary rather than a fixed bug.** A
+/// hardlink is not a reparse point: it is a second *directory entry* for one file record, and the
+/// file genuinely resides at both names. `canonicalize` correctly reports a hardlink inside the
+/// grant as inside the grant, because it *is* — there is no "real location" elsewhere to resolve to.
+/// Three things make this narrower than the C84 escape it superficially resembles, and all three are
+/// verified rather than asserted in `docs/design/HARDENING_CAMPAIGN.md` (finding P20-R1):
+///
+/// 1. **Not workspace-deliverable.** A hardlink does not survive `git`/archive: content is stored,
+///    the link relation is not, so a clone cannot carry a hardlink aimed at the victim's files. The
+///    C84 symlink/junction — which stores a path string — can, which is why *it* was the urgent one.
+/// 2. **Requires prior local access.** Creating the link needs the attacker to open the target, so
+///    they already reach the secret; delulu grants them nothing new.
+/// 3. **No cheap, cross-platform fix exists.** Deciding "does this file also have a name outside the
+///    grant?" needs enumerating every hardlink of an inode. Windows can (`FindFirstFileNameW`);
+///    POSIX has no such call short of walking the whole filesystem. A Windows-only defense would make
+///    containment platform-dependent — the one thing this project refuses, because the same program
+///    would then confine differently on Linux and Windows.
+#[cfg(test)]
+mod containment_tests {
+    use super::contains_on_disk;
+    use std::fs;
+    use std::path::Path;
+
+    fn unique_dir(tag: &str) -> std::path::PathBuf {
+        let base = std::env::temp_dir().join(format!(
+            "delulu-contain-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir_all(base.join("grant")).unwrap();
+        fs::create_dir_all(base.join("outside")).unwrap();
+        base
+    }
+
+    /// A plain file inside the grant is inside it; a plain file outside is outside. The floor.
+    #[test]
+    fn a_plain_file_is_contained_iff_it_is_under_the_root() {
+        let base = unique_dir("plain");
+        let grant = base.join("grant");
+        let inside = grant.join("ok.txt");
+        let outside = base.join("outside").join("secret.txt");
+        fs::write(&inside, b"ok").unwrap();
+        fs::write(&outside, b"secret").unwrap();
+        assert!(contains_on_disk(&grant, &inside), "a file under the grant must be contained");
+        assert!(!contains_on_disk(&grant, &outside), "a file outside the grant must not be");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// **C84 regression lock.** A symlink inside the grant, pointing outside it, must resolve and be
+    /// rejected. Symlink creation needs privilege on Windows (Developer Mode / admin); when it is not
+    /// available the assertion is skipped rather than failing, since the mechanism under test —
+    /// `canonicalize` resolving a reparse point — is identical to the junction path exercised
+    /// end-to-end elsewhere, and a POSIX runner exercises it every time.
+    #[test]
+    fn a_symlink_escaping_the_grant_is_not_contained() {
+        let base = unique_dir("symlink");
+        let grant = base.join("grant");
+        let secret = base.join("outside").join("secret.txt");
+        fs::write(&secret, b"secret").unwrap();
+        let link = grant.join("escape.txt");
+
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(&secret, &link).is_ok();
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&secret, &link).is_ok();
+
+        if made {
+            assert!(
+                !contains_on_disk(&grant, &link),
+                "C84: a symlink resolving outside the grant must not be reported contained"
+            );
+            // And the control: the same mechanism must still admit a link that stays inside.
+            let inner = grant.join("inner.txt");
+            fs::write(&inner, b"x").unwrap();
+            let good = grant.join("good_link.txt");
+            #[cfg(unix)]
+            let good_made = std::os::unix::fs::symlink(&inner, &good).is_ok();
+            #[cfg(windows)]
+            let good_made = std::os::windows::fs::symlink_file(&inner, &good).is_ok();
+            if good_made {
+                assert!(contains_on_disk(&grant, &good), "a link that stays inside must be contained");
+            }
+        } else {
+            eprintln!("skipped: symlink creation not permitted on this host (needs privilege)");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// **The documented boundary, pinned as an executed fact.** A hardlink inside the grant whose
+    /// content is shared with a file outside it IS reported contained — because the file genuinely
+    /// has a name inside the grant. This is not a fix-required escape (see the module doc): it is not
+    /// workspace-deliverable, it requires an attacker who already reaches the target, and no cheap
+    /// cross-platform defense exists. If this behavior ever changes — in either direction — it must
+    /// be a conscious decision that updates this test and the P20-R1 record, not a silent drift.
+    #[test]
+    fn a_hardlink_sharing_content_with_an_outside_file_is_still_contained() {
+        let base = unique_dir("hardlink");
+        let grant = base.join("grant");
+        let outside = base.join("outside").join("secret.txt");
+        fs::write(&outside, b"CROWN-JEWELS").unwrap();
+        let link = grant.join("hl.txt");
+
+        if fs::hard_link(&outside, &link).is_err() {
+            // Cross-device or unsupported filesystem — nothing to characterize here.
+            eprintln!("skipped: hard link creation not supported on this host/filesystem");
+            let _ = fs::remove_dir_all(&base);
+            return;
+        }
+        assert!(Path::new(&link).exists());
+        assert!(
+            contains_on_disk(&grant, &link),
+            "a hardlink is a real member of the granted directory; canonicalize reports it inside \
+             because it IS inside — this is the P20-R1 boundary, documented in HARDENING_CAMPAIGN.md, \
+             not a containment escape in the C84 sense"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+}

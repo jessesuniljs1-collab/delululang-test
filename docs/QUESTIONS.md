@@ -263,6 +263,16 @@ Yes, and they are enumerated rather than implied:
 - **`Secret.verify` leaks one bit by design** (equal / not equal), in constant time — **and as of
   2026-08-03 that disclosure is known to understate the problem badly. See the entry below.**
 - **`--trace-effects` buffers the whole trace in RAM** — about 70 MB per 100k effects, unbounded.
+- **A hardlink planted inside a granted directory reads and writes the file it shares content with,
+  even when that file also lives outside the grant** (red-team finding P20-R1, 2026-08-08). This is
+  narrower than it sounds and was measured, not assumed: it is **not deliverable through a clone** (a
+  hardlink does not survive `git` — the clone gets a plain file, no link), it needs an attacker who
+  can already open the target, and the file genuinely *is* a member of the granted directory (a
+  hardlink is a second name for one file, not a redirection like the symlink/junction that finding
+  C84 closed). No cheap cross-platform defense exists — POSIX cannot enumerate an inode's names
+  without walking the whole filesystem — so a fix would make containment platform-dependent, which
+  the project refuses. Pinned as an executed characterization test; full threat model in
+  `HARDENING_CAMPAIGN.md` P20-R1.
 - **Side channels are out of scope entirely.**
 - **The editor was a way in, twice, and the second one needed no click.** The VS Code extension read
   `delulu.serverPath` at VS Code's default configuration scope, which a repository's own

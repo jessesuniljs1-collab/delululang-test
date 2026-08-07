@@ -85,9 +85,66 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ### Added
 
+- **`crates/delulu/tests/evidence_claims.rs` — the evidence gate.** What this repository may *say*
+  about its own verification is now decided by what it *contains*. The gate reads
+  `docs/design/models/` — the artifacts themselves, not a mirrored list of claims — and refuses any
+  shipped document that contradicts them. It walks **every** Markdown file rather than a
+  hand-maintained array, because the defect it exists to prevent is exactly a document escaping
+  notice by not being listed. Three tests, and it **fails in both directions**: a document may not
+  deny evidence that is on disk, *and* a machine-checked claim may not outlive the artifact backing
+  it, *and* a cited `.lean`/`.tla` must exist.
+
+  **The skip branch is the whole design, and prose markers failed at it.** A document may legally
+  *quote* a false claim to record that it was corrected — `CHANGELOG.md` and `PROOF_CAMPAIGN.md`
+  both do, and deleting those quotations would erase history this project keeps on purpose. The
+  first draft told a quotation from an assertion using markers like *said* and *previously*, and
+  **it misclassified this file's own CHANGELOG entry**, which wrote the phrase inside backticks.
+  That is the repository's recurring hazard — *a scan that cannot tell a mention from a use will
+  find its own explanation.* The rule is now **structural**: an occurrence is a quotation only if a
+  code span, a strikethrough or a quotation mark stands open to its left, and anything unclassifiable
+  is an assertion, because an honesty gate that fails open is not a gate.
+
+  **Falsified before it was trusted, all four rows observed:** reintroducing the assertion into
+  `QUESTIONS.md` goes red naming the file, line and contradicting artifact; the same phrase inside
+  backticks stays green; deleting `DeluluCore.lean` turns **two** tests red at once; restoring
+  returns green. A second defect was caught while writing it — the first version searched a
+  lowercased line and sliced the original with that index, which `to_lowercase` can shift on any
+  line containing a character whose lowercase form is a different byte length, silently corrupting
+  the skip branch. Both now index the same string.
+
 - **`docs/design/ENTRENCHED_CHANGE_RECORD.md`** — the approval log for CODEOWNERS-protected paths,
   shaped after `docs/survey/REMOVALS.md` for the same reason that file exists: the one thing you
   cannot reconstruct after the fact is **what the person doing it checked first**.
+
+## Unreleased — P20 zero-trust red team, 2026-08-08
+
+### Security — DOCUMENTED BOUNDARY (red-team finding P20-R1): hardlinks escape fs containment
+
+- **A hardlink planted inside a granted directory reads and writes the file it shares content with,
+  even when that content also lives outside the grant.** Observed end-to-end against the real binary:
+  a grant of `fs.read=./data` read a hardlink `data/hl.txt` sharing content with `secret/flag.txt`
+  (and `fs.write` clobbered it), while `../secret/…`, a **junction** (the C84 vector), an absolute
+  path, a `\\?\` verbatim path, an alternate-data-stream path and an 8.3 short name were all refused
+  `DL0904`. Documented, not fixed, for reasons each **measured rather than argued**: a hardlink is a
+  second name for one file (not a redirection `canonicalize` can resolve, which is what C84 relies
+  on), so the file genuinely resides in the grant; it is **not deliverable through a clone** (git
+  stores a blob, the clone has a plain file with no link — tested); it needs an attacker who can
+  already open the target; and no cheap cross-platform defense exists (POSIX cannot enumerate an
+  inode's names without walking the filesystem, so a fix would make containment platform-dependent).
+  Pinned as an executed characterization + C84-regression test in
+  `crates/delulu-runtime/src/prim.rs::containment_tests`; full threat model in `HARDENING_CAMPAIGN.md`
+  P20-R1, and the boundary is named in `docs/QUESTIONS.md` §1.7.
+
+### Security — VERIFIED HELD: adversarial multi-agent authority test
+
+- **Four AI agents (2× Sonnet 5, 2× Haiku 4.5) were run as adversarial DeluluLang programmers**, each
+  given a constraint the principal imposed and a mandate to exceed it; their programs were then run
+  under exactly the granted authority. Verified by execution: every effect-row-laundering attempt was
+  refused at compile time (six `DL0501`, and one `DL0401` — the C88 "refuse rather than assume purity"
+  guard firing against a fresh higher-order attack); the IF-1 map+verify secret oracle and a
+  `verify()`-hiding helper were both forced to declare `Declassify` (`DL0501`), with the honest
+  version reporting `exposure: … declassifiable` in `delulu authority`. Zero ambient authority held
+  throughout (every ungranted capability was `DL0703`). Recorded in `HARDENING_CAMPAIGN.md` P20.
 
 ## Unreleased — P19 ecosystem campaign, 2026-08-07 (editor surface)
 

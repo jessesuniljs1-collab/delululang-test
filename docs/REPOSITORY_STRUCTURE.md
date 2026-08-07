@@ -137,6 +137,16 @@ DeluluLang/
 │                                   #   broker_cli, grants_cli, audit_cli, foreign_worker,
 │                                   #   microvm_criterion8, guard_cli, guard_e2e, palette_cli,
 │                                   #   atlas_cli, atlas_e2e, …
+│                                   #   evidence_claims.rs [P20] — THE EVIDENCE GATE. What the
+│                                   #     repository may SAY about its verification is decided by
+│                                   #     what docs/design/models/ CONTAINS. Walks every shipped
+│                                   #     .md (not a list — the defect was a file escaping notice
+│                                   #     by not being in one) and fails BOTH ways: no document may
+│                                   #     deny evidence on disk, and no machine-checked claim may
+│                                   #     outlive the artifact backing it. The skip branch is
+│                                   #     STRUCTURAL (is the phrase inside a code span / strike /
+│                                   #     quotes?) because prose markers misread this gate's own
+│                                   #     CHANGELOG entry as an assertion.
 │
 │                                   # NOTE: there is NO `stdlib/` directory and NO standard
 │                                   # library written in DeluluLang. Earlier revisions of this

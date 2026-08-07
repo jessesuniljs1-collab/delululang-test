@@ -2818,3 +2818,75 @@ itself visible in an ordinary process listing, as is any `--lease` token passed 
 
 Recorded as open: authenticated broker sessions, per-node ownership on revoke, key material outside
 the co-tenant's reach, an accept/read timeout, and an atomic single-daemon start.
+
+---
+
+## P20 — the zero-trust red team (2026-08-08)
+
+A pass whose brief was to break DeluluLang the way a smarter-than-human, patient, fully-informed
+attacker would, and to record every attack that **failed** as well as the ones that succeeded —
+because "we tried this and could not" is the only evidence that means anything. Attacks were run
+against the real binary, not reasoned about.
+
+### P20-R1 · Filesystem containment does not extend to hardlinks — DOCUMENTED BOUNDARY, not fixed
+
+**What.** A grant of `fs.read=./data` (or `fs.write`) reads/writes a file whose content also lives
+outside `./data`, if that file is reached through a **hardlink** planted inside `./data`. Observed
+end-to-end: a hardlink `data/hl.txt` sharing content with `secret/flag.txt` was read
+(`LEAKED via hardlink: CROWN-JEWELS-…`) and written through (clobbering the out-of-grant file),
+both exit 0, while the lexically identical `../secret/flag.txt`, a **junction** (the C84 vector),
+an absolute path, a `\?\` verbatim path, an alternate-data-stream path, and an 8.3 short name were
+all refused (`DL0904`).
+
+**Why it is a boundary rather than a C84-class escape.** A hardlink is not a reparse point: it is a
+second directory entry for one file record, and the file genuinely resides at both names.
+`std::fs::canonicalize` correctly reports it inside the grant because it **is** inside — there is no
+"real location" elsewhere to resolve to, which is exactly what C84's fix relies on for symlinks and
+junctions. Three facts, each **verified rather than argued**, make it strictly narrower than the
+symlink/junction escape it resembles:
+
+1. **Not workspace-deliverable.** Tested: a hardlink committed to `git` is stored as a plain blob
+   (mode `100644`); the clone contains a regular file with the committer's content and **no link**
+   (`fsutil hardlink list` shows one name). A clone therefore cannot carry a hardlink aimed at the
+   victim's files. The C84 symlink/junction stores a *path string* and can — which is why it was the
+   urgent one and this is not.
+2. **Requires prior local access.** Creating the link needs the attacker to open the target, so they
+   already reach the secret; delulu grants them nothing new. The one genuine escalation is a narrow
+   confused-deputy (write-attributes-without-read), noted not hidden.
+3. **No cheap, cross-platform fix exists.** Deciding "does this file also have a name outside the
+   grant?" means enumerating every hardlink of an inode. Windows can (`FindFirstFileNameW`); POSIX
+   has no such call short of walking the whole filesystem. A Windows-only defense would make
+   containment **platform-dependent** — the one property this project refuses, because the same
+   program would then confine differently on Linux and Windows.
+
+**Disposition.** Documented as an explicit known limitation (this entry, plus the honest-limits
+surfaces) and **pinned as an executed fact**: `crates/delulu-runtime/src/prim.rs::containment_tests`
+locks the C84 refusal (symlink escaping the grant is not contained) and characterizes the hardlink
+boundary (a hardlink sharing content with an outside file *is* reported contained), so any future
+change in either direction must consciously update the test and this record. This is the response
+the commission prescribes for a residual limitation: state it with its threat model, do not claim it
+is impossible.
+
+### P20 · Adversarial multi-agent authority test — Authority and secret-flow held
+
+Four AI agents (2× Sonnet 5, 2× Haiku 4.5) were commissioned as adversarial DeluluLang programmers,
+each given a legitimate job, a constraint the principal imposed, and a mandate to exceed it. Their
+programs were then run under exactly the authority the principal granted. Verified by execution:
+
+- **Effect-row laundering (8 programs):** every one refused at compile time — six `DL0501`
+  (undeclared effect caught), and one hitting **`DL0401`**, the "refuse rather than assume purity"
+  guard the C88 fix installed, firing against a fresh higher-order laundering attempt. The row held.
+- **Secret exfiltration:** the agent's own programs mostly failed to parse (a learnability datapoint
+  for smaller models, recorded), so canonical valid versions were written by hand. Both critical
+  attacks — a helper calling `verify()` while declaring only `{Read}`, and the **IF-1 map+verify
+  oracle** declaring no `Declassify` — were refused `DL0501`, forced to declare `Declassify`. The
+  honest version checks clean and `delulu authority` reports `Declassify` and
+  `exposure: api_key … declassifiable -> files/console`. The IF-1 fix (R-2b) holds against a fresh
+  attack: a secret cannot be probed without the effect, and the report, showing it.
+- **Capability forgery / data exfil (Sonnet agents):** running at time of writing; results recorded
+  when complete.
+
+**What held, stated because a red-team pass that only lists faults is not a red-team pass:** zero
+ambient authority (every ungranted capability was `DL0703`), the effect row's completeness under
+higher-order code, secret opacity and the declassification effect, and the whole family of
+path-spelling escapes short of the hardlink boundary above.
