@@ -241,3 +241,26 @@ OS boundary rather than by Miri. None is new tonight; all are documented where t
 Linux; its language server and CLI work; its one newly-found defect is fixed; its `unsafe` is either
 Miri-clean or honestly out of reach; and its macOS story is designed-for and truthfully labelled
 unverified. The final full-workspace suite is green on both platforms.
+
+## Phase I — continued discovery (bonus): broker `rotate-key` persistence (finding + fix)
+
+The A–H sweep above is a complete production-readiness pass. Per the never-ending discovery mandate,
+this is one round beyond it — and it found a real security defect.
+
+**Finding — ROTATE-1 (fixed, witnessed).** `delulu broker rotate-key` rotated the lease-MAC key only
+in the daemon's MEMORY; it never rewrote `broker.key` on disk. Witnessed against the current binary:
+the on-disk key hash was **byte-identical before and after** a rotate. Because `serve_inner` reloads
+the key from `broker.key` at startup, a daemon **restart** reloaded the old key and re-validated every
+lease token the rotation was supposed to invalidate — while the CLI told the operator they were "now
+invalid". For a security rotation (revoking outstanding delegations after a suspected key compromise),
+the effect lasted only until the next restart, and daemons restart routinely.
+
+**Fix.** The daemon now generates the new key and **persists it to `broker.key` (0600) before applying
+it in memory** — a rotation that cannot be made durable is not applied at all (fail-closed;
+`Broker::rotate_key_to` is the in-memory half, the daemon owns the disk half). Witnessed fixed: the
+on-disk key now **changes** after a rotate on Windows and Linux. Regression guard:
+`rotate_key_is_persisted_so_a_restart_cannot_resurrect_old_tokens`; delulu-broker 144/0 on both
+platforms; broker / grants / dead-man CLI green; clippy clean.
+
+Found by continuing to ask what assumption had not been attacked — here, that a documented,
+unit-tested *in-memory* behavior was also durable across a restart. It was not.

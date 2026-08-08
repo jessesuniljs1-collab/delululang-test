@@ -27,6 +27,19 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   reaches the adapter (`crates/delulu-runtime/src/device.rs`); this hardens reply *attribution*
   under a misbehaving adapter, matching the module's own stated rule.
 
+### Security — `broker rotate-key` now persists, so a restart cannot resurrect old tokens
+
+- `delulu broker rotate-key` regenerated the lease-MAC key only in the daemon's memory and never
+  rewrote `broker.key` on disk — witnessed by a byte-identical hash before and after. The daemon
+  reports "outstanding lease tokens are now invalid", but a restart reloaded the old key from disk
+  and re-validated every token the rotation was supposed to kill (**ROTATE-1**). The daemon now
+  generates the new key and **persists it to `broker.key` (0600) BEFORE applying it in memory** — a
+  rotation that cannot be made durable is not applied at all (fail-closed), so it survives a restart.
+  Witnessed: `broker.key` changed after rotate on Windows and Linux where the pre-fix hashes were
+  identical; new test `rotate_key_is_persisted_so_a_restart_cannot_resurrect_old_tokens`;
+  delulu-broker 144/0, broker/grants/dead-man CLI green, clippy clean. `Broker::rotate_key` now
+  returns the new key and `rotate_key_to` applies a caller-persisted one.
+
 ### Conformance — DL1421 witnessed, generated reference regenerated (commit `e5ae9ec`)
 
 - The full-workspace suite surfaced `DL1421` (strict root issuance) shipping without a conformance

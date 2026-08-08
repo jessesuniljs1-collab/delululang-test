@@ -49,6 +49,26 @@ fn pid_path(state: &Path) -> PathBuf {
 fn key_path(state: &Path) -> PathBuf {
     state.join("broker.key")
 }
+
+/// Persist a freshly-rotated broker key with owner-only perms, mirroring how `load_or_create_key`
+/// writes it at startup (0600 on unix). `rotate-key` calls this BEFORE applying the key in memory so
+/// a rotation that cannot be made durable does not happen at all (ROTATE-1).
+#[cfg(unix)]
+fn write_broker_key(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    f.write_all(key)
+}
+#[cfg(not(unix))]
+fn write_broker_key(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
+    std::fs::write(path, key)
+}
 fn audit_dir(state: &Path) -> PathBuf {
     state.join("audit")
 }
@@ -285,8 +305,31 @@ fn handle(
         ReqBody::Status => (Response::Status { pid, nodes: broker.len(), epoch: broker.epoch() }, false),
         ReqBody::Shutdown => (Response::Ok, true),
         ReqBody::RotateKey => {
-            broker.rotate_key();
-            (Response::Ok, false)
+            // Persist the new key to disk BEFORE applying it in memory, so a rotation that cannot be
+            // made durable does not happen at all. Otherwise the rotation would live only in this
+            // process, and a restart reloads the OLD key from `broker.key` — re-validating every
+            // token the rotation was meant to kill (ROTATE-1). getrandom here; `rotate_key_to`
+            // applies the persisted key in memory and emits the audit record.
+            let mut new_key = [0u8; 32];
+            getrandom::fill(&mut new_key).expect("OS randomness (getrandom) unavailable");
+            match write_broker_key(&key_path(state_dir), &new_key) {
+                Ok(()) => {
+                    broker.rotate_key_to(new_key);
+                    (Response::Ok, false)
+                }
+                Err(e) => (
+                    Response::Error {
+                        code: "DL1401".to_string(),
+                        message: format!(
+                            "broker key rotation aborted: the new key could not be persisted to `{}` \
+                             ({e}); the rotation was NOT applied and the current key is unchanged",
+                            key_path(state_dir).display()
+                        ),
+                        requires_human: true,
+                    },
+                    false,
+                ),
+            }
         }
         ReqBody::Issue(spec) => {
             // Root issuance goes through the gated `issue_root`, so a same-uid IPC client is refused
@@ -1798,6 +1841,33 @@ mod tests {
         // …and the refusal mutated nothing: no node exists.
         let Response::Status { nodes, .. } = request(&state, ReqBody::Status).unwrap() else { panic!() };
         assert_eq!(nodes, 0, "a refused Issue creates no node");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// ROTATE-1: `rotate-key` must PERSIST the new key, not only rotate it in daemon memory. If it
+    /// rotated in memory alone, `broker.key` on disk would be unchanged and a daemon restart would
+    /// reload the OLD key from disk — re-validating every lease token the rotation was supposed to
+    /// invalidate (the CLI even tells the operator they are "now invalid"). Witnessed as a bypass
+    /// against the pre-fix code, where the two on-disk keys were byte-identical. Together with the
+    /// broker-crate unit test that a rotated-away key rejects an old token (DL1407) and the fact that
+    /// `serve_inner` loads the key from this file at startup, persisting it here is what makes a
+    /// rotation survive a restart.
+    #[test]
+    fn rotate_key_is_persisted_so_a_restart_cannot_resurrect_old_tokens() {
+        let state = temp_state("rotate_persist");
+        let handle = start_daemon(&state);
+        let before = std::fs::read(key_path(&state)).expect("broker.key exists after start");
+        let resp = request(&state, ReqBody::RotateKey).unwrap();
+        assert!(matches!(resp, Response::Ok), "rotate-key should succeed: {resp:?}");
+        let after = std::fs::read(key_path(&state)).expect("broker.key exists after rotate");
+        assert_ne!(
+            before, after,
+            "rotate-key MUST rewrite broker.key on disk — otherwise a restart reloads the old key and \
+             the rotation is silently undone (ROTATE-1)"
+        );
+        assert_eq!(after.len(), 32, "the persisted key is a 32-byte MAC key");
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);

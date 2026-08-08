@@ -127,15 +127,27 @@ impl Broker {
         result
     }
 
-    /// Rotate the broker key: generate a fresh random 256-bit key (spec §2). This invalidates ALL
-    /// outstanding tokens — their MACs no longer verify (→ DL1407) — which is the deliberate point.
-    /// Emits one `"rotate_key"` audit record.
-    pub fn rotate_key(&mut self) {
-        let mut k = [0u8; 32];
-        getrandom::fill(&mut k).expect("OS randomness (getrandom) unavailable");
-        self.set_key(k);
+    /// Rotate the broker key to a SPECIFIC value and emit the `"rotate_key"` audit record. Split out
+    /// from [`rotate_key`] so the daemon can PERSIST the new key to disk *first* and only then apply
+    /// it in memory. Without that ordering a rotation lives only in the daemon's memory, and a restart
+    /// reloads the old key from `broker.key`, re-validating every token the rotation invalidated
+    /// (ROTATE-1). This method is the in-memory half; the daemon owns the disk half.
+    pub fn rotate_key_to(&mut self, key: [u8; 32]) {
+        self.set_key(key);
         let seq = self.consume_seq();
         self.record_op(seq, "rotate_key", None, None, None, "allow", None);
+    }
+
+    /// Rotate the broker key: generate a fresh random 256-bit key (spec §2) and apply it. This
+    /// invalidates ALL outstanding tokens — their MACs no longer verify (→ DL1407) — which is the
+    /// deliberate point. Returns the new key so a persisting caller (the daemon) can write it to disk
+    /// so the rotation survives a restart; the in-memory broker (the embedded broker, unit tests)
+    /// simply ignores the return.
+    pub fn rotate_key(&mut self) -> [u8; 32] {
+        let mut k = [0u8; 32];
+        getrandom::fill(&mut k).expect("OS randomness (getrandom) unavailable");
+        self.rotate_key_to(k);
+        k
     }
 
     // ----- internals -----------------------------------------------------------------------------
