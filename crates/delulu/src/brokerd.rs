@@ -58,6 +58,9 @@ fn secrets_path(state: &Path) -> PathBuf {
 fn guard_policy_path(state: &Path) -> PathBuf {
     state.join("guard.json")
 }
+fn root_policy_path(state: &Path) -> PathBuf {
+    state.join("root_policy.json")
+}
 
 /// Load the persisted guard policy (Stage 5 chunk 6). Fail closed (addendum §2.4 / criterion 10):
 /// an absent file uses the DEFAULT policy; a present-but-corrupt file returns the default policy
@@ -648,6 +651,14 @@ pub(crate) fn serve_inner(
         .with_guard_policy(policy, poisoned)
         .with_owner_code(owner_code.clone())
         .with_bypass(bypass);
+    // DISC-1 strict root-issuance mode: if persisted, a root may enter ONLY by adopting a certificate
+    // that verifies against this pinned anchor; unsigned `Issue` (and thus `grants delegate` auto-root
+    // and `run --grant` against this daemon) is refused DL1421. Reported at start so the mode — and any
+    // silent downgrade from config tampering — is visible.
+    let strict = load_root_policy(state_dir);
+    if let Some(anchor) = &strict {
+        broker.require_anchored_roots(anchor.clone());
+    }
 
     let listener = Listener::bind(state_dir)?;
     let pid = std::process::id();
@@ -657,6 +668,14 @@ pub(crate) fn serve_inner(
     // this process is the one the user is watching (foreground/direct start) — never in the detached
     // child (the parent printed it; broker.log must not contain it — criterion 9).
     eprintln!("delulu guard: {}", guard_digest(&broker));
+    if let Some(anchor) = &strict {
+        eprintln!(
+            "delulu broker: STRICT root-issuance mode ON (DISC-1) — roots require an anchored \
+             certificate verifying against `{anchor}`; unsigned issuance is refused DL1421. Residual: \
+             protect the anchor PRIVATE key and `{}` from same-uid access (category 7).",
+            root_policy_path(state_dir).display()
+        );
+    }
     if print_owner {
         eprintln!("delulu guard owner code (admin verbs need it; printed once, never written to disk): {owner_code}");
     }
@@ -760,6 +779,45 @@ fn seed_guard_policy(state_dir: &Path, file: &str) -> Result<(), i32> {
     }
 }
 
+/// `broker start --require-anchored-roots <anchor-pubkey-hex>`: persist STRICT root-issuance mode
+/// (DISC-1) to `<state>/root_policy.json` before the daemon loads it — so it survives the detached
+/// re-spawn and a restart. Only the PUBLIC anchor is stored, never a private key. **Honest residual:**
+/// this file is same-user-writable, so a same-uid adversary that edits/deletes it, or restarts the
+/// daemon without the mode, is not contained by code alone — a deployment property (category 7, see
+/// `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`). The startup banner reports the mode so a downgrade
+/// is at least visible. The anchor is not validated here (it is the operator's trust decision); a
+/// bogus anchor simply means no chain ever verifies (fail closed).
+fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
+    if anchor.trim().is_empty() {
+        eprintln!("error: --require-anchored-roots needs an anchor public key (hex)");
+        return Err(2);
+    }
+    if let Err(e) = std::fs::create_dir_all(state_dir) {
+        eprintln!("error: cannot create state dir: {e}");
+        return Err(2);
+    }
+    let doc = serde_json::json!({ "version": 1, "require_anchored_roots": true, "anchor": anchor });
+    if let Err(e) = std::fs::write(root_policy_path(state_dir), format!("{doc}\n")) {
+        eprintln!("error: cannot write root policy `{}`: {e}", root_policy_path(state_dir).display());
+        return Err(2);
+    }
+    Ok(())
+}
+
+/// Load the persisted strict root-issuance anchor, if any (`None` = legacy default: unsigned roots
+/// allowed). A missing file is the legacy default. A file that exists but does NOT set
+/// `require_anchored_roots: true` with a string `anchor` yields `None` — the operator's `broker start`
+/// banner reports the effective mode, so an unexpected legacy state is visible rather than silent.
+fn load_root_policy(state_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(root_policy_path(state_dir)).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if v.get("require_anchored_roots").and_then(serde_json::Value::as_bool) == Some(true) {
+        v.get("anchor").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
+    } else {
+        None
+    }
+}
+
 /// `delulu broker start|status|stop|rotate-key` (spec §2). `start --foreground` runs the serve loop
 /// in this process (tests + the detached child); bare `start` spawns a detached child.
 pub fn cmd_broker(rest: &[String]) -> i32 {
@@ -784,6 +842,15 @@ pub fn cmd_broker(rest: &[String]) -> i32 {
             let guard_policy_file = flag_value(args, "--guard-policy");
             if let Some(file) = &guard_policy_file {
                 if let Err(code) = seed_guard_policy(&state_dir, file) {
+                    return code;
+                }
+            }
+            // DISC-1: `--require-anchored-roots <anchor>` persists strict root-issuance mode before the
+            // daemon (or its detached child) loads it. Sticky once set: a later `broker start` without
+            // the flag keeps it, because the persisted file governs. To return to legacy, remove
+            // `<state>/root_policy.json` (an owner action — see the residual note on the function).
+            if let Some(anchor) = flag_value(args, "--require-anchored-roots") {
+                if let Err(code) = seed_root_policy(&state_dir, &anchor) {
                     return code;
                 }
             }
@@ -1635,6 +1702,32 @@ mod tests {
         request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true }).unwrap();
         let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed under bypass: {resp:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// DISC-1 strict mode over the wire (race-free, in-process daemon): a persisted
+    /// `require_anchored_roots` makes the daemon refuse `ReqBody::Issue` with DL1421 — so a same-uid
+    /// IPC client, and thus `grants delegate` auto-root and `run --grant` against this daemon, cannot
+    /// manufacture a root. The adopt-pin half is covered by the broker-crate unit tests (a self-anchored
+    /// chain → DL1415) and a live end-to-end run; here we pin the unsigned-Issue refusal deterministically.
+    #[test]
+    fn strict_mode_refuses_unsigned_issue_over_the_wire() {
+        let state = temp_state("strict_issue");
+        // Persist strict mode BEFORE the daemon loads it (serve_inner reads root_policy.json at start).
+        seed_root_policy(&state, "an_anchor_pubkey_that_no_chain_here_matches").unwrap();
+        let handle = start_daemon(&state);
+
+        // The DISC-1 hole — an unsigned root issuance — is refused DL1421, not served.
+        let resp = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, .. } if code == "DL1421"),
+            "strict mode must refuse unsigned Issue over the wire: {resp:?}"
+        );
+        // …and the refusal mutated nothing: no node exists.
+        let Response::Status { nodes, .. } = request(&state, ReqBody::Status).unwrap() else { panic!() };
+        assert_eq!(nodes, 0, "a refused Issue creates no node");
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
