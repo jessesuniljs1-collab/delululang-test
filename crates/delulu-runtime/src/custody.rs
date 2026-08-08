@@ -152,7 +152,16 @@ impl EmbeddedCustody {
     /// real broker even in embedded mode.
     pub fn with_root(authority: Authority) -> EmbeddedCustody {
         let mut tree = Broker::new();
-        let node = tree.issue(Holder::new("host", "embedded run", ""), authority, None);
+        // Go through the public gated `issue_root` (not the `pub(crate)` primitive) so no external
+        // caller has an ungated root path (DISC-1). A fresh embedded `Broker` is never strict-mode —
+        // embedded `run --grant` is a SEPARATE trust model where the command-line grant IS the
+        // authority, with no daemon and no Guard to bypass, so it is not the broker's strict-mode
+        // boundary. An operator relying on strict mode must still prevent untrusted/AI agents from
+        // invoking `run --grant` with a hardware adapter — i.e. run them as a separate OS user (this is
+        // documented in ROOT_ISSUANCE_TRUST_BOUNDARY.md, §embedded).
+        let node = tree
+            .issue_root(Holder::new("host", "embedded run", ""), authority, None)
+            .expect("a fresh embedded broker is never in strict root-issuance mode");
         EmbeddedCustody { tree: Some(tree), node: Some(node) }
     }
 

@@ -149,6 +149,7 @@ registry! {
     "DL1416" => "grant certificate hop is not an attenuation of its issuer (carries the intersection)",
     "DL1417" => "grant certificate is outside its validity window",
     "DL1418" => "grant certificate refused: unsupported algorithm/dimension, or malformed",
+    "DL1421" => "root issuance refused: strict mode requires an anchor-verified certificate (DISC-1)",
 
     // DL15xx — runtime plugins (Stage 6 "Live", spec §7). DL0801/DL0803 (reserved in Stage 1)
     // activate alongside these. DL1508 is a build-order-recorded addition (deviation 2): the spec
@@ -1279,6 +1280,21 @@ pub fn code_explain(code: &str) -> Option<String> {
                     .to_string(),
             )
         }
+        "DL1421" => "Root issuance was refused because the broker is in STRICT root-issuance mode \
+             (DISC-1). Normally any client of a broker can create a root node from an unsigned \
+             `Issue` — the Guard gates delegated grants but never root creation, so a same-OS-user \
+             process (a compromised or autonomous AI agent) could mint a root holding any authority \
+             and command a Guard-sealed resource with it. Strict mode closes the unsigned path: a \
+             root may enter ONLY by adopting a certificate chain that verifies against the broker's \
+             configured trust anchor (`delulu grants adopt`), and the pinned anchor overrides any \
+             caller-supplied one so a client cannot substitute its own.\n\nWhat this does and does \
+             NOT guarantee, stated honestly: the broker enforces `no root without an anchor-verified \
+             certificate`. The SECURITY of that reduces to keeping the anchor PRIVATE key — and the \
+             strict-mode configuration — outside the adversary's reach (a separate OS account, \
+             hardware token, or offline signer). A same-uid adversary that can read the anchor \
+             private key, or restart the daemon without strict mode, is not contained by the code \
+             alone — that residual is a deployment property (MATHEMATICS.md category 7). See \
+             `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`.",
         "DL1902" => "A bounded mailbox was full and the `drop-new` overflow policy dropped the \
              message — and because the program runs in abort mode, the drop is an error rather \
              than telemetry: abort mode is the statement that losing work is worse than stopping, \

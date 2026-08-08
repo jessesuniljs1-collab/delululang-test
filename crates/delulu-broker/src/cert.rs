@@ -538,7 +538,16 @@ impl crate::tree::Broker {
         holder: crate::tree::Holder,
     ) -> Result<crate::tree::GrantId, Denial> {
         let now = self.effective_now();
-        let authority = verify_chain(chain, anchors, verifier, now)?;
+        // Strict root-issuance mode (DISC-1): a root may enter ONLY under the broker's PINNED anchor,
+        // never a caller-supplied one — otherwise a same-uid client would present its own anchor with a
+        // self-signed chain and mint a root. The pinned anchor replaces the caller's set entirely; a
+        // chain not rooted in it fails `verify_chain` with DL1415. In the legacy default (no pin), the
+        // caller-supplied anchors are honored exactly as before.
+        let effective_anchors: BTreeSet<String> = match self.strict_anchor() {
+            Some(pinned) => std::iter::once(pinned.to_string()).collect(),
+            None => anchors.clone(),
+        };
+        let authority = verify_chain(chain, &effective_anchors, verifier, now)?;
         let leaf = chain.last().expect("verify_chain rejects an empty chain");
         let fingerprint = leaf.fingerprint();
         let chain_fps: Vec<String> = chain.iter().map(|c| c.fingerprint()).collect();
@@ -942,6 +951,113 @@ mod tests {
     }
     fn holder() -> crate::tree::Holder {
         crate::tree::Holder::new("process", "vehicle", "local")
+    }
+
+    // ===== DISC-1: strict root-issuance mode (opt-in anchor-verified roots) =======================
+
+    fn strict_broker_at(now: i64, anchor: &str) -> crate::tree::Broker {
+        let mut b = broker_at(now);
+        b.require_anchored_roots(anchor.to_string());
+        b
+    }
+
+    /// THE broker-boundary invariant (DISC-1, Jesse's most-important test): **in strict mode no root
+    /// node can exist unless it entered via a certificate chain that verifies against the CONFIGURED
+    /// (pinned) trust anchor.** Established against the three attacks a same-uid adversary actually has,
+    /// checking `unjustified_root_nodes()` stays empty after each. Falsify by making `issue_root` skip
+    /// the strict check (attack 1 then creates a root) or by having `adopt` honor caller anchors in
+    /// strict mode (attack 2 then adopts).
+    #[test]
+    fn strict_mode_no_root_without_a_chain_verifying_against_the_pinned_anchor() {
+        let mut b = strict_broker_at(500, "ground");
+
+        // Attack 1 — unsigned root issuance. This is the DISC-1 hole: `ReqBody::Issue`, `grants
+        // delegate` auto-root, and `run --grant` all reach `issue_root`. Refused DL1421; no root made.
+        let e = b.issue_root(holder(), auth(&["Actuate"], &[WIDE]), None).unwrap_err();
+        assert_eq!(e.code(), "DL1421", "unsigned root issuance must be refused in strict mode");
+        assert!(b.unjustified_root_nodes().is_empty(), "the refused issue created no root");
+
+        // Attack 2 — a same-uid adversary self-signs a chain and presents it under its OWN anchor. The
+        // broker PINS `ground` and ignores the caller's `attacker` anchor, so verify_chain fails DL1415.
+        let evil = vec![cert("attacker", "attacker", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+        let e = b.adopt(&evil, &anchors(&["attacker"]), &FakeVerifier, holder()).unwrap_err();
+        assert_eq!(e.code(), "DL1415", "a self-anchored chain cannot mint a root when the anchor is pinned");
+        assert!(b.unjustified_root_nodes().is_empty(), "the adversary created no root");
+
+        // Attack 3 — a forged `ground` cert: it claims issuer `ground` but is signed with the
+        // attacker's key. The signature does not verify as `ground`, so it is refused.
+        let forged = vec![{
+            let mut c = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000));
+            c.sig = fake_sign("attacker", &c.signing_bytes());
+            c
+        }];
+        assert!(
+            b.adopt(&forged, &anchors(&["ground"]), &FakeVerifier, holder()).is_err(),
+            "a forged `ground` signature must not verify"
+        );
+        assert!(b.unjustified_root_nodes().is_empty());
+
+        // The ONLY path that creates a root: a chain verifying against the PINNED anchor. Note the
+        // caller passes a bogus anchor set — proving the PIN governs, not the caller.
+        let node = b
+            .adopt(&ground_to_vehicle(), &anchors(&["caller-picked-nonsense"]), &FakeVerifier, holder())
+            .expect("a chain verifying against the PINNED anchor adopts, whatever the caller passes");
+        assert_eq!(b.inspect(&node).map(|n| n.parent.is_none()), Some(true), "the adopted node is a root");
+        assert!(b.unjustified_root_nodes().is_empty(), "the sole root is a justified adoption");
+    }
+
+    /// Strict mode is strictly additive: the legacy default is unchanged. Unsigned roots still work,
+    /// and adoption still honors CALLER anchors — which is exactly why the legacy default is not a
+    /// boundary against a same-uid agent (it trusts whatever anchor the caller names). Documented, not
+    /// hidden — this is the DISC-1 point.
+    #[test]
+    fn legacy_default_still_allows_unsigned_roots_and_trusts_caller_anchors() {
+        let mut b = broker_at(500);
+        let root = b.issue_root(holder(), auth(&["Actuate"], &[WIDE]), None).expect("legacy issue_root ok");
+        assert_eq!(b.inspect(&root).map(|n| n.parent.is_none()), Some(true));
+        assert!(b.adopt(&ground_to_vehicle(), &anchors(&["ground"]), &FakeVerifier, holder()).is_ok());
+
+        // In legacy mode a same-uid adversary's self-anchored chain ADOPTS — the weakness DISC-1 names.
+        let mut b2 = broker_at(500);
+        let evil = vec![cert("attacker", "attacker", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000))];
+        assert!(
+            b2.adopt(&evil, &anchors(&["attacker"]), &FakeVerifier, holder()).is_ok(),
+            "legacy mode trusts caller anchors; only strict mode pins one"
+        );
+    }
+
+    /// Under strict mode the existing certificate defenses still apply THROUGH the pinned anchor:
+    /// an expired chain and an attenuation-violating chain are refused, so strict mode does not create
+    /// a weaker adoption path — it only removes the unsigned one.
+    #[test]
+    fn strict_mode_still_enforces_expiry_and_attenuation() {
+        // Expired: the chain's window has closed by `now`.
+        let mut b = strict_broker_at(20_000, "ground");
+        let expired = {
+            let root = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000));
+            let leaf = cert("vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 10_000));
+            vec![root, leaf]
+        };
+        assert_eq!(
+            b.adopt(&expired, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err().code(),
+            "DL1417",
+            "an expired chain is refused even under a valid pinned anchor"
+        );
+        assert!(b.unjustified_root_nodes().is_empty());
+
+        // Widening: a leaf that widens its parent's device envelope is refused DL1416.
+        let mut b2 = strict_broker_at(500, "ground");
+        let widen = {
+            let root = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[NARROW]), (0, 10_000));
+            let leaf = cert("vehicle", "payload", &root.fingerprint(), auth(&["Actuate"], &[WIDE]), (0, 10_000));
+            vec![root, leaf]
+        };
+        assert_eq!(
+            b2.adopt(&widen, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err().code(),
+            "DL1416",
+            "a widening chain is refused even under a valid pinned anchor"
+        );
+        assert!(b2.unjustified_root_nodes().is_empty());
     }
 
     #[test]

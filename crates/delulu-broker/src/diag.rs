@@ -94,6 +94,11 @@ pub enum Denial {
     GuardSealed { node: GrantId, rule: String },
     /// DL1414 — the Guard: an admin verb was refused because the owner code was missing or invalid.
     GuardOwner { detail: String },
+    /// DL1421 — strict root-issuance mode (DISC-1): this broker refuses to create root authority from
+    /// an unsigned request. A root may enter ONLY by adopting a certificate that verifies against the
+    /// configured trust anchor. Carries the pinned anchor pubkey (hex) so the message can name the
+    /// exact `grants adopt` path. Not `requires_human`: it is resolved mechanically, by adopting a cert.
+    StrictRootRequiresAnchor { anchor: String },
 }
 
 impl Denial {
@@ -117,6 +122,7 @@ impl Denial {
             Denial::GuardDenied { .. } => "DL1412",
             Denial::GuardSealed { .. } => "DL1413",
             Denial::GuardOwner { .. } => "DL1414",
+            Denial::StrictRootRequiresAnchor { .. } => "DL1421",
         }
     }
 
@@ -300,6 +306,17 @@ impl Denial {
                      only a principal policy edit can unseal it (`delulu guard policy unset {rule} \
                      --owner <code>`, or set a weaker tier). Bypass does not lift a seal.",
                     node.as_str()
+                ),
+            ),
+            Denial::StrictRootRequiresAnchor { anchor } => Diagnostic::error(
+                "DL1421",
+                format!(
+                    "root issuance refused: this broker requires anchored roots (strict mode, DISC-1). \
+                     An unsigned root cannot be created — a root may enter only by adopting a \
+                     certificate chain that verifies against the configured trust anchor `{anchor}` \
+                     (`delulu grants adopt <chain> --anchor {anchor}`). A same-OS-user process without \
+                     the anchor private key cannot manufacture root authority this way; the anchor \
+                     key's custody is the residual boundary (see ROOT_ISSUANCE_TRUST_BOUNDARY.md)."
                 ),
             ),
             Denial::GuardOwner { detail } => Diagnostic::error(

@@ -133,6 +133,15 @@ pub struct Broker {
     /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
     /// guarded); guard enforcement applies to delegated (non-root) nodes ONLY (addendum §2.1).
     pub(crate) guard: crate::guard::GuardState,
+    /// Strict root-issuance mode (DISC-1). `Some(anchor_pubkey_hex)` ⇒ this broker refuses to create
+    /// root authority from an unsigned [`Broker::issue_root`]; a root may enter ONLY by adopting a
+    /// certificate chain that verifies against this **pinned** anchor (never a caller-supplied one).
+    /// `None` ⇒ the legacy default (unsigned root issuance allowed). Only the anchor **public** half is
+    /// held here — never the private key. The security of strict mode reduces to keeping the anchor
+    /// **private** key, and this configuration, outside the same-uid adversary's reach: the broker
+    /// enforces the mechanism, the deployment provides that custody (a category-7 boundary — see
+    /// `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`).
+    strict_anchor: Option<String>,
 }
 
 /// The result of a [`Broker::revoke`] call: which nodes this call transitioned to `Revoked`.
@@ -175,6 +184,7 @@ impl Broker {
             adopted_chain_fps: HashMap::new(),
             revoked_adoption_fps: HashSet::new(),
             guard: crate::guard::GuardState::new(),
+            strict_anchor: None,
         }
     }
 
@@ -418,7 +428,60 @@ impl Broker {
 
     /// Issue a **root** grant (spec §3.2 `issue`, CLI-only human action — nothing programmatic
     /// creates root nodes, Constitution §5.16 law 4). Returns the new node's id.
-    pub fn issue(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> GrantId {
+    /// Enable **strict root-issuance mode** (DISC-1): after this, [`Broker::issue_root`] refuses, and a
+    /// root may enter ONLY via [`Broker::adopt`] of a chain that verifies against `anchor_pubkey_hex`
+    /// — the pinned anchor overrides any caller-supplied anchor, so a same-uid client cannot substitute
+    /// its own. There is deliberately **no IPC/CLI-runtime path to flip this off**: only in-process
+    /// daemon-init code calls it, so a same-uid client cannot disable strict mode over the wire. The
+    /// residual (a daemon restarted without the flag, or a tampered config file) is a deployment
+    /// property named in `ROOT_ISSUANCE_TRUST_BOUNDARY.md` (category 7).
+    pub fn require_anchored_roots(&mut self, anchor_pubkey_hex: String) {
+        self.strict_anchor = Some(anchor_pubkey_hex);
+    }
+
+    /// The pinned anchor iff strict root-issuance mode is on, else `None`.
+    pub fn strict_anchor(&self) -> Option<&str> {
+        self.strict_anchor.as_deref()
+    }
+
+    /// The DISC-1 strict-mode invariant, checkable over live broker state: the ids of any **root**
+    /// nodes (no parent) that did NOT enter via an adopted, anchor-verified chain. In strict mode this
+    /// **must always be empty** — the only way a root can exist is [`Broker::adopt`], which records the
+    /// node as `adopted`; a non-empty result means an unsigned root slipped in (a strict-mode
+    /// violation). In the legacy default it is expected to be non-empty (unsigned roots are allowed),
+    /// so it is meaningful as an assertion only under `require_anchored_roots`.
+    pub fn unjustified_root_nodes(&self) -> Vec<GrantId> {
+        let adopted_ids: HashSet<&GrantId> = self.adopted.values().map(|(id, _)| id).collect();
+        self.nodes
+            .values()
+            .filter(|n| n.parent.is_none() && !adopted_ids.contains(&n.id))
+            .map(|n| n.id.clone())
+            .collect()
+    }
+
+    /// The **public** root-issuance API and the DISC-1 security boundary. In strict mode
+    /// ([`Broker::require_anchored_roots`]) it refuses with `DL1421`: an unsigned root cannot be
+    /// conjured — a root must be adopted from an anchor-verified certificate. In the legacy default it
+    /// creates a root exactly as before. **Every** external caller (the daemon's `Issue` dispatch, and
+    /// any library user) goes through here; the raw [`Broker::issue`] primitive is `pub(crate)` and is
+    /// reached only after verification (by [`Broker::adopt`]), so there is no public bypass of the gate.
+    pub fn issue_root(
+        &mut self,
+        holder: Holder,
+        authority: Authority,
+        ttl_millis: Option<i64>,
+    ) -> Result<GrantId, Denial> {
+        if let Some(anchor) = &self.strict_anchor {
+            return Err(Denial::StrictRootRequiresAnchor { anchor: anchor.clone() });
+        }
+        Ok(self.issue(holder, authority, ttl_millis))
+    }
+
+    /// The raw root-creation primitive — `pub(crate)`, NOT a public API. Bypasses the strict-mode gate
+    /// by construction, so it must be called only from a path that has already established the right to
+    /// create a root: today that is [`Broker::adopt`] (after `verify_chain` against the pinned anchor)
+    /// and in-crate tests. External root creation goes through [`Broker::issue_root`].
+    pub(crate) fn issue(&mut self, holder: Holder, authority: Authority, ttl_millis: Option<i64>) -> GrantId {
         // Canonicalize at the custody boundary (P17-F1/F3). Path scopes have equivalence classes —
         // `./data` and `data` are one path under two names — so without this the same logical grant
         // enters the tree, and the hash chain, under two different hashes. Canonicalization

@@ -286,8 +286,13 @@ fn handle(
             (Response::Ok, false)
         }
         ReqBody::Issue(spec) => {
-            let id = broker.issue(spec_holder(&spec), spec_to_authority(&spec), spec.ttl_millis);
-            (Response::Issued { node: id.to_string() }, false)
+            // Root issuance goes through the gated `issue_root`, so a same-uid IPC client is refused
+            // DL1421 in strict mode (DISC-1) — this is the single broker boundary that also covers
+            // `grants delegate` auto-root and `run --grant`, since both mint their root via this path.
+            match broker.issue_root(spec_holder(&spec), spec_to_authority(&spec), spec.ttl_millis) {
+                Ok(id) => (Response::Issued { node: id.to_string() }, false),
+                Err(d) => (deny_response(&d), false),
+            }
         }
         ReqBody::Attenuate { parent, authority, owner } => {
             let parent = GrantId::from_trusted(parent);
