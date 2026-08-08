@@ -1,0 +1,28 @@
+module attack3.mapSideEffects
+
+// Attack 3: Closure side effects in map
+// Theory: The closure in map() receives plaintext. Even though it returns a Secret[Str],
+// what if the closure performs I/O side effects with the plaintext (e.g., writes to file)?
+// If the map doesn't check the closure's purity, the plaintext could escape via Write.
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let writer = root.fs_write("./")
+    let sec = root.secret("api_key")
+
+    // Try to write the plaintext from within the map closure
+    let transformed = sec.map(fn(x) {
+        // Attempt to write x to a file
+        let _ = writer.write_text("./leaked.txt", "Secret value: " + x)
+        // Return something that doesn't reveal x directly
+        "processed"
+    })
+
+    out.println("Map completed")
+
+    // Check if leaked.txt was created with the plaintext
+    match root.fs_read("./").read_text("./leaked.txt") {
+        Ok(contents) => out.println("Leaked: " + contents),
+        Err(_) => out.println("No leak file")
+    }
+}

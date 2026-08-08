@@ -1,0 +1,59 @@
+module attack2.if1BitOracle
+
+// Attack 2: IF-1 bit-by-bit oracle (the classic)
+// Theory: Use map + verify to extract information bit-by-bit without declaring Declassify.
+// The map closure sees plaintext and can test a guess, returning true/false.
+// We then verify that boolean result against a known guess.
+//
+// For a string, we can extract character-by-character:
+// - map checks if secret starts with "a", returns "true" or "false"
+// - then verify("true") tells us if the first char is "a"
+
+fn test_char(sec: Secret[Str], ch: Str) -> Bool ! {Read, Write} {
+    let out = root.console()
+    let transformed = sec.map(fn(x) {
+        // Return "1" if x starts with ch, else "0"
+        if x.starts_with(ch) {
+            "1"
+        } else {
+            "0"
+        }
+    })
+
+    // Verify if the transformed secret matches "1"
+    transformed.verify("1")
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Try to extract the first character by testing each letter
+    let chars = ["a", "p", "s", "x", "z"]
+
+    for ch in chars {
+        let transformed = sec.map(fn(x) {
+            if x.starts_with(ch) { "1" } else { "0" }
+        })
+
+        if transformed.verify("1") {
+            out.println("First char is: " + ch)
+            // We've leaked information without Declassify!
+            break
+        }
+    }
+
+    // Now extract second character
+    let transformed2 = sec.map(fn(x) {
+        if x.len() > 1 {
+            x.substring(1, 2)
+        } else {
+            ""
+        }
+    })
+
+    let second_guess = "p"
+    if transformed2.verify(second_guess) {
+        out.println("Second char is: " + second_guess)
+    }
+}

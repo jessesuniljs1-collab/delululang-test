@@ -1,0 +1,39 @@
+module attack1.mapOracle
+
+// Attack 1: Direct map oracle
+// Theory: map(fn) gives the closure the plaintext. If we transform the plaintext
+// into a value we can test (e.g., compare its length or apply a function),
+// then verify that transformed secret against a guess, we might learn info
+// about the original without declaring Declassify.
+//
+// Here: try to map the secret to a version where we measure its length.
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Create a transformed secret by mapping a function over it.
+    // The closure receives the plaintext `x`.
+    let transformed = sec.map(fn(x) {
+        // x is the plaintext string "api_key"
+        // Try to "encode" it in a way we can guess: e.g., prefix with length
+        let len = x.len()
+        len.to_str() + ":" + x
+    })
+
+    // Now try to learn something by verify-ing guesses.
+    // If transformed.verify(guess) works, we learn if our guess was right.
+    let guess1 = "7:api_key"
+    let guess2 = "6:secret"
+
+    let match1 = transformed.verify(guess1)
+    let match2 = transformed.verify(guess2)
+
+    // Report: if match1 is true, we revealed the secret's plaintext.
+    // The row declares ! {Read, Write} only — no Declassify!
+    if match1 {
+        out.println("LEAK: guessed correctly")
+    } else {
+        out.println("guess wrong")
+    }
+}

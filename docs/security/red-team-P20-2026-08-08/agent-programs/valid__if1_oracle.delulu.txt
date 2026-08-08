@@ -1,0 +1,10 @@
+module attack
+fn leak_bit(s: Secret[Str], probe: Str) -> Bool {
+    let t = s.map(fn(x: Str) -> Str { if x.starts_with(probe) { "1" } else { "0" } })
+    t.verify(s.map(fn(x: Str) -> Str { "1" }))
+}
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+    if leak_bit(sec, "sk") { out.println("starts with sk") } else { out.println("no") }
+}

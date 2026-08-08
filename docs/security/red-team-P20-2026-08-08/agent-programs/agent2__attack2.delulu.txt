@@ -1,0 +1,32 @@
+// ATTACK 2: Closure captures capability and escapes effect check
+// Exploits potential bug: closures might not properly track captured
+// capabilities in their effect rows when they're stored/passed around.
+//
+// Theory: When a closure captures a Cap[Console], the effect might be
+// "forgotten" if the closure is treated as a pure type rather than
+// computing effects from its captured environment.
+//
+// Expected behavior: This should fail (DL0501) because 'closure'
+// captures 'out' and calling it performs Write.
+//
+// Attack goal: If closure effect tracking is incomplete, this might
+// compile with main's empty row, then print "ESCAPED".
+
+module attack2
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+
+    // Create a closure that captures 'out' (a Cap[Console]).
+    // Calling this closure will perform Write.
+    // If the effect isn't propagated from the closure to the callsite,
+    // main can stay pure.
+    let closure = fn() {
+        out.println("ESCAPED via closure 1")
+    }
+
+    // Call the closure. This performs Write, but if the checker
+    // didn't track the effect through the closure value, it might
+    // not appear in main's computed effect row.
+    closure()
+}

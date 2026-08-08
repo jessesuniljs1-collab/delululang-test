@@ -1,0 +1,39 @@
+// ATTACK 8: Variance inversion in effect row parameter
+// Exploits potential bug: row parameters might have incorrect variance.
+// If a row parameter is treated as covariant when it should be invariant,
+// an effectful function might be assignable to a position expecting a
+// pure function.
+//
+// Theory: In a generic parameter 'fn() -> T ! e', if 'e' is covariant,
+// a function with e={Write} might be assignable to a position expecting
+// e={}. This is unsound because the caller expects purity but gets effects.
+//
+// Expected behavior: Compiler error because assigning an effectful function
+// to a pure-function type should fail.
+//
+// Attack goal: If variance is wrong, this might compile and perform
+// hidden effects.
+
+module attack8
+
+fn invoke_pure[T](f: fn() -> T ! {}) -> T {
+    f()
+}
+
+fn create_impure_caller(root: Root) -> fn() -> Int ! {} {
+    let out = root.console()
+    // Return a function that will perform Write when called.
+    // But we declare its row as ! {}, lying about its effects.
+    // This function should not be assignable to a pure-function type.
+    fn() {
+        out.println("ESCAPED via variance bug 1")
+        99
+    }
+}
+
+fn main(root: Root) ! {} {
+    // If create_impure_caller can return a function with hidden Write effects
+    // wrapped in a pure type, and invoke_pure accepts it, we have a soundness bug.
+    let impure = create_impure_caller(root)
+    let result = invoke_pure(impure)
+}

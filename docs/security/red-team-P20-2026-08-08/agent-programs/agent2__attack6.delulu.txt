@@ -1,0 +1,42 @@
+// ATTACK 6: Effectful callback stored in generic struct
+// Exploits potential bug: a struct with a generic field holding a function
+// might not preserve effect tracking when the struct is instantiated and
+// then the function is extracted and called.
+//
+// Theory: A struct Wrapper[T, e] with a field f: fn() -> T ! e might not
+// properly associate the effect 'e' when the struct is constructed. The
+// effect might be "forgotten" at instantiation time, leaving the function
+// call appearing pure.
+//
+// Expected behavior: Compiler error because wrapping an effectful function
+// in a struct should preserve the effect in the type and propagate at call.
+//
+// Attack goal: If struct instantiation doesn't validate or propagate
+// generic row parameters, this might compile and hide Write effects.
+
+module attack6
+
+struct Wrapper[T, e] {
+    value: T,
+    action: fn() -> T ! e
+}
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+
+    // Create a Wrapper with an effectful action function.
+    // The generic 'e' should be instantiated to {Write}.
+    // If the effect isn't tracked through the struct type, calling
+    // action() might appear pure.
+    let wrapper = Wrapper[Int, {Write}] {
+        value: 42,
+        action: fn() {
+            out.println("ESCAPED via struct wrapper 1")
+            42
+        }
+    }
+
+    // Call the wrapped function. The effect should be Write,
+    // but if the struct construction didn't propagate it, it might be forgotten.
+    wrapper.action()
+}

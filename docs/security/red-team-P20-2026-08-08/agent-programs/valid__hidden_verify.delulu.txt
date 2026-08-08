@@ -1,0 +1,10 @@
+module attack
+fn test_hidden(s: Secret[Str], guess: Secret[Str]) -> Bool ! {Read} {
+    s.verify(guess)
+}
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+    let g = root.secret("guess")
+    if test_hidden(sec, g) { out.println("match") } else { out.println("no") }
+}

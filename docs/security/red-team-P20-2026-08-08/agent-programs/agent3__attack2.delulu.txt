@@ -1,0 +1,21 @@
+module attack2
+
+// TECHNIQUE: define a type named `Cap`, `Root`, or `Secret` ourselves, hoping our definition
+// wins (shadows the builtin) so we can mint our own "capability" through our own constructor.
+//
+// delulu-check/src/resolve.rs (shadows_a_builtin_type, ~line 525) and check.rs's
+// PRELUDE_TYPES list say this is refused at the declaration (DL0302): the type resolver
+// matches Int/Root/Cap/Secret/... before it ever searches user scope, so the declaration
+// would be silently inert even if accepted — the compiler refuses it outright instead.
+
+type Cap { fake: Bool }
+type Root { fake: Bool }
+type Secret { fake: Bool }
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let c = Cap { fake: true }
+    let r = Root { fake: true }
+    let s = Secret { fake: true }
+    out.println("shadowed builtins constructed")
+}

@@ -1,0 +1,58 @@
+module attack8.multiStageTransform
+
+// Attack 8: Multi-stage transformation chain
+// Theory: Chain multiple operations to obscure which step actually does the declassification.
+// By breaking the secret into intermediate values through map() calls,
+// we might hide the information flow.
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Stage 1: Extract first character
+    let stage1 = sec.map(fn(x) {
+        if x.len() > 0 {
+            x.substring(0, 1)
+        } else {
+            ""
+        }
+    })
+
+    // Stage 2: Transform it somehow (e.g., uppercase if 'a', etc.)
+    let stage2 = stage1.map(fn(x) {
+        match x {
+            "a" => "FOUND_A",
+            "p" => "FOUND_P",
+            "s" => "FOUND_S",
+            "x" => "FOUND_X",
+            _ => "UNKNOWN_CHAR"
+        }
+    })
+
+    // Stage 3: Verify the result
+    let guesses = ["FOUND_A", "FOUND_P", "FOUND_S"]
+    for guess in guesses {
+        if stage2.verify(guess) {
+            out.println("Character found: " + guess)
+        }
+    }
+
+    // Try a second vector: extract all odd-positioned characters
+    let odds = sec.map(fn(x) {
+        let mut result = ""
+        let mut i = 1
+        while i < x.len() {
+            result = result + x.substring(i, i + 1)
+            i = i + 2
+        }
+        result
+    })
+
+    // Verify the odd-positioned substring
+    let odd_guesses = ["i", "ey", "i_y"]
+    for guess in odd_guesses {
+        if odds.verify(guess) {
+            out.println("Odd chars match: " + guess)
+        }
+    }
+}

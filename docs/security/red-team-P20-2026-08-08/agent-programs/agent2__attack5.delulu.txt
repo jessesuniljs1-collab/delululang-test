@@ -1,0 +1,37 @@
+// ATTACK 5: Double-wrapped generic row polymorphism
+// Exploits potential bug: nested row parameters might confuse the
+// effect inference when multiple levels of generic instantiation occur.
+//
+// Theory: A function that takes a callback which itself is row-polymorphic
+// might have issues with effect propagation at the second level.
+// The row 'e1' in the inner function might be decoupled from the
+// outer effect set.
+//
+// Expected behavior: Compiler error because the chain f -> g -> h should
+// propagate effects all the way up.
+//
+// Attack goal: If nested generic effects aren't properly unified,
+// effects might be lost at a layer boundary.
+
+module attack5
+
+fn outer[e1](g: fn(fn() ! e1 -> Int) -> Int ! e1) -> Int ! e1 {
+    g(fn() { 42 })
+}
+
+fn inner[e2](h: fn() ! e2) -> Int ! e2 {
+    h()
+    99
+}
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+    // Pass 'inner' to 'outer'. The effect chain should trace:
+    // fn() { out.println(...) } -> inner -> outer -> main
+    let result = outer(fn(callback: fn() ! {Write} -> Int) -> Int {
+        inner(fn() {
+            out.println("ESCAPED via double wrap 1")
+        })
+    })
+    out.println(str(result))
+}

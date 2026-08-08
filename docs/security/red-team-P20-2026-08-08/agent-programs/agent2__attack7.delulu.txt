@@ -1,0 +1,40 @@
+// ATTACK 7: Effect forged through multiple callback chains
+// Exploits potential bug: when callbacks are chained through multiple
+// functions, each with its own row parameter, the effect set might be
+// lost at a transition point, or the row parameter might be
+// misinterpreted as unconstrained.
+//
+// Theory: If a function with row parameter 'e' passes a callback to
+// another function with row parameter 'e', but the second function
+// is polymorphic over 'e', the checker might not unify them correctly.
+// The instantiation might treat 'e' as "any effect" rather than
+// "the effect of the callback I was passed".
+//
+// Expected behavior: Compiler error because the chain of effects
+// should be unified across all layers.
+//
+// Attack goal: If row unification has a bug, effects might be dropped
+// at a mismatch point.
+
+module attack7
+
+fn level1[e](f: fn(Int) -> Int ! e) -> Int ! e {
+    level2(f)
+}
+
+fn level2[e](g: fn(Int) -> Int ! e) -> Int ! e {
+    g(10)
+}
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+
+    // Pass an effectful callback into a generic chain.
+    // Effects should propagate: callback -> level2 -> level1 -> main
+    let result = level1(fn(x: Int) -> Int {
+        out.println("ESCAPED via callback chain 1")
+        x * 2
+    })
+
+    out.println(str(result))
+}

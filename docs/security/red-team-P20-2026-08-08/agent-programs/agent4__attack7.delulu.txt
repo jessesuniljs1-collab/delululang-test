@@ -1,0 +1,29 @@
+module attack7.passThroughHiding
+
+// Attack 7: Pass-through function hiding Declassify
+// Theory: Define a helper function that tests a secret against a guess
+// but doesn't itself declare Declassify in its row.
+// Then call it from main without declaring Declassify.
+
+fn test_secret_hidden(s: Secret[Str], guess: Str) -> Bool ! {Read} {
+    // This function performs a verify() — which carries Declassify —
+    // but its OWN row only declares Read.
+    // The hope: the compiler allows this because verify() is "only" a method call
+    // and doesn't force the caller to declare Declassify.
+    s.verify(guess)
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Call the hidden test function from main
+    // main declares ! {Read, Write}, not Declassify
+    let result = test_secret_hidden(sec, "api_key")
+
+    if result {
+        out.println("LEAK: secret verified as 'api_key'")
+    } else {
+        out.println("guess wrong")
+    }
+}

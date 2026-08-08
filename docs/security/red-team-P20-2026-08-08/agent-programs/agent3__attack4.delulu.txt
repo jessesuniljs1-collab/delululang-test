@@ -1,0 +1,55 @@
+module attack4
+
+// TECHNIQUE: reach a capability through a global or an uninitialized/default field, instead of
+// receiving it as a parameter.
+//
+// Three sub-attempts:
+//  (A) module-level MUTABLE global used as a capability stash, written once by a function that
+//      legitimately holds `root`, read later by a function that never received anything.
+//      Prediction: refused outright — `var` is not legal at module scope at all (DL0305).
+//      Written LAST in this file and isolated, because the parser's error recovery for a
+//      rejected `var` swallows the following item if one is placed immediately after it.
+//  (B) module-level CONSTANT holding Option[Cap[Console]]. Legal (it is a pure value — None
+//      carries no payload) but should be permanently None, because nothing outside a function
+//      body ever has access to `root` to produce a `Some`.
+//  (C) a record type with a Cap[Console] field, constructed with that field OMITTED from the
+//      literal — an "uninitialized field". A throwaway probe confirmed `Holder { }` for
+//      `type Holder { stash: Cap[Console] }` checks CLEAN with no diagnostic: check_record
+//      (delulu-check/src/check.rs) verifies every SUPPLIED field is declared (DL0405 for an
+//      extra one) but never verifies every DECLARED field was supplied — unlike ordinary
+//      function/constructor calls, which get a dedicated DL0403 "missing argument"
+//      diagnostic. So this sub-attempt is expected to COMPILE even though a real Cap[Console]
+//      was never provided. Whether it BREAKS anything depends on what reading the phantom
+//      field does at runtime.
+
+// (B) — expected to compile; permanently None, no function anywhere assigns to it (module
+// constants cannot even see `root`, so there is no expression that could produce Some(..) here).
+let global_maybe_cap: Option[Cap[Console]] = None
+
+type Holder { stash: Cap[Console] }
+
+fn read_global(out: Cap[Console]) ! {Write} {
+    match global_maybe_cap {
+        Some(c) => c.println("(B) SMUGGLED a Cap[Console] through a module constant"),
+        None => out.println("(B) global_maybe_cap is None, as it must always be")
+    }
+}
+
+// This function never receives a capability as a parameter (besides `out`, used only to report
+// the result) — the forged value must come entirely from the record literal `Holder { }` below.
+fn use_uninitialized_field(out: Cap[Console]) ! {Write} {
+    let h = Holder { }
+    out.println("(C) built Holder{} with the stash field completely omitted - no DL0403 fired")
+    h.stash.println("(C) SMUGGLED a Cap[Console] out of an omitted record field")
+    out.println("(C) if you see this, the phantom field call did NOT fault")
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    read_global(out)
+    use_uninitialized_field(out)
+    out.println("attack4 finished")
+}
+
+// (A) — module-level mutable state, isolated at end of file. Expected: DL0305 right here.
+var stash: Option[Cap[Console]] = None

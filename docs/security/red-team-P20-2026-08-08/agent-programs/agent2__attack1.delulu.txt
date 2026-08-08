@@ -1,0 +1,31 @@
+// ATTACK 1: Callback effect forgotten through generic parameter
+// Exploits potential bug: higher-order function row polymorphism might not
+// properly constrain what effects can flow through a generic callback.
+//
+// Theory: If a generic parameter 'e' is not properly instantiated,
+// a caller might pass an effectful closure while the row inference
+// says the function is pure (! {}).
+//
+// Expected behavior: This should fail to compile (DL0501) because 'apply'
+// is called with an effectful lambda, which should propagate to main.
+//
+// Attack goal: If the checker has a hole in generic effect inference,
+// this might compile and run while declaring ! {}, then print "ESCAPED".
+
+module attack1
+
+fn apply[T, e](f: fn(T) -> T ! e, x: T) -> T ! e {
+    f(x)
+}
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+    // Pass a callback that performs Write through a generic parameter.
+    // The generic 'e' should force 'apply' to inherit the callback's effect.
+    // If there's a bug in effect instantiation, this might not propagate.
+    let result = apply(fn(x: Int) -> Int {
+        out.println("ESCAPED via callback 1")
+        x + 1
+    }, 42)
+    out.println(str(result))
+}

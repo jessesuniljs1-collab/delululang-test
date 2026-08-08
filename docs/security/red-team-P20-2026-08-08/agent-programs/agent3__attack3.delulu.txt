@@ -1,0 +1,43 @@
+module attack3
+
+// TECHNIQUE: smuggle a capability into existence through a generic Option/Result.
+// `fn conjure[T]() -> Option[T] { None }` type-checks for ANY T, including T = Cap[Console] or
+// T = Root — the type system happily lets us instantiate the generic at an authority-bearing
+// type. The question is whether that ever hands us a REAL value: does the None/Err path ever
+// let a `Some`/`Ok` arm bind, or is parametricity actually holding (a function that never
+// receives a T cannot manufacture one, no matter what T is instantiated to)?
+
+// Generic, pure (no row): claims to maybe-produce a T "from nothing".
+fn conjure_opt[T]() -> Option[T] {
+    None
+}
+
+// Same idea via Result — E is pinned to Str so the function body can build the Err payload
+// itself; T stays fully abstract, so the Ok(..) arm can only ever be reached if this function
+// actually had a T lying around, which it never does.
+fn conjure_res[T]() -> Result[T, Str] {
+    Err("conjure_res never actually has a T to hand back")
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+
+    // Instantiate T = Cap[Console] and T = Root at the CALL SITE via the let-binding's type.
+    let maybe_cap: Option[Cap[Console]] = conjure_opt()
+    let maybe_root: Option[Root] = conjure_opt()
+    let res_cap: Result[Cap[Console], Str] = conjure_res()
+
+    match maybe_cap {
+        Some(c) => c.println("SMUGGLED a Cap[Console] out of thin air"),
+        None => out.println("maybe_cap: got None, as it must — no payload was ever created")
+    }
+    match maybe_root {
+        Some(r) => r.console().println("SMUGGLED a Root out of thin air"),
+        None => out.println("maybe_root: got None, as it must")
+    }
+    match res_cap {
+        Ok(c) => c.println("SMUGGLED a Cap[Console] via Result"),
+        Err(e) => out.println("res_cap: got Err(\"" + e + "\"), as it must")
+    }
+    out.println("attack3 finished: parametricity held if only the three lines above printed")
+}

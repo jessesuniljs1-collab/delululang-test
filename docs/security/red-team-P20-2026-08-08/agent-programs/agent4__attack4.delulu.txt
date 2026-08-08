@@ -1,0 +1,28 @@
+module attack4.hashOracle
+
+// Attack 4: Hash/equality oracle
+// Theory: Try to hash or compare the secret in ways that don't explicitly call expose.
+// For example, map the secret to its hash value, then verify against known hashes.
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Map the secret to a hash-like value (simulate by taking first N chars)
+    let hashed = sec.map(fn(x) {
+        // Simulate a one-way operation: concatenate chars in reverse
+        let reversed = x.reverse()
+        reversed
+    })
+
+    // Now try common candidate secrets against the hashed version
+    let candidates = ["api_key", "password", "secret", "token"]
+
+    for candidate in candidates {
+        let candidate_hash = candidate.reverse()
+        if hashed.verify(candidate_hash) {
+            out.println("LEAK: secret is " + candidate)
+            break
+        }
+    }
+}

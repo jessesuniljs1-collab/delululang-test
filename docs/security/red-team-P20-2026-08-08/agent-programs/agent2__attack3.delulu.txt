@@ -1,0 +1,32 @@
+// ATTACK 3: Effect polymorphism with lying row declaration
+// Exploits potential bug: a function declared with a specific effect
+// row might not be validated against its actual implementation when
+// it uses generic row parameters.
+//
+// Theory: The function 'wrapper' claims to return ! {}, but actually
+// calls an effectful function. If the row checker doesn't validate
+// that the call's effect is included in the declared row, this might slip through.
+//
+// Expected behavior: Compiler error DL0501 because wrapper calls f(42)
+// where f might have Write, but wrapper declares ! {}.
+//
+// Attack goal: If effect validation is incomplete for generic rows,
+// this might compile. When main calls wrapper with an effectful callback,
+// the Write effect doesn't propagate.
+
+module attack3
+
+fn wrapper[e](f: fn(Int) -> Int ! e) -> Int ! {} {
+    // LIE: We claim to return ! {}, but we call an effectful function.
+    // The checker should reject this because 'e' could include Write.
+    f(42)
+}
+
+fn main(root: Root) ! {} {
+    let out = root.console()
+    let result = wrapper(fn(x: Int) -> Int {
+        out.println("ESCAPED via lying row 1")
+        x
+    })
+    out.println(str(result))
+}

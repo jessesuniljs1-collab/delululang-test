@@ -1,0 +1,34 @@
+module attack1
+
+// TECHNIQUE: construct Cap[Console] / Root / Secret[Str] directly from a literal, a bare
+// integer/string, or an empty record literal naming the builtin type — instead of ever
+// calling root.console() / root.secret(name) / receiving root as a parameter.
+//
+// DeluluLang has no `as`/`unsafe`/`transmute` (grep of delulu-syntax/src/token.rs turns up no
+// cast keyword at all), so the only expression forms that could "make a value out of nothing"
+// are: literals, list literals, record literals `Path { fields }`, and calls. We try each
+// against the three authority-bearing builtin types.
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+
+    // (a) Assign an Int literal where Cap[Console] is expected.
+    let forged_cap: Cap[Console] = 42
+
+    // (b) Assign a Str literal where Root is expected.
+    let forged_root: Root = "root"
+
+    // (c) Assign a Str literal where Secret[Str] is expected (bypassing root.secret(name)).
+    let forged_secret: Secret[Str] = "totally a secret"
+
+    // (d) Empty record literals naming the builtin types directly, hoping `Cap`/`Root`/`Secret`
+    // resolve as zero-field record constructors the way a user `type X { }` would.
+    let forged_cap2 = Cap { }
+    let forged_root2 = Root { }
+    let forged_secret2 = Secret { }
+
+    // If any of the above ever type-checked, this would use the forged capability for real.
+    forged_cap.println("forged console used")
+    forged_root2.console().println("forged root used")
+    out.println("if you see this line execute, attack1 broke unforgeability")
+}

@@ -1,0 +1,48 @@
+module attack5.listEscape
+
+// Attack 5: Store secret in a List and extract elsewhere
+// Theory: If we store a Secret[Str] in a List and access it later, we might
+// bypass the access control that's tied to a single point of use.
+// Or, try to iterate over a list and extract the secret from its contents.
+
+fn extract_from_list[T](lst: List[T]) -> T ! {Read} {
+    // A pure function that extracts the first element
+    // If we pass a Secret in a List, does it leak?
+    match lst.get(0) {
+        Option.Some(item) => item,
+        Option.None => ???  // Need a default, which fails
+    }
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Create a list containing the secret
+    let sec_list: List[Secret[Str]] = [sec]
+
+    // Try to extract and use it
+    let extracted = sec_list.get(0)
+    match extracted {
+        Option.Some(secret) => {
+            // Now we have the secret in our own local binding
+            // Try to verify it against guesses
+            if secret.verify("api_key") {
+                out.println("LEAK: extracted secret matches 'api_key'")
+            }
+        },
+        Option.None => out.println("list empty")
+    }
+
+    // Try another approach: map over the list
+    let results = sec_list.map(fn(s) {
+        // s is a Secret[Str]
+        // Can we test it here?
+        if s.verify("api_key") { "match" } else { "no" }
+    })
+
+    match results.get(0) {
+        Option.Some(result) => out.println(result),
+        Option.None => out.println("no result")
+    }
+}

@@ -1,0 +1,34 @@
+// ATTACK 4: Effectful callback through Option/Result wrapper
+// Exploits potential bug: effects might not propagate correctly through
+// container types like Option or Result when extracting/using contained
+// functions.
+//
+// Theory: A function stored inside Option[fn() ! e] might lose its
+// effect annotation when extracted, making the extracted function
+// appear pure even though it carries effects.
+//
+// Expected behavior: Compiler should reject this because extracting
+// the function from Ok() should preserve its effect.
+//
+// Attack goal: If effect tracking through container types is buggy,
+// this might let an effectful function escape detection.
+
+module attack4
+
+fn get_callback(root: Root) -> Result[fn() ! {Write}, Str] ! {} {
+    let out = root.console()
+    // Return a function that will print when called.
+    // Wrapped in Result, the function's effect should be preserved.
+    Ok(fn() { out.println("ESCAPED via Result wrapper 1") })
+}
+
+fn main(root: Root) ! {} {
+    match get_callback(root) {
+        Ok(callback) => {
+            // Extract the function from Ok().
+            // If the effect isn't propagated, calling it appears pure.
+            callback()
+        }
+        Err(_) => {}
+    }
+}

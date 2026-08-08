@@ -1,0 +1,10 @@
+module attack
+fn check(s: Secret[Str], g: Secret[Str]) -> Bool ! {Declassify} {
+    s.verify(g)
+}
+fn main(root: Root) ! {Write, Declassify} {
+    let out = root.console()
+    let a = root.secret("api_key")
+    let b = root.secret("guess")
+    if check(a, b) { out.println("match") } else { out.println("no") }
+}

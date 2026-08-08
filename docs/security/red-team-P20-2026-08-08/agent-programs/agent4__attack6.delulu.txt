@@ -1,0 +1,32 @@
+module attack6.conditionalLeakage
+
+// Attack 6: Conditional leakage via map
+// Theory: Use map to create a secret that encodes a guess, then verify.
+// If map sees plaintext and can return different values based on it,
+// we can create a dictionary-like attack.
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let sec = root.secret("api_key")
+
+    // Map the secret into a fixed length by checking its content
+    let length_encoded = sec.map(fn(x) {
+        match x {
+            "api_key" => "FOUND_API_KEY",
+            "password" => "FOUND_PASSWORD",
+            "secret" => "FOUND_SECRET",
+            "token" => "FOUND_TOKEN",
+            _ => "UNKNOWN"
+        }
+    })
+
+    // Now verify against the known matches
+    let guesses = ["FOUND_API_KEY", "FOUND_PASSWORD", "FOUND_SECRET", "UNKNOWN"]
+
+    for guess in guesses {
+        if length_encoded.verify(guess) {
+            out.println("Matched: " + guess)
+            // We've identified which branch the secret took!
+        }
+    }
+}

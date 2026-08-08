@@ -1,0 +1,26 @@
+module attack5
+
+// TECHNIQUE: get `main` to run with more authority than `root` by re-declaring its signature.
+//
+// The CLI/runtime source (`crates/delulu-runtime/src/interp.rs::run_main`) always does exactly:
+//     self.call_fn("main", vec![root])
+// i.e. it calls the function literally named "main" with EXACTLY ONE argument: the real Root
+// value the grant/broker layer built. `checked.result.main_present` (delulu-check/src/check.rs)
+// is just `table.fns.contains_key("main")` — it does NOT validate that main's signature is
+// `(root: Root)`. So a program is free to declare `main` with extra parameters; the question is
+// whether the runtime harness can be tricked into supplying real authority for them.
+//
+// `call_fn`'s parameter binding is:
+//     for (p, v) in f.params.iter().zip(args) { env.define(&p.name.name, v); }
+// `.zip()` stops at the SHORTER sequence. With 2 declared params and 1 supplied argument, the
+// second parameter is simply never `env.define`d. It type-checks fine (an ordinary extra
+// parameter, statically indistinguishable from any other Cap[FsWrite] parameter elsewhere), but
+// at runtime evaluating it must hit the interpreter's own unbound-name fault. Predicted: DL0907
+// "unbound name `extra`" the moment `extra` is evaluated, i.e. a clean Fault, not a forged write.
+
+fn main(root: Root, extra: Cap[FsWrite]) ! {Write} {
+    let out = root.console()
+    out.println("main started; about to use the never-bound second parameter `extra`")
+    extra.write_text("attack5_pwned.txt", "if this file exists, attack5 broke unforgeability")
+    out.println("if you see this, the write above actually happened through a forged Cap[FsWrite]")
+}
