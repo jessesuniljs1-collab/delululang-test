@@ -17,7 +17,7 @@ run.
 | D | Deployability / install from clean | ✅ portable archive builds, unpacks + runs (Linux) |
 | E | Security discovery (hardware adapter) | ✅ found + fixed a reply-framing gap (fail-closed) |
 | F | Miri (small batches) | ✅ 0 UB on the interpretable unsafe; FFI out of reach (stated) |
-| G | macOS honest assessment | pending |
+| G | macOS honest assessment | ⚠️ designed-for (cfg audit); UNVERIFIED (no Mac; C toolchain blocks cross-check) |
 | H | Documentation consistency + final full-suite | pending |
 
 ## Phase A — full-workspace suite baseline (commit `e5ae9ec`)
@@ -161,3 +161,37 @@ those — there is no real pipe and no real interpreter under Miri — so it nei
 them; it simply does not run them. They are defended instead by their own tests, the
 process-isolation contracts (`foreign_worker.rs`), and the OS boundary — not by Miri, and this log
 does not pretend otherwise.
+
+## Phase G — macOS: an honest assessment (static-only; no Mac on this bench)
+
+There is no Mac here, so macOS is **not run**, and this phase claims nothing it did not check. What it
+*could* check — the platform `cfg` paths and a cross-target type-check — shows macOS is carefully
+designed-for, and pins the exact reason it stays unverified.
+
+**The macOS-specific code is deliberate, not accidental.** Every Linux-specific path has a documented
+macOS story:
+- `microvm` isolation is Linux-only (`crates/delulu/src/main.rs`); every other platform — macOS
+  included — refuses `--isolation microvm` with **DL1408** rather than faking a weaker isolation as
+  equivalent.
+- `PR_SET_PDEATHSIG` (kill-the-worker-if-the-host-dies) is Linux-only; `crates/delulu/src/foreign_worker.rs`
+  explicitly notes that a bare `cfg(unix)` there **would break the macOS build** (libc omits it on
+  Apple/BSD), so it is `cfg(target_os = "linux")` with a portable fallback (the `WorkerGuard`'s
+  explicit kill on drop), and `libc` is scoped as a Linux-only dependency (`crates/delulu/Cargo.toml`).
+  A kqueue `EVFILT_PROC` watch is named as the macOS hardening if a macOS lane ever goes live.
+- The Unix-socket path limit is set per-OS (`crates/delulu/src/broker_transport.rs`: 104 on macOS,
+  108 elsewhere), and `cli.rs` already carries macOS-specific test branches.
+
+No cfg bug was found; nothing needed changing.
+
+**Cross-target type-check.** `rustup target add aarch64-apple-darwin` (the macOS Rust std installs
+fine) then `cargo check --target aarch64-apple-darwin -p delulu` compiles the pure-Rust dependency
+graph for Apple silicon and stops at a **C dependency's build script**: `cc-rs: failed to find tool
+"cc"`. That is the honest blocker — `blake3` (and `libffi` via pyo3) build C, which needs a
+darwin-targeting C compiler this Windows bench does not have; a real Mac ships one (Xcode
+command-line tools). The stop is a missing C toolchain, not a fault in the DeluluLang Rust.
+
+**Honest status:** macOS is **designed-for** (correct, documented `cfg` handling; the Rust
+dependencies cross-compile) but **UNVERIFIED** — never built, never run, no CI run on hardware.
+`docs/design/CROSS_PLATFORM_VERIFICATION.md` already marks every macOS gate "never run", and that
+stays true. "Works on macOS" is not a claim this pass can make; "written for macOS, and blocked only
+by the absence of a Mac and its C toolchain" is.
