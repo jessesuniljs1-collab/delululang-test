@@ -156,6 +156,41 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   output; zero existing bytes changed), across 300+ recorded cases. This was owner-directed; the
   other reserved-word tiers were declined with written reasons rather than built hastily.
 
+## Unreleased — P20 red team, broker & certificates, 2026-08-08
+
+### Security — FIXED (CRITICAL, finding P20-R4): revocation evaded by extending a revoked chain
+
+- **An operator's revocation of an adopted federation node could be undone within the same broker
+  lifetime by extending the certificate chain by one self-delegation.** Reproduced end-to-end against
+  the real broker: the ground signs `A` (anchored, delegating actuator authority to the vehicle); the
+  vehicle adopts `[A]` → a live local node; the operator runs `grants revoke` and the authority is
+  gone; the vehicle — which holds the key `A` was delegated *to* — mints `B` as a child of `A` with
+  its own key, adopts `[A, B]`, and **a fresh live node with the same `{Actuate}` authority
+  reappears.** The single-adoption guard keys on the *leaf* fingerprint, and `B` is a new leaf, so it
+  slipped straight past the very check whose stated purpose (cert.rs) is that "re-presenting a
+  credential must not undo a revocation."
+
+- **Root cause and fix.** The guard protected against re-presenting the *same* certificate but not a
+  *longer* chain containing it. Revoking an adopted node now **retires every certificate fingerprint
+  in its chain** (`revoked_adoption_fps`), and `adopt` refuses any chain that contains a retired
+  fingerprint. Every extension of a revoked chain still contains the anchored root, so retiring the
+  root's fingerprint stops all of them — `[A, B]`, `[A, B2]`, `[A, B, C]`, any of them. Verified:
+  after the fix both extensions are refused (`DL1415`), the revocation holds, and a genuinely
+  different, un-revoked credential still adopts (no over-blocking). Regression test
+  `revoking_an_adopted_node_cannot_be_undone_by_extending_the_chain` was **observed to fail** when the
+  new refusal is neutralized.
+
+- **Why the model did not catch it, recorded because it matters.** The `Custody.tla` model checks
+  single-adoption and even reconstructs the certificate-replay bug when `SINGLE_ADOPTION` is turned
+  off — but it abstracts a credential as a single opaque object with one identity, not a **chain of
+  arbitrary length**. A property about chain *extension* cannot be stated over that abstraction, so
+  bounded model checking could not have found this, exactly as the Z3 order model could not see the
+  antichain collapse behind F1. This was found by adversarial execution against the implementation.
+  The honest scope of the fix: it closes re-adoption within a broker lifetime; a broker **restart**
+  still clears the in-memory tree and the retired-fingerprint set together (documented, deliberate —
+  the grant tree does not persist), and revocation still cannot cross a partition (that bound is the
+  uplink lease, unchanged).
+
 ## Unreleased — P20 zero-trust red team, 2026-08-08
 
 ### Language — CHANGED (narrows what compiles): type nesting is capped at 128 levels (DL0211)

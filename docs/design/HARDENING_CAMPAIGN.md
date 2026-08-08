@@ -2912,3 +2912,38 @@ diagnostic and a `type`-alias remedy in the message. Witnesses: `reject/DL0211_d
 (conformance) and two falsified parser tests. The core-invariance snapshot moved **only additively**
 (the witness's own output; zero existing bytes changed), which is the proof no program that already
 compiled changed meaning.
+
+### P20-R4 · Revocation evaded by extending a revoked certificate chain — CLOSED (CRITICAL)
+
+**What.** An operator's `grants revoke` of an adopted federation node was undoable within the same
+broker lifetime. Reproduced end-to-end: ground signs `A` (anchored → vehicle, actuator authority);
+vehicle adopts `[A]` → live node; operator revokes it → authority gone; vehicle mints `B` = child of
+`A` with its OWN key (it is `A`'s subject, so it may delegate onward), adopts `[A, B]`, and a fresh
+live node with the same `{Actuate}` authority reappears. The single-adoption guard keys on the LEAF
+fingerprint; `B` is a new leaf, so it bypassed the check whose own comment says it exists so that
+"re-presenting a credential must not undo a revocation."
+
+**Threat model.** The attacker is the holder of the leaf key — the party the authority was delegated
+to (the vehicle itself). That party can always mint children of a certificate it holds; the defect is
+that the vehicle's own broker, following the code, then *restored* revoked authority. It is a
+defense-in-depth failure in the broker's revocation enforcement, the same class the single-adoption
+guard was added to close, left open for the chain-extension case.
+
+**Fix.** Revoking an adopted node retires every certificate fingerprint in its chain
+(`revoked_adoption_fps` in `tree.rs`); `adopt` (`cert.rs`) refuses any chain containing a retired
+fingerprint. Every extension of a revoked chain still contains the anchored root, so retiring the
+root's fingerprint stops them all. Surgical: a different, un-revoked credential still adopts.
+
+**Why the TLA+ model missed it.** `Custody.tla` checks single-adoption and reconstructs the
+certificate-replay bug with `SINGLE_ADOPTION=FALSE` — but it abstracts a credential as one opaque
+object, not a **chain of arbitrary length**, so it cannot state a property about chain *extension*.
+Bounded model checking could not have found this, precisely as the Z3 order model could not see the
+antichain collapse behind F1: a proof about an abstraction is only as strong as the abstraction's
+ability to state the property. Found by adversarial execution against the implementation instead.
+
+**Residue, named not hidden.** The fix closes re-adoption within a broker lifetime. A broker
+**restart** still clears the in-memory grant tree and the retired-fingerprint set together — that is
+the documented, deliberate "the grant tree does not persist" behavior (P17-B1), not a new hole.
+Revocation still cannot cross a partition; the bound that survives one is the uplink lease, unchanged.
+Pinned by `revoking_an_adopted_node_cannot_be_undone_by_extending_the_chain`, falsified against the
+un-fixed code.

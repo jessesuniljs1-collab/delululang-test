@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 108044 |
+| Rust lines | 108151 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 136 |
-| Markdown lines | 36905 |
+| Markdown lines | 36975 |
 | DeluluLang programs | 151 |
 | Registered diagnostic codes | 151 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1081 / 9234 |
+| Nodes / edges in this map | 1081 / 9236 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -134,13 +134,13 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 8386 lines
+- **Modules:** 14 files, 8493 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/audit.rs` | 1057 | Phase 5d — the append-only, hash-chained audit log (spec §7, invariant 26). |
 | `src/authority.rs` | 408 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
-| `src/cert.rs` | 1380 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
+| `src/cert.rs` | 1450 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 399 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
 | `src/guard.rs` | 1204 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
@@ -150,7 +150,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/path.rs` | 563 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/secrets.rs` | 511 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
-| `src/tree.rs` | 934 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
+| `src/tree.rs` | 971 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
 | `src/validate.rs` | 597 | Phase 5c — the two validation classes + revocation epochs (spec §4). |
 
 ### `delulu-check`

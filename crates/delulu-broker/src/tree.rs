@@ -118,6 +118,16 @@ pub struct Broker {
     /// simply presenting the same certificate again), and it is how a contact receipt finds the node
     /// it renews.
     adopted: HashMap<String, (GrantId, Option<i64>)>,
+    /// Every certificate fingerprint in an adopted chain, keyed by the local node it was adopted as
+    /// (finding P20-R4). Consulted on revoke to retire the WHOLE credential, not just the leaf.
+    adopted_chain_fps: HashMap<GrantId, Vec<String>>,
+    /// Fingerprints belonging to a chain whose adopted node has been revoked. Re-adopting any chain
+    /// that contains one of these is refused. This closes the revocation-evasion that a single-adoption
+    /// check on the LEAF alone leaves open (P20-R4): extending a revoked chain by one fresh
+    /// self-delegation yields a new leaf, so the leaf check passes while the credential is unchanged —
+    /// and every extension still contains the anchored root, so retiring the root's fingerprint stops
+    /// them all.
+    revoked_adoption_fps: HashSet<String>,
     /// The Guard (Stage 5 chunk 6): policy, permits, pending requests, bypass flag, owner code —
     /// all daemon-memory only (the CLI injects a persisted policy + the print-once owner code). A
     /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
@@ -162,6 +172,8 @@ impl Broker {
             key: None,
             redeemed: HashSet::new(),
             adopted: HashMap::new(),
+            adopted_chain_fps: HashMap::new(),
+            revoked_adoption_fps: HashSet::new(),
             guard: crate::guard::GuardState::new(),
         }
     }
@@ -299,6 +311,18 @@ impl Broker {
     /// Record a certificate chain as adopted: which node carries it, and its outer window.
     pub(crate) fn mark_adopted(&mut self, fingerprint: &str, node: &GrantId, window: Option<i64>) {
         self.adopted.insert(fingerprint.to_string(), (node.clone(), window));
+    }
+
+    /// Does this chain contain a certificate whose credential this broker has revoked (P20-R4)?
+    /// If so, adopting it would restore revoked authority and must be refused.
+    pub(crate) fn chain_hits_revoked_adoption(&self, chain_fps: &[String]) -> bool {
+        chain_fps.iter().any(|fp| self.revoked_adoption_fps.contains(fp))
+    }
+
+    /// Remember every certificate fingerprint in an adopted chain, so a later revoke of the node can
+    /// retire the whole credential rather than only the leaf that was presented (P20-R4).
+    pub(crate) fn record_adopted_chain(&mut self, node: &GrantId, chain_fps: Vec<String>) {
+        self.adopted_chain_fps.insert(node.clone(), chain_fps);
     }
 
     /// Which local node an adopted certificate became — for reporting a renewal back to an
@@ -575,6 +599,19 @@ impl Broker {
             }
         }
         newly_revoked.sort();
+        // P20-R4: revoking an adopted node retires its whole credential. Every certificate in the
+        // adopted chain becomes un-re-adoptable, so re-presenting the chain extended by a fresh
+        // self-delegation — which has a new leaf fingerprint and would otherwise slip past the leaf
+        // single-adoption check — can no longer bring the revoked authority back.
+        let retired: Vec<String> = newly_revoked
+            .iter()
+            .filter_map(|id| self.adopted_chain_fps.get(id))
+            .flatten()
+            .cloned()
+            .collect();
+        for fp in retired {
+            self.revoked_adoption_fps.insert(fp);
+        }
         (seq, Ok(RevokeOutcome { by_seq: seq, newly_revoked, epoch: self.epoch }))
     }
 

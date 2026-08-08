@@ -541,6 +541,7 @@ impl crate::tree::Broker {
         let authority = verify_chain(chain, anchors, verifier, now)?;
         let leaf = chain.last().expect("verify_chain rejects an empty chain");
         let fingerprint = leaf.fingerprint();
+        let chain_fps: Vec<String> = chain.iter().map(|c| c.fingerprint()).collect();
         if self.adopted_node(&fingerprint).is_some() {
             let seq = self.consume_seq();
             self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
@@ -549,6 +550,22 @@ impl crate::tree::Broker {
                     "certificate `{fingerprint}` has already been adopted by this broker. A second \
                      adoption is refused because it would restore authority an operator may have \
                      revoked — re-presenting a credential must not undo a revocation"
+                ),
+            });
+        }
+        // P20-R4: the leaf check above only catches re-presenting the SAME certificate. A holder who
+        // extends a revoked chain by one fresh self-delegation gets a new leaf, so that check passes
+        // while the credential is unchanged. Revocation retires every fingerprint in the chain, so a
+        // new chain sharing ANY of them — in practice always the anchored root — is refused here.
+        if self.chain_hits_revoked_adoption(&chain_fps) {
+            let seq = self.consume_seq();
+            self.record_op(seq, "adopt", None, Some(fingerprint.clone()), None, "deny", None);
+            return Err(Denial::CertUntrusted {
+                detail: format!(
+                    "a certificate in the chain ending at `{fingerprint}` belongs to a credential \
+                     this broker has revoked. Extending a revoked chain with a fresh delegation does \
+                     not restore it: revocation retires the whole credential, not only the leaf that \
+                     was presented when it was revoked"
                 ),
             });
         }
@@ -568,6 +585,8 @@ impl crate::tree::Broker {
         };
         let node = self.issue(holder, authority, ttl_millis);
         self.mark_adopted(&fingerprint, &node, window);
+        // Remember the whole chain's fingerprints so revoking this node retires the credential (P20-R4).
+        self.record_adopted_chain(&node, chain_fps);
         let seq = self.consume_seq();
         self.record_op(
             seq,
@@ -943,6 +962,57 @@ mod tests {
         assert!(
             b.check(&node, crate::validate::Op::Actuate, Some("sat0/thruster")).denial().is_some(),
             "a device the certificate never granted is refused locally"
+        );
+    }
+
+    /// **P20-R4 — revocation cannot be undone by extending a revoked chain.** The holder of the leaf
+    /// key can always mint a child of a certificate it holds, and that child has a NEW leaf
+    /// fingerprint. The single-adoption check keys on the leaf, so before this fix re-adopting the
+    /// extended chain `[root, child]` built a fresh, un-revoked node and handed the revoked authority
+    /// straight back. Now revoking an adopted node retires every fingerprint in its chain; every
+    /// extension still contains the anchored root, so all of them are refused. Found by the red team,
+    /// reproduced end-to-end against the real broker, and pinned here at the unit boundary.
+    #[test]
+    fn revoking_an_adopted_node_cannot_be_undone_by_extending_the_chain() {
+        let mut b = broker_at(500);
+        let root = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 10_000));
+
+        // 1. Adopt [root]; the authority is live.
+        let node = b
+            .adopt(std::slice::from_ref(&root), &anchors(&["ground"]), &FakeVerifier, holder())
+            .expect("adopts");
+        assert!(b.check(&node, crate::validate::Op::Actuate, Some("sat0/hga")).is_allow());
+
+        // 2. The operator revokes it. The node grants nothing afterward.
+        b.revoke(&node, &node).expect("revoked");
+        assert!(
+            b.check(&node, crate::validate::Op::Actuate, Some("sat0/hga")).denial().is_some(),
+            "a revoked node grants nothing"
+        );
+
+        // 3. THE ATTACK: extend the chain by one self-delegation the vehicle key can mint offline,
+        //    then re-adopt. This is the exact move that undid the revocation before the fix.
+        let child =
+            cert("vehicle", "vehicle", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 10_000));
+        let err = b
+            .adopt(&[root.clone(), child], &anchors(&["ground"]), &FakeVerifier, holder())
+            .expect_err("adopting an extension of a revoked chain must be refused");
+        assert_eq!(err.code(), "DL1415", "must refuse as untrusted, got {err:?}");
+
+        // 4. A SECOND, different extension is refused too — every extension shares the anchored root.
+        let child2 =
+            cert("vehicle", "other", &root.fingerprint(), auth(&["Actuate"], &[NARROW]), (0, 9_500));
+        assert!(
+            b.adopt(&[root.clone(), child2], &anchors(&["ground"]), &FakeVerifier, holder()).is_err(),
+            "no extension of the revoked credential may adopt"
+        );
+
+        // 5. Control — a genuinely DIFFERENT credential (different window => different fingerprint)
+        //    still adopts. The fix retires the revoked credential, it does not block adoption at large.
+        let other = cert("ground", "vehicle", ANCHOR, auth(&["Actuate"], &[WIDE]), (0, 9_000));
+        assert!(
+            b.adopt(std::slice::from_ref(&other), &anchors(&["ground"]), &FakeVerifier, holder()).is_ok(),
+            "an un-revoked, unrelated credential must still adopt"
         );
     }
 
