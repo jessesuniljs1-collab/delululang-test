@@ -9,9 +9,24 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
+| warning | `prose-cites-missing-path` | 9 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `ruling-cited-without-its-stage` | 1 |
 | note | `test-count-quoted-but-unverifiable` | 1 |
+
+## warning — `prose-cites-missing-path` (9)
+
+**What to do:** correct the path, or say plainly that it no longer exists
+
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/deadman-NOTES.md:99` — prose names `crates/delulu-runtime/src/device.rs:355-428`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/deadman-NOTES.md:287` — prose names `crates/delulu/src/cli.rs:4639-4640`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/deadman-NOTES.md:350` — prose names `crates/delulu/src/broker_transport.rs:258-443`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/deadman-NOTES.md:351` — prose names `crates/delulu/src/device.rs:590-610`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md:79` — prose names `crates/delulu-wasm/tests/hostile_guest.rs:132–141`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md:121` — prose names `crates/delulu-wasm/tests/hostile_guest.rs:99–108`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md:165` — prose names `crates/delulu-wasm/tests/hostile_guest.rs:111–129`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md:249` — prose names `crates/delulu-wasm/tests/lib.rs:443–455`, which is nowhere in the tree
+- `docs/security/red-team-surfaces-2026-08-08/agent-notes/wasm-NOTES.md:296` — prose names `crates/delulu-wasm/tests/lib.rs:185–217`, which is nowhere in the tree
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

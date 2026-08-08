@@ -158,6 +158,29 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — P20 red team, broker & certificates, 2026-08-08
 
+### Security — IPC-1 + DEADMAN-1: bound the broker read (multi-agent red team of the untested surfaces)
+
+- **Multi-agent red team** (2× Haiku 4.5 attacking, head chef holding authority and re-verifying every
+  claim) of the broker IPC daemon, the device dead-man/e-stop, and the WASM host. WASM: clean
+  (deny-by-default Wasmtime linker, effects host-mediated, loop refusal complete — no escape). Two real
+  findings, one root cause: **no IPC read timeout**. Evidence + verdicts:
+  `docs/security/red-team-surfaces-2026-08-08/`.
+- **IPC-1:** the single-connection blocking serve loop had no server-side read timeout, so a same-uid
+  client that connects and stalls hung the daemon indefinitely — denying every custody op, including the
+  operator's e-stop revoke. **DEADMAN-1 (amplifies it):** the dead-man watchdog's authority probe used
+  the unbounded `request()`, so on Unix a hung broker blocked the probe forever, stalling the watchdog
+  and disabling the heartbeat park for every device — a same-uid attacker could defeat the dead-man on
+  Linux (Windows already fail-closed at connect time).
+- **Fix (one mechanism, both sides):** `Connection::set_read_timeout` on both transports (Unix
+  `SO_RCVTIMEO`; Windows a `PeekNamedPipe` poll — still blocking std I/O, no async, no thread pool). The
+  serve loop bounds each read at 5 s and drops a stalled client (fail-closed); the dead-man probe uses
+  `request_timed` with a 1 s bound → a non-answering broker surfaces as `Err` → `AuthorityState::Dead` →
+  the device PARKS. The automatic heartbeat dead-man is now independent of broker responsiveness on both
+  platforms. Pinned + falsified (`request_timed_fails_closed_...`); Windows 15/0 + 144/0 + 66/66, Linux
+  16/0 + 144/0 + integration green. **Residual (category 7):** a same-uid attacker can still churn
+  connections or kill the daemon — the *indefinite* hang is what's closed; run untrusted agents as a
+  separate OS user.
+
 ### Security — DISC-1: opt-in anchor-verified root issuance (a same-user vulnerability, mitigated not "fixed")
 
 - **Discovered + proven:** the Guard gates *delegated* grants but not **root** creation, and unsigned

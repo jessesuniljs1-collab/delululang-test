@@ -477,6 +477,16 @@ question that cost this project its worst soundness hole, and it settles nothing
     programmatic / never headless" control that is **not** what is enforced; do not cite it as
     guaranteed. Threat model, architecture, evidence, and the migration analysis:
     `design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`.
+12. **Broker availability against a same-OS-user adversary (IPC-1 / DEADMAN-1, 2026-08-08).** The
+    broker's single-connection serve loop and the dead-man watchdog's authority probe now BOUND their
+    reads (`Connection::set_read_timeout`), so a stalled client can no longer hang the daemon
+    indefinitely, and a hung broker can no longer stall the dead-man on Unix — the automatic heartbeat
+    park is now fail-closed independent of broker responsiveness (**category 4**, pinned + falsified by
+    `request_timed_fails_closed_on_a_broker_that_accepts_but_never_answers`). What stays **category 7**:
+    full availability against a same-uid adversary is not guaranteed — it can still churn/dribble
+    connections or simply `kill` the daemon (it shares the OS user). The *indefinite* hang is closed;
+    saturation DoS by a co-resident same-uid process is a deployment property (run untrusted agents as a
+    separate OS user). See `security/red-team-surfaces-2026-08-08/`.
 
 ---
 
