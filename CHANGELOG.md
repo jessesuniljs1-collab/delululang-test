@@ -30,19 +30,26 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   to serve there, but only after writing the world-readable key.) Category 7: an OS/filesystem
   property — but it is no longer *silent* (see the hardening below).
 
-### Security — hardening: make the silent chmod no-op observable (mitigates P21-F1)
+### Security — hardening: fail closed when the filesystem can't keep secrets owner-only (mitigates P21-F1)
 
-- After setting owner-only permissions, delulu now re-reads the achieved mode and **warns** when
-  group/other bits remain — i.e. when the filesystem ignored the `chmod`. Applied at the two
-  security-critical write points in the `delulu` crate: the broker state directory
-  (`crates/delulu/src/broker_transport.rs`, which covers `broker.key`, `secrets.json` and the audit
-  log inside it) and the `keygen` private key (`crates/delulu/src/signing.rs`). The check is a pure,
-  unit-tested predicate (`owner_only`); the warning names the filesystem hazard and points the
-  operator at a native filesystem. Unix-only (Windows ACL hardening remains the documented v0.8 gap).
-  Witnessed **silent on ext4, warning on 9p** for both the broker and `keygen`
-  (`docs/security/red-team-p21-crossaccount-2026-08-08/`); unit test
-  `signing::p21_perm_tests::owner_only_flags_group_or_other_bits`. Windows bin 69/0 + doctor_cli 7/0
-  + evidence 3/0; Linux bin 73/0; clippy clean; Survey 0 error/0 warning.
+- Two layers, both unix-only (Windows ACL hardening remains the documented v0.8 gap):
+  - **Fail-closed (pre-write).** Before writing a private key (`keygen`) or starting the broker,
+    delulu probes the target directory with a throwaway non-secret file (create 0600, read the mode
+    back) and **refuses** if the filesystem does not enforce owner-only permissions — so the secret is
+    never written where other local users could read it. `keygen`'s refusal is overridable with
+    `--dangerously-allow-insecure-perms`; the broker has **no** override (a custody daemon must not run
+    with world-readable secrets, and such filesystems cannot bind its socket anyway).
+  - **Warn (post-write backstop).** When a secret IS written (override, or a file-specific failure),
+    delulu re-reads the achieved mode and warns if group/other bits remain.
+- Applied at the two security-critical write points in the `delulu` crate: the `keygen` private key
+  (`crates/delulu/src/signing.rs`) — how the DISC-1 anchor key would leak if `~/.delulu` sat on a
+  Windows-mounted/network volume — and the broker state directory (`crates/delulu/src/brokerd.rs` +
+  `crates/delulu/src/broker_transport.rs`, covering `broker.key` / `secrets.json` / audit). Pure,
+  unit-tested predicate (`owner_only`) plus a probe test. **Witnessed:** on 9p, `keygen` and
+  `broker start` now REFUSE and write nothing (previously the broker wrote a world-readable
+  `broker.key` before failing to bind); on ext4 both proceed; the override proceeds with a warning
+  (`docs/security/red-team-p21-crossaccount-2026-08-08/`). Windows bin 69/0 + doctor_cli 7/0 +
+  evidence 3/0; Linux bin 74/0; clippy clean; Survey 0 error / 0 warning.
 
 ### Documentation
 

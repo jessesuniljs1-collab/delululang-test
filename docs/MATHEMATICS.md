@@ -501,8 +501,11 @@ question that cost this project its worst soundness hole, and it settles nothing
     mount (9p/DrvFs under WSL; by the same mechanism NFS-without-mapping, SMB, exFAT/FAT)
     `chmod 0600/0700` is a **silent no-op** — a separate account read a "0600" file and the broker's
     `broker.key` — and delulu could not tell, because every `set_permissions` discarded its result.
-    That is no longer silent: delulu re-reads the achieved mode and warns when it did not stick
-    (`crates/delulu/src/broker_transport.rs`, `crates/delulu/src/signing.rs`), and the broker cannot
+    That is no longer silent — and no longer merely a warning: before writing a private key (`keygen`)
+    or starting the broker, delulu probes the target directory with a throwaway file and **refuses,
+    fail-closed**, when the filesystem does not enforce owner-only permissions, so the secret is never
+    written (`crates/delulu/src/signing.rs`, `crates/delulu/src/brokerd.rs`); a post-write warning
+    (`crates/delulu/src/broker_transport.rs`) backstops the `keygen` override. The broker also cannot
     bind its `AF_UNIX` socket on 9p at all (`ENOTSUP`). Evidence and both transcripts:
     `security/red-team-p21-crossaccount-2026-08-08/`.
 

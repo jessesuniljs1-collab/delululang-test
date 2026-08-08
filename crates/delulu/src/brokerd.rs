@@ -635,6 +635,16 @@ pub(crate) fn serve_inner(
     bypass: bool,
 ) -> io::Result<()> {
     std::fs::create_dir_all(state_dir)?;
+    // P21: refuse to start if the state directory's filesystem cannot enforce owner-only permissions —
+    // broker.key, secrets.json and the audit log would otherwise be readable by other local users.
+    // Probed BEFORE broker.key is written, so nothing leaks. No override: a custody daemon must not run
+    // with world-readable secrets, and the filesystems this catches (9p/DrvFs) cannot bind the socket
+    // anyway — fix the mount, not the daemon.
+    if let Some(msg) =
+        crate::signing::perms_unenforced_refusal(state_dir, "refusing to start: the broker state directory", false, "")
+    {
+        return Err(io::Error::other(msg));
+    }
     let key = load_or_create_key(key_path(state_dir))
         .map_err(|e| io::Error::other(format!("broker key: {e}")))?;
     let log = AuditLog::open(audit_dir(state_dir))

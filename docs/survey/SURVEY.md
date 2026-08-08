@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 109055 |
+| Rust lines | 109137 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 150 |
-| Markdown lines | 39373 |
+| Markdown lines | 39408 |
 | DeluluLang programs | 151 |
 | Registered diagnostic codes | 152 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1100 / 9415 |
+| Nodes / edges in this map | 1100 / 9420 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 19423 lines
+- **Modules:** 22 files, 19505 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -92,7 +92,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_client.rs` | 431 | Phase 5f — `BrokerClientCustody`: the daemon-mode [`Custody`] impl (spec §4). |
 | `src/broker_ipc.rs` | 370 | Phase 5f — the broker IPC wire protocol (spec §2, head-chef ruling 2). |
 | `src/broker_transport.rs` | 550 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
-| `src/brokerd.rs` | 1855 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
+| `src/brokerd.rs` | 1865 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
 | `src/cli.rs` | 8245 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
@@ -109,7 +109,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
 | `src/repl.rs` | 153 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1145 | `delulu run` — the command that actually executes a program. |
-| `src/signing.rs` | 830 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
+| `src/signing.rs` | 902 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 
 ### `delulu-atlas`
 

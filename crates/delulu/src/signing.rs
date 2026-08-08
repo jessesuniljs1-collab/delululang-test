@@ -97,6 +97,51 @@ pub(crate) fn set_owner_only_or_warn(path: &Path, mode: u32, what: &str) {
     }
 }
 
+/// Does `dir`'s filesystem actually enforce owner-only file permissions? Probes with a throwaway,
+/// non-secret file (create 0600, chmod 0600, read the mode back, delete) — so it can run BEFORE any
+/// secret is written and leak nothing. `Ok(false)` means a 0600 file here is world-readable
+/// (9p/DrvFs/NFS/SMB/exFAT/FAT): the P21 exposure. Uses `owner_only` for the verdict.
+#[cfg(unix)]
+fn dir_enforces_owner_only(dir: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let probe = dir.join(".delulu-perm-probe");
+    let _ = std::fs::remove_file(&probe);
+    std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&probe)?;
+    let _ = std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o600));
+    let got = std::fs::metadata(&probe)?.permissions().mode() & 0o777;
+    let _ = std::fs::remove_file(&probe);
+    Ok(owner_only(got))
+}
+
+/// Fail-closed guard for P21: if `dir` cannot enforce owner-only permissions, return an operator-facing
+/// refusal so the caller can decline to write a secret there BEFORE it is written — unlike
+/// `set_owner_only_or_warn`, which fires only AFTER the secret is already on disk. `allow` (an explicit
+/// operator override) and a non-unix target return None. An inconclusive probe (an IO error) also
+/// returns None: the subsequent write would fail on its own and the post-write check backstops it — we
+/// do not block on a probe we could not run. `override_hint` is appended to the message.
+pub(crate) fn perms_unenforced_refusal(dir: &Path, what: &str, allow: bool, override_hint: &str) -> Option<String> {
+    if allow {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        if let Ok(false) = dir_enforces_owner_only(dir) {
+            return Some(format!(
+                "{what} `{}` is on a filesystem that does not enforce owner-only permissions \
+                 (9p/DrvFs/NFS/SMB/exFAT/FAT); the secret would be readable by other local users. Put \
+                 delulu state on a native filesystem{override_hint}. (P21)",
+                dir.display()
+            ));
+        }
+        None
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (dir, what, override_hint);
+        None
+    }
+}
+
 #[cfg(unix)]
 fn lock_down(path: &Path) {
     set_owner_only_or_warn(path, 0o600, "signing key");
@@ -122,6 +167,20 @@ mod p21_perm_tests {
         assert!(!owner_only(0o604), "other-readable");
         assert!(!owner_only(0o710), "group-exec = dir traversal for another user");
     }
+
+    #[test]
+    fn dir_probe_reports_true_on_a_native_filesystem_and_cleans_up() {
+        // CI's temp dir is a native (enforcing) filesystem, so the pre-write probe must say so, leave
+        // nothing behind, and raise no false refusal.
+        let d = std::env::temp_dir().join(format!("delulu-p21-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        assert_eq!(super::dir_enforces_owner_only(&d).ok(), Some(true), "ext4/tmpfs enforces owner-only");
+        assert!(!d.join(".delulu-perm-probe").exists(), "the probe file must be removed");
+        assert!(super::perms_unenforced_refusal(&d, "x", false, "").is_none(), "no false refusal when enforced");
+        assert!(super::perms_unenforced_refusal(&d, "x", true, "").is_none(), "override always proceeds");
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }
 
 pub fn cmd_keygen(rest: &[String]) -> i32 {
@@ -133,6 +192,19 @@ pub fn cmd_keygen(rest: &[String]) -> i32 {
     };
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("error: cannot create {}: {e}", dir.display());
+        return 2;
+    }
+    // P21: refuse to write a private key onto a filesystem that cannot keep it owner-only — the key
+    // would be readable by other local users (this is how the DISC-1 anchor key would leak if `~/.delulu`
+    // sat on a Windows-mounted / network volume). Probed BEFORE the key is generated, so nothing leaks.
+    let allow_insecure = rest.iter().any(|a| a == "--dangerously-allow-insecure-perms");
+    if let Some(msg) = perms_unenforced_refusal(
+        &dir,
+        "refusing to write the ed25519 private key:",
+        allow_insecure,
+        " or pass --dangerously-allow-insecure-perms to override",
+    ) {
+        eprintln!("error: {msg}");
         return 2;
     }
     let key_path = dir.join(name.as_deref().unwrap_or("id_ed25519"));

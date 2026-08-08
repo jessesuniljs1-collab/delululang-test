@@ -63,14 +63,25 @@ OS/filesystem property outside the proof boundary.
 
 ## What ships in response
 
-The filesystem cannot be fixed from inside delulu, but the *silence* can. The hardening commit
-makes the swallowed `set_permissions` observable: after setting owner-only perms, delulu re-reads
-the achieved mode and, if group/other bits remain, warns loudly that this filesystem does not
-enforce POSIX permissions and that secrets here are exposed. Applied at the two security-critical
-write points in the `delulu` crate — the broker state directory (`crates/delulu/src/broker_transport.rs`,
-which covers `broker.key`, `secrets.json` and the audit log inside it) and the `keygen` private
-key (`crates/delulu/src/signing.rs`). Witnessed: silent on ext4 (Scenario 1 re-run), warns on 9p
-(Scenario 2 re-run). See the P21 hardening commit and `docs/MATHEMATICS.md`.
+delulu cannot fix the filesystem, but it can refuse to trust it. Two layers ship (both unix-only;
+Windows ACL hardening is the documented v0.8 gap):
+
+1. **Fail-closed, before the secret is written.** Before `keygen` writes a private key or the broker
+   starts, delulu probes the target directory with a throwaway non-secret file (create `0600`, read
+   the mode back) and **refuses** if the filesystem does not enforce owner-only permissions — so no
+   secret is ever written to a place other local users could read. `keygen`'s refusal is overridable
+   with `--dangerously-allow-insecure-perms`; the broker has **no** override (a custody daemon must
+   not run with world-readable secrets, and 9p cannot bind its socket anyway). This is the real fix:
+   the first commit only *warned* after the key was already on disk.
+2. **Warn, as a post-write backstop.** When a secret is written anyway (the `keygen` override, or a
+   file-specific failure), delulu re-reads the achieved mode and warns if group/other bits remain.
+
+Applied at `crates/delulu/src/signing.rs` (the `keygen` private key — how the DISC-1 anchor key would
+leak on a shared `~/.delulu`), `crates/delulu/src/brokerd.rs` (broker start) and
+`crates/delulu/src/broker_transport.rs` (the post-write dir warning). **Witnessed:** on 9p, `keygen`
+and `broker start` now REFUSE and write nothing (the broker no longer even creates `broker.key`); on
+ext4 both proceed; the override proceeds with a warning. Pure unit-tested predicate (`owner_only`) plus
+a probe test. See the P21 hardening commits and `docs/MATHEMATICS.md`.
 
 ## Honest residuals (unchanged, now precisely bounded)
 
