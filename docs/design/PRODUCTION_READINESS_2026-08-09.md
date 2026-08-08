@@ -18,7 +18,7 @@ run.
 | E | Security discovery (hardware adapter) | ✅ found + fixed a reply-framing gap (fail-closed) |
 | F | Miri (small batches) | ✅ 0 UB on the interpretable unsafe; FFI out of reach (stated) |
 | G | macOS honest assessment | ⚠️ designed-for (cfg audit); UNVERIFIED (no Mac; C toolchain blocks cross-check) |
-| H | Documentation consistency + final full-suite | pending |
+| H | Documentation consistency + final full-suite | ✅ 124 test binaries green, both platforms |
 
 ## Phase A — full-workspace suite baseline (commit `e5ae9ec`)
 
@@ -195,3 +195,49 @@ dependencies cross-compile) but **UNVERIFIED** — never built, never run, no CI
 `docs/design/CROSS_PLATFORM_VERIFICATION.md` already marks every macOS gate "never run", and that
 stays true. "Works on macOS" is not a claim this pass can make; "written for macOS, and blocked only
 by the absence of a Mac and its C toolchain" is.
+
+## Phase H — documentation consistency + final full-suite (finale)
+
+**Documentation consistency:** the Survey reports **0 errors / 0 warnings** — only three
+tolerated-by-design notes remain (Lean `C<n>` tokens, the bare-`D<n>` stage convention, and the
+README test-count that can only come from a suite run). No doc drift was introduced across the night;
+each phase regenerated the Survey and updated this log, so "update all the .md files" holds by
+construction rather than by a last-minute sweep.
+
+**Final full-workspace suite:** `cargo test --workspace` re-run from clean on **both** platforms
+after all the night's changes — **124 test binaries `ok` on Windows and 124 on Linux, zero
+failures**. The two things most worth re-checking both held: the DL1421 conformance witness (Phase A)
+and the hardware-adapter fail-closed fix (Phase E).
+
+## Closing summary — phases A–H
+
+An eight-phase overnight production-readiness sweep, verified on Windows and Linux (macOS
+designed-for but unverified — no Mac on this bench). Every phase committed with its evidence; the
+Survey stayed at 0/0 throughout and `doctor_cli` was 7/0 every time.
+
+| Phase | Outcome | Commit |
+|---|---|---|
+| A — full-workspace baseline | fixed 2 conformance gates (DL1421 witness + stale reference) | `e5ae9ec` |
+| B — LSP server + VS Code extension | verified live; the historical collision cannot recur | `d66e600` |
+| C — CLI + compiler dogfood | clean on both platforms; authority enforced; broken → diagnosed | `46be87e` |
+| D — deployability / install | portable archive builds, unpacks + runs; checksums intact | `9af4611` |
+| E — security discovery (hw adapter) | **found + fixed** a reply-framing desync (fail-closed) | `ffca9bd` |
+| F — Miri (small batches) | 0 UB on the interpretable unsafe; FFI out of reach (stated) | `6a55380` |
+| G — macOS honest assessment | designed-for; unverified (C toolchain blocks the cross-check) | `8f9e6c1` |
+| H — doc-consistency + final full-suite | 124 test binaries green on Windows AND Linux | this commit |
+
+**The one real defect** was the hardware-adapter reply-framing gap (Phase E): an untrusted adapter
+emitting an extra line per command desynced reply attribution off-by-one, silently; it now fails
+closed, witnessed against the old code. **Not a containment break** — the envelope guarantee was
+confirmed intact.
+
+**Honest residuals carried forward** (the standing shape of the system, not regressions): macOS is
+unverified; the same-OS-user threat model still needs a separate account for full isolation (the
+DISC-1 / IPC-1 category-7 residuals, empirically bounded in P21); the from-source default-features
+install embeds CPython; and the FFI/syscall `unsafe` is defended by tests + isolation contracts + the
+OS boundary rather than by Miri. None is new tonight; all are documented where they live.
+
+**Verdict:** DeluluLang builds, checks, runs, packages, deploys, and installs cleanly on Windows and
+Linux; its language server and CLI work; its one newly-found defect is fixed; its `unsafe` is either
+Miri-clean or honestly out of reach; and its macOS story is designed-for and truthfully labelled
+unverified. The final full-workspace suite is green on both platforms.
