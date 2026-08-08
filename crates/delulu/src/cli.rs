@@ -5830,8 +5830,12 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 foreign_c: foreign_c.clone(),
                 foreign_python: foreign_python.clone(),
                 device: device.clone(),
-                holder_kind: "human".to_string(),
-                holder_desc: "delulu grants delegate (root)".to_string(),
+                // Provenance honesty (DISC-1): this root is minted by whatever process invoked the
+                // CLI — the broker cannot verify a human typed it, so it must not be recorded as
+                // `human`. `holder` is DATA (never switched on, KIND_IS_DATA); this only affects what
+                // the audit trail and `grants list` claim about who created the root.
+                holder_kind: "process".to_string(),
+                holder_desc: "grants delegate auto-root (origin unverified — DISC-1)".to_string(),
                 ttl_millis: None,
             };
             match grants_rpc(state_dir, ReqBody::Issue(root_spec), json) {

@@ -105,11 +105,21 @@ The root node is created interactively (the Stage-1 grant prompt now runs agains
 by `delulu grants issue` — both are **human actions at the top of the tree**; nothing programmatic
 creates root nodes (Constitution §5.16 law 4).
 
+> **NOT ENFORCED — DISC-1 (2026-08-08).** This paragraph describes intent, not the implementation.
+> There is no `delulu grants issue` command; a root is minted by `grants delegate`'s auto-root and
+> `run --grant` through the ungated `ReqBody::Issue`, with no prompt, no TTY check, and no owner code —
+> so a same-OS-user (e.g. AI-agent) process *can* create root nodes programmatically and headlessly,
+> and thereby command a Guard-sealed resource. Against a same-uid adversary no local secret could
+> enforce "human only." See [`ROOT_ISSUANCE_TRUST_BOUNDARY.md`](ROOT_ISSUANCE_TRUST_BOUNDARY.md) for
+> the threat model, the anchored-certificate architecture that would close it, and the residual
+> boundary (an out-of-band anchor key or a separate OS account). Do not cite §5.16 law 4 as an enforced
+> guarantee until that architecture ships.
+
 ### 3.2 Operations (IPC + CLI)
 
 | Operation | Rule |
 |---|---|
-| `issue` (CLI only) | creates a root-level node; interactive confirmation unless `--yes` in a TTY-less session is *refused* (root issuance is never headless-silent; CI uses pre-issued delegation tokens instead) |
+| `issue` (CLI only) | creates a root-level node; interactive confirmation unless `--yes` in a TTY-less session is *refused* (root issuance is never headless-silent; CI uses pre-issued delegation tokens instead). **⚠ NOT ENFORCED (DISC-1):** no such confirmation/refusal exists in code — `ReqBody::Issue` is ungated and headless. See `ROOT_ISSUANCE_TRUST_BOUNDARY.md`. |
 | `attenuate(parent_lease, authority)` | new child node iff `authority ⊑ parent` (DL0802 otherwise); returns lease |
 | `delegate(parent_lease, authority, ttl)` | attenuate + mint a **portable lease token** (HMAC-signed, single-redemption by default) for handing to another process — this is how an orchestrating LLM gives each parallel agent its slice |
 | `redeem(token)` | binds the token to the redeeming process; second redemption fails (DL1407) unless minted `--multi`. Refuses if the bound node is not live **including its ancestors** — revoked → DL1403, expired → DL1402 (campaign C29, ruling D36); the state check runs after the MAC and before any state is written, so a refused redemption mutates nothing |

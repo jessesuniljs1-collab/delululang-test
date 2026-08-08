@@ -239,6 +239,22 @@ It is a gap against a question the project had not answered. Genuine multi-tenan
 authenticated sessions, per-node ownership, and key material a co-tenant cannot read. That is an RFC,
 not a patch, and it is recorded as open rather than quietly invented.
 
+**The sharper consequence for the Guard, made explicit (DISC-1, 2026-08-08).** The Guard gates
+*delegated* grants; **root** nodes pass without guard interaction. And root issuance is *ungated* — a
+same-user process can call the broker's `Issue` path (via `grants delegate`'s auto-root or `run
+--grant`) and mint a fresh root holding any authority, **headlessly, with no owner code**. Proven: an
+operator can `guard policy set device:sat0/hga sealed`, and a same-user agent then mints an ungated
+root holding `{Actuate}` on that exact device and commands it — the seal does not contain it. So **the
+Guard provides no protection against an agent that shares your OS account.** "I sealed the device so
+the agent can't command it" is *false* on one account. The Constitution (§5.16 law 4) and Stage-5 spec
+(§112) claim root issuance is "never a programmatic path" / "never headless-silent"; that control is
+**not implemented**, and against a same-uid adversary no local secret (owner code, TTY, env var, file)
+could implement it — only a separate OS account or an out-of-band key can. The full threat model,
+the architecture that would close it, and the residual boundary the code cannot guarantee are in
+[`design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`](design/ROOT_ISSUANCE_TRUST_BOUNDARY.md). **Operational rule,
+unchanged and now load-bearing for the Guard too: run any untrusted or autonomous agent as a separate
+OS user.**
+
 ### 1.6 How exposed is this while agents are writing code?
 
 The realistic risks during an agent authoring loop, and where each stands:

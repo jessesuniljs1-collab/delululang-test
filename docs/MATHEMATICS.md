@@ -461,6 +461,16 @@ question that cost this project its worst soundness hole, and it settles nothing
 8. **Concurrency, partitions and clock skew** in the broker model.
 9. **macOS.** Never executed, not once.
 10. **Side channels**, including timing.
+11. **Root issuance against a same-OS-user adversary (DISC-1, 2026-08-08).** The Guard gates
+    *delegated* grants; **root** creation is ungated and headless (`ReqBody::Issue`), so a same-uid
+    process — the common AI-agent deployment — can mint a root and command a Guard-*sealed* resource.
+    Proven executably. Against a same-uid adversary **no local secret** (owner code, TTY, env var,
+    readable file) is a boundary; only a separate OS account or an out-of-band anchor key is. The code
+    can enforce "root requires an anchor-verified certificate" but **cannot** guarantee the anchor key
+    is out of the adversary's reach — that is a deployment property. Constitution §5.16 law 4 and spec
+    §112 claim a "never programmatic / never headless" control that is **not implemented**; do not cite
+    it as guaranteed. Threat model, architecture, and the residual boundary:
+    `design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`.
 
 ---
 
