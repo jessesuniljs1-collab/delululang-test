@@ -16,7 +16,7 @@ run.
 | C | CLI + compiler end-to-end dogfood | ✅ clean on Win + Linux; no defects |
 | D | Deployability / install from clean | ✅ portable archive builds, unpacks + runs (Linux) |
 | E | Security discovery (hardware adapter) | ✅ found + fixed a reply-framing gap (fail-closed) |
-| F | Miri (small batches) | pending |
+| F | Miri (small batches) | ✅ 0 UB on the interpretable unsafe; FFI out of reach (stated) |
 | G | macOS honest assessment | pending |
 | H | Documentation consistency + final full-suite | pending |
 
@@ -137,3 +137,27 @@ confirmed), so every dispatched command stays within the granted envelope whatev
 replies. The defect was reply *attribution* under a misbehaving/untrusted adapter; the fix makes it
 fail closed, matching the module's own rule 3. This is a robustness hardening, not a vulnerability
 disclosure — recorded honestly as such.
+
+## Phase F — Miri, in small batches (no code change; negative result)
+
+Miri interprets Rust MIR and cannot execute real FFI or syscalls, so it validates the runtime's
+Rust-level `unsafe` but not the FFI/syscall `unsafe`. That split is the whole story of this phase,
+and it is stated rather than hidden. Run on the WSL nightly toolchain with
+`-Zmiri-disable-isolation`, one tiny batch at a time.
+
+**What Miri validated — 0 UB:**
+- The **secret-zeroing** `unsafe` in `crates/delulu-runtime/src/value.rs` — `as_bytes_mut()` +
+  `ptr::write_volatile(b, 0)` inside the secret's `Drop` — exercised by the three `secret_*` tests
+  (`daemon_secret_handle_holds_no_bytes`, `secret_never_reaches_stdout…`, `trace_never_leaks…`):
+  **0 UB**. Miri would have caught an out-of-bounds write, an aliasing violation, or a
+  use-after-free in that pointer loop; none is present.
+- The runtime's determinism and filesystem-containment paths (`prim::` — RNG seed mapping, fixed
+  clock, hardlink/symlink containment): 8 tests, **0 UB**. 11 runtime tests total under Miri, clean.
+
+**What Miri cannot reach, said plainly:** the bulk of the workspace's `unsafe` is FFI/syscall —
+`crates/delulu/src/broker_transport.rs` (Windows named pipe / Unix domain socket, ~30 sites) and
+`crates/delulu-runtime/src/foreign.rs` (embedded CPython via pyo3, ~11 sites). Miri cannot execute
+those — there is no real pipe and no real interpreter under Miri — so it neither passes nor fails
+them; it simply does not run them. They are defended instead by their own tests, the
+process-isolation contracts (`foreign_worker.rs`), and the OS boundary — not by Miri, and this log
+does not pretend otherwise.
