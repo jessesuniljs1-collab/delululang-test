@@ -564,6 +564,24 @@ file = "crates/delulu/tests/stability_cli.rs"
 test = "a_deprecation_is_a_warning_and_never_fails_a_build"
 kind = "negative"
 
+# DL1421 (DISC-1 strict root issuance) is a BROKER diagnostic: no `.delulu` program can produce it,
+# so — unlike the compile-time codes whose accepting side is `accepting_programs_check_clean` — BOTH
+# polarities are explicit Rust-test witnesses. Negative: the daemon refuses an unsigned `Issue` over
+# the wire (DL1421). Positive: strict mode ADOPTS a valid root whose chain verifies against the pinned
+# anchor — the accept side of the same boundary. Surfaced by the full-workspace conformance gate,
+# 2026-08-09 (the code shipped earlier without its witness).
+[[witness]]
+anchor = "ref.diag.DL1421"
+file = "crates/delulu/src/brokerd.rs"
+test = "strict_mode_refuses_unsigned_issue_over_the_wire"
+kind = "negative"
+
+[[witness]]
+anchor = "ref.diag.DL1421"
+file = "crates/delulu-broker/src/cert.rs"
+test = "strict_mode_no_root_without_a_chain_verifying_against_the_pinned_anchor"
+kind = "positive"
+
 
 # ---- Diagnostic codes: the ACCEPTING (false-positive-guard) witnesses ----
 # A diagnostic's accepting witness proves the code does NOT fire on valid input.

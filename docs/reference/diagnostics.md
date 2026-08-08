@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 151 of 151 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 152 of 152 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -108,6 +108,7 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL1416` | grant certificate hop is not an attenuation of its issuer (carries the intersection) | `ref.diag.DL1416` | covered |
 | `DL1417` | grant certificate is outside its validity window | `ref.diag.DL1417` | covered |
 | `DL1418` | grant certificate refused: unsupported algorithm/dimension, or malformed | `ref.diag.DL1418` | covered |
+| `DL1421` | root issuance refused: strict mode requires an anchor-verified certificate (DISC-1) | `ref.diag.DL1421` | covered |
 | `DL1501` | manifest export signature does not match the plugin code (the manifest never overrides the code) | `ref.diag.DL1501` | covered |
 | `DL1502` | requested grant exceeds the plugin's declared ceiling | `ref.diag.DL1502` | covered |
 | `DL1503` | DIR version unsupported (rebuild the plugin) | `ref.diag.DL1503` | covered |
