@@ -28,7 +28,21 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   broker's `broker.key`. delulu could not tell, because every `set_permissions` discarded its
   result. (The broker additionally cannot bind its `AF_UNIX` socket on 9p — `ENOTSUP` — so it fails
   to serve there, but only after writing the world-readable key.) Category 7: an OS/filesystem
-  property. **Mitigation — making the silent failure observable — ships in the next commit.**
+  property — but it is no longer *silent* (see the hardening below).
+
+### Security — hardening: make the silent chmod no-op observable (mitigates P21-F1)
+
+- After setting owner-only permissions, delulu now re-reads the achieved mode and **warns** when
+  group/other bits remain — i.e. when the filesystem ignored the `chmod`. Applied at the two
+  security-critical write points in the `delulu` crate: the broker state directory
+  (`crates/delulu/src/broker_transport.rs`, which covers `broker.key`, `secrets.json` and the audit
+  log inside it) and the `keygen` private key (`crates/delulu/src/signing.rs`). The check is a pure,
+  unit-tested predicate (`owner_only`); the warning names the filesystem hazard and points the
+  operator at a native filesystem. Unix-only (Windows ACL hardening remains the documented v0.8 gap).
+  Witnessed **silent on ext4, warning on 9p** for both the broker and `keygen`
+  (`docs/security/red-team-p21-crossaccount-2026-08-08/`); unit test
+  `signing::p21_perm_tests::owner_only_flags_group_or_other_bits`. Windows bin 69/0 + doctor_cli 7/0
+  + evidence 3/0; Linux bin 73/0; clippy clean; Survey 0 error/0 warning.
 
 ### Documentation
 

@@ -66,15 +66,62 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
 }
 
+/// Owner-only check: true when no group/other permission bit is set. Pure, so the silent-no-op
+/// detection below can be unit-tested without touching the filesystem (P21).
+#[cfg(unix)]
+pub(crate) fn owner_only(mode: u32) -> bool {
+    mode & 0o077 == 0
+}
+
+/// Set `path` to owner-only `mode`, then VERIFY it stuck and warn loudly if it did not. On a
+/// non-POSIX filesystem (9p/DrvFs under WSL, NFS without mapping, SMB, exFAT/FAT) `chmod` is a
+/// silent no-op, so the owner-only hardening delulu relies on to keep secrets from other local
+/// users is simply absent — and until P21 delulu could not tell, because it discarded the
+/// `set_permissions` result. We cannot fix the filesystem; we refuse to let the failure be silent.
+/// `what` names the thing for the operator (e.g. "signing key", "broker state directory").
+/// Witnessed silent on ext4 and warning on 9p in `docs/security/red-team-p21-crossaccount-2026-08-08/`.
+#[cfg(unix)]
+pub(crate) fn set_owner_only_or_warn(path: &Path, mode: u32, what: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+    if let Ok(meta) = std::fs::metadata(path) {
+        let got = meta.permissions().mode() & 0o777;
+        if !owner_only(got) {
+            eprintln!(
+                "warning: {what} `{}` is not owner-only (mode {got:04o}); this filesystem does not \
+                 enforce POSIX permissions (9p/DrvFs/NFS/SMB/exFAT/FAT). Other local users may read \
+                 delulu secrets stored here — put delulu state on a native filesystem (P21).",
+                path.display()
+            );
+        }
+    }
+}
+
 #[cfg(unix)]
 fn lock_down(path: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    set_owner_only_or_warn(path, 0o600, "signing key");
 }
 #[cfg(not(unix))]
 fn lock_down(_path: &Path) {
     // Windows: the file lands under the per-user profile; ACL hardening is a documented
     // v0.8 gap (the broker's key files carry the same caveat).
+}
+
+#[cfg(all(test, unix))]
+mod p21_perm_tests {
+    use super::owner_only;
+    #[test]
+    fn owner_only_flags_group_or_other_bits() {
+        // The owner-only cases delulu wants to hold.
+        assert!(owner_only(0o700), "0700 dir");
+        assert!(owner_only(0o600), "0600 file");
+        assert!(owner_only(0o000));
+        // The silent-no-op case a non-POSIX filesystem produces, plus any leaked bit, must be flagged.
+        assert!(!owner_only(0o777), "the 9p chmod-ignored case");
+        assert!(!owner_only(0o640), "group-readable");
+        assert!(!owner_only(0o604), "other-readable");
+        assert!(!owner_only(0o710), "group-exec = dir traversal for another user");
+    }
 }
 
 pub fn cmd_keygen(rest: &[String]) -> i32 {

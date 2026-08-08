@@ -452,10 +452,12 @@ mod imp {
 
     impl Listener {
         pub fn bind(state_dir: &Path) -> io::Result<Listener> {
-            use std::os::unix::fs::PermissionsExt as _;
             std::fs::create_dir_all(state_dir)?;
-            // 0700: only the owner (same user) can traverse into the dir and reach the socket.
-            let _ = std::fs::set_permissions(state_dir, std::fs::Permissions::from_mode(0o700));
+            // 0700: only the owner (same user) can traverse into the dir and reach the socket. Verify
+            // it actually stuck and warn if not — on a non-POSIX filesystem (9p/DrvFs/NFS) chmod is a
+            // silent no-op and this boundary would not exist (P21). This dir holds broker.key,
+            // secrets.json and the audit log, so one warning here covers them all.
+            crate::signing::set_owner_only_or_warn(state_dir, 0o700, "broker state directory");
             let address = checked_address(state_dir)?;
             let _ = std::fs::remove_file(&address); // clear a stale socket from a previous run
             let inner = UnixListener::bind(&address)?;
