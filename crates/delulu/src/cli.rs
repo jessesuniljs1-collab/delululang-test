@@ -4637,7 +4637,11 @@ pub(crate) fn mint_device_nodes(
             return AuthorityState::Dead(format!("`{device}` has no grant node in this run"));
         };
         let req = crate::broker_ipc::ReqBody::NodeState { node: node.clone() };
-        match crate::brokerd::request(&dir, req) {
+        // DEADMAN-1: bound the probe so a hung/slow broker can NEVER stall the dead-man watchdog. A
+        // broker that does not answer within 1 s surfaces as `Err` below → `AuthorityState::Dead` →
+        // the device parks (fail closed). On Unix the unbounded `request` would otherwise block the
+        // watchdog forever against a broker hung by IPC-1, disabling the heartbeat dead-man.
+        match crate::brokerd::request_timed(&dir, req, std::time::Duration::from_secs(1)) {
             Ok(crate::broker_ipc::Response::NodeState { state, by_seq, .. }) => {
                 if state == "live" {
                     AuthorityState::Live

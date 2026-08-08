@@ -687,6 +687,11 @@ pub(crate) fn serve_inner(
 
     // The serve loop never propagates an error via `?` (transient accept/frame errors `continue`;
     // a `Shutdown` request `break`s), so no IIFE is needed to guarantee the pid-file cleanup below.
+    // IPC-1: a single blocking read may not exceed this. Generous for local IPC (a legit client sends
+    // its whole frame immediately after connecting); a client that connects and stalls, or dribbles a
+    // partial frame, is dropped after this so it cannot hang the single-connection serve loop — and
+    // thus deny every other custody op, INCLUDING the operator's e-stop revoke — indefinitely.
+    const SERVE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
     loop {
         let mut conn = match listener.accept() {
             Ok(c) => c,
@@ -696,7 +701,12 @@ pub(crate) fn serve_inner(
                 continue;
             }
         };
-        // Read exactly one request; a malformed/short frame closes this connection (fail closed)
+        if let Err(e) = conn.set_read_timeout(Some(SERVE_READ_TIMEOUT)) {
+            // If the bound cannot be set, drop the connection rather than risk an unbounded read.
+            eprintln!("delulu broker: could not bound read (dropping connection): {e}");
+            continue;
+        }
+        // Read exactly one request; a malformed/short/slow frame closes this connection (fail closed)
         // without taking down the daemon.
         let req: Request = match read_frame(&mut conn) {
             Ok(r) => r,
@@ -725,6 +735,24 @@ pub(crate) fn serve_inner(
 /// so a `run` in progress and a concurrent `revoke` interleave at request granularity).
 pub fn request(state_dir: &Path, body: ReqBody) -> io::Result<Response> {
     let mut conn = broker_transport::connect(state_dir)?;
+    write_frame(&mut conn, &Request::new(body))?;
+    read_frame(&mut conn)
+}
+
+/// Like [`request`], but BOUNDS the read so a hung/slow broker cannot block the caller forever
+/// (DEADMAN-1). Used by the device dead-man watchdog's authority probe: a broker that does not answer
+/// within `read_timeout` surfaces as `Err`, which the probe maps to `AuthorityState::Dead` → the device
+/// PARKS (fail closed). Without this the probe's `read_frame` blocks forever on Unix against a broker
+/// that accepted the connection but never replied (e.g. one hung by IPC-1), stalling the watchdog and
+/// disabling the heartbeat dead-man for every device — a safety fail-open. On Windows the connect
+/// already bounded this; the timeout makes both platforms fail closed at the same bound.
+pub fn request_timed(
+    state_dir: &Path,
+    body: ReqBody,
+    read_timeout: std::time::Duration,
+) -> io::Result<Response> {
+    let mut conn = broker_transport::connect(state_dir)?;
+    conn.set_read_timeout(Some(read_timeout))?;
     write_frame(&mut conn, &Request::new(body))?;
     read_frame(&mut conn)
 }
@@ -1704,6 +1732,38 @@ mod tests {
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed under bypass: {resp:?}");
 
         stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// DEADMAN-1 (Unix): the dead-man watchdog's authority probe must FAIL CLOSED, not block, against
+    /// a broker that accepted the connection but never answered (one hung by IPC-1). `request_timed`
+    /// bounds the read, so it returns `Err` within ~the timeout — the probe then maps that to
+    /// `AuthorityState::Dead` and the device parks. Self-falsifying: with the unbounded `request` the
+    /// read would block until the hung acceptor closes (~2 s here), busting the `< 1 s` bound below;
+    /// this platform is where the fail-open actually lived (Windows already bounded it at connect time).
+    #[cfg(unix)]
+    #[test]
+    fn request_timed_fails_closed_on_a_broker_that_accepts_but_never_answers() {
+        use std::os::unix::net::UnixListener;
+        let state = temp_state("hung_broker");
+        std::fs::create_dir_all(&state).unwrap();
+        // A raw listener on the broker socket path that ACCEPTS one connection and then just sits —
+        // models a broker wedged by IPC-1 (it accepted the probe but is blocked elsewhere).
+        let listener = UnixListener::bind(state.join("broker.sock")).unwrap();
+        let acceptor = std::thread::spawn(move || {
+            if let Ok((_s, _)) = listener.accept() {
+                std::thread::sleep(std::time::Duration::from_secs(2)); // hold it "hung"
+            }
+        });
+        let start = std::time::Instant::now();
+        let r = request_timed(&state, ReqBody::Status, std::time::Duration::from_millis(300));
+        let elapsed = start.elapsed();
+        assert!(r.is_err(), "a broker that never answers must fail closed (Err), not block");
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "request_timed must return within ~its bound, not block on the hung broker: {elapsed:?}"
+        );
+        let _ = acceptor.join();
         let _ = std::fs::remove_dir_all(&state);
     }
 

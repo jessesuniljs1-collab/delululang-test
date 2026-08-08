@@ -58,7 +58,8 @@ mod imp {
     };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
-        WaitNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+        PeekNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+        PIPE_WAIT,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -214,7 +215,7 @@ mod imp {
                 }
                 // Peer identity (same-user) verification.
                 match self.verify_peer(h) {
-                    Ok(true) => return Ok(Connection { handle: h, server: true }),
+                    Ok(true) => return Ok(Connection { handle: h, server: true, read_timeout: None }),
                     Ok(false) => {
                         // A different user slipped past the DACL (should be impossible) — refuse and
                         // wait for the next client. Fail closed.
@@ -258,13 +259,50 @@ mod imp {
     pub struct Connection {
         handle: HANDLE,
         server: bool,
+        /// Bound on a single blocking read (IPC-1 / DEADMAN-1). `None` = block as before. When set,
+        /// `read` polls `PeekNamedPipe` (non-blocking) until data is available or the deadline passes,
+        /// so a peer that connects and never sends cannot hang us forever. Still blocking std I/O — no
+        /// async runtime, no thread pool — so the head-chef "blocking, single-thread" design holds.
+        read_timeout: Option<std::time::Duration>,
     }
 
     // The handle is used from a single thread (the blocking serve loop / a single client call).
     unsafe impl Send for Connection {}
 
+    impl Connection {
+        /// Bound each subsequent blocking read to `dur` (`None` clears it). Infallible on Windows —
+        /// the deadline is enforced in `read` by polling, so there is no OS call that can fail here.
+        pub fn set_read_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
+            self.read_timeout = dur;
+            Ok(())
+        }
+    }
+
     impl Read for Connection {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            // When a timeout is set, wait for data with a non-blocking peek rather than blocking in
+            // ReadFile. A legit peer that has already sent its frame sees data on the first peek, so
+            // this adds no latency to the common path; only a stalled/absent peer hits the poll.
+            if let Some(timeout) = self.read_timeout {
+                let deadline = std::time::Instant::now() + timeout;
+                loop {
+                    let mut avail: u32 = 0;
+                    let ok = unsafe {
+                        PeekNamedPipe(self.handle, ptr::null_mut(), 0, ptr::null_mut(), &mut avail, ptr::null_mut())
+                    };
+                    if ok == 0 {
+                        let e = unsafe { GetLastError() };
+                        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, format!("PeekNamedPipe: win32 error {e}")));
+                    }
+                    if avail > 0 {
+                        break; // data is available; the ReadFile below will not block
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return Err(io::Error::new(io::ErrorKind::TimedOut, "broker pipe read timed out"));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            }
             let mut read: u32 = 0;
             let want = buf.len().min(u32::MAX as usize) as u32;
             let ok = unsafe { ReadFile(self.handle, buf.as_mut_ptr(), want, &mut read, ptr::null_mut()) };
@@ -336,7 +374,7 @@ mod imp {
                 )
             };
             if h != INVALID_HANDLE_VALUE {
-                return Ok(Connection { handle: h, server: false });
+                return Ok(Connection { handle: h, server: false, read_timeout: None });
             }
             let e = unsafe { GetLastError() };
             let before_deadline = std::time::Instant::now() < deadline;
@@ -439,6 +477,16 @@ mod imp {
 
     pub struct Connection {
         inner: UnixStream,
+    }
+
+    impl Connection {
+        /// Bound each subsequent blocking read to `dur` (`None` clears it) via the OS socket read
+        /// timeout (`SO_RCVTIMEO`). This is what stops a hung broker from blocking the dead-man
+        /// watchdog's authority probe forever on Unix (DEADMAN-1) and a stalled client from hanging
+        /// the serve loop (IPC-1). A zero duration is rejected by the OS, surfaced as the caller's error.
+        pub fn set_read_timeout(&mut self, dur: Option<std::time::Duration>) -> io::Result<()> {
+            self.inner.set_read_timeout(dur)
+        }
     }
 
     impl Read for Connection {
