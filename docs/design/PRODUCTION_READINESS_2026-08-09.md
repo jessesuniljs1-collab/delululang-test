@@ -15,7 +15,7 @@ run.
 | B | LSP language server + VS Code extension | ✅ verified live; no changes needed |
 | C | CLI + compiler end-to-end dogfood | ✅ clean on Win + Linux; no defects |
 | D | Deployability / install from clean | ✅ portable archive builds, unpacks + runs (Linux) |
-| E | Security discovery (untested surfaces) | pending |
+| E | Security discovery (hardware adapter) | ✅ found + fixed a reply-framing gap (fail-closed) |
 | F | Miri (small batches) | pending |
 | G | macOS honest assessment | pending |
 | H | Documentation consistency + final full-suite | pending |
@@ -108,3 +108,32 @@ per-host; the macOS and Windows archives were not produced — see Phase G). The
 default-features path (`cargo install --path crates/delulu`, which the VS Code extension suggests)
 embeds CPython and so needs a Python present at build time; it was not exercised tonight — the
 Python-less archive is the path that was.
+
+## Phase E — security discovery: the hardware-adapter subprocess protocol (finding + fix)
+
+Applied the discovery mandate to the D23 hardware adapter (`crates/delulu-runtime/src/adapter.rs`),
+an operator-supplied subprocess speaking a line protocol over stdio with no signature check — the
+newest and least-attacked real-world surface. Its tests already cover garbled output, "anything that
+is not OK is not success", timeout, death, and a missing program. The unattacked assumption was
+**one reply line per command**, which nothing enforced.
+
+**Finding (fixed, witnessed):** the reader thread feeds an unbounded channel and each exchange reads
+one line, so an untrusted adapter that emitted an EXTRA line per command left it buffered — and the
+next command read that stale line as its reply: an off-by-one reply desync, silently, with no
+poisoning. That is precisely the half-open hazard the module's rule 3 exists to forbid ("a reply
+must never be attributed to the wrong command"), reached via an extra line rather than a late one —
+rule 3 had only closed the timeout path. Witnessed against the unfixed code with a two-line-per-command
+adapter: `first = Ok, second = Ok, poisoned = false` (the second "success" was the first command's
+leftover line).
+
+**Fix:** before sending each request, any line already waiting in the channel is unsolicited output
+the previous exchange did not consume — the framing is in doubt, so the adapter is poisoned and the
+command fails closed. Adapter tests **10/0 on Windows and Linux** (the new witness plus the nine that
+already passed), runtime lib 162/0, hw-adapter / actuate / dead-man integration green, clippy clean.
+
+**Honest severity:** this is **not** a containment break. The envelope is still validated host-side
+against the grant *before* any byte reaches the adapter (`crates/delulu-runtime/src/device.rs`,
+confirmed), so every dispatched command stays within the granted envelope whatever the adapter
+replies. The defect was reply *attribution* under a misbehaving/untrusted adapter; the fix makes it
+fail closed, matching the module's own rule 3. This is a robustness hardening, not a vulnerability
+disclosure — recorded honestly as such.

@@ -168,6 +168,19 @@ impl ProcessAdapter {
         if self.poisoned {
             return Err(AdapterError::Poisoned);
         }
+        // Rule 3, extended from a LATE reply to an EXTRA one. A well-behaved adapter answers exactly
+        // one line per request and is otherwise silent, so any line already waiting before we have
+        // sent this request is output the previous exchange did not consume — the framing is off by
+        // a line, and reading it as this command's reply is the same half-open hazard rule 3 forbids
+        // (there via a late line, here via an extra one). Fail closed rather than attribute a stale
+        // answer to a new command. The reader thread delivers in order, so one buffered line is proof
+        // enough; the poison stops us from ever speaking to a stream whose framing is in doubt.
+        if self.rx.try_recv().is_ok() {
+            self.poisoned = true;
+            return Err(AdapterError::Protocol(
+                "unsolicited output before a request — adapter is misframed".to_string(),
+            ));
+        }
         if writeln!(self.stdin, "{request}").is_err() || self.stdin.flush().is_err() {
             self.poisoned = true;
             return Err(AdapterError::Closed);
@@ -406,5 +419,40 @@ mod tests {
             }
             other => panic!("expected the echoed request, got {other:?}"),
         }
+    }
+
+    /// A driver that answers each request with TWO lines. A well-behaved adapter emits exactly one;
+    /// the second here is unsolicited output, used to prove the framing cannot silently go off by a
+    /// line.
+    fn two_line_responder(reply: &str) -> String {
+        #[cfg(windows)]
+        {
+            format!("while ($l = [Console]::In.ReadLine()) {{ Write-Output '{reply}'; Write-Output '{reply}' }}")
+        }
+        #[cfg(not(windows))]
+        {
+            format!("while IFS= read -r line; do echo '{reply}'; echo '{reply}'; done")
+        }
+    }
+
+    /// Rule 3 forbids a reply being attributed to the wrong command. A late reply after a timeout is
+    /// one way in (covered above); an EXTRA reply the previous command did not consume is another —
+    /// it sits in the channel and becomes the silent answer to the NEXT command, off by a line. An
+    /// adapter that emits two lines per request must therefore fail closed, not desync.
+    #[test]
+    fn unsolicited_extra_output_poisons_rather_than_desyncing_the_framing() {
+        let mut a = echo_adapter(&two_line_responder("OK"));
+        // The first command consumes one "OK"; the second "OK" is left buffered in the channel.
+        let first = a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]);
+        // Give the reader thread time to deliver the leftover line, so this is deterministic.
+        std::thread::sleep(Duration::from_millis(150));
+        // By the next command the leftover must be caught: reading it as this command's reply would
+        // attribute the previous command's stray output to a new instruction.
+        let second = a.command("arm0/elbow", &[("angle_deg".into(), 2.0)]);
+        assert!(
+            matches!(second, Err(AdapterError::Protocol(_))) && a.is_poisoned(),
+            "an adapter that emits extra lines must fail closed; first={first:?} second={second:?} poisoned={}",
+            a.is_poisoned()
+        );
     }
 }

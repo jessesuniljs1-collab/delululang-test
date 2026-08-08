@@ -9,6 +9,29 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — production-readiness pass, 2026-08-09
+
+### Security/robustness — the hardware adapter fails closed on a misframed stream
+
+- The line-protocol hardware adapter (`crates/delulu-runtime/src/adapter.rs`) assumed exactly one
+  reply line per command but did not enforce it. An untrusted adapter that emitted an **extra** line
+  per command left it buffered in the reader channel; the next command then read that stale line as
+  its own reply — an off-by-one reply desync, silently, with no poisoning. That is the half-open
+  hazard the module's rule 3 exists to forbid ("a reply must never be attributed to the wrong
+  command"), reached via an extra line rather than a late one — rule 3 had only closed the timeout
+  path. Now: before sending a request, any unsolicited buffered output poisons the adapter and the
+  command fails closed. Witnessed to fail against the old code (a two-line-per-command adapter gave
+  `first=Ok second=Ok poisoned=false`) and to pass after; adapter tests 10/0 on Windows and Linux,
+  runtime lib 162/0, hw-adapter / actuate / dead-man integration green, clippy clean. **NOT a
+  containment break** — the envelope is still validated host-side against the grant before any byte
+  reaches the adapter (`crates/delulu-runtime/src/device.rs`); this hardens reply *attribution*
+  under a misbehaving adapter, matching the module's own stated rule.
+
+### Conformance — DL1421 witnessed, generated reference regenerated (commit `e5ae9ec`)
+
+- The full-workspace suite surfaced `DL1421` (strict root issuance) shipping without a conformance
+  witness (99.7% coverage) and a drifted generated reference. Both fixed; coverage back to 100%.
+
 ## Unreleased — P21 cross-account boundary, tested with a real second UID, 2026-08-08
 
 ### Security — VERIFIED: a separate OS account is a real boundary (on a POSIX filesystem)
