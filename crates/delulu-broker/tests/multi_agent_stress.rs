@@ -96,7 +96,7 @@ fn run_scale(agents: usize, seed: u64) {
         .with_sink(Box::new(sink));
 
     // The root holds the widest authority anything can hold. Everything else attenuates from it.
-    let root = b.issue(holder(0), raw_authority(&["./data"]), None);
+    let root = b.issue_root(holder(0), raw_authority(&["./data"]), None).unwrap();
     let mut live: Vec<GrantId> = vec![root.clone()];
     let mut all: Vec<GrantId> = vec![root.clone()];
 

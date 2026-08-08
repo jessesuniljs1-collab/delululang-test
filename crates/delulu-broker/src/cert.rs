@@ -645,7 +645,15 @@ impl crate::tree::Broker {
                 ),
             });
         }
-        if !anchors.contains(&receipt.issuer) {
+        // Strict mode (DISC-1) pins the anchor for RENEWAL too, mirroring `adopt`. Otherwise a
+        // same-uid agent could forge a contact receipt under its OWN anchor and extend an adopted
+        // node's TTL past the operator's uplink lease — the one revocation bound that survives a
+        // partition (a Phase-8 cross-surface finding: strict mode pinned root creation but not renewal).
+        let effective_anchors: BTreeSet<String> = match self.strict_anchor() {
+            Some(pinned) => std::iter::once(pinned.to_string()).collect(),
+            None => anchors.clone(),
+        };
+        if !effective_anchors.contains(&receipt.issuer) {
             return Err(Denial::CertUntrusted {
                 detail: format!(
                     "contact receipt issuer `{}` is not a configured trust anchor",
@@ -1058,6 +1066,33 @@ mod tests {
             "a widening chain is refused even under a valid pinned anchor"
         );
         assert!(b2.unjustified_root_nodes().is_empty());
+    }
+
+    /// (DISC-1 Phase-8 cross-surface finding) Strict mode pins the anchor for RENEWAL too: a same-uid
+    /// agent's contact receipt signed under its OWN anchor cannot extend an adopted node's TTL past the
+    /// operator's uplink lease. Refused DL1415, mirroring `adopt`. In legacy mode (caller anchors) it
+    /// would succeed — which is why strict mode must pin renewal, not just creation.
+    #[test]
+    fn strict_mode_pins_the_anchor_for_renewal_too() {
+        let mut b = strict_broker_at(500, "ground");
+        let chain = ground_to_vehicle();
+        let fp = chain.last().unwrap().fingerprint();
+        b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).expect("legit adopt under the pin");
+
+        // The adversary forges a receipt for that certificate under its OWN anchor and presents it.
+        let evil_receipt = receipt("attacker", &fp, 9_000);
+        let err = b.renew(&evil_receipt, &anchors(&["attacker"]), &FakeVerifier).unwrap_err();
+        assert_eq!(err.code(), "DL1415", "a self-anchored receipt cannot renew under a pinned anchor");
+
+        // Sanity: in LEGACY mode the same forged receipt DOES renew (the documented weakness).
+        let mut legacy = broker_at(500);
+        let c2 = ground_to_vehicle();
+        let fp2 = c2.last().unwrap().fingerprint();
+        legacy.adopt(&c2, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        assert!(
+            legacy.renew(&receipt("attacker", &fp2, 9_000), &anchors(&["attacker"]), &FakeVerifier).is_ok(),
+            "legacy mode trusts the caller's anchor for renewal — the weakness strict mode closes"
+        );
     }
 
     #[test]

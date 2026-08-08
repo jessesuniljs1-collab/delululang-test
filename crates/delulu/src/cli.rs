@@ -1059,7 +1059,7 @@ fn usage() -> &'static str {
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: $DELULU_STATE_DIR/audit, else ~/.delulu/audit)\n\
-     \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] | status | stop | rotate-key\n\
+     \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\

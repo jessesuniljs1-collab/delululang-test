@@ -51,7 +51,7 @@ fn empty_authority() -> Authority {
 fn moving_the_clock_backwards_cannot_resurrect_an_expired_grant() {
     let clock = std::rc::Rc::new(ManualClock::new(1_000));
     let mut b = Broker::with_sources(Box::new(SeqIdSource::default()), Box::new(clock.clone()));
-    let root = b.issue(Holder::new("test", "operator", "root"), empty_authority(), Some(5_000));
+    let root = b.issue_root(Holder::new("test", "operator", "root"), empty_authority(), Some(5_000)).unwrap();
 
     // t = 1,000 — alive, before its deadline.
     assert!(
@@ -85,7 +85,7 @@ fn moving_the_clock_backwards_cannot_resurrect_an_expired_grant() {
 fn expiry_still_works_normally_while_the_clock_moves_forward() {
     let clock = std::rc::Rc::new(ManualClock::new(0));
     let mut b = Broker::with_sources(Box::new(SeqIdSource::default()), Box::new(clock.clone()));
-    let root = b.issue(Holder::new("test", "operator", "root"), empty_authority(), Some(100));
+    let root = b.issue_root(Holder::new("test", "operator", "root"), empty_authority(), Some(100)).unwrap();
 
     for t in [50, 99, 100, 101, 500, 10_000] {
         clock.set(t);
@@ -108,13 +108,13 @@ fn the_ratchet_only_ever_withholds_authority_never_grants_it() {
     let mut b = Broker::with_sources(Box::new(SeqIdSource::default()), Box::new(clock.clone()));
 
     // Pull the ratchet up to 10,000, then step the wall clock back to 1,000.
-    let early = b.issue(Holder::new("test", "operator", "a"), empty_authority(), Some(20_000));
+    let early = b.issue_root(Holder::new("test", "operator", "a"), empty_authority(), Some(20_000)).unwrap();
     assert!(matches!(b.effective_state(&early), Some(EffState::Live)), "live at t=10,000");
     clock.set(1_000);
 
     // A grant deadlined at 5,000 is issued while the WALL clock reads 1,000 — but the ratchet is at
     // 10,000, so it is already past its deadline and must be Expired immediately. Withheld, not granted.
-    let late = b.issue(Holder::new("test", "operator", "b"), empty_authority(), Some(5_000));
+    let late = b.issue_root(Holder::new("test", "operator", "b"), empty_authority(), Some(5_000)).unwrap();
     assert!(
         matches!(b.effective_state(&late), Some(EffState::Expired { .. })),
         "the ratchet must judge against 10,000, not the rewound 1,000 — withholding, never granting"

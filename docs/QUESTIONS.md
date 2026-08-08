@@ -253,7 +253,11 @@ could implement it — only a separate OS account or an out-of-band key can. The
 the architecture that would close it, and the residual boundary the code cannot guarantee are in
 [`design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`](design/ROOT_ISSUANCE_TRUST_BOUNDARY.md). **Operational rule,
 unchanged and now load-bearing for the Guard too: run any untrusted or autonomous agent as a separate
-OS user.**
+OS user.** An **opt-in** mitigation now exists — `broker start --require-anchored-roots <anchor-pubkey>`
+makes root creation require an anchor-verified certificate, closing the unsigned path (`DL1421`). It is
+a real hardening, but **not** an airtight boundary on one account: its security reduces to keeping the
+anchor private key and `root_policy.json` outside same-uid reach, so a separate OS account (or a
+hardware-held anchor) remains the actual boundary.
 
 ### 1.6 How exposed is this while agents are writing code?
 

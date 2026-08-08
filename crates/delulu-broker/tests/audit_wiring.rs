@@ -39,7 +39,7 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
     let (mut b, sink) = broker_with_sink(clock);
 
     // 1. issue → one "issue" record.
-    let root = b.issue(
+    let root = b.issue_root(
         holder(),
         Authority::new(
             eff(&["Read", "Net", "Write"]),
@@ -51,7 +51,7 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
             },
         ),
         None,
-    );
+    ).unwrap();
     assert_eq!(sink.len(), 1);
 
     // 2. attenuate (ok) → one "attenuate" allow record.
@@ -154,7 +154,7 @@ fn exactly_one_record_per_op_including_denies_and_none_for_epoch() {
 fn every_revocation_record_states_the_4_2_bound_verbatim() {
     let clock = Rc::new(ManualClock::new(1_000));
     let (mut b, sink) = broker_with_sink(clock);
-    let root = b.issue(holder(), Authority::new(eff(&["Read"]), Scopes::default()), None);
+    let root = b.issue_root(holder(), Authority::new(eff(&["Read"]), Scopes::default()), None).unwrap();
     let child = b.attenuate(&root, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None).unwrap();
     b.revoke(&root, &child).unwrap();
     b.revoke(&root, &root).unwrap();
@@ -188,7 +188,7 @@ fn no_sink_means_no_records_and_chunk1_behavior() {
     // guarantee (head-chef ruling 4). Smoke-tested here; the full chunk-1 suite is the real proof.
     let clock = Rc::new(ManualClock::new(1_000));
     let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock));
-    let root = b.issue(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./d"]), ..Default::default() }), None);
+    let root = b.issue_root(holder(), Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./d"]), ..Default::default() }), None).unwrap();
     assert!(b.check(&root, Op::FsRead, Some("./d/x")).is_allow());
     b.revoke(&root, &root).unwrap();
 }
@@ -205,11 +205,11 @@ fn broker_driven_daily_rotation_cross_links_and_verifies() {
     let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock.clone()))
         .with_sink(Box::new(log));
 
-    let root = b.issue(
+    let root = b.issue_root(
         holder(),
         Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
         None,
-    );
+    ).unwrap();
     assert!(b.check(&root, Op::FsWrite, Some("./out/a")).is_allow());
 
     // Cross the day boundary via the injected clock; the next record lands in a new day file whose

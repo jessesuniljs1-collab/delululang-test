@@ -462,14 +462,20 @@ question that cost this project its worst soundness hole, and it settles nothing
 9. **macOS.** Never executed, not once.
 10. **Side channels**, including timing.
 11. **Root issuance against a same-OS-user adversary (DISC-1, 2026-08-08).** The Guard gates
-    *delegated* grants; **root** creation is ungated and headless (`ReqBody::Issue`), so a same-uid
-    process — the common AI-agent deployment — can mint a root and command a Guard-*sealed* resource.
-    Proven executably. Against a same-uid adversary **no local secret** (owner code, TTY, env var,
-    readable file) is a boundary; only a separate OS account or an out-of-band anchor key is. The code
-    can enforce "root requires an anchor-verified certificate" but **cannot** guarantee the anchor key
-    is out of the adversary's reach — that is a deployment property. Constitution §5.16 law 4 and spec
-    §112 claim a "never programmatic / never headless" control that is **not implemented**; do not cite
-    it as guaranteed. Threat model, architecture, and the residual boundary:
+    *delegated* grants; in the LEGACY default **root** creation is ungated and headless
+    (`ReqBody::Issue`), so a same-uid process — the common AI-agent deployment — can mint a root and
+    command a Guard-*sealed* resource. Proven executably. **Opt-in strict mode is now shipped**
+    (`broker start --require-anchored-roots`): a root may then enter only via an anchor-verified
+    certificate, and the invariant *"no root exists in strict mode unless justified by a chain
+    verifying against the pinned anchor"* is **category 4 (property/differentially tested + falsified)**
+    — `strict_mode_no_root_without_a_chain_verifying_against_the_pinned_anchor`,
+    `strict_mode_refuses_unsigned_issue_over_the_wire`. But the SECURITY of that invariant is
+    **category 7**: against a same-uid adversary **no local secret** (owner code, TTY, env var, readable
+    file, `root_policy.json`) is a boundary — only a separate OS account or an out-of-band anchor key
+    is, and the code cannot guarantee that custody. *"The code verifies the signature"* ≠ *"secure
+    against same-user compromise."* Constitution §5.16 law 4 and spec §112 still claim a "never
+    programmatic / never headless" control that is **not** what is enforced; do not cite it as
+    guaranteed. Threat model, architecture, evidence, and the migration analysis:
     `design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`.
 
 ---

@@ -61,11 +61,13 @@ fn seeded_dir(tag: &str) -> PathBuf {
     let clock = Rc::new(ManualClock::new(1_752_192_000_000)); // 2025-07-11-ish, any fixed epoch ms
     let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock))
         .with_sink(Box::new(log));
-    let root = b.issue(
-        Holder::new("process", "cli-test", "pid:0"),
-        Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
-        None,
-    );
+    let root = b
+        .issue_root(
+            Holder::new("process", "cli-test", "pid:0"),
+            Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }),
+            None,
+        )
+        .expect("a non-strict broker issues a root");
     assert!(b.check(&root, Op::FsWrite, Some("./out/a.txt")).is_allow());
     assert!(!b.check(&root, Op::FsWrite, Some("./secret")).is_allow());
     b.revoke(&root, &root).unwrap();

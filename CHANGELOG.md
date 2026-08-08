@@ -158,6 +158,28 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — P20 red team, broker & certificates, 2026-08-08
 
+### Security — DISC-1: opt-in anchor-verified root issuance (a same-user vulnerability, mitigated not "fixed")
+
+- **Discovered + proven:** the Guard gates *delegated* grants but not **root** creation, and unsigned
+  root issuance (`ReqBody::Issue`, reached by `grants delegate` auto-root and `run --grant`) is ungated
+  and headless — so a same-OS-user process (a compromised or autonomous AI agent) can mint a root and
+  command a Guard-**sealed** device. Executable proof and the full threat model:
+  `docs/design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`, `docs/security/red-team-disc1-root-issuance-2026-08-08/`.
+- **Shipped as an OPT-IN security-migration experiment** (`broker start --require-anchored-roots
+  <anchor-pubkey-hex>`): in strict mode a root may enter ONLY by adopting a certificate that verifies
+  against the pinned anchor; unsigned issuance is refused with a new `DL1421`, and `adopt`/`renew` pin
+  the configured anchor so a same-uid client cannot substitute its own. `issue()` is now the
+  `pub(crate)` primitive (reached only after verification) behind a single public `issue_root` gate —
+  no path (daemon `Issue`, delegate auto-root, `run --grant`, embedded custody, library API) bypasses it.
+- **Evidence, not inflated:** the broker-boundary invariant "no root exists in strict mode unless
+  justified by a chain verifying against the pinned anchor" is property/differentially tested and
+  **falsified** (reintroducing the unsigned hole, and removing the anchor pin, each break the suite).
+  Verified live end-to-end. **Honest residual (MATHEMATICS.md category 7):** the security reduces to
+  keeping the anchor private key and `root_policy.json` outside the same-uid adversary's reach — a
+  deployment property. A separate OS account, or a hardware-held anchor, remains the airtight boundary.
+  This is NOT "DISC-1 fixed"; making strict mode the default is a fundamental change reserved for a
+  major version (migration analysis in the trust-boundary doc).
+
 ### Security — HARDENED (findings F-CUSTODY-1, F-CUSTODY-2 from the multi-agent custody red team)
 
 - **F-CUSTODY-1: a sealed guard class is now refused at request AND approval time, not only at use

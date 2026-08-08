@@ -462,11 +462,13 @@ fn a_malformed_device_grant_string_refuses_rather_than_widening() {
         // …and the consequence is a REFUSAL at the first command, not an allow.
         let mut b = delulu_broker::Broker::new();
         let effects = [delulu_check::Effect::core_from_name("Actuate").unwrap()];
-        let node = b.issue(
-            delulu_broker::Holder::new("process", "device program", "pid:1"),
-            Authority::new(effects, Scopes { device, ..Default::default() }),
-            None,
-        );
+        let node = b
+            .issue_root(
+                delulu_broker::Holder::new("process", "device program", "pid:1"),
+                Authority::new(effects, Scopes { device, ..Default::default() }),
+                None,
+            )
+            .expect("a non-strict broker issues a root");
         let d = b.check(&node, Op::Actuate, Some("arm0/elbow"));
         assert!(
             d.denial().is_some(),

@@ -1,11 +1,12 @@
 # Root issuance and the same-user trust boundary (DISC-1)
 
-**Status: DESIGN + DECISION POINT. The airtight fix is a fundamental, backwards-incompatible change to
-how root authority is created, so it is recorded here for the owner's decision, not shipped
-unilaterally (Jesse's Authority/Guard guardrail).** Evidence and the executable proof:
+**Status: OPT-IN STRICT MODE SHIPPED as a security-migration EXPERIMENT (Jesse-approved 2026-08-08) —
+NOT "DISC-1 fixed".** Making anchored roots the DEFAULT is still a fundamental, backwards-incompatible
+change and remains the owner's decision (§7, §9). Evidence and the executable proof:
 `docs/security/red-team-disc1-root-issuance-2026-08-08/`. This document is the rigorous analysis Jesse
 commissioned: model the threat, name the boundary, find the root cause, design the minimal change,
-state the machine-testable invariant, and name honestly what the code cannot guarantee.
+state the machine-testable invariant, and name honestly what the code cannot guarantee. **§9 records
+what is now implemented and §10 the production-migration analysis.**
 
 ## 1. The threat, modelled precisely
 
@@ -138,3 +139,65 @@ Delegated grants **are** Guard-gated (the DL1413 on the delegated child in the p
 **separate-OS-account** agent cannot reach the broker at all. The custody core (attenuation, revocation
 incl. the P20-R4 chain-extension fix, single-adoption, lease integrity) holds. DISC-1 is not a break in
 any of those — it is the `Issue` path never having been held to the same standard as `Adopt`.
+
+## 9. What is IMPLEMENTED (opt-in strict mode, the experiment)
+
+`delulu broker start --require-anchored-roots <anchor-pubkey-hex>` turns strict mode on for that broker,
+persisted in `<state>/root_policy.json` (public anchor only — never a private key). In strict mode:
+
+- **`Broker::issue_root` refuses `DL1421`.** `issue()` is now the `pub(crate)` primitive reached only by
+  `adopt` (post-verification) and in-crate tests; the public `issue_root` is the single gate. Every
+  external root path funnels through it — the daemon `Issue` dispatch, `grants delegate` auto-root,
+  `run --grant`, embedded custody — so none has an ungated bypass.
+- **`adopt` verifies against the PINNED anchor and ignores any caller-supplied anchor**, so a same-uid
+  client cannot substitute its own. `renew` does the same (a Phase-8 finding: it must pin too, or a
+  forged receipt would extend an adopted node's TTL past the uplink lease).
+- The startup banner reports strict mode and its residual, so a downgrade is visible.
+
+**Evidence (MATHEMATICS.md categories, not inflated):**
+- The broker-boundary invariant — *no root exists in strict mode unless justified by a chain verifying
+  against the pinned anchor* (`unjustified_root_nodes()` stays empty) — is **property/differentially
+  tested (category 4)** by `strict_mode_no_root_without_a_chain_verifying_against_the_pinned_anchor`
+  and the deterministic wire test `strict_mode_refuses_unsigned_issue_over_the_wire`. **Falsified:**
+  reintroducing the unsigned-`Issue` hole fails attack 1; removing the anchor pin fails attack 2.
+- The SECURITY of that invariant reduces to keeping the anchor private key AND `root_policy.json`
+  outside the same-uid adversary's reach — a same-uid agent can still downgrade by tampering the config
+  or restarting the daemon without the mode. That is **category 7 (outside the proof boundary)**, named
+  here and in the banner and MATHEMATICS.md §12. *"The code verifies the signature"* is NOT *"the
+  system is secure against same-user compromise."*
+
+**Embedded mode (`run --grant`) is a separate model, not a strict-mode escape hatch.** It builds a
+fresh in-process broker with no daemon and no Guard; the command-line grant IS the authority. A same-uid
+agent that can run `delulu run --grant Actuate --adapter-cmd <driver>` can already command the driver
+directly, so this is not an escalation — but an operator relying on strict mode must still run untrusted
+agents as a separate OS user (the embedded path does not consult the daemon's anchor).
+
+## 10. Production-migration analysis (can strict mode become the default?)
+
+**A. Can it be the default without breaking legitimate workflows?** No — not silently. Two workflows
+break: (1) `delulu grants delegate` with no `--parent` (the auto-root convenience) and (2) `delulu run
+--grant` against a broker, both of which conjure a root via unsigned `Issue`. Under a strict default they
+would require a pre-issued anchored root.
+
+**B. Exactly what breaks:** any script, CI job, demo, or first-run that expects to create a root from the
+CLI with no anchor key. The current test suite and quick-starts lean on the auto-root.
+
+**C. Migration paths (all already in the model):** pre-issued anchored roots adopted via `grants adopt`;
+delegation tokens minted from such a root for each agent (`grants delegate --parent … `); a CI credential
+that is an offline-anchored cert; hardware-backed signing for the anchor key; separate service accounts
+per agent (the airtight boundary regardless of strict mode).
+
+**D. A SAFE compatibility layer:** opt-in strict mode itself (shipped) — legacy stays the default, strict
+is available for deployments that want the boundary. A future default flip should be a MAJOR version with
+a loud migration note, a `--allow-unsigned-roots` escape for legacy scripts, and the auto-root re-pointed
+at "adopt a pre-issued root".
+
+**E. A compatibility layer that would WEAKEN the boundary — reject:** any auto-fallback that mints an
+unsigned root when adoption "fails", any env var / flag that disables strict per-request, any caller-
+supplied anchor honored in strict mode, or storing the anchor PRIVATE key in the broker state so
+delegate/run can self-sign. Each recreates the DISC-1 hole. Security semantics take priority over
+convenience: a compatibility path that preserves the vulnerability is not preserved.
+
+**Recommendation:** keep strict mode opt-in now; gather evidence; plan a default flip for a major version
+with the migration above. Do not flip it silently. Do not sell it as airtight without the deployment-side
+key custody, which is the real boundary.
