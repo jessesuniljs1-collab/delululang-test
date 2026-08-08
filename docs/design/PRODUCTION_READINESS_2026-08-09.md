@@ -14,7 +14,7 @@ run.
 | A | Full-workspace suite baseline (Win + Linux) | ✅ green after fixing 2 conformance gates |
 | B | LSP language server + VS Code extension | ✅ verified live; no changes needed |
 | C | CLI + compiler end-to-end dogfood | ✅ clean on Win + Linux; no defects |
-| D | Deployability / install from clean | pending |
+| D | Deployability / install from clean | ✅ portable archive builds, unpacks + runs (Linux) |
 | E | Security discovery (untested surfaces) | pending |
 | F | Miri (small batches) | pending |
 | G | macOS honest assessment | pending |
@@ -83,3 +83,28 @@ identical results:
   consistent, helpful errors (`check` / `run` / `build` each name the file-or-directory they need).
 
 No defects found: the compiler produces correct output and correct exit codes on both platforms.
+
+## Phase D — deployability / install from clean (no code change; verification only)
+
+The shipped artifact is the **portable, Python-less** archive that `scripts/package-toolchain.sh`
+builds (`cargo build --release -p delulu --no-default-features`); `cargo install delulu` from
+crates.io is intentionally impossible (every internal crate is `publish = false`, per `STABILITY.md`).
+Verified on Linux by behaving like a downloader — no repository, no Rust toolchain on the machine:
+
+- **Build:** the release build finished in **3m36s** and produced
+  `delulu-1.0.0-x86_64-unknown-linux-gnu.tar.gz` (10 MB, 21 files).
+- **Unpack + run:** the extracted `bin/delulu` reports `delulu 1.0.0` and checks
+  `examples/hello_wasm.delulu` clean, with nothing from this repository present.
+- **Honest Python-less degradation:** `examples/numpy_mean.delulu` (which imports NumPy) prints
+  `embedded Python is unavailable` and exits 0 — the DL1307 path surfaced as a **value, not a crash**,
+  exactly as a machine with no interpreter behaves.
+- **Integrity:** `sha256sum -c SHA256SUMS` passes (**20/20 OK, 0 FAILED**); the archive ships its own
+  `INSTALL.txt`, `LICENSE`, `NOTICE`, `TRADEMARK.md`, `README.md`, `CHANGELOG.md`, `SECURITY.md`.
+- **Lockfile:** `Cargo.lock` is committed and `cargo tree --locked` resolves the workspace against it
+  with no update needed.
+
+Honest limits: only the **x86_64-unknown-linux-gnu** archive was built on this bench (the packager is
+per-host; the macOS and Windows archives were not produced — see Phase G). The from-source
+default-features path (`cargo install --path crates/delulu`, which the VS Code extension suggests)
+embeds CPython and so needs a Python present at build time; it was not exercised tonight — the
+Python-less archive is the path that was.
