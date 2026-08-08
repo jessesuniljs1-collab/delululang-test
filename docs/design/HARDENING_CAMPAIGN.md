@@ -2982,6 +2982,22 @@ directions, and a `guarded` negative) + an over-the-wire daemon test. **Falsifie
 guarantee stay green — proving each gate load-bearing and the effect cross-cut non-vacuous (cases
 C/D reach a sealed verdict only through it). Verified live through the real CLI.
 
+**Backed by maths, category 4 (MATHEMATICS.md taxonomy), not rounded up.** The Guard's seal/approval
+logic has no TLA+ model (`Broker.tla`/`Custody.tla` cover the grant tree and leases/certs, not the
+Guard tiers), so this is NOT model-checked and is not claimed to be. Instead `tier_for_subset` is
+verified **differentially and exhaustively** against the trusted use-time pair `covers_use` +
+`tier_for_use`: over 30k generated policies × subsets its sealed verdict agrees EXACTLY with a
+brute-force oracle — *a subset is sealed iff some use it covers would be refused DL1413 at use time*
+(`tier_for_subset_agrees_with_use_time_sealing_over_generated_policies`, falsified: neutering the gate
+fails it with an under-seal, `left:false right:true`). Writing that test **found a real defect in the
+fix itself**: the symmetric overlap over-sealed on a *dead effect rule* — `effect:a` where no
+operation produces an effect named `a`, so the rule fires at no use, yet `overlaps("a","*")` counted
+it. Corrected with `effect_pattern_denotes` (the `effect` class is the one closed token space: a
+pattern seals only if it is `*` or a real effect name). The over-seal was the safe direction — it
+refused more — but the gate is now exact, machine-confirmed against use-time semantics. (The same
+dead-pattern gap means `guard policy set effect:<typo>` currently accepts a rule that gates nothing —
+a separate, minor typo footgun, noted for a later validation pass, not a hole.)
+
 ### F-CUSTODY-2 · `delulu audit` defaulted to the global log, not the active broker's — CLOSED
 
 **What.** `audit verify|tail|query|bundle|reconcile` defaulted to `~/.delulu/audit` unconditionally.

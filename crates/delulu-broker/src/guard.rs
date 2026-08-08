@@ -166,6 +166,16 @@ const EFFECT_BEARING_CLASSES: [GuardClass; 6] = [
     GuardClass::Device,
 ];
 
+/// Whether an `effect:<pattern>` rule or request denotes any real effect at use time: `*` (all
+/// effects) or an exact effect name. A pattern that names no effect — a typo like `Declasify`, or a
+/// bare resource token — denotes the empty set and can never fire at use time, so
+/// [`GuardPolicy::tier_for_subset`] must not let it seal or be sealed. The `effect` class is the one
+/// guard class whose token space is CLOSED (the finite set of effect names); every other class ranges
+/// over open resource tokens, where any spelling may name a real resource.
+fn effect_pattern_denotes(pattern: &str) -> bool {
+    pattern == "*" || Effect::core_from_name(pattern).is_some()
+}
+
 /// Pattern match against a use token (addendum §2.3 vocabulary). v0.5 (deviation §7): `*` matches
 /// everything; otherwise EXACT string equality — the conservative, sound choice consistent with the
 /// attenuation lattice's exact-string discipline (authority.rs ruling 4: no pattern implication).
@@ -338,9 +348,19 @@ impl GuardPolicy {
             }
         };
         for (class, pat) in &subset.0 {
-            // (a) rules of the item's own class.
+            // (a) rules of the item's own class. For the `effect` class the token space is CLOSED — a
+            // pattern only ever matches a use when it names a real effect (or is `*`); a pattern that
+            // names no effect denotes nothing, so it neither seals nor is sealed. Every other class
+            // ranges over open resource tokens where any spelling can be a real resource, so plain
+            // overlap is exact there. (Both directions verified exact against the use-time oracle by
+            // `tier_for_subset_agrees_with_use_time_sealing_over_generated_policies`.)
             for r in self.rules.iter().filter(|r| r.class == *class) {
-                if overlaps(&r.pattern, pat) {
+                let hit = if *class == GuardClass::Effect {
+                    effect_pattern_denotes(&r.pattern) && effect_pattern_denotes(pat) && overlaps(&r.pattern, pat)
+                } else {
+                    overlaps(&r.pattern, pat)
+                };
+                if hit {
                     consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
@@ -1367,6 +1387,66 @@ mod tests {
         let (id, _) = b.guard_request(&child, foo_subset(), "want it".into()).unwrap();
         let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         assert!(pid.starts_with("gp_"), "a guarded subset still approves normally");
+    }
+
+    /// (F-CUSTODY-1, category-4 — exhaustively/differentially verified) `tier_for_subset` is a SOUND
+    /// mirror of use-time sealing, not a hand-argument. Over 30k generated policies × subsets its
+    /// sealed verdict agrees EXACTLY with a brute-force oracle built from the trusted use-time pair
+    /// `GuardSubset::covers_use` + `GuardPolicy::tier_for_use`: **a subset is sealed iff some use it
+    /// covers would be refused DL1413 at use time.** This ties the new request-time gate to the
+    /// existing use-time decision (the one whose refusal is the load-bearing guarantee), and would
+    /// catch either an under-seal (a hole) or an over-seal (spurious refusal) in the closed form.
+    /// Neutering `tier_for_subset` fails this too (the oracle still finds sealed uses).
+    #[test]
+    fn tier_for_subset_agrees_with_use_time_sealing_over_generated_policies() {
+        // Deterministic LCG — generated, not hand-picked, and reproducible.
+        let mut st: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut next = |n: usize| {
+            st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((st >> 33) as usize) % n
+        };
+        let classes = [
+            GuardClass::Declassify, GuardClass::FsWrite, GuardClass::Net,
+            GuardClass::ForeignC, GuardClass::Device, GuardClass::Effect,
+        ];
+        // Include real effect names as patterns so the effect cross-cut actually fires, plus tokens.
+        let pats = ["*", "Declassify", "Write", "Net", "Actuate", "a", "b"];
+        let tiers = [GuardTier::Warn, GuardTier::Guarded, GuardTier::Sealed];
+        let ops = [
+            Op::Declassify, Op::FsWrite, Op::Net, Op::ForeignBind, Op::Actuate,
+            Op::FsRead, Op::Clock, Op::Rand, Op::Console, Op::PluginLoad,
+        ];
+        // The arg universe: every non-`*` pattern present, plus a fresh token that only `*`-rules
+        // match, plus `None` (arg-less ops). Sealing depends only on WHICH rules match, so this finite
+        // set is exhaustive for the decision.
+        let mut args: Vec<Option<&str>> = vec![None, Some("\u{2204}fresh")];
+        for p in pats.iter().filter(|p| **p != "*") {
+            args.push(Some(p));
+        }
+
+        for _ in 0..30_000 {
+            let mut policy = GuardPolicy::default_policy();
+            for _ in 0..(1 + next(4)) {
+                policy.set(classes[next(classes.len())], pats[next(pats.len())].to_string(), tiers[next(tiers.len())]);
+            }
+            let items: Vec<(GuardClass, String)> = (0..(1 + next(3)))
+                .map(|_| (classes[next(classes.len())], pats[next(pats.len())].to_string()))
+                .collect();
+            let subset = GuardSubset(items);
+
+            let closed_sealed = matches!(policy.tier_for_subset(&subset), Some((GuardTier::Sealed, _)));
+            let oracle_sealed = ops.iter().any(|&op| {
+                args.iter().any(|&arg| {
+                    subset.covers_use(op, arg)
+                        && matches!(policy.tier_for_use(op, arg), Some((GuardTier::Sealed, _)))
+                })
+            });
+            assert_eq!(
+                closed_sealed, oracle_sealed,
+                "tier_for_subset disagreed with the use-time oracle:\n  rules={:?}\n  subset={:?}",
+                policy.rules(), subset.labels()
+            );
+        }
     }
 
     /// Permits and pending requests are daemon-memory only — an owner-gated revoke drops a permit,

@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 108452 |
+| Rust lines | 108532 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 141 |
-| Markdown lines | 37483 |
+| Markdown lines | 37499 |
 | DeluluLang programs | 151 |
 | Registered diagnostic codes | 151 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1086 / 9296 |
+| Nodes / edges in this map | 1086 / 9298 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -134,7 +134,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 8697 lines
+- **Modules:** 14 files, 8777 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -143,7 +143,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/cert.rs` | 1450 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 399 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
-| `src/guard.rs` | 1408 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
+| `src/guard.rs` | 1488 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 636 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 58 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
