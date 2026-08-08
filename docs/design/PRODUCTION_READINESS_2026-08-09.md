@@ -13,7 +13,7 @@ run.
 |---|---|---|
 | A | Full-workspace suite baseline (Win + Linux) | ✅ green after fixing 2 conformance gates |
 | B | LSP language server + VS Code extension | ✅ verified live; no changes needed |
-| C | CLI + compiler end-to-end dogfood | pending |
+| C | CLI + compiler end-to-end dogfood | ✅ clean on Win + Linux; no defects |
 | D | Deployability / install from clean | pending |
 | E | Security discovery (untested surfaces) | pending |
 | F | Miri (small batches) | pending |
@@ -64,3 +64,22 @@ own registration — cannot recur: the editor command is the distinct `delulu.sh
 server advertises `delulu.authority`; the two names were confirmed distinct **live**. Cross-platform:
 `lsp_cli.rs` (a real client driving the server) is 34/0/1-ignored on Windows and Linux; the live
 drive above was on Linux; the extension is platform-agnostic JavaScript.
+
+## Phase C — CLI + compiler end-to-end dogfood (no code change; verification only)
+
+Dogfooded the compiler and CLI against the current binary on **both** Windows and Linux, with
+identical results:
+
+- `delulu new hello_dl` scaffolds a `bin` project (`src/main.delulu`, `delulu.toml`, `.gitignore`)
+  and prints an onboarding note that teaches the authority model rather than hiding it.
+- `delulu check .` → "checked clean (authority within manifest and pins)"; `delulu check <file>`
+  and every `examples/guide/*.delulu` check clean (6/6).
+- `delulu run src/main.delulu --grant console` → `hello, world`; `delulu build .` → "built clean".
+- `delulu run --grant console examples/guide/01_types.delulu` → `area = 12.0 / size = 3 /
+  point = 1.5, 2.5` — byte-identical on Windows and Linux.
+- The authority model is enforced end to end: `run` without `--grant` stops with **DL0703**
+  (`console was not granted`), pointing at the exact call site — a feature working, not a defect.
+- A non-exhaustive `match` is **diagnosed as DL0407, never a panic**; the no-argument verbs give
+  consistent, helpful errors (`check` / `run` / `build` each name the file-or-directory they need).
+
+No defects found: the compiler produces correct output and correct exit codes on both platforms.
