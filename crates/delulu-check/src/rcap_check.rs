@@ -499,6 +499,35 @@ impl<'a> Pass<'a> {
                 }
                 self.walk_block_with_tail(body, None, false);
             }
+            Stmt::For { var, iter, body, .. } => {
+                self.walk_expr(iter);
+                // Same loop-carried consume as `while`: a consume in the body is dead on the next
+                // iteration.
+                let mut carried = Vec::new();
+                consumed_free_names(body, &mut HashSet::new(), &mut carried);
+                for (name, site) in &carried {
+                    if let Some(b) = self.lookup_mut(name) {
+                        if b.consumed.is_none() {
+                            b.consumed = Some((*site, true));
+                        }
+                    }
+                }
+                // The loop variable binds each element; its rcap is the element type's default,
+                // read from the iterable's checked `List[T]` type. Scoped to the body alone.
+                let elem_ty = self.node_types.get(&iter.id()).and_then(|t| match t {
+                    Type::List(inner) => Some((**inner).clone()),
+                    _ => None,
+                });
+                let rcap = elem_ty.as_ref().and_then(|t| self.default_of(t));
+                self.push_scope();
+                self.bind(
+                    &var.name,
+                    Binding { rcap, ty: elem_ty, fresh_lift: None, consumed: None, rcap_written: false },
+                );
+                self.walk_block_with_tail(body, None, false);
+                self.pop_scope();
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Return { value, .. } => {
                 if let Some(v) = value {
                     let k = self.walk_expr(v);
@@ -1467,6 +1496,17 @@ fn free_vars_block(b: &Block, bound: &mut HashSet<String>, out: &mut Vec<String>
                 free_vars_expr(cond, bound, out);
                 free_vars_block(body, bound, out);
             }
+            Stmt::For { var, iter, body, .. } => {
+                free_vars_expr(iter, bound, out);
+                // `var` is bound only within the body — scope it there, not for the rest of the
+                // block the way a `let` binds.
+                let added = bound.insert(var.name.clone());
+                free_vars_block(body, bound, out);
+                if added {
+                    bound.remove(&var.name);
+                }
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Return { value, .. } => {
                 if let Some(v) = value {
                     free_vars_expr(v, bound, out);
@@ -1591,6 +1631,15 @@ fn consumed_free_names(b: &Block, bound: &mut HashSet<String>, out: &mut Vec<(St
                 consumed_free_in_expr(cond, bound, out);
                 consumed_free_names(body, bound, out);
             }
+            Stmt::For { var, iter, body, .. } => {
+                consumed_free_in_expr(iter, bound, out);
+                let added = bound.insert(var.name.clone());
+                consumed_free_names(body, bound, out);
+                if added {
+                    bound.remove(&var.name);
+                }
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Return { value: Some(v), .. } => consumed_free_in_expr(v, bound, out),
             Stmt::Return { value: None, .. } => {}
             Stmt::Expr(e) => consumed_free_in_expr(e, bound, out),

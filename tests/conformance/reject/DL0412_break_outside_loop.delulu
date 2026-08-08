@@ -1,0 +1,8 @@
+// anchors: ref.diag.DL0412
+// Tier 1: `break`/`continue` are legal only inside a `while` or `for` body. At function level
+// there is no loop to act on, so this is DL0412.
+module conf
+
+fn f() {
+    break
+}

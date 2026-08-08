@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 149 of 149 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 151 of 151 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -50,6 +50,8 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0408` | condition must be Bool | `ref.diag.DL0408` | covered |
 | `DL0409` | `?` requires Result in a Result-returning function | `ref.diag.DL0409` | covered |
 | `DL0410` | generic variable used as both type and effect row | `ref.diag.DL0410` | covered |
+| `DL0411` | `for` iterates something that is not a list | `ref.diag.DL0411` | covered |
+| `DL0412` | `break` or `continue` outside a loop | `ref.diag.DL0412` | covered |
 | `DL0501` | function performs an effect not declared in its row | `ref.diag.DL0501` | covered |
 | `DL0502` | declared effect never performed | `ref.diag.DL0502` | covered |
 | `DL0504` | conflicting bindings for row variable (rows never union-merge) | `ref.diag.DL0504` | covered |

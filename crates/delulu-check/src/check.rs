@@ -353,6 +353,9 @@ struct FnCtx {
     /// Local variable environment (name → type).
     locals: Vec<HashMap<String, Type>>,
     facts: FnFacts,
+    /// How many `while`/`for` bodies enclose the statement being checked. `break`/`continue` are
+    /// legal only when this is > 0 (Tier 1); a bare `break` at function level is DL0412.
+    loop_depth: u32,
 }
 
 impl FnCtx {
@@ -420,6 +423,7 @@ impl<'a> Checker<'a> {
             ret_err,
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
+            loop_depth: 0,
         };
         // Bind parameters, noting capability kinds they carry.
         for (p, ty) in f.params.iter().zip(&param_types) {
@@ -547,6 +551,7 @@ impl<'a> Checker<'a> {
             ret_err,
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
+            loop_depth: 0,
         };
         ctx.bind("self", self_ty.clone());
         for (p, ty) in params.iter().zip(&param_types) {
@@ -955,6 +960,7 @@ impl<'a> Checker<'a> {
             ret_err: None,
             locals: vec![HashMap::new()],
             facts: FnFacts::default(),
+            loop_depth: 0,
         };
         // The runner (8g) scopes this Root by the test manifest; the TYPE is just Root.
         self.note_caps_in(&Type::Root, &mut ctx.facts);
@@ -1099,8 +1105,53 @@ impl<'a> Checker<'a> {
                     let (ct, cr) = self.check_expr(cond, ctx);
                     acc.add_row_acc(&cr);
                     self.expect_type_coded(&Type::Bool, &ct, cond.span(), "`while` condition must be Bool", Some("DL0408"));
+                    ctx.loop_depth += 1;
                     let (_, br) = self.check_block(body, ctx);
+                    ctx.loop_depth -= 1;
                     acc.add_row_acc(&br);
+                    value_ty = Type::Unit;
+                }
+                Stmt::For { var, iter, body, .. } => {
+                    // The iterable is checked in the enclosing scope; its effects join the block's.
+                    let (it, ir) = self.check_expr(iter, ctx);
+                    acc.add_row_acc(&ir);
+                    // It must be a `List[T]`; the loop variable is then `T`. On anything else, emit
+                    // DL0411 and bind a fresh type var so the body still checks against *something*
+                    // rather than cascading — the same fail-soft the index lvalue uses.
+                    let elem = match self.cx.apply_type(&it) {
+                        Type::List(inner) => *inner,
+                        other => {
+                            self.diags.push(
+                                Diagnostic::error(
+                                    "DL0411",
+                                    format!("`for` iterates a `List`, but this is `{}`", self.ty(&other)),
+                                )
+                                .with_span(iter.span(), "expected a `List` here"),
+                            );
+                            self.cx.fresh_type()
+                        }
+                    };
+                    // Bind the loop variable in a scope of its own so it does not leak past the loop,
+                    // then check the body one loop level deeper so `break`/`continue` are legal in it.
+                    ctx.push_scope();
+                    ctx.bind(&var.name, elem);
+                    ctx.loop_depth += 1;
+                    let (_, br) = self.check_block(body, ctx);
+                    ctx.loop_depth -= 1;
+                    ctx.pop_scope();
+                    acc.add_row_acc(&br);
+                    value_ty = Type::Unit;
+                }
+                Stmt::Break { span } | Stmt::Continue { span } => {
+                    // A gate that dies in the else branch: `break`/`continue` outside any loop is
+                    // DL0412, refused rather than silently accepted and then mishandled at run time.
+                    if ctx.loop_depth == 0 {
+                        let word = if matches!(stmt, Stmt::Break { .. }) { "break" } else { "continue" };
+                        self.diags.push(
+                            Diagnostic::error("DL0412", format!("`{word}` is only valid inside a `while` or `for` loop"))
+                                .with_span(*span, "not inside a loop"),
+                        );
+                    }
                     value_ty = Type::Unit;
                 }
                 Stmt::Return { value, span } => {
@@ -3140,6 +3191,11 @@ fn collect_self_field_assigns(b: &Block, out: &mut HashSet<String>) {
                 }
             }
             Stmt::While { body, .. } => collect_self_field_assigns(body, out),
+            // A `for` body assigns `self.field` exactly as a `while` body can. Without this arm the
+            // catch-all below swallowed it, so an actor constructor that assigned a field ONLY
+            // inside a `for` loop was falsely reported as never assigning it (DL0405). `break`/
+            // `continue` assign nothing and correctly fall through.
+            Stmt::For { body, .. } => collect_self_field_assigns(body, out),
             Stmt::Expr(e) => scan_expr(e, out),
             _ => {}
         }

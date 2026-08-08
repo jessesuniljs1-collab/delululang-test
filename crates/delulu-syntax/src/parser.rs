@@ -1335,6 +1335,31 @@ impl Parser {
                 let span = start.to(self.prev_span());
                 Some(Stmt::While { cond, body, span })
             }
+            TokenKind::KwFor => {
+                // `for <var> in <iter> { body }`. The iterable is parsed in no-struct mode for the
+                // same reason `while`'s condition is: a bare `{` after the expression opens the loop
+                // body, and a struct literal there would swallow it.
+                let start = self.span();
+                self.bump();
+                let var = self.expect_decl_name();
+                self.expect(TokenKind::KwIn);
+                let iter = self.parse_expr_no_struct();
+                let body = self.parse_block();
+                let span = start.to(self.prev_span());
+                Some(Stmt::For { var, iter, body, span })
+            }
+            TokenKind::KwBreak => {
+                let span = self.span();
+                self.bump();
+                self.expect_term();
+                Some(Stmt::Break { span })
+            }
+            TokenKind::KwContinue => {
+                let span = self.span();
+                self.bump();
+                self.expect_term();
+                Some(Stmt::Continue { span })
+            }
             TokenKind::KwReturn => {
                 let start = self.span();
                 self.bump();

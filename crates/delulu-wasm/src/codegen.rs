@@ -520,6 +520,8 @@ fn module_calls_method(env: &EnumEnv, module: &Module, names: &[&str]) -> bool {
         b.stmts.iter().any(|s| match s {
             Stmt::Let { value, .. } | Stmt::Assign { value, .. } => in_expr(value, names),
             Stmt::While { cond, body, .. } => in_expr(cond, names) || in_block(body, names),
+            Stmt::For { iter, body, .. } => in_expr(iter, names) || in_block(body, names),
+            Stmt::Break { .. } | Stmt::Continue { .. } => false,
             Stmt::Return { value: Some(e), .. } => in_expr(e, names),
             Stmt::Return { value: None, .. } => false,
             Stmt::Expr(e) => in_expr(e, names),
@@ -947,6 +949,11 @@ fn collect_strings_block(b: &Block, off: &mut HashMap<String, u32>, data: &mut V
     for s in &b.stmts {
         match s {
             Stmt::Let { value, .. } | Stmt::Assign { value, .. } => collect_strings_expr(value, off, data),
+            Stmt::For { iter, body, .. } => {
+                collect_strings_expr(iter, off, data);
+                collect_strings_block(body, off, data);
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::While { cond, body, .. } => {
                 collect_strings_expr(cond, off, data);
                 collect_strings_block(body, off, data);
@@ -1308,6 +1315,9 @@ fn compile_stmt(stmt: &Stmt, cx: &mut Cx, is_last: bool, expected: Option<Ty>) -
         // assignment targets (locals, indices) stay outside the subset (honest DL1201).
         Stmt::Assign { target, value, .. } => compile_assign(target, value, cx),
         Stmt::While { .. } => Err(CompileError::Unsupported("`while`".into())),
+        Stmt::For { .. } => Err(CompileError::Unsupported("`for`".into())),
+        Stmt::Break { .. } => Err(CompileError::Unsupported("`break`".into())),
+        Stmt::Continue { .. } => Err(CompileError::Unsupported("`continue`".into())),
     }
 }
 
@@ -2198,6 +2208,7 @@ fn block_result_ty(b: &Block) -> Result<Ty, CompileError> {
         Some(Stmt::Return { value: Some(e), .. }) => expr_result_ty(e),
         Some(Stmt::Let { .. }) | Some(Stmt::Return { value: None, .. }) | None => Ok(Ty::Unit),
         Some(Stmt::While { .. }) | Some(Stmt::Assign { .. }) => Ok(Ty::Unit),
+        Some(Stmt::For { .. }) | Some(Stmt::Break { .. }) | Some(Stmt::Continue { .. }) => Ok(Ty::Unit),
     }
 }
 

@@ -94,14 +94,14 @@ A block comment containing a newline counts as a newline for insertion purposes.
 
 ### 2.3 Keywords
 
-Active in Stage 1:
+Active in Stage 1 (and, since the owner-directed Tier 1 addition, `for in break continue`):
 ```
-fn let var if else while return match module import pub type effect true false
+fn let var if else while for in break continue return match module import pub type effect true false
 ```
 **Reserved** (compile error DL0106 "reserved for a future stage"):
 ```
 actor async await spawn iso val ref box tag trn plugin foreign secret cap
-for in break continue trait impl where pure
+trait impl where pure
 ```
 Precision (implementation-forced clarification): reserved words are rejected where a **new name
 is declared** — function/type/effect/variant/field/generic names, parameters, `let`/`var`
@@ -181,12 +181,15 @@ type          = "fn" , "(" , [ type , { "," , type } ] , ")" , [ "->" , type ] ,
               | "(" , type , ")" ;
 
 block         = "{" , { stmt } , "}" ;
-stmt          = let_stmt | var_stmt | assign_stmt | while_stmt | return_stmt | expr_stmt ;
+stmt          = let_stmt | var_stmt | assign_stmt | while_stmt | for_stmt | break_stmt | continue_stmt | return_stmt | expr_stmt ;
 let_stmt      = "let" , IDENT , [ ":" , type ] , "=" , expr , term ;
 var_stmt      = "var" , IDENT , [ ":" , type ] , "=" , expr , term ;
 assign_stmt   = lvalue , "=" , expr , term ;
 lvalue        = IDENT , { "." , IDENT | "[" , expr , "]" } ;
 while_stmt    = "while" , expr , block ;
+for_stmt      = "for" , IDENT , "in" , expr , block ;      (* Tier 1: expr must have type List[T]; IDENT binds T in the body *)
+break_stmt    = "break" , term ;                            (* Tier 1: legal only inside while_stmt or for_stmt (DL0412) *)
+continue_stmt = "continue" , term ;                         (* Tier 1: legal only inside while_stmt or for_stmt (DL0412) *)
 return_stmt   = "return" , [ expr ] , term ;
 expr_stmt     = expr , term ;
 

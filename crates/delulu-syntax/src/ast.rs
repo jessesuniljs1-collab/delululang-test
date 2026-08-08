@@ -346,6 +346,13 @@ pub enum Stmt {
     Let { name: Ident, ty: Option<TypeExpr>, value: Expr, mutable: bool, span: Span },
     Assign { target: LValue, value: Expr, span: Span },
     While { cond: Expr, body: Block, span: Span },
+    /// `for <var> in <iter> { body }` — iterate a `List[T]`, binding `var: T` per element
+    /// (Tier 1, owner-directed 2026-08-08). Empty row for the iteration itself; body effects
+    /// propagate exactly as a `while` body's do.
+    For { var: Ident, iter: Expr, body: Block, span: Span },
+    /// `break` / `continue` — valid only inside a `while` or `for` body (DL0412 otherwise).
+    Break { span: Span },
+    Continue { span: Span },
     Return { value: Option<Expr>, span: Span },
     Expr(Expr),
 }

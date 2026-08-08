@@ -1,0 +1,9 @@
+// anchors: ref.diag.DL0411
+// Tier 1: `for x in xs` requires `xs` to be a `List[T]`. Iterating an `Int` is DL0411.
+module conf
+
+fn f() {
+    for x in 5 {
+        let _ = x
+    }
+}

@@ -35,6 +35,14 @@ pub enum TokenKind {
     KwConsume,
     KwRecover,
 
+    // Keywords activated in Tier 1 (owner-directed 2026-08-08): bounded iteration. `for`/`in`/
+    // `break`/`continue` come off the reserved list. `while` already existed; `break`/`continue`
+    // now make it (and `for`) breakable.
+    KwFor,
+    KwIn,
+    KwBreak,
+    KwContinue,
+
     // Punctuation and operators
     LParen,
     RParen,
@@ -122,6 +130,10 @@ impl TokenKind {
             TokenKind::KwSpawn => "spawn",
             TokenKind::KwConsume => "consume",
             TokenKind::KwRecover => "recover",
+            TokenKind::KwFor => "for",
+            TokenKind::KwIn => "in",
+            TokenKind::KwBreak => "break",
+            TokenKind::KwContinue => "continue",
             _ => return None,
         })
     }
@@ -152,6 +164,10 @@ impl TokenKind {
             TokenKind::KwSpawn => "`spawn`".into(),
             TokenKind::KwConsume => "`consume`".into(),
             TokenKind::KwRecover => "`recover`".into(),
+            TokenKind::KwFor => "`for`".into(),
+            TokenKind::KwIn => "`in`".into(),
+            TokenKind::KwBreak => "`break`".into(),
+            TokenKind::KwContinue => "`continue`".into(),
             TokenKind::LParen => "`(`".into(),
             TokenKind::RParen => "`)`".into(),
             TokenKind::LBrace => "`{`".into(),
@@ -216,6 +232,10 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
         "spawn" => TokenKind::KwSpawn,
         "consume" => TokenKind::KwConsume,
         "recover" => TokenKind::KwRecover,
+        "for" => TokenKind::KwFor,
+        "in" => TokenKind::KwIn,
+        "break" => TokenKind::KwBreak,
+        "continue" => TokenKind::KwContinue,
         _ => return None,
     })
 }
@@ -232,9 +252,14 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
 /// STAY reserved: they are recognized *contextually in type position only* (spec §2, build-order
 /// deviation 5) — activation is not tokenization — and DL0106 keeps rejecting them as declared
 /// names, which is exactly what makes the contextual reading unambiguous.
+/// Tier 1 (owner-directed 2026-08-08) removed `for`, `in`, `break` and `continue` — now active
+/// keywords for bounded iteration. The remaining reserved words are genuinely unbuilt: `async`/
+/// `await` (Async is an effect, not surface syntax — Constitution decision 12 rejected a parallel
+/// async system), `trait`/`impl`/`where` (no typeclass design), the three extra Pony rcaps
+/// `ref`/`box`/`trn` (soundness-critical lattice extensions), and `pure` (redundant with `!{}`).
 pub const RESERVED: &[&str] = &[
     "async", "await", "iso", "val", "ref", "box", "tag", "trn", "plugin",
-    "secret", "cap", "for", "in", "break", "continue", "trait", "impl", "where",
+    "secret", "cap", "trait", "impl", "where",
     "pure",
 ];
 
@@ -280,6 +305,10 @@ pub fn token_index() -> Vec<TokenInfo> {
         ("KwSpawn", TokenKind::KwSpawn),
         ("KwConsume", TokenKind::KwConsume),
         ("KwRecover", TokenKind::KwRecover),
+        ("KwFor", TokenKind::KwFor),
+        ("KwIn", TokenKind::KwIn),
+        ("KwBreak", TokenKind::KwBreak),
+        ("KwContinue", TokenKind::KwContinue),
         ("LParen", TokenKind::LParen),
         ("RParen", TokenKind::RParen),
         ("LBrace", TokenKind::LBrace),

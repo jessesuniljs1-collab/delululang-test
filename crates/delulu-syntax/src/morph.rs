@@ -86,7 +86,8 @@ pub struct Morph {
 /// same reason: there is no token to rename yet.
 pub const MORPHABLE_KEYWORDS: &[&str] = &[
     "fn", "let", "var", "if", "else", "while", "return", "match", "module", "import", "pub", "type",
-    "effect", "true", "false", "actor", "spawn", "consume", "recover",
+    "effect", "true", "false", "actor", "spawn", "consume", "recover", "for", "in", "break",
+    "continue",
 ];
 
 /// A reason a morph was refused, carrying the diagnostic code it maps to.

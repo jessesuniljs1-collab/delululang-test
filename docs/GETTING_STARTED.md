@@ -127,6 +127,27 @@ fn evens_up_to(n: Int) -> List[Int] {
 There is no `()` unit literal, so "else do nothing" is written by leaving the `else` off — an `if`
 without `else` is a statement.
 
+**Iterating a list is a `for` loop.** `for x in xs { … }` binds `x` to each element of a `List[T]`
+in turn; `break` ends the loop early and `continue` skips to the next element. The loop performs no
+effect of its own — its authority is exactly its body's, so a `for` with a pure body stays proved
+pure.
+
+```delulu
+fn sum_positive(xs: List[Int]) -> Int {
+    var total = 0
+    for x in xs {
+        if x == 0 { continue }   // skip zeros
+        if x < 0 { break }       // stop at the first negative
+        total = total + x
+    }
+    total
+}
+```
+
+The list is fixed when the loop starts, so mutating it inside the body cannot change how many times
+the loop runs. `break`/`continue` outside a loop are a compile error (`DL0412`), and `for` over
+anything that is not a list is `DL0411`.
+
 ## 4. Errors
 
 [`examples/guide/03_errors.delulu`](../examples/guide/03_errors.delulu)

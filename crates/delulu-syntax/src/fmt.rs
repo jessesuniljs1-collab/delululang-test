@@ -544,6 +544,21 @@ impl<'a> Printer<'a> {
                 self.line("}");
                 self.attach_same_line(span.end);
             }
+            Stmt::For { var, iter, body, span } => {
+                let it = expr_flat(iter, 0, true);
+                self.line(&format!("for {} in {it} {{", var.name));
+                self.block_body(body);
+                self.line("}");
+                self.attach_same_line(span.end);
+            }
+            Stmt::Break { span } => {
+                self.line("break");
+                self.attach_same_line(span.end);
+            }
+            Stmt::Continue { span } => {
+                self.line("continue");
+                self.attach_same_line(span.end);
+            }
             Stmt::Return { value, span } => {
                 match value {
                     Some(v) => {
@@ -768,6 +783,9 @@ fn stmt_span(s: &Stmt) -> delulu_diag::Span {
         Stmt::Let { span, .. }
         | Stmt::Assign { span, .. }
         | Stmt::While { span, .. }
+        | Stmt::For { span, .. }
+        | Stmt::Break { span }
+        | Stmt::Continue { span }
         | Stmt::Return { span, .. } => *span,
         Stmt::Expr(e) => e.span(),
     }
@@ -1103,6 +1121,11 @@ fn stmt_flat(s: &Stmt) -> String {
         Stmt::While { cond, body, .. } => {
             format!("while {} {}", expr_flat(cond, 0, true), block_flat(body))
         }
+        Stmt::For { var, iter, body, .. } => {
+            format!("for {} in {} {}", var.name, expr_flat(iter, 0, true), block_flat(body))
+        }
+        Stmt::Break { .. } => "break".to_string(),
+        Stmt::Continue { .. } => "continue".to_string(),
     }
 }
 

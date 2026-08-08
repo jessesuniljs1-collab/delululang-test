@@ -60,6 +60,8 @@ registry! {
     "DL0408" => "condition must be Bool",
     "DL0409" => "`?` requires Result in a Result-returning function",
     "DL0410" => "generic variable used as both type and effect row",
+    "DL0411" => "`for` iterates something that is not a list",
+    "DL0412" => "`break` or `continue` outside a loop",
 
     // DL05xx — effects
     "DL0501" => "function performs an effect not declared in its row",
@@ -846,6 +848,13 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0410" => "A generic variable is either a TYPE variable or a ROW variable, never both. \
              Using `e` as `fn(e) -> e` and as `! e` in one signature is ambiguous; give them \
              separate names.",
+        "DL0411" => "`for x in xs` iterates a `List`, binding `x` to each element in turn, so `xs` \
+             must have a `List[T]` type. The expression here does not — check that you are iterating \
+             a list rather than, say, an `Int` or an `Option`. To go over the elements of an \
+             `Option`, `match` on it instead.",
+        "DL0412" => "`break` and `continue` only mean something inside a `while` or `for` loop — \
+             `break` ends the loop, `continue` skips to the next iteration. This one is not inside a \
+             loop, so there is nothing for it to act on. Remove it, or move it into a loop body.",
 
         // ===== DL05xx — effects ============================================
         "DL0501" => "This function performs an effect its row does not declare. This is the \

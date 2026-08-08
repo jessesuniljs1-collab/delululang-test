@@ -403,6 +403,11 @@ fn walk_block_for_foreign(b: &Block, c_syms: &BTreeSet<String>, out: &mut Foreig
                 walk_expr_for_foreign(cond, c_syms, out);
                 walk_block_for_foreign(body, c_syms, out);
             }
+            Stmt::For { iter, body, .. } => {
+                walk_expr_for_foreign(iter, c_syms, out);
+                walk_block_for_foreign(body, c_syms, out);
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Return { value: Some(v), .. } => walk_expr_for_foreign(v, c_syms, out),
             Stmt::Return { value: None, .. } => {}
             Stmt::Expr(e) => walk_expr_for_foreign(e, c_syms, out),

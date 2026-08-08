@@ -794,6 +794,19 @@ test = "accepting_programs_check_clean"
 kind = "positive"
 
 [[witness]]
+anchor = "ref.diag.DL0411"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
+anchor = "ref.diag.DL0412"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+
+[[witness]]
 anchor = "ref.diag.DL0501"
 file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"

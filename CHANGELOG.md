@@ -116,6 +116,46 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   shaped after `docs/survey/REMOVALS.md` for the same reason that file exists: the one thing you
   cannot reconstruct after the fact is **what the person doing it checked first**.
 
+## Unreleased — Tier 1 iteration: `for` / `break` / `continue`, 2026-08-08 (owner-directed)
+
+### Language — ADDED: bounded iteration (`for x in xs`, `break`, `continue`)
+
+- **`for <var> in <iter> { … }` iterates a `List[T]`, binding `<var>: T` to each element**, and
+  **`break` / `continue`** now work — in both `for` **and** `while`, which previously could not be
+  broken out of at all. This activates four keywords that had been reserved since Stage 1 (`for`,
+  `in`, `break`, `continue`); the other reserved words stay reserved, with reasons now recorded in
+  `token.rs` (`async`/`await` were rejected as surface syntax by Constitution decision 12; `trait`/
+  `impl`/`where` have no typeclass design; `ref`/`box`/`trn` are soundness-critical rcap lattice
+  extensions; `pure` is redundant with an empty row). Built end-to-end: lexer, AST, parser, the type
+  & effect checker, the reference-capability pass, the tree-walking interpreter, the formatter, the
+  Atlas, the LSP walk, and the VS Code grammar. The WASM backend does **not** compile loops — they
+  are `DL1201`, the honest interpreter fallback, exactly as `while` already was.
+
+- **The effect story is the important part: a `for` loop is effect-transparent.** The iteration
+  itself performs nothing; the loop's row is the union of the iterable's effects and the body's,
+  exactly as a `while` body's effects propagate. `delulu authority` on a program whose only effect is
+  a `println` inside a `for` reports `Write` and nothing more, and a `for` over a list with a pure
+  body stays **`!{}` — proved pure**. Verified through the Atlas: a function iterating a list purely
+  is reported `[pure]`.
+
+- **Two new diagnostics, each with an accepting and a rejecting conformance witness (coverage stays
+  100%):** **`DL0411`** — `for` iterates something that is not a `List`; **`DL0412`** — `break` or
+  `continue` outside any loop, refused rather than accepted and mishandled at run time (the gate dies
+  in its `else` branch: `loop_depth == 0` is the checked case). The loop variable is scoped to the
+  body alone — it does not leak past the loop the way a `let` binding would — enforced in the checker
+  and in the reference-capability free-variable walk.
+
+- **Semantics chosen deliberately.** The loop iterates a **snapshot** of the list taken when the loop
+  starts, so mutating the underlying list inside the body cannot make the loop skip, repeat, or run
+  forever — the iteration count is fixed up front. `break`/`continue` unwind through the interpreter's
+  existing `Escape` mechanism (the same one `return` uses) and are caught by the nearest enclosing
+  loop; one escaping to a function boundary is a checker bug and faults loudly rather than silently.
+
+- **Existing programs are unaffected**, which is the load-bearing claim for a change to a frozen
+  language: the core-invariance snapshot moved **only additively** (the new witness programs' own
+  output; zero existing bytes changed), across 300+ recorded cases. This was owner-directed; the
+  other reserved-word tiers were declined with written reasons rather than built hastily.
+
 ## Unreleased — P20 zero-trust red team, 2026-08-08
 
 ### Language — CHANGED (narrows what compiles): type nesting is capped at 128 levels (DL0211)

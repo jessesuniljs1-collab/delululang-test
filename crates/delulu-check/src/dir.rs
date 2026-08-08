@@ -411,6 +411,11 @@ fn validate_block(b: &Block) -> Result<(), DirError> {
                 validate_expr(cond)?;
                 validate_block(body)?;
             }
+            Stmt::For { iter, body, .. } => {
+                validate_expr(iter)?;
+                validate_block(body)?;
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Return { value, .. } => {
                 if let Some(e) = value {
                     validate_expr(e)?;

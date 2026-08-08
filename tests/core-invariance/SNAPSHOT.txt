@@ -2616,6 +2616,73 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/28_discard_binding.delulu`
 
+===== tests/conformance/accept/for_loop_iteration.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/for_loop_iteration.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/for_loop_iteration.delulu checked clean
+
+===== tests/conformance/accept/for_loop_iteration.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "count_names",
+      "sum_until_four"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/for_loop_iteration.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     count_names, sum_until_four
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/for_loop_iteration.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/for_loop_iteration.delulu`
+
 ===== tests/conformance/reject/DL0104_float_overflow.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -8628,6 +8695,110 @@ error[DL0306]: unknown effect-row variable `e`
   explain: delulu explain E-DL0306
 
 2 error(s)
+
+===== tests/conformance/reject/DL0411_for_non_list.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0411",
+      "explanation_id": "E-DL0411",
+      "message": "`for` iterates a `List`, but this is `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 152,
+            "col": 15,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL0411_for_non_list.delulu",
+          "label": "expected a `List` here",
+          "start": {
+            "byte": 151,
+            "col": 14,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0411_for_non_list.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0411]: `for` iterates a `List`, but this is `Int`
+  --> tests/conformance/reject/DL0411_for_non_list.delulu:6:14
+   |
+ 6 |     for x in 5 {
+   |              ^ expected a `List` here
+  explain: delulu explain E-DL0411
+
+1 error(s)
+
+===== tests/conformance/reject/DL0412_break_outside_loop.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0412",
+      "explanation_id": "E-DL0412",
+      "message": "`break` is only valid inside a `while` or `for` loop",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 204,
+            "col": 10,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0412_break_outside_loop.delulu",
+          "label": "not inside a loop",
+          "start": {
+            "byte": 199,
+            "col": 5,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0412_break_outside_loop.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0412]: `break` is only valid inside a `while` or `for` loop
+  --> tests/conformance/reject/DL0412_break_outside_loop.delulu:7:5
+   |
+ 7 |     break
+   |     ^^^^^ not inside a loop
+  explain: delulu explain E-DL0412
+
+1 error(s)
 
 ===== tests/conformance/reject/DL0501_test_undeclared_write.delulu :: check --json =====
 exit 1

@@ -1820,6 +1820,11 @@ fn walk_exprs(module: &delulu_syntax::ast::Module, f: &mut impl FnMut(&delulu_sy
                     expr(cond, f);
                     block(body, f);
                 }
+                Stmt::For { iter, body, .. } => {
+                    expr(iter, f);
+                    block(body, f);
+                }
+                Stmt::Break { .. } | Stmt::Continue { .. } => {}
                 Stmt::Return { value: Some(v), .. } => expr(v, f),
                 Stmt::Return { value: None, .. } => {}
                 Stmt::Expr(e) => expr(e, f),

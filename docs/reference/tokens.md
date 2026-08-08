@@ -33,6 +33,10 @@ be added, renamed or removed without this chapter changing with it.
 | `KwSpawn` | `spawn` | `spawn` |
 | `KwConsume` | `consume` | `consume` |
 | `KwRecover` | `recover` | `recover` |
+| `KwFor` | `for` | `for` |
+| `KwIn` | `in` | `in` |
+| `KwBreak` | `break` | `break` |
+| `KwContinue` | `continue` | `continue` |
 | `LParen` | `(` | `(` |
 | `RParen` | `)` | `)` |
 | `LBrace` | `{` | `{` |
@@ -70,4 +74,4 @@ be added, renamed or removed without this chapter changing with it.
 
 Lexed as identifiers and refused at declaration sites (`DL0106`), so a member name like `root.secret(…)` stays legal while `secret` cannot be *declared*:
 
-`async`, `await`, `iso`, `val`, `ref`, `box`, `tag`, `trn`, `plugin`, `secret`, `cap`, `for`, `in`, `break`, `continue`, `trait`, `impl`, `where`, `pure`
+`async`, `await`, `iso`, `val`, `ref`, `box`, `tag`, `trn`, `plugin`, `secret`, `cap`, `trait`, `impl`, `where`, `pure`

@@ -231,6 +231,8 @@ fn best_effort_limit_msg(limit: &str) -> String {
 enum Escape {
     Return(Value),
     Propagate(Value), // `?` propagating an `Err` as the function's result
+    Break,            // Tier 1: `break` unwinds to the nearest enclosing loop, which catches it
+    Continue,         // Tier 1: `continue` unwinds to the nearest enclosing loop's next iteration
     Fault(Fault),
 }
 
@@ -447,6 +449,11 @@ impl Interp {
             // A behavior yields Unit at the send site; `return`/`?` inside it are ordinary
             // turn completion.
             Ok(_) | Err(Escape::Return(_)) | Err(Escape::Propagate(_)) => Ok(()),
+            // `break`/`continue` are caught by their enclosing loop; reaching here means the checker
+            // let one through outside any loop (DL0412), which is a bug, so surface it loudly.
+            Err(Escape::Break) | Err(Escape::Continue) => {
+                Err(Fault::new("DL0907", "internal: `break`/`continue` escaped its loop"))
+            }
             Err(Escape::Fault(f)) => Err(f),
         }
     }
@@ -762,6 +769,11 @@ impl Interp {
             Ok(v) => Ok(v),
             Err(Escape::Return(v)) => Ok(v),
             Err(Escape::Propagate(v)) => Ok(v),
+            // A loop always catches its own `break`/`continue`; one reaching a call boundary means
+            // the checker admitted it outside a loop, so fail loudly rather than swallow it.
+            Err(Escape::Break) | Err(Escape::Continue) => {
+                Err(Escape::Fault(Fault::new("DL0907", "internal: `break`/`continue` escaped its loop")))
+            }
             Err(Escape::Fault(f)) => Err(Escape::Fault(f)),
         }
     }
@@ -800,14 +812,38 @@ impl Interp {
                 #[allow(clippy::while_let_loop)]
                 loop {
                     match self.eval_expr(cond, env)? {
-                        Value::Bool(true) => {
-                            self.exec_block_value(body, env)?;
-                        }
+                        Value::Bool(true) => match self.exec_block_value(body, env) {
+                            Ok(_) | Err(Escape::Continue) => {} // continue: re-evaluate the condition
+                            Err(Escape::Break) => break,
+                            Err(other) => return Err(other), // Return / Propagate / Fault escape the loop
+                        },
                         _ => break,
                     }
                 }
                 Ok(Value::Unit)
             }
+            Stmt::For { var, iter, body, .. } => {
+                let iterable = self.eval_expr(iter, env)?;
+                let Value::List(items) = iterable else {
+                    // The checker (DL0411) guarantees a `List` here; anything else is a checker bug.
+                    return Err(Escape::Fault(Fault::new("DL0907", "internal: `for` iterated a non-list value")));
+                };
+                // Iterate a SNAPSHOT so mutating the underlying list inside the body cannot make the
+                // loop skip, repeat, or run forever — the length is fixed the moment the loop starts.
+                let snapshot: Vec<Value> = items.borrow().clone();
+                for item in snapshot {
+                    let loop_env = Scope::child(env);
+                    loop_env.define(&var.name, item);
+                    match self.exec_block_value(body, &loop_env) {
+                        Ok(_) | Err(Escape::Continue) => {} // continue: move to the next element
+                        Err(Escape::Break) => break,
+                        Err(other) => return Err(other),
+                    }
+                }
+                Ok(Value::Unit)
+            }
+            Stmt::Break { .. } => Err(Escape::Break),
+            Stmt::Continue { .. } => Err(Escape::Continue),
             Stmt::Return { value, .. } => {
                 let v = match value {
                     Some(e) => self.eval_expr(e, env)?,
@@ -1901,7 +1937,9 @@ fn host_of(url: &str) -> String {
 fn unwrap_fault(e: Escape) -> Fault {
     match e {
         Escape::Fault(f) => f,
-        Escape::Return(_) | Escape::Propagate(_) => Fault::new("DL0907", "control-flow escaped the top level (checker bug)"),
+        Escape::Return(_) | Escape::Propagate(_) | Escape::Break | Escape::Continue => {
+            Fault::new("DL0907", "control-flow escaped the top level (checker bug)")
+        }
     }
 }
 

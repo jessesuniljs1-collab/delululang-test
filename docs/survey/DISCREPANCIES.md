@@ -29,5 +29,5 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 **What to do:** re-run the suite and update these by hand; the Survey deliberately does not guess
 
-- `README.md` — these lines quote a test count, which is produced by `cargo test` and cannot be read out of the tree — verify them against a suite run: docs/design/STAGE1_SPECIFICATION.md:938
+- `README.md` — these lines quote a test count, which is produced by `cargo test` and cannot be read out of the tree — verify them against a suite run: docs/design/STAGE1_SPECIFICATION.md:941
 

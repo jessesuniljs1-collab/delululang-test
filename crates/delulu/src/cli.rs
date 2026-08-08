@@ -2700,6 +2700,11 @@ fn collect_plugin_loads(block: &delulu_syntax::ast::Block, out: &mut Vec<PluginL
                     walk_expr(value, out, &grants);
                 }
                 Stmt::Assign { value, .. } => walk_expr(value, out, &grants),
+                Stmt::For { iter, body, .. } => {
+                    walk_expr(iter, out, &grants);
+                    walk_block(body, out, &grants);
+                }
+                Stmt::Break { .. } | Stmt::Continue { .. } => {}
                 Stmt::While { cond, body, .. } => {
                     walk_expr(cond, out, &grants);
                     walk_block(body, out, &grants);
@@ -6833,6 +6838,11 @@ impl PyWalk {
                 self.walk_expr(cond);
                 self.walk_block(body);
             }
+            For { iter, body, .. } => {
+                self.walk_expr(iter);
+                self.walk_block(body);
+            }
+            Break { .. } | Continue { .. } => {}
             Return { value, .. } => {
                 if let Some(e) = value {
                     self.walk_expr(e);

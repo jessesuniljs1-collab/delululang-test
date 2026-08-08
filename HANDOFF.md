@@ -108,7 +108,21 @@ has been in continuous adversarial review rather than feature work.
 - **P18 — eliminating uncertainty.** `⊑` was shown to be a *preorder*, not a partial order, because
   `path::resolve` is not injective — mathematics, not a bug. Fixed by canonicalizing at the custody
   boundary. Miri completed for the first time.
-- **P19 — ecosystem** (this campaign, 2026-08-07). See §8 for what it found.
+- **P19 — ecosystem** (2026-08-07). See §8 for what it found.
+- **P20 — zero-trust red team & evidence honesty** (2026-08-08). Fixed five documents that *denied* a
+  machine-checked proof that exists (Lean re-runs in 35 s); added the **evidence gate**
+  (`crates/delulu/tests/evidence_claims.rs`) so prose cannot outlive fact. Red team: filesystem
+  containment escapes through a **hardlink** (P20-R1 — documented boundary, not workspace-deliverable,
+  pinned by a test); a deeply nested **type** was a checker DoS and, deeper, a parser crash
+  (P20-R3 → **`DL0211`** caps type nesting at 128); an adversarial multi-agent authority test
+  (Sonnet 5 + Haiku 4.5) confirmed Authority, effect rows and secret-flow hold under attack.
+- **Tier 1 — bounded iteration** (2026-08-08, **owner-directed**). Activated four reserved keywords:
+  **`for x in xs { … }`**, **`break`**, **`continue`** — the last two also make `while` breakable.
+  New diagnostics `DL0411` (non-list iterable) and `DL0412` (break/continue outside a loop). Built
+  through every layer with the same effect-transparency and reference-capability soundness as `while`;
+  the WASM backend refuses it (`DL1201` interpreter fallback). The other reserved words stay reserved
+  with written reasons (`async`/`await` rejected by Constitution decision 12; `trait`/`impl`/`where`
+  undesigned; `ref`/`box`/`trn` soundness-critical; `pure` redundant with `!{}`).
 
 ---
 

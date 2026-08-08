@@ -1,0 +1,28 @@
+// anchors: ref.diag.DL0411 ref.diag.DL0412
+// Tier 1: `for`/`break`/`continue` compile and check clean. The iteration itself is pure; the body
+// carries whatever effects it performs (here, none). This is the accepting side of DL0411/DL0412 —
+// a well-formed loop must NOT trip either diagnostic.
+module conf
+
+fn sum_until_four(xs: List[Int]) -> Int {
+    var total = 0
+    for x in xs {
+        if x == 4 {
+            break
+        }
+        if x == 2 {
+            continue
+        }
+        total = total + x
+    }
+    total
+}
+
+fn count_names(names: List[Str]) -> Int {
+    var n = 0
+    for name in names {
+        let _ = name
+        n = n + 1
+    }
+    n
+}
