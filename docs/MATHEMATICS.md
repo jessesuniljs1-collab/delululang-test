@@ -487,6 +487,24 @@ question that cost this project its worst soundness hole, and it settles nothing
     connections or simply `kill` the daemon (it shares the OS user). The *indefinite* hang is closed;
     saturation DoS by a co-resident same-uid process is a deployment property (run untrusted agents as a
     separate OS user). See `security/red-team-surfaces-2026-08-08/`.
+13. **The separate-OS-account boundary — now tested, and its filesystem dependency (P21, 2026-08-08).**
+    Items 11 and 12 both rest their residual on one claim — *"a separate OS account is the boundary"* —
+    which had only ever been asserted (every prior test ran same-uid on one account). P21 **demonstrates
+    it against the live binary with a real second uid** under WSL: a broker run by `user` (uid 1002)
+    with its state dir on a POSIX filesystem denies a separate account (`attacker`, uid 1003) on all
+    five vectors — directory traversal, `broker.key` read, IPC custody op (fail-closed `DL1401`, no
+    local-state fallback), raw socket connect, and `kill` — while the same-uid control succeeds on all
+    four. This is a **reproducible red-team differential** (the P21 scripts), not an in-suite property
+    test and not a proof; it moves the claim from *asserted* to *verified-by-demonstration*. The
+    guarantee itself stays **category 7**, because it is a property of the operating system and the
+    filesystem, not of delulu's code. P21 also shows the sharp edge of that dependency: on a non-POSIX
+    mount (9p/DrvFs under WSL; by the same mechanism NFS-without-mapping, SMB, exFAT/FAT)
+    `chmod 0600/0700` is a **silent no-op** — a separate account read a "0600" file and the broker's
+    `broker.key` — and delulu could not tell, because every `set_permissions` discarded its result.
+    That is no longer silent: delulu re-reads the achieved mode and warns when it did not stick
+    (`crates/delulu/src/broker_transport.rs`, `crates/delulu/src/signing.rs`), and the broker cannot
+    bind its `AF_UNIX` socket on 9p at all (`ENOTSUP`). Evidence and both transcripts:
+    `security/red-team-p21-crossaccount-2026-08-08/`.
 
 ---
 

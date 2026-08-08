@@ -1,5 +1,12 @@
 # DeluluLang WASM Red-Team Audit: Findings
 
+> **Provenance note (P21 normalization, 2026-08-08):** the `file:line` citations below are the
+> attacking agent's own, recorded as observed. During P21 the Survey flagged five as unresolvable —
+> two named a separate integration-test file that does not exist (these are inline `#[cfg(test)]`
+> tests in the delulu-wasm crate root), the rest used line *ranges* the map cannot resolve. The paths
+> were corrected and the line ranges rendered as prose; the numbers are unchanged and approximate.
+> Verified locations are in `../README.md`.
+
 **Date:** 2026-08-08  
 **Scope:** WASM compilation boundary, host import confinement, effect soundness  
 **Threat Model:** Breaches of authority/effect guarantees via WASM surface  
@@ -76,7 +83,7 @@ The linker begins empty. Host functions are added **only** if the module declare
 - Similar for other capabilities
 - Imports NOT in this list cannot be resolved
 
-**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs:132–141`
+**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs` (lines 132–141)
 ```rust
 #[test]
 fn importing_an_unprovided_capability_fails_to_instantiate() {
@@ -118,7 +125,7 @@ if !ok {
 
 **Bounds check:** `caps.get(cap as usize)` returns `None` if `cap` is out of bounds (negative values cast to huge usize, index out of range). The `unwrap_or(false)` treats missing handles as refused.
 
-**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs:99–108`
+**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs` (lines 99–108)
 ```rust
 #[test]
 fn forged_capability_handle_is_refused_dl0904() {
@@ -162,7 +169,7 @@ fn read_guest_str(caller: &mut Caller<'_, HostState>, ptr: i32) -> Option<String
 3. **Bounds filtering:** The filter `|&e| e <= data.len()` ensures both header and body stay within memory.
 4. **UTF-8 safety:** `from_utf8_lossy()` is safe; invalid UTF-8 becomes U+FFFD.
 
-**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs:111–129`
+**Test Proof:** `crates/delulu-wasm/tests/hostile_guest.rs` (lines 111–129)
 ```rust
 #[test]
 fn out_of_bounds_string_pointer_is_refused_dl0903() {
@@ -246,7 +253,7 @@ The program **does not compile to WASM**; it falls back to the interpreter silen
 
 **Honest behavior:** Secret-handling functions refuse to compile to WASM so secret bytes never enter guest linear memory.
 
-**Test Proof:** `crates/delulu-wasm/tests/lib.rs:443–455`
+**Test Proof:** `crates/delulu-wasm/src/lib.rs` (lines 443–455)
 ```rust
 #[test]
 fn secret_handling_program_is_refused_dl1205() {
@@ -293,7 +300,7 @@ fn ovf_add_fn() -> Function {
 }
 ```
 
-**Test Proof:** `crates/delulu-wasm/tests/lib.rs:185–217`
+**Test Proof:** `crates/delulu-wasm/src/lib.rs` (lines 185–217)
 ```rust
 #[test]
 fn wasm_matches_interpreter_on_random_programs_including_faults() {

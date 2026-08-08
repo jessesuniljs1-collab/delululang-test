@@ -25,14 +25,14 @@ files, so it still opens when the tree does not build.
 | Rust files | 224 |
 | Rust lines | 109006 |
 | Rust files outside `src/` (test/bench targets) | 94 |
-| Markdown documents | 149 |
-| Markdown lines | 39220 |
+| Markdown documents | 150 |
+| Markdown lines | 39373 |
 | DeluluLang programs | 151 |
 | Registered diagnostic codes | 152 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1095 / 9396 |
-| Open discrepancies | 12 |
+| Nodes / edges in this map | 1100 / 9415 |
+| Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers

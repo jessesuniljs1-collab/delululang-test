@@ -1,0 +1,49 @@
+P21 SCENARIO 1 — cross-OS-account boundary on ext4 (/tmp). Broker=user(1002), attacker(1003).
+Run: wsl -d Ubuntu-20.04 -u root bash scenario1.sh  (2026-08-08)
+
+===== P21 SCENARIO 1: ext4 (/tmp), 0700 dir boundary =====
+broker user: uid=1002(user) gid=1002(user) groups=1002(user),27(sudo),1003(docker)
+attacker   : uid=1003(attacker) gid=1004(attacker) groups=1004(attacker)
+--- start broker as user (foreground, backgrounded by script) ---
+socket_ready=1 broker_pid=20
+--- broker log (head) ---
+delulu broker: serving on `/tmp/dl-boundary/broker.sock` (pid 20, state `/tmp/dl-boundary`)
+delulu guard: on — guarded/sealed: declassify:*, foreign_c:*, foreign_python:*
+delulu guard owner code (admin verbs need it; printed once, never written to disk): gow1_12d9d07ac2e79c5e8cdae56a
+--- THE CRUX: perms of the state dir + key (proves 0700/0600 stuck on ext4) ---
+dir  /tmp/dl-boundary : mode=700 owner=user
+sock /tmp/dl-boundary/broker.sock : mode=755 owner=user
+key  /tmp/dl-boundary/broker.key : mode=600 owner=user
+
+########## ATTACKER (uid 1003, SEPARATE account) — every one should be DENIED ##########
+--- A1: attacker ls state dir ---
+rc=2 out=[ls: cannot open directory '/tmp/dl-boundary': Permission denied]
+--- A2: attacker cat broker.key (the lease-MAC secret) ---
+rc=1 out=[cat: /tmp/dl-boundary/broker.key: Permission denied]
+--- A3: attacker 'grants list' over IPC ---
+rc=1 out=[error[DL1401]: broker unreachable: Permission denied (os error 13) — start it with `delulu broker start` (fail closed, invariant 27: `grants` verbs never fall back to local state)
+  explain: delulu explain E-DL1401]
+--- A4: attacker raw AF_UNIX connect to broker.sock ---
+rc=0 out=[EXC PermissionError [Errno 13] Permission denied]
+--- A5: attacker kill broker pid 20 ---
+rc=1 out=[kill: (20): Operation not permitted]
+broker STILL ALIVE after attacker kill = boundary HELD
+
+########## FALSIFICATION: same uid (user 1002) — every one should SUCCEED ##########
+--- F1: user ls state dir ---
+rc=0 lines=7
+--- F2: user read broker.key size ---
+rc=0 bytes=[32]
+--- F3: user 'grants list' over IPC ---
+rc=0 out=[(no grants — the tree is empty)]
+--- F4: user raw AF_UNIX connect ---
+rc=0 out=[CONNECTED]
+
+--- cleanup ---
+SCENARIO1-DONE
+
+VERDICT: On a POSIX filesystem the 0700 state dir + 0600 broker.key stick (owner=user),
+and a SEPARATE OS account (uid 1003) is denied on all five vectors — list, key read, IPC
+custody op (fail-closed DL1401, no local-state fallback), raw socket connect, and kill.
+The same-uid control (user 1002) succeeds on all four, proving the test discriminates on UID.
+The category-7 residual "needs a separate OS account" is EMPIRICALLY VERIFIED here.

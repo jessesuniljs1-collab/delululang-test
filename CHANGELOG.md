@@ -9,6 +9,36 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — P21 cross-account boundary, tested with a real second UID, 2026-08-08
+
+### Security — VERIFIED: a separate OS account is a real boundary (on a POSIX filesystem)
+
+- The DISC-1 and IPC-1/DEADMAN-1 residuals both rest on one claim — *"the boundary is a separate OS
+  account"* — that had only ever been asserted (every prior test ran same-uid on one account).
+  Tested now with a **real second uid** under WSL: a broker run by `user` (uid 1002) with its state
+  dir on ext4 denies a separate account (`attacker`, uid 1003) on all five vectors — directory
+  traversal, `broker.key` read, IPC custody op (fail-closed `DL1401`, no local-state fallback), raw
+  socket connect, and `kill` — while the same-uid control succeeds on all four. Reproducible
+  red-team scripts + raw transcripts: `docs/security/red-team-p21-crossaccount-2026-08-08/`.
+
+### Security — FINDING P21-F1: the boundary is a property of the filesystem, and silent when absent
+
+- On a non-POSIX mount (9p/DrvFs under WSL; NFS-without-mapping, SMB, exFAT/FAT by the same
+  mechanism) `chmod 0600/0700` is a **silent no-op** — a separate account read a "0600" file and the
+  broker's `broker.key`. delulu could not tell, because every `set_permissions` discarded its
+  result. (The broker additionally cannot bind its `AF_UNIX` socket on 9p — `ENOTSUP` — so it fails
+  to serve there, but only after writing the world-readable key.) Category 7: an OS/filesystem
+  property. **Mitigation — making the silent failure observable — ships in the next commit.**
+
+### Documentation
+
+- `docs/MATHEMATICS.md` §12 gains item 13: the verification and the filesystem dependency, recorded
+  without inflating the category (a reproducible demonstration, not a proof; the guarantee stays
+  category 7).
+- Normalized nine drifted `file:line` citations in the 2026-08-08 red-team agent notes (paths
+  corrected — one wrong crate, two wrong file — line ranges rendered as prose) so the Survey
+  resolves them; provenance notes added. No claim changed.
+
 ## Unreleased — P20 evidence-honesty campaign, 2026-08-08
 
 ### Documentation — FIXED: the evidence documents denied evidence that exists

@@ -1,0 +1,51 @@
+P21 SCENARIO 2 — is there ANY perm boundary on a 9p (Windows-mounted) state dir?
+Run: wsl -d Ubuntu-20.04 -u root bash scenario2.sh  (2026-08-08)
+
+===== P21 SCENARIO 2: 9p (/mnt/d) — is there any perm boundary? =====
+--- /mnt/d type ---
+D:\            9p   484665340 262276120 222389220  55% /mnt/d
+drwxrwxrwx 1 user user 4096 Aug  8 22:44 /mnt/d
+
+--- RAW chmod-stick test as user: mkdir 0700 + file 0600 on 9p, read back ---
+dir  mode=777 owner=user
+file mode=777 owner=user
+--- ATTACKER reads the '0600' file on 9p (denied => boundary real; content => LEAK) ---
+rc=0 out=[topsecret]
+--- ATTACKER lists the '0700' dir on 9p ---
+rc=0 out=[total 0
+drwxrwxrwx 1 user user 4096 Aug  8 22:52 .
+drwxrwxrwx 1 user user 4096 Aug  8 22:52 ..
+-rwxrwxrwx 1 user user   10 Aug  8 22:52 probe.txt]
+
+--- END-TO-END: run the broker with its state dir on 9p ---
+socket_ready=0 broker_pid=
+--- broker9 log (head) ---
+error: broker serve loop failed: Operation not supported (os error 95)
+--- achieved perms on the 9p state dir ---
+dir  /mnt/d/dl-b9p mode=777 owner=user
+key  /mnt/d/dl-b9p/broker.key mode=777 owner=user
+stat: cannot stat '/mnt/d/dl-b9p/broker.sock': No such file or directory
+--- ATTACKER reads broker.key (the lease-MAC secret) from 9p ---
+attacker broker.key bytes=[32]  (32 => LEAK, denied => held)
+--- ATTACKER connects to broker.sock on 9p ---
+rc=0 out=[EXC FileNotFoundError [Errno 2] No such file or directory]
+--- ATTACKER 'grants list' over IPC on 9p ---
+rc=1 out=[error[DL1401]: broker unreachable: No such file or directory (os error 2) — start it with `delulu broker start` (fail closed, invariant 27: `grants` verbs never fall back to local state)
+  explain: delulu explain E-DL1401]
+--- cleanup ---
+SCENARIO2-DONE
+
+VERDICT (two findings):
+1. LEAK — chmod is a silent no-op on 9p: a 0700 dir and 0600 file read back as mode=777, and
+   the SEPARATE account (uid 1003) read the "0600" probe.txt ("topsecret") AND the broker's
+   32-byte broker.key (the lease-MAC secret). Every set_permissions delulu relies on is
+   discarded (let _ = ...), so it cannot tell the hardening failed. Any secret delulu writes to
+   a non-POSIX filesystem (9p/DrvFs, and by the same mechanism NFS/SMB/exFAT/FAT) is world-readable.
+2. BIND-FAIL — the broker cannot bind its AF_UNIX socket on 9p: "Operation not supported
+   (os error 95)". So it fails to serve there — but only AFTER writing a world-readable broker.key.
+   (This is why the attacker's socket connect / grants list return ENOENT: no socket was ever bound.)
+
+So the separate-account boundary that Scenario 1 proved on ext4 is ABSENT on a Windows-mounted
+volume. This is a deployment hazard (category 7 — an OS/filesystem property), not a same-account
+break: the default WSL /home is ext4. Mitigation shipped: verify the achieved perms after chmod
+and warn when they did not stick (see the P21 hardening commit).

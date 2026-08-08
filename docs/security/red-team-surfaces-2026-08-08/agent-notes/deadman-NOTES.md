@@ -1,5 +1,11 @@
 # Red-Team Attack on DeluluLang Dead-Man Timer & E-Stop
 
+> **Provenance note (P21 normalization, 2026-08-08):** the `file:line` citations below are the
+> attacking agent's own, recorded as observed. During P21 the Survey flagged four as unresolvable —
+> one named the wrong crate (`device.rs` lives in `delulu-runtime`, not `delulu`), the rest used
+> line *ranges* the map cannot resolve. The paths were corrected and the line ranges rendered as
+> prose; the numbers are unchanged and approximate. Verified current locations are in `../README.md`.
+
 ## Methodology
 Systematic analysis of `crates/delulu-runtime/src/device.rs` and related files examining:
 1. Dead-man lease timing mechanics (wall-clock + stepped-sim)
@@ -96,7 +102,7 @@ All invariants analyzed against threat model: same-OS-user attacker (no memory i
 ### INVARIANT 4: Envelope Enforcement (Host-Side Before Dispatch)
 **Claim:** Out-of-envelope command MUST be refused before adapter/simulator sees it.
 
-**Location:** `crates/delulu-runtime/src/device.rs:355-428` (command function)
+**Location:** `crates/delulu-runtime/src/device.rs` (lines 355–428, command function)
 
 **Sequence:**
 1. Line 359: `step_and_sweep()` - advance sim clock if needed
@@ -284,7 +290,7 @@ All invariants analyzed against threat model: same-OS-user attacker (no memory i
 **Claim:** If broker daemon is unresponsive or slow, the authority probe IPC (line 4639-4640) could block the watchdog thread. During this block, heartbeat checks for OTHER devices are delayed.
 
 **Location:** 
-- `crates/delulu/src/cli.rs:4639-4640`
+- `crates/delulu/src/cli.rs` (lines 4639–4640)
   ```rust
   let req = crate::broker_ipc::ReqBody::NodeState { node: node.clone() };
   match crate::brokerd::request(&dir, req) {
@@ -347,8 +353,8 @@ All invariants analyzed against threat model: same-OS-user attacker (no memory i
 
 **Evidence:**
 - `crates/delulu/src/broker_transport.rs:461` - Unix socket connect has no timeout
-- `crates/delulu/src/broker_transport.rs:258-443` - No read timeout on Connection object
-- `crates/delulu/src/device.rs:590-610` - Watchdog loop holds probe as blocking call
+- `crates/delulu/src/broker_transport.rs` (lines 258–443) - No read timeout on Connection object
+- `crates/delulu-runtime/src/device.rs` (lines 590–610) - Watchdog loop holds probe as blocking call
 
 **Reproduction Path:**
 1. Start run with two devices (A and B)
