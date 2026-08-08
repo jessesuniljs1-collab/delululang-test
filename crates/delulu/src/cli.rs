@@ -1058,7 +1058,7 @@ fn usage() -> &'static str {
      \x20 delulu plugin    verify  <file.dpx> [--json]   (load steps 1,2,5 — identical verdicts to a real load)\n\
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: ~/.delulu/audit)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: $DELULU_STATE_DIR/audit, else ~/.delulu/audit)\n\
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] | status | stop | rotate-key\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
@@ -6933,11 +6933,35 @@ impl PyWalk {
 // authority decision. Revocation latency honesty (spec §4.2): records observe that revocations take
 // effect synchronously before the next use / within one epoch interval — never "immediately".
 
-/// Default log dir: `~/.delulu/audit` (HOME, else USERPROFILE on Windows). Only the CLI knows this
-/// path — the `delulu-broker` library takes injected paths only.
+/// Default log dir, chosen to read the SAME chain the broker wrote. When `DELULU_STATE_DIR` is set the
+/// operator is working with a specific broker, so the default follows it (`$DELULU_STATE_DIR/audit`) —
+/// mirroring `brokerd::resolve_state_dir` + `audit_dir`. Only when no state dir is set does it fall
+/// back to `~/.delulu/audit` (HOME, else USERPROFILE on Windows). Only the CLI knows this path — the
+/// `delulu-broker` library takes injected paths only.
+///
+/// **F-CUSTODY-2.** This used to return `~/.delulu/audit` unconditionally, so an operator running an
+/// isolated broker (custom `DELULU_STATE_DIR`) who forgot `--dir` verified a DIFFERENT, global log and
+/// could get a confident `ok` for a chain unrelated to the incident under investigation — the same
+/// "reads the wrong store" class as campaign finding C75 (the `--state-dir` typo note below). An
+/// explicit `--dir` still overrides both (the caller tries `--dir` first).
 fn default_audit_dir() -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-    Some(std::path::PathBuf::from(home).join(".delulu").join("audit"))
+    audit_dir_from(
+        std::env::var_os("DELULU_STATE_DIR"),
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")),
+    )
+}
+
+/// The pure resolution behind [`default_audit_dir`] (split out so it is testable without mutating
+/// process-global env, which races under the parallel test harness): a set `DELULU_STATE_DIR` wins
+/// with `<state>/audit`, else `<home>/.delulu/audit`, else `None` when neither is known.
+fn audit_dir_from(
+    state_dir: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    if let Some(state) = state_dir {
+        return Some(std::path::PathBuf::from(state).join("audit"));
+    }
+    Some(std::path::PathBuf::from(home?).join(".delulu").join("audit"))
 }
 
 /// One human line per record: seq, UTC time (display-only ISO render of the stored epoch millis),
@@ -7062,14 +7086,17 @@ fn cmd_audit(rest: &[String]) -> i32 {
             // habitual flag here had it dropped and got records from the DEFAULT store —
             // `~/.delulu/audit` — presented as the answer to a question about a different one.
             // Investigating an incident with evidence from somewhere else is not a lesser failure
-            // than showing none (campaign finding C75, ruling D72).
+            // than showing none (campaign finding C75, ruling D72). F-CUSTODY-2 then made the default
+            // itself follow `DELULU_STATE_DIR`, so the drop no longer silently changes stores — but
+            // the unknown flag is still an error, never ignored.
             other => {
                 eprintln!("error: `audit` does not know the option `{other}`");
                 if other.starts_with("--state-dir") {
                     eprintln!(
                         "note: `audit` reads a log directory, not the broker's state root — it is \
-                         `--dir DIR`. The other custody commands take `--state-dir` because they \
-                         talk to the broker; this one reads files."
+                         `--dir DIR`. It already defaults to `$DELULU_STATE_DIR/audit` when that \
+                         variable is set, so with an isolated broker you usually need no flag at all; \
+                         the other custody commands take `--state-dir` because they talk to the broker."
                     );
                 }
                 eprintln!(
@@ -8112,6 +8139,36 @@ mod suggestion_tests {
         for c in SUBCOMMANDS {
             assert_eq!(nearest_subcommand(c), Some(*c), "`{c}` is a real command");
         }
+    }
+}
+
+#[cfg(test)]
+mod audit_dir_tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    /// F-CUSTODY-2: with `DELULU_STATE_DIR` set, `audit` defaults to THAT broker's `<state>/audit`,
+    /// not the global `~/.delulu/audit`, so `audit verify` reads the same chain the broker wrote and
+    /// cannot report a confident `ok` for an unrelated store. The pure resolver is exercised directly
+    /// so no process-global env is mutated (which would race the parallel harness).
+    #[test]
+    fn a_set_state_dir_redirects_the_default_audit_log() {
+        // State dir set → `<state>/audit` wins, whatever HOME is.
+        assert_eq!(
+            audit_dir_from(Some(OsString::from("/srv/sat0")), Some(OsString::from("/home/op"))),
+            Some(PathBuf::from("/srv/sat0").join("audit"))
+        );
+    }
+
+    #[test]
+    fn no_state_dir_falls_back_to_the_home_default() {
+        assert_eq!(
+            audit_dir_from(None, Some(OsString::from("/home/op"))),
+            Some(PathBuf::from("/home/op").join(".delulu").join("audit"))
+        );
+        // Neither known → no default; the caller then demands an explicit `--dir`.
+        assert_eq!(audit_dir_from(None, None), None);
     }
 }
 

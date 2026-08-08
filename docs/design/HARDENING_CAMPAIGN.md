@@ -2947,3 +2947,59 @@ the documented, deliberate "the grant tree does not persist" behavior (P17-B1), 
 Revocation still cannot cross a partition; the bound that survives one is the uplink lease, unchanged.
 Pinned by `revoking_an_adopted_node_cannot_be_undone_by_extending_the_chain`, falsified against the
 un-fixed code.
+
+## P20 custody — multi-agent red team (2026-08-08)
+
+Four AI agents (2× Sonnet 5, 2× Haiku 4.5) ran as untrusted federation parties against the broker,
+certificates, lease tokens, audit chain, and Guard, holding only a delegated vehicle key. Full
+verdicts and preserved agent notes: `docs/security/red-team-P20-custody-2026-08-08/`. Three targets
+held under adversarial AI; one "CRITICAL" was a **false positive** (the Guard sealed tier — the agent
+saw a permit minted and never checked that the permit authorizes nothing; use-time refuses `DL1413`
+before any permit, and a pinning test already existed); one "BROKE" was **P20-R4, already fixed** (the
+agent tested a stale binary). The two real findings, both **CLOSED this pass**, both minor:
+
+### F-CUSTODY-1 · A sealed guard class was refused only at use time, not at approval — CLOSED
+
+**What.** `guard_request`/`guard_approve` minted a permit for a `sealed` class. The permit was inert
+(use-time refuses `DL1413` before any permit is consulted — the load-bearing guarantee always held and
+is tested), but it would have become **effective the instant the class was unsealed to `guarded`,
+without a fresh approval** — a latency gap against the design's "sealed is not runtime-approvable;
+unseal first." Not a runtime bypass; a workflow that mints something it should refuse.
+
+**Fix.** `GuardPolicy::tier_for_subset` — the request-time dual of `tier_for_use`, mirroring its
+axis+effect cross-cut in *both* directions (an axis request hits a sealed `effect:` rule; a broad
+`effect:` request hits any sealed axis token it would cover). `guard_request` refuses a sealed subset
+up front; `guard_approve` refuses one at approval — the **decisive gate**, because it catches a request
+queued while `guarded` and then sealed before approval, so **no permit is ever minted for a sealed
+class**. The owner's path is to unseal first (a policy edit), then approve. This does not contradict
+`guard_check_mint` letting the owner mint sealed authority directly: a minted child's *use* stays
+sealed-gated, whereas a permit's only purpose is to lift the gate — refusing the permit is consistent
+with the seal, refusing the mint would not be.
+
+**Verification.** Five focused broker tests (direct request, the approve-race, both cross-cut
+directions, and a `guarded` negative) + an over-the-wire daemon test. **Falsified:** neutering
+`tier_for_subset` fails all four positive cases independently while the negative and the use-time
+guarantee stay green — proving each gate load-bearing and the effect cross-cut non-vacuous (cases
+C/D reach a sealed verdict only through it). Verified live through the real CLI.
+
+### F-CUSTODY-2 · `delulu audit` defaulted to the global log, not the active broker's — CLOSED
+
+**What.** `audit verify|tail|query|bundle|reconcile` defaulted to `~/.delulu/audit` unconditionally.
+An operator running an isolated broker (custom `DELULU_STATE_DIR`) who forgot `--dir` verified a
+*different, global* chain and could get a confident `ok` for a store unrelated to the incident — the
+"reads the wrong store" class of finding C75, applied to the one command whose entire job is to answer
+"is this log intact?"
+
+**Fix.** `default_audit_dir` follows `DELULU_STATE_DIR` when set (`$DELULU_STATE_DIR/audit`, mirroring
+the broker's own `resolve_state_dir` + `audit_dir`), falling back to `~/.delulu/audit` only when no
+state dir is set; an explicit `--dir` still overrides both, and the unknown-flag error and
+`--state-dir` hint are unchanged. The pure resolver is split out and unit-tested (no process-env
+race); verified live (`audit verify` with no `--dir` read the broker's own log).
+
+### The discipline that carried the pass
+
+Every agent claim was re-verified independently against the CURRENT binary — the one "CRITICAL"
+evaporated under a code read, the one "BROKE" was already closed against a stale build. The genuine
+finding of the night (P20-R4) was found by the operator asking "could this mechanism be defeated?",
+not by any checklist. A green suite is a floor to extend, not a finish line (see the standing directive
+to keep asking *what assumption have we not attacked yet?*).

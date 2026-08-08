@@ -22,6 +22,8 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
 
+use delulu_check::Effect;
+
 use crate::authority::Authority;
 use crate::diag::Denial;
 use crate::tree::{Broker, GrantId};
@@ -129,6 +131,40 @@ fn use_axis_class(op: Op) -> Option<GuardClass> {
         Op::PluginLoad => None,
     }
 }
+
+/// The effect a use of this guard class requires, if any — the dual of [`use_axis_class`] composed
+/// with [`Op::required_effect`] (each axis class corresponds to exactly one `use_axis_class` op, whose
+/// `required_effect` this returns). A sealed `effect:<name>` rule gates every use in the classes that
+/// map to it, so a request/approval touching such a class is sealed even when its own axis rule is
+/// only `guarded`; [`GuardPolicy::tier_for_subset`] uses this to mirror `tier_for_use`'s cross-cut.
+/// The three classes with no use-time broker op map to `None`: `effect` items are matched directly,
+/// and `secret`/`foreign_python` gate at MINT time only (their use never crosses the broker).
+/// Exhaustive on purpose (campaign C31 discipline): a new class breaks this build rather than
+/// silently escaping the seal cross-cut.
+fn class_use_effect(class: GuardClass) -> Option<Effect> {
+    match class {
+        GuardClass::FsRead => Some(Effect::Read),
+        GuardClass::FsWrite => Some(Effect::Write),
+        GuardClass::Net => Some(Effect::Net),
+        GuardClass::Declassify => Some(Effect::Declassify),
+        GuardClass::ForeignC => Some(Effect::ForeignCall),
+        GuardClass::Device => Some(Effect::Actuate),
+        GuardClass::Effect | GuardClass::Secret | GuardClass::ForeignPython => None,
+    }
+}
+
+/// The axis guard classes with an associated use-time effect (the domain where [`class_use_effect`]
+/// is `Some`). [`GuardPolicy::tier_for_subset`] iterates these to resolve an `effect:E` request back
+/// to the axis rules its covered uses would hit. Kept beside `class_use_effect` so the two cannot
+/// drift; a missing entry only ever UNDER-seals, which a falsification test guards against.
+const EFFECT_BEARING_CLASSES: [GuardClass; 6] = [
+    GuardClass::FsRead,
+    GuardClass::FsWrite,
+    GuardClass::Net,
+    GuardClass::Declassify,
+    GuardClass::ForeignC,
+    GuardClass::Device,
+];
 
 /// Pattern match against a use token (addendum §2.3 vocabulary). v0.5 (deviation §7): `*` matches
 /// everything; otherwise EXACT string equality — the conservative, sound choice consistent with the
@@ -267,6 +303,67 @@ impl GuardPolicy {
             for r in self.rules.iter().filter(|r| r.class == GuardClass::Device) {
                 if pattern_matches(&r.pattern, Some(name)) {
                     consider(r.tier, rule_label(r.class, &r.pattern));
+                }
+            }
+        }
+        best
+    }
+
+    /// The strongest tier gating any use that a requested/approved subset could later authorize, with
+    /// the matched rule's `class:pattern` label — or `None` when nothing gates it. This is the
+    /// request-time dual of [`Self::tier_for_use`]: `guard_request`/`guard_approve` consult it so a
+    /// **sealed** subset is refused (DL1413) exactly as use-time and mint-time refuse one. It closes
+    /// finding F-CUSTODY-1 — a permit minted while a class is sealed would otherwise sit inert (a
+    /// permit is never consulted for a sealed op, `guard_verdict_use`), then silently become effective
+    /// the instant the class was unsealed to `guarded`, with no fresh approval reflecting that change.
+    /// (This does NOT contradict `guard_check_mint` letting the owner mint sealed authority: a minted
+    /// child's USE is still sealed-gated, whereas a permit's whole purpose is to lift the gate.)
+    ///
+    /// Matching is the symmetric closure of [`pattern_matches`] (`overlaps`): the requested pattern may
+    /// itself be `*`, so `*` on either side matches. Each subset item is judged against (a) rules of
+    /// its own class and (b) the cross-cutting `effect` class in BOTH directions — an axis item (e.g.
+    /// `declassify:x`) is gated by a sealed `effect:Declassify` rule, and an `effect:E` item is gated
+    /// by any rule of a class whose use requires `E` (an `effect:E` permit covers EVERY token of that
+    /// class, so a single sealed token seals the request). Anything `tier_for_use` refuses at use time
+    /// is therefore refused here at request time; an over-broad subset straddling a seal is refused
+    /// whole, which is correct — the holder can re-request the un-sealed items narrowly.
+    pub fn tier_for_subset(&self, subset: &GuardSubset) -> Option<(GuardTier, String)> {
+        fn overlaps(a: &str, b: &str) -> bool {
+            a == "*" || b == "*" || a == b
+        }
+        let mut best: Option<(GuardTier, String)> = None;
+        let mut consider = |tier: GuardTier, label: String| {
+            if best.as_ref().is_none_or(|(t, _)| tier > *t) {
+                best = Some((tier, label));
+            }
+        };
+        for (class, pat) in &subset.0 {
+            // (a) rules of the item's own class.
+            for r in self.rules.iter().filter(|r| r.class == *class) {
+                if overlaps(&r.pattern, pat) {
+                    consider(r.tier, rule_label(r.class, &r.pattern));
+                }
+            }
+            // (b) cross-cutting effect, axis → effect: a use of this axis class requires an effect, so
+            // a sealed `effect:<that>` rule gates it (exactly as `tier_for_use` folds in the effect).
+            if let Some(eff) = class_use_effect(*class) {
+                for r in self.rules.iter().filter(|r| r.class == GuardClass::Effect) {
+                    if overlaps(&r.pattern, eff.name()) {
+                        consider(r.tier, rule_label(r.class, &r.pattern));
+                    }
+                }
+            }
+            // (b) cross-cutting effect, effect → axis: an `effect:E` item covers every token of any
+            // axis class whose use requires an effect named by the item, so every rule on that class
+            // applies (not just an overlapping-token one — the request is unbounded over tokens).
+            if *class == GuardClass::Effect {
+                for other in EFFECT_BEARING_CLASSES {
+                    let Some(eff) = class_use_effect(other) else { continue };
+                    if overlaps(pat, eff.name()) {
+                        for r in self.rules.iter().filter(|r| r.class == other) {
+                            consider(r.tier, rule_label(r.class, &r.pattern));
+                        }
+                    }
                 }
             }
         }
@@ -725,7 +822,20 @@ impl Broker {
     /// explaining itself is free). Records `guard_request` (with the `why`). A repeat request for the
     /// same (node, subset) that is still pending returns the existing id (dedup). Returns `(id,
     /// deduped)`.
-    pub fn guard_request(&mut self, node: &GrantId, subset: GuardSubset, why: String) -> (String, bool) {
+    pub fn guard_request(
+        &mut self,
+        node: &GrantId,
+        subset: GuardSubset,
+        why: String,
+    ) -> Result<(String, bool), Denial> {
+        // A sealed subset is not runtime-approvable (addendum §2.6): refuse the request the same way
+        // use-time (DL1413) and mint-time do, BEFORE queueing it. Checked ahead of dedup so a seal set
+        // AFTER a first request still refuses retries. This is fail-fast; `guard_approve` re-checks —
+        // that is the decisive gate, since a request queued while `guarded` may be sealed before it is
+        // approved (F-CUSTODY-1).
+        if let Some((GuardTier::Sealed, rule)) = self.guard.policy.tier_for_subset(&subset) {
+            return Err(Denial::GuardSealed { node: node.clone(), rule });
+        }
         self.guard_gc();
         if let Some(r) = self
             .guard
@@ -733,7 +843,7 @@ impl Broker {
             .iter()
             .find(|r| r.node == *node && r.subset == subset && r.status == ReqStatus::Pending)
         {
-            return (r.id.clone(), true);
+            return Ok((r.id.clone(), true));
         }
         let id = format!("gr_{:04}", self.guard.next_request);
         self.guard.next_request += 1;
@@ -756,7 +866,7 @@ impl Broker {
             "allow",
             None,
         );
-        (id, false)
+        Ok((id, false))
     }
 
     /// The pending/decided request queue (with justifications), after a GC of expired pendings.
@@ -793,6 +903,14 @@ impl Broker {
         };
         let subset = self.guard.requests[pos].subset.clone();
         let node = self.guard.requests[pos].node.clone();
+        // The decisive seal gate (F-CUSTODY-1). The class may have been sealed AFTER this request was
+        // queued (requested while `guarded`, then `guard policy set … sealed`). Sealed authority is
+        // not runtime-approvable: refuse DL1413 and leave the request PENDING, so no permit is ever
+        // minted for a sealed subset. The owner's path to grant it is to unseal first (a policy edit),
+        // then approve — which mints a permit that correctly reflects the now-`guarded` status.
+        if let Some((GuardTier::Sealed, rule)) = self.guard.policy.tier_for_subset(&subset) {
+            return Err(Denial::GuardSealed { node, rule });
+        }
         self.guard.requests[pos].status = ReqStatus::Approved;
         let permit_id = format!("gp_{:04}", self.guard.next_permit);
         self.guard.next_permit += 1;
@@ -1106,7 +1224,8 @@ mod tests {
 
         // Request (with why) → pending; a retried use is DL1411 carrying the request id.
         let subset = GuardSubset::parse(&["declassify:foo".to_string()]).unwrap();
-        let (id, deduped) = b.guard_request(&child, subset.clone(), "need the api key to call home".into());
+        let (id, deduped) =
+            b.guard_request(&child, subset.clone(), "need the api key to call home".into()).unwrap();
         assert!(!deduped);
         match b.guard_verdict_use(&child, Op::Declassify, Some("foo")) {
             GuardVerdict::Block(d) => {
@@ -1116,7 +1235,7 @@ mod tests {
             _ => panic!("a pending request must yield DL1411"),
         }
         // Dedup: a repeat request for the same (node, subset) returns the existing id.
-        let (id2, deduped2) = b.guard_request(&child, subset, "again".into());
+        let (id2, deduped2) = b.guard_request(&child, subset, "again".into()).unwrap();
         assert!(deduped2 && id2 == id, "repeat request dedups to the existing id");
 
         // Approve → the retried use succeeds via the permit.
@@ -1125,7 +1244,9 @@ mod tests {
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
 
         // Criterion 5: a SECOND request (bar) → deny (comment required) → DL1412 carrying the comment.
-        let (id3, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:bar".to_string()]).unwrap(), "and bar too".into());
+        let (id3, _) = b
+            .guard_request(&child, GuardSubset::parse(&["declassify:bar".to_string()]).unwrap(), "and bar too".into())
+            .unwrap();
         assert!(b.guard_deny(Some("gow1_testowner"), &id3, "no — bar is out of bounds".into()).unwrap());
         match b.guard_verdict_use(&child, Op::Declassify, Some("bar")) {
             GuardVerdict::Block(d) => {
@@ -1142,7 +1263,9 @@ mod tests {
     fn a_permit_covers_only_its_own_subset() {
         let mut b = broker();
         let (_root, child) = declassify_root_and_child(&mut b);
-        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "foo only".into());
+        let (id, _) = b
+            .guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "foo only".into())
+            .unwrap();
         b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         // foo is covered…
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
@@ -1150,21 +1273,100 @@ mod tests {
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("bar")), GuardVerdict::Block(d) if d.code() == "DL1410"));
     }
 
-    /// Criterion 6 (unit): a `sealed` rule refuses DL1413 even with an approved request/permit —
+    /// Criterion 6 (unit): a `sealed` rule refuses DL1413 even with a pre-existing approved permit —
     /// sealed short-circuits before any permit is consulted (and bypass never lifts it, see the 5k
     /// `sealed_use_is_dl1413_even_under_bypass`).
+    ///
+    /// The permit is minted the ONLY way a permit can now exist for a class that ends up sealed: while
+    /// the class was still `guarded`. (F-CUSTODY-1 closed the other route — `guard_approve` refuses a
+    /// subset that is sealed AT approval time, so you can no longer mint a permit for an already-sealed
+    /// class.) This is the realistic inert-permit scenario: an approval predates a later seal.
     #[test]
     fn sealed_refuses_even_with_an_approved_permit() {
         let mut b = broker();
-        b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Sealed).unwrap();
+        // Start GUARDED so a permit can be minted through the normal request/approve flow…
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Guarded).unwrap();
         let root = b.issue(holder(), Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), None);
         b.guard_check_mint(&Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), &root, Some("gow1_testowner")).unwrap();
         let child = b.attenuate(&root, Authority::new(eff(&["Write"]), Scopes { fs_write: names(&["./out"]), ..Default::default() }), holder(), None).unwrap();
-        // Approve a permit for fs_write:* anyway…
-        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["fs_write:*".to_string()]).unwrap(), "want it".into());
+        let (id, _) = b
+            .guard_request(&child, GuardSubset::parse(&["fs_write:*".to_string()]).unwrap(), "want it".into())
+            .unwrap();
         b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
-        // …and the sealed rule still refuses DL1413.
+        // …the permit works while guarded…
+        assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::PermitUse));
+        // …now SEAL the class. The pre-existing permit becomes inert: use-time refuses DL1413 before
+        // any permit is consulted, so the seal is airtight even against an approval that predates it.
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::FsWrite, "*".into(), GuardTier::Sealed).unwrap();
         assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Block(d) if d.code() == "DL1413"));
+    }
+
+    // F-CUSTODY-1: a sealed subset is NOT runtime-approvable. Split into focused cases so that
+    // neutering `tier_for_subset` makes EACH fail independently (an assert panic no longer hides the
+    // cases after it) — the falsification that proves none of these is vacuous.
+    fn foo_subset() -> GuardSubset {
+        GuardSubset::parse(&["declassify:foo".to_string()]).unwrap()
+    }
+
+    /// (F-CUSTODY-1, direct) Sealing the class refuses the request immediately, before it is queued.
+    #[test]
+    fn sealing_a_class_refuses_its_request_dl1413() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Declassify, "*".into(), GuardTier::Sealed).unwrap();
+        assert!(matches!(b.guard_request(&child, foo_subset(), "want it".into()), Err(d) if d.code() == "DL1413"));
+    }
+
+    /// (F-CUSTODY-1, the decisive gate) A request made while `guarded`, then sealed, must be refused at
+    /// APPROVE time — the request-time check provably cannot catch this, so it isolates the approve
+    /// gate. No permit is minted; the request is left pending for a later unseal.
+    #[test]
+    fn sealing_after_a_request_refuses_the_approval_dl1413() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let (id, _) = b.guard_request(&child, foo_subset(), "want it".into()).unwrap();
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Declassify, "*".into(), GuardTier::Sealed).unwrap();
+        assert!(matches!(b.guard_approve(Some("gow1_testowner"), &id, None, None, None), Err(d) if d.code() == "DL1413"));
+        assert!(b.guard_permits().is_empty(), "no permit may be minted for a sealed subset");
+        assert!(
+            b.guard_pending().iter().any(|r| r.id == id && matches!(r.status, ReqStatus::Pending)),
+            "a refused approve leaves the request pending — the owner must unseal first"
+        );
+    }
+
+    /// (F-CUSTODY-1, cross-cut axis → effect) `declassify:*` only GUARDED, but `effect:Declassify`
+    /// SEALED. A declassify use would be DL1413 at use time (the effect folds in), so the request must
+    /// be refused here too — a sealed verdict reachable ONLY through the `class_use_effect` cross-cut.
+    #[test]
+    fn a_sealed_effect_rule_seals_an_axis_request() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Effect, "Declassify".into(), GuardTier::Sealed).unwrap();
+        assert!(matches!(b.guard_request(&child, foo_subset(), "want it".into()), Err(d) if d.code() == "DL1413"));
+    }
+
+    /// (F-CUSTODY-1, cross-cut effect → axis) A specific token `declassify:secret` SEALED, requested as
+    /// the broad `effect:Declassify` (which covers EVERY declassify token). Must refuse — otherwise the
+    /// broad permit would cover `declassify:secret` the instant it was unsealed. Reachable ONLY through
+    /// the effect→axis cross-cut (there is no sealed `effect:*` rule for the direct branch to find).
+    #[test]
+    fn a_sealed_axis_token_seals_a_broad_effect_request() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        b.guard_policy_set(Some("gow1_testowner"), GuardClass::Declassify, "secret".into(), GuardTier::Sealed).unwrap();
+        let eff_decl = GuardSubset::parse(&["effect:Declassify".to_string()]).unwrap();
+        assert!(matches!(b.guard_request(&child, eff_decl, "broad".into()), Err(d) if d.code() == "DL1413"));
+    }
+
+    /// (F-CUSTODY-1, negative) A merely GUARDED class is unaffected: request and approve still work
+    /// end-to-end, so the seal gate does not over-refuse the ordinary approval path.
+    #[test]
+    fn a_guarded_subset_still_approves_normally() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let (id, _) = b.guard_request(&child, foo_subset(), "want it".into()).unwrap();
+        let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        assert!(pid.starts_with("gp_"), "a guarded subset still approves normally");
     }
 
     /// Permits and pending requests are daemon-memory only — an owner-gated revoke drops a permit,
@@ -1173,7 +1375,9 @@ mod tests {
     fn permits_are_session_scoped_and_revocable() {
         let mut b = broker();
         let (_root, child) = declassify_root_and_child(&mut b);
-        let (id, _) = b.guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "why".into());
+        let (id, _) = b
+            .guard_request(&child, GuardSubset::parse(&["declassify:foo".to_string()]).unwrap(), "why".into())
+            .unwrap();
         let pid = b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
         // Revoke (owner-gated) → the use is blocked again.

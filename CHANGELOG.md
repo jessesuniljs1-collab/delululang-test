@@ -158,6 +158,33 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — P20 red team, broker & certificates, 2026-08-08
 
+### Security — HARDENED (findings F-CUSTODY-1, F-CUSTODY-2 from the multi-agent custody red team)
+
+- **F-CUSTODY-1: a sealed guard class is now refused at request AND approval time, not only at use
+  time.** The approval *workflow* previously minted a permit for a `sealed` class. That permit was
+  inert while the rule was sealed (use-time refuses `DL1413` before any permit is consulted — the
+  guarantee always held and is tested), but it would have become **effective the instant the class was
+  unsealed to `guarded`, with no fresh approval** reflecting the change — a latency gap against the
+  design's "sealed is not runtime-approvable; unseal first." A new `GuardPolicy::tier_for_subset` —
+  the request-time dual of `tier_for_use`, mirroring its axis+effect cross-cut in *both* directions —
+  now lets `guard_request` refuse a sealed subset up front and `guard_approve` refuse one at approval
+  (the decisive gate: it catches a request queued while `guarded` and then sealed before approval, so
+  **no permit is ever minted for a sealed class**). This does not weaken `guard_check_mint`'s rule that
+  the owner may mint sealed authority directly — a minted child's *use* is still sealed-gated, whereas
+  a permit exists only to lift the gate. Pinned by five focused broker tests plus an over-the-wire
+  daemon test; falsified by neutering `tier_for_subset` (all four positive cases fail independently);
+  verified live through the CLI (`error[DL1413]`, exit 1, for both a sealed request and the
+  guarded-then-sealed approve).
+
+- **F-CUSTODY-2: `delulu audit` defaults to the active broker's log, not the global one.**
+  `audit verify|tail|query|bundle|reconcile` used `~/.delulu/audit` unconditionally, so an operator
+  running an isolated broker (custom `DELULU_STATE_DIR`) who forgot `--dir` verified a *different,
+  global* chain and could get a confident `ok` for an unrelated store — the same "reads the wrong
+  store" class as finding C75. `default_audit_dir` now follows `DELULU_STATE_DIR` when set
+  (`$DELULU_STATE_DIR/audit`, mirroring the broker's own `resolve_state_dir` + `audit_dir`), falling
+  back to `~/.delulu/audit` only when no state dir is set; an explicit `--dir` still overrides both.
+  Pinned by a pure-resolver unit test and verified live.
+
 ### Security — FIXED (CRITICAL, finding P20-R4): revocation evaded by extending a revoked chain
 
 - **An operator's revocation of an adopted federation node could be undone within the same broker

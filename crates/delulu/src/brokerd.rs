@@ -555,8 +555,12 @@ fn handle(
                 );
             };
             let node = GrantId::from_trusted(node);
-            let (id, deduped) = broker.guard_request(&node, subset, why);
-            (Response::GuardRequested { id, deduped }, false)
+            match broker.guard_request(&node, subset, why) {
+                Ok((id, deduped)) => (Response::GuardRequested { id, deduped }, false),
+                // A sealed subset is refused DL1413 at request time (F-CUSTODY-1), surfaced through
+                // the same `deny_response` path as `guard_approve`'s refusals.
+                Err(d) => (deny_response(&d), false),
+            }
         }
         ReqBody::GuardPending => {
             let requests = broker.guard_pending().iter().map(guard_request_wire).collect();
@@ -1593,15 +1597,17 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
-    /// Criterion 6 (over the wire): a `sealed` rule refuses DL1413 even with an approved permit, and
-    /// under bypass.
+    /// Criterion 6 (over the wire): a `sealed` rule refuses DL1413 even with a pre-existing approved
+    /// permit, and under bypass. The permit is minted the only way one can now exist for a
+    /// later-sealed class — while it was still `guarded` (F-CUSTODY-1 closed the approve-while-sealed
+    /// route); this is the realistic inert-permit case where an approval predates the seal.
     #[test]
     fn guard_c6_sealed_refuses_with_permit_and_under_bypass() {
         let state = temp_state("guard_c6");
         let handle = start_daemon(&state);
-        // Seal fs_write.
-        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
-        // Root + delegated child (owner mints the sealed slice directly).
+        // Start GUARDED so a permit can be minted through the normal request/approve flow.
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "guarded".into() }).unwrap();
+        // Root + delegated child.
         let root_spec = AuthoritySpec { effects: vec!["Write".into()], fs_write: vec!["./out".into()], holder_kind: "process".into(), holder_desc: "c6".into(), ..Default::default() };
         let Response::Issued { node: root } = request(&state, ReqBody::Issue(root_spec.clone())).unwrap() else { panic!() };
         let mut child_spec = root_spec.clone();
@@ -1609,16 +1615,50 @@ mod tests {
         let Response::Delegated { node: child, token } = request(&state, ReqBody::Delegate { parent: root, authority: child_spec, multi: false, owner: Some(TEST_OWNER.into()) }).unwrap() else { panic!() };
         let _ = request(&state, ReqBody::Redeem { token, peer: "pid:1".into() }).unwrap();
 
-        // Approve a permit for fs_write:* anyway…
-        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["fs_write:*".into()], why: "want it".into() }).unwrap() else { panic!() };
+        // Mint a permit for fs_write:* while guarded…
+        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["fs_write:*".into()], why: "want it".into() }).unwrap() else { panic!("a guarded request is accepted") };
         request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
-        // …sealed still refuses DL1413.
+        // …the permit works while guarded…
+        let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
+        assert!(matches!(&resp, Response::Decision { allow: true, .. }), "permit works while guarded: {resp:?}");
+
+        // …now SEAL it: the pre-existing permit is inert, sealed refuses DL1413…
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "fs_write".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
         let resp = request(&state, ReqBody::Check { node: child.clone(), op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed with permit: {resp:?}");
         // …and under bypass.
         request(&state, ReqBody::GuardBypass { owner: Some(TEST_OWNER.into()), on: true }).unwrap();
         let resp = request(&state, ReqBody::Check { node: child, op: "FsWrite".into(), arg: Some("./out/x".into()) }).unwrap();
         assert!(matches!(&resp, Response::Decision { allow: false, code, .. } if code.as_deref() == Some("DL1413")), "sealed under bypass: {resp:?}");
+
+        stop_daemon(&state, handle);
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// F-CUSTODY-1 over the wire: the daemon refuses a request for a sealed class (DL1413), and
+    /// refuses approval of a request queued while `guarded` and then sealed — no permit is minted
+    /// either way. Exercises the full dispatch → `deny_response` → `Response::Error` chain that the
+    /// CLI renders as DL1413.
+    #[test]
+    fn guard_sealed_subset_refused_at_request_and_approve_over_the_wire() {
+        let state = temp_state("guard_sealed_wire");
+        let handle = start_daemon(&state);
+        let (_root, child) = guarded_child(&state); // declassify:* is guarded by default
+
+        // (A) Seal declassify, then a request is refused DL1413 at REQUEST time.
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
+        let resp = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1413"), "sealed request refused: {resp:?}");
+
+        // (B) The race: unseal, request while guarded, RE-seal, then APPROVE is refused DL1413.
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "guarded".into() }).unwrap();
+        let Response::GuardRequested { id, .. } = request(&state, ReqBody::GuardRequest { node: child.clone(), uses: vec!["declassify:*".into()], why: "want it".into() }).unwrap() else { panic!("a guarded request is accepted") };
+        request(&state, ReqBody::GuardPolicySet { owner: Some(TEST_OWNER.into()), class: "declassify".into(), pattern: "*".into(), tier: "sealed".into() }).unwrap();
+        let resp = request(&state, ReqBody::GuardApprove { owner: Some(TEST_OWNER.into()), id, ttl_millis: None, uses: None, comment: None }).unwrap();
+        assert!(matches!(&resp, Response::Error { code, .. } if code == "DL1413"), "sealed approve refused: {resp:?}");
+        // No permit was minted for the sealed subset.
+        let Response::GuardPermitList { permits } = request(&state, ReqBody::GuardPermits).unwrap() else { panic!() };
+        assert!(permits.is_empty(), "no permit for a sealed subset: {permits:?}");
 
         stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);

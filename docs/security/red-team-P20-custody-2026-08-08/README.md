@@ -35,23 +35,36 @@ The design (`STAGE5_GUARD_ADDENDUM.md`): `sealed` — *"refused with DL1413 alwa
 runtime; only a principal policy edit (owner-coded) can unseal. Bypass does not lift sealed."* The
 runtime guarantee is intact.
 
-## Real findings, tracked (minor, not security escalations)
+## Findings — both now CLOSED (2026-08-08, this pass)
 
-- **F-CUSTODY-1 — `guard request`/`approve` accept a `sealed` class and mint an inert permit.** The
-  approval *workflow* does not refuse a sealed class the way use-time and mint-time do; it mints a
-  permit that is inert while the rule is sealed. It is not a runtime bypass (proven above). The
-  residual concern is latency: a permit minted while sealed would become **effective if the rule is
-  later unsealed** to `guarded`, without a fresh approval — a small gap against the design's intent
-  that a sealed rule be "not approvable at runtime; unseal first." Proportionate fix: `request`/
-  `approve` refuse a sealed class with `DL1413`, matching use-time and mint-time. Tracked for a
-  hardening pass; the load-bearing guarantee (use-time refusal) already holds and is tested.
+- **F-CUSTODY-1 — `guard request`/`approve` accepted a `sealed` class and minted an inert permit.
+  CLOSED.** The approval *workflow* did not refuse a sealed class the way use-time and mint-time do;
+  it minted a permit that was inert while the rule was sealed. It was not a runtime bypass (proven
+  above). The residual concern was latency: a permit minted while sealed would become **effective if
+  the rule were later unsealed** to `guarded`, without a fresh approval — a gap against the design's
+  intent that a sealed rule be "not approvable at runtime; unseal first."
+  **Fix:** a new `GuardPolicy::tier_for_subset` (the request-time dual of `tier_for_use`, mirroring
+  its axis+effect cross-cut in both directions); `guard_request` and — the decisive gate —
+  `guard_approve` now refuse a sealed subset with `DL1413`, so no permit is ever minted for a sealed
+  class, including a request queued while `guarded` and then sealed before approval. The owner's path
+  is to unseal first (a policy edit), then approve. This does NOT contradict `guard_check_mint`
+  letting the owner mint sealed authority directly: a minted child's *use* is still sealed-gated,
+  whereas a permit's whole purpose is to lift the gate. Pinned by five focused broker tests
+  (`sealing_a_class_refuses_its_request_dl1413`, `sealing_after_a_request_refuses_the_approval_dl1413`,
+  the two cross-cut tests, and a `guarded` negative) plus an over-the-wire daemon test
+  (`guard_sealed_subset_refused_at_request_and_approve_over_the_wire`). **Falsified:** neutering
+  `tier_for_subset` fails all four positive cases independently while the negative and the use-time
+  guarantee stay green. Verified live through the real CLI (both the sealed request and the
+  guarded-then-sealed approve print `error[DL1413]` and exit 1).
 
-- **F-CUSTODY-2 — `delulu audit verify|tail|query` default to `~/.delulu/audit`, not the broker's
-  `$DELULU_STATE_DIR/audit`.** Forgetting `--dir` verifies a *different, global* log and can report a
-  confident `ok` for an unrelated chain. Not a chain-integrity break — the mechanism is sound — but
-  the same "reads the wrong store" footgun class as hardening finding C75 (`audit --dir` vs
-  `--state-dir`). Worth aligning the default (or refusing without an explicit target when a state dir
-  is set). Tracked.
+- **F-CUSTODY-2 — `delulu audit verify|tail|query` defaulted to `~/.delulu/audit`, not the broker's
+  `$DELULU_STATE_DIR/audit`. CLOSED.** Forgetting `--dir` verified a *different, global* log and could
+  report a confident `ok` for an unrelated chain — the same "reads the wrong store" footgun class as
+  hardening finding C75. **Fix:** `default_audit_dir` now follows `DELULU_STATE_DIR` when set
+  (`$DELULU_STATE_DIR/audit`, mirroring `brokerd::resolve_state_dir` + `audit_dir`), falling back to
+  `~/.delulu/audit` only when no state dir is set; an explicit `--dir` still overrides both. Pinned by
+  a pure-resolver unit test (`audit_dir_tests`) and verified live (`audit verify` with no `--dir` read
+  the broker's own log). The unknown-flag error and the `--state-dir` hint are unchanged.
 
 ## What held — the custody core is genuinely well-built
 
