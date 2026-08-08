@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 223 |
-| Rust lines | 107518 |
+| Rust lines | 107600 |
 | Rust files outside `src/` (test/bench targets) | 93 |
 | Markdown documents | 136 |
-| Markdown lines | 36770 |
-| DeluluLang programs | 147 |
-| Registered diagnostic codes | 148 |
+| Markdown lines | 36821 |
+| DeluluLang programs | 148 |
+| Registered diagnostic codes | 149 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1073 / 9174 |
-| Open discrepancies | 5 |
+| Nodes / edges in this map | 1075 / 9195 |
+| Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -203,12 +203,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3585 lines
+- **Modules:** 9 files, 3593 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 371 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 1844 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 1852 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 167 |  |
 | `src/json.rs` | 185 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
@@ -318,7 +318,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7086 lines
+- **Modules:** 9 files, 7160 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -329,7 +329,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 733 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 113 | The language's one rule for turning written decimal text into a `Float`. |
-| `src/parser.rs` | 2554 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
+| `src/parser.rs` | 2628 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
 | `src/token.rs` | 426 | The Stage-1 token model (spec §2). |
 
 ### `delulu-wasm`
@@ -360,7 +360,7 @@ where the code is *produced*, not where someone wrote its number in a comment.
 | Range | Codes | Raised in |
 |---|---:|---|
 | `DL01xx` | 8 | `delulu`, `delulu-conform`, `delulu-diag`, `delulu-syntax` |
-| `DL02xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
+| `DL02xx` | 11 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-syntax` |
 | `DL03xx` | 7 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-measure`, `delulu-survey`, `delulu-syntax` |
 | `DL04xx` | 10 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey`, `delulu-syntax`, `delulu-wasm` |
 | `DL05xx` | 4 | `delulu`, `delulu-check`, `delulu-conform`, `delulu-diag`, `delulu-fuzz`, `delulu-measure`, `delulu-survey` |

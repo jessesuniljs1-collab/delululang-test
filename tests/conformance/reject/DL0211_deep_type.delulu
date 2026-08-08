@@ -1,0 +1,7 @@
+// anchors: ref.diag.DL0211
+// P20-R3: type nesting is capped at 128 levels. Before the cap, a deeply nested type did
+// not crash but made the checker superlinear -- a ~96 KB signature hung delulu check for a
+// minute. 200 levels is used rather than the ~16,000 that stalled, to keep this file small.
+module conf
+
+fn f(x: List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[Int]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]) {}

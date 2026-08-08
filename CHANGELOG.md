@@ -118,6 +118,34 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — P20 zero-trust red team, 2026-08-08
 
+### Language — CHANGED (narrows what compiles): type nesting is capped at 128 levels (DL0211)
+
+- **A deeply nested type was a denial-of-service surface, and at greater depth a hard crash**
+  (red-team finding P20-R3). `DL0210` caps *expression* nesting; nothing bounded a *type*. A
+  signature `fn f(x: List[List[…List[Int]…]])` nested ~16,000 deep **checked clean in ~59 seconds**,
+  the curve quadratic-to-cubic in depth (12k→20s, 14k→37s, 16k→59s, 18k+→hang), so a ~96 KB file made
+  `delulu check` — the loop an agent runs on every edit — unresponsive for a minute. The cost is in
+  the checker's type lowering, so the fix bounds depth **at parse time**, before that pass is
+  reached: a new `MAX_TYPE_DEPTH = 128` guard in `parse_type` refuses deeper types with **`DL0211`**.
+  Now the 16,000-deep type is refused in **2 seconds**; a 10-deep type still checks clean.
+
+  **Falsification turned up a second, worse failure that the quadratic measurement had hidden.**
+  Raising the limit to expose the test showed the parser **stack-overflowing** (`STATUS_STACK_OVERFLOW
+  0xC00000FD`) on a deep-enough type — the 59-second case was merely the slow part visible on the
+  CLI's explicit 512 MiB stack; a 2 MiB tooling or LSP thread crashes outright. The 128 cap closes
+  both the DoS and the crash, and holds on the smallest stack, exactly as `MAX_EXPR_DEPTH` does.
+
+  **This narrows the accepted language** — a type nested past 128 levels used to compile — which is
+  why it carries a diagnostic and is recorded rather than treated as a silent fix. No hand-written or
+  generated program nests a type past a handful of levels; one that needs more should name an inner
+  type with a `type` alias. Witnessed by `reject/DL0211_deep_type.delulu` (conformance) and two
+  falsified parser tests (the limit refuses, a 32-deep control still parses). The core-invariance
+  snapshot moved **only additively** — the new witness's own output, zero existing bytes changed —
+  which is the proof the language did not move for any program that already compiled. Also corrected
+  while here: `DL0210`'s explain text said the cap was "1,024 levels"; it has been 128 since P17-F5.
+
+
+
 ### Security — DOCUMENTED BOUNDARY (red-team finding P20-R1): hardlinks escape fs containment
 
 - **A hardlink planted inside a granted directory reads and writes the file it shares content with,
@@ -132,7 +160,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   already open the target; and no cheap cross-platform defense exists (POSIX cannot enumerate an
   inode's names without walking the filesystem, so a fix would make containment platform-dependent).
   Pinned as an executed characterization + C84-regression test in
-  `crates/delulu-runtime/src/prim.rs::containment_tests`; full threat model in `HARDENING_CAMPAIGN.md`
+  the `containment_tests` module in `crates/delulu-runtime/src/prim.rs`; full threat model in `HARDENING_CAMPAIGN.md`
   P20-R1, and the boundary is named in `docs/QUESTIONS.md` §1.7.
 
 ### Security — VERIFIED HELD: adversarial multi-agent authority test

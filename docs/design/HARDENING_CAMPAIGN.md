@@ -2860,7 +2860,7 @@ symlink/junction escape it resembles:
    program would then confine differently on Linux and Windows.
 
 **Disposition.** Documented as an explicit known limitation (this entry, plus the honest-limits
-surfaces) and **pinned as an executed fact**: `crates/delulu-runtime/src/prim.rs::containment_tests`
+surfaces) and **pinned as an executed fact**: the `containment_tests` module in `crates/delulu-runtime/src/prim.rs`
 locks the C84 refusal (symlink escaping the grant is not contained) and characterizes the hardlink
 boundary (a hardlink sharing content with an outside file *is* reported contained), so any future
 change in either direction must consciously update the test and this record. This is the response
@@ -2890,3 +2890,25 @@ programs were then run under exactly the authority the principal granted. Verifi
 ambient authority (every ungranted capability was `DL0703`), the effect row's completeness under
 higher-order code, secret opacity and the declassification effect, and the whole family of
 path-spelling escapes short of the hardlink boundary above.
+
+### P20-R3 · A deeply nested type was a DoS, and at depth a crash — CLOSED (DL0211)
+
+**What.** `DL0210` bounds *expression* nesting (P17-F5); nothing bounded a *type*. A signature
+`fn f(x: List[List[…List[Int]…]])` nested ~16,000 deep **checked clean in ~59 s**, superlinear in
+depth (12k→20 s, 14k→37 s, 16k→59 s, 18k+→hang), so a ~96 KB file froze `delulu check` — the agent
+hot loop — for a minute.
+
+**Worse than the timing showed.** The 59-second measurement was taken on the CLI's explicit 512 MiB
+stack. Falsifying the fix (raising the cap so the guard test could not fire) exposed the parser
+**stack-overflowing** (`STATUS_STACK_OVERFLOW 0xC00000FD`) on a deep-enough type — which is what a
+2 MiB LSP or tooling thread would do at far shallower depth. So the one input is both a checker DoS
+and a parser crash.
+
+**Fix.** A `MAX_TYPE_DEPTH = 128` guard in `parse_type` (the choke point every nested type routes
+through) refuses deeper types with **`DL0211`** at parse time, before the quadratic lowering is
+reached. Chosen to match `MAX_EXPR_DEPTH` and to hold on the smallest stack. Now the 16,000-deep type
+is refused in **2 s**; a normal type checks clean. Narrows the accepted language, so it carries a
+diagnostic and a `type`-alias remedy in the message. Witnesses: `reject/DL0211_deep_type.delulu`
+(conformance) and two falsified parser tests. The core-invariance snapshot moved **only additively**
+(the witness's own output; zero existing bytes changed), which is the proof no program that already
+compiled changed meaning.

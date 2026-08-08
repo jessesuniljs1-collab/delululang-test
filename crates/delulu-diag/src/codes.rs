@@ -38,6 +38,7 @@ registry! {
     "DL0208" => "expected an item",
     "DL0209" => "expected a statement terminator",
     "DL0210" => "expression nests too deeply",
+    "DL0211" => "type nests too deeply",
 
     // DL03xx — names / modules
     "DL0301" => "unknown name",
@@ -760,7 +761,7 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0209" => "Two statements ran together where one had to end. Statements are separated by \
              a newline or a `;`. This usually means a missing newline, or an expression that \
              consumed less than you expected.",
-        "DL0210" => "An expression nested deeper than the parser will follow (1,024 levels). \
+        "DL0210" => "An expression nested deeper than the parser will follow (128 levels). \
              Parsing is recursive, so unbounded nesting is unbounded stack use: before this limit \
              existed, a valid module whose body was 100,000 nested parentheses did not produce an \
              error at all — it overflowed the stack and killed the process, with no code, no span, \
@@ -768,6 +769,13 @@ pub fn code_explain(code: &str) -> Option<String> {
              strictly better than a crash you cannot. No hand-written program approaches this \
              depth; if generated code does, emit a `let` binding per level instead of one nested \
              expression.",
+        "DL0211" => "A type nested deeper than the compiler will follow (128 levels) — for \
+             example `List[List[List[…]]]` thousands deep. Unlike an over-nested expression this \
+             one did not crash: it checked clean, but the checker's type lowering is superlinear in \
+             nesting depth, so a ~96 KB signature made `delulu check` — the loop an agent runs on \
+             every edit — unresponsive for a minute, and a deeper one hung (red-team finding \
+             P20-R3). No real type nests past a handful of levels; if generated code needs more, \
+             name the inner type with a `type` alias.",
 
         // ===== DL03xx — resolution =========================================
         "DL0301" => "This name is not defined in any scope reachable from here. Check the spelling, \

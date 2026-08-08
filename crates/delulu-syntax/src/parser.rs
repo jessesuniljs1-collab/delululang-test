@@ -67,6 +67,30 @@ pub fn parse_type_expr(file: FileId, tokens: Vec<Token>) -> (TypeExpr, Vec<Diagn
 /// emit a `let` per level instead of one nested expression.
 const MAX_EXPR_DEPTH: u32 = 128;
 
+/// The deepest a **type** may nest before the parser refuses it with DL0211 (red-team finding
+/// P20-R3, 2026-08-08).
+///
+/// # Why this exists, separately from `MAX_EXPR_DEPTH`
+///
+/// `MAX_EXPR_DEPTH` bounds *expression* nesting; it does nothing for a type. A signature like
+/// `fn f(x: List[List[…List[Int]…]])` nested ~16,000 deep **checked clean in ~59 seconds**, and the
+/// curve is quadratic-to-cubic in depth (12k → 20 s, 14k → 37 s, 16k → 59 s), so a ~96 KB file makes
+/// `delulu check` — the agent hot loop — unresponsive for a minute, and a deeper one hangs. The cost
+/// is in the checker's type lowering, not the parser (the deep type parses without overflowing), so
+/// bounding depth **at parse time** is what keeps the pathological type from ever reaching the
+/// quadratic pass. This is the same posture as DL0210: refuse absurd depth early with a diagnostic
+/// rather than trying to make every downstream pass cheap on inputs no real program produces.
+///
+/// # Why this number
+///
+/// A real type nests a handful of levels; 128 is orders of magnitude beyond any hand-written or
+/// generated signature, and checking a 128-deep type is instant (128² is nothing). It matches
+/// `MAX_EXPR_DEPTH` so the two "you nested too deep" limits are one number to remember. **It narrows
+/// the accepted language** — a type nested past 128 levels used to compile — which is why it carries
+/// a diagnostic and is recorded rather than treated as a silent bug fix. A program that genuinely
+/// needs such a type should name intermediate types with `type` aliases.
+const MAX_TYPE_DEPTH: u32 = 128;
+
 struct Parser {
     #[allow(dead_code)]
     file: FileId,
@@ -78,11 +102,13 @@ struct Parser {
     panicking: bool,
     /// Current expression nesting depth, bounded by [`MAX_EXPR_DEPTH`] (finding P17-F5).
     depth: u32,
+    /// Current type nesting depth, bounded by [`MAX_TYPE_DEPTH`] (finding P20-R3).
+    type_depth: u32,
 }
 
 impl Parser {
     fn new(file: FileId, tokens: Vec<Token>) -> Self {
-        Parser { file, tokens, pos: 0, next_node: 0, diags: Vec::new(), panicking: false, depth: 0 }
+        Parser { file, tokens, pos: 0, next_node: 0, diags: Vec::new(), panicking: false, depth: 0, type_depth: 0 }
     }
 
     // ----- node ids and cursor --------------------------------------------
@@ -1106,6 +1132,32 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> TypeExpr {
+        // Depth guard (finding P20-R3): every nested type position routes back through `parse_type`,
+        // so this is the one choke point where type depth can be counted. Refuse absurd nesting with
+        // DL0211 before it reaches the checker's quadratic lowering. No token is consumed; `error`
+        // sets `panicking`, so the unclosed `[`s unwind through the callers already on the stack
+        // without a cascade, exactly as the DL0210 expression guard does.
+        if self.type_depth >= MAX_TYPE_DEPTH {
+            let span = self.span();
+            self.error(
+                "DL0211",
+                format!("type nests deeper than {MAX_TYPE_DEPTH} levels"),
+                span,
+                "name an inner type with a `type` alias instead of nesting this far",
+            );
+            return TypeExpr::Named {
+                path: Path { segs: vec![Ident { name: "<error>".into(), span }] },
+                args: Vec::new(),
+                span,
+            };
+        }
+        self.type_depth += 1;
+        let t = self.parse_type_prefixed();
+        self.type_depth -= 1;
+        t
+    }
+
+    fn parse_type_prefixed(&mut self) -> TypeExpr {
         // Stage 7: an optional rcap prefix (`iso T`, `val fn(val T) -> …`). Contextual: the six
         // words are RESERVED identifiers, recognized here only when a type follows (build-order
         // deviation 5) — so `x: iso List[Int]` works while no expression position changes.
@@ -1908,6 +1960,28 @@ mod tests {
         let src = format!("module m\nfn f() -> Int {{\n  {}1{}\n}}\n", "(".repeat(64), ")".repeat(64));
         let (_, d) = parse_src(&src);
         assert!(d.is_empty(), "64 levels of nesting must still parse, got {d:?}");
+    }
+
+    /// P20-R3. A deeply nested *type* did not crash — it checked clean and made the checker's type
+    /// lowering superlinear, hanging `delulu check` on a ~96 KB signature. `MAX_TYPE_DEPTH` refuses
+    /// it at parse time with DL0211 before it reaches that pass. `MAX_EXPR_DEPTH` does nothing here,
+    /// so this needs its own guard and its own witness.
+    #[test]
+    fn a_type_nested_past_the_limit_is_refused_with_dl0211() {
+        let n = (MAX_TYPE_DEPTH as usize) + 50;
+        let src = format!("module m\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n));
+        let (_, d) = parse_src(&src);
+        assert!(d.iter().any(|x| x.code == "DL0211"), "expected DL0211, got {d:?}");
+    }
+
+    /// The control: a type nested far more deeply than any real program, but within the limit, must
+    /// still parse clean — otherwise the guard would just be "reject nested types".
+    #[test]
+    fn a_type_within_the_limit_still_parses_clean() {
+        let n = 32;
+        let src = format!("module m\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n));
+        let (_, d) = parse_src(&src);
+        assert!(d.is_empty(), "32 levels of type nesting must still parse, got {d:?}");
     }
 
     #[test]

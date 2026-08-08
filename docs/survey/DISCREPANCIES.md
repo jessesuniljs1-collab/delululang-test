@@ -9,17 +9,9 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
-| warning | `prose-cites-missing-path` | 2 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `ruling-cited-without-its-stage` | 1 |
 | note | `test-count-quoted-but-unverifiable` | 1 |
-
-## warning — `prose-cites-missing-path` (2)
-
-**What to do:** correct the path, or say plainly that it no longer exists
-
-- `CHANGELOG.md:135` — prose names `crates/delulu-runtime/src/prim.rs::containment_tests`, which is nowhere in the tree
-- `docs/design/HARDENING_CAMPAIGN.md:2863` — prose names `crates/delulu-runtime/src/prim.rs::containment_tests`, which is nowhere in the tree
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

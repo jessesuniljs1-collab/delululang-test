@@ -7698,6 +7698,88 @@ error[DL0210]: expression nests deeper than 128 levels
 note: 95 more diagnostic(s) not shown (50 of 145 displayed) — fix these first, or re-run with `--json` for the complete list
 145 error(s)
 
+===== tests/conformance/reject/DL0211_deep_type.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0211",
+      "explanation_id": "E-DL0211",
+      "message": "type nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 974,
+            "col": 653,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0211_deep_type.delulu",
+          "label": "name an inner type with a `type` alias instead of nesting this far",
+          "start": {
+            "byte": 970,
+            "col": 649,
+            "line": 7
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0301",
+      "explanation_id": "E-DL0301",
+      "message": "unknown type `<error>`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 974,
+            "col": 653,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0211_deep_type.delulu",
+          "label": "not a type",
+          "start": {
+            "byte": 970,
+            "col": 649,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 2,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0211_deep_type.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0211]: type nests deeper than 128 levels
+  --> tests/conformance/reject/DL0211_deep_type.delulu:7:649
+   |
+ 7 | ...st[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[Li...
+   |                                                         ^^^^ name an inner type with a `type` alias instead of nesting this far
+  explain: delulu explain E-DL0211
+
+error[DL0301]: unknown type `<error>`
+  --> tests/conformance/reject/DL0211_deep_type.delulu:7:649
+   |
+ 7 | ...st[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[List[Li...
+   |                                                         ^^^^ not a type
+  explain: delulu explain E-DL0301
+
+2 error(s)
+
 ===== tests/conformance/reject/DL0301_unknown_name.delulu :: check --json =====
 exit 1
 --- stdout ---
