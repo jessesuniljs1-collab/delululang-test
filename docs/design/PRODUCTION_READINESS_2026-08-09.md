@@ -264,3 +264,29 @@ platforms; broker / grants / dead-man CLI green; clippy clean.
 
 Found by continuing to ask what assumption had not been attacked — here, that a documented,
 unit-tested *in-memory* behavior was also durable across a restart. It was not.
+
+## Phase J — continued discovery (bonus): foreign-worker isolation (NEGATIVE result — the surface holds)
+
+Red-teamed the process-isolation of foreign (C/Python) workers (`crates/delulu/src/foreign_worker.rs`)
+against the current binary. It holds and is honestly scoped — no finding.
+
+- **Non-disclosure of the broker is honestly labelled, not over-claimed.** The worker is spawned with
+  no broker address in argv, `DELULU_STATE_DIR` overridden to an isolated broker-less directory, and
+  std-handle inheritance cleared — but the module doc states plainly (criterion 7b) that this is
+  *"non-disclosure, not kernel enforcement — a same-user process is out of scope for hard blocks"* per
+  the §10 threat model. So "malicious same-uid foreign code could find the real broker socket by its
+  path" is the DOCUMENTED same-uid limit, not a gap. Test: `worker_command_does_not_disclose_the_broker`.
+- **Crash-isolation holds (the headline guarantee).** A worker that dies mid-call — a segfault, a hard
+  crash — surfaces as `ForeignErr::WorkerDied` (any write/read failure on the channel maps to it) and
+  **the host keeps running**. Verified: foreign-worker integration 3/0, foreign-FFI 9/0.
+- **A worker HANG is inherent, not a defect.** The host waits on the worker's response with no read
+  timeout — but a fixed timeout would be wrong here: a foreign call is arbitrary user computation, so a
+  legitimate long call is indistinguishable from a hang, and an in-process foreign call hangs the host
+  thread identically. Isolation claims CRASH-resilience, not HANG-resilience, and cannot bound
+  unbounded computation with a fixed deadline. This differs from IPC-1/DEADMAN-1, where broker ops and
+  heartbeats DO have a sensible bound and the timeout was the right fix.
+- **Kill-on-host-death** is a Job Object (Windows) / `PR_SET_PDEATHSIG` (Linux), consistent with the
+  Phase G cfg audit.
+
+Recorded as a NEGATIVE result: the isolation is real, its headline guarantee holds, and its limits
+(same-uid, unbounded-computation hang) are documented rather than hidden.
