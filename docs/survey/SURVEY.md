@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 109877 |
+| Rust lines | 109904 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 151 |
-| Markdown lines | 39978 |
+| Markdown lines | 40075 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1105 / 9504 |
+| Nodes / edges in this map | 1105 / 9524 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -159,7 +159,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 14362 lines
+- **Modules:** 17 files, 14389 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -170,7 +170,7 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/dir.rs` | 843 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
 | `src/lib.rs` | 1848 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 561 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
-| `src/manifest.rs` | 362 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
+| `src/manifest.rs` | 389 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 244 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |
 | `src/plugin.rs` | 588 | `kind = "plugin"` packages: the plugin manifest tables and the manifest-vs-code fence |
 | `src/prim_table.rs` | 318 | The declarative primitive-table index (Stage 9, invariant 42 — the coverage law). |

@@ -600,3 +600,29 @@ DL0212 guard turned a crash into a quadratic hang).
 delulu-runtime 163/0, federation_cli 9/0, hw_adapter_cli 11/0, lsp_cli 34/0, conformance 4/0 + 100%
 anchor coverage, doctor_cli 7/0, Survey 0 error/0 warning, VS Code node 15/0 + verify-package OK. Linux
 was green through the earlier phases; macOS honestly unverified. Nothing pushed.
+
+### Phase Q — lexer + config-parser untrusted-input robustness (NEGATIVE; the campaign's final surface)
+
+The last planned surface: the bytes a *cloned repo* supplies — source text into the lexer, and
+`delulu.toml` / the lockfile / a plugin manifest into the config parsers. **It holds.**
+
+- **Lexer** (`lexer.rs`): an iterative scan (no recursive descent → no stack overflow of the P17/O/P
+  kind). The nested block-comment `depth` is a `u32` bounded by input size; literal overflow is DL0104;
+  an unterminated comment/string is DL0105/a diagnostic. Witnessed clean on a 2M-digit integer, a
+  500k-nested block comment, an unterminated 1M-char string, a 2M-char identifier, and raw invalid
+  UTF-8 — every one a clean error/exit, **zero panics, zero hangs**.
+- **Config parsers** (`manifest.rs`, `lockfile.rs`, `plugin.rs`): all parse through the mature `toml`
+  crate (its own recursion limit turns a nesting bomb into an `Err`, not a crash) and then extract
+  fields with `Option`; `parse_semver` is `unwrap_or`-safe; and `check_plugin_module`'s one
+  `expect("fn in table has a checked type")` is **not** reachable on hostile input — the production
+  caller (`cli.rs`) runs it only `if errors == 0`, i.e. only when the plugin code checked clean, which
+  is exactly the invariant the `expect` asserts. Witnessed clean on garbage TOML, a 100k-nested TOML
+  bomb, duplicate keys, a 2M-char value, and non-UTF-8. Regression guard left behind:
+  `adversarial_config_inputs_are_errors_never_panics`.
+
+**No seventh defect.** With Phase Q the campaign's discovery is complete: the surfaces that eat
+untrusted bytes — driver output (adapter), federation credentials (certs/bundles), and now source
+files and config — are each either fixed or proven to fail closed with a guard left behind. **FINAL
+TALLY: six real defects fixed, four evidenced negatives (federation parsers, dev-facing/cross-platform,
+persistence-class completeness, lexer+config), each witnessed against the current binary. Campaign
+CLOSED.**

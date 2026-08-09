@@ -292,6 +292,33 @@ fn section_span(src: &str, file: FileId, section: &str) -> Span {
 mod tests {
     use super::*;
 
+    /// **Phase Q — the config parsers must never panic on an untrusted file.** `delulu.toml`, the
+    /// lockfile, and a plugin manifest all come from a cloned repo or a dependency — bytes a human on
+    /// this machine never typed. All three parse through the `toml` crate (which has its own recursion
+    /// limit, so a nesting bomb is an `Err`, not a stack overflow) and then extract fields with
+    /// `Option`, so every malformed / truncated / duplicate-key / oversized / deeply-nested / non-UTF-8
+    /// input must be a diagnostic or a defaulted value — never a panic. Reaching the end proves it.
+    #[test]
+    fn adversarial_config_inputs_are_errors_never_panics() {
+        let deep = format!("x = {}{}", "[".repeat(2000), "]".repeat(2000));
+        let mut cases: Vec<String> = vec![
+            String::new(),
+            "not toml = = =".into(),
+            "[[[".into(),
+            "\u{0}\u{1}\u{2}".into(),
+            "[package]\nname=\"a\"\nname=\"b\"\nversion=\"0.1.0\"".into(), // duplicate key
+            "[package]\nname=1\nversion=true".into(),                      // wrong value types
+            format!("[package]\nname=\"{}\"\nversion=\"0.1.0\"", "x".repeat(200_000)), // oversized
+        ];
+        cases.push(deep);
+        for src in &cases {
+            // Each must return, not panic. Results are intentionally discarded.
+            let _ = Manifest::parse(src, 0);
+            let _ = crate::lockfile::Lockfile::parse(src);
+            let _ = crate::plugin::PluginManifest::parse(src, 0);
+        }
+    }
+
     #[test]
     fn parses_full_manifest() {
         let src = r#"
