@@ -345,3 +345,49 @@ across three surfaces, all HOLD:**
 Honest caveat (Sonnet): the cert signature check's correctness rests on the real ed25519 verifier in
 `delulu-runtime` (cert.rs uses a fake in tests) — a reasonable trust in an audited crate, recorded not
 hidden. NEGATIVE result: the core custody holds.
+
+### Multi-agent round 2 — daemon persistence → ADOPT-REPLAY-1 (the THIRD real defect, `6d3e9cf`)
+
+Round 2 aimed the agents at the ROTATE-1 bug class directly: *what other security decision lives only
+in daemon memory and silently reverts on a restart?* Two surfaces returned clean negatives (device
+scope: no widening via `within`/`all_within`, `is_finite` rejects NaN/∞, inclusive-bounds parse — all
+citations re-verified); the ordinary grant tree is intentionally **ephemeral** and fails a bearer
+token **closed** on restart (its node is gone, and grants+revocations are wiped together, so there is
+no revoke-resurrection asymmetry). But one surface was a real, sharp finding.
+
+**The finding (Sonnet `a805cffe`, head-chef re-verified against the code and then live).** A
+federation **certificate** is not a reference into the broker's tree the way a bearer token is — it is
+a self-contained, externally-held, signed artifact that re-verifies against the anchor on its own. So
+when a restart wipes the tree, a token dies (its referent vanished) but a certificate **walks back in
+unchanged**. The only thing that kept a *revoked* certificate out was the in-memory
+`revoked_adoption_fps` denylist — the D22 "revocation cannot be undone by replay" memory — and a
+restart cleared it with everything else. Concretely: operator revokes an adopted credential → daemon
+restarts (crash, reboot, update) → the same certificate is re-presented → a fresh **LIVE** node is
+minted holding the authority the operator explicitly killed. No signature broken; only the broker's
+memory of "I revoked this" was lost. This is the **ROTATE-1 shape one level up.** The load-bearing
+code comment claimed the process-lifetime scope was safe because "a restart clears both together" —
+true for a tree-reference token, **false** for a self-contained certificate.
+
+**Witnessed live** (`federation_cli.rs`, real binary end to end): adopt → revoke → **restart** →
+re-adopt SUCCEEDED against the old code (minted `g_dfed49ef…`); it is refused after the fix.
+
+**Fix — surgical, fail-closed.** `revoked_adoption_fps` is the *only* piece of tree state whose loss
+makes the broker **less** restrictive, so it is the only thing persisted across a restart:
+`revoked_certs.json` beside `broker.key`, written atomically (temp + rename) after any revoke that
+retired a chain, reloaded in `serve_inner`. `adopted` (single-adoption) is deliberately **not**
+persisted — a *never-revoked* certificate should re-adopt after a wiped tree (the intended recovery
+path). A corrupt/unreadable denylist **poisons adoptions** (refuse every `adopt`) rather than silently
+forgetting revocations — the daemon keeps serving revoke/inspect/e-stop and local `issue`. New broker
+methods: `revoked_adoption_fps_snapshot` / `restore_revoked_adoption_fps` / `poison_adoptions`. Tests:
+`a_revoked_certificate_stays_revoked_across_a_daemon_restart` (live), plus
+`a_revoked_chains_denylist_survives_a_restart_via_snapshot_restore` and
+`poisoned_adoptions_refuse_every_certificate` (unit). delulu-broker green; federation_cli 9/9;
+brokerd 16/16.
+
+**Reach, honestly.** `Adopt` arrives over the owner-only IPC transport and the daemon does not
+auto-adopt on startup, so the re-presenter is an operator or a same-uid process (category 7). But the
+comment itself documents legitimate post-restart re-adoption as an **expected workflow**, so a revoked
+cert riding along in a routine re-adoption and silently undoing a revocation is a real safety defect,
+not only an attacker story. **Tally for the night: three real security defects, each witnessed against
+old code before the fix — adapter reply-framing (`ffca9bd`), ROTATE-1 (`0676183`), ADOPT-REPLAY-1
+(`6d3e9cf`).**
