@@ -290,3 +290,34 @@ against the current binary. It holds and is honestly scoped — no finding.
 
 Recorded as a NEGATIVE result: the isolation is real, its headline guarantee holds, and its limits
 (same-uid, unbounded-computation hang) are documented rather than hidden.
+
+## Phase K — continued discovery (bonus): audit-chain integrity (NEGATIVE result — the chain holds)
+
+Red-teamed the hash-chained audit log (`crates/delulu-broker/src/audit.rs`) — the accountability
+backbone — against the current binary, with a live tamper witness on a real 5-record log:
+
+- **Clean log verifies:** `delulu audit verify` → "audit chain verified — 5 records, head bea70658".
+- **A mid-chain body mutation is caught:** changing a record's `decision` (`allow` → `deny_`) →
+  **DL1405 "record hash mismatch at seq 1"** — `verify` recomputes `blake3(prev_hash ‖ canonical
+  body)` and the stored hash no longer matches.
+- **A reorder is caught:** swapping two records → **DL1405 "prev_hash chain break: expected …, found …"**.
+- **A field forgery is caught:** mutating a record's `seq` → **DL1405 "record hash mismatch at seq 99"**.
+- **Restoring the bytes verifies clean again.**
+
+Every mid-chain tamper the chain claims to detect was detected, at the right sequence, on both the
+hash-recompute and the prev-link checks. The one gap — dropping the whole tail while consistently
+rewriting the external anchor — is the same-uid category-7 limit already documented in
+`docs/MATHEMATICS.md`, not re-reported here. The DL1405 message is itself honest: *"observability,
+not enforcement; this detects, it does not prevent."* NEGATIVE result: the audit-chain integrity holds.
+
+## Sweep A–K complete; multi-agent discovery continues — 2026-08-09
+
+Eleven phases: the 8-phase production-readiness sweep (A–H, final full suite 124/124 green on Windows
+and Linux) plus three bonus discovery rounds (I found + fixed ROTATE-1; J and K are clean negatives).
+**Two real security defects found and fixed tonight, each witnessed against the old code:** the
+hardware-adapter reply-framing desync (Phase E, `ffca9bd`) and the `broker rotate-key` persistence gap
+(Phase I, `0676183`). Three surfaces re-verified solid and honestly scoped (Miri, foreign-worker,
+audit chain). macOS designed-for and truthfully unverified. Survey 0/0 and `doctor_cli` 7/0 every
+phase; nothing pushed. Per the owner's direction, discovery now continues as a **multi-agent red-team
+round** — Haiku 4.5 and Sonnet 5 agents attack distinct untested surfaces, the head chef holds delulu
+authority and re-verifies every claim against the current binary (agent output is evidence, not verdict).
