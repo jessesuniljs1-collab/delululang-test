@@ -127,7 +127,19 @@ pub struct Broker {
     /// self-delegation yields a new leaf, so the leaf check passes while the credential is unchanged —
     /// and every extension still contains the anchored root, so retiring the root's fingerprint stops
     /// them all.
+    ///
+    /// **ADOPT-REPLAY-1**: unlike every other field here, losing this set makes the broker *less*
+    /// restrictive (a revoked certificate becomes re-adoptable), so it is the one piece of tree state
+    /// the daemon persists across a restart (`revoked_certs.json`). `adopted` above is deliberately
+    /// NOT persisted — clearing it on restart is correct, because it only gates re-adoption of a
+    /// *live* credential, which after a wiped tree is the intended recovery path.
     revoked_adoption_fps: HashSet<String>,
+    /// **ADOPT-REPLAY-1 fail-closed**: set when the persisted revoked-certificate denylist could not
+    /// be read at startup (corrupt/tampered). While true, [`Broker::adopt`] refuses every certificate,
+    /// because the broker can no longer prove a presented chain was not one it revoked. Mirrors the
+    /// guard-policy `poisoned` posture: the daemon keeps running (revoke/inspect/e-stop, and local
+    /// `issue` still work) but the specific surface whose safety depends on the lost state fails shut.
+    adoptions_poisoned: bool,
     /// The Guard (Stage 5 chunk 6): policy, permits, pending requests, bypass flag, owner code —
     /// all daemon-memory only (the CLI injects a persisted policy + the print-once owner code). A
     /// default-constructed broker carries the default policy (declassify/foreign_c/foreign_python
@@ -183,6 +195,7 @@ impl Broker {
             adopted: HashMap::new(),
             adopted_chain_fps: HashMap::new(),
             revoked_adoption_fps: HashSet::new(),
+            adoptions_poisoned: false,
             guard: crate::guard::GuardState::new(),
             strict_anchor: None,
         }
@@ -327,6 +340,35 @@ impl Broker {
     /// If so, adopting it would restore revoked authority and must be refused.
     pub(crate) fn chain_hits_revoked_adoption(&self, chain_fps: &[String]) -> bool {
         chain_fps.iter().any(|fp| self.revoked_adoption_fps.contains(fp))
+    }
+
+    /// **ADOPT-REPLAY-1**: the revoked-certificate denylist, sorted, for the daemon to persist after a
+    /// revoke. This is the only tree state whose *loss* weakens the broker, so it is the only one that
+    /// crosses a restart. Sorted so the on-disk form is stable (a byte-for-byte no-op re-write when the
+    /// set is unchanged).
+    pub fn revoked_adoption_fps_snapshot(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.revoked_adoption_fps.iter().cloned().collect();
+        v.sort();
+        v
+    }
+
+    /// **ADOPT-REPLAY-1**: re-seed the revoked-certificate denylist at startup from the persisted set,
+    /// so a revocation made in a previous daemon lifetime still refuses re-adoption. Additive: it only
+    /// ever *adds* refusals, never grants authority.
+    pub fn restore_revoked_adoption_fps(&mut self, fps: impl IntoIterator<Item = String>) {
+        self.revoked_adoption_fps.extend(fps);
+    }
+
+    /// **ADOPT-REPLAY-1 fail-closed**: mark that the persisted denylist was unreadable, so every
+    /// adoption is refused until an operator repairs it (see the field doc). One-way: nothing clears it
+    /// within a lifetime.
+    pub fn poison_adoptions(&mut self) {
+        self.adoptions_poisoned = true;
+    }
+
+    /// Whether adoptions are poisoned (the denylist was unreadable at startup). Read by [`crate::cert`].
+    pub(crate) fn adoptions_poisoned(&self) -> bool {
+        self.adoptions_poisoned
     }
 
     /// Remember every certificate fingerprint in an adopted chain, so a later revoke of the node can

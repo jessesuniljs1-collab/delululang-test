@@ -335,6 +335,65 @@ fn a_certificate_resists_tampering_replay_and_outliving_its_window() {
     assert!(stderr(&o).contains("DL1417"), "by code: {}", stderr(&o));
 }
 
+/// **ADOPT-REPLAY-1 — a revocation must survive a daemon RESTART.**
+///
+/// The single-adoption / revoked-fingerprint memory that makes `grants revoke` stick against replay
+/// (the test above, step 3) lived only in daemon memory. A bearer TOKEN survives a restart failing
+/// closed — it is a reference into the tree, and the tree is wiped, so the referent is gone. A
+/// CERTIFICATE does not: it is a self-contained, externally-held, signed artifact that re-verifies
+/// against the anchor on its own, so wiping the tree does not invalidate it. The only thing that
+/// stopped a *revoked* certificate from walking back in was the in-memory `revoked_adoption_fps`
+/// set — and a restart cleared it. That is the ROTATE-1 shape one level up: an explicit operator
+/// revocation silently reverted by a routine restart (crash, reboot, update), after which the same
+/// certificate re-adopts into a fresh LIVE node holding the authority the operator killed.
+///
+/// The denylist is now persisted (`revoked_certs.json`) and reloaded at startup, so the revocation
+/// holds across the restart while a *never-revoked* certificate still re-adopts normally (the
+/// intended post-restart recovery path — proved by the sibling test).
+#[test]
+fn a_revoked_certificate_stays_revoked_across_a_daemon_restart() {
+    let f = setup("revoke_restart");
+    let o = f.certify(&[
+        "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
+        "--ttl", "1h", "--key", &f.gk(), "--out", "pass.dlcert",
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let _guard = DaemonGuard { state: f.state.clone() };
+
+    // Adopt, then revoke — the operator kills this credential's authority.
+    let o = f.vehicle(&["grants", "adopt", "pass.dlcert", "--anchor", &f.ground_pub]);
+    assert!(o.status.success(), "adopt: {}", stderr(&o));
+    let node = stdout(&o).trim().to_string();
+    let o = f.vehicle(&["grants", "revoke", &node]);
+    assert!(o.status.success(), "revoke: {}", stderr(&o));
+
+    // In-lifetime, re-adoption is already refused (the working guarantee).
+    let o = f.vehicle(&["grants", "adopt", "pass.dlcert", "--anchor", &f.ground_pub]);
+    assert!(!o.status.success(), "in-lifetime re-adoption must not undo a revocation:\n{}", stdout(&o));
+
+    // ----- RESTART the vehicle daemon on the SAME state dir -------------------------------------
+    assert!(f.vehicle(&["broker", "stop"]).status.success(), "stop for restart");
+    let o = f.vehicle(&["broker", "start"]);
+    assert!(o.status.success(), "restart: {}", stderr(&o));
+
+    // The revocation MUST still hold: the same certificate must not re-adopt after a restart.
+    let o = f.vehicle(&["grants", "adopt", "pass.dlcert", "--anchor", &f.ground_pub]);
+    assert!(
+        !o.status.success(),
+        "ADOPT-REPLAY-1: a revoked certificate re-adopted after a daemon restart — the revocation \
+         did not survive the restart:\n{}",
+        stdout(&o)
+    );
+    assert!(
+        stderr(&o).contains("revoked") || stderr(&o).contains("already been adopted"),
+        "and the refusal names the revocation: {}",
+        stderr(&o)
+    );
+}
+
 /// The ground side must work with no broker at all — an air-gapped machine can mint credentials.
 /// If `certify` ever needed a daemon, the ground segment would have to run one to fly a spacecraft.
 #[test]

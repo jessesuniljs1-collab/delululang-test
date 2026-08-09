@@ -537,6 +537,21 @@ impl crate::tree::Broker {
         verifier: &dyn SignatureVerifier,
         holder: crate::tree::Holder,
     ) -> Result<crate::tree::GrantId, Denial> {
+        // ADOPT-REPLAY-1 fail-closed: if the persisted revoked-certificate denylist could not be read
+        // at startup, this broker cannot prove a presented chain is not one it revoked. Refuse every
+        // adoption until an operator repairs it — the safe direction, mirroring the guard `poisoned`
+        // posture (the daemon keeps serving revoke/inspect/e-stop and local issue).
+        if self.adoptions_poisoned() {
+            let seq = self.consume_seq();
+            self.record_op(seq, "adopt", None, None, None, "deny", None);
+            return Err(Denial::CertUntrusted {
+                detail: "this broker's revoked-certificate memory (revoked_certs.json) could not be \
+                         read at startup, so it cannot prove this chain was not previously revoked. \
+                         Adoptions are refused until an operator repairs or removes that file (removing \
+                         it forgets which certificates were revoked)"
+                    .to_string(),
+            });
+        }
         let now = self.effective_now();
         // Strict root-issuance mode (DISC-1): a root may enter ONLY under the broker's PINNED anchor,
         // never a caller-supplied one — otherwise a same-uid client would present its own anchor with a
@@ -1278,6 +1293,57 @@ mod tests {
         let err = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
         assert_eq!(err.code(), "DL1415");
         assert!(format!("{err:?}").contains("already been adopted"));
+    }
+
+    /// **ADOPT-REPLAY-1**: the single-adoption memory above lived only in this `Broker` — a restart
+    /// built a fresh, empty one, and the revoked certificate walked back in because a certificate is a
+    /// self-contained artifact, not a reference into the wiped tree. The daemon now persists
+    /// `revoked_adoption_fps_snapshot()` and re-seeds it via `restore_revoked_adoption_fps` at startup.
+    /// This exercises that hand-off directly: the revoked chain is refused by the reconstructed broker,
+    /// while a broker WITHOUT the hand-off (the pre-fix behavior) re-adopts it — pinning both the bug
+    /// and its fix.
+    #[test]
+    fn a_revoked_chains_denylist_survives_a_restart_via_snapshot_restore() {
+        // Lifetime 1: adopt, then revoke — the chain's fingerprints are retired.
+        let mut b1 = broker_at(500);
+        let chain = ground_to_vehicle();
+        let node = b1.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap();
+        b1.revoke(&node, &node).expect("the operator revokes it");
+        let snapshot = b1.revoked_adoption_fps_snapshot();
+        assert!(!snapshot.is_empty(), "revoking an adopted node retires its chain fingerprints");
+
+        // Lifetime 2 WITHOUT the persisted denylist (pre-fix): a fresh broker has an empty tree, so the
+        // same certificate re-adopts — exactly the ADOPT-REPLAY-1 hole.
+        let mut b_lost = broker_at(500);
+        assert!(
+            b_lost.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).is_ok(),
+            "without the persisted denylist a revoked certificate re-adopts — the bug this closes"
+        );
+
+        // Lifetime 2 WITH the denylist re-seeded at startup (the fix): still refused.
+        let mut b2 = broker_at(500);
+        b2.restore_revoked_adoption_fps(snapshot);
+        let err = b2.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+        assert_eq!(err.code(), "DL1415");
+        assert!(
+            format!("{err:?}").to_lowercase().contains("revoked"),
+            "refused specifically as a revoked credential: {err:?}"
+        );
+    }
+
+    /// **ADOPT-REPLAY-1 fail-closed**: if the persisted denylist was unreadable at startup, the daemon
+    /// poisons adoptions and refuses EVERY certificate — even a never-revoked one — rather than risk
+    /// re-adopting one it can no longer prove it revoked.
+    #[test]
+    fn poisoned_adoptions_refuse_every_certificate() {
+        let mut b = broker_at(500);
+        b.poison_adoptions();
+        let chain = ground_to_vehicle(); // a perfectly valid, never-revoked chain
+        let err = b.adopt(&chain, &anchors(&["ground"]), &FakeVerifier, holder()).unwrap_err();
+        assert!(
+            format!("{err:?}").contains("revoked_certs.json"),
+            "a poisoned broker refuses adoption and names the file to repair: {err:?}"
+        );
     }
 
     #[test]

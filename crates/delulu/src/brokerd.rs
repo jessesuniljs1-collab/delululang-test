@@ -110,6 +110,45 @@ fn persist_guard_policy(state: &Path, policy: &delulu_broker::GuardPolicy) {
     }
 }
 
+fn revoked_certs_path(state: &Path) -> PathBuf {
+    state.join("revoked_certs.json")
+}
+
+/// **ADOPT-REPLAY-1**: load the persisted revoked-certificate denylist. Fail closed, mirroring
+/// `load_guard_policy`: an ABSENT file is an empty denylist (nothing revoked yet — not poisoned); a
+/// present-but-corrupt file returns `poisoned = true`, and the daemon then refuses every adoption,
+/// because a broker that cannot read which certificates it revoked must not risk re-adopting one.
+/// Returns `(fingerprints, poisoned)`.
+///
+/// This is the ONE piece of grant-tree state the daemon carries across a restart. The tree is
+/// otherwise ephemeral by design (a restart fails a bearer token closed — its node is gone), but a
+/// certificate is a self-contained artifact that re-verifies against the anchor on its own, so the
+/// only thing that keeps a *revoked* certificate out is this denylist. Losing it silently reverts a
+/// revocation (ADOPT-REPLAY-1) — the ROTATE-1 shape one level up.
+fn load_revoked_certs(state: &Path) -> (Vec<String>, bool) {
+    match std::fs::read_to_string(revoked_certs_path(state)) {
+        Err(_) => (Vec::new(), false),
+        Ok(text) => match serde_json::from_str::<Vec<String>>(&text) {
+            Ok(fps) => (fps, false),
+            Err(_) => (Vec::new(), true),
+        },
+    }
+}
+
+/// **ADOPT-REPLAY-1**: persist the revoked-certificate denylist after a revoke that retired one.
+/// Written atomically (temp + rename) so a crash mid-write can never leave a half-written file that
+/// would poison the next start — the file is always either the old complete set or the new one.
+/// `std::fs::rename` replaces the destination on both Unix and Windows. Unlike the guard policy this
+/// is security-critical durability, so a failure is returned to the caller (which surfaces it), not
+/// swallowed.
+fn persist_revoked_certs(state: &Path, fps: &[String]) -> std::io::Result<()> {
+    let path = revoked_certs_path(state);
+    let text = serde_json::to_string_pretty(fps).unwrap_or_else(|_| "[]".to_string());
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, &path)
+}
+
 /// A guard rule set as wire structs (for `GuardStatus`/`policy show`).
 fn guard_rules_wire(broker: &Broker) -> Vec<crate::broker_ipc::GuardRuleWire> {
     broker
@@ -426,14 +465,32 @@ fn handle(
             let caller = GrantId::from_trusted(caller);
             let target = GrantId::from_trusted(target);
             match broker.revoke(&caller, &target) {
-                Ok(out) => (
-                    Response::Revoked {
-                        by_seq: out.by_seq,
-                        epoch: out.epoch,
-                        newly_revoked: out.newly_revoked.iter().map(|g| g.to_string()).collect(),
-                    },
-                    false,
-                ),
+                Ok(out) => {
+                    // ADOPT-REPLAY-1: if this revoke retired an adopted certificate's fingerprints,
+                    // persist the denylist so the revocation survives a daemon restart. Monotonic and
+                    // small; written only when non-empty (a local, non-adopted revoke retires nothing).
+                    // The revoke is already effective in memory; a persist failure does not undo it, but
+                    // it does mean the revocation might not survive a restart, so it is logged loudly.
+                    let fps = broker.revoked_adoption_fps_snapshot();
+                    if !fps.is_empty() {
+                        if let Err(e) = persist_revoked_certs(state_dir, &fps) {
+                            eprintln!(
+                                "delulu broker: WARNING (ADOPT-REPLAY-1) — a certificate revocation is \
+                                 effective now but could NOT be persisted to `{}` ({e}); it may not \
+                                 survive a daemon restart. Fix the state directory and re-run the revoke.",
+                                revoked_certs_path(state_dir).display()
+                            );
+                        }
+                    }
+                    (
+                        Response::Revoked {
+                            by_seq: out.by_seq,
+                            epoch: out.epoch,
+                            newly_revoked: out.newly_revoked.iter().map(|g| g.to_string()).collect(),
+                        },
+                        false,
+                    )
+                }
                 Err(d) => (deny_response(&d), false),
             }
         }
@@ -712,6 +769,17 @@ pub(crate) fn serve_inner(
     if let Some(anchor) = &strict {
         broker.require_anchored_roots(anchor.clone());
     }
+    // ADOPT-REPLAY-1: reload the revoked-certificate denylist so a revocation made in a PREVIOUS
+    // daemon lifetime still refuses re-adoption. The rest of the tree is intentionally ephemeral (a
+    // restart fails bearer tokens closed); this denylist is the one exception, because a certificate
+    // re-verifies against the anchor on its own and would otherwise walk back in. A corrupt file
+    // poisons adoptions (fail closed) rather than silently forgetting revocations.
+    let (revoked_fps, adopt_poisoned) = load_revoked_certs(state_dir);
+    let revoked_count = revoked_fps.len();
+    broker.restore_revoked_adoption_fps(revoked_fps);
+    if adopt_poisoned {
+        broker.poison_adoptions();
+    }
 
     let listener = Listener::bind(state_dir)?;
     let pid = std::process::id();
@@ -721,6 +789,18 @@ pub(crate) fn serve_inner(
     // this process is the one the user is watching (foreground/direct start) — never in the detached
     // child (the parent printed it; broker.log must not contain it — criterion 9).
     eprintln!("delulu guard: {}", guard_digest(&broker));
+    if adopt_poisoned {
+        eprintln!(
+            "delulu broker: revoked-certificate memory `{}` is UNREADABLE — adoptions are refused \
+             (fail closed) until it is repaired or removed (ADOPT-REPLAY-1).",
+            revoked_certs_path(state_dir).display()
+        );
+    } else if revoked_count > 0 {
+        eprintln!(
+            "delulu broker: {revoked_count} revoked certificate fingerprint(s) reloaded — re-adoption \
+             of a revoked credential stays refused across this restart (ADOPT-REPLAY-1)."
+        );
+    }
     if let Some(anchor) = &strict {
         eprintln!(
             "delulu broker: STRICT root-issuance mode ON (DISC-1) — roots require an anchored \
