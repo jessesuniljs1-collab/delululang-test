@@ -285,10 +285,11 @@ fn run_contained_export_impl(
     // guest `unreachable`. On Windows + wasmtime 27, that unwind `__fastfail`s the host process
     // (0xc0000409) — an uncatchable crash, so the only safe move is to not reach it. Two settings,
     // both of which our evidence-based attribution makes free:
-    //   1. wasm_backtrace(false): wasmtime otherwise stack-walks the guest on every trap to build a
-    //      backtrace — a known Windows fastfail source. We never surface a guest backtrace
+    //   1. wasm_backtrace_max_frames(None): wasmtime otherwise stack-walks the guest on every trap to
+    //      build a backtrace — a known Windows fastfail source. We never surface a guest backtrace
     //      (attribution reads the store's own fuel/limiter/watchdog state, not a stack trace).
-    config.wasm_backtrace(false);
+    //      `None` is wasmtime's own documented equivalent of the deprecated `wasm_backtrace(false)`.
+    config.wasm_backtrace_max_frames(None);
     //   2. signals_based_traps(false): deliver traps as an ordinary returned error instead of via
     //      the SEH/signal unwind path that fastfails. Costs some throughput; a plugin sandbox trades
     //      throughput for not being able to crash its host.

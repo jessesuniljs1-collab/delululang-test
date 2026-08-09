@@ -11,6 +11,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 ## Unreleased — production-readiness pass, 2026-08-09
 
+### Maintenance — replace a deprecated wasmtime API, no behavior change
+
+- The plugin sandbox disables guest backtraces on Windows to avoid a wasmtime host fastfail
+  (`crates/delulu-wasm/src/limits.rs`). wasmtime 47 deprecated `Config::wasm_backtrace`; per
+  wasmtime's own documentation `wasm_backtrace(false)` is exactly `wasm_backtrace_max_frames(None)`
+  — the same field set to the same value — so the call was swapped with **no behavior change** (not
+  an authority widening; no ruling required). The deprecation warning is eliminated;
+  `clippy --workspace --all-targets` is clean on Linux and `clippy -p delulu-wasm` clean on Windows.
+
 ### Security/robustness — the hardware adapter fails closed on a misframed stream
 
 - The line-protocol hardware adapter (`crates/delulu-runtime/src/adapter.rs`) assumed exactly one
