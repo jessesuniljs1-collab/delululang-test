@@ -7847,6 +7847,170 @@ error[DL0301]: unknown type `<error>`
 
 2 error(s)
 
+===== tests/conformance/reject/DL0212_deep_pattern.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0212",
+      "explanation_id": "E-DL0212",
+      "message": "pattern nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 1185,
+            "col": 649,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
+          "label": "simplify or split this pattern",
+          "start": {
+            "byte": 1181,
+            "col": 645,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "cannot match variant `Some` against `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 1742,
+            "col": 1206,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
+          "label": "not a sum type",
+          "start": {
+            "byte": 541,
+            "col": 5,
+            "line": 11
+          }
+        }
+      ]
+    },
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "variant `Some` binds 0 field(s), pattern has 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 1742,
+            "col": 1206,
+            "line": 11
+          },
+          "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
+          "label": "wrong number of fields",
+          "start": {
+            "byte": 541,
+            "col": 5,
+            "line": 11
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 3,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0212_deep_pattern.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0212]: pattern nests deeper than 128 levels
+  --> tests/conformance/reject/DL0212_deep_pattern.delulu:11:645
+   |
+11 | ...me(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(So...
+   |                                                         ^^^^ simplify or split this pattern
+  explain: delulu explain E-DL0212
+
+error[DL0401]: cannot match variant `Some` against `Int`
+  --> tests/conformance/reject/DL0212_deep_pattern.delulu:11:5
+   |
+11 |     Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(S...
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not a sum type
+  explain: delulu explain E-DL0401
+
+error[DL0403]: variant `Some` binds 0 field(s), pattern has 1
+  --> tests/conformance/reject/DL0212_deep_pattern.delulu:11:5
+   |
+11 |     Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(S...
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ wrong number of fields
+  explain: delulu explain E-DL0403
+
+3 error(s)
+
+===== tests/conformance/reject/DL0213_deep_blocks.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0213",
+      "explanation_id": "E-DL0213",
+      "message": "block nests deeper than 128 levels",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 2159,
+            "col": 1673,
+            "line": 9
+          },
+          "file": "tests/conformance/reject/DL0213_deep_blocks.delulu",
+          "label": "flatten the nested blocks — extract an inner function",
+          "start": {
+            "byte": 2158,
+            "col": 1672,
+            "line": 9
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0213_deep_blocks.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0213]: block nests deeper than 128 levels
+  --> tests/conformance/reject/DL0213_deep_blocks.delulu:9:1672
+   |
+ 9 | ... { while true { while true { while true { while true { while true { while true { while true { while true { while true { while true { while true { while true { w...
+   |                                                         ^ flatten the nested blocks — extract an inner function
+  explain: delulu explain E-DL0213
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0301_unknown_name.delulu :: check --json =====
 exit 1
 --- stdout ---

@@ -468,8 +468,6 @@ impl Broker {
         );
     }
 
-    /// Issue a **root** grant (spec §3.2 `issue`, CLI-only human action — nothing programmatic
-    /// creates root nodes, Constitution §5.16 law 4). Returns the new node's id.
     /// Enable **strict root-issuance mode** (DISC-1): after this, [`Broker::issue_root`] refuses, and a
     /// root may enter ONLY via [`Broker::adopt`] of a chain that verifies against `anchor_pubkey_hex`
     /// — the pinned anchor overrides any caller-supplied anchor, so a same-uid client cannot substitute

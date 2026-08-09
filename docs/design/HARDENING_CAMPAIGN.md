@@ -2888,8 +2888,20 @@ programs were then run under exactly the authority the principal granted. Verifi
 
 **What held, stated because a red-team pass that only lists faults is not a red-team pass:** zero
 ambient authority (every ungranted capability was `DL0703`), the effect row's completeness under
-higher-order code, secret opacity and the declassification effect, and the whole family of
-path-spelling escapes short of the hardlink boundary above.
+higher-order code, secret opacity and the declassification effect, and the family of path-spelling
+escapes this pass exercised.
+
+> **Correction (2026-08-10, campaign SYMLINK-DANGLE-1).** This paragraph originally claimed *"the
+> whole family of path-spelling escapes short of the hardlink boundary above"* held. **That was too
+> broad, and a later pass falsified it.** Every symlink case tested here — and in the C84 regression
+> lock — used a link whose target *existed*. A **dangling** symlink (target absent) makes
+> `canonicalize` fail exactly as an absent name does, so the nearest-existing-ancestor walk
+> re-appended the link's own name as a plain component, containment passed, and the write then
+> followed the link out of the grant. Unlike the hardlink boundary, that one **is**
+> workspace-deliverable (git stores a symlink as a path string, mode `120000`). Found, witnessed
+> end-to-end, and fixed on 2026-08-10 — see `PRODUCTION_READINESS_2026-08-10.md`. The lesson is the
+> general one: *a family of escapes is only as closed as the widest case actually executed*, and
+> "existing target" was silently the only case anyone had run.
 
 ### P20-R3 · A deeply nested type was a DoS, and at depth a crash — CLOSED (DL0211)
 

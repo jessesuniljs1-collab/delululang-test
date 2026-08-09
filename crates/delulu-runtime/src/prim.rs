@@ -45,8 +45,34 @@ fn normalize(p: &Path) -> PathBuf {
 /// A write creates its file, and a granted directory may legitimately not exist until something
 /// makes it, so refusing every path that is not already on disk would refuse ordinary programs.
 /// Walking up to the deepest ancestor that *does* exist still resolves every link along the way,
-/// which is the part that matters: the components that remain are plain names the OS has not yet
-/// been asked to interpret.
+/// which is the part that matters.
+///
+/// # Campaign finding SYMLINK-DANGLE-1 — why the walk checks `symlink_metadata`
+///
+/// The original walk re-appended the remaining components on the stated grounds that they "are
+/// plain names the OS has not yet been asked to interpret". **That claim is false for exactly one
+/// case, and it reopened C84.** A *dangling* symlink — one whose target does not exist — makes
+/// `canonicalize` fail with `NotFound`, indistinguishable here from a name that is simply absent.
+/// The walk therefore re-appended the link's own name as if it were a plain name, the prefix check
+/// passed, and the caller then opened the path — at which point the OS *did* interpret it, followed
+/// the link, and created the file wherever it pointed. Verified end-to-end: with a dangling
+/// `<grant>/log.txt -> <outside>/pwned.txt`, `write_text("log.txt", …)` returned `Ok` and wrote
+/// outside the grant, while the identical program against a link whose target *existed* was refused
+/// `DL0904` — the same link, the same grant, opposite verdicts, decided only by whether the target
+/// happened to exist.
+///
+/// Unlike the hardlink boundary below, this one **is workspace-deliverable**: git stores a symlink
+/// as a path string (mode `120000`), so a cloned repository — or a project an agent was pointed at —
+/// can carry the aimed link, which is what made C84 the urgent class.
+///
+/// The rule is therefore: a component that **exists as a symlink** but did not canonicalize cannot
+/// be re-appended, because where it lands is precisely what could not be verified. Fail closed
+/// (`None` → the caller refuses). Deliberately narrow: a component that exists and is *not* a
+/// symlink is still re-appended (it is genuinely at that path — the hardlink disposition below is
+/// unchanged), and a link whose target exists still resolves and is checked exactly as C84 fixed it,
+/// so a link that stays inside the grant keeps working. A dangling link pointing *inside* the grant
+/// is refused too: distinguishing it means resolving the link by hand, and narrowing is the safe
+/// direction when the alternative is guessing.
 fn canonical_existing(p: &Path) -> Option<PathBuf> {
     if let Ok(c) = std::fs::canonicalize(p) {
         return Some(c);
@@ -54,6 +80,12 @@ fn canonical_existing(p: &Path) -> Option<PathBuf> {
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     let mut cur = p;
     loop {
+        // SYMLINK-DANGLE-1. `cur` did not canonicalize. If it nonetheless EXISTS as a link, the OS
+        // will interpret it at open time and we cannot say where it points — refuse rather than
+        // hand back a path whose destination was never checked.
+        if is_symlink(cur) {
+            return None;
+        }
         let name = cur.file_name()?;
         let parent = cur.parent()?;
         tail.push(name.to_owned());
@@ -65,6 +97,35 @@ fn canonical_existing(p: &Path) -> Option<PathBuf> {
         }
         cur = parent;
     }
+}
+
+/// Does `p` itself exist as a symbolic link (without following it)? `false` when `p` is absent or
+/// cannot be stat'd — the callers treat "cannot tell" as "do not admit".
+fn is_symlink(p: &Path) -> bool {
+    std::fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+}
+
+/// Is some component of `p` a symlink that does not resolve? Used only to explain a `DL0904`
+/// refusal in the operator's terms — the containment decision itself is [`contains_on_disk`]'s.
+fn unresolvable_link_on(p: &Path) -> bool {
+    if std::fs::canonicalize(p).is_ok() {
+        return false;
+    }
+    let mut cur = Some(p);
+    while let Some(c) = cur {
+        if is_symlink(c) {
+            // The DEEPEST link on the path, and the only one that needs asking: `canonicalize`
+            // resolves a whole chain, so if this one resolves, nothing above it dangles either.
+            //
+            // A link that resolves is NOT the dangling case — it was refused for the ordinary
+            // reason that it lands outside the grant (C84), and saying "its target does not exist"
+            // would be a false statement in a diagnostic. Caught by testing the fix against a
+            // Windows junction aimed at a directory that did exist.
+            return std::fs::canonicalize(c).is_err();
+        }
+        cur = c.parent().filter(|par| !par.as_os_str().is_empty());
+    }
+    false
 }
 
 /// Whether `candidate` really lives under `root` **on the filesystem**, not merely lexically.
@@ -99,7 +160,16 @@ fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault
     if joined.starts_with(root) && contains_on_disk(root, &joined) {
         Ok(joined)
     } else {
-        Err(Fault::at("DL0904", format!("path `{rel}` escapes the granted scope"), span))
+        // SYMLINK-DANGLE-1: name the cause when it is a link that does not resolve, so the refusal
+        // reads as the deliberate decision it is rather than a puzzling scope error on a path that
+        // "looks" inside the grant.
+        let why = if unresolvable_link_on(&joined) {
+            " — a component is a symbolic link whose target does not exist, so where a write would \
+             land cannot be verified; refused rather than guessed"
+        } else {
+            ""
+        };
+        Err(Fault::at("DL0904", format!("path `{rel}` escapes the granted scope{why}"), span))
     }
 }
 
@@ -815,6 +885,90 @@ mod containment_tests {
         } else {
             eprintln!("skipped: symlink creation not permitted on this host (needs privilege)");
         }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// **SYMLINK-DANGLE-1 regression lock.** A symlink inside the grant aimed OUTSIDE it, whose
+    /// target does not exist yet, must not be reported contained. Before the fix this returned
+    /// `true`: `canonicalize` fails on a dangling link exactly as it fails on an absent name, so the
+    /// nearest-existing-ancestor walk re-appended the link's own name as a "plain name" and the
+    /// prefix check passed — after which the caller opened the path, the OS followed the link, and
+    /// the file was created outside the grant. Verified end-to-end before the fix (write returned
+    /// `Ok`, file appeared outside); this is the unit-level lock.
+    #[test]
+    fn a_dangling_symlink_aimed_outside_the_grant_is_not_contained() {
+        let base = unique_dir("dangling-out");
+        let grant = base.join("grant");
+        // Deliberately NOT created — the whole point is that the target does not exist.
+        let victim = base.join("outside").join("pwned.txt");
+        assert!(!victim.exists(), "the target must be absent for this to be the dangling case");
+        let link = grant.join("log.txt");
+
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(&victim, &link).is_ok();
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&victim, &link).is_ok();
+
+        if made {
+            assert!(
+                !contains_on_disk(&grant, &link),
+                "SYMLINK-DANGLE-1: a dangling symlink aimed outside the grant must not be reported \
+                 contained — opening it creates the file at the target, outside the grant"
+            );
+        } else {
+            eprintln!("skipped: symlink creation not permitted on this host (needs privilege)");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// The deliberate narrowing, pinned so it is a decision and not a surprise: a dangling link that
+    /// points back INSIDE the grant is refused too. Telling it apart from the escaping one means
+    /// resolving the link by hand, and when the alternative is guessing where a write lands,
+    /// narrowing is the safe direction. If this is ever relaxed it must be a conscious change.
+    #[test]
+    fn a_dangling_symlink_aimed_inside_the_grant_is_also_refused() {
+        let base = unique_dir("dangling-in");
+        let grant = base.join("grant");
+        let inside_target = grant.join("not_yet.txt"); // absent on purpose
+        let link = grant.join("alias.txt");
+
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(&inside_target, &link).is_ok();
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&inside_target, &link).is_ok();
+
+        if made {
+            assert!(
+                !contains_on_disk(&grant, &link),
+                "a dangling link is refused regardless of where it aims — narrowing is the safe \
+                 direction (SYMLINK-DANGLE-1 disposition)"
+            );
+        } else {
+            eprintln!("skipped: symlink creation not permitted on this host (needs privilege)");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// **The over-narrowing guard.** The SYMLINK-DANGLE-1 fix must not refuse ordinary programs: a
+    /// file that simply does not exist yet — the common case for every `write_text` that creates its
+    /// output — is still contained, and so is a not-yet-existing file in a not-yet-existing
+    /// subdirectory. Without this, a fix aimed at the escape could quietly break every write.
+    #[test]
+    fn a_not_yet_existing_file_under_the_grant_is_still_contained() {
+        let base = unique_dir("absent");
+        let grant = base.join("grant");
+        let fresh = grant.join("brand_new.txt");
+        assert!(!fresh.exists());
+        assert!(
+            contains_on_disk(&grant, &fresh),
+            "a write must still be able to create its own file inside the grant"
+        );
+        let deeper = grant.join("sub").join("deeper").join("out.txt");
+        assert!(
+            contains_on_disk(&grant, &deeper),
+            "a not-yet-existing path under the grant stays contained (the open itself may still \
+             fail if the parent is missing — that is an IO error, not a containment decision)"
+        );
         let _ = fs::remove_dir_all(&base);
     }
 

@@ -152,7 +152,39 @@ persisted in `<state>/root_policy.json` (public anchor only — never a private 
 - **`adopt` verifies against the PINNED anchor and ignores any caller-supplied anchor**, so a same-uid
   client cannot substitute its own. `renew` does the same (a Phase-8 finding: it must pin too, or a
   forged receipt would extend an adopted node's TTL past the uplink lease).
-- The startup banner reports strict mode and its residual, so a downgrade is visible.
+- The startup banner reports the effective root-issuance mode in **all three** states — strict,
+  legacy, and unreadable-policy — so a downgrade is visible. (Before ROOTPOLICY-1 it printed only in
+  the strict case, while this line already claimed downgrades were visible; the absence of a banner
+  is not a report, least of all in a detached start whose operator reads `broker.log`.)
+
+### 9.1 ROOTPOLICY-1 — the policy file now fails CLOSED (fixed 2026-08-10)
+
+`root_policy.json` was, until 2026-08-10, **the one persisted security file in this directory that
+failed OPEN.** `load_root_policy` swallowed every error with `.ok()?` and returned `None`, which the
+caller reads as *legacy: unsigned roots allowed*. So an unreadable or truncated policy did not
+disable a feature — it silently turned this entire gate **off** and served. Its two siblings, loaded
+within a few lines of it, both fail closed: a corrupt `guard_policy.json` poisons the Guard, and a
+corrupt `revoked_certs.json` poisons adoptions (ADOPT-REPLAY-1).
+
+**Witnessed:** against the pre-fix loader, a daemon started with a truncated `root_policy.json`
+answered `ReqBody::Issue` with a live root — the DISC-1 hole reopened by nothing more than a bad
+write. Now:
+
+- A file that **exists but does not read back as strict-with-an-anchor poisons.** `seed_root_policy`
+  only ever writes that shape, and the documented way back to legacy is to *remove* the file, so a
+  malformed file is not a legacy marker — it is a policy that cannot be read.
+- Poisoning shuts **both** doors: an anchor that can never verify (`issue_root` → `DL1421`) plus
+  poisoned adoptions. The daemon keeps **serving**, so revocation and the operator's e-stop still
+  work — refusing to start would trade this fail-open for the availability fail-open IPC-1/DEADMAN-1
+  closed.
+- The policy is written **atomically** (temp + rename), matching `revoked_certs.json`. The previous
+  plain `fs::write` meant a crash or a full disk could leave a truncated file, and a truncated policy
+  was not a broken feature but a silently weaker broker.
+
+**Scope of the claim, stated honestly.** This does **not** raise the same-uid boundary: an adversary
+who can corrupt the file can also delete it, and deletion still yields legacy mode. It is a
+fail-closed/consistency fix whose realistic trigger is non-adversarial corruption, and whose value is
+that the weakening can no longer be silent. The category-7 residual below is unchanged.
 
 **Evidence (MATHEMATICS.md categories, not inflated):**
 - The broker-boundary invariant — *no root exists in strict mode unless justified by a chain verifying

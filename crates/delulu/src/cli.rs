@@ -5822,8 +5822,14 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         Some(p) => p,
         None => {
             // No parent named: issue a root holding EXACTLY the requested authority (nothing
-            // wider), then delegate under it. Root issuance stays a human action — this typed
-            // command line — never a programmatic path (Constitution §5.16 law 4).
+            // wider), then delegate under it.
+            //
+            // This comment used to end "root issuance stays a human action — this typed command
+            // line — never a programmatic path (Constitution §5.16 law 4)". **DISC-1 falsified that
+            // sentence against this very code**: nothing here checks for a human. This auto-root is
+            // one of the paths a headless same-uid caller reaches, which is why the boundary now
+            // lives at the broker (`Broker::issue_root`, `DL1421` under strict mode) rather than in
+            // a claim about who is typing. See `ROOT_ISSUANCE_TRUST_BOUNDARY.md`.
             let root_spec = AuthoritySpec {
                 effects: effects.clone(),
                 fs_read: fs_read.clone(),

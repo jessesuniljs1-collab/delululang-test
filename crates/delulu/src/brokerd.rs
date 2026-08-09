@@ -765,9 +765,15 @@ pub(crate) fn serve_inner(
     // that verifies against this pinned anchor; unsigned `Issue` (and thus `grants delegate` auto-root
     // and `run --grant` against this daemon) is refused DL1421. Reported at start so the mode — and any
     // silent downgrade from config tampering — is visible.
-    let strict = load_root_policy(state_dir);
+    let (strict, root_policy_poisoned) = load_root_policy(state_dir);
     if let Some(anchor) = &strict {
         broker.require_anchored_roots(anchor.clone());
+    } else if root_policy_poisoned {
+        // ROOTPOLICY-1 fail-closed: a policy file we cannot read must not read as "no policy".
+        // Pin an anchor that cannot verify anything and poison adoptions, so neither door — unsigned
+        // `Issue` nor `Adopt` — can admit a root until an operator repairs or removes the file.
+        broker.require_anchored_roots(UNREADABLE_ROOT_POLICY_ANCHOR.to_string());
+        broker.poison_adoptions();
     }
     // ADOPT-REPLAY-1: reload the revoked-certificate denylist so a revocation made in a PREVIOUS
     // daemon lifetime still refuses re-adoption. The rest of the tree is intentionally ephemeral (a
@@ -801,12 +807,29 @@ pub(crate) fn serve_inner(
              of a revoked credential stays refused across this restart (ADOPT-REPLAY-1)."
         );
     }
+    // ROOTPOLICY-1: report the effective root-issuance mode on EVERY start, in all three states. The
+    // old code printed only in the strict case, while the loader's doc claimed "the banner reports
+    // the effective mode, so an unexpected legacy state is visible rather than silent" — but the
+    // absence of a line is not a report, least of all in a detached start whose operator reads
+    // `broker.log`. A downgrade is exactly the event worth seeing, so it now says so out loud.
     if let Some(anchor) = &strict {
         eprintln!(
             "delulu broker: STRICT root-issuance mode ON (DISC-1) — roots require an anchored \
              certificate verifying against `{anchor}`; unsigned issuance is refused DL1421. Residual: \
              protect the anchor PRIVATE key and `{}` from same-uid access (category 7).",
             root_policy_path(state_dir).display()
+        );
+    } else if root_policy_poisoned {
+        eprintln!(
+            "delulu broker: root policy `{}` EXISTS but is UNREADABLE — refusing to create root \
+             authority by ANY path (unsigned issuance DL1421, adoptions poisoned) until it is \
+             repaired or removed. A policy that cannot be read is not a missing policy (ROOTPOLICY-1).",
+            root_policy_path(state_dir).display()
+        );
+    } else {
+        eprintln!(
+            "delulu broker: root-issuance mode LEGACY — unsigned `Issue` may create root authority \
+             (DISC-1). Turn on the gate with `broker start --require-anchored-roots <anchor-pubkey>`."
         );
     }
     if print_owner {
@@ -958,26 +981,65 @@ fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
         return Err(2);
     }
     let doc = serde_json::json!({ "version": 1, "require_anchored_roots": true, "anchor": anchor });
-    if let Err(e) = std::fs::write(root_policy_path(state_dir), format!("{doc}\n")) {
-        eprintln!("error: cannot write root policy `{}`: {e}", root_policy_path(state_dir).display());
+    // **ROOTPOLICY-1**: written atomically (temp + rename), exactly as the revoked-certificate
+    // denylist is. A crash or a full disk part-way through a plain `write` used to be able to leave a
+    // truncated file — and a truncated root policy is not a broken feature, it is a SILENTLY WEAKER
+    // broker, because an unparsable policy used to read as "legacy: unsigned roots allowed". The file
+    // is now always either the old complete policy or the new one.
+    let path = root_policy_path(state_dir);
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = std::fs::write(&tmp, format!("{doc}\n")).and_then(|()| std::fs::rename(&tmp, &path)) {
+        eprintln!("error: cannot write root policy `{}`: {e}", path.display());
         return Err(2);
     }
     Ok(())
 }
 
-/// Load the persisted strict root-issuance anchor, if any (`None` = legacy default: unsigned roots
-/// allowed). A missing file is the legacy default. A file that exists but does NOT set
-/// `require_anchored_roots: true` with a string `anchor` yields `None` — the operator's `broker start`
-/// banner reports the effective mode, so an unexpected legacy state is visible rather than silent.
-fn load_root_policy(state_dir: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(root_policy_path(state_dir)).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    if v.get("require_anchored_roots").and_then(serde_json::Value::as_bool) == Some(true) {
-        v.get("anchor").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
-    } else {
-        None
+/// Load the persisted strict root-issuance anchor. Returns `(anchor, poisoned)`.
+///
+/// A **missing** file is the legacy default (`(None, false)`): unsigned roots allowed, exactly as
+/// before strict mode existed.
+///
+/// # Campaign finding ROOTPOLICY-1 — why a present-but-unusable file poisons
+///
+/// This loader used to swallow every error with `.ok()?` and return `None`, which the caller reads
+/// as *legacy: unsigned roots allowed*. So an unreadable or truncated `root_policy.json` did not
+/// disable a feature — it silently turned the **DISC-1 root-issuance gate off** and started serving.
+/// That made it the one persisted security file in this directory that failed OPEN, while its two
+/// siblings loaded three lines away both fail CLOSED: a corrupt `guard_policy.json` poisons the
+/// Guard, and a corrupt `revoked_certs.json` poisons adoptions (ADOPT-REPLAY-1). Uncertainty must
+/// not become authority.
+///
+/// `seed_root_policy` only ever writes `require_anchored_roots: true` with a non-empty anchor, and
+/// the documented way back to legacy is to REMOVE the file. So a file that exists but does not parse
+/// into exactly that shape is not a legacy marker — it is a policy we cannot read, and the safe
+/// reading of "the operator created this file" is that strict mode was intended. It poisons.
+fn load_root_policy(state_dir: &Path) -> (Option<String>, bool) {
+    let path = root_policy_path(state_dir);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        // Truly absent → legacy. Present but unreadable (permissions, IO error) → cannot tell, so
+        // distinguish the two rather than treating both as "no policy".
+        return if path.exists() { (None, true) } else { (None, false) };
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return (None, true);
+    };
+    if v.get("require_anchored_roots").and_then(serde_json::Value::as_bool) != Some(true) {
+        return (None, true);
+    }
+    match v.get("anchor").and_then(serde_json::Value::as_str).filter(|s| !s.is_empty()) {
+        Some(a) => (Some(a.to_string()), false),
+        None => (None, true),
     }
 }
+
+/// The anchor pinned when a root policy is unreadable (ROOTPOLICY-1). It is not a key and can never
+/// verify a chain — that is the point: `issue_root` refuses `DL1421` and no adoption can match, so
+/// **no new root authority can enter** while the policy cannot be read. The daemon deliberately keeps
+/// serving so revocation and the operator's e-stop still work; refusing to start would trade a
+/// confidentiality fail-open for an availability one, which IPC-1/DEADMAN-1 already taught is its own
+/// safety failure.
+const UNREADABLE_ROOT_POLICY_ANCHOR: &str = "<unreadable-root-policy>";
 
 /// `delulu broker start|status|stop|rotate-key` (spec §2). `start --foreground` runs the serve loop
 /// in this process (tests + the detached child); bare `start` spawns a detached child.
@@ -2010,6 +2072,80 @@ mod tests {
         // But the persisted audit chain still verifies across the restart.
         stop_daemon(&state, handle);
         assert!(delulu_broker::verify(state.join("audit")).is_ok(), "audit verifies across the restart");
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **ROOTPOLICY-1 (classification).** A missing policy is the legacy default; a policy that
+    /// exists but cannot be read back as "strict with an anchor" POISONS. The old loader mapped every
+    /// one of the poisoning cases to the same `None` the missing file produces — which the caller
+    /// reads as *legacy: unsigned roots allowed* — so a truncated or tampered file silently turned the
+    /// DISC-1 gate off. Each case below returned `(None, false)` before the fix.
+    #[test]
+    fn a_root_policy_that_cannot_be_read_poisons_rather_than_reading_as_legacy() {
+        let state = temp_state("rootpolicy_class");
+        let path = root_policy_path(&state);
+
+        // Absent → legacy, and deliberately so: this is the pre-strict default.
+        assert_eq!(load_root_policy(&state), (None, false), "a missing policy is the legacy default");
+
+        // The real shape, written by `seed_root_policy` → strict with that anchor.
+        seed_root_policy(&state, "abc123").unwrap();
+        assert_eq!(load_root_policy(&state), (Some("abc123".to_string()), false));
+
+        // Every unreadable shape must poison. Truncation is the one a crash or a full disk produces
+        // on its own, with no adversary anywhere near the machine.
+        for (tag, body) in [
+            ("truncated", "{\"version\":1,\"require_anchored_roots\":tr"),
+            ("not json", "\0\0\0garbage"),
+            ("empty file", ""),
+            ("flag flipped off", "{\"version\":1,\"require_anchored_roots\":false,\"anchor\":\"abc123\"}"),
+            ("anchor removed", "{\"version\":1,\"require_anchored_roots\":true}"),
+            ("anchor emptied", "{\"version\":1,\"require_anchored_roots\":true,\"anchor\":\"\"}"),
+            ("wrong type", "[]"),
+        ] {
+            std::fs::write(&path, body).unwrap();
+            assert_eq!(
+                load_root_policy(&state),
+                (None, true),
+                "a `{tag}` root policy must poison, not read as legacy — uncertainty must not become authority"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    /// **ROOTPOLICY-1 (over the wire — the witness that matters).** A daemon whose root policy exists
+    /// but is corrupt must refuse to create root authority by ANY path. Before the fix this test
+    /// failed at the first assertion: the corrupt file read as "no policy", the daemon started in
+    /// legacy mode, and `ReqBody::Issue` — the same door DISC-1 is about, reachable from `grants
+    /// delegate` auto-root and `run --grant` — happily minted a root.
+    ///
+    /// The daemon still SERVES (Status answers): refusing to start would deny the operator's e-stop
+    /// and revoke, trading this fail-open for the availability fail-open IPC-1/DEADMAN-1 closed.
+    #[test]
+    fn a_corrupt_root_policy_refuses_root_issuance_over_the_wire() {
+        let state = temp_state("rootpolicy_wire");
+        // A policy file that exists and is unreadable — exactly what a crash mid-write leaves behind.
+        std::fs::write(root_policy_path(&state), "{\"require_anchored_roots\":tr").unwrap();
+        let handle = start_daemon(&state);
+
+        // The daemon is alive and serving — the fail-closed is on root creation, not on availability.
+        assert!(matches!(request(&state, ReqBody::Status).unwrap(), Response::Status { .. }));
+
+        // Door 1: unsigned issuance is refused DL1421.
+        let resp = request(&state, ReqBody::Issue(spec(&["Write"]))).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { code, .. } if code == "DL1421"),
+            "a corrupt root policy must refuse unsigned root issuance, not fall back to legacy: {resp:?}"
+        );
+
+        // Door 2: adoption is poisoned too, so a certificate cannot walk a root in the other way.
+        let resp = request(&state, ReqBody::Adopt { chain: vec!["not-a-cert".into()], anchors: vec!["abc123".into()] }).unwrap();
+        assert!(
+            matches!(&resp, Response::Error { .. }),
+            "a corrupt root policy must refuse adoption as well — both doors, or the gate is not a gate: {resp:?}"
+        );
+
+        stop_daemon(&state, handle);
         let _ = std::fs::remove_dir_all(&state);
     }
 }
