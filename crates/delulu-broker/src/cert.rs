@@ -1346,6 +1346,55 @@ mod tests {
         );
     }
 
+    /// **Phase M — a fuzzing-style battery: every adversarial certificate/receipt is a Denial, never a
+    /// panic.** A certificate crosses a trust boundary as a file; the operator who adopts it did not
+    /// write it. `parse`/`parse_receipt` must treat every malformed, oversized, integer-overflowing, or
+    /// deeply-nested input as a refusal — never an index panic, an `as`/arithmetic overflow, or a stack
+    /// overflow. The assertions prove each result is `Err`; reaching the end of the loop proves nothing
+    /// panicked (a panic in a `#[test]` is a failure). The valid template is checked first so the
+    /// battery is known to vary exactly one thing at a time.
+    #[test]
+    fn adversarial_certificates_and_receipts_are_denials_never_panics() {
+        let auth = "{\"effects\":[],\"scopes\":{}}";
+        let valid = format!(
+            "dlcert1\nalg: ed25519\nissuer: aa\nsubject: bb\nparent: anchor\n\
+             not_before: 0\nnot_after: 1000\nnonce: nn\nauthority: {auth}\nsig: 00"
+        );
+        assert!(parse(&valid).is_ok(), "the valid template must parse, else the battery tests nothing");
+
+        // 600 deep — far past serde_json's 128 recursion limit, which turns this into an Err at parse
+        // time rather than a stack overflow.
+        let nested = format!("{}{}", "[".repeat(600), "]".repeat(600));
+        let cases: Vec<String> = vec![
+            String::new(),                               // empty
+            "dlcert1".to_string(),                       // magic only, no fields
+            "dlcert1\nno-colon-line".to_string(),        // a line with no `key: value`
+            "dlcert1\nalg: ed25519".to_string(),         // missing required fields
+            valid.replace("not_after: 1000", "not_after: 99999999999999999999999999999"), // i64 overflow
+            valid.replace("nonce: nn", "nonce: nn\nuplink_ttl_ms: 99999999999999999999999999"), // u64 overflow
+            valid.replace(auth, "not-json"),             // authority is not JSON
+            valid.replace(auth, &nested),                // authority nested past the recursion limit
+            valid.replace("sig: 00", "sig: abc"),        // odd-length hex
+            valid.replace("sig: 00", "sig: zz"),         // even-length but not hex
+            valid.replace("not_before: 0", "not_before: not-a-number"), // non-numeric int field
+        ];
+        for c in &cases {
+            assert!(parse(c).is_err(), "expected a Denial (not a panic/Ok) for:\n{c}");
+        }
+
+        // Receipts share the line-oriented shape and the same failure modes.
+        let receipts: Vec<String> = vec![
+            String::new(),
+            "dlrcpt1".to_string(),
+            "dlrcpt1\nno-colon".to_string(),
+            "dlrcpt1\nalg: ed25519\nissuer: a\ncertificate: c\nnot_after: 99999999999999999999999999\nnonce: n\nsig: 00".to_string(),
+            "dlrcpt1\nalg: ed25519\nissuer: a\ncertificate: c\nnot_after: 10\nnonce: n\nsig: xyz".to_string(),
+        ];
+        for r in &receipts {
+            assert!(parse_receipt(r).is_err(), "expected a Denial for receipt:\n{r}");
+        }
+    }
+
     #[test]
     fn adoption_refuses_exactly_what_chain_verification_refuses() {
         let chain = ground_to_vehicle();

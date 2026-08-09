@@ -883,6 +883,39 @@ mod tests {
         assert_eq!(canonical_json(&v), r#"{"a":{"y":3,"z":2},"b":1}"#);
     }
 
+    /// **Phase M — a fuzzing-style battery: every adversarial bundle is an error, never a panic.** A
+    /// bundle crosses a trust boundary as a file; `audit reconcile` runs `parse_bundle(...).and_then(|b|
+    /// b.verify(...))` on bytes a remote party produced. Neither step may panic: not an index out of
+    /// bounds on an EMPTY bundle (`verify` guards `is_empty` before `records[0]`), not a stack overflow
+    /// on a deeply-nested field (serde_json's recursion limit turns it into a parse error), not an
+    /// unbounded allocation from a count field (`parse_bundle` grows a Vec line-by-line and trusts no
+    /// declared length). Every case must be `Err`; reaching the end proves nothing panicked.
+    #[test]
+    fn adversarial_bundles_are_errors_never_panics() {
+        // 600 deep — past serde_json's 128 recursion limit, so this is a parse error, not a crash.
+        let nested = format!("{}{}", "[".repeat(600), "]".repeat(600));
+        let cases: Vec<String> = vec![
+            String::new(),                                 // no magic
+            "dlbundle1".to_string(),                       // magic only -> empty bundle -> verify Err
+            "dlbundle1\n".to_string(),
+            "dlbundle1\nnot json at all".to_string(),      // a non-JSON record line
+            "dlbundle1\n{}".to_string(),                   // JSON object but not a record (no seq)
+            "dlbundle1\n[]".to_string(),                   // JSON but not even an object
+            "dlbundle1\n{\"seq\":\"not-a-number\"}".to_string(), // seq is the wrong type
+            format!("dlbundle1\n{{\"seq\":1,\"ts\":0,\"prev_hash\":\"x\",\"hash\":\"y\",\"action\":\"use\",\"decision\":\"allow\",\"authority\":{nested}}}"),
+            "dlbundle1\n{\"seq\":18446744073709551615,\"ts\":0,\"prev_hash\":\"x\",\"hash\":\"y\",\"action\":\"a\",\"decision\":\"d\"}".to_string(), // u64::MAX seq
+        ];
+        for c in &cases {
+            let result = parse_bundle(c).and_then(|b| b.verify(None));
+            assert!(result.is_err(), "expected an AuditError (not a panic/Ok) for:\n{c}");
+        }
+
+        // The empty bundle specifically must be the guarded `is_empty` error, never a `records[0]` panic.
+        let empty = parse_bundle("dlbundle1").expect("magic-only parses to an empty bundle");
+        assert!(empty.records.is_empty(), "magic-only is a zero-record bundle");
+        assert!(empty.verify(None).is_err(), "an empty bundle is a clean error, never an index panic");
+    }
+
     #[test]
     fn mem_sink_chains_and_first_prev_is_genesis() {
         let mut s = MemSink::new();

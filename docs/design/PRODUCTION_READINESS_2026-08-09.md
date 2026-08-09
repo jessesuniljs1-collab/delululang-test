@@ -424,3 +424,38 @@ Test: `an_unbounded_reply_line_fails_closed_rather_than_being_buffered_whole`. d
 reply-framing (`ffca9bd`), ROTATE-1 (`0676183`), ADOPT-REPLAY-1 (`6d3e9cf`), ADAPTER-LINE-1.** Two of
 the four are on the D23 adapter — the untrusted-driver surface is the sharpest edge in the tree, as
 its own module docs anticipate.
+
+### Phase M — federation parsers vs. adversarial input (NEGATIVE result: the surface holds)
+
+Continuing the untrusted-input theme from Phase L onto the other cross-trust-domain surface: the
+federation PARSERS, which take bytes a remote party produced (`grants adopt` / `grants renew` /
+`audit reconcile`). The question was whether a parser INSIDE the 16 MiB frame bound could be driven to
+a panic (unwrap/index/overflow), a hang, or an unbounded allocation. Verified three independent ways;
+**it holds.**
+
+- **`cert::parse` / `parse_receipt`** (`cert.rs`): every field goes through `get()` → `Denial` on
+  missing; integer fields `parse::<i64>()`/`<u64>()` → `Denial` on overflow (not a wrapping cast);
+  `from_hex` uses `str::get(i..i+2)` → `None` (never an index panic) on odd length or a non-char
+  boundary; the `authority` JSON is `serde_json::from_str`, which enforces its own 128-deep recursion
+  limit, so a nesting bomb is a parse error, not a stack overflow. `authority_from_json` refuses an
+  unknown effect/scope/dimension WHOLE (the DL0803 skip-branch rule), never silently widening.
+- **`verify_chain`** (`cert.rs`): the only index is `chain[len-1]`, guarded by the `is_empty` check at
+  the top; the validity window is a pure comparison; the TTL/uplink arithmetic in `adopt` is
+  `saturating_add` with a `min`, so a `u64::MAX` uplink saturates/clamps to a past deadline
+  (fail-closed), never a panic or a widening.
+- **`parse_bundle` / `Bundle::verify` / `AuditRecord::from_value`** (`audit.rs`): `parse_bundle` grows
+  a `Vec` line-by-line and trusts **no** declared count (no alloc-from-count trap); `from_value` is
+  entirely `?`-guarded; `verify` guards `is_empty()` before `records[0]`; the reconcile CLI is
+  `parse_bundle(..).and_then(|b| b.verify(..))` and reports any error as a recorded INCIDENT.
+
+**Evidence.** Two fuzzing-style unit batteries (`adversarial_certificates_and_receipts_are_denials_never_panics`,
+`adversarial_bundles_are_errors_never_panics`) feed empty / magic-only / non-JSON / wrong-type /
+integer-overflowing / 600-deep-nested / bad-hex inputs and assert each is `Err` (a panic in a test is
+a failure) — both green. End-to-end through the real binary, `audit reconcile` on five hostile bundles
+returned reported INCIDENTs (exit 1), **zero** `panicked`/abort lines; the 600-deep bundle failed with
+*"recursion limit exceeded at line 1 column 128"* — serde's backstop firing exactly where predicted; a
+20 MB junk bundle was a clean error too. delulu-broker suite green.
+
+**No fifth defect here — and that is the point of a discovery pass: attack the surface, and when it
+holds, prove it holds and leave regression guards behind.** The batteries are those guards. Running
+tally of REAL defects stays at four (`ffca9bd`, `0676183`, `6d3e9cf`, `6d908f7`).
