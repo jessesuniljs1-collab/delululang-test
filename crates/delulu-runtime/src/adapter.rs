@@ -66,7 +66,7 @@
 //! the lease's heartbeat with it, so the declared fail-state engages on schedule without anyone
 //! noticing the process is gone.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
@@ -77,6 +77,16 @@ use std::time::Duration;
 /// timeout that will be stretched until it stops protecting anything. The dead-man's `heartbeat_ms`
 /// is the tunable that governs real-time behaviour, and it is set at grant time by a human.
 pub const EXCHANGE_TIMEOUT: Duration = Duration::from_millis(2000);
+
+/// Hard ceiling on a single reply line the reader thread will buffer (64 KiB). Every legitimate reply
+/// in this protocol is a handful of bytes ("OK", "VAL 21.5", "ERR <short reason>") — this is orders of
+/// magnitude more headroom than any of them needs. It exists for the MEMORY dimension of rule 2: the
+/// exchange timeout bounds how *long* an adapter can make us wait; this bounds how much *memory* an
+/// adapter can make us buffer for one reply. `BufRead::lines()` grows without limit, so an untrusted
+/// adapter streaming a reply with no newline could otherwise exhaust the host. A line that reaches this
+/// cap without a newline is a broken/hostile adapter; the reader tears down and the exchange fails
+/// closed. Mirrors the broker IPC `MAX_FRAME` bound on the other untrusted-input surface.
+const MAX_LINE_BYTES: u64 = 64 * 1024;
 
 /// Why an adapter exchange failed. Every variant is a refusal; none is recoverable in place.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,15 +154,38 @@ impl ProcessAdapter {
         // or when `Drop` closes our handle.
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        if tx.send(l).is_err() {
-                            return; // the adapter was dropped; nothing left to feed
-                        }
+            let mut reader = BufReader::new(stdout);
+            loop {
+                // ADAPTER-LINE-1: bound each line. `BufRead::lines()`/`read_line` grows without limit,
+                // so an untrusted adapter streaming a reply with no newline could exhaust memory here —
+                // the exchange timeout (rule 2) bounds latency, not buffering. `take` caps one line's
+                // read; a line that reaches the cap without a newline is a broken/hostile adapter, so we
+                // tear the reader down and the exchange fails closed (Disconnected → Closed → poison).
+                let mut buf: Vec<u8> = Vec::new();
+                let n = match (&mut reader).take(MAX_LINE_BYTES).read_until(b'\n', &mut buf) {
+                    Ok(n) => n,
+                    Err(_) => return, // a read error, including the pipe closing under us
+                };
+                if n == 0 {
+                    return; // EOF: the child closed its stdout
+                }
+                if n as u64 == MAX_LINE_BYTES && buf.last() != Some(&b'\n') {
+                    return; // over-cap with no line end in sight — fail closed, never keep buffering
+                }
+                // Match `lines()`: strip a trailing \n (and a preceding \r), and reject non-UTF-8 by
+                // tearing down exactly as the old `Err(_) => return` arm did.
+                if buf.last() == Some(&b'\n') {
+                    buf.pop();
+                    if buf.last() == Some(&b'\r') {
+                        buf.pop();
                     }
+                }
+                let line = match String::from_utf8(buf) {
+                    Ok(s) => s,
                     Err(_) => return,
+                };
+                if tx.send(line).is_err() {
+                    return; // the adapter was dropped; nothing left to feed
                 }
             }
         });
@@ -433,6 +466,44 @@ mod tests {
         {
             format!("while IFS= read -r line; do echo '{reply}'; echo '{reply}'; done")
         }
+    }
+
+    /// A driver that answers with ONE enormous line and no newline in sight — the memory-flood analog
+    /// of the silent (`silent()`) hang. `size` bytes of a single `ERR` line: far beyond any legitimate
+    /// protocol reply, but kept small enough here that the test itself cannot OOM the runner.
+    fn flood_line(size: usize) -> String {
+        #[cfg(windows)]
+        {
+            format!(
+                "$l = [Console]::In.ReadLine(); [Console]::Out.Write('ERR '); \
+                 [Console]::Out.Write('x' * {size}); [Console]::Out.Write(\"`n\")"
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            format!("read line; printf 'ERR '; head -c {size} /dev/zero | tr '\\0' x; printf '\\n'")
+        }
+    }
+
+    /// **ADAPTER-LINE-1**: the reader thread must BOUND how much of one reply it will buffer. The
+    /// exchange timeout (rule 2) bounds *latency*, not *memory* — an untrusted adapter that streams a
+    /// reply without a newline would otherwise grow the reader's buffer without limit (the broker IPC
+    /// reader already caps this via `MAX_FRAME`; the adapter did not). A line far larger than any
+    /// legitimate protocol reply must fail closed — poisoned, never read whole as a value.
+    #[test]
+    fn an_unbounded_reply_line_fails_closed_rather_than_being_buffered_whole() {
+        // 256 KiB: comfortably over the 64 KiB per-line cap, comfortably under anything that could
+        // exhaust the test runner's memory.
+        let mut a = echo_adapter(&flood_line(256 * 1024));
+        let got = a.command("arm0/elbow", &[("angle_deg".into(), 1.0)]);
+        assert!(
+            !matches!(got, Ok(_) | Err(AdapterError::Refused(_))),
+            "an oversize reply line must NOT be accepted as a value (Ok/Refused); got {got:?}"
+        );
+        assert!(
+            a.is_poisoned(),
+            "an adapter that floods a single line past the cap must be poisoned, not trusted again"
+        );
     }
 
     /// Rule 3 forbids a reply being attributed to the wrong command. A late reply after a timeout is

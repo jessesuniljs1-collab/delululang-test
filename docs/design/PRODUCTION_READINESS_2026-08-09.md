@@ -391,3 +391,36 @@ cert riding along in a routine re-adoption and silently undoing a revocation is 
 not only an attacker story. **Tally for the night: three real security defects, each witnessed against
 old code before the fix — adapter reply-framing (`ffca9bd`), ROTATE-1 (`0676183`), ADOPT-REPLAY-1
 (`6d3e9cf`).**
+
+### Phase L — untrusted-input robustness → ADAPTER-LINE-1 (the FOURTH real defect, code fix)
+
+Rounds 1–2 attacked custody *logic*; Phase L attacked resource *bounds* on the surfaces that take
+bytes from **outside the same-uid trust domain**, where a panic or unbounded allocation is a real
+vulnerability rather than a category-7 footgun. Two surfaces:
+
+- **Broker/foreign-worker IPC frame reader** (`broker_ipc.rs`): already defensive — a 16 MiB
+  `MAX_FRAME` ceiling is checked *before* the body is allocated (`read_frame`, `:302`). Clean.
+- **The D23 hardware-adapter subprocess** (`delulu-runtime/adapter.rs`), operator-supplied and
+  explicitly untrusted: **the real finding.** The reader thread used `BufReader::lines()`, whose
+  `read_line` grows a `String` **without any length bound**. The module's own **rule 2** ("a hung
+  adapter must not wedge the control loop") is enforced by `EXCHANGE_TIMEOUT` — but a timeout bounds
+  *latency*, not *memory*. An untrusted adapter streaming a reply with no newline grows that buffer in
+  a detached thread until OOM, bounded only by when the child is killed (end of run). The codebase
+  *knew* to bound untrusted input (`MAX_FRAME`); the adapter path simply missed it.
+
+**Witnessed** (`adapter.rs`, real subprocess): an adapter emitting a 256 KiB single line was accepted
+**whole** as `Refused("xxx…256 KiB…")` against the old code — proof the line buffer is unbounded.
+
+**Fix:** the reader thread now reads each line through `(&mut reader).take(MAX_LINE_BYTES=64 KiB)
+.read_until(b'\n', …)`. A line that reaches the cap without a newline is a broken/hostile adapter, so
+the reader tears down and the exchange fails closed (Disconnected → Closed → poison). UTF-8-error
+teardown and newline-stripping semantics of `lines()` are preserved exactly (all 10 prior adapter
+tests still green). 64 KiB is orders of magnitude beyond any legitimate protocol reply ("OK",
+"VAL 21.5", "ERR <reason>"); it mirrors the broker IPC `MAX_FRAME` bound. Platform-agnostic (no `cfg`).
+Test: `an_unbounded_reply_line_fails_closed_rather_than_being_buffered_whole`. delulu-runtime lib
+163/0.
+
+**Tally for the night: FOUR real defects, each witnessed against old code before the fix — adapter
+reply-framing (`ffca9bd`), ROTATE-1 (`0676183`), ADOPT-REPLAY-1 (`6d3e9cf`), ADAPTER-LINE-1.** Two of
+the four are on the D23 adapter — the untrusted-driver surface is the sharpest edge in the tree, as
+its own module docs anticipate.
