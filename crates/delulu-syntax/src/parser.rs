@@ -108,6 +108,19 @@ const MAX_TYPE_DEPTH: u32 = 128;
 /// spec-relevant refusal rather than a pure bug fix.
 const MAX_PATTERN_DEPTH: u32 = 128;
 
+/// The deepest a **block** may nest before the parser refuses it with DL0213 (overnight red-team,
+/// 2026-08-09).
+///
+/// `MAX_EXPR_DEPTH` bounds a block-EXPRESSION (`{ … }` used as a value), which routes through
+/// `parse_unary`. But a `while`/`for` body is a STATEMENT block: `parse_block → parse_stmt → (while) →
+/// parse_block` recurses touching no expression counter, so nested loops parsed unbounded — witnessed
+/// crashing `delulu check` (exit 127, no diagnostic) at 200,000 levels while 20,000 merely checked
+/// clean. Guarding `parse_block` itself — the one choke point every block passes through — bounds
+/// while, for, and any future block user in one place. A pure block-expression chain still trips
+/// `MAX_EXPR_DEPTH` first (`parse_unary` checks its depth before descending into the block), so DL0210
+/// keeps owning that case and DL0213 owns the statement-block case. Same value as its siblings.
+const MAX_BLOCK_DEPTH: u32 = 128;
+
 struct Parser {
     #[allow(dead_code)]
     file: FileId,
@@ -123,6 +136,8 @@ struct Parser {
     type_depth: u32,
     /// Current pattern nesting depth, bounded by [`MAX_PATTERN_DEPTH`] (overnight red-team 2026-08-09).
     pat_depth: u32,
+    /// Current block nesting depth, bounded by [`MAX_BLOCK_DEPTH`] (overnight red-team 2026-08-09).
+    block_depth: u32,
 }
 
 impl Parser {
@@ -137,6 +152,7 @@ impl Parser {
             depth: 0,
             type_depth: 0,
             pat_depth: 0,
+            block_depth: 0,
         }
     }
 
@@ -1316,12 +1332,44 @@ impl Parser {
         if !self.expect(TokenKind::LBrace) {
             return Block { stmts: Vec::new(), id: self.node_id(), span: start };
         }
+        // Depth guard (overnight red-team 2026-08-09): while/for bodies recurse `parse_block →
+        // parse_stmt → parse_block` with no expression/type/pattern counter, so deeply nested loops
+        // overflow the stack. Refuse past 128 with DL0213, then skip this block's over-deep body in
+        // ONE brace-balanced pass and consume its own `}` — so the enclosing statement loop does not
+        // re-parse the tail (the quadratic shape the pattern guard, DL0212, hit before its recovery).
+        if self.block_depth >= MAX_BLOCK_DEPTH {
+            self.error(
+                "DL0213",
+                format!("block nests deeper than {MAX_BLOCK_DEPTH} levels"),
+                start,
+                "flatten the nested blocks — extract an inner function",
+            );
+            let mut group: u32 = 0;
+            while !self.at_eof() {
+                if self.at(&TokenKind::LBrace) {
+                    group += 1;
+                    self.bump();
+                } else if self.at(&TokenKind::RBrace) {
+                    if group == 0 {
+                        break; // our own closer — consumed just below
+                    }
+                    group -= 1;
+                    self.bump();
+                } else {
+                    self.bump();
+                }
+            }
+            self.eat(&TokenKind::RBrace);
+            return Block { stmts: Vec::new(), id: self.node_id(), span: start.to(self.prev_span()) };
+        }
+        self.block_depth += 1;
         let mut stmts = Vec::new();
         self.parse_until(&TokenKind::RBrace, |p| {
             if let Some(s) = p.parse_stmt() {
                 stmts.push(s);
             }
         });
+        self.block_depth -= 1;
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         Block { stmts, id: self.node_id(), span }
@@ -2119,6 +2167,39 @@ mod tests {
         assert!(
             !d.iter().any(|x| x.code == "DL0212"),
             "32 levels of pattern nesting must parse without a depth refusal, got {d:?}"
+        );
+    }
+
+    /// Overnight red-team 2026-08-09. A `while`/`for` body is a STATEMENT block, so nested loops
+    /// recurse `parse_block → parse_stmt → parse_block` touching no expression counter — witnessed
+    /// crashing `delulu check` (exit 127, no diagnostic) at 200,000 levels while a nested `if` (an
+    /// EXPRESSION) is refused DL0210. DL0213 refuses over-deep blocks at parse time, and the guard's
+    /// brace-balanced skip keeps recovery linear (a naive return re-parsed the tail per level).
+    #[test]
+    fn deeply_nested_statement_blocks_are_dl0213_not_a_stack_overflow() {
+        let n = (MAX_BLOCK_DEPTH as usize) + 50;
+        let src = format!(
+            "module m\nfn f() {{ {}{} }}\n",
+            "while true { ".repeat(n),
+            "}".repeat(n),
+        );
+        let (_, d) = parse_src(&src);
+        assert!(d.iter().any(|x| x.code == "DL0213"), "expected DL0213, got {d:?}");
+    }
+
+    /// The control: ordinary loop nesting, far more than any real code, still parses clean.
+    #[test]
+    fn statement_blocks_within_the_limit_still_parse_clean() {
+        let n = 32;
+        let src = format!(
+            "module m\nfn f() {{ {}{} }}\n",
+            "while true { ".repeat(n),
+            "}".repeat(n),
+        );
+        let (_, d) = parse_src(&src);
+        assert!(
+            !d.iter().any(|x| x.code == "DL0213"),
+            "32 levels of loop nesting must parse without a depth refusal, got {d:?}"
         );
     }
 

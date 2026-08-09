@@ -8,7 +8,7 @@ Every diagnostic code, with its title and its conformance status.
 
 A code's **rejecting** witness proves it fires when it should; its **accepting** witness proves it does *not* fire on valid input. A diagnostic that always fires is as broken as one that never fires, so invariant 42 requires both.
 
-> **Coverage (invariant 42):** 152 of 153 anchors in this chapter have both an accepting and a rejecting conformance witness (99.3%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 154 of 154 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 Codes marked other than `covered` are **not stable**: the classification of every such code — shadowed by a more general code, producible but untested, or unproducible by construction — is in `docs/design/STAGE9_BUILD_ORDER.md` D10.
 
@@ -33,7 +33,8 @@ Codes marked other than `covered` are **not stable**: the classification of ever
 | `DL0209` | expected a statement terminator | `ref.diag.DL0209` | covered |
 | `DL0210` | expression nests too deeply | `ref.diag.DL0210` | covered |
 | `DL0211` | type nests too deeply | `ref.diag.DL0211` | covered |
-| `DL0212` | pattern nests too deeply | `ref.diag.DL0212` | rejecting only |
+| `DL0212` | pattern nests too deeply | `ref.diag.DL0212` | covered |
+| `DL0213` | block nests too deeply | `ref.diag.DL0213` | covered |
 | `DL0301` | unknown name | `ref.diag.DL0301` | covered |
 | `DL0302` | duplicate definition | `ref.diag.DL0302` | covered |
 | `DL0303` | unknown module in import | `ref.diag.DL0303` | covered |

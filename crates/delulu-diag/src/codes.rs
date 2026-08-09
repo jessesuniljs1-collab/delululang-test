@@ -40,6 +40,7 @@ registry! {
     "DL0210" => "expression nests too deeply",
     "DL0211" => "type nests too deeply",
     "DL0212" => "pattern nests too deeply",
+    "DL0213" => "block nests too deeply",
 
     // DL03xx — names / modules
     "DL0301" => "unknown name",
@@ -788,6 +789,12 @@ pub fn code_explain(code: &str) -> Option<String> {
              deep pattern merely wasted time, but on the smaller main/LSP/tooling stacks it aborts the \
              process with no diagnostic (overnight red-team, 2026-08-09). No real pattern nests past a \
              handful of levels; if generated code needs more, match one layer at a time.",
+        "DL0213" => "A block nested deeper than the parser will follow (128 levels) — most often a stack \
+             of `while`/`for` loops, `while c { while c { … } }` thousands deep. A block-EXPRESSION is \
+             already bounded by DL0210, but a loop body is a STATEMENT block whose parsing recurses \
+             through its own path; before this limit it overflowed the stack and aborted the process on \
+             the small main/LSP/tooling stacks, with no diagnostic (overnight red-team, 2026-08-09). No \
+             real code nests blocks this far; if generated code does, extract an inner function.",
 
         // ===== DL03xx — resolution =========================================
         "DL0301" => "This name is not defined in any scope reachable from here. Check the spelling, \

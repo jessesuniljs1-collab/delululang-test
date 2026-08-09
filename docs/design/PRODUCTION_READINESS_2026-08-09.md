@@ -529,3 +529,74 @@ with regression guards left behind (federation parsers, dev-facing/cross-platfor
 Phase O — the expression/type depth guards that made this finding's siblings). The recurring shape all
 five share: a construct that is safe in the normal case and unbounded in the adversarial one —
 untrusted bytes from a driver, a peer, or a source file.
+
+### Phase P — the last unguarded frontend recursion → BLOCK-DEPTH-1 (the SIXTH defect, DL0213)
+
+Phase O guarded patterns; Phase P asked what else recurses. A block-EXPRESSION (`{ … }` as a value)
+is bounded by DL0210 because it routes through `parse_unary`. But a `while`/`for` body is a STATEMENT
+block: `parse_block → parse_stmt → (while) → parse_block` recurses touching no expression counter.
+Witnessed: `while true { while true { … } }` nested 200,000 deep **crashed** `delulu check` (exit 127,
+no diagnostic) while 20,000 checked clean and a nested `if` (an expression) is refused DL0210.
+
+Fixed by guarding `parse_block` itself — the one choke point every block passes through — with a
+`block_depth` counter, refusing past 128 with **DL0213**, plus the same linear brace-balanced
+skip-recovery as DL0212 (post-fix: 200,000-deep now DL0213 in 1 s, no crash, no hang). A confirmation
+sweep then proved every other deeply-nested construct is already covered: nested `for`→DL0213, nested
+list literals→DL0210, nested lambdas→DL0213 (a lambda body is a block). Full DL0213 registration
+(codes.rs, `reject/DL0213_deep_blocks.delulu`, witnesses.toml, parser tests, reference regen, 100%
+coverage). delulu-syntax 130/0.
+
+**The four recursive-descent nesting classes — expression (DL0210), type (DL0211), pattern (DL0212),
+block (DL0213) — are now ALL bounded at 128 with a diagnostic instead of a stack overflow.** Patterns
+and blocks were the two the earlier P17-F5/P20-R3 passes left, and this campaign closed both.
+
+---
+
+## CLOSING REPORT — overnight production-readiness campaign, 2026-08-09 (Opus 4.8, autonomous)
+
+**Mandate (Jesse):** *"make DeluluLang absolutely production ready and free of security vulnerabilities
+and deployable"* — verify Windows/Linux, honestly assess macOS; test CLI/compiler/VS Code/LSP; run
+Miri in tiny batches; use + regenerate the Survey; keep the .md docs current; pause ~2 min then
+auto-continue between phases; **never push**; harden-never-redefine Authority/Guard; re-verify every
+claim against the current binary.
+
+**SIX real security/robustness defects, each witnessed failing against the pre-fix binary before the fix:**
+
+| # | Defect | Commit | One line |
+|---|--------|--------|----------|
+| 1 | Adapter reply-framing desync | `ffca9bd` | an untrusted adapter's extra reply line desynced the next command's reply → fail-closed poison |
+| 2 | ROTATE-1 | `0676183` | `broker rotate-key` never persisted the new key → a restart resurrected every "invalidated" token → persist-first |
+| 3 | ADOPT-REPLAY-1 | `6d3e9cf` | a federation cert revocation lived only in daemon memory → a restart re-adopted a revoked cert → persist the denylist |
+| 4 | ADAPTER-LINE-1 | `6d908f7` | the D23 adapter reader had no per-line byte bound → a hostile driver could OOM the host → 64 KiB cap |
+| 5 | PATTERN-DEPTH-1 | `d25ee5c` | `parse_pattern` had no depth guard → a deep match pattern crashed `delulu check` → DL0212 + linear recovery |
+| 6 | BLOCK-DEPTH-1 | *(this)* | `while`/`for` bodies recursed unguarded → deep loops crashed `delulu check` → DL0213 + linear recovery |
+
+**THREE surfaces attacked and proved to HOLD, with regression guards left behind:** the federation
+cert/receipt/bundle parsers (Phase M — fuzzing batteries + serde recursion backstop); the dev-facing
+surfaces and cross-platform posture (Phase N — LSP live 34/0, VS Code 15/0 + verify-package,
+core-regression null); and the daemon-persistence bug class as a whole (the ROTATE-1/ADOPT-REPLAY-1
+class is complete — every other in-memory item resets in the SAFE direction).
+
+**The recurring shape of all six defects:** a construct that is correct in the normal case and
+**unbounded in the adversarial one** — untrusted bytes from a driver, a federation peer, or a source
+file a human never typed. The fixes are uniformly *fail-closed*: a poison, a bound, a persisted
+denylist, a diagnostic — never a silent pass.
+
+**Honest residuals (unchanged by this campaign, not oversold):**
+- **macOS is designed-for but UNVERIFIED** — no Mac on the bench; the cross-compile stops at blake3's C
+  build script (`cc` not found), a transitive dependency, not DeluluLang Rust.
+- **Same-OS-user isolation (category 7)** — against an adversary sharing the operator's UID, no local
+  secret/file/socket is a boundary; strict root-issuance mode and the P21 fail-closed perms mitigate,
+  a separate OS account is the real boundary.
+- No real hardware driver ships in-tree; every demo commands the simulator; certification is NONE.
+
+**Methodology that worked:** witness-first (a finding is not real until the current binary is seen to
+fail); discovery-over-checklist (each negative asked "what have we not attacked yet?"); the one-shot
+`CronCreate` + nonce continuation chain paced the night with no runaway across ~16 phases; and the
+hard-won operational lesson — after a crash fix, **re-measure timing, not just correctness** (the naive
+DL0212 guard turned a crash into a quadratic hang).
+
+**Final verification (Windows):** delulu-syntax 130/0, delulu-check green, delulu-broker green,
+delulu-runtime 163/0, federation_cli 9/0, hw_adapter_cli 11/0, lsp_cli 34/0, conformance 4/0 + 100%
+anchor coverage, doctor_cli 7/0, Survey 0 error/0 warning, VS Code node 15/0 + verify-package OK. Linux
+was green through the earlier phases; macOS honestly unverified. Nothing pushed.
