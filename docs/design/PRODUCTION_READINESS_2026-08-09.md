@@ -321,3 +321,27 @@ audit chain). macOS designed-for and truthfully unverified. Survey 0/0 and `doct
 phase; nothing pushed. Per the owner's direction, discovery now continues as a **multi-agent red-team
 round** — Haiku 4.5 and Sonnet 5 agents attack distinct untested surfaces, the head chef holds delulu
 authority and re-verifies every claim against the current binary (agent output is evidence, not verdict).
+
+### Multi-agent round 1 — core custody (all HOLD; head-chef re-verified)
+
+Three agents (Haiku 4.5 ×2, Sonnet 5 ×1) each red-teamed ONE core custody file with fixed attack
+questions; the head chef re-verified every cited line and test against the tree. **13 attack questions
+across three surfaces, all HOLD:**
+
+- **Guard** (`guard.rs`): a permit is scoped to its exact node AND subset and single-use (no replay,
+  `:685`); a SEALED tier refuses before any permit or `--dangerously-bypass-guard` (`:664`); a
+  poisoned policy fails closed (`:676`); the owner code is 96 bits of OS randomness (same-uid memory
+  read is the documented §10 limit, not a weaker gap).
+- **Lease tokens** (`lease.rs`): single-use via a burned nonce, no TOCTOU (`:242`); `redeem` re-checks
+  live node state incl. revoked/dead ancestors before burning the nonce (`:220`, the C29 fix); the
+  token is MAC-bound to its exact node and carries no authority itself (authority lives in the tree) —
+  so it cannot inflate or retarget.
+- **Federation certs** (`cert.rs`): a chain must verify to the anchor, and strict mode PINS it (caller
+  anchors discarded, `:546`/`:652`); every hop attenuates its issuer across effects, scopes AND the
+  device envelope (`:401`); every hop's validity window is checked (`:350`); no re-adoption and no
+  fingerprint reuse from a REVOKED adoption (`:559`/`:569`); signer must equal the claimed issuer with
+  grant/receipt domain separation (`:340`, `GRANT_CTX`≠`RECEIPT_CTX`).
+
+Honest caveat (Sonnet): the cert signature check's correctness rests on the real ed25519 verifier in
+`delulu-runtime` (cert.rs uses a fake in tests) — a reasonable trust in an audited crate, recorded not
+hidden. NEGATIVE result: the core custody holds.
