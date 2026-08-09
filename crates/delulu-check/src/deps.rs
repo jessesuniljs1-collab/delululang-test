@@ -950,12 +950,66 @@ fn dep_scope_within_paths(child: &str, parents: &[String]) -> bool {
     let c = normalize_path(child);
     parents.iter().any(|p| {
         let p = normalize_path(p);
+        if p.is_empty() {
+            // The package root itself (a pin of `.`): anything that does not climb out of it is
+            // within it. Kept explicit so the empty string cannot accidentally prefix-match.
+            return !c.starts_with("..");
+        }
         c == p || c.starts_with(&format!("{p}/"))
     })
 }
 
+/// Lexically normalize a declared scope for comparison: `\` → `/`, **and `.` / `..` resolved**.
+///
+/// # Campaign finding DEPPIN-LEX-1 — the pin was escapable by spelling
+///
+/// This used to be `p.replace('\\', "/").trim_end_matches('/')` — separators and trailing slashes
+/// only, with `..` left in place. The comparison above is a *prefix* test, so a dependency could
+/// declare a scope that lexically sits under the pin and resolves outside it:
+///
+/// ```text
+///   pin:  fs.read = ["data"]
+///   dep:  fs.read = ["data/../../outside"]   → starts_with("data/") → PASSED
+///   dep:  fs.read = ["../outside"]           → DL1001 refused
+/// ```
+///
+/// Both spellings name the same place outside the pin; only the second was caught. Witnessed with
+/// `delulu check` on a real two-package workspace before the fix. This is C84's shape one layer out:
+/// a containment decision made on an unresolved path string.
+///
+/// **Scope of the fix, stated honestly.** The pin is a *declared-authority ceiling* a consumer puts
+/// on a dependency (§A.3), not the runtime boundary — runtime filesystem access is bounded by the
+/// grant and by `prim::resolve_in_scope`, which normalizes properly, and `--grant-manifest` reads
+/// only the ROOT package's manifest, never a dependency's. So this defeated the supply-chain
+/// constraint, not filesystem containment. It is fixed because the pin is presented as a real
+/// constraint (finding C19 / ruling D34 treated a missing pin dimension as a genuine defect), and a
+/// constraint that a spelling walks past is decoration.
 fn normalize_path(p: &str) -> String {
-    p.replace('\\', "/").trim_end_matches('/').to_string()
+    let unix = p.replace('\\', "/");
+    let absolute = unix.starts_with('/');
+    let mut out: Vec<&str> = Vec::new();
+    // `..` above a relative root cannot be cancelled — it must survive as `..`, or `../outside`
+    // would normalize to `outside` and land *inside* a pin it climbs out of.
+    let mut climbs = 0usize;
+    for seg in unix.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                if out.pop().is_none() && !absolute {
+                    climbs += 1;
+                }
+            }
+            s => out.push(s),
+        }
+    }
+    let mut parts: Vec<&str> = vec![".."; climbs];
+    parts.extend(out);
+    let joined = parts.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
 }
 
 /// Build the `insert-pin` repair for a missing pin. Flagged `authority_widening` (§3.2).
@@ -1220,6 +1274,36 @@ mod tests {
             "the pinned secret is permitted and must not be reported: {}",
             d.message
         );
+    }
+
+    /// **DEPPIN-LEX-1 regression lock.** Two spellings of the same out-of-pin location must both be
+    /// refused. Before the fix the first one PASSED: the comparison was a prefix test on an
+    /// unresolved string, and `data/../../outside` starts with `data/`. Witnessed end-to-end with
+    /// `delulu check` on a two-package workspace — `../outside` was refused DL1001 while the
+    /// climbing spelling checked clean, same destination, opposite verdicts.
+    #[test]
+    fn a_dependency_scope_cannot_escape_its_pin_by_spelling() {
+        let pin = vec!["data".to_string()];
+        assert!(
+            !dep_scope_within_paths("data/../../outside", &pin),
+            "DEPPIN-LEX-1: a scope that climbs out of the pin is outside it however it is spelled"
+        );
+        assert!(!dep_scope_within_paths("../outside", &pin), "the plain spelling stays refused");
+        assert!(!dep_scope_within_paths("data/../other", &pin), "a sibling reached through `..` is outside");
+
+        // The legitimate cases must keep working — a fix that refuses everything is not a fix.
+        assert!(dep_scope_within_paths("data", &pin), "the pin itself is within the pin");
+        assert!(dep_scope_within_paths("data/sub/x", &pin), "a real descendant is within");
+        assert!(dep_scope_within_paths("./data/sub", &pin), "a `.`-spelled descendant is within");
+        assert!(dep_scope_within_paths("data\\sub", &pin), "a Windows-spelled descendant is within");
+        assert!(dep_scope_within_paths("data/sub/../other", &pin), "climbing but staying inside is within");
+        assert!(!dep_scope_within_paths("database", &pin), "a name that merely shares a prefix is not a child");
+
+        // A pin of the package root contains anything that does not climb out of it.
+        let root_pin = vec![".".to_string()];
+        assert!(dep_scope_within_paths("data", &root_pin));
+        assert!(dep_scope_within_paths("./data/sub", &root_pin));
+        assert!(!dep_scope_within_paths("../outside", &root_pin), "climbing out of the root is still out");
     }
 
     #[test]

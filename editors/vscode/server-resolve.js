@@ -91,7 +91,17 @@ function resolveServer(configured, env = process.env, platform = process.platfor
       : { error: `No file exists at \`delulu.serverPath\` (\`${configured}\`).` };
   }
 
-  const dirs = (env.PATH || env.Path || "").split(path.delimiter).filter(Boolean);
+  // SERVERPATH-REL-1: a RELATIVE `PATH` entry (`.`, `bin`, `..\tools`) would be joined onto the
+  // bare name and then stat'd against the process's current directory — so the answer would once
+  // again be a function of where this extension happens to be standing, which is the single thing
+  // this module exists to prevent, and it would return a relative path in violation of the contract
+  // above. Verified before the fix: with `PATH="."` and a planted `delulu.exe` in the working
+  // directory, `resolveServer("delulu")` returned `"delulu.exe"`. Relative entries are skipped for
+  // the same reason a relative `delulu.serverPath` is refused outright.
+  const dirs = (env.PATH || env.Path || "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .filter((dir) => path.isAbsolute(dir));
   for (const dir of dirs) {
     const hit = firstExistingFile(variants(path.join(dir, spelled), exts));
     if (hit) {

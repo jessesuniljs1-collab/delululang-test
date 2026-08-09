@@ -97,6 +97,32 @@ test("a bare name is never satisfied by the current directory", () => {
   }
 });
 
+// SERVERPATH-REL-1. The test above proves an EMPTY PATH cannot be satisfied by the working
+// directory. This is the same attack through the other door: a PATH that contains a *relative*
+// entry. Before the fix `resolveServer("delulu", { PATH: "." })` returned the bare `"delulu.exe"` —
+// a relative path, in violation of this module's documented contract, resolved by the OS against
+// whatever directory the extension was standing in. That is the planted-binary hole P19 closed,
+// re-opened by a PATH misconfiguration rather than by a setting.
+test("a relative PATH entry is skipped, not resolved against the working directory", () => {
+  const root = sandbox({ "delulu.exe": "file" });
+  const cwd = process.cwd();
+  try {
+    process.chdir(root);
+    const got = resolveServer("delulu", { PATH: ".", PATHEXT: ".EXE" }, "win32");
+    assert.ok(got.error, "a relative PATH entry must not satisfy a bare name");
+    assert.strictEqual(got.path, undefined, "and must certainly not return a relative path");
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("an absolute PATH entry still resolves, and to an absolute path", () => {
+  const root = sandbox({ "bin/delulu.exe": "file" });
+  const got = resolveServer("delulu", { PATH: path.join(root, "bin"), PATHEXT: ".EXE" }, "win32");
+  assert.strictEqual(got.path, path.join(root, "bin", "delulu.exe"));
+  assert.ok(path.isAbsolute(got.path), "the documented contract is an absolute path");
+});
+
 test("a directory named like the binary is skipped, not returned", () => {
   const root = sandbox({ "a/delulu.exe": "dir", "b/delulu.exe": "file" });
   const env = { PATH: [path.join(root, "a"), path.join(root, "b")].join(path.delimiter), PATHEXT: ".EXE" };

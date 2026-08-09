@@ -191,6 +191,88 @@ the runner's own exit code says so.**
 **Fix.** Snapshot re-blessed (additive only, diff read before committing); the campaign's own suite
 runs now capture cargo's exit code directly rather than through a pipe.
 
+---
+
+## Phase C — adversarial verification & cross-surface attack
+
+Baseline before this phase: `cargo test --workspace` **cargo exit 0, 124 test binaries, 1628 tests,
+0 failures** on Windows, tree frozen (see CORE-SNAPSHOT-1 on why the exit code is quoted and not a
+tail of the log).
+
+### DEPPIN-LEX-1 — a dependency's authority pin was escapable by spelling (MODERATE)
+
+**What.** `dep_scope_within_paths` decides whether a dependency's declared filesystem scope sits
+inside the consumer's pin (§A.3). It is a *prefix* test, and its normalizer only swapped `\` for `/`
+and trimmed trailing slashes — `..` was left in the string. So a scope could lexically sit under the
+pin and resolve outside it.
+
+**Witness (`delulu check`, real two-package workspace).** Same destination, opposite verdicts:
+
+| dependency declares | verdict |
+|---|---|
+| `../outside` | `DL1001` refused — the pin is enforced |
+| `data/../../outside` | **checked clean** — the pin is escaped |
+
+**Scope of the claim, stated honestly.** This is the *supply-chain* boundary, not the runtime one.
+Runtime filesystem access is bounded by the grant and by `resolve_in_scope`, which normalizes
+properly, and `--grant-manifest` reads only the **root** package's manifest, never a dependency's —
+verified, not assumed. So a malicious dependency could not reach the filesystem through this. What it
+defeated is the constraint a consumer *puts on a third-party dependency*, which finding C19 / ruling
+D34 already established as a real control ("the pin was decoration" was treated as a genuine defect
+then, and a pin a spelling walks past is decoration too).
+
+**Fix.** The normalizer now resolves `.` and `..`, keeping unresolvable leading `..` as `..` so
+`../outside` cannot normalize into `outside` and land *inside* a pin it climbs out of. A pin of the
+package root (`.`) is handled explicitly so the empty string cannot accidentally prefix-match.
+Regression test covers both escaping spellings, the legitimate descendants (including `data/sub/../other`,
+which climbs but stays inside), the Windows spelling, and the near-miss `database` — and it **fails
+against the pre-fix normalizer** (falsification run recorded).
+
+### SERVERPATH-REL-1 — a relative `PATH` entry re-opened the planted-binary hole (LOW)
+
+**What.** `editors/vscode/server-resolve.js` exists so that "a bare or relative name is never handed
+to the OS to resolve … the outcome [is] a function of this code rather than of the host's working
+directory", and its contract says it returns an **absolute** path. The PATH branch joined the bare
+name onto each `PATH` entry without requiring that entry to be absolute.
+
+**Witness.** With `PATH="."` and a planted `delulu.exe` in the working directory,
+`resolveServer("delulu")` returned `"delulu.exe"` — relative, contract violated, and resolved by the
+OS against wherever the extension was standing. That is the P19 planted-binary hole reached through a
+`PATH` misconfiguration instead of a setting. The existing tests covered an *empty* PATH and a
+relative *configured path*, but no test covered a relative PATH **entry**.
+
+**Fix.** Relative `PATH` entries are skipped, for the same reason a relative `delulu.serverPath` is
+refused outright. Two tests added (the attack, and an absolute entry still resolving to an absolute
+path). Extension suite: **17/17 green**.
+
+### CONTAIN-TOCTOU-1 — the containment race, now named rather than implied (residual, documented)
+
+The containment doc presents itself as "the boundary `contains_on_disk` draws, and the one it does
+NOT", and listed only the hardlink. But the check resolves a path and the operation that follows
+re-opens it **by name**, so a concurrent writer into the granted directory can swap a checked file
+for a symlink in between.
+
+Recorded with its threat model rather than fixed, and the reasoning is the hardlink's: the confined
+program **cannot** win this race through this API (the primitive table exposes no symlink-creating
+operation, so it needs a *second* writer), the second writer is either a same-uid process
+(category 7, already outside the proof boundary) or anyone able to write into the granted directory,
+and closing it properly requires `O_NOFOLLOW`/`openat2`/`FILE_FLAG_OPEN_REPARSE_POINT` — the
+platform-dependent containment this project explicitly refuses. Deployment consequence stated in one
+line: **grant scopes that point at directories only the program's own user can write.**
+
+### Negative results from this phase
+
+- **The VS Code extension's execution paths are clean.** `execFile` with an argv vector,
+  `createTerminal({shellPath, shellArgs})` and `ProcessExecution` all bypass the shell, Workspace
+  Trust gates `run`/`test`, and `delulu.serverPath` is machine-scoped so a workspace cannot set it.
+  The P18 command-injection class is closed and stayed closed; only the PATH gap above was new.
+- **The dangling-link fix holds against Windows junctions.** Junctions dangle with *no* privilege
+  (`mklink /J`), and Rust's `is_symlink()` does report them — verified end-to-end, so the fix covers
+  the one reparse point Windows hands out freely.
+- **The lexical-prefix bug class is bounded to one site.** Every `starts_with(&format!(…))` in the
+  workspace was reviewed: `python.rs` matches module *namespaces* (where `..` has no meaning) and
+  `codeowners.rs` is survey tooling. `deps.rs` was the only path instance.
+
 ## Documentation corrected in this phase
 
 Stale claims found and fixed rather than merely appended to (see the entries themselves for detail):

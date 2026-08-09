@@ -817,6 +817,31 @@ mod determinism_tests {
 ///    POSIX has no such call short of walking the whole filesystem. A Windows-only defense would make
 ///    containment platform-dependent — the one thing this project refuses, because the same program
 ///    would then confine differently on Linux and Windows.
+///
+/// # The other boundary: this is a check-then-open, so there is a race (CONTAIN-TOCTOU-1)
+///
+/// Named here because this doc claims to state the boundary `contains_on_disk` draws *and the one it
+/// does not*, and until 2026-08-10 it listed only the hardlink. The containment decision is made by
+/// resolving the path, and the operation that follows re-opens it **by name**. Between those two
+/// moments the filesystem can change: anything able to write into the granted directory can replace
+/// a checked plain file with a symlink and have the subsequent write follow it out.
+///
+/// What this does and does not mean:
+///
+/// - **It is not reachable by the confined program itself through this API.** A DeluluLang program
+///   holding only `Cap[FsWrite]` cannot create a symlink — the primitive table exposes no such
+///   operation — so winning this race requires a *second*, concurrent writer.
+/// - That second writer is a same-uid process (**category 7**, already outside the proof boundary and
+///   documented in `ROOT_ISSUANCE_TRUST_BOUNDARY.md`), **or** any other party who can write into the
+///   granted directory — which is the case worth stating, because a grant aimed at a shared location
+///   such as `/tmp` hands that ability to everyone on the machine.
+/// - **Closing it properly needs the OS, not more path logic.** The fix is to open first and check
+///   the opened handle (`O_NOFOLLOW`/`openat2` on Linux, `FILE_FLAG_OPEN_REPARSE_POINT` on Windows),
+///   which is exactly the platform-dependent containment fact 3 above refuses. So it is stated, with
+///   its threat model, rather than papered over — the same disposition the hardlink gets.
+///
+/// **Deployment consequence, in one sentence:** grant filesystem scopes that point at directories
+/// only the program's own user can write, never at a shared or world-writable one.
 #[cfg(test)]
 mod containment_tests {
     use super::contains_on_disk;
