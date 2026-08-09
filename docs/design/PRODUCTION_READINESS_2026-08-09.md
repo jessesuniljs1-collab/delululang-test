@@ -459,3 +459,35 @@ returned reported INCIDENTs (exit 1), **zero** `panicked`/abort lines; the 600-d
 **No fifth defect here — and that is the point of a discovery pass: attack the surface, and when it
 holds, prove it holds and leave regression guards behind.** The batteries are those guards. Running
 tally of REAL defects stays at four (`ffca9bd`, `0676183`, `6d3e9cf`, `6d908f7`).
+
+### Phase N — dev-facing + cross-platform re-verification after this session's changes (all clean)
+
+This session's four commits touched only the broker (`audit`/`cert`/`tree`/`brokerd`) and the device
+`adapter` — never the compiler core, never any editor code. Phase N confirms the dev-facing surfaces
+and cross-platform posture did not regress, driving each LIVE (a green suite is not proof — P19's LSP
+regression sat behind a green suite because the extension, not the protocol handlers, was broken).
+
+- **LSP server, live:** `lsp_cli` drives the real `delulu lsp` binary over stdio JSON-RPC —
+  initialize/capabilities, diagnostics (== `check --json`), code actions, hover, inlay hints, symbols,
+  rename (cross-module + honest refusals), semantic tokens, code lenses, `workspace/executeCommand`
+  (`delulu.authority`), completion, signature help, incremental sync, malformed-range robustness,
+  reopen, determinism. **34 passed / 0 failed / 1 ignored** (the ignored one is the release-mode ≤150 ms
+  latency gate).
+- **VS Code extension:** `node --test` **15/0** (the `withContentSecurityPolicy` insertion logic and the
+  `resolveServer` PATH/absolute/relative/PATHEXT/`~` resolution — the launch wiring P19 was about);
+  `verify-package.js` **OK** — vsix builds (97.8 KB), `dist/extension.js` resolves with no missing
+  modules, **4 commands declared and registered (the lists agree)**. `extension.js` starts the client
+  with `{ command: serverPath, args: ["lsp"] }`, and the `delulu.showAuthority` (VS Code) vs
+  `delulu.authority` (server executeCommand) split — the exact P18 collision that silently killed the
+  server — is kept distinct and documented in place.
+- **macOS:** `cargo check --target aarch64-apple-darwin` stops at **blake3's** build script
+  (`cc-rs: failed to find tool "cc"`) — a transitive C dependency, not any DeluluLang Rust. Same blocker
+  Phase G recorded. This session's changes are pure-Rust std with no `cfg` and no C surface, so the
+  posture is unchanged: designed-for, Rust believed-portable, full cross-check blocked by the C
+  toolchain on this Windows bench. Not overclaimed as verified.
+- **Core-regression (Jesse's standing rule):** the diff vs. the pre-session commit shows only
+  broker/adapter files — zero in `delulu-syntax`/`delulu-check`/the interpreter. Live on the current
+  binary: `check` → "checked clean"; `run` → `DL0703` authority enforcement fires; a broken program →
+  a `DL0202` diagnostic, never a panic. The product's core is untouched and unregressed.
+
+Phase N adds no code — it is verification. Nothing pushed.
