@@ -39,6 +39,7 @@ registry! {
     "DL0209" => "expected a statement terminator",
     "DL0210" => "expression nests too deeply",
     "DL0211" => "type nests too deeply",
+    "DL0212" => "pattern nests too deeply",
 
     // DL03xx — names / modules
     "DL0301" => "unknown name",
@@ -779,6 +780,14 @@ pub fn code_explain(code: &str) -> Option<String> {
              every edit — unresponsive for a minute, and a deeper one hung (red-team finding \
              P20-R3). No real type nests past a handful of levels; if generated code needs more, \
              name the inner type with a `type` alias.",
+        "DL0212" => "A pattern nested deeper than the parser will follow (128 levels) — for example \
+             `Some(Some(…Some(y)…))` thousands deep. Pattern parsing is recursive like expression \
+             parsing, so unbounded nesting is unbounded stack use; the expression guard (DL0210) does \
+             not cover it, because a variant pattern's fields recurse through the pattern grammar's own \
+             path, which counts neither the expression nor the type depth. On the CLI's large stack a \
+             deep pattern merely wasted time, but on the smaller main/LSP/tooling stacks it aborts the \
+             process with no diagnostic (overnight red-team, 2026-08-09). No real pattern nests past a \
+             handful of levels; if generated code needs more, match one layer at a time.",
 
         // ===== DL03xx — resolution =========================================
         "DL0301" => "This name is not defined in any scope reachable from here. Check the spelling, \

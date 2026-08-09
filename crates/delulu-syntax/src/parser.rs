@@ -91,6 +91,23 @@ const MAX_EXPR_DEPTH: u32 = 128;
 /// needs such a type should name intermediate types with `type` aliases.
 const MAX_TYPE_DEPTH: u32 = 128;
 
+/// The deepest a **pattern** may nest before the parser refuses it with DL0212 (overnight red-team,
+/// 2026-08-09).
+///
+/// `MAX_EXPR_DEPTH` bounds expression nesting and `MAX_TYPE_DEPTH` bounds type nesting, but neither
+/// covers a **pattern**: `parse_pattern` recurses through its own path (a variant pattern's fields
+/// are themselves patterns — `Some(Some(…Some(y)…))`), touching neither counter. So a match arm whose
+/// pattern nests thousands deep parsed with no limit — witnessed accepting 50,000 levels where the
+/// identical expression depth is refused DL0210 at 128. On the CLI's large interpreter stack that
+/// merely wasted time, but the guard exists precisely for the 1–2 MiB main/LSP/tooling threads
+/// (`parse_unary`'s note), where a few hundred levels exhaust the stack and **abort the process** —
+/// carrying no `DL####`, no span, nothing a caller can catch. `delulu check` is the gate every other
+/// guarantee is verified through, and a gate that can be made to die instead of answering can be
+/// skipped. Same value as the other two so "you nested too deep" is one number to remember; it
+/// **narrows the accepted language** (a pattern past 128 levels used to parse), which is why it is a
+/// spec-relevant refusal rather than a pure bug fix.
+const MAX_PATTERN_DEPTH: u32 = 128;
+
 struct Parser {
     #[allow(dead_code)]
     file: FileId,
@@ -104,11 +121,23 @@ struct Parser {
     depth: u32,
     /// Current type nesting depth, bounded by [`MAX_TYPE_DEPTH`] (finding P20-R3).
     type_depth: u32,
+    /// Current pattern nesting depth, bounded by [`MAX_PATTERN_DEPTH`] (overnight red-team 2026-08-09).
+    pat_depth: u32,
 }
 
 impl Parser {
     fn new(file: FileId, tokens: Vec<Token>) -> Self {
-        Parser { file, tokens, pos: 0, next_node: 0, diags: Vec::new(), panicking: false, depth: 0, type_depth: 0 }
+        Parser {
+            file,
+            tokens,
+            pos: 0,
+            next_node: 0,
+            diags: Vec::new(),
+            panicking: false,
+            depth: 0,
+            type_depth: 0,
+            pat_depth: 0,
+        }
     }
 
     // ----- node ids and cursor --------------------------------------------
@@ -1863,6 +1892,54 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> Pattern {
+        // Depth guard (overnight red-team 2026-08-09): a variant pattern's fields are themselves
+        // patterns (`Some(Some(…))`), so `parse_pattern` recurses through its own path — one neither
+        // MAX_EXPR_DEPTH nor MAX_TYPE_DEPTH counts. Refuse absurd nesting with DL0212 before it
+        // exhausts the stack. No token is consumed; `error` sets `panicking`, so the unclosed `(`s
+        // unwind through the callers already on the stack without a cascade, exactly as the DL0210
+        // expression guard does. `parse_pattern` (guarded), not `parse_pattern_inner`, is the point
+        // every nested field re-enters, so the counter rises once per level.
+        if self.pat_depth >= MAX_PATTERN_DEPTH {
+            let start = self.span();
+            self.error(
+                "DL0212",
+                format!("pattern nests deeper than {MAX_PATTERN_DEPTH} levels"),
+                start,
+                "simplify or split this pattern",
+            );
+            // Recovery in ONE linear pass: consume the over-deep remainder, balancing parens, so the
+            // enclosing match-arm loop (`parse_until`) does not re-parse the tail. Returning without
+            // consuming was correct for termination but made a pathological pattern QUADRATIC — each
+            // arm iteration re-descended 128 levels into the same tail. Stop before the `)` that
+            // closes our PARENT group (so the callers already on the stack unwind normally), or at an
+            // arm boundary / EOF for an unterminated one. Patterns use only `(`…`)`, so parens are the
+            // only grouping to balance.
+            let mut group: u32 = 0;
+            while !self.at_eof() {
+                if self.at(&TokenKind::LParen) {
+                    group += 1;
+                    self.bump();
+                } else if self.at(&TokenKind::RParen) {
+                    if group == 0 {
+                        break;
+                    }
+                    group -= 1;
+                    self.bump();
+                } else if self.at(&TokenKind::FatArrow) || self.at(&TokenKind::RBrace) {
+                    break;
+                } else {
+                    self.bump();
+                }
+            }
+            return Pattern::Wildcard(start);
+        }
+        self.pat_depth += 1;
+        let p = self.parse_pattern_inner();
+        self.pat_depth -= 1;
+        p
+    }
+
+    fn parse_pattern_inner(&mut self) -> Pattern {
         let start = self.span();
         match self.peek().clone() {
             TokenKind::Underscore => {
@@ -2007,6 +2084,42 @@ mod tests {
         let src = format!("module m\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n));
         let (_, d) = parse_src(&src);
         assert!(d.is_empty(), "32 levels of type nesting must still parse, got {d:?}");
+    }
+
+    /// Overnight red-team 2026-08-09. A deeply nested *pattern* — a variant pattern whose fields are
+    /// themselves patterns, `Some(Some(…))` — recurses through `parse_pattern`'s own path, which
+    /// counts neither `MAX_EXPR_DEPTH` nor `MAX_TYPE_DEPTH`, so it parsed unbounded: witnessed
+    /// accepting 50,000 levels where the identical EXPRESSION depth is refused DL0210 at 128. On the
+    /// CLI's large interpreter stack that only wasted time, but the guard exists for the 1–2 MiB
+    /// main/LSP/tooling stacks, where a few hundred levels abort the process with no `DL####`. DL0212
+    /// refuses it at parse time instead.
+    #[test]
+    fn a_deeply_nested_pattern_is_dl0212_not_a_stack_overflow() {
+        let n = (MAX_PATTERN_DEPTH as usize) + 50;
+        let src = format!(
+            "module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n",
+            "Some(".repeat(n),
+            ")".repeat(n),
+        );
+        let (_, d) = parse_src(&src);
+        assert!(d.iter().any(|x| x.code == "DL0212"), "expected DL0212, got {d:?}");
+    }
+
+    /// The control: a pattern nested far more than any real match, but within the limit, must still
+    /// parse clean — otherwise the guard would just be "reject nested patterns".
+    #[test]
+    fn a_pattern_within_the_limit_still_parses_clean() {
+        let n = 32;
+        let src = format!(
+            "module m\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0, _ => 1 }} }}\n",
+            "Some(".repeat(n),
+            ")".repeat(n),
+        );
+        let (_, d) = parse_src(&src);
+        assert!(
+            !d.iter().any(|x| x.code == "DL0212"),
+            "32 levels of pattern nesting must parse without a depth refusal, got {d:?}"
+        );
     }
 
     #[test]

@@ -710,6 +710,12 @@ test = "accepting_programs_check_clean"
 kind = "positive"
 
 [[witness]]
+anchor = "ref.diag.DL0212"
+file = "crates/delulu/tests/conformance.rs"
+test = "accepting_programs_check_clean"
+kind = "positive"
+
+[[witness]]
 anchor = "ref.diag.DL0301"
 file = "crates/delulu/tests/conformance.rs"
 test = "accepting_programs_check_clean"

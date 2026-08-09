@@ -491,3 +491,41 @@ regression sat behind a green suite because the extension, not the protocol hand
   a `DL0202` diagnostic, never a panic. The product's core is untouched and unregressed.
 
 Phase N adds no code — it is verification. Nothing pushed.
+
+### Phase O — compiler frontend fuzzing → PATTERN-DEPTH-1 (the FIFTH real defect, DL0212)
+
+The frontend eats UNTRUSTED source — an LLM or agent emitting DeluluLang, a cloned repo, a paste —
+so a source that crashes the compiler is a real robustness/DoS bug. Prior red-team passes already
+capped **expression** nesting (DL0210, P17-F5) and **type** nesting (DL0211, P20-R3) at 128 levels,
+each with the explicit reasoning that the guard must hold on the 1–2 MiB main/LSP/tooling threads.
+The skip-branch rule paid off immediately: those guards exist — but they do **not** cover the one
+recursive-descent path they missed.
+
+**The finding.** `parse_pattern` recurses on its own (`Some(Some(…Some(y)…))` — a variant pattern's
+fields are themselves patterns) and touched **neither** depth counter. Witnessed: a 50,000-deep
+pattern parsed in full (straight to a checker DL0401) where the identical **expression** depth is
+refused DL0210 at 128; and a deeper one (≥ ~500k) **crashed** `delulu check` (abnormal exit, no
+diagnostic). The vulnerability bites hardest exactly where the sibling guards were designed to
+protect — the small stacks an editor/agent runs analysis on.
+
+**The fix (two parts, both witnessed).**
+1. `MAX_PATTERN_DEPTH = 128` + a `pat_depth` counter guarding `parse_pattern`, refusing past 128 with
+   **DL0212** — stack-independent, mirroring DL0210/DL0211.
+2. A **linear skip-recovery**: on the guard firing, consume the over-deep remainder in one
+   paren-balanced pass, so the enclosing match-arm loop (`parse_until`) does not re-parse the tail.
+   Without it the fix merely converted the stack-overflow into a **quadratic hang** (50k hung > 60 s);
+   with it, a post-fix sweep at 200 / 10k / 50k / 800k depth all return a clean DL0212 in ≤ 2 s.
+
+New code DL0212 registered in `codes.rs` (both message tables), a `reject/DL0212_deep_pattern.delulu`
+auto-negative witness + a positive witnesses.toml entry (100% anchor coverage held), the parser unit
+tests `a_deeply_nested_pattern_is_dl0212_not_a_stack_overflow` + its within-limit control, and the
+generated reference regenerated. delulu-syntax 235 + 128 / 0, delulu-check green, conformance 4/0,
+doctor_cli 7/7, survey 0/0.
+
+**Tally for the night: FIVE real defects, each witnessed against old code before the fix — adapter
+reply-framing (`ffca9bd`), ROTATE-1 (`0676183`), ADOPT-REPLAY-1 (`6d3e9cf`), ADAPTER-LINE-1
+(`6d908f7`), PATTERN-DEPTH-1 (this commit).** Three surfaces additionally attacked and proved to hold
+with regression guards left behind (federation parsers, dev-facing/cross-platform, and — before
+Phase O — the expression/type depth guards that made this finding's siblings). The recurring shape all
+five share: a construct that is safe in the normal case and unbounded in the adversarial one —
+untrusted bytes from a driver, a peer, or a source file.
