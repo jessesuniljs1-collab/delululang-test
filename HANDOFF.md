@@ -55,6 +55,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **Do not fabricate evidence, and never delete a failed experiment.** | Failed runs are recorded, not tidied away. |
 | **The word "graphify" appears nowhere in the repository or product surfaces.** | Owner ruling. (The `dcg` credit in the Guard docs stands and is unrelated.) |
 | **Regenerate the Survey after any change, before running the suite.** | `cargo run -p delulu-survey -- build`. A test enforces freshness; see §4. |
+| **Run `delulu doctor` — it is the one command that answers "is this healthy?"** | Three sections: **environment** (install, state directory, audit chain), **security posture** (root-issuance mode, anchor-key custody, whether the filesystem can enforce owner-only permissions, and whether the RUNNING broker agrees with the policy on disk), and **repository** (the map's freshness and integrity). Exit 0 healthy, **1 when a problem remains**, 2 on a bad invocation. `--check` never writes; `--json` emits one envelope. Run it **on the deployment host, as the account your agents use** — see §11.4 and `docs/DEPLOYMENT.md`. |
 
 ---
 
@@ -383,6 +384,9 @@ cargo test --workspace --no-fail-fast              # 124 binaries (--no-fail-fas
 cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # 27 cases, exact exit codes
 cargo run -p delulu-survey -- build                # ALWAYS, after any change
+./target/release/delulu doctor                     # the health command: environment,
+                                                   #  SECURITY POSTURE, and the repo map.
+                                                   #  Exit 1 means a real problem remains.
 ```
 
 Editor extension:
@@ -511,7 +515,7 @@ Also verified by execution on this pass: every shipped example checks clean on b
 **LSP answers a real `initialize` / `didOpen` / `hover` / `shutdown` sequence over stdio** with genuine
 `DL` diagnostics (verified by speaking the protocol to the binary, not by trusting the suite — P19's
 lesson was that the suite was green while the extension had no server) · VS Code extension **17/17**
-and the `.vsix` verifies · `delulu doctor` **15/15** · Survey 0 errors / 0 warnings.
+and the `.vsix` verifies · `delulu doctor` passes every check · Survey 0 errors / 0 warnings.
 
 **Quote cargo's own exit code, never a pipeline's.** `cargo test … | tail` reports the *pipe's* status,
 so a failing suite reads as exit 0 — that is how a red core-invariance gate survived a whole campaign
