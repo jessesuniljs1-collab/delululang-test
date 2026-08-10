@@ -411,10 +411,15 @@ New at root/created: `Cargo.toml`, `README.md`, `.gitignore`, `crates/`, `tests/
 
 ## 5. Every document in this repository, and what it is for
 
-**139 markdown files.** This section exists because 83 of them were named nowhere in this document,
-and a structure guide that omits three fifths of the prose is a guide to the code only. Series (the
-16 semantics chapters, the 11 localizations, the per-study measurement records) are grouped where the
-group is the useful unit; every file is accounted for.
+**Every markdown file in the repository.** The count itself is not written here on purpose — it moves
+with every campaign, and the Survey recounts it from the tree (`docs/survey/SURVEY.md` § Measured
+facts) where a stale figure fails a test. This section exists because a large fraction of the prose
+was once named nowhere in this document, and a structure guide that omits most of the writing is a
+guide to the code only.
+
+Series (the 16 semantics chapters, the 11 localizations, the per-study measurement records, the
+red-team agents' working notes) are grouped where the group is the useful unit; every file is
+accounted for by name or by its group.
 
 ### 5.1 Root — the front door
 
@@ -436,6 +441,7 @@ group is the useful unit; every file is accounted for.
 | `GETTING_STARTED.md` | Install to first program to real programs to your editor. The path a new developer walks. |
 | `for-agents.md` | **Driving the toolchain as an AI agent**: exit codes, JSON envelopes, why to batch `check` and nothing else, and what to ask the language server instead of shelling out. |
 | `QUESTIONS.md` | The hard questions answered with evidence — can an agent bypass Authority, is any of this real mathematics — and an enumerated list of known leaks. |
+| `DEPLOYMENT.md` | **What a deployment actually protects, and what you must do to get it.** Three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and the recorded ruling on why strict anchored-root mode is not yet the default. |
 | `MATHEMATICS.md` | Every formal claim with its evidence category (1–7). **A claim with no category is a claim to be deleted or demoted.** |
 | `REPOSITORY_STRUCTURE.md` | This file. |
 | `editors.md` | One server, every editor. Per-editor setup, what the server does and cannot do, and the editor surface's security history. |
@@ -477,7 +483,9 @@ See §4 for how to cite a bare `D<n>`.
 | File | Purpose |
 | --- | --- |
 | `SOUNDNESS_AUDIT.md` | Where the type system's soundness argument is, and is not, complete. |
-| `HARDENING_CAMPAIGN.md` | **P16.** The `C<n>` finding ledger — the "what is known to be wrong" list README points readers at. |
+| `HARDENING_CAMPAIGN.md` | **P16.** The `C<n>` finding ledger — the "what is known to be wrong" list README points readers at. Its opening table covers the original campaign; every later pass records its findings as `### C<n> · …` sections under its own dated heading. |
+| `PRODUCTION_READINESS_2026-08-09.md` | The 2026-08-09 overnight sweep: six defects, each with a witness that failed against the pre-fix code, and the four evidenced negatives. |
+| `PRODUCTION_READINESS_2026-08-10.md` | The 2026-08-10 containment + deployment campaign: thirteen defects and one documented residual, the through-line that found four of them, and the production-readiness verdict with its scope stated. |
 | `PROOF_CAMPAIGN.md` | **P17 and P18.** Evidence categories, proof boundaries, the F1–F4 authority findings, and the Miri story end to end. |
 | `P19_ECOSYSTEM_REVIEW.md` | **P19, the most recent pass.** Seven personas; every claim tied to something executed and every gap named. |
 | `PRODUCTION_READINESS_REVIEW.md` | The pre-1.0 readiness pass. |
@@ -539,7 +547,22 @@ looks the way it does, rather than what it does.
 - `security/DRILL-001.md` — a recorded incident drill: a verdict string and an exit code that
   disagreed. `for-agents.md` points at it as the reason an agent must read exit codes rather than
   output.
-- `maintenance/DISK-CLEANUP-2026-08-04.md` — a maintenance action, recorded rather than forgotten.
+- `security/red-team-*/` — **five dated red-team records**, each a directory rather than a file
+  because the working notes are part of the evidence:
+  - `red-team-P20-2026-08-08/` and `red-team-P20-custody-2026-08-08/` — the multi-agent adversarial
+    authority tests, including each agent's raw `agent-programs/` and `agent-notes/`. Kept because a
+    red-team pass that publishes only its conclusions cannot be audited.
+  - `red-team-surfaces-2026-08-08/` — the untested-surface sweep (IPC, dead-man, WASM), with an
+    `ADJUDICATION.md` recording which agent claims survived re-verification against the current
+    binary and which evaporated. **That file is the point of the directory**: agents reported a
+    "CRITICAL" that a code read disproved, and a "BROKE" that was a stale build.
+  - `red-team-disc1-root-issuance-2026-08-08/` — DISC-1: a same-user process minting root authority
+    and commanding a guard-sealed device. Carries a status banner for what has since shipped; the
+    finding itself is **not** retracted, because on a default broker it still reproduces.
+  - `red-team-p21-crossaccount-2026-08-08/` — the separate-OS-account boundary tested with a real
+    second UID: holds on POSIX, absent on 9p.
+- `maintenance/DISK-CLEANUP-2026-08-04.md`, `DISK-CLEANUP-2026-08-09.md` — maintenance actions,
+  recorded rather than forgotten: what was deleted, what was verified first, and what was reclaimed.
 
 ### 5.10 `measurements/` and `rfcs/`
 
