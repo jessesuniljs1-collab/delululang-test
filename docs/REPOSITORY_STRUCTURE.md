@@ -17,6 +17,15 @@ in the same direction: §1 listed `delulu-check` as eight modules when it has se
 federation work (D21–D22) added both. Every crate's module list in §1 is now generated from the
 tree rather than remembered.
 
+**Re-synchronized a third time 2026-08-11.** Five crates (`delulu-wasm`, `delulu-registry`,
+`delulu-conform`, `delulu-measure`, `delulu-survey`) carried a description and **no module list at
+all**, and `delulu` omitted `run_cmd.rs` — so ten real modules appeared nowhere, including
+`delulu-wasm/host.rs`, which shares the filesystem-containment helper with the interpreter. §5 was
+missing eleven documents: five dated `red-team-*` directories with their agents' working notes,
+`DEPLOYMENT.md`, both 2026-08-1x campaign records, and a maintenance record. **Both directions are now
+checked mechanically** — every module in every crate appears here, no listed module is absent from the
+tree, and every markdown file is accounted for by name or by its group.
+
 **This drifted twice in six weeks, which is the argument for not relying on it.** A hand-maintained
 map falls behind the thing it maps — the project's own design rule 1. `docs/survey/` is derived from
 the tree by `cargo run -p delulu-survey -- build`, cites a `file:line` on every edge, and **a test
@@ -98,9 +107,19 @@ DeluluLang/
 │   │   │                           #   graph from compiler facts (atlas/1, digest, query verbs)
 │   │   └── src/{lib,model,build,render,query,formats}.rs
 │   ├── delulu-wasm/                # [Stage 3] the WASM backend: .dwx emission, engine parity
+│   │   └── src/{lib,gen,codegen,artifact,dpx,actors,host,limits}.rs
+│   │                               #   host.rs - the deny-by-default Wasmtime host. It shares
+│   │                               #     `prim::contains_on_disk` with the interpreter ON PURPOSE:
+│   │                               #     engine fault parity is a tested law, so a containment
+│   │                               #     rule holding in one engine and not the other would be a
+│   │                               #     divergence in the direction that matters most
+│   │                               #   limits.rs - fuel, memory and wall-clock bounds
 │   ├── delulu-registry/            # [Stage 2/9] index lines, resolution, server-side authority
+│   │   └── src/{lib,main,token,tests}.rs
 │   ├── delulu-conform/             # [Stage 9] the conformance runner: --coverage, --check-reference
+│   │   └── src/{lib,main,rules,reference,tests}.rs
 │   ├── delulu-measure/             # [Stage 9] the measurement harness behind measurements/
+│   │   └── src/{lib,main,corpus,study_a,study_b,study_c}.rs
 │   ├── delulu-fuzz/                # [Stage 2] the differential fuzz harness: generate programs,
 │   │   │                           #   check them, and assert the runtime trace ⊆ the statically
 │   │   │                           #   computed row (Effect Soundness, executable)
@@ -115,12 +134,23 @@ DeluluLang/
 │   ├── delulu-survey/              # repository tooling (`publish = false`, no sibling deps):
 │   │                               #   derives docs/survey/ — the map of THIS REPOSITORY, with a
 │   │                               #   file:line citation on every edge. Not language surface.
+│   │   └── src/{lib,main,scan,paths,rust,mdown,manifest,codeowners,verify,render,health}.rs
+│   │                               #   mdown.rs - reads the prose: rulings, findings, links. Knows
+│   │                               #     BOTH shapes a finding is recorded in (the original ledger
+│   │                               #     table and the `### C<n>` sections later passes use);
+│   │                               #     knowing only one made it report eleven real findings as
+│   │                               #     "not campaign findings" (SURVEY-HEADING-1)
+│   │                               #   health.rs - the map-integrity knowledge `delulu doctor` and
+│   │                               #     the survey's own tests BOTH consume; there is one doctor
 │   └── delulu/                     # [Stage 1] the `delulu` CLI — every user-facing command lives
 │       │                           #   here. `cli.rs` dispatches and owns `usage()`; a test binds
 │       │                           #   the dispatcher, `--help` and the generated completion
 │       │                           #   script to ONE command list, so none of the three can drift
 │       │                           #   (completions_cli.rs). One command per module below:
-│       ├── src/{main,cli}.rs       #   dispatch + the Stage-1 commands (check, fmt, test, run, …)
+│       ├── src/{main,cli,run_cmd}.rs  # dispatch + the Stage-1 commands (check, fmt, test, run)
+│       │                           #   main.rs runs the CLI on a thread with a stack sized
+│       │                           #     for the interpreter's depth bound, so deep recursion
+│       │                           #     is DL0905 and never a host crash
 │       ├── src/new.rs              #   `new`         scaffold a package; its ceiling is minimal
 │       ├── src/fix.rs              #   `fix`         apply typed repairs; never widens authority
 │       ├── src/doctor.rs           #   `doctor`      is this machine — and this checkout — healthy?
