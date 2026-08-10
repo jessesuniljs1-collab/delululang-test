@@ -123,6 +123,17 @@ under *some* parent path.
 paths that do not exist. (The *enforcement* path is different and does consult the filesystem —
 campaign finding C84 — because a lexical check cannot see a symlink.)
 
+**And the enforcement path had a case even the filesystem could not settle for it.** C84 made the
+runtime resolve links before comparing, but a write must be able to *create* its file, so the resolver
+fell back to canonicalizing the nearest existing ancestor and re-appending the rest — on the stated
+grounds that what remains are "plain names the OS has not yet been asked to interpret". That is false
+for a **dangling** symlink, where `canonicalize` fails exactly as it does for an absent name; the
+link's own name was re-appended, the check passed, and the open then followed it out of the grant
+(`SYMLINK-DANGLE-1`, 2026-08-10, fixed). This is not a defect in the *order* — the mathematics above
+is untouched — but it is the sharpest available reminder that **`⊑` bounds what a grant may say, and
+never what the filesystem will do with a path.** Those are two different guarantees, and only the
+first is what this document proves.
+
 **How strong:** category **4**, exhaustively enumerated over every subset of a path universe
 deliberately containing several spellings of one path. That enumeration is what found F1–F3.
 
@@ -522,6 +533,23 @@ question that cost this project its worst soundness hole, and it settles nothing
     (`crates/delulu/src/broker_transport.rs`) backstops the `keygen` override. The broker also cannot
     bind its `AF_UNIX` socket on 9p at all (`ENOTSUP`). Evidence and both transcripts:
     `security/red-team-p21-crossaccount-2026-08-08/`.
+14. **The filesystem check-then-open race (`CONTAIN-TOCTOU-1`, 2026-08-10).** Containment resolves a
+    path and the operation that follows re-opens it **by name**, so a writer acting between those two
+    moments can substitute a symlink. The confined program cannot do this through the primitive table
+    — no operation there creates a link — so it needs a *second* writer: a same-uid process (already
+    items 11–12) or anyone able to write into the granted directory, which is why a grant aimed at a
+    shared location such as `/tmp` is a different proposition from one aimed at a private directory.
+    Closing it means checking the opened **handle** (`O_NOFOLLOW`/`openat2`, `FILE_FLAG_OPEN_REPARSE_POINT`),
+    which would make containment platform-dependent — the one property this project refuses — so it is
+    named here rather than fixed. **Deployment rule: grant scopes that point at directories only the
+    program's own user can write.**
+15. **What `⊑` proves, and what it does not.** Worth stating in this list because two campaign findings
+    landed on the seam. The order bounds what a grant may **say**; the filesystem decides what a path
+    **does**. `SYMLINK-DANGLE-1` (a dangling link the resolver could not settle) and `GUARD-SPELL-1` (a
+    guard rule compared against a *resolved absolute* path while the operator had written a relative
+    one) were both defects in that second half, and neither touched the algebra §1–§2 proves. A proof
+    about the specification lattice is not a proof about path resolution, and this document should not
+    be read as offering one.
 
 ---
 

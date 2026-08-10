@@ -104,6 +104,14 @@ The first clause is the load-bearing one, and this campaign showed it can be fal
 claim worth anything is that the project **looks for counterexamples and publishes them**, and that
 there are independent layers underneath so one failure is not total.
 
+**Both clauses have now been falsified, on separate occasions, and both are published.** P16 broke the
+first: `delulu authority` reported "provably pure" for a program that printed at run time. On
+2026-08-10 the *second* went — a program wrote a file **outside its granted scope**, through a dangling
+symlink the containment resolver could not settle (`SYMLINK-DANGLE-1`, §1.7). Both were found by
+looking, both were witnessed against the pre-fix binary, and both are fixed with a test that fails
+without the fix. That is the only warranty on offer here: not that the sentence above has never been
+false, but that when it is, this project finds out and says so.
+
 ### 1.4 Is any of this backed by real mathematics?
 
 **Yes, and less than you might hope. Both halves matter.**
@@ -312,6 +320,32 @@ Yes, and they are enumerated rather than implied:
   without walking the whole filesystem — so a fix would make containment platform-dependent, which
   the project refuses. Pinned as an executed characterization test; full threat model in
   `HARDENING_CAMPAIGN.md` P20-R1.
+- **Filesystem containment is a check-then-open, so a concurrent writer into a granted directory can
+  swap a checked file for a symlink in between** (`CONTAIN-TOCTOU-1`, 2026-08-10). **This one is
+  open.** It is not reachable by the confined program through this API — the primitive table exposes
+  no symlink-creating operation, so winning the race needs a *second* writer — and that writer is
+  either a same-uid process (already outside the proof boundary) or anyone who can write into the
+  granted directory. Closing it properly needs `O_NOFOLLOW`/`openat2`/`FILE_FLAG_OPEN_REPARSE_POINT`,
+  which is the platform-dependent containment this project refuses, so it is stated rather than
+  fixed. **Deployment consequence: grant scopes that point at directories only the program's own user
+  can write — never a shared or world-writable one.**
+- **A *dangling* symlink used to escape filesystem containment entirely — fixed 2026-08-10**
+  (`SYMLINK-DANGLE-1`). `canonicalize` fails identically for "a name that is absent" and "a link whose
+  target is absent", so the containment walk re-appended the link's own name as an ordinary component,
+  the check passed, and the write then followed the link out of the grant. Unlike the hardlink above
+  this **was** deliverable through a clone — git stores a symlink as a path string. Witnessed
+  end-to-end before the fix, with the identical program against a link whose target *existed*
+  correctly refused; the only variable was whether the target happened to exist.
+- **A guard seal written the natural way gated nothing, and the CLI reported `ok` — fixed 2026-08-10**
+  (`GUARD-SPELL-1`). `fs_read`/`fs_write` guard rules are matched against the runtime's *resolved
+  absolute* path, so `guard policy set "fs_write:./out/secret.txt" sealed` stored a rule that could
+  never fire. Witnessed: the program wrote the sealed file. Rules that cannot match are now refused at
+  set time. Worth keeping in this list because a seal that reports success while gating nothing is
+  worse than no seal — it stops the operator looking for another mechanism.
+- **A valid program could abort the host during value teardown — fixed 2026-08-10**
+  (`INTERP-DROP-1`). The interpreter bounded *call* depth (`DL0905`) and nothing bounded *data* depth,
+  so a recursive value a few million deep killed the process **after the program had finished**, with
+  no diagnostic. Teardown is iterative now.
 - **Side channels are out of scope entirely.**
 - **The editor was a way in, twice, and the second one needed no click.** The VS Code extension read
   `delulu.serverPath` at VS Code's default configuration scope, which a repository's own
