@@ -752,6 +752,52 @@ is working correctly; the prose is what has to change.
 Survey's own comment about why `C99` is not a finding; the bare-`D<n>` citations rely on a default
 that `STAGE10_BUILD_ORDER.md` §2 defines). `delulu doctor` 15/15.
 
+## Phase 6 — closing the two gaps I had named in the tools
+
+Having reported that `survey` and `doctor` "work but are not perfect", the two named gaps were worth
+closing rather than restating.
+
+### The gate that mattered: configuration is not behaviour
+
+`root issuance` reads the policy **file**. A daemon serves the mode it **booted** with. So an operator
+who wrote a strict policy and did not restart was told `STRICT` by doctor while the live broker went
+on minting unsigned roots — a posture check reporting configuration as though it were behaviour, which
+is the same species as DOCTOR-STATEDIR-1 reading the wrong store.
+
+`running broker mode` closes it by comparing the policy against the `root-policy-mode` record this
+campaign put in the hash-chained log — the mode the daemon *actually booted with*. Verified against a
+real daemon:
+
+| step | result |
+|---|---|
+| broker booted legacy, policy legacy | `ok` — they agree |
+| strict policy written, **no restart** | `root issuance` says STRICT, **`running broker mode` says problem**, doctor **exits 1** |
+| broker restarted | `ok`, doctor exits 0 |
+| audit chain | still verifies |
+
+### The one check that tests the boundary instead of the configuration
+
+`state dir reachability` attempts the write and reports whether **this process** can reach the
+broker's state. It is deliberately a capability test rather than an identity comparison — a user name
+from the environment is a claim; the write is the fact, and it is the same fact an attacker would
+establish. Run doctor **as the account the agents use**: if it can write, Tier 2 is not in force.
+
+Doctor cannot know which account invoked it and does not guess. That honesty is the point: it reports
+what this process can do, and the operator supplies the one thing only they know.
+
+### What is still not perfect, stated rather than papered over
+
+- Doctor sees a signing key **in the state directory**. An anchor key elsewhere on the same host reads
+  as clean. Scanning a filesystem for private keys is not something this tool should do.
+- `state dir reachability` answers for the account that ran it, not for every account on the machine.
+- The Survey's `stale-count` check matches number-then-unit, so a **quoted** historical figure reads
+  as a fresh claim — it fired on this campaign's own retrospective. The remedy stays the one C81
+  established: prose about counts carries no counts.
+
+Decision logic is unit-tested exhaustively rather than through a spawned daemon, because this
+repository allows exactly one integration test to spawn a real process and that budget is already
+spent on the daemon lifecycle.
+
 ## Documentation corrected in this phase
 
 Stale claims found and fixed rather than merely appended to (see the entries themselves for detail):

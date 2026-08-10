@@ -20,7 +20,7 @@
 use std::path::{Path, PathBuf};
 
 /// What a single check concluded.
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum Status {
     /// Healthy.
     Ok,
@@ -287,6 +287,109 @@ fn security_posture(r: &mut Report) {
             ),
         }
     }
+
+    // 4. Does the RUNNING broker agree with the policy on disk? See `running_mode_agrees`.
+    running_mode_agrees(r, &dir);
+
+    // 5. Can THIS process reach the broker's state? The one fact that decides whether Tier 2 is real.
+    reachability(r, &dir);
+}
+
+/// Does the broker that is actually running agree with the policy file?
+///
+/// `load_root_policy` reads what the policy says *now*; a daemon started before that file was written
+/// is still serving the mode it booted with. Everything else in this section would then report STRICT
+/// while the live broker happily mints unsigned roots — a posture check that reads configuration and
+/// calls it behaviour.
+///
+/// The `root-policy-mode` record each start writes into the hash-chained log is what makes the
+/// difference observable: it is the mode the running daemon *booted with*, not the mode someone
+/// intended. A disagreement is reported as a `problem`, because "I set the policy" and "the gate is
+/// on" are exactly the two things an operator must not confuse.
+fn running_mode_agrees(r: &mut Report, dir: &Path) {
+    let audit = dir.join("audit");
+    if !audit.exists() {
+        return; // nothing has ever run here; §1 already reported the configured mode
+    }
+    let Ok(records) = delulu_broker::tail(&audit, 500) else { return };
+    let Some(last) = records.iter().rev().find(|x| x.action == "root-policy-mode") else {
+        r.push(
+            "security posture",
+            "running broker mode",
+            Status::Note,
+            "this audit log predates mode recording, so what mode the running broker booted with cannot be read from it — restart the broker to record it",
+        );
+        return;
+    };
+    let booted = last.target.clone().unwrap_or_default();
+    let configured = configured_mode(dir);
+    let (status, detail) = mode_agreement(&booted, configured);
+    r.push("security posture", "running broker mode", status, detail);
+}
+
+/// The mode the policy file asks for, as the word the audit log records.
+fn configured_mode(dir: &Path) -> &'static str {
+    match crate::brokerd::load_root_policy(dir) {
+        (Some(_), _) => "strict",
+        (None, true) => "unreadable-policy",
+        (None, false) => "legacy",
+    }
+}
+
+/// The decision, separated from the I/O so it can be tested exhaustively.
+///
+/// Kept pure deliberately: the interesting cases are combinations of two words, and a test that has
+/// to start a daemon to reach them would exercise the process plumbing instead of the judgement —
+/// and this repository allows exactly one integration test to spawn a real process.
+fn mode_agreement(booted: &str, configured: &str) -> (Status, String) {
+    if booted == configured {
+        return (
+            Status::Ok,
+            format!("the last broker start recorded `{booted}`, which matches the policy on disk"),
+        );
+    }
+    (
+        Status::Problem,
+        format!(
+            "the policy on disk says `{configured}` but the last broker start recorded `{booted}` — a daemon serves the mode it BOOTED with, so restart the broker or the change has not taken effect"
+        ),
+    )
+}
+
+/// Can this process reach the broker's state directory?
+///
+/// This is the one fact that decides whether the Tier-2 boundary is real, and it is the one thing
+/// prose could never tell an operator: `DEPLOYMENT.md` can say "run untrusted agents as a separate OS
+/// account", but only running this check **as that account** answers whether they did.
+///
+/// It is deliberately a capability test rather than an identity comparison. A user name read from the
+/// environment is a claim; attempting the write is the fact — and it is the same fact the attacker
+/// would establish. Reported as a `note` either way, because doctor cannot know which account it is
+/// being run as and must not pretend to: it states what this process can do and leaves the operator
+/// to say whether that is the agent.
+fn reachability(r: &mut Report, dir: &Path) {
+    if !dir.exists() {
+        return;
+    }
+    let who = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_else(|_| "<unknown>".into());
+    if writable(dir) {
+        r.push(
+            "security posture",
+            "state dir reachability",
+            Status::Note,
+            format!(
+                "this process (user `{who}`) CAN write `{}`. If this is the account your untrusted programs run as, the separate-OS-account boundary is NOT in force here — it can read the broker key and edit the root policy",
+                dir.display()
+            ),
+        );
+    } else {
+        r.push(
+            "security posture",
+            "state dir reachability",
+            Status::Ok,
+            format!("this process (user `{who}`) cannot write `{}` — run this as the account your agents use; being refused here is what Tier 2 looks like", dir.display()),
+        );
+    }
 }
 
 fn audit_chain(r: &mut Report) {
@@ -485,4 +588,38 @@ fn envelope(r: &Report) -> String {
     }
     root["doctor"] = doctor;
     root.to_string()
+}
+
+#[cfg(test)]
+mod posture_tests {
+    use super::{mode_agreement, Status};
+
+    /// **The trap this check exists for.** `root issuance` reads the policy FILE; a daemon serves the
+    /// mode it BOOTED with. An operator who writes a strict policy and does not restart would
+    /// otherwise be told `STRICT` by one line while the live broker went on minting unsigned roots —
+    /// a posture check reporting configuration as though it were behaviour. Verified end to end
+    /// against a real daemon before this was extracted: doctor exits 1 on the disagreement, 0 once
+    /// the broker is restarted.
+    #[test]
+    fn a_policy_the_running_broker_never_booted_is_a_problem() {
+        let (s, msg) = mode_agreement("legacy", "strict");
+        assert_eq!(s, Status::Problem, "configuration that is not yet behaviour must fail the run");
+        assert!(msg.contains("restart"), "and must say what to do about it: {msg}");
+
+        // The reverse is just as wrong: the file was removed but the daemon is still enforcing.
+        assert_eq!(mode_agreement("strict", "legacy").0, Status::Problem);
+        // A poisoned policy the daemon never saw is a disagreement like any other.
+        assert_eq!(mode_agreement("legacy", "unreadable-policy").0, Status::Problem);
+    }
+
+    /// Agreement in every mode is `ok` — a gate that flagged a correctly-configured host would be
+    /// noise, and noise is how a real warning gets ignored.
+    #[test]
+    fn agreement_in_any_mode_is_healthy() {
+        for m in ["legacy", "strict", "unreadable-policy"] {
+            let (s, msg) = mode_agreement(m, m);
+            assert_eq!(s, Status::Ok, "`{m}` agreeing with itself is healthy");
+            assert!(msg.contains(m), "and names the mode: {msg}");
+        }
+    }
 }

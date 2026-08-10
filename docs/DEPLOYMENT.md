@@ -114,6 +114,24 @@ security posture
 | `root issuance … UNREADABLE` (problem) | The policy file is corrupt. The broker is refusing **all** root creation until you repair or remove it. Fail-closed by design. |
 | `anchor key custody` (note) | A signing key is sitting next to the state it protects. If that is your anchor, you are back to file permissions — move the private half off the box. |
 | `state dir permissions` (problem) | The filesystem cannot keep a secret from other local users. A separate OS account buys you nothing here. Move the state directory. |
+| `running broker mode` (problem) | **The policy on disk and the running daemon disagree.** A daemon serves the mode it *booted* with, so a policy written after it started has not taken effect. Restart the broker. |
+| `state dir reachability` (note) | Whether **this process** can write the broker's state. See below — this is the one that tests Tier 2. |
+
+### Testing the Tier-2 boundary — run doctor as the agent account
+
+Every other line reports what you *configured*. Two report what is *true*:
+
+- **`running broker mode`** compares the policy file against the mode the live daemon actually booted
+  with, read from the `root-policy-mode` record in the hash-chained audit log. Without it, `root
+  issuance` would happily say `STRICT` while the running broker went on minting unsigned roots —
+  configuration reported as though it were behaviour.
+- **`state dir reachability`** is a *capability* test, not an identity claim: it tries the write. Run
+  `delulu doctor` **as the account your untrusted programs run as**. If it reports that the process
+  *can* write the state directory, **Tier 2 is not in force** — that account can read the broker key
+  and edit the root policy. Being refused is what Tier 2 looks like.
+
+Doctor cannot know which account it was invoked as, and does not guess. It tells you what this
+process can do; you know which account that is.
 
 Run `delulu doctor` **on the deployment host**, not on your laptop — it reports on the state directory
 the broker actually uses (`DELULU_STATE_DIR` if set).
