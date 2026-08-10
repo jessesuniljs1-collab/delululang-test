@@ -112,14 +112,24 @@ creates root nodes (Constitution §5.16 law 4).
 > and thereby command a Guard-sealed resource. Against a same-uid adversary no local secret could
 > enforce "human only." See [`ROOT_ISSUANCE_TRUST_BOUNDARY.md`](ROOT_ISSUANCE_TRUST_BOUNDARY.md) for
 > the threat model, the anchored-certificate architecture that would close it, and the residual
-> boundary (an out-of-band anchor key or a separate OS account). Do not cite §5.16 law 4 as an enforced
-> guarantee until that architecture ships.
+> boundary (an out-of-band anchor key or a separate OS account).
+>
+> **Update 2026-08-10 — that architecture has shipped, and the default has not changed.** Strict
+> anchored-root mode (`broker start --require-anchored-roots <anchor>`) refuses unsigned issuance
+> `DL1421`, and as of this date it is **verified usable end to end** — `certify → adopt → delegate →
+> run --lease` reaches a real filesystem write on Windows and Linux (three defects had previously made
+> that path fail, which is the honest reason it stayed switched off). It is **opt-in**, so everything
+> above still describes the DEFAULT broker: do not cite §5.16 law 4 as an enforced guarantee unless
+> strict mode is on, and not even then as protection against a same-uid adversary — its own residual
+> is a same-user-writable policy file. `delulu doctor` now reports which mode you are actually in, and
+> every broker start records it in the audit chain. Recipe and the three deployment tiers:
+> [`../DEPLOYMENT.md`](../DEPLOYMENT.md).
 
 ### 3.2 Operations (IPC + CLI)
 
 | Operation | Rule |
 |---|---|
-| `issue` (CLI only) | creates a root-level node; interactive confirmation unless `--yes` in a TTY-less session is *refused* (root issuance is never headless-silent; CI uses pre-issued delegation tokens instead). **⚠ NOT ENFORCED (DISC-1):** no such confirmation/refusal exists in code — `ReqBody::Issue` is ungated and headless. See `ROOT_ISSUANCE_TRUST_BOUNDARY.md`. |
+| `issue` (CLI only) | creates a root-level node; interactive confirmation unless `--yes` in a TTY-less session is *refused* (root issuance is never headless-silent; CI uses pre-issued delegation tokens instead). **⚠ NOT ENFORCED BY DEFAULT (DISC-1):** no such confirmation/refusal exists in code — `ReqBody::Issue` is ungated and headless in the LEGACY default. Opt-in strict mode (`broker start --require-anchored-roots`) refuses it `DL1421` and is verified usable end to end (2026-08-10); `delulu doctor` reports which mode is in force. See `ROOT_ISSUANCE_TRUST_BOUNDARY.md` and `../DEPLOYMENT.md`. |
 | `attenuate(parent_lease, authority)` | new child node iff `authority ⊑ parent` (DL0802 otherwise); returns lease |
 | `delegate(parent_lease, authority, ttl)` | attenuate + mint a **portable lease token** (HMAC-signed, single-redemption by default) for handing to another process — this is how an orchestrating LLM gives each parallel agent its slice |
 | `redeem(token)` | binds the token to the redeeming process; second redemption fails (DL1407) unless minted `--multi`. Refuses if the bound node is not live **including its ancestors** — revoked → DL1403, expired → DL1402 (campaign C29, ruling D36); the state check runs after the MAC and before any state is written, so a refused redemption mutates nothing |

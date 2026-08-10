@@ -938,7 +938,10 @@ pass review; the stdlib is the first authority-typed ecosystem code and sets the
 ## 12a. Implementation status (2026-07-05)
 
 Stage 1 is **implemented and verified**. Rust workspace under `crates/` (`delulu-diag`,
-`delulu-syntax`, `delulu-check`, `delulu-runtime`, `delulu`); 65 tests green on MSVC Windows,
+`delulu-syntax`, `delulu-check`, `delulu-runtime`, `delulu`); 65 tests green on MSVC Windows
+**— a snapshot of 2026-07-05, when the workspace was those five crates; it is not a current figure
+and is deliberately not updated, because this section records what Stage 1 looked like when it
+closed. For the live numbers see `docs/survey/SURVEY.md` § Measured facts** —
 including the laundering suite (`crates/delulu-check/tests/laundering.rs`) encoding audit findings
 F-2…F-5 and the core non-escape guarantee. `delulu authority examples/demo.delulu`, `delulu run`,
 `delulu check` (human + `--json`), and a REPL all run. Implementation-forced spec deltas already

@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 110933 |
+| Rust lines | 110999 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 154 |
-| Markdown lines | 41359 |
+| Markdown lines | 41448 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
-| Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1108 / 9614 |
-| Open discrepancies | 3 |
+| Recorded campaign findings | 92 |
+| Nodes / edges in this map | 1119 / 9850 |
+| Open discrepancies | 2 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -296,7 +296,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 3992 lines
+- **Modules:** 11 files, 4058 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -305,7 +305,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 | `src/lib.rs` | 625 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 242 | Cargo manifests — the ground truth for "which crate depends on which". |
-| `src/mdown.rs` | 356 | Reading Markdown. |
+| `src/mdown.rs` | 422 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
 | `src/render.rs` | 279 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 407 | Reading Rust source as text. |

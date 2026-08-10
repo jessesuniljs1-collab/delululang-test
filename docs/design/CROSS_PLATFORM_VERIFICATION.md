@@ -208,6 +208,26 @@ differs across all three target platforms. So this pass is not a formality.
 
 The 6-test difference is the same one [named test-by-test above](#re-verified-2026-08-03-production-readiness-pass-with-the-platform-delta-named); it did not move.
 
+### Re-verified 2026-08-10 (containment + deployment hardening campaign)
+
+The figures above are left exactly as recorded — this is a living record, and a later run appends
+rather than rewrites. `doctor` reports **15** checks now, not 12, because this pass added the
+three-check `security posture` section; the older `12/12` rows are correct for the day they were taken.
+
+| Gate | Windows (native) | Linux (WSL) | macOS |
+|---|---|---|---|
+| `cargo test --workspace` | **124 binaries, 1641 passed, 0 failed** | **124 binaries, 1650 passed, 0 failed** | **never executed** |
+| clippy `--workspace --all-targets` | clean | **0 findings** | — |
+| `delulu doctor --check` | **15/15** (was 12 — posture section added) | **15/15** | — |
+| Compiler — every shipped example | all check clean | all check clean | — |
+| **LSP server, live protocol** | initialize / capabilities / publishDiagnostics with real `DL` codes / hover / shutdown | identical | — |
+| VS Code extension | **17/17**, `.vsix` verifies | node absent in this WSL image | — |
+| macOS cross-check (`cargo check --target aarch64-apple-darwin`) | — | — | `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` type-check; the rest blocked by third-party C build scripts — see the cross-check section above |
+
+The **LSP was verified by speaking the protocol to the real binary**, not by trusting the suite. P19's
+finding was that the whole suite was green while the extension had no working language server; an
+in-process test cannot see that, and this is the gate that can.
+
 #### The C84 fix, exercised with each platform's own link type
 
 A lexical path check cannot see a link, so the fix asks the filesystem. Each platform has a

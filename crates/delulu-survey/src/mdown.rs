@@ -51,7 +51,7 @@ pub fn extract(idx: &PathIndex, f: &ScannedFile, b: &mut Builder) {
                 b.edge(EdgeKind::Defines, &self_id, &id, &f.rel, lineno);
             }
         }
-        if let Some((num, summary)) = finding_definition(t) {
+        if let Some((num, summary)) = finding_definition(t).or_else(|| finding_heading_definition(t)) {
             let id = format!("finding:C{num}");
             b.defined_findings.insert(format!("C{num}"));
             let n = b.node(&id, NodeKind::Finding, &format!("C{num}"));
@@ -219,6 +219,38 @@ fn ruling_definition(t: &str) -> Option<(u32, String)> {
     Some((num, heading.to_string()))
 }
 
+/// `### C88 · The effect row could be escaped entirely — CLOSED (D78)` — the shape the campaign's
+/// LATER passes use to record a finding.
+///
+/// # Why both shapes are needed
+///
+/// `HARDENING_CAMPAIGN.md` opens with a ledger **table** (`## 3. Findings ledger`) covering the
+/// original 2026-07-24 campaign. Every pass after it — the 2026-08-02 production-readiness pass, the
+/// 2026-08-03 sweeps, and later — records its findings as **sections under its own dated heading**
+/// instead, which is the right place for them: back-filling a 2026-08-03 finding into a 2026-07-24
+/// ledger would misfile it.
+///
+/// Reading only the table therefore made the Survey report **eleven genuine findings** (C82–C92,
+/// including C84's filesystem escape and C88's effect-row escape) as *"not campaign findings"* —
+/// and it silently falsified a claim in `PRODUCTION_READINESS_REVIEW.md` that the note's *"only
+/// trigger today is `C99`"*, which was true when written and stopped being true as soon as a pass
+/// recorded a finding outside the table. The map fell behind the thing it maps: this project's own
+/// design rule 1, pointed at the mapper.
+fn finding_heading_definition(t: &str) -> Option<(u32, String)> {
+    if !t.starts_with('#') {
+        return None;
+    }
+    let rest = t.trim_start_matches('#').trim_start().strip_prefix('C')?;
+    let (num, tail) = split_number(rest)?;
+    // The middle dot is the separator these headings use; without it this is prose about a finding,
+    // not the heading that records one.
+    let title = tail.trim_start().strip_prefix('·')?.trim();
+    if title.is_empty() {
+        return None;
+    }
+    Some((num, title.to_string()))
+}
+
 /// `| C69 | description | severity | status |` — a row in the campaign ledger.
 fn finding_definition(t: &str) -> Option<(u32, String)> {
     let rest = t.strip_prefix("| C")?;
@@ -352,5 +384,39 @@ mod tests {
         assert_eq!(markdown_links("see [the guide](docs/GETTING_STARTED.md)"), vec!["docs/GETTING_STARTED.md"]);
         assert!(markdown_links("fn map[T, U](xs: List[T]) -> U").is_empty(), "generic syntax is not a link");
         assert!(markdown_links("[home](https://example.com)").is_empty(), "external links are not tree edges");
+    }
+
+    /// A finding recorded as a SECTION is as real as one recorded as a table row.
+    ///
+    /// The campaign's original ledger is a table; every pass after it records findings under its own
+    /// dated heading instead, which is the right place for them. Reading only the table made the
+    /// Survey report eleven genuine findings — C82–C92, including C84's filesystem escape and C88's
+    /// effect-row escape — as *"not campaign findings"*, and silently falsified a claim in
+    /// `PRODUCTION_READINESS_REVIEW.md` that the note's only trigger was `C99`.
+    #[test]
+    fn a_finding_recorded_as_a_heading_is_defined_like_a_ledger_row() {
+        let (n, title) =
+            finding_heading_definition("### C88 · The effect row could be escaped entirely — CLOSED (D78)")
+                .expect("a `### C<n> · title` heading defines a finding");
+        assert_eq!(n, 88);
+        assert!(title.starts_with("The effect row"), "the heading text becomes the summary: {title}");
+        // The later passes use `##` as well as `###`.
+        assert_eq!(
+            finding_heading_definition("## C70 · A normative runtime rule was false").map(|(n, _)| n),
+            Some(70)
+        );
+        // And the table row still defines one, because both records are real.
+        assert_eq!(finding_definition("| C69 | the audit chain | high | CLOSED |").map(|(n, _)| n), Some(69));
+    }
+
+    /// The separator is what distinguishes a RECORD from PROSE about a finding. Without it every
+    /// sentence mentioning a `C<n>` under a heading would invent one — exactly what the Survey's
+    /// provenance law forbids.
+    #[test]
+    fn prose_about_a_finding_does_not_define_one() {
+        assert!(finding_heading_definition("### C88 was closed by D78").is_none(), "no separator, no record");
+        assert!(finding_heading_definition("C88 · not a heading").is_none(), "a heading starts with #");
+        assert!(finding_heading_definition("### Closing C88 · a retrospective").is_none(), "the number must lead");
+        assert!(finding_heading_definition("### C88 ·").is_none(), "an empty title records nothing");
     }
 }

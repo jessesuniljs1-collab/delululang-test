@@ -446,7 +446,7 @@ is refused `DL0703`, and nothing is created outside. Both doors closed.
 | Platform | Status | Evidence |
 |---|---|---|
 | **Windows 11** | ✅ executed | `cargo test --workspace` **cargo exit 0**, 124 binaries, **1631** tests, 0 failures, tree frozen |
-| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1640** tests, 0 failures; every witness re-run end-to-end; `doctor` 12/12 |
+| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1640** tests, 0 failures; every witness re-run end-to-end; `doctor` 12/12 (before the posture section existed — 15 now) |
 
 The Guard fix was verified on **both** platforms, which matters because the two disagree on what an
 absolute path looks like: Windows refused the relative seal, sealed `C:\…\secret.txt`, and sealed the
@@ -695,6 +695,62 @@ in-process tests cannot catch that, so this pass sends a real `initialize` / `di
 fails when its *file* is checked and passes when its *package* is (the sibling module is not loaded by
 a bare-file check — correct), and `grants list` exits 1 with no broker running, which is
 invariant 27's fail-closed behaviour rather than a defect.
+
+## Phase 5 — a full audit of every `.md` in the repository
+
+156 markdown files, audited with the tools rather than by eye.
+
+### The clean negatives
+
+- **No broken links.** 127 local links across all 156 files resolve. (A naive scan reports 14 "broken"
+  targets; every one is code prose such as `root.foreign[mathlib](root.foreign_load())?`, where the
+  language's own generic syntax happens to contain `](`. The Survey already knows this — it strips
+  code spans before looking for links — which is why its own `broken-link` count is zero.)
+- **No unregistered diagnostic codes** cited anywhere in the docs.
+- **No stale claim about this campaign's own findings** — nothing still describes INTERP-DROP-1 as
+  deferred, and every finding fixed tonight reads as fixed.
+
+### SURVEY-HEADING-1 — the map could not see eleven of its own findings
+
+The Survey reported `C82`–`C92` as *"not campaign findings"*. They are: C84 is the filesystem escape,
+C88 is the effect-row escape. The checker only recognised the **table-row** shape
+(`| C69 | … |`) used by the original 2026-07-24 ledger, and every pass *after* that one records its
+findings as `### C<n> · …` sections under its own dated heading — which is the right place for them,
+since back-filling a 2026-08-03 finding into a 2026-07-24 ledger would misfile it.
+
+**The first fix I reached for was wrong**, and it is worth recording why: adding table rows would have
+made the note go away by corrupting the ledger's meaning. Reading the document's structure showed the
+defect was in the *checker*, not the docs.
+
+It had also silently falsified a claim: `PRODUCTION_READINESS_REVIEW.md` states the note's *"only
+trigger today is `C99`"* — true when written, and untrue from the moment a pass recorded a finding
+outside the table. Teaching `mdown.rs` both shapes links all eleven (the map gained **11 nodes and
+228 edges**), leaves `C99` as the single remaining trigger, and makes that review's claim true again.
+Two tests lock it, including the negative: prose *about* a finding must not define one.
+
+### Corrections made
+
+| File | Correction |
+|---|---|
+| `STAGE5_SPECIFICATION.md` | Its DISC-1 callout ended *"do not cite §5.16 law 4 … until that architecture ships"*. **It shipped** (2026-08-08) and is verified usable (2026-08-10). Now states that, and that the **default** is still legacy — the caution survives, its reason is corrected. |
+| `CROSS_PLATFORM_VERIFICATION.md` | Appended a 2026-08-10 row (suites, clippy, compiler, LSP, extension, macOS cross-check). Older `12/12` doctor rows **left as recorded** — this is a living record, and the document's own policy is that a later run appends rather than rewrites. `doctor` reports 15 now because this campaign added three checks. |
+| `STAGE1_SPECIFICATION.md` | "65 tests green" is from 2026-07-05, when the workspace was five crates. Marked explicitly as a snapshot that is deliberately not updated, pointing at `SURVEY.md` for live figures — the remedy C81 established. |
+| `PRODUCTION_READINESS_2026-08-10.md` | The Phase-D `doctor 12/12` line now says it predates the posture section. |
+
+**The Survey caught two of my own drifts during this audit**: a crate-count in `DEPLOYMENT.md` that
+quoted the workspace total where the shipped total was meant, and a line in the macOS row whose figure
+it read as a claim about the size of the tree. Both fixed — the second by **naming** the crates
+instead of counting them, which is the remedy C81 established and is more useful prose anyway.
+
+It caught a third on the next run: this very section quoted those two figures while describing them,
+and a quoted count is indistinguishable from a fresh claim to a checker that matches number-then-unit.
+Rewriting the sentence to carry no figures at all is, again, exactly what C81 concluded — *"the line
+carries no figures at all now, pointing at `SURVEY.md`"*. A gate that fires on its own retrospective
+is working correctly; the prose is what has to change.
+
+**Final state: 0 errors, 0 warnings, 2 notes** — and both notes are documented-by-design (`C99` is the
+Survey's own comment about why `C99` is not a finding; the bare-`D<n>` citations rely on a default
+that `STAGE10_BUILD_ORDER.md` §2 defines). `delulu doctor` 15/15.
 
 ## Documentation corrected in this phase
 
