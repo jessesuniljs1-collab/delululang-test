@@ -21,7 +21,8 @@ Platforms this bench can execute: **Windows 11** (native) and **Linux** (WSL2 Ub
 
 **Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), **GUARD-SPELL-1 (high, fixed)**,
 DEPPIN-LEX-1 (moderate, fixed), ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed),
-CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented).
+CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented),
+**INTERP-DROP-1 (moderate, fix costed and deferred to the owner)**.
 
 **The through-line: four of the six were the same defect.** A security decision made on an
 **unnormalized or unresolved representation**, walked past by a different spelling of the same thing —
@@ -331,6 +332,55 @@ apply** (CRLF vs LF in the patch text) and the test "passed" against supposedly-
 only because the sibling test failed and the pair disagreed. A falsification that does not change the
 binary proves nothing — verify the edit landed, not just that the runner ran.
 
+### INTERP-DROP-1 — a valid program aborts the host during value teardown (MODERATE, **fix deferred to the owner**)
+
+The one large surface this repository had never fuzzed is the runtime on *adversarial-but-valid*
+programs — programs that type-check and pass the effect row, but stress the interpreter. Probing it
+produced one finding, and it is a **rule violation, not a resource-policy question**.
+
+**The rule it breaks is the project's own.** `crates/delulu/src/main.rs` states
+`ref.rule.runtime.faults-are-diagnostics`: *"a runtime fault must be a diagnostic (`DL0905`), never a
+host crash."* The entire reason the CLI runs on a 512 MiB `delulu-main` thread is to make the
+interpreter's own `MAX_DEPTH` the limit that fires instead of a native overflow.
+
+**But `MAX_DEPTH` bounds CALL depth, not DATA depth.** `Value::Variant { fields: Rc<Vec<Value>> }`
+nests without bound, and its derived `Drop` recurses. The large stack does not fix that; it only
+moves the threshold.
+
+**Witness — same runtime, same machine, one difference: calls vs. data.**
+
+| program | Windows | Linux |
+|---|---|---|
+| 1,000,000-deep **recursive call** | `DL0905` diagnostic | `DL0905`, exit 1 |
+| 5,000,000-deep **recursive value** (`type Chain = Nil \| Link(Chain)`) | exit `0xC00000FD` `STATUS_STACK_OVERFLOW` | exit 134 SIGABRT, `fatal runtime error: stack overflow` |
+
+The program prints `built the chain` **first** and then the host dies: the work completed and the
+crash is in the runtime's own teardown. `DEFAULT_MAX_DEPTH` is 10,000 for calls; data nesting is
+bounded by nothing.
+
+**Severity, stated precisely.** This is **not** an authority escape and is not presented as one — the
+program harms only its own process, and a program is entitled to consume its own resources
+(`authority is the containment, not resource limits`). What makes it a defect rather than a policy
+question is that the project already decided depth exhaustion must surface as a diagnostic, built a
+mechanism to guarantee it, and that mechanism covers one of the two doors. The practical cost is that
+there is no structured fault, no exit code a caller can act on, and no clean shutdown or audit
+finalisation — for a long-running agent or service that is an abrupt disappearance. In the robotics
+path the dead-man watchdog is designed for exactly an abrupt host death, so a device still fails
+safe; that containment is unaffected.
+
+**Why the fix is not applied here.** The correct fix is an **iterative teardown** for `Value` instead
+of the derived recursive `Drop`. Measured rather than guessed: adding `impl Drop for Value` produces
+**9 `E0509` "cannot move out of type which implements Drop" errors in `delulu-runtime` alone**,
+before the dependent crates (`delulu`, `delulu-wasm`) are even reached. That is an invasive change to
+the most pervasive type in the runtime, it would require re-verifying the core-invariance snapshot,
+and it fixes a crash rather than a containment hole. Making that change unreviewed at the end of an
+autonomous session is precisely what the standing core-regression rule exists to prevent.
+
+**Recorded as a costed owner decision, not an accepted boundary.** Unlike the hardlink and
+CONTAIN-TOCTOU-1 residuals — which are blocked by the platform-dependence the project refuses —
+this one is **fixable in-tree**; it is deferred for review, not dispositioned as acceptable. The
+reproducer above is the acceptance test for whichever fix is chosen.
+
 ### Negative results from this phase
 
 - **The VS Code extension's execution paths are clean.** `execFile` with an argv vector,
@@ -343,6 +393,14 @@ binary proves nothing — verify the edit landed, not just that the runner ran.
 - **The lexical-prefix bug class is bounded to one site.** Every `starts_with(&format!(…))` in the
   workspace was reviewed: `python.rs` matches module *namespaces* (where `..` has no meaning) and
   `codeowners.rs` is survey tooling. `deps.rs` was the only path instance.
+- **The hex comparisons fail closed.** Applying the same search key to certificate fingerprints and
+  the pinned anchor: `Certificate::fingerprint` is blake3's lowercase hex computed *internally* and
+  never caller-supplied, so the revocation denylist cannot be case-desynchronised; and a
+  case-mismatched or malformed anchor simply matches nothing, which is the fail-closed direction the
+  code already documents ("a bogus anchor simply means no chain ever verifies"). No finding.
+- **The interpreter's call-depth guard holds.** A 1,000,000-deep recursive call is `DL0905` on both
+  platforms, not a crash — the mechanism works exactly as designed. That control is what makes
+  INTERP-DROP-1 above a specific gap rather than a general weakness.
 
 ---
 
