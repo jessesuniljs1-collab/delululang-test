@@ -29,8 +29,13 @@ DEPPIN-LEX-1 (moderate, fixed), ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1
 CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented),
 **INTERP-DROP-1 (moderate, fixed)**. Deployment phases added: **CERT-SCOPE-REL-1** (moderate, fixed),
 **DL1421-RENDER-1** (moderate, fixed), **DOCTOR-STATEDIR-1** (moderate, fixed), plus the
-undiscoverable `certify` scope flags. **Eleven defects fixed; one residual documented
-(CONTAIN-TOCTOU-1).**
+undiscoverable `certify` scope flags. A later documentation + tooling pass added two more, **both in
+the checkers themselves**: **SURVEY-HEADING-1** (the Survey reported eleven real findings as "not
+campaign findings" because it knew only one of the two shapes the ledger uses) and **BOOKFMT-1** (a
+`ci.yml` gate recorded as green had been red since the formatter changed — a gate outside
+`cargo test` rots silently).
+
+**Thirteen defects fixed; one residual documented (CONTAIN-TOCTOU-1).**
 
 **The through-line: four of the six were the same defect.** A security decision made on an
 **unnormalized or unresolved representation**, walked past by a different spelling of the same thing —
