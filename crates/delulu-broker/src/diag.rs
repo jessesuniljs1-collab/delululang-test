@@ -42,6 +42,10 @@ pub enum Denial {
     /// DL0904 — `revoke` refused because the target is neither the caller's node nor a descendant
     /// of it (spec §3.2). The caller's authority (its own subtree) does not reach the target.
     NotRevocable { caller: GrantId, target: GrantId },
+    /// DL0904 — a guard policy edit named a pattern that could never match, so the rule would gate
+    /// nothing (campaign finding GUARD-SPELL-1). Refused rather than stored, because the failure
+    /// mode is an operator who believes a seal is in place while the program writes the file anyway.
+    DeadGuardPattern { label: String, why: String },
     /// DL0904 — an operation named a grant id that does not exist in the tree (fail-closed: an
     /// unknown lease confers no authority).
     UnknownNode { node: GrantId },
@@ -110,6 +114,7 @@ impl Denial {
             Denial::Revoked { .. } => "DL1403",
             Denial::OutOfScope { .. }
             | Denial::NotRevocable { .. }
+            | Denial::DeadGuardPattern { .. }
             | Denial::UnknownNode { .. } => "DL0904",
             Denial::AuditChainBroken { .. } => "DL1405",
             Denial::TokenInvalid { .. } => "DL1407",
@@ -215,6 +220,13 @@ impl Denial {
                 format!(
                     "lease `{}` does not grant `{arg}` in scope `{dimension}` (capability scope violation)",
                     node.as_str()
+                ),
+            ),
+            Denial::DeadGuardPattern { label, why } => Diagnostic::error(
+                "DL0904",
+                format!(
+                    "guard policy `{label}` was NOT set: {why} A rule that cannot match is worse than \
+                     no rule, because it reports success while gating nothing (GUARD-SPELL-1)."
                 ),
             ),
             Denial::NotRevocable { caller, target } => Diagnostic::error(

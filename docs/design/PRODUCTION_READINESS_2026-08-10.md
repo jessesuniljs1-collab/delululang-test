@@ -19,9 +19,17 @@ Platforms this bench can execute: **Windows 11** (native) and **Linux** (WSL2 Ub
 | C | Adversarial verification & cross-surface attack | ✅ 2 more defects + 1 residual documented; Win + Linux green |
 | D | Final production readiness, evidence & documentation | ✅ both C84 doors closed; **PRODUCTION CANDIDATE** |
 
-**Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), DEPPIN-LEX-1 (moderate, fixed),
-ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed), CORE-SNAPSHOT-1 (evidence honesty,
-fixed), CONTAIN-TOCTOU-1 (residual, documented). Commits `56f53ec`, `a028913`, and this one.
+**Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), **GUARD-SPELL-1 (high, fixed)**,
+DEPPIN-LEX-1 (moderate, fixed), ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed),
+CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented).
+
+**The through-line: four of the six were the same defect.** A security decision made on an
+**unnormalized or unresolved representation**, walked past by a different spelling of the same thing —
+a dangling link that `canonicalize` could not resolve, a `..` left in a pin comparison, a relative
+`PATH` entry, and a relative guard pattern. After the first three, that shape became the search key,
+and it is what found GUARD-SPELL-1 in the Guard itself *after* the campaign's own final phase had
+closed. Worth carrying forward as a review question rather than a one-off: **for every string
+compared to decide a security outcome, what else spells the same thing?**
 
 ---
 
@@ -263,6 +271,65 @@ operation, so it needs a *second* writer), the second writer is either a same-ui
 and closing it properly requires `O_NOFOLLOW`/`openat2`/`FILE_FLAG_OPEN_REPARSE_POINT` — the
 platform-dependent containment this project explicitly refuses. Deployment consequence stated in one
 line: **grant scopes that point at directories only the program's own user can write.**
+
+### GUARD-SPELL-1 — a guard seal written the natural way gated nothing, and said `ok` (HIGH)
+
+Found while continuing after the Phase-D close-out, by asking where else a security decision is made
+on an unnormalized representation — the shape three of the night's four defects already shared. The
+last place it lives is the Guard's own rule matcher.
+
+**What.** `pattern_matches` was `pattern == "*" || token == Some(pattern)` — byte-exact equality. For
+`fs_read`/`fs_write` the token is not what the operator typed: it is produced by the runtime as
+`resolve_norm(cap_root, rel)`, an **absolute** path in the host's separator spelling. So a rule
+written relatively could never fire, and `guard policy set` reported success anyway.
+
+**Witness (real broker, real lease, end-to-end).**
+
+| guard policy | result |
+|---|---|
+| none | file written (baseline) |
+| **`fs_write:./out/secret.txt` → sealed** | `ok: … → sealed`, then **FILE WRITTEN** |
+| `fs_write:*` → sealed | `DL1413` refused |
+
+The audit log shows exactly why: the broker matched against
+`target=C:\Users\…\out\secret.txt` while the rule held `./out/secret.txt`.
+
+**Why this is the worst-shaped defect of the campaign even though it grants no new authority.** It
+does not escalate anything — the program already held the grant. What it does is defeat the control a
+principal reaches for *after* granting: "you may write in ./out, but never this file." The operator
+is told the seal is in place. A seal that reports success while gating nothing is worse than no seal,
+because it stops the operator looking for another mechanism. The Guard is the one subsystem the
+standing rule says to harden and never redefine; this hardens it.
+
+**Relation to the known footgun.** `HARDENING_CAMPAIGN.md` had already noted that
+`guard policy set effect:<typo>` accepts a rule gating nothing, deferring it as "a separate, minor
+typo footgun … not a hole". That assessment was right for `effect:`, whose token space is **closed**
+(a typo is the only way in). It did not transfer to the **path** classes, whose token space is open
+and where the *natural* spelling is the broken one — the grant beside it is written relative
+(`--grant fs.write=./out`). Same gap, one class over, materially worse.
+
+**Fix (two parts, both at the authoritative broker boundary).**
+
+1. **Refuse a rule that cannot match**, after the owner-code gate so an unauthorized caller still gets
+   `DL1414` and cannot probe pattern validity. `dead_pattern_reason` → `DL0904`, with a message naming
+   the absolute form and where to read it (`delulu audit tail`'s `target=`). This also closes the
+   deferred `effect:<typo>` case in the same stroke. **Deliberately no new diagnostic code** — a new
+   `DLxxxx` would need a conformance witness, which is precisely how CORE-SNAPSHOT-1 went red.
+2. **Normalize both sides for path classes** through one lexical function (separators + `.`/`..`, no
+   filesystem access), so a correctly-absolute seal written `C:/out/x` still covers the runtime's
+   `C:\out\x`. `overlaps` (pattern-to-pattern, used by `tier_for_subset`) is untouched, so the
+   exhaustive 30k-policy differential test against the use-time oracle still holds.
+
+**Verification.** Two regression tests, both **falsified against the pre-fix code**, plus the
+end-to-end re-run: the relative seal is now refused with an actionable message; an absolute seal
+returns `DL1413` and no file; the same path spelled with forward slashes also returns `DL1413` (that
+one would have silently failed before); `effect:Wrtie` is refused; `effect:Write` still settable.
+Guard suite 22/22.
+
+*Falsification note worth keeping:* the first attempt to falsify the refusal test **silently did not
+apply** (CRLF vs LF in the patch text) and the test "passed" against supposedly-broken code. Caught
+only because the sibling test failed and the pair disagreed. A falsification that does not change the
+binary proves nothing — verify the edit landed, not just that the runner ran.
 
 ### Negative results from this phase
 

@@ -179,8 +179,106 @@ fn effect_pattern_denotes(pattern: &str) -> bool {
 /// Pattern match against a use token (addendum §2.3 vocabulary). v0.5 (deviation §7): `*` matches
 /// everything; otherwise EXACT string equality — the conservative, sound choice consistent with the
 /// attenuation lattice's exact-string discipline (authority.rs ruling 4: no pattern implication).
-fn pattern_matches(pattern: &str, token: Option<&str>) -> bool {
-    pattern == "*" || token == Some(pattern)
+/// Classes whose token is a **resolved absolute filesystem path**, not a bare name.
+///
+/// The distinction is load-bearing (campaign finding GUARD-SPELL-1): for these classes the token the
+/// broker matches against is produced by the runtime — `resolve_norm(cap_root, rel)`, i.e. an
+/// absolute path in the host's own separator spelling — never the relative string the operator typed.
+pub(crate) fn class_is_path_valued(class: GuardClass) -> bool {
+    matches!(class, GuardClass::FsRead | GuardClass::FsWrite)
+}
+
+/// Canonical spelling for a path-valued guard token: `\` → `/`, and `.` / `..` segments resolved.
+/// Purely lexical — it never touches the filesystem, so it cannot be defeated by, or depend on, what
+/// happens to exist. Applied to BOTH the rule pattern and the incoming argument so that two spellings
+/// of one path cannot disagree about whether a seal applies.
+fn path_norm(s: &str) -> String {
+    let unix = s.replace('\\', "/");
+    let absolute = unix.starts_with('/');
+    let mut out: Vec<&str> = Vec::new();
+    let mut climbs = 0usize;
+    for seg in unix.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                if out.pop().is_none() && !absolute {
+                    climbs += 1;
+                }
+            }
+            s => out.push(s),
+        }
+    }
+    let mut parts: Vec<&str> = vec![".."; climbs];
+    parts.extend(out);
+    let joined = parts.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
+}
+
+/// Would a rule with this pattern gate anything at all? `None` = it can match; `Some(reason)` = it is
+/// **dead** and must be refused rather than stored.
+///
+/// # Campaign finding GUARD-SPELL-1
+///
+/// `pattern_matches` is exact equality, and for `fs_read`/`fs_write` the token is the runtime's
+/// *resolved absolute* path. So `guard policy set "fs_write:./out/secret.txt" sealed` stored a rule
+/// that could never fire — and the CLI answered `ok: … → sealed`. Witnessed end-to-end: with that
+/// seal in place the program wrote the file anyway, while `fs_write:*` was correctly refused
+/// `DL1413`. An operator sealing one specific file got **no protection and was told they had it**,
+/// which is worse than no seal, because a seal is what a principal reaches for to stop a program they
+/// have otherwise granted.
+///
+/// This is the same species as the `effect:<typo>` dead-pattern footgun already noted in
+/// `HARDENING_CAMPAIGN.md` — but a class over, and materially worse: the `effect` token space is
+/// closed (a typo is the only way in), whereas a *relative* path is the natural thing to write, since
+/// the grant that pairs with it is itself written relative (`--grant fs.write=./out`).
+pub fn dead_pattern_reason(class: GuardClass, pattern: &str) -> Option<String> {
+    if pattern == "*" {
+        return None;
+    }
+    if class == GuardClass::Effect && !effect_pattern_denotes(pattern) {
+        return Some(format!(
+            "`{pattern}` is not an effect name, so this rule would gate nothing. Use `*` or a real \
+             effect (e.g. `effect:Write`)."
+        ));
+    }
+    if class_is_path_valued(class) {
+        let norm = path_norm(pattern);
+        let absolute = norm.starts_with('/') || is_windows_absolute(&norm);
+        if !absolute {
+            return Some(format!(
+                "`{pattern}` is a relative path, and this class is matched against the ABSOLUTE path \
+                 the program actually reaches, so the rule would gate nothing. Use `*` to gate the \
+                 whole class, or the absolute path (e.g. the `target=` field of the op in `delulu \
+                 audit tail`)."
+            ));
+        }
+    }
+    None
+}
+
+/// `C:/x`, `//server/share` — absolute in Windows spelling after [`path_norm`] has unified separators.
+/// Checked on every platform deliberately: a policy file written on Windows must not read as a dead
+/// rule when the same state directory is inspected elsewhere.
+fn is_windows_absolute(norm: &str) -> bool {
+    let b = norm.as_bytes();
+    (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/') || norm.starts_with("//")
+}
+
+fn pattern_matches(class: GuardClass, pattern: &str, token: Option<&str>) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    match token {
+        None => false,
+        // GUARD-SPELL-1: both sides through one normalizer, so `C:\out\x`, `C:/out/x` and
+        // `C:/out/./x` are one rule rather than three that silently fail to be each other.
+        Some(t) if class_is_path_valued(class) => path_norm(pattern) == path_norm(t),
+        Some(t) => t == pattern,
+    }
 }
 
 fn rule_label(class: GuardClass, pattern: &str) -> String {
@@ -254,7 +352,7 @@ impl GuardPolicy {
         };
         if let Some(class) = use_axis_class(op) {
             for r in self.rules.iter().filter(|r| r.class == class) {
-                if pattern_matches(&r.pattern, arg) {
+                if pattern_matches(class, &r.pattern, arg) {
                     consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
@@ -262,7 +360,7 @@ impl GuardPolicy {
         if let Some(effect) = op.required_effect() {
             let effname = effect.name();
             for r in self.rules.iter().filter(|r| r.class == GuardClass::Effect) {
-                if pattern_matches(&r.pattern, Some(effname)) {
+                if pattern_matches(GuardClass::Effect, &r.pattern, Some(effname)) {
                     consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
@@ -282,7 +380,7 @@ impl GuardPolicy {
         };
         for e in &auth.effects {
             for r in self.rules.iter().filter(|r| r.class == GuardClass::Effect) {
-                if pattern_matches(&r.pattern, Some(e.name())) {
+                if pattern_matches(GuardClass::Effect, &r.pattern, Some(e.name())) {
                     consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
@@ -300,7 +398,7 @@ impl GuardPolicy {
         for (class, set) in dims {
             for item in set {
                 for r in self.rules.iter().filter(|r| r.class == class) {
-                    if pattern_matches(&r.pattern, Some(item)) {
+                    if pattern_matches(class, &r.pattern, Some(item)) {
                         consider(r.tier, rule_label(r.class, &r.pattern));
                     }
                 }
@@ -311,7 +409,7 @@ impl GuardPolicy {
         // NAME; the envelope itself is bounded by the `⊑` lattice, not by policy patterns.
         for name in s.device.keys() {
             for r in self.rules.iter().filter(|r| r.class == GuardClass::Device) {
-                if pattern_matches(&r.pattern, Some(name)) {
+                if pattern_matches(GuardClass::Device, &r.pattern, Some(name)) {
                     consider(r.tier, rule_label(r.class, &r.pattern));
                 }
             }
@@ -457,13 +555,13 @@ impl GuardSubset {
     /// `*` is not representable in the exact-string scope lattice)?
     fn covers_use(&self, op: Op, arg: Option<&str>) -> bool {
         if let Some(class) = use_axis_class(op) {
-            if self.0.iter().any(|(c, p)| *c == class && pattern_matches(p, arg)) {
+            if self.0.iter().any(|(c, p)| *c == class && pattern_matches(class, p, arg)) {
                 return true;
             }
         }
         if let Some(effect) = op.required_effect() {
             let effname = effect.name();
-            if self.0.iter().any(|(c, p)| *c == GuardClass::Effect && pattern_matches(p, Some(effname))) {
+            if self.0.iter().any(|(c, p)| *c == GuardClass::Effect && pattern_matches(GuardClass::Effect, p, Some(effname))) {
                 return true;
             }
         }
@@ -777,6 +875,11 @@ impl Broker {
         if !self.guard.owner_ok(owner) {
             return Err(Denial::GuardOwner { detail: "policy set".into() });
         }
+        // GUARD-SPELL-1: refuse a rule that could never fire. Checked AFTER the owner gate, so an
+        // unauthorized caller still gets DL1414 and cannot use this to probe pattern validity.
+        if let Some(why) = dead_pattern_reason(class, &pattern) {
+            return Err(Denial::DeadGuardPattern { label: rule_label(class, &pattern), why });
+        }
         let label = rule_label(class, &pattern);
         self.guard.policy.set(class, pattern, tier);
         self.bump_epoch();
@@ -1015,7 +1118,7 @@ fn mint_within_subset(subset: &GuardSubset, auth: &Authority) -> bool {
     // class (or an `effect`-class entry for effects). Only guarded-eligible items need coverage, but
     // requiring coverage of ALL requested items is the conservative (never-widening) choice.
     let covered_in = |class: GuardClass, item: &str| {
-        subset.0.iter().any(|(c, p)| *c == class && pattern_matches(p, Some(item)))
+        subset.0.iter().any(|(c, p)| *c == class && pattern_matches(class, p, Some(item)))
     };
     let s = &auth.scopes;
     let dims: [(GuardClass, &BTreeSet<String>); 7] = [
@@ -1484,5 +1587,53 @@ mod tests {
         assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("K")), GuardVerdict::Block(_)), "guarded refuses when poisoned");
         assert!(matches!(b.guard_verdict_use(&child, Op::FsWrite, Some("./out/x")), GuardVerdict::Ungated), "ungated unaffected");
         assert!(b.guard_poisoned());
+    }
+
+    /// **GUARD-SPELL-1 regression lock (the refusal).** For a path-valued class the token the broker
+    /// matches against is the runtime's RESOLVED ABSOLUTE path, so a relative pattern can never fire.
+    /// Before the fix `guard policy set "fs_write:./out/secret.txt" sealed` was accepted, answered
+    /// `ok: … → sealed`, and gated nothing — witnessed end-to-end, the program wrote the file anyway
+    /// while `fs_write:*` was correctly refused DL1413. Storing a rule that cannot match is worse than
+    /// storing none, because it reports success.
+    #[test]
+    fn a_guard_pattern_that_could_never_match_is_refused_rather_than_stored() {
+        for pat in ["./out/secret.txt", "out/secret.txt", "../out/x", "."] {
+            let why = dead_pattern_reason(GuardClass::FsWrite, pat);
+            assert!(why.is_some(), "a relative fs pattern `{pat}` must be refused — it can never match");
+        }
+        // The dead EFFECT pattern, previously noted in HARDENING_CAMPAIGN.md as a deferred footgun.
+        assert!(dead_pattern_reason(GuardClass::Effect, "Wrtie").is_some(), "a typo'd effect gates nothing");
+
+        // …and everything that CAN match must still be accepted — a validator that refuses
+        // everything would be its own outage.
+        assert!(dead_pattern_reason(GuardClass::FsWrite, "*").is_none(), "`*` gates the whole class");
+        assert!(dead_pattern_reason(GuardClass::FsWrite, "/srv/data/x").is_none(), "a POSIX absolute path");
+        assert!(dead_pattern_reason(GuardClass::FsWrite, "C:\\out\\x").is_none(), "a Windows absolute path");
+        assert!(dead_pattern_reason(GuardClass::FsWrite, "C:/out/x").is_none(), "either separator");
+        assert!(dead_pattern_reason(GuardClass::Effect, "Write").is_none(), "a real effect");
+        // Non-path classes range over bare names and must be untouched by the path rule.
+        assert!(dead_pattern_reason(GuardClass::Device, "sat0/hga").is_none(), "a device name is not a path");
+        assert!(dead_pattern_reason(GuardClass::Secret, "API_KEY").is_none(), "a secret name is not a path");
+        assert!(dead_pattern_reason(GuardClass::Net, "example.com").is_none(), "a host is not a path");
+    }
+
+    /// **GUARD-SPELL-1 regression lock (the matching).** One path spelled two ways is one rule. Before
+    /// the fix a seal written `C:/out/x` never matched the runtime's `C:\out\x`, so a correctly
+    /// *absolute* seal could still silently gate nothing on Windows.
+    #[test]
+    fn a_path_seal_matches_the_same_path_however_it_is_spelled() {
+        let win = "C:\\Users\\j\\out\\secret.txt";
+        for spelling in ["C:/Users/j/out/secret.txt", "C:\\Users\\j\\out\\secret.txt", "C:/Users/j/./out/secret.txt", "C:/Users/j/tmp/../out/secret.txt"] {
+            assert!(
+                pattern_matches(GuardClass::FsWrite, spelling, Some(win)),
+                "`{spelling}` and `{win}` are the same file, so one seal must cover both"
+            );
+        }
+        // A different file must still NOT match — normalizing must not blur distinct paths.
+        assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/out/other.txt", Some(win)));
+        assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/out", Some(win)), "the parent is not the file");
+        // And a NON-path class keeps exact-string semantics (a device id is not a path).
+        assert!(pattern_matches(GuardClass::Device, "sat0/hga", Some("sat0/hga")));
+        assert!(!pattern_matches(GuardClass::Device, "sat0/./hga", Some("sat0/hga")), "no path rules off-path");
     }
 }

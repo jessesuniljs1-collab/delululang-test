@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 110308 |
+| Rust lines | 110471 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 153 |
-| Markdown lines | 40641 |
+| Markdown lines | 40724 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1107 / 9556 |
+| Nodes / edges in this map | 1107 / 9567 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -134,7 +134,7 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 
 - **Depends on:** `delulu-check`, `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 14 files, 9208 lines
+- **Modules:** 14 files, 9371 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -142,8 +142,8 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/authority.rs` | 408 | Phase 5a — the `⊑` attenuation lattice (spec §A.3, R-7; Constitution §5.16 law 1). |
 | `src/cert.rs` | 1716 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
-| `src/diag.rs` | 416 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
-| `src/guard.rs` | 1488 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
+| `src/diag.rs` | 428 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
+| `src/guard.rs` | 1639 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
 | `src/lease.rs` | 648 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 58 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |

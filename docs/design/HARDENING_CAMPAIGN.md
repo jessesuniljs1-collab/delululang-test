@@ -3010,6 +3010,22 @@ refused more — but the gate is now exact, machine-confirmed against use-time s
 dead-pattern gap means `guard policy set effect:<typo>` currently accepts a rule that gates nothing —
 a separate, minor typo footgun, noted for a later validation pass, not a hole.)
 
+> **Closed 2026-08-10 — and it was NOT minor in the class next door (GUARD-SPELL-1).** The deferred
+> "typo footgun" was scoped to `effect:`, where the token space is closed and a typo is the only way
+> in. The same dead-pattern gap in the **path** classes turned out to be reachable by writing the
+> most natural thing: `fs_read`/`fs_write` are matched against the runtime's *resolved absolute* path,
+> so `guard policy set "fs_write:./out/secret.txt" sealed` stored a rule that could never fire — and
+> answered `ok: … → sealed`. Witnessed end-to-end: with that seal in place the program wrote the file
+> anyway, while `fs_write:*` was correctly refused `DL1413`. A relative spelling is exactly what an
+> operator reaches for, because the grant beside it is written relative (`--grant fs.write=./out`).
+>
+> Both are now refused at set time (`dead_pattern_reason` → `DL0904`) with a message naming the
+> absolute form to use, and path patterns and arguments pass through one normalizer so a seal written
+> `C:/out/x` still covers `C:\out\x`. The general lesson: **a validator that refuses only the
+> impossible spelling in the closed token space leaves the open one wide open** — and "reports
+> success while gating nothing" is worse than refusing, because the operator stops looking. See
+> `PRODUCTION_READINESS_2026-08-10.md`.
+
 ### F-CUSTODY-2 · `delulu audit` defaulted to the global log, not the active broker's — CLOSED
 
 **What.** `audit verify|tail|query|bundle|reconcile` defaulted to `~/.delulu/audit` unconditionally.
