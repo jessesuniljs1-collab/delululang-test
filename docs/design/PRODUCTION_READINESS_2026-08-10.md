@@ -359,8 +359,13 @@ is refused `DL0703`, and nothing is created outside. Both doors closed.
 
 | Platform | Status | Evidence |
 |---|---|---|
-| **Windows 11** | ✅ executed | `cargo test --workspace` **cargo exit 0**, 124 binaries, **1629** tests, 0 failures, tree frozen |
-| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1638** tests, 0 failures; both witnesses re-run end-to-end; `doctor` 12/12 |
+| **Windows 11** | ✅ executed | `cargo test --workspace` **cargo exit 0**, 124 binaries, **1631** tests, 0 failures, tree frozen |
+| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1640** tests, 0 failures; every witness re-run end-to-end; `doctor` 12/12 |
+
+The Guard fix was verified on **both** platforms, which matters because the two disagree on what an
+absolute path looks like: Windows refused the relative seal, sealed `C:\…\secret.txt`, and sealed the
+same path spelled `C:/…/secret.txt`; Linux refused the relative seal, sealed `/tmp/…/secret.txt`, and
+sealed the messy `/tmp/…/out/../out/./secret.txt`. Same rule, both spellings, both platforms.
 | **macOS** | ⛔ **UNVERIFIED** | No Mac on this bench, and the blake3 C-toolchain blocker still prevents a cross-check. Reviewed statically only. **Not claimed as run.** |
 
 The Windows/Linux test-count delta (1629 vs 1638, +9) is platform-gated tests, not a discrepancy in
@@ -387,6 +392,13 @@ this bench cannot execute. That is stated plainly rather than smoothed over.
 ### Production-readiness status
 
 **PRODUCTION CANDIDATE.**
+
+> **Re-affirmed after the campaign continued past this section.** GUARD-SPELL-1 — a second
+> HIGH-severity finding, in the Guard itself — was found *after* this verdict was first written, by
+> continuing to apply the search key rather than stopping at four green phases. That is the strongest
+> possible evidence for the verdict below, not against it: the argument was "the discovery curve has
+> not flattened", and the very next probe produced another high finding in another
+> already-reviewed subsystem. Anything above "candidate" would have been wrong twice.
 
 Not the higher rating, and the reason is specific rather than cautious boilerplate: **the first
 serious probe of an area already considered closed produced a HIGH-severity containment escape.**
