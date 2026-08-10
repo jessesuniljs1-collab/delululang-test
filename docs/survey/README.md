@@ -10,11 +10,19 @@ against it, and kept honest by a test.
 | [`survey.json`](survey.json) | tools & agents | The same graph, schema `survey/1`. One record per line. |
 | [`DISCREPANCIES.md`](DISCREPANCIES.md) | everyone | Every place the repository currently disagrees with itself. |
 
-All three are **generated**. Do not edit them. The command is always the same:
+Those three are **generated**. Do not edit them. The command is always the same:
 
 ```
 cargo run -p delulu-survey -- build
 ```
+
+Two more files live here and are **hand-written**, because they hold the one thing a generated file
+cannot: what a person checked, and what they decided to leave alone.
+
+| File | For | What it is |
+|---|---|---|
+| [`AUDIT.md`](AUDIT.md) | maintainers | The first Survey audit (2026-08-01): every finding the map produced, examined one at a time, with what was done about each — including the ones deliberately left alone, and why. `DISCREPANCIES.md` says what is true today; this says what was *judged*. |
+| [`REMOVALS.md`](REMOVALS.md) | maintainers | A log of destructive operations: what was deleted, what was verified first, and how to get it back. It exists because the one thing you cannot reconstruct after a deletion is what the person doing it checked beforehand. |
 
 ---
 
@@ -46,6 +54,7 @@ rather than resolved**.
 | a `DLxxxx` cited anywhere | the registry in `crates/delulu-diag/src/codes.rs`, **and** the `UNALLOCATED` table beside it, which records why a code is absent — retired, never allocated, reserved, specified-but-not-implemented, or a test sentinel. A code in neither is reported. |
 | a path named in prose or a comment | the set of files that exist |
 | a `D<n>` ruling citation | the build order that allocates that number |
+| a `C<n>` finding citation | the campaign record — **both** the original ledger table and the `### C<n> · …` sections that later passes use. Reading only the table made the map report eleven real findings as "not campaign findings" (2026-08-10); a checker that knows one of two shapes is a checker that falls behind the thing it maps. |
 | a count quoted in a document | the tree, recounted |
 
 The reader's own scepticism is the last check, and it is the one the citations exist to serve.

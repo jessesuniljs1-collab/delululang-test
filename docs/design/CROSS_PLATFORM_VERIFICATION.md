@@ -222,6 +222,7 @@ three-check `security posture` section; the older `12/12` rows are correct for t
 | Compiler — every shipped example | all check clean | all check clean | — |
 | **LSP server, live protocol** | initialize / capabilities / publishDiagnostics with real `DL` codes / hover / shutdown | identical | — |
 | VS Code extension | **17/17**, `.vsix` verifies | node absent in this WSL image | — |
+| `fmt --check examples` / `docs/book/samples` | **0 would change** (13 clean / 10 clean) | — | — |
 | macOS cross-check (`cargo check --target aarch64-apple-darwin`) | — | — | `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` type-check; the rest blocked by third-party C build scripts — see the cross-check section above |
 
 The **LSP was verified by speaking the protocol to the real binary**, not by trusting the suite. P19's

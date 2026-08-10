@@ -798,6 +798,49 @@ Decision logic is unit-tested exhaustively rather than through a spawned daemon,
 repository allows exactly one integration test to spawn a real process and that budget is already
 spent on the daemon lifecycle.
 
+## Phase 7 — the Book and the Survey directory
+
+### BOOKFMT-1 — a documented CI gate was red, and recorded as green
+
+`delulu fmt --check docs/book/samples` is one of the gates `ci.yml` declares and
+`CROSS_PLATFORM_VERIFICATION.md` records as passing (*"0 would change (10)"*). It reported **2 would
+change**. The samples had not moved since a P17-era commit; the **formatter** had — it now canonicalises
+effect-row order and uses four-space indent, so files that were clean when written stopped being clean
+and nothing noticed, because this gate is not part of `cargo test`.
+
+Fixing it was not a one-line reformat, and the reason is the interesting part. Chapter 14's code block
+is a **literal slice** of `08_foreign.delulu`, enforced by `book.rs` since campaign finding C68 (the
+Book once showed `root.foreign[mathlib](root.foreign_load())?`, which does not compile, and the gate
+of the day compared the *number* of code blocks to the number of sample files rather than their
+contents). So reformatting the sample immediately broke the Book gate — **which is the gate working**:
+it caught, within seconds, that the prose no longer matched the code it claimed to quote. The Book
+block was updated to the canonical form (indent, `{ForeignCall, Write}` ordering, and the trailing
+comma the formatter drops).
+
+Both gates green: `docs/book/samples` **0 would change, 10 clean**; `examples` **0 would change, 13
+clean**; `book.rs` **9/9**.
+
+### The Book, brought current
+
+- Chapter 19's *"a compiler that cannot be crashed"* named only `DL0210`. The same shape then turned
+  up three more times — types, patterns, blocks — so it now says so: **one fix does not close a class.**
+- A companion clause added: *"a runtime that cannot be crashed"*, because until 2026-08-10 it could be,
+  by a program that had already finished (INTERP-DROP-1). Said in the honesty chapter rather than a
+  changelog, because "we bounded recursion" was stated once and was only half true.
+- The macOS clause gains the measured cross-check, with **both** halves of the claim: no DeluluLang
+  source was shown to fail, and most was not shown to compile either.
+- Chapter 15 already said the broker *"defends against the program and its delegates — not against the
+  OS user"*, which is exactly right and needed no correction. It now points at `DEPLOYMENT.md` for
+  what to do about that.
+
+### `docs/survey/` — the index was missing two of its own files
+
+`survey/README.md` tabled three files and said *"all three are generated"*. The directory holds five:
+`AUDIT.md` and `REMOVALS.md` are **hand-written**, and neither was mentioned at all — so a reader
+landing there could not learn that the first audit's judgements, or the record of what was deleted and
+what was checked first, exist. Both are now listed as what they are. The "how it stays honest" table
+also gains the `C<n>` finding row, which is what SURVEY-HEADING-1 taught it to check properly.
+
 ## Documentation corrected in this phase
 
 Stale claims found and fixed rather than merely appended to (see the entries themselves for detail):

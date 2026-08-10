@@ -778,21 +778,21 @@ opens that door and **paints a bright line around it.**
 
 ```delulu
 foreign "c" lib mathlib {
-  fn cos(x: Float) -> Float
-  fn sqrt(x: Float) -> Float
+    fn cos(x: Float) -> Float
+    fn sqrt(x: Float) -> Float
 }
 
-fn report(m: mathlib, out: Cap[Console]) -> Unit ! {Write, ForeignCall} {
-  out.println("cos(0.0)    = " + str(m.cos(0.0)))
-  out.println("sqrt(144.0) = " + str(m.sqrt(144.0)))
+fn report(m: mathlib, out: Cap[Console]) -> Unit ! {ForeignCall, Write} {
+    out.println("cos(0.0)    = " + str(m.cos(0.0)))
+    out.println("sqrt(144.0) = " + str(m.sqrt(144.0)))
 }
 
-fn main(root: Root) ! {Write, ForeignCall} {
-  let out = root.console()
-  match root.foreign(root.foreign_load()) {
-    Err(_) => out.println("could not load the library"),
-    Ok(m) => report(m, out)
-  }
+fn main(root: Root) ! {ForeignCall, Write} {
+    let out = root.console()
+    match root.foreign(root.foreign_load()) {
+        Err(_) => out.println("could not load the library")
+        Ok(m) => report(m, out)
+    }
 }
 ```
 
@@ -869,6 +869,15 @@ privilege subprocess, so a segfault kills the worker, not your program) and the 
 (Firecracker-class, Linux-first, default-deny egress) for genuinely untrusted execution. The broker
 defends against *the program and its delegates* — not against the OS user, root, the kernel, or the
 hardware. That boundary is stated plainly and never oversold.
+
+Which raises the only deployment question that really matters: **what OS user does the untrusted code
+run as?** If the answer is "the same one as the broker", nothing in this chapter contains it — that
+process can read the broker's key and edit its policy, and no amount of code changes that. Running it
+as a *separate account* is the configuration in which the boundary is enforced by the operating
+system rather than by the program's good behaviour, and it is the one this project verified with a
+real second UID. [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) gives the three tiers, the exact commands,
+and what each is actually worth; `delulu doctor` reports which one you are in — and running it *as the
+agent account* is how you find out whether the boundary is really there.
 
 Custody is the answer to "but what if the code is *actively* hostile?" You put the keys where the code
 can't reach them, and you let it run.
@@ -1151,6 +1160,18 @@ DeluluLang **does not claim**, ever:
   levels (`DL0210`). The honest clause going forward is *"deep input is refused, not survived
   indefinitely"* — the limit is a bound, not an absence of bounds, and it **narrowed the accepted
   language** to get there.
+
+  The same shape then turned up three more times, which is the part worth telling: the bound was on
+  *expressions* only, and **types** (`DL0211`), **patterns** (`DL0212`) and **blocks** (`DL0213`)
+  each had to be found and bounded separately. One fix does not close a class.
+
+- **A runtime that cannot be crashed.** Until 2026-08-10 it could be, and by a program that had
+  already *finished*: a recursive value a few million deep aborted the host while being torn down,
+  because the depth bound covered function **calls** and nothing covered **data**. The program
+  printed its output and then the process died with no diagnostic — which is exactly what this
+  project's own rule (*a runtime fault must be a diagnostic, never a host crash*) forbids. Teardown
+  is iterative now, so depth costs heap instead of native stack. Worth stating in this chapter rather
+  than a changelog, because "we bounded recursion" was said once and was only half true.
 - **Three-platform support.** DeluluLang is built and tested on **Windows and Linux**. It has
   **never been executed on macOS** — not once, on any day of its development. The Unix code path is
   the one Linux runs green and the conditional compilation was audited site by site, but *a path
@@ -1168,6 +1189,13 @@ DeluluLang **does not claim**, ever:
   on Linux, because Linux compiles four tests Windows skips" — every number in that clause was wrong:
   the counts came from a method that also counted summary lines and depended on build-cache warmth,
   and the test delta is **six**, named test by test in `docs/design/CROSS_PLATFORM_VERIFICATION.md`.)
+
+  Re-measured 2026-08-10, and the count of macOS executions is **still zero**. What is new is
+  precision: a per-crate `cargo check --target aarch64-apple-darwin` now type-checks four workspace
+  members, and every remaining member stops inside a **third-party C build script** (`blake3`,
+  `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain — so no DeluluLang source has been
+  shown to fail for macOS, **and most of it has not been shown to compile either.** Both halves of
+  that sentence are the claim. One command on any Mac would replace all of it: `cargo test --workspace`.
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.
