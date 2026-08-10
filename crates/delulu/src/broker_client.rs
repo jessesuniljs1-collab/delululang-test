@@ -34,34 +34,17 @@ fn dl1401(detail: &str) -> CustodyDenial {
     )
 }
 
-/// Map a wire diagnostic code to its `&'static` registry form (the `Denial` codes the daemon can
-/// answer with). An UNKNOWN code maps to DL1401 (a protocol-level surprise is a broker failure —
-/// fail closed, never invent an allow).
+/// Map a wire diagnostic code to its `&'static` registry form. An UNKNOWN code maps to DL1401 (a
+/// protocol-level surprise is a broker failure — fail closed, never invent an allow).
+///
+/// **Campaign finding DL1421-RENDER-1.** This used to be a hand-written `match` naming every code
+/// the daemon could answer with — a second copy of a fact `delulu-diag` already owns, kept in step
+/// by hand. It drifted: `DL1421`, the DISC-1 strict-root refusal, was never added, so the flagship
+/// diagnostic of that entire mitigation reached the operator as `error[DL1401]` while
+/// `delulu explain E-DL1421` described something they had not been shown. The registry decides now,
+/// so the list cannot fall behind the codes again (design rule 1).
 pub(crate) fn static_code(code: &str) -> &'static str {
-    match code {
-        "DL0802" => "DL0802",
-        "DL0904" => "DL0904",
-        "DL1401" => "DL1401",
-        "DL1402" => "DL1402",
-        "DL1403" => "DL1403",
-        "DL1405" => "DL1405",
-        "DL1406" => "DL1406",
-        "DL1407" => "DL1407",
-        // The Guard (Stage 5 chunk 6).
-        "DL1410" => "DL1410",
-        "DL1411" => "DL1411",
-        "DL1412" => "DL1412",
-        "DL1413" => "DL1413",
-        "DL1414" => "DL1414",
-        // Grant certificates (RFC 0001 F2/F3). Without these the fallback below would report a
-        // certificate refusal as "broker unreachable" — an operator would go looking for a dead
-        // daemon while the real answer was that the credential did not verify.
-        "DL1415" => "DL1415",
-        "DL1416" => "DL1416",
-        "DL1417" => "DL1417",
-        "DL1418" => "DL1418",
-        _ => "DL1401",
-    }
+    delulu_diag::static_code(code).unwrap_or("DL1401")
 }
 
 /// Clamp `--epoch-ms` to spec §4.1: default **50**, floor 1, ceiling **250**. Documented bound: a
@@ -427,5 +410,44 @@ mod tests {
         // And there is no embedded fallback to observe: the mode is daemon, the decision was Deny.
         assert_eq!(custody.mode(), "daemon");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod code_mapping_tests {
+    use super::static_code;
+
+    /// **DL1421-RENDER-1 regression lock.** Every code this repository allocates must render as
+    /// ITSELF over the wire. The old hand-written allowlist had drifted by exactly one entry —
+    /// `DL1421`, the DISC-1 strict-root refusal — so the flagship diagnostic of that whole
+    /// mitigation reached the operator as `error[DL1401]`, and `delulu explain E-DL1421` described
+    /// something they had never been shown. Deriving from the registry makes the drift unrepresentable;
+    /// this test makes it un-shippable.
+    #[test]
+    fn every_registered_code_renders_as_itself() {
+        for c in delulu_diag::REGISTRY {
+            assert_eq!(
+                static_code(c.code),
+                c.code,
+                "`{}` must not be rewritten on its way to the operator",
+                c.code
+            );
+        }
+    }
+
+    /// The specific regression, named so a future reader meets the finding and not just the rule.
+    #[test]
+    fn the_strict_root_refusal_is_not_reported_as_a_dead_broker() {
+        assert_eq!(static_code("DL1421"), "DL1421", "DISC-1's refusal must say DL1421");
+        assert_ne!(static_code("DL1421"), "DL1401", "reporting it as `broker unreachable` sends the operator to look for a dead daemon");
+    }
+
+    /// The fail-closed fallback is preserved: a code this build does not know is a protocol-level
+    /// surprise, and a surprise is a broker failure — never an invented allow.
+    #[test]
+    fn an_unknown_code_still_falls_back_to_the_broker_failure() {
+        assert_eq!(static_code("DL9999"), "DL1401");
+        assert_eq!(static_code(""), "DL1401");
+        assert_eq!(static_code("not-a-code"), "DL1401");
     }
 }

@@ -780,6 +780,13 @@ pub(crate) fn serve_inner(
     // restart fails bearer tokens closed); this denylist is the one exception, because a certificate
     // re-verifies against the anchor on its own and would otherwise walk back in. A corrupt file
     // poisons adoptions (fail closed) rather than silently forgetting revocations.
+    // Category-7 detection: write the effective mode into the hash-chained log, so a same-uid
+    // downgrade leaves evidence rather than only a banner. See `Broker::record_root_policy_mode`.
+    match (&strict, root_policy_poisoned) {
+        (Some(a), _) => broker.record_root_policy_mode("strict", Some(a)),
+        (None, true) => broker.record_root_policy_mode("unreadable-policy", None),
+        (None, false) => broker.record_root_policy_mode("legacy", None),
+    }
     let (revoked_fps, adopt_poisoned) = load_revoked_certs(state_dir);
     let revoked_count = revoked_fps.len();
     broker.restore_revoked_adoption_fps(revoked_fps);

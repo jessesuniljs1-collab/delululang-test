@@ -447,6 +447,40 @@ impl Broker {
         }
     }
 
+    /// Record the broker's **effective root-issuance mode** in the audit log at startup.
+    ///
+    /// # Why this exists — detection where prevention is impossible (the category-7 residual)
+    ///
+    /// Strict anchored-root mode (DISC-1) is persisted in `<state>/root_policy.json`, which a
+    /// same-OS-user process can edit or delete. No amount of code prevents that: to the kernel, that
+    /// process and this one are the same principal. The honest response is not to pretend the file is
+    /// a boundary, but to make crossing it **non-repudiable** — a downgrade that leaves a permanent,
+    /// hash-chained trace is a very different thing from one that leaves a banner nobody read.
+    ///
+    /// So every start writes what mode it is actually running in. `delulu audit verify` already
+    /// proves the chain has not been rewritten; with this record in it, "was this broker ever
+    /// serving in legacy mode?" becomes a question the log can answer, and an attacker who downgrades
+    /// must either leave the evidence or break chain verification, which is itself the alarm.
+    ///
+    /// Observability, not enforcement (invariant 26 / trap 6): no decision reads this record. As with
+    /// [`Broker::record_plugin_signature`] it is a **no-op with no sink attached**, and then consumes
+    /// no seq — so in-memory brokers and the existing accounting are byte-identical.
+    pub fn record_root_policy_mode(&mut self, mode: &str, anchor: Option<&str>) {
+        if self.sink.is_none() {
+            return;
+        }
+        let seq = self.take_seq();
+        self.record_op(
+            seq,
+            "root-policy-mode",
+            None,
+            Some(mode.to_string()),
+            Some(serde_json::json!({ "mode": mode, "anchor": anchor })),
+            "allow",
+            None,
+        );
+    }
+
     /// Record a verified plugin **signature identity** in the audit log (Stage 6 phase 6h, spec §3.1
     /// step 6). `signer` is the ed25519 public key (lowercase hex). **No-op when no sink is
     /// attached** — and it then consumes NO seq, so a run that never signs plugins is byte-identical

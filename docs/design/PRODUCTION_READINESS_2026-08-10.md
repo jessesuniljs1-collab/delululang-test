@@ -499,6 +499,97 @@ What it *is*: coherent, green on both executable platforms, honest about its bou
 security fix carrying a witness that fails against the pre-fix code, and with its own documentation
 corrected where it overclaimed.
 
+---
+
+# Deployment hardening — closing out the two named residuals
+
+The campaign's verdict left exactly two things below the top rating: **strict anchored-root mode is
+still opt-in**, and **the same-uid boundary is still category 7**. This section finishes them, and
+the first thing it establishes is that they are one problem, not two.
+
+**Category 7 cannot be closed by code, and this section does not pretend otherwise.** A process
+running as the same OS user is indistinguishable from the broker to the kernel: it can read, write or
+delete anything the broker can, including any policy file. What *can* be done is convert an unbounded
+residual into a **bounded, checkable deployment requirement** — and the anchored-root design is
+precisely the mechanism, because the anchor key signs certificates **offline** and the broker only
+ever needs the *public* anchor. Keep the private key off the box and a same-uid process cannot
+manufacture root authority at all; its only remaining move is to downgrade the policy file and
+restart, which is now recorded.
+
+So: **prevention where the OS permits it, non-repudiable detection where it does not, and a verified
+recipe for the OS boundary that actually holds.**
+
+## Phase 1 — make the anchored-root deployment real
+
+Strict mode was opt-in for a reason nobody had written down: **it was not usable.** Driving the
+documented flow end-to-end for the first time produced three defects, each of which alone was enough
+to make an operator give up and leave the mitigation switched off.
+
+### CERT-SCOPE-REL-1 — a certificate's relative filesystem scope silently matched nothing (MODERATE)
+
+`grants certify --fs-write ./out` signed, adopted cleanly, and appeared correct in `grants list` as
+`fs.write=[./out]`. Then **every delegation from it was refused `DL0802`**, with an intersection that
+had quietly dropped the path dimension entirely (`narrow to the intersection — effects={Write}`).
+
+The cause is the campaign's recurring shape one surface further out: a certificate stores the path
+**as typed**, while every other surface resolves through `prim::granted_root` to an **absolute** path.
+A relative scope names a location only the *issuer's* working directory could mean — which the holder
+does not share and the issuer cannot know — so the two can never intersect. Same class as
+GUARD-SPELL-1: a security decision made on an unresolved path.
+
+**Fixed at mint time**, for the same reason certify already checks attenuation at mint time: a
+certificate is the thing that travels out of contact, so its mistakes must surface while an operator
+is still standing in front of it, not on a vehicle. A relative `--fs-read`/`--fs-write` is now refused
+with the absolute form spelled out in the message.
+
+### DL1421-RENDER-1 — the DISC-1 refusal reported itself as a dead broker (MODERATE)
+
+The strict-mode refusal reached the operator as **`error[DL1401]` — "broker unreachable"** — sending
+them to look for a daemon that was running fine, while `delulu explain E-DL1421` described a
+diagnostic they had never been shown.
+
+`broker_client::static_code` bridged wire strings to `&'static str` with a **hand-written allowlist**
+of every code the daemon could answer with. Diffing that list against every code `Denial::code()` can
+return produced exactly one gap: **`DL1421`** — the flagship diagnostic of the entire DISC-1
+mitigation. The file's own comment warned this had already happened once for certificate refusals.
+
+**Fixed by deleting the list.** `delulu_diag::static_code` derives the mapping from the code registry,
+so a code this repository allocates renders as itself and only a genuinely unknown code falls back to
+the fail-closed `DL1401`. Design rule 1 — one function referenced by both sides, not two lists kept in
+step by hand. Locked by a test that walks the **whole registry** and asserts every code renders as
+itself, so the drift is now un-shippable rather than merely fixed.
+
+### The scope flags were undiscoverable
+
+`grants certify` accepts `--fs-read`/`--fs-write`/`--net`, but the usage line listed only `--effects`
+and `--device`. An operator reading `--help` would conclude an anchored root cannot carry a filesystem
+scope — which is what the author of this section concluded, from the same evidence, before checking
+the parser. Usage now lists them, and says `ABS`.
+
+### Category-7 detection: the effective mode is now in the hash chain
+
+`Broker::record_root_policy_mode` writes what mode the broker is **actually** running in at every
+start — `strict` (with the anchor), `legacy`, or `unreadable-policy`. A same-uid adversary can still
+downgrade the policy file; they can no longer do it quietly. `delulu audit verify` already proves the
+chain has not been rewritten, so "was this broker ever serving in legacy mode?" becomes a question the
+log answers, and the attacker must either leave the evidence or break chain verification — which is
+itself the alarm. Observability, not enforcement (invariant 26): no decision reads the record, and it
+is a no-op with no sink attached, so in-memory brokers and the existing seq accounting are unchanged.
+
+### Verified end to end
+
+| check | result |
+|---|---|
+| legacy start | recorded — `root-policy-mode allow target=legacy` |
+| strict start | recorded — `target=strict`, anchor in the payload |
+| unsigned issuance under strict | **`error[DL1421]`** (was `DL1401`) |
+| relative cert scope | refused at mint, with the absolute form given |
+| **full anchored path** | certify → adopt → delegate → `run --lease` → **`RESULT: write Ok`** |
+| audit chain | `ok: audit chain verified — 7 record(s), head d820e1cc37af5034` |
+
+**Strict anchored-root mode is now usable end to end.** That is the precondition for any honest
+conversation about making it the default — which Phase 3 takes up.
+
 ## Documentation corrected in this phase
 
 Stale claims found and fixed rather than merely appended to (see the entries themselves for detail):

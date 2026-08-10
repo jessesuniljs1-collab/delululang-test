@@ -255,6 +255,26 @@ pub fn is_registered(code: &str) -> bool {
     REGISTRY.iter().any(|c| c.code == code)
 }
 
+/// The interned `&'static` form of a registered code, or `None` if this repository does not
+/// allocate it.
+///
+/// # Why this exists (campaign finding DL1421-RENDER-1)
+///
+/// A wire protocol carries codes as owned strings, but a `Diagnostic` holds `&'static str`. The
+/// broker client bridged that with a **hand-written allowlist** — a `match` naming every code the
+/// daemon could answer with, falling back to `DL1401` for anything unrecognised. That list is a
+/// second copy of a fact this registry already owns, and it drifted exactly as the project's design
+/// rule 1 predicts ("the answer is one function referenced by both sides, not two lists kept in step
+/// by hand"): `DL1421` — the DISC-1 strict-root refusal, the flagship diagnostic of that whole
+/// mitigation — was never added, so an operator who hit it was shown `error[DL1401]` and
+/// `delulu explain E-DL1421` described something they had not seen.
+///
+/// Deriving the mapping from the registry makes that class of drift impossible: a code this
+/// repository allocates renders as itself, and only a genuinely unknown code falls back.
+pub fn static_code(code: &str) -> Option<&'static str> {
+    REGISTRY.iter().find(|c| c.code == code).map(|c| c.code)
+}
+
 /// Why a `DLxxxx` that looks like a code is not in [`REGISTRY`].
 ///
 /// Four different facts wear the same costume — a code you cannot look up — and until this table

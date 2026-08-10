@@ -15,7 +15,7 @@ mod source;
 mod span;
 
 pub use codes::{
-    code_explain, code_title, is_registered, topic_explain, unallocated, CodeInfo, Disposition,
+    code_explain, code_title, is_registered, static_code, topic_explain, unallocated, CodeInfo, Disposition,
     UnallocatedCode, GUARD_BYPASS_BANNER, GUARD_CAVEAT, GUARD_POLICY_BOUND, MIN_EXPLAIN_BODY,
     REGISTRY, REVOCATION_BOUND, UNALLOCATED,
 };

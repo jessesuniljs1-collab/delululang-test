@@ -1064,7 +1064,8 @@ fn usage() -> &'static str {
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--multi] [--owner CODE]  (prints a lease token)\n\
-     \x20 delulu grants    certify --subject HEX --effects E,.. [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
+     \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
@@ -5374,6 +5375,34 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             }
         },
     };
+    // **Campaign finding CERT-SCOPE-REL-1.** A filesystem scope in a certificate is compared against
+    // the paths the HOLDER resolves at use time, and every other surface resolves those to ABSOLUTE
+    // (`prim::granted_root` joins the working directory). A relative scope therefore describes a
+    // location only the ISSUER's working directory could name — which the holder does not share and
+    // the issuer cannot know — so it matches nothing.
+    //
+    // It failed silently and late, which is the worst combination for a credential that travels: the
+    // certificate signed, adopted cleanly, appeared correct in `grants list`, and then every
+    // delegation from it was refused `DL0802` with an intersection that had quietly dropped the path
+    // dimension. Refused here for the same reason the attenuation check above is: a certificate is
+    // the thing that goes out of contact, so its mistakes must surface at MINT time, not on the
+    // vehicle. (The same "one path, two spellings" class as GUARD-SPELL-1 — a security decision made
+    // on an unresolved path.)
+    for (flag, paths) in [("--fs-read", &fs_read), ("--fs-write", &fs_write)] {
+        for p in paths.iter() {
+            if !std::path::Path::new(p).is_absolute() {
+                eprintln!(
+                    "error: `{flag} {p}` is a relative path. A certificate's filesystem scope is \
+                     matched against the path the HOLDER resolves at use time, which is absolute — a \
+                     relative scope names a location only this machine's working directory could \
+                     mean, so the credential would adopt cleanly and then refuse every delegation \
+                     (DL0802). Use an absolute path, e.g. `{flag} {}`.",
+                    delulu_runtime::prim::granted_root(p).display()
+                );
+                return 2;
+            }
+        }
+    }
     let now = now_millis();
     let authority = delulu_broker::Authority::new(
         effects.iter().filter_map(|e| Effect::core_from_name(e)),
