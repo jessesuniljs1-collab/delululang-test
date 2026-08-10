@@ -18,11 +18,19 @@ Platforms this bench can execute: **Windows 11** (native) and **Linux** (WSL2 Ub
 | B | Implementation & hardening | ✅ both fixed, both falsified against pre-fix code |
 | C | Adversarial verification & cross-surface attack | ✅ 2 more defects + 1 residual documented; Win + Linux green |
 | D | Final production readiness, evidence & documentation | ✅ both C84 doors closed; **PRODUCTION CANDIDATE** |
+| — | *Continued past D:* the Guard's own matcher, then the unfuzzed interpreter | ✅ GUARD-SPELL-1 + INTERP-DROP-1 found and fixed |
+| 1 | Deployment: make strict anchored-root mode usable | ✅ 3 defects; the whole path verified end to end |
+| 2 | Deployment: make the posture checkable (`doctor`) | ✅ + DOCTOR-STATEDIR-1 (read the wrong store) |
+| 3 | Deployment recipe + the strict-by-default ruling | ✅ `docs/DEPLOYMENT.md`; ruling recorded |
+| 4 | Final verification across every shipped surface | ✅ Win + Linux green; LSP live; extension 17/17 |
 
 **Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), **GUARD-SPELL-1 (high, fixed)**,
 DEPPIN-LEX-1 (moderate, fixed), ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed),
 CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented),
-**INTERP-DROP-1 (moderate, fixed)**.
+**INTERP-DROP-1 (moderate, fixed)**. Deployment phases added: **CERT-SCOPE-REL-1** (moderate, fixed),
+**DL1421-RENDER-1** (moderate, fixed), **DOCTOR-STATEDIR-1** (moderate, fixed), plus the
+undiscoverable `certify` scope flags. **Eleven defects fixed; one residual documented
+(CONTAIN-TOCTOU-1).**
 
 **The through-line: four of the six were the same defect.** A security decision made on an
 **unnormalized or unresolved representation**, walked past by a different spelling of the same thing —
@@ -469,6 +477,32 @@ this bench cannot execute. That is stated plainly rather than smoothed over.
 
 ### Production-readiness status
 
+> **FINAL STATUS, after the deployment phases (2026-08-10):**
+> **PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS — on Windows and Linux, in the Tier-2
+> deployment of `docs/DEPLOYMENT.md`. macOS is NOT covered by this verdict and remains unverified.**
+>
+> The upgrade from the CANDIDATE verdict below is not a change of mood; it is that the two things
+> holding it back were finished. Strict anchored-root mode was **unusable** — three defects made the
+> documented path fail end to end — and is now verified working. The same-uid residual could not be
+> *closed* (it never can be; to the kernel that process is you), but it has been converted from an
+> unbounded caveat into a **documented, verified, and checkable deployment requirement**: a recipe
+> with the exact commands, a `delulu doctor` section that tells you whether you followed it, and a
+> permanent audit record if anyone downgrades it. "Documented deployment requirements" is precisely
+> what this category names, and they are now documented *and* machine-checkable rather than prose.
+>
+> **What this verdict does NOT say**, because the evidence does not support it:
+> - **Not macOS.** Four of thirteen crates type-check for it and no delulu source was shown to fail,
+>   but nothing has been *run*. One command on any Mac closes that gap.
+> - **Not Tier 0 or Tier 1 against a hostile same-user program.** Those tiers do not contain it, and
+>   `DEPLOYMENT.md` says so in the same table that recommends Tier 2.
+> - **Not "free of vulnerabilities."** This session found eleven, several in subsystems already
+>   reviewed and pinned, and the last two were found in the final phases. The honest reading is that
+>   adversarial review keeps paying and should continue — the verdict reflects that the **known**
+>   requirements are documented, enforced, and checkable, not that nothing remains to be found.
+
+The original Phase-D reasoning is kept below, unedited, because it is the argument the verdict was
+raised *against* and a reader should be able to weigh both.
+
 **PRODUCTION CANDIDATE.**
 
 > **Re-affirmed after the campaign continued past this section.** GUARD-SPELL-1 — a second
@@ -636,6 +670,31 @@ isolation, and dropping it would silently point the suite at the developer's rea
 and the unreadable case exits 1. Four regression tests, deliberately run from **outside** the source
 tree so a posture assertion can never fail because this repository's map happened to be stale.
 Doctor suite 11/11.
+
+## Phase 4 — final verification across every shipped surface
+
+Run against `af2c024`, tree clean, on both executable platforms.
+
+| Surface | Windows 11 | Linux (WSL2) |
+|---|---|---|
+| Full workspace suite | **cargo exit 0** — 124 binaries, **1641** tests | **cargo exit 0** — 124 binaries, **1650** tests |
+| Clippy `--workspace --all-targets` | clean | **0** warning/error lines |
+| Compiler — every shipped example | all check clean | all check clean |
+| CLI core verbs | answer; `grants list` with no daemon fails closed `DL1401` with the exact start command (invariant 27) | same |
+| `delulu doctor` + security posture | all three states distinct; exit 0 healthy, 1 on an unreadable policy | same |
+| Posture reads the **broker's own** state dir | ✅ | ✅ |
+| **LSP server — live protocol** | **LIVE**: initialize, capabilities, publishDiagnostics with real `DL` codes, hover, shutdown | **LIVE**, identical |
+| VS Code extension | 17/17 + `.vsix` verifies (entry resolves, 4 commands declared **and** registered) | node absent in this WSL image |
+
+**The LSP was checked by speaking the protocol to the real binary, not by trusting the suite.** P19's
+lesson was that the whole suite was green while the extension had no working language server;
+in-process tests cannot catch that, so this pass sends a real `initialize` / `didOpen` / `hover` /
+`shutdown` sequence over stdio and asserts the server publishes genuine diagnostics.
+
+**Two apparent failures were checked before being believed, and neither was one:** `examples/greeter`
+fails when its *file* is checked and passes when its *package* is (the sibling module is not loaded by
+a bare-file check — correct), and `grants list` exits 1 with no broker running, which is
+invariant 27's fail-closed behaviour rather than a defect.
 
 ## Documentation corrected in this phase
 

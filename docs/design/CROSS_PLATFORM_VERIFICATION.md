@@ -259,6 +259,32 @@ in particular:
 That is the most that can be claimed. It is not "verified on macOS", and this document will not say
 it is.
 
+### macOS cross-check, 2026-08-10 — measured instead of asserted
+
+The standing position above is unchanged: **macOS has still never been executed.** But "blocked by a
+C toolchain" had been recorded without anyone measuring *where* it is blocked, so this pass measured
+it. Both Apple targets are installed; `cargo check --target aarch64-apple-darwin` was run per crate:
+
+| Result | Crates |
+|---|---|
+| **Type-checks for macOS** | `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` |
+| **Blocked** | every remaining member — each by a **third-party C build script**: `blake3`, `zstd-sys`, `libffi-sys` |
+
+Two things follow, and neither is "macOS works":
+
+1. **No DeluluLang source has been shown to fail for macOS.** Every blocker fires in a dependency's
+   `build.rs` before the compiler reaches this project's own code, so the blocker is an absent Apple
+   cross-toolchain on this bench, not a portability defect in delulu.
+2. **Nor has most of it been shown to compile for macOS**, because the check never got that far. Four
+   workspace members are what was actually demonstrated, and that is what is claimed.
+
+The residual macOS-specific surface is small and identifiable: exactly one line branches on the OS
+(`broker_transport.rs`, `SUN_PATH_MAX = 104` on macOS versus 108 elsewhere — a real macOS-aware
+detail, not an oversight), and everything else that differs is `cfg(unix)`, which Linux exercises.
+
+**What would close it:** `cargo test --workspace` on any Mac. That is one command, and it is the only
+missing evidence — this document will keep saying "unverified" until someone runs it.
+
 ## 3. Why it ports — the load-bearing design facts
 
 - **Wire format is endianness-independent.** Every serialized integer uses `to_le_bytes` /

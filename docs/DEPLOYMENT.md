@@ -133,7 +133,7 @@ delulu audit tail | grep root-policy-mode
 |---|---|
 | **Linux** | Verified. Full suite executed; cross-account boundary tested with a real second UID. |
 | **Windows 11** | Verified. Full suite executed. Note that unprivileged symlink creation is not available, which blocks one class of workspace-delivered attack that POSIX permits. |
-| **macOS** | **Designed for, not executed.** The code is portable Rust with no macOS-specific paths, and the POSIX behaviour it relies on is the same behaviour verified on Linux — but this project's bench has no Mac, so **no macOS claim here is backed by a run.** Treat it as unverified until you run the suite yourself: `cargo test --workspace`. |
+| **macOS** | **Designed for, not executed.** A per-crate `cargo check --target aarch64-apple-darwin` type-checks 4 of the workspace's members for macOS; the rest are blocked by third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) needing an Apple cross-toolchain this bench does not have — **no DeluluLang source was shown to fail.** Exactly one line in the codebase branches on macOS (`SUN_PATH_MAX`); everything else is `cfg(unix)`, which Linux exercises. **No macOS claim here is backed by a run.** One command closes it: `cargo test --workspace` on any Mac. |
 
 ---
 
