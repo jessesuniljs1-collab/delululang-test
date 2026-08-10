@@ -261,6 +261,12 @@ DeluluLang/
     ├── QUESTIONS.md                # hard questions answered with evidence — can authority be
     │                               #   bypassed, how it compares to a sandbox, what the maths does
     │                               #   and does not prove, and the things this project cannot claim
+    ├── DEPLOYMENT.md               # what a deployment actually protects, and what you must do to
+    │                               #   get it: three tiers (single-user legacy / strict anchored
+    │                               #   roots / separate OS account), how to VERIFY each with
+    │                               #   `delulu doctor`, honest per-platform status, the list of
+    │                               #   things that are NOT protected, and the recorded ruling on
+    │                               #   why strict mode is not yet the default
     ├── editors.md                  # editor/LSP setup
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md

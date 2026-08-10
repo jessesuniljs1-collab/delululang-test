@@ -9,6 +9,59 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — containment + deployment hardening, 2026-08-10
+
+Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can
+do to your system, so no major bump is implied (Constitution invariant 10).
+
+### Security — filesystem containment, the Guard, and the dependency pin
+
+- **A dangling symlink escaped filesystem containment** (`SYMLINK-DANGLE-1`, high). `canonicalize`
+  fails identically for "absent name" and "broken link", so the nearest-existing-ancestor walk
+  re-appended the link's own name as a plain component; the containment check passed and the write
+  then followed the link out of the grant. Unlike the hardlink boundary this **is**
+  workspace-deliverable (git stores a symlink as a path string). One fix covers all three surfaces
+  that share the helper: runtime filesystem ops, capability minting, and the WASM host.
+- **A guard seal written the natural way gated nothing, and reported `ok`** (`GUARD-SPELL-1`, high).
+  `fs_read`/`fs_write` rules are matched against the runtime's *resolved absolute* path, so
+  `guard policy set "fs_write:./out/secret.txt" sealed` stored a rule that could never fire. Rules
+  that cannot match are now refused at set time (`DL0904`), and pattern and argument pass through one
+  normalizer. This also closes the previously-deferred `effect:<typo>` dead-pattern footgun.
+- **A dependency's authority pin was escapable by spelling** (`DEPPIN-LEX-1`). `data/../../outside`
+  passed a prefix test that `../outside` failed. The pin comparison now resolves `.` and `..`.
+- **Strict root-issuance mode failed OPEN on an unreadable policy** (`ROOTPOLICY-1`). A truncated
+  `root_policy.json` read as "legacy", silently disabling the DISC-1 gate. It now poisons both doors
+  while the daemon keeps serving (so revoke and e-stop still work), and the file is written atomically.
+- **A relative `PATH` entry re-opened the planted-binary hole** (`SERVERPATH-REL-1`) in the VS Code
+  extension's server lookup. Relative `PATH` entries are skipped.
+
+### Robustness — a valid program could abort the host
+
+- **Deep value teardown recursed the native stack** (`INTERP-DROP-1`). `MAX_DEPTH` bounds *call*
+  depth; nothing bounded *data* depth, so a 5,000,000-deep recursive value aborted the process
+  *after* the program had finished — violating `ref.rule.runtime.faults-are-diagnostics`. Teardown is
+  now iterative (the destructor lives on the variant payload, so depth becomes breadth).
+
+### Deployment — strict anchored-root mode is now usable, recorded, and checkable
+
+- **`grants certify` refuses a relative filesystem scope** (`CERT-SCOPE-REL-1`). A relative scope
+  named a location only the signing machine could mean, so the credential adopted cleanly and then
+  failed every delegation with `DL0802`. Refused at mint time, with the absolute form given.
+- **The DISC-1 refusal reports itself correctly** (`DL1421-RENDER-1`). It surfaced as
+  `DL1401 broker unreachable`; `broker_client`'s hand-written code list had drifted by exactly one
+  entry. The list is gone — the diagnostic registry decides.
+- **`grants certify` usage now lists `--fs-read`/`--fs-write`/`--net`**, which it always accepted.
+- **The broker records its effective root-issuance mode** in the hash-chained audit log at every
+  start. A same-uid downgrade cannot be prevented, but it can no longer be quiet.
+- **`delulu doctor` reports a `security posture` section** — root-issuance mode, anchor-key custody,
+  and whether the filesystem enforces owner-only permissions at all.
+- **`delulu doctor` now reads the broker's own state directory** (`DOCTOR-STATEDIR-1`). It ignored
+  `DELULU_STATE_DIR`, so an isolated broker got a confident report about a different store — the
+  "reads the wrong store" class F-CUSTODY-2 fixed for `delulu audit` and nobody fixed here.
+- **New: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** — three deployment tiers, what each is actually
+  worth, how to verify it, honest platform status, and the recorded ruling on why strict mode is not
+  yet the default.
+
 ## Unreleased — production-readiness pass, 2026-08-09
 
 ### Maintenance — replace a deprecated wasmtime API, no behavior change

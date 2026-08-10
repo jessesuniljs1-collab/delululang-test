@@ -477,6 +477,20 @@ question that cost this project its worst soundness hole, and it settles nothing
     programmatic / never headless" control that is **not** what is enforced; do not cite it as
     guaranteed. Threat model, architecture, evidence, and the migration analysis:
     `design/ROOT_ISSUANCE_TRUST_BOUNDARY.md`.
+
+    **Update 2026-08-10 — the category does not move, but two things about it changed.** Strict mode
+    had never actually been *runnable*: three defects (a certificate's relative filesystem scope
+    matched nothing; the refusal surfaced as `DL1401 broker unreachable` because a hand-written code
+    list had drifted by exactly this diagnostic; the scope flags were absent from `--help`) made the
+    documented path fail end to end. All three are fixed and the whole path is verified. An invariant
+    nobody can execute is not category 4 in any useful sense, so this raises the *evidence* to what it
+    already claimed. Additionally: (a) every broker start now writes its **effective** mode into the
+    hash-chained audit log, so a same-uid downgrade must leave permanent evidence or break
+    `audit verify` — **detection**, which is what remains available when prevention is not; and (b)
+    `delulu doctor` reports the mode, the anchor-key custody, and whether the filesystem enforces
+    owner-only permissions at all. **The guarantee is still category 7** — a deployment property of
+    the OS, not of this code — but it is now a deployment property that can be *checked*, which is a
+    different thing from one that can only be *read about*. Recipe: `DEPLOYMENT.md`.
 12. **Broker availability against a same-OS-user adversary (IPC-1 / DEADMAN-1, 2026-08-08).** The
     broker's single-connection serve loop and the dead-man watchdog's authority probe now BOUND their
     reads (`Connection::set_read_timeout`), so a stalled client can no longer hang the daemon

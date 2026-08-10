@@ -590,6 +590,53 @@ is a no-op with no sink attached, so in-memory brokers and the existing seq acco
 **Strict anchored-root mode is now usable end to end.** That is the precondition for any honest
 conversation about making it the default — which Phase 3 takes up.
 
+## Phase 2 — make the deployment posture checkable (`delulu doctor`)
+
+Category 7's published answer has always been *"run untrusted agents as a separate OS account, and
+keep the anchor private key off the box."* That answer lived only in prose. **A deployment property
+that cannot be checked is a deployment property nobody checks**, so `delulu doctor` now reports the
+three facts that decide whether the boundary is real on this machine:
+
+```
+security posture
+  ok       root issuance          STRICT — a root may enter only by adopting a certificate that
+                                  verifies against `abc123…`; unsigned issuance is refused DL1421
+  ok       anchor key custody     no signing key in the state directory — an offline anchor is what
+                                  strict mode's guarantee rests on
+  ok       state dir permissions  on a filesystem that enforces owner-only permissions, so a
+                                  separate OS account is a real boundary here
+```
+
+Severity is chosen to match reality, not to look strict: **legacy mode is a `note`** — it is a
+supported configuration and doctor's job is to make the choice visible, not to fail a checkout for
+it — while an **unreadable policy is a `problem`** that fails the run, because the broker really is
+refusing all root creation until it is repaired. The permissions check reuses the P21 probe, so a 9p
+/ DrvFs / NFS mount (where `chmod` is a silent no-op) is reported as what it is: a filesystem on
+which a separate OS account buys nothing.
+
+### DOCTOR-STATEDIR-1 — doctor reported on a different store than the broker uses (MODERATE)
+
+Found while verifying the section above: with three different broker state directories, doctor gave
+**identical** answers for all three. It resolved `DELULU_HOME`, else `$HOME/.delulu`, and never
+consulted **`DELULU_STATE_DIR`** — the documented override the broker itself honors and that
+`delulu audit --dir`'s own help names.
+
+The two agree by default and diverge exactly when an operator runs an isolated broker, which is
+precisely when it matters. Doctor was reporting the audit chain, the state directory, and (once this
+section existed) the **root-issuance mode** of an unrelated store, with a confident `ok`.
+
+This is the "reads the wrong store" class this project has already named **twice** — finding C75, and
+F-CUSTODY-2, where `delulu audit` defaulted to the global log and could return a confident `ok` for a
+chain unrelated to the incident. **F-CUSTODY-2 fixed `audit`. Nobody fixed `doctor`** — the one
+command whose entire job is to answer "is this deployment sound?". `DELULU_STATE_DIR` now wins;
+`DELULU_HOME` stays as the next fallback because `signing.rs` uses it and the CLI tests set it for
+isolation, and dropping it would silently point the suite at the developer's real state.
+
+**Verified:** strict / legacy / unreadable now report distinctly against isolated state directories,
+and the unreadable case exits 1. Four regression tests, deliberately run from **outside** the source
+tree so a posture assertion can never fail because this repository's map happened to be stale.
+Doctor suite 11/11.
+
 ## Documentation corrected in this phase
 
 Stale claims found and fixed rather than merely appended to (see the entries themselves for detail):

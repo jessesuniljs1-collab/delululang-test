@@ -107,6 +107,9 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
     // not read it as a remark about theirs.
     let mut r = Report::default();
     environment(&mut r);
+    // Before the repository map: this is about the machine the operator is deploying ON, which is
+    // true whether or not they are standing in DeluluLang's own source tree.
+    security_posture(&mut r);
     match delulu_survey::find_source_tree() {
         Some(root) => repository(&mut r, &root, check_only),
         None => r.push(
@@ -203,6 +206,89 @@ fn environment(r: &mut Report) {
 
 /// The audit chain is the one piece of durable state a broken machine can silently damage, so it is
 /// worth verifying rather than assuming.
+/// The **deployment** half of the security model, made checkable.
+///
+/// # Why this section exists
+///
+/// DeluluLang's honest position is that the same-OS-user boundary is *outside* the proof boundary
+/// (category 7): a process running as this user is indistinguishable from the broker to the kernel,
+/// and no amount of code changes that. The published answer has always been "run untrusted agents as
+/// a separate OS account, and keep the anchor private key off the box" — but that answer lived only
+/// in prose, so nothing ever told an operator whether they had actually done it.
+///
+/// A deployment property that cannot be checked is a deployment property nobody checks. These are
+/// the three facts that decide whether the boundary is real on THIS machine, so `delulu doctor`
+/// reports them. They are `Note`, not `Problem`, where they are a legitimate choice: legacy mode is
+/// a supported configuration, and doctor's job here is to make the choice visible, not to fail a
+/// checkout for it.
+fn security_posture(r: &mut Report) {
+    let Some(dir) = state_dir() else { return };
+
+    // 1. Root issuance (DISC-1). The single most consequential deployment fact: in legacy mode any
+    //    process running as this user can mint root authority and command a guard-SEALED resource.
+    let (anchor, poisoned) = crate::brokerd::load_root_policy(&dir);
+    match (anchor, poisoned) {
+        (Some(a), _) => r.push(
+            "security posture",
+            "root issuance",
+            Status::Ok,
+            format!("STRICT — a root may enter only by adopting a certificate that verifies against `{a}`; unsigned issuance is refused DL1421"),
+        ),
+        (None, true) => r.push(
+            "security posture",
+            "root issuance",
+            Status::Problem,
+            format!(
+                "root policy `{}` EXISTS but is UNREADABLE — the broker refuses to create root authority by any path until it is repaired or removed (ROOTPOLICY-1)",
+                crate::brokerd::root_policy_path(&dir).display()
+            ),
+        ),
+        (None, false) => r.push(
+            "security posture",
+            "root issuance",
+            Status::Note,
+            "LEGACY — any process running as this OS user can mint root authority, including over a guard-sealed resource (DISC-1). Turn the gate on with `delulu broker start --require-anchored-roots <anchor-pubkey>`",
+        ),
+    }
+
+    // 2. Anchor key custody. Strict mode's whole value is that the private half signs OFFLINE — the
+    //    broker never needs it. A signing key sitting beside the state it protects collapses that
+    //    back to file permissions, which is exactly the boundary category 7 says is not one.
+    let key = dir.join("grant.key");
+    if key.exists() {
+        r.push(
+            "security posture",
+            "anchor key custody",
+            Status::Note,
+            format!(
+                "a signing key is present at `{}`. If this is the anchor for strict mode, the boundary reduces to file permissions against a same-user process — keep the anchor PRIVATE key on another machine and copy only certificates here",
+                key.display()
+            ),
+        );
+    } else {
+        r.push(
+            "security posture",
+            "anchor key custody",
+            Status::Ok,
+            "no signing key in the state directory — an offline anchor is what strict mode's guarantee rests on",
+        );
+    }
+
+    // 3. Whether the filesystem can keep a secret at all (P21). On 9p/DrvFs/NFS a `chmod` is a
+    //    silent no-op, so "owner-only" is a lie and a separate OS account buys nothing.
+    if dir.exists() {
+        match crate::signing::perms_unenforced_refusal(&dir, "the broker state directory", false, "") {
+            Some(msg) => r.push("security posture", "state dir permissions", Status::Problem, msg),
+            None => r.push(
+                "security posture",
+                "state dir permissions",
+                Status::Ok,
+                "on a filesystem that enforces owner-only permissions, so a separate OS account is a real boundary here",
+            ),
+        }
+    }
+}
+
 fn audit_chain(r: &mut Report) {
     let Some(dir) = state_dir().map(|h| h.join("audit")) else { return };
     if !dir.exists() {
@@ -225,7 +311,29 @@ fn audit_chain(r: &mut Report) {
     }
 }
 
+/// The state directory doctor reports on — **the one the broker actually uses**.
+///
+/// # Campaign finding DOCTOR-STATEDIR-1
+///
+/// This resolved `DELULU_HOME`, else `$HOME/.delulu`, and never consulted `DELULU_STATE_DIR` — the
+/// documented override the broker itself honors (`brokerd::resolve_state_dir`, and the one
+/// `delulu audit --dir`'s help names). The two agree by default and diverge exactly when an operator
+/// runs an isolated broker, which is when it matters: doctor then reported the audit chain, the
+/// state directory and — once this file grew a security-posture section — the *root-issuance mode* of
+/// a completely different store, with a confident `ok`.
+///
+/// That is the "reads the wrong store" class this project has already named twice (finding C75, and
+/// F-CUSTODY-2, where `delulu audit` defaulted to the global log and could verify a chain unrelated
+/// to the incident). F-CUSTODY-2 fixed `audit`; nobody fixed `doctor`, whose entire job is to answer
+/// "is this deployment sound?".
+///
+/// `DELULU_STATE_DIR` therefore wins. `DELULU_HOME` stays as the next fallback: it is what
+/// `signing.rs` uses and what the CLI tests set for isolation, so dropping it would silently point
+/// the suite at the developer's real state.
 fn state_dir() -> Option<PathBuf> {
+    if let Some(d) = std::env::var_os("DELULU_STATE_DIR") {
+        return Some(PathBuf::from(d));
+    }
     std::env::var_os("DELULU_HOME").map(PathBuf::from).or_else(|| {
         std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))

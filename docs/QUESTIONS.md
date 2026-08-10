@@ -259,6 +259,25 @@ a real hardening, but **not** an airtight boundary on one account: its security 
 anchor private key and `root_policy.json` outside same-uid reach, so a separate OS account (or a
 hardware-held anchor) remains the actual boundary.
 
+**Update 2026-08-10 — the mitigation is now usable, recorded, and checkable.** Three defects had made
+strict mode effectively un-runnable (a certificate's relative filesystem scope silently matched
+nothing; the refusal reported itself as `DL1401 broker unreachable`; the scope flags were missing from
+`--help`), which is the honest reason nobody turned it on. All three are fixed and the whole path
+— `certify → adopt → delegate → run --lease` — is verified end to end. Two things changed about the
+*residual* as well:
+
+- **It is recorded.** Every broker start writes its effective mode into the hash-chained audit log.
+  A same-uid process can still downgrade the policy file, but it can no longer do so quietly: it must
+  leave permanent evidence or break `audit verify`, which is itself the alarm.
+- **It is checkable.** `delulu doctor` reports a `security posture` section — root-issuance mode,
+  anchor-key custody, and whether the filesystem enforces owner-only permissions at all. The
+  operational rule below is no longer only prose you have to remember; it is a command that answers
+  whether you followed it. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the verified recipe.
+
+None of this closes the same-uid hole, and none of it is claimed to: to the kernel, a process running
+as your user *is* you. What changed is that the boundary is now a deployment requirement you can
+verify, rather than a caveat you had to have read.
+
 ### 1.6 How exposed is this while agents are writing code?
 
 The realistic risks during an agent authoring loop, and where each stands:

@@ -78,7 +78,7 @@ fn secrets_path(state: &Path) -> PathBuf {
 fn guard_policy_path(state: &Path) -> PathBuf {
     state.join("guard.json")
 }
-fn root_policy_path(state: &Path) -> PathBuf {
+pub(crate) fn root_policy_path(state: &Path) -> PathBuf {
     state.join("root_policy.json")
 }
 
@@ -1021,7 +1021,7 @@ fn seed_root_policy(state_dir: &Path, anchor: &str) -> Result<(), i32> {
 /// the documented way back to legacy is to REMOVE the file. So a file that exists but does not parse
 /// into exactly that shape is not a legacy marker — it is a policy we cannot read, and the safe
 /// reading of "the operator created this file" is that strict mode was intended. It poisons.
-fn load_root_policy(state_dir: &Path) -> (Option<String>, bool) {
+pub(crate) fn load_root_policy(state_dir: &Path) -> (Option<String>, bool) {
     let path = root_policy_path(state_dir);
     let Ok(text) = std::fs::read_to_string(&path) else {
         // Truly absent → legacy. Present but unreadable (permissions, IO error) → cannot tell, so

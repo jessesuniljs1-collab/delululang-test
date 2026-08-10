@@ -171,3 +171,96 @@ fn outside_the_source_tree_the_repository_section_is_skipped() {
     );
     let _ = std::fs::remove_dir_all(&elsewhere);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Security posture (deployment). These make the category-7 deployment property CHECKABLE: the
+// published answer to "the same-OS-user boundary is outside the proof boundary" has always been
+// "use a separate OS account and keep the anchor key offline", but nothing ever told an operator
+// whether they had done it.
+// ---------------------------------------------------------------------------------------------
+
+/// Run doctor against an ISOLATED broker state directory, and deliberately from OUTSIDE the source
+/// tree: these tests are about the deployment posture of a machine, so coupling them to whether this
+/// repository's map happens to be fresh would make them fail for a reason that has nothing to do
+/// with what they assert.
+fn doctor_in(state: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(state)
+        .env("DELULU_STATE_DIR", state)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["doctor", "--check"])
+        .output()
+        .expect("failed to run delulu")
+}
+
+fn scratch(tag: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("delulu-posture-{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+/// **DOCTOR-STATEDIR-1 regression lock.** Doctor must report on the store the BROKER uses. It
+/// resolved `DELULU_HOME`/`$HOME/.delulu` and never consulted `DELULU_STATE_DIR`, so an operator
+/// running an isolated broker got a confident report about a different directory entirely — the
+/// "reads the wrong store" class that F-CUSTODY-2 fixed for `delulu audit` and nobody fixed here.
+/// Before the fix all three states below reported identically, because all three read `~/.delulu`.
+#[test]
+fn the_posture_section_reads_the_brokers_own_state_directory() {
+    let strict = scratch("strict");
+    std::fs::write(
+        strict.join("root_policy.json"),
+        "{\"version\":1,\"require_anchored_roots\":true,\"anchor\":\"abc123deadbeef\"}\n",
+    )
+    .unwrap();
+    let out = stdout(&doctor_in(&strict));
+    assert!(out.contains("security posture"), "the posture section must appear:\n{out}");
+    assert!(
+        out.contains("STRICT") && out.contains("abc123deadbeef"),
+        "doctor must read THIS broker's policy and name its anchor:\n{out}"
+    );
+    let _ = std::fs::remove_dir_all(&strict);
+}
+
+/// Legacy is a supported configuration, so it is a NOTE, not a failure — but it must be visible,
+/// because it is the single most consequential deployment fact (DISC-1: any process running as this
+/// user can mint root authority, including over a guard-sealed resource).
+#[test]
+fn a_legacy_broker_is_reported_without_failing_the_run() {
+    let legacy = scratch("legacy");
+    let o = doctor_in(&legacy);
+    let out = stdout(&o);
+    assert!(out.contains("LEGACY"), "legacy root issuance must be stated plainly:\n{out}");
+    assert!(out.contains("--require-anchored-roots"), "and must say how to turn the gate on:\n{out}");
+    assert_eq!(o.status.code(), Some(0), "a legacy broker is a choice, not a broken checkout:\n{out}");
+    let _ = std::fs::remove_dir_all(&legacy);
+}
+
+/// An UNREADABLE policy is different in kind: the broker refuses all root creation until it is
+/// repaired, so this is a real problem and doctor fails the run (ROOTPOLICY-1).
+#[test]
+fn an_unreadable_root_policy_is_a_problem_not_a_note() {
+    let bad = scratch("bad");
+    std::fs::write(bad.join("root_policy.json"), "{\"require_anchored_roots\":tr").unwrap();
+    let o = doctor_in(&bad);
+    let out = stdout(&o);
+    assert!(out.contains("UNREADABLE"), "the poisoned state must be named:\n{out}");
+    assert_eq!(o.status.code(), Some(1), "an unreadable security policy must fail the run:\n{out}");
+    let _ = std::fs::remove_dir_all(&bad);
+}
+
+/// Strict mode's guarantee rests on the anchor's PRIVATE half signing offline. A signing key sitting
+/// beside the state it protects collapses that back to file permissions — which is exactly the
+/// boundary category 7 says is not one — so doctor says so.
+#[test]
+fn a_signing_key_beside_the_state_it_protects_is_flagged() {
+    let withkey = scratch("withkey");
+    std::fs::write(withkey.join("grant.key"), b"not-a-real-key").unwrap();
+    let out = stdout(&doctor_in(&withkey));
+    assert!(out.contains("anchor key custody"), "the custody check must appear:\n{out}");
+    assert!(
+        out.contains("another machine"),
+        "and must say where the private half belongs:\n{out}"
+    );
+    let _ = std::fs::remove_dir_all(&withkey);
+}

@@ -198,6 +198,39 @@ that the weakening can no longer be silent. The category-7 residual below is unc
   here and in the banner and MATHEMATICS.md §12. *"The code verifies the signature"* is NOT *"the
   system is secure against same-user compromise."*
 
+### 9.2 Strict mode is now USABLE, RECORDED, and CHECKABLE (2026-08-10)
+
+Everything in §9 above described a mode that, until this date, **no operator could actually run.**
+Driving the documented flow end to end for the first time found three defects that each, alone,
+would send someone back to legacy:
+
+- **CERT-SCOPE-REL-1** — `grants certify --fs-write ./out` signed and adopted cleanly, then made
+  *every* delegation from it fail `DL0802`, because a certificate stored the path as typed while
+  every other surface resolves to absolute. Relative filesystem scopes are now refused at mint time,
+  with the absolute form given.
+- **DL1421-RENDER-1** — the strict refusal reached the operator as `error[DL1401] broker unreachable`,
+  sending them to hunt a daemon that was running fine. `broker_client`'s hand-written code allowlist
+  had drifted by exactly one entry: `DL1421`, this section's own diagnostic. The list is gone; the
+  registry decides.
+- **Undiscoverable scope flags** — `certify` accepts `--fs-read`/`--fs-write`/`--net`, but its usage
+  line listed only `--effects` and `--device`, so `--help` implied an anchored root could not carry a
+  filesystem scope at all.
+
+**Verified end to end:** `certify → adopt → delegate → run --lease` now reaches a real filesystem
+write under strict mode, on Windows and Linux.
+
+**Recorded (the category-7 detection half).** Every broker start writes its *effective* mode into the
+hash-chained audit log (`root-policy-mode` = `strict` / `legacy` / `unreadable-policy`). A same-uid
+process can still downgrade the policy file — that is what category 7 *means* — but it can no longer
+do so quietly: `audit verify` already proves the chain was not rewritten, so a downgrade must either
+leave permanent evidence or break verification, which is itself the alarm. Prevention where the OS
+allows it; **non-repudiable detection where it does not.**
+
+**Checkable.** `delulu doctor` now reports a `security posture` section — root-issuance mode, anchor
+key custody, and whether the filesystem can enforce owner-only permissions at all (the P21 probe).
+Legacy is a `note` (a supported choice, made visible); an unreadable policy is a `problem` that fails
+the run. The deployment property is no longer only prose.
+
 **Embedded mode (`run --grant`) is a separate model, not a strict-mode escape hatch.** It builds a
 fresh in-process broker with no daemon and no Guard; the command-line grant IS the authority. A same-uid
 agent that can run `delulu run --grant Actuate --adapter-cmd <driver>` can already command the driver
