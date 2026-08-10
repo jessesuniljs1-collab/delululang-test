@@ -15,9 +15,13 @@ Platforms this bench can execute: **Windows 11** (native) and **Linux** (WSL2 Ub
 | Phase | Scope | Result |
 |---|---|---|
 | A | Discovery, threat model, attack-surface + invariant map | ✅ 2 real defects found, 2 negatives recorded |
-| B | Implementation & hardening | ✅ both defects fixed, both falsified against pre-fix code |
-| C | Adversarial verification & cross-surface attack | in progress |
-| D | Final production readiness, evidence & documentation | pending |
+| B | Implementation & hardening | ✅ both fixed, both falsified against pre-fix code |
+| C | Adversarial verification & cross-surface attack | ✅ 2 more defects + 1 residual documented; Win + Linux green |
+| D | Final production readiness, evidence & documentation | ✅ both C84 doors closed; **PRODUCTION CANDIDATE** |
+
+**Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), DEPPIN-LEX-1 (moderate, fixed),
+ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed), CORE-SNAPSHOT-1 (evidence honesty,
+fixed), CONTAIN-TOCTOU-1 (residual, documented). Commits `56f53ec`, `a028913`, and this one.
 
 ---
 
@@ -272,6 +276,71 @@ line: **grant scopes that point at directories only the program's own user can w
 - **The lexical-prefix bug class is bounded to one site.** Every `starts_with(&format!(…))` in the
   workspace was reviewed: `python.rs` matches module *namespaces* (where `..` has no meaning) and
   `codeowners.rs` is survey tooling. `deps.rs` was the only path instance.
+
+---
+
+## Phase D — final verification, evidence audit & production-readiness
+
+### The final fresh pass — what had still not been attacked
+
+C84 had **two doors**: using a capability, and *minting* one rooted at a link. Tonight's fix was
+proven on the first; the second was checked separately rather than assumed, because "the same helper
+guards it" is exactly the reasoning that leaves a door open. `root.fs_write("./grant/<dangling>")`
+is refused `DL0703`, and nothing is created outside. Both doors closed.
+
+### Cross-platform, stated exactly
+
+| Platform | Status | Evidence |
+|---|---|---|
+| **Windows 11** | ✅ executed | `cargo test --workspace` **cargo exit 0**, 124 binaries, **1629** tests, 0 failures, tree frozen |
+| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1638** tests, 0 failures; both witnesses re-run end-to-end; `doctor` 12/12 |
+| **macOS** | ⛔ **UNVERIFIED** | No Mac on this bench, and the blake3 C-toolchain blocker still prevents a cross-check. Reviewed statically only. **Not claimed as run.** |
+
+The Windows/Linux test-count delta (1629 vs 1638, +9) is platform-gated tests, not a discrepancy in
+what was verified — the same 124 binaries pass on both.
+
+**Verdict-relevant:** the security defect that mattered most tonight, SYMLINK-DANGLE-1, was
+exploitable *on POSIX* and only privilege-blocked on Windows. macOS is POSIX. It is therefore the
+platform where tonight's headline finding would have been most exploitable, and it is the platform
+this bench cannot execute. That is stated plainly rather than smoothed over.
+
+### Evidence levels — no claim above its evidence
+
+| Claim | Level |
+|---|---|
+| Dangling-link containment is closed (3 surfaces) | **experimentally verified** end-to-end + unit-tested + falsified against pre-fix code; Miri-clean |
+| Strict root policy fails closed | **tested + falsified** (pre-fix loader minted a root; post-fix `DL1421`) |
+| Dependency pin resists path spelling | **tested + falsified**; witnessed end-to-end on two platforms |
+| VS Code server lookup ignores relative PATH | **tested** (17/17 extension suite) |
+| Containment race (CONTAIN-TOCTOU-1) | **documented residual**, not fixed — needs OS-level `O_NOFOLLOW` class primitives |
+| Same-uid adversary containment | **outside the proof boundary (category 7)** — unchanged |
+| macOS behaviour | **unverified** |
+| Miri | **0 UB on one small targeted batch** (6 containment tests, isolation disabled so the symlink syscalls really ran). Tonight's changes introduce **no `unsafe`**; the broad Miri coverage from the 2026-08-09 campaign stands and was not re-run |
+
+### Production-readiness status
+
+**PRODUCTION CANDIDATE.**
+
+Not the higher rating, and the reason is specific rather than cautious boilerplate: **the first
+serious probe of an area already considered closed produced a HIGH-severity containment escape.**
+C84 had been fixed, red-teamed by four agents, pinned with regression tests and a written
+disposition — and every symlink case ever executed against it happened to use a link whose target
+existed. One night's attention found the missing case, and it broke the product's central promise
+that a program cannot touch anything outside its grant. When a single session still yields a finding
+of that severity in the core guarantee, the defect-discovery curve has not flattened, and the honest
+reading is "candidate", not "ready".
+
+Three further facts hold it below the top rating, each already documented rather than newly alleged:
+
+1. **macOS is entirely unverified**, and is a POSIX platform where tonight's headline finding was
+   fully exploitable rather than privilege-blocked.
+2. **Strict anchored-root mode is still opt-in**; the default broker allows unsigned root issuance,
+   and making it the default is a pending major-version decision.
+3. **The same-uid boundary remains category 7.** No code change tonight moved it, and none claimed to.
+
+What it *is*: coherent, green on both executable platforms, honest about its boundaries, with every
+security fix carrying a witness that fails against the pre-fix code, and with its own documentation
+corrected where it overclaimed.
 
 ## Documentation corrected in this phase
 
