@@ -834,7 +834,7 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         },
         MsgValue::Variant { name, fields } => Value::Variant {
             name: Rc::from(name.as_str()),
-            fields: Rc::new(fields.into_iter().map(|x| msg_to_value(x, globals)).collect()),
+            fields: crate::value::VariantFields::new(fields.into_iter().map(|x| msg_to_value(x, globals)).collect()),
         },
         MsgValue::Closure { params, body, scopes } => {
             let mut env = globals.clone();

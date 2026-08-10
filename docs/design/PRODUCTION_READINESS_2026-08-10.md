@@ -22,7 +22,7 @@ Platforms this bench can execute: **Windows 11** (native) and **Linux** (WSL2 Ub
 **Findings this campaign:** SYMLINK-DANGLE-1 (high, fixed), **GUARD-SPELL-1 (high, fixed)**,
 DEPPIN-LEX-1 (moderate, fixed), ROOTPOLICY-1 (moderate, fixed), SERVERPATH-REL-1 (low, fixed),
 CORE-SNAPSHOT-1 (evidence honesty, fixed), CONTAIN-TOCTOU-1 (residual, documented),
-**INTERP-DROP-1 (moderate, fix costed and deferred to the owner)**.
+**INTERP-DROP-1 (moderate, fixed)**.
 
 **The through-line: four of the six were the same defect.** A security decision made on an
 **unnormalized or unresolved representation**, walked past by a different spelling of the same thing —
@@ -332,7 +332,7 @@ apply** (CRLF vs LF in the patch text) and the test "passed" against supposedly-
 only because the sibling test failed and the pair disagreed. A falsification that does not change the
 binary proves nothing — verify the edit landed, not just that the runner ran.
 
-### INTERP-DROP-1 — a valid program aborts the host during value teardown (MODERATE, **fix deferred to the owner**)
+### INTERP-DROP-1 — a valid program aborted the host during value teardown (MODERATE, **FIXED**)
 
 The one large surface this repository had never fuzzed is the runtime on *adversarial-but-valid*
 programs — programs that type-check and pass the effect row, but stress the interpreter. Probing it
@@ -368,18 +368,38 @@ finalisation — for a long-running agent or service that is an abrupt disappear
 path the dead-man watchdog is designed for exactly an abrupt host death, so a device still fails
 safe; that containment is unaffected.
 
-**Why the fix is not applied here.** The correct fix is an **iterative teardown** for `Value` instead
-of the derived recursive `Drop`. Measured rather than guessed: adding `impl Drop for Value` produces
-**9 `E0509` "cannot move out of type which implements Drop" errors in `delulu-runtime` alone**,
-before the dependent crates (`delulu`, `delulu-wasm`) are even reached. That is an invasive change to
-the most pervasive type in the runtime, it would require re-verifying the core-invariance snapshot,
-and it fixes a crash rather than a containment hole. Making that change unreviewed at the end of an
-autonomous session is precisely what the standing core-regression rule exists to prevent.
+**The fix, and a corrected cost estimate.** This was first costed as `impl Drop for Value`, which
+produces **9 `E0509` "cannot move out of a type that implements Drop" errors in `delulu-runtime`
+alone** — an invasive change to the runtime's most pervasive type, and it was deferred on that basis.
+**That estimate was of the wrong design.** The recursion runs
+`Value → Rc<Vec<Value>> → Vec<Value> → Value`, a cycle that can be cut at *either* link, and cutting
+it at the **payload** costs almost nothing:
 
-**Recorded as a costed owner decision, not an accepted boundary.** Unlike the hardlink and
-CONTAIN-TOCTOU-1 residuals — which are blocked by the platform-dependence the project refuses —
-this one is **fixable in-tree**; it is deferred for review, not dispositioned as acceptable. The
-reproducer above is the acceptance test for whichever fix is chosen.
+- `Value::Variant`'s payload becomes a newtype, `VariantFields(Rc<Vec<Value>>)`, which owns the
+  destructor. `Value` itself gains no `Drop`, so **`E0509` never arises**.
+- `VariantFields` derefs to `Vec<Value>`, so every call site that only *reads* fields — `.iter()`,
+  `.len()`, `.is_empty()`, indexing — compiles unchanged. **Three** sites needed edits (the
+  constructor, the actor-message decoder, and the cycle detector's pointer identity), not nine.
+- `Drop` moves children onto an explicit worklist instead of dropping them in place: **depth becomes
+  breadth**, so teardown costs heap — bounded by the structure that already fit in memory — instead
+  of native stack, which is not bounded at all. A payload that is still shared is left alone; the
+  last owner does the work.
+
+**Why `Variant` alone is sufficient**, verified rather than assumed: unbounded nesting requires a
+recursive type, and a recursive type requires a sum. A directly recursive record is uninhabited (you
+would need a value to construct the first one), and `List[List[…]]` is a static type whose depth is
+bounded by the source text. Every unbounded chain therefore passes through a `Variant` — including
+one that nests through `Option`. The walker still descends into `List` and `Record` children, so a
+mixed structure is dismantled whole once the first `Variant` triggers it.
+
+**Verification.** After the fix, depths of 1M, 5M and **20M** all exit 0 with no output on stderr —
+where 5M and 20M previously aborted. Three regression tests: the deep chain, a mixed
+variant/list/record nesting, and a shared-payload test proving the last owner does the work and an
+earlier drop cannot disturb a sibling. **Falsified**: with the iterative path disabled, the test
+binary dies with `exit code: 0xc00000fd, STATUS_STACK_OVERFLOW` — the falsification signal here is
+the *process* dying, because a stack overflow is not a catchable panic. Full Windows suite green
+(cargo exit 0, 124 binaries, 1634 tests), **including `core_invariance`**, which is what proves this
+core-type change did not move a single one of the compiler's answers.
 
 ### Negative results from this phase
 

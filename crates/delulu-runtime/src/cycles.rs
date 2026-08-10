@@ -86,7 +86,7 @@ impl Registry {
                     }
                     Value::Variant { fields, .. } => {
                         // Immutable and never registered, but its children may be.
-                        if seen.insert(Rc::as_ptr(fields) as *const () as usize) {
+                        if seen.insert(fields.ptr_id()) {
                             values.extend(fields.iter().cloned());
                         }
                     }

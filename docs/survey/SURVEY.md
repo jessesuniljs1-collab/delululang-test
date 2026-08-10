@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 110471 |
+| Rust lines | 110620 |
 | Rust files outside `src/` (test/bench targets) | 94 |
 | Markdown documents | 153 |
-| Markdown lines | 40794 |
+| Markdown lines | 40814 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 81 |
-| Nodes / edges in this map | 1107 / 9571 |
+| Nodes / edges in this map | 1107 / 9573 |
 | Open discrepancies | 3 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -269,7 +269,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 12920 lines
+- **Modules:** 16 files, 13069 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -288,7 +288,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/prim.rs` | 1029 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 332 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/trace.rs` | 522 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 715 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 864 | Runtime values, environments, and capability values (spec §7.1). |
 
 ### `delulu-survey`
 

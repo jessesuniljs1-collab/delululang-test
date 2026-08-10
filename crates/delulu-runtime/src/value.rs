@@ -42,7 +42,11 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Record { name: Rc<str>, fields: Rc<RefCell<Vec<(String, Value)>>> },
     /// A sum-type value: builtin (`Ok`/`Err`/`Some`/`None`) or a user variant, by name.
-    Variant { name: Rc<str>, fields: Rc<Vec<Value>> },
+    ///
+    /// The payload is [`VariantFields`] rather than a bare `Rc<Vec<Value>>` for one reason, and it is
+    /// a safety reason: this is the **only** unbounded nesting vector in the value representation, so
+    /// it is where the iterative teardown lives (campaign finding INTERP-DROP-1).
+    Variant { name: Rc<str>, fields: VariantFields },
     Closure(Rc<Closure>),
     Cap(Rc<CapVal>),
     Secret(Rc<SecretVal>),
@@ -65,12 +69,98 @@ pub enum Value {
     ActorRef { id: crate::actors::ActorId, actor: Rc<str> },
 }
 
+/// The payload of a [`Value::Variant`] — an `Rc<Vec<Value>>` that tears itself down **iteratively**.
+///
+/// # Campaign finding INTERP-DROP-1
+///
+/// `main.rs` states `ref.rule.runtime.faults-are-diagnostics`: *a runtime fault must be a diagnostic
+/// (`DL0905`), never a host crash*. The 512 MiB `delulu-main` stack exists precisely so the
+/// interpreter's `MAX_DEPTH` is the limit that fires. But `MAX_DEPTH` bounds **call** depth, and
+/// nothing bounded **data** depth: the derived `Drop` for a nested value recurses once per level, so
+/// a 5,000,000-deep `type Chain = Nil | Link(Chain)` aborted the host — on Windows with
+/// `0xC00000FD STATUS_STACK_OVERFLOW`, on Linux with `exit 134, fatal runtime error: stack overflow`
+/// — *after* the program had printed its output and finished. The crash was in the runtime's own
+/// teardown, and a bigger stack only moves the threshold.
+///
+/// **Why the destructor lives here and not on `Value`.** The recursion runs
+/// `Value → Rc<Vec<Value>> → Vec<Value> → Value`, so the payload is the right place to break it.
+/// Putting `impl Drop` on `Value` itself would forbid moving out of a `Value` anywhere in the crate
+/// (`E0509`, measured: 9 sites in this crate alone before its dependents are reached) — for no gain,
+/// since the cycle can be cut at either link.
+///
+/// **Why `Variant` is the only place this is needed.** Unbounded nesting requires a *recursive type*,
+/// and a recursive type requires a sum: a directly recursive record is uninhabited (you would need a
+/// value to build the first one), and `List[List[…]]` is a static type whose depth is bounded by the
+/// source text. Every unbounded chain therefore passes through a `Variant` — including one that nests
+/// through `Option`. The walker below still descends into `List` and `Record` children, so a mixed
+/// structure is dismantled whole once the first `Variant` triggers it.
+#[derive(Clone)]
+pub struct VariantFields(Rc<Vec<Value>>);
+
+impl VariantFields {
+    pub fn new(fields: Vec<Value>) -> Self {
+        VariantFields(Rc::new(fields))
+    }
+
+    /// Identity of the shared payload, for cycle detection (`cycles.rs`). Not the values' identity —
+    /// the allocation's.
+    pub fn ptr_id(&self) -> usize {
+        Rc::as_ptr(&self.0) as *const () as usize
+    }
+}
+
+/// Reading a variant's fields is what almost every call site does, so they keep working unchanged.
+impl std::ops::Deref for VariantFields {
+    type Target = Vec<Value>;
+    fn deref(&self) -> &Vec<Value> {
+        &self.0
+    }
+}
+
+impl Drop for VariantFields {
+    fn drop(&mut self) {
+        // Only the LAST owner dismantles; a shared payload is still reachable, so this is just a
+        // refcount decrement and the work belongs to whoever holds the final reference.
+        let Some(owned) = Rc::get_mut(&mut self.0) else { return };
+        // Depth becomes breadth: children are moved onto an explicit worklist instead of being
+        // dropped in place, so teardown costs heap, which is bounded by the structure that already
+        // fit in memory — never native stack, which is not.
+        let mut work: Vec<Value> = std::mem::take(owned);
+        while let Some(v) = work.pop() {
+            match v {
+                Value::Variant { fields, .. } => {
+                    let mut fields = fields;
+                    if let Some(inner) = Rc::get_mut(&mut fields.0) {
+                        work.append(&mut std::mem::take(inner));
+                    }
+                    // `fields` drops here holding an EMPTY vec (or a still-shared Rc), so this
+                    // recursion is one level deep and stops.
+                }
+                Value::List(rc) => {
+                    let mut rc = rc;
+                    if let Some(cell) = Rc::get_mut(&mut rc) {
+                        work.append(&mut std::mem::take(cell.get_mut()));
+                    }
+                }
+                Value::Record { fields, .. } => {
+                    let mut rc = fields;
+                    if let Some(cell) = Rc::get_mut(&mut rc) {
+                        work.extend(std::mem::take(cell.get_mut()).into_iter().map(|(_, v)| v));
+                    }
+                }
+                // Every other variant owns no `Value` children, so dropping it is O(1).
+                _ => {}
+            }
+        }
+    }
+}
+
 impl Value {
     pub fn str(s: impl Into<String>) -> Value {
         Value::Str(Rc::from(s.into().as_str()))
     }
     pub fn variant(name: &str, fields: Vec<Value>) -> Value {
-        Value::Variant { name: Rc::from(name), fields: Rc::new(fields) }
+        Value::Variant { name: Rc::from(name), fields: VariantFields::new(fields) }
     }
     pub fn ok(v: Value) -> Value {
         Value::variant("Ok", vec![v])
@@ -710,6 +800,65 @@ impl Scope {
             p.assign(name, value)
         } else {
             false
+        }
+    }
+}
+
+#[cfg(test)]
+mod teardown_tests {
+    use super::*;
+
+    /// **INTERP-DROP-1 regression lock.** A deeply nested value must tear down without recursing the
+    /// native stack.
+    ///
+    /// Before the fix this aborted the whole test binary — a stack overflow is not a catchable
+    /// panic, so the falsification signal is the process dying, not an assertion failing. That is
+    /// exactly the failure mode the rule `ref.rule.runtime.faults-are-diagnostics` forbids: a runtime
+    /// fault must be a diagnostic (`DL0905`), never a host crash. `MAX_DEPTH` bounds *call* depth;
+    /// this bounds nothing — it makes teardown cost heap instead of stack, so the only limit is the
+    /// memory the structure already occupies.
+    ///
+    /// Depth is chosen to be decisive on a *test* thread's stack (far smaller than the 512 MiB
+    /// `delulu-main` reserves), so the lock fires here without needing the CLI's reservation.
+    #[test]
+    fn a_deeply_nested_value_tears_down_without_recursing_the_native_stack() {
+        let mut v = Value::variant("Nil", vec![]);
+        for _ in 0..500_000 {
+            v = Value::variant("Link", vec![v]);
+        }
+        drop(v); // the operation under test
+    }
+
+    /// The same for a chain that alternates variant and list levels, because the walker has to
+    /// descend through `List`/`Record` children too — a structure that nests through a list between
+    /// every variant must not find a recursive path back.
+    #[test]
+    fn a_mixed_variant_list_record_nesting_also_tears_down_iteratively() {
+        let mut v = Value::variant("Nil", vec![]);
+        for i in 0..200_000 {
+            v = Value::List(Rc::new(RefCell::new(vec![v])));
+            v = Value::Record { name: Rc::from("Box"), fields: Rc::new(RefCell::new(vec![(format!("f{i}"), v)])) };
+            v = Value::variant("Link", vec![v]);
+        }
+        drop(v);
+    }
+
+    /// Teardown must not disturb a payload someone else still holds: the last owner does the work,
+    /// and an earlier drop is only a refcount decrement.
+    #[test]
+    fn a_shared_variant_payload_survives_until_its_last_owner_drops() {
+        let inner = Value::variant("Leaf", vec![Value::Int(7)]);
+        let a = Value::variant("Holder", vec![inner.clone()]);
+        let b = a.clone(); // shares the same Rc payload
+        drop(a);
+        // `b` must still be intact and readable after its sibling went away.
+        match &b {
+            Value::Variant { name, fields } => {
+                assert_eq!(&**name, "Holder");
+                assert_eq!(fields.len(), 1, "the shared payload must survive the first drop");
+                assert!(matches!(&fields[0], Value::Variant { .. }), "and its child with it");
+            }
+            _ => panic!("expected a variant"),
         }
     }
 }
