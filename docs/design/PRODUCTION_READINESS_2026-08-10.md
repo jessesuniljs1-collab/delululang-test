@@ -446,7 +446,7 @@ is refused `DL0703`, and nothing is created outside. Both doors closed.
 | Platform | Status | Evidence |
 |---|---|---|
 | **Windows 11** | ✅ executed | `cargo test --workspace` **cargo exit 0**, 124 binaries, **1631** tests, 0 failures, tree frozen |
-| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1640** tests, 0 failures; every witness re-run end-to-end; `doctor` 12/12 (before the posture section existed — 15 now) |
+| **Linux** (WSL2 Ubuntu-20.04) | ✅ executed | **cargo exit 0**, 124 binaries, **1640** tests, 0 failures; every witness re-run end-to-end; `doctor` all checks pass (this predates the posture section) |
 
 The Guard fix was verified on **both** platforms, which matters because the two disagree on what an
 absolute path looks like: Windows refused the relative seal, sealed `C:\…\secret.txt`, and sealed the
@@ -733,7 +733,7 @@ Two tests lock it, including the negative: prose *about* a finding must not defi
 | File | Correction |
 |---|---|
 | `STAGE5_SPECIFICATION.md` | Its DISC-1 callout ended *"do not cite §5.16 law 4 … until that architecture ships"*. **It shipped** (2026-08-08) and is verified usable (2026-08-10). Now states that, and that the **default** is still legacy — the caution survives, its reason is corrected. |
-| `CROSS_PLATFORM_VERIFICATION.md` | Appended a 2026-08-10 row (suites, clippy, compiler, LSP, extension, macOS cross-check). Older `12/12` doctor rows **left as recorded** — this is a living record, and the document's own policy is that a later run appends rather than rewrites. `doctor` reports 15 now because this campaign added three checks. |
+| `CROSS_PLATFORM_VERIFICATION.md` | Appended a 2026-08-10 row (suites, clippy, compiler, LSP, extension, macOS cross-check). Older `12/12` doctor rows **left as recorded** — this is a living record, and the document's own policy is that a later run appends rather than rewrites. `doctor` reports more checks now because this campaign added the posture section; the exact number depends on the environment, so it is no longer quoted as a figure. |
 | `STAGE1_SPECIFICATION.md` | "65 tests green" is from 2026-07-05, when the workspace was five crates. Marked explicitly as a snapshot that is deliberately not updated, pointing at `SURVEY.md` for live figures — the remedy C81 established. |
 | `PRODUCTION_READINESS_2026-08-10.md` | The Phase-D `doctor 12/12` line now says it predates the posture section. |
 
@@ -750,7 +750,7 @@ is working correctly; the prose is what has to change.
 
 **Final state: 0 errors, 0 warnings, 2 notes** — and both notes are documented-by-design (`C99` is the
 Survey's own comment about why `C99` is not a finding; the bare-`D<n>` citations rely on a default
-that `STAGE10_BUILD_ORDER.md` §2 defines). `delulu doctor` 15/15.
+that `STAGE10_BUILD_ORDER.md` §2 defines). `delulu doctor` passes every check.
 
 ## Phase 6 — closing the two gaps I had named in the tools
 

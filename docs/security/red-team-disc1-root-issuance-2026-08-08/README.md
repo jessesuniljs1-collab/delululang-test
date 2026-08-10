@@ -4,6 +4,28 @@
 model — do NOT unilaterally change root-issuance semantics).** Discovered in the post-F-CUSTODY
 discovery phase (the standing directive: *"what security assumption have we not attacked yet?"*).
 
+> **Where this stands now (updated 2026-08-10; the record below is left exactly as written).**
+>
+> - **Opt-in strict mode shipped 2026-08-08.** `broker start --require-anchored-roots <anchor>` makes
+>   a root enter only by adopting a certificate that verifies against a pinned anchor; unsigned
+>   issuance is refused **`DL1421`**. The default is unchanged, so everything below still describes a
+>   default broker.
+> - **It was not actually usable until 2026-08-10.** Three defects in its own path — a certificate's
+>   relative filesystem scope silently matched nothing, the refusal reported itself as
+>   `DL1401 broker unreachable`, and the scope flags were missing from `--help` — made the documented
+>   flow fail end to end. That is the honest reason nobody turned it on. All three are fixed and the
+>   whole path is verified.
+> - **The residual is unchanged and cannot be closed by code.** Strict mode's own security reduces to
+>   keeping the anchor private key *and* `root_policy.json` outside same-uid reach. What changed is
+>   that it is now **recorded** (every broker start writes its effective mode into the hash-chained
+>   audit log, so a downgrade must leave evidence or break `audit verify`) and **checkable**
+>   (`delulu doctor` reports a `security posture` section, including whether the *running* daemon
+>   agrees with the policy on disk).
+> - **The deployment answer is written down**: [`docs/DEPLOYMENT.md`](../../DEPLOYMENT.md).
+>
+> The finding itself is **not** retracted: on a default broker, on one OS account, the attack below
+> still works exactly as recorded.
+
 ## The claim under attack
 
 The Guard gates **delegated** (non-root) grants; root nodes are "principal-held by construction and

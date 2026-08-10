@@ -2,9 +2,24 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **107,096 lines of Rust**
+**Last updated:** 2026-08-10, at the end of the containment + deployment hardening campaign.
+**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,136 lines of Rust**
 (measured by the Survey, not remembered).
-**State:** clean tree, **122 commits past the local `v1.0.0` tag**, **never pushed anywhere**.
+**State:** clean tree, **177 commits past the local `v1.0.0` tag**, **never pushed anywhere**.
+
+> **If you are starting today, read this first.** Two campaigns have run since this document was
+> written, and the second changed what you should assume:
+>
+> - **2026-08-09** — production-readiness sweep; six defects fixed (see `PRODUCTION_READINESS_2026-08-09.md`).
+> - **2026-08-10** — containment + deployment hardening (`PRODUCTION_READINESS_2026-08-10.md`).
+>   **Eleven defects fixed**, two of them high: a **dangling symlink escaped filesystem containment**
+>   (workspace-deliverable via git), and a **guard seal written the natural way gated nothing while
+>   the CLI said `ok`**. Also: strict anchored-root mode was **unusable** until this campaign and now
+>   works end to end; `delulu doctor` grew a `security posture` section; and
+>   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) now says what a deployment actually protects.
+>
+> **Current status: PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS** — Windows and Linux,
+> in the Tier-2 deployment of `DEPLOYMENT.md`. **macOS is not covered and has still never been run.**
 
 Read §1 and §2 before touching anything. The rest is reference.
 
@@ -123,6 +138,29 @@ has been in continuous adversarial review rather than feature work.
   the WASM backend refuses it (`DL1201` interpreter fallback). The other reserved words stay reserved
   with written reasons (`async`/`await` rejected by Constitution decision 12; `trait`/`impl`/`where`
   undesigned; `ref`/`box`/`trn` soundness-critical; `pure` redundant with `!{}`).
+- **P21 — cross-account boundary** (2026-08-08). Tested the "separate OS account" recommendation with
+  a real second UID: it **holds** on a POSIX filesystem and is **absent on 9p**, where `chmod` is a
+  silent no-op. Both `keygen` and the broker now refuse to write a secret onto such a filesystem.
+- **Production-readiness sweep** (2026-08-09, `PRODUCTION_READINESS_2026-08-09.md`). Six defects,
+  each witnessed against pre-fix code — including a key rotation that a restart undid, a revoked
+  federation certificate that a restart resurrected, and two unbounded parser recursions. All four
+  recursive-descent nesting classes are now bounded (`DL0210`/`DL0211`/`DL0212`/`DL0213`).
+- **Containment + deployment hardening** (2026-08-10, `PRODUCTION_READINESS_2026-08-10.md`). **Eleven
+  defects.** Two high: a **dangling symlink escaped filesystem containment** (`canonicalize` fails
+  identically for "absent name" and "broken link", so the link's name was re-appended as a plain
+  component and the write followed it out of the grant — workspace-deliverable via git, unlike the
+  hardlink boundary), and a **guard seal written the natural, relative way gated nothing while the CLI
+  answered `ok`**. Also: a dependency's authority pin was escapable by spelling; strict root mode
+  failed *open* on a corrupt policy; a valid program aborted the host during value teardown; and
+  strict anchored-root mode — the DISC-1 mitigation — turned out to be **unusable** until three
+  defects in its own path were fixed. `delulu doctor` gained a `security posture` section, and
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) now states what a deployment actually protects.
+
+  **The through-line worth carrying forward:** four of them were the same defect — a security decision
+  made on an **unnormalized or unresolved representation**, walked past by a different spelling of the
+  same thing. It became the search key, and it is what found the Guard one *after* the campaign's own
+  final phase had closed. Ask it of any string compared to decide a security outcome: **what else
+  spells the same thing?**
 
 ---
 
@@ -190,6 +228,7 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 | **`docs/GETTING_STARTED.md`** | You want to write DeluluLang. Install → first program → real programs → your editor. |
 | **`docs/for-agents.md`** | **You are an AI agent driving the toolchain.** Exit codes, `--json` envelopes, how to batch `check`, and what to ask the LSP instead of shelling out. |
 | **`docs/QUESTIONS.md`** | Someone asks "can this be broken?" It answers the hard questions with evidence, and enumerates the known leaks rather than implying there are none. |
+| **`docs/DEPLOYMENT.md`** | **You are about to run code you did not write.** What a deployment actually protects, the three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and why strict mode is not yet the default. |
 | **`docs/survey/SURVEY.md`** | You are about to change the compiler and want the blast radius. |
 
 ### Reference
@@ -339,7 +378,7 @@ matcher, a status bar, and an icon. **`delulu.serverPath` is machine-scoped on p
 
 ```
 cargo build --release                              # first build fetches everything
-cargo test --workspace --no-fail-fast              # 122 suites  (--no-fail-fast MATTERS: without
+cargo test --workspace --no-fail-fast              # 124 binaries (--no-fail-fast MATTERS: without
                                                    #  it cargo stops at the first failing target)
 cargo clippy --workspace --all-targets -- -D warnings   # currently ZERO warnings; keep it there
 bash scripts/cli-sweep.sh <abs-path-to-delulu>     # 27 cases, exact exit codes
@@ -375,7 +414,7 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 
 | | |
 | --- | --- |
-| **rustfmt** | *(new, 2026-08-07)* There is no `rustfmt.toml`; rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). The choices are: reformat ~102,000 lines in one unreviewable commit, keep a permanently red CI step, or say the project has not adopted rustfmt. I removed the step and wrote the reason into `ci.yml`, because a permanently red job teaches people that red is normal. **Adopting rustfmt rewrites every file, and this project's comments carry much of its value — it is the owner's call.** Formatting is currently unenforced. |
+| **rustfmt** | *(new, 2026-08-07)* There is no `rustfmt.toml`; rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). The choices are: reformat the whole tree (now ~111,000 lines) in one unreviewable commit, keep a permanently red CI step, or say the project has not adopted rustfmt. I removed the step and wrote the reason into `ci.yml`, because a permanently red job teaches people that red is normal. **Adopting rustfmt rewrites every file, and this project's comments carry much of its value — it is the owner's call.** Formatting is currently unenforced. |
 | **CODE_OF_CONDUCT.md** | Absent. A policy commitment, not a cleanup task. |
 
 **Settled, and no longer blocking — the licence.** `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`
@@ -457,7 +496,28 @@ still claimed four reachable advisories after the wasmtime 27→47 upgrade had c
 
 ---
 
-## 9. Current numbers — measured 2026-08-07, on an untouched tree
+## 9. Current numbers
+
+### Measured 2026-08-10, on an untouched tree (current)
+
+| | Windows | Linux |
+| --- | --- | --- |
+| test binaries | 124 | 124 |
+| tests passing | **1,645** | **1,654** |
+| failures | 0 | 0 |
+| clippy findings | clean | **0** |
+
+Also verified by execution on this pass: every shipped example checks clean on both platforms · the
+**LSP answers a real `initialize` / `didOpen` / `hover` / `shutdown` sequence over stdio** with genuine
+`DL` diagnostics (verified by speaking the protocol to the binary, not by trusting the suite — P19's
+lesson was that the suite was green while the extension had no server) · VS Code extension **17/17**
+and the `.vsix` verifies · `delulu doctor` **15/15** · Survey 0 errors / 0 warnings.
+
+**Quote cargo's own exit code, never a pipeline's.** `cargo test … | tail` reports the *pipe's* status,
+so a failing suite reads as exit 0 — that is how a red core-invariance gate survived a whole campaign
+being described as green (finding CORE-SNAPSHOT-1).
+
+### Measured 2026-08-07, on an untouched tree (kept — the delta below is explained against it)
 
 | | Windows | Linux |
 | --- | --- | --- |
@@ -465,7 +525,7 @@ still claimed four reachable advisories after the wasmtime 27→47 upgrade had c
 | tests passing | **1,581** | **1,587** |
 | failures | 0 | 0 |
 
-The difference is exactly **6**, and it is a **set** difference rather than a gap. Linux runs 8 tests
+The difference is exactly **6**, and it is a **set** difference rather than a gap. (On the 2026-08-10 run the delta is **9**; the mechanism is the same — platform-gated tests — and the enumeration below is the last one taken test-by-test.) Linux runs 8 tests
 Windows does not — 2 Unix-socket transport tests, 5 wasmtime live-engine contained-execution tests,
 and 1 verified-plugin-on-wasm test — while Windows runs the 2 refusal counterparts
 (`windows_refuses_contained_execution_rather_than_risk_a_fastfail` and
@@ -488,7 +548,9 @@ JSON, including on failure.
 ## 10. If you are starting fresh, do this
 
 1. Read `README.md`, then this file's §1 and §8.
-2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 122 suites, 0 failures.
+2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 124 test binaries, 0
+   failures. **Read cargo's own exit code, not a pipeline's** — `cargo test … | tail` reports the
+   *pipe's* status, which is how a red gate once survived a whole campaign described as green.
    If `doctor_cli` fails, run `cargo run -p delulu-survey -- build` and try again.
 3. Ask the Survey about anything you are about to change.
 4. Read `docs/release/CHECKPOINT-1.0.md` for the honest status, and
@@ -561,7 +623,7 @@ There are 19 memory topics. Their content is below, organised by what it is for.
   disk — rather than respawning it.
 - **The laptop's BSOD problem is resolved** (NVIDIA `nvlddmkm`, fixed at source 2026-07-12). Build
   caps are lifted. The commit-often habit remains sensible.
-- **A local `v1.0.0` tag exists and was never pushed.** The tree is 122 commits past it.
+- **A local `v1.0.0` tag exists and was never pushed.** The tree is 177 commits past it (2026-08-10).
 
 ### 11.4 Findings that must never be quietly re-softened
 
@@ -679,7 +741,7 @@ The distinction this section turns on is the one the whole project turns on: **e
 
 | | Windows 11 (x86_64-msvc) | Linux (WSL2 Ubuntu) | macOS |
 | --- | --- | --- | --- |
-| Full test suite | ✅ **122 suites / 1,581 tests / 0 failed** | ✅ **122 suites / 1,587 tests / 0 failed** | ❌ **never executed, not once, in any phase** |
+| Full test suite | ✅ **124 binaries / 1,645 tests / 0 failed** | ✅ **124 binaries / 1,654 tests / 0 failed** | ❌ **never executed, not once, in any phase.** A per-crate `cargo check --target aarch64-apple-darwin` type-checks four workspace members; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`), so **no DeluluLang source was shown to fail — and most was not shown to compile either** |
 | CLI sweep (`cli-sweep.sh`) | ✅ 27/27 | ✅ run in earlier passes | ❌ |
 | Compiler + interpreter | ✅ | ✅ | ❌ |
 | WASM engine | ✅ | ✅ (plus 5 live-engine tests Windows refuses by design) | ❌ |

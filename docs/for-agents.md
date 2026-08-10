@@ -351,6 +351,16 @@ Scripts and emoji are otherwise unrestricted.
 Repeating what the rest of the project says, because a harness author is the person most likely to
 overstate it downstream:
 
+- **The Guard does not contain a program running as the same OS user, and this is the one that
+  matters most to a harness author.** DeluluLang's containment is enforced by a broker process; to
+  the kernel, a program running as your user is the same principal as that broker, so it can read
+  the broker key, edit its policy, or kill it. If your harness runs *generated* code, run it as a
+  **separate OS account** — that is the only configuration in which the boundary is enforced by
+  something other than the code's good behaviour, and it is verified with a real second UID. The
+  three deployment tiers, what each is worth, and how to check which one you are in are in
+  [`DEPLOYMENT.md`](DEPLOYMENT.md); `delulu doctor` reports a `security posture` section, and
+  **running it as the agent account is how you test the boundary** — if it can write the broker's
+  state directory, the boundary is not there.
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught.
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
@@ -361,10 +371,18 @@ overstate it downstream:
 - **Performance is measured, never promised** — `measurements/study-c/REPORT.md`.
   v1.0 is **not competitive with C** on the measured workloads (2.0×–60.5× slower), and the report
   says so in those words. Do not let a harness's marketing copy imply otherwise.
-- **Expression nesting is capped at 128 levels (`DL0210`)** — the one limit in this list a code
-  *generator* is realistically able to hit. A human never writes 128-deep nesting; a program
-  emitting one nested expression per element of a large structure can. If you generate DeluluLang,
-  emit a `let` binding per level rather than one deep expression.
+- **Nesting is capped at 128 levels in all four recursive-descent classes** — expressions
+  (`DL0210`), types (`DL0211`), patterns (`DL0212`) and blocks (`DL0213`). These are the limits in
+  this list a code *generator* is realistically able to hit. A human never writes 128-deep nesting; a
+  program emitting one nested construct per element of a large structure can. If you generate
+  DeluluLang, emit a `let` binding per level rather than one deep expression, and prefer a loop over
+  deeply nested blocks.
+
+  **Deep runtime *data* is a separate axis and is now safe too.** Building a recursive value
+  millions deep — `type Chain = Nil | Link(Chain)` in an accumulator loop — used to abort the host
+  during teardown *after* the program had finished, with no diagnostic. Value teardown is iterative
+  as of 2026-08-10, so depth costs heap rather than native stack. Call depth remains bounded by
+  `DL0905`.
 
   Stated with its history because it is recent: before 2026-08-04 there was no limit, and a valid
   module nested 100,000 deep did not produce a diagnostic — it overflowed the stack and killed the

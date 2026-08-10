@@ -115,6 +115,13 @@ availability is not a security property (spec §11).
   path itself instead of letting the OS do it, because on Windows `CreateProcess` searches the
   current directory before `PATH`; `editors/vscode/test/resolve.test.js` pins that behaviour.
 
+  That resolution had one gap of its own, closed 2026-08-10 (`SERVERPATH-REL-1`): it did the lookup
+  itself but did not require the `PATH` **entries** to be absolute, so a `PATH` containing `.` put the
+  planted-binary hole back — the resolver returned a bare name that the OS then resolved against the
+  working directory, in violation of this module's own contract to return an absolute path. Relative
+  `PATH` entries are now skipped, for the same reason a relative `delulu.serverPath` is refused
+  outright.
+
   `delulu run` and `delulu test` additionally refuse to run in an untrusted workspace, since they
   execute the workspace's own code. Analysis deliberately still runs there: reading a hostile file is
   what a language server is for.

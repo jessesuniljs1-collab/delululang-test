@@ -218,7 +218,7 @@ three-check `security posture` section; the older `12/12` rows are correct for t
 |---|---|---|---|
 | `cargo test --workspace` | **124 binaries, 1641 passed, 0 failed** | **124 binaries, 1650 passed, 0 failed** | **never executed** |
 | clippy `--workspace --all-targets` | clean | **0 findings** | — |
-| `delulu doctor --check` | **15/15** (was 12 — posture section added) | **15/15** | — |
+| `delulu doctor --check` | all checks pass, exit 0 | all checks pass, exit 0 | — |
 | Compiler — every shipped example | all check clean | all check clean | — |
 | **LSP server, live protocol** | initialize / capabilities / publishDiagnostics with real `DL` codes / hover / shutdown | identical | — |
 | VS Code extension | **17/17**, `.vsix` verifies | node absent in this WSL image | — |

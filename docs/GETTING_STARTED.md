@@ -484,6 +484,11 @@ Zed, Helix, Neovim, Kate, Emacs and JetBrains all work from the three-line confi
 
 - [The DeluluLang Book](book/THE_DELULULANG_BOOK.md) — 20 chapters. Chapter 6, *Reading Authority*,
   is the flagship skill; Chapter 11 is for reviewing AI-written code.
+- [**`DEPLOYMENT.md`**](DEPLOYMENT.md) — **read this before you run code you did not write.**
+  Everything in this guide assumes you are running your own programs on your own machine, which is
+  the right posture for learning. A program running as *your* OS user is not contained by anything
+  here; the three deployment tiers, and how to check with `delulu doctor` which one you are actually
+  in, are there.
 - [`for-agents.md`](for-agents.md) — pin this if you are an agent harness.
 - [`reference/`](reference/) — grammar, tokens, primitives, diagnostics, CLI contracts.
 - `delulu explain <CODE>` — long-form docs for any diagnostic you hit.
