@@ -428,7 +428,7 @@ done.
 
 | | Why |
 | --- | --- |
-| **macOS has never been executed. Not once, in any phase.** | No Apple hardware. 7 crates type-check for `x86_64-apple-darwin`, 3 for `aarch64`; the full workspace is blocked by `libffi-sys` picking its MSVC path from the host. A matrix entry naming `macos-latest` is a plan, not a result. |
+| **macOS has never been executed. Not once, in any phase.** | No Apple hardware. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **One command on any Mac closes this: `cargo test --workspace`.** |
 | **CI has never executed.** | The repository is not pushed and will not be. The YAML parses and every command in it has been run by hand — but *"written"* and *"green"* are different claims. |
 | **The Dockerfile has never been built.** | `Dockerfile` and `.devcontainer/devcontainer.json` were written 2026-08-07. Docker CLI 29.5.2 is installed; **the daemon was not running**. Dockerfiles fail for boring reasons that are invisible by reading. Treat the first `docker build` as an experiment. |
 
@@ -573,7 +573,12 @@ session opened at `D:\nelan\DeluluLang` **on this account, on this machine** loa
 clone, does not exist on another machine, and is not shared with a different account. So everything
 durable is transcribed here, and this file is the authority if the two ever disagree.
 
-There are 19 memory topics. Their content is below, organised by what it is for.
+There are **26** memory topics as of 2026-08-10. Their content is below, organised by what it is for
+rather than one-per-topic, because several topics say the same thing from different angles.
+
+**If you are a fresh session with no memory loaded, §11 is your briefing** — it is written to stand on
+its own. If you *do* have memory, this section will be familiar; where the two disagree, this file
+wins, and you should update the memory to match.
 
 ### 11.1 Standing owner instructions — the ones that never expire
 
@@ -624,6 +629,17 @@ There are 19 memory topics. Their content is below, organised by what it is for.
 - **The laptop's BSOD problem is resolved** (NVIDIA `nvlddmkm`, fixed at source 2026-07-12). Build
   caps are lifted. The commit-often habit remains sensible.
 - **A local `v1.0.0` tag exists and was never pushed.** The tree is 177 commits past it (2026-08-10).
+- **Linux verification runs in WSL2 Ubuntu-20.04, and the harness has three rules that cost time to
+  learn.** Drive it from **PowerShell, not Git-Bash** — Git-Bash rewrites `/mnt/...` into
+  `C:/Program Files/Git/mnt/...` and the command silently fails. Pass **script files**, not inline
+  `bash -lc '…'` (quoting collides with `$(…)` and nested quotes), and **strip CR first**. Use the
+  **warm Linux target**: `cd /mnt/d/nelan/DeluluLang && CARGO_TARGET_DIR=/home/user/delulu-target
+  cargo test --workspace` — an ext4 target is required, because a `drvfs` one breaks `libffi-sys`.
+- **`/home/user/delulu-f1` and `/home/user/delulu-linux2` are preserved snapshots, not junk.** Only
+  `delulu-target` is a rebuildable cache.
+- **Disk cleanups have a written discipline** (`docs/maintenance/`): never delete a `.md`, confirm at
+  a gate before permanent deletion, keep the build caches, and verify WSL content by hash against
+  `D:` HEAD before removing anything there.
 
 ### 11.4 Findings that must never be quietly re-softened
 
@@ -649,6 +665,42 @@ There are 19 memory topics. Their content is below, organised by what it is for.
   plugin.** There is **no signature check** on the adapter itself, and **no driver for any real device
   ships in-tree**. Named as a gap, never blurred.
 - **P19 — the editor was a way in, twice**, and the second needed no click. See §8.
+- **2026-08-09 — four restart-resurrection defects.** `broker rotate-key` never persisted the new key,
+  so a restart resurrected every "invalidated" token (**ROTATE-1**); a revoked federation certificate
+  lived only in daemon memory, so a restart let it re-adopt (**ADOPT-REPLAY-1**); an untrusted adapter
+  could OOM the host with an unterminated reply line; and two more parser recursions crashed
+  `delulu check`. All four recursive-descent nesting classes are now bounded
+  (`DL0210`/`DL0211`/`DL0212`/`DL0213`) — **one fix does not close a class.**
+- **2026-08-10 — filesystem containment escaped, and a guard seal gated nothing.**
+  **SYMLINK-DANGLE-1**: `canonicalize` fails identically for "a name that is absent" and "a link whose
+  target is absent", so the containment walk re-appended a *dangling symlink's* own name as a plain
+  component and the write followed it out of the grant. Unlike the hardlink boundary this **is**
+  workspace-deliverable — git stores a symlink as a path string. **GUARD-SPELL-1**: `fs_read`/`fs_write`
+  guard rules are matched against the runtime's *resolved absolute* path, so a seal written the
+  natural relative way (`guard policy set "fs_write:./out/secret.txt" sealed`) could never fire — and
+  the CLI answered `ok`. Witnessed: the program wrote the sealed file. **A seal that reports success
+  while gating nothing is worse than no seal.**
+- **2026-08-10 — the runtime could be crashed by a valid program.** `MAX_DEPTH` bounds *call* depth
+  and nothing bounded *data* depth, so a recursive value a few million deep aborted the host during
+  teardown, **after the program had finished** (**INTERP-DROP-1**). That violates this project's own
+  `ref.rule.runtime.faults-are-diagnostics`. Fixed by an iterative teardown on the variant payload.
+- **CONTAIN-TOCTOU-1 is an accepted, documented residual.** Filesystem containment is a
+  check-then-open, so a *concurrent* writer into a granted directory can swap a checked file for a
+  symlink in between. The confined program cannot win this race through the primitive table (no
+  symlink-creating operation exists), and closing it properly needs `O_NOFOLLOW`/`openat2` — the
+  platform-dependent containment this project refuses. **Deployment rule: grant scopes that point at
+  directories only the program's own user can write.**
+- **The same-uid boundary is category 7 and cannot be closed by code.** To the kernel, a process
+  running as your user *is* you. Strict anchored-root mode raises the bar (and, since 2026-08-10, is
+  usable, audit-recorded and `doctor`-checkable) but its own residual is a same-user-writable policy
+  file. The real boundary is a **separate OS account** — verified with a real second UID, and written
+  up with the exact commands in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+**The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
+security decision made on an **unnormalized or unresolved representation**, walked past by a different
+*spelling* of the same thing — a dangling link, a `..` left in a comparison, a relative `PATH` entry,
+a relative guard pattern. Ask it of every string compared to decide a security outcome: **what else
+spells the same thing?**
 
 ### 11.5 Operational traps, recorded because each one cost time
 
@@ -657,6 +709,32 @@ mechanism. **PowerShell 5.1 `*>` writes UTF-16LE** — `iconv` before grepping. 
 the first failing target** — always `--no-fail-fast`. **Freeze the tree during verification**; editing
 while a suite runs makes the Survey stale and produces three `doctor_cli` failures that look like
 product defects.
+
+Added 2026-08-09/10, each paid for the same way:
+
+- **A pipeline's exit code is not cargo's.** `cargo test … | tail` reports the *pipe's* status, so a
+  failing suite reads as exit 0. That is how the core-invariance gate stayed red for a day while a
+  campaign was described as green (**CORE-SNAPSHOT-1**). Capture `$?` from cargo directly.
+- **A gate outside `cargo test` rots silently.** `delulu fmt --check docs/book/samples` is declared in
+  `ci.yml` and recorded as passing; it had been failing since the formatter changed its canonical
+  effect-row order. Run the *declared* gates, not just the suite.
+- **A falsification that does not change the binary proves nothing.** One guard-removal patch silently
+  missed (CRLF vs LF in the match text) and the test "passed" against supposedly-broken code — caught
+  only because a sibling test failed and the pair disagreed. Confirm the edit landed, not that the
+  runner ran.
+- **A witness that never ran is not a negative result.** A guard test reported "sealed: no file" when
+  in fact `run` had rejected an unknown flag and the program never executed. Check the witness
+  produces the *baseline* effect before believing its refusal.
+- **Read a document's structure before "fixing" what a checker reports.** The obvious fix to
+  SURVEY-HEADING-1 — adding rows to the ledger table — would have made the note go away by *misfiling*
+  a 2026-08-03 finding into a 2026-07-24 ledger. The defect was in the checker. A discrepancy marked
+  "for a human to judge" means judge it.
+- **A stale binary is not evidence.** A background `cargo test` holds `delulu.exe`, so a concurrent
+  `cargo build` fails and the next run silently uses the OLD binary.
+- **Never quote a `delulu doctor` check-count.** It varies by environment — a state directory or audit
+  log that exists adds checks (17 on Windows here, 14 on Linux). Say "all checks pass".
+- **A Python heredoc that prints an emoji dies on Windows cp1252 *before* it writes.** One doc patch
+  reported two successful replacements and saved nothing. Prefer the editor for Unicode content.
 
 ### 11.6 If you are an assistant with memory, keep it current
 
