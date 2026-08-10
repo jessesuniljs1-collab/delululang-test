@@ -41,9 +41,16 @@ What that does and does not mean:
 | **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
 
-An in-progress hardening campaign — testing every stage to failure and fixing what breaks — is
-tracked in [`docs/design/HARDENING_CAMPAIGN.md`](docs/design/HARDENING_CAMPAIGN.md), including the
-defects it has found so far and the ones still open.
+A continuing hardening effort — testing every stage to failure and fixing what breaks — is tracked in
+[`docs/design/HARDENING_CAMPAIGN.md`](docs/design/HARDENING_CAMPAIGN.md), with the later passes in
+their own dated records: [`PRODUCTION_READINESS_2026-08-09.md`](docs/design/PRODUCTION_READINESS_2026-08-09.md)
+and [`PRODUCTION_READINESS_2026-08-10.md`](docs/design/PRODUCTION_READINESS_2026-08-10.md). Each names
+the defects it found, the witness that failed against the pre-fix code, and what was left open.
+
+The most recent found a **dangling symlink that escaped filesystem containment** and a **guard seal
+that gated nothing while the CLI reported `ok`** — both in subsystems that had already been fixed,
+red-teamed and pinned with regression tests. That is the honest shape of this work: the checklist
+being green is where the search starts, not where it ends.
 
 ## Installing
 
@@ -196,7 +203,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | [`docs/design/CONSTITUTION.md`](docs/design/CONSTITUTION.md) | The v1.0 constitution — identity, semantics, honesty clauses. |
 | [`docs/design/SOUNDNESS_AUDIT.md`](docs/design/SOUNDNESS_AUDIT.md) | Rules R-1…R-8 that keep authority in the type, and the five holes they close. |
 | [`docs/design/STABILITY.md`](docs/design/STABILITY.md) | What is promised to stay put, and what is not. |
-| [`docs/release/CHECKPOINT-1.0.md`](docs/release/CHECKPOINT-1.0.md) | The state of the project in one page: architecture, testing, and ten known limitations named without softening. |
+| [`docs/release/CHECKPOINT-1.0.md`](docs/release/CHECKPOINT-1.0.md) | The state of the project in one page: architecture, testing, and every known limitation named without softening — §8 is the list, and it has grown as the campaigns found more. |
 | [`SECURITY.md`](SECURITY.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`rfcs/`](rfcs/) | Reporting, contributing, and changing the language. |
 
 ## Honesty
