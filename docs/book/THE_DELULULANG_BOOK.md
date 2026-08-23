@@ -822,8 +822,9 @@ instruction without a manifest entry, a runtime grant, a capability threaded fro
 `ForeignCall` in every row on the path — but it does **not** bound foreign **behavior**. A C library,
 once called, can do anything to the process; the Python import allowlist gates the *interface*, not
 what Python transitively does. The word "sandbox" is deliberately absent here: containment of foreign
-*behavior* is the job of the custody layer's worker isolation and microVMs (Chapter 15), and the docs
-say so at every turn.
+*behavior* is the job of the custody layer's worker isolation (Chapter 15) — and of the microVM
+profile, which is **specified and not built**, so today the worker is the whole of it. The docs say
+so at every turn.
 
 Two rules are permanent, not deferred:
 - **Secrets never cross to foreign code** (DL1301) — and the compiler will never suggest `expose` to
@@ -866,9 +867,19 @@ claimed. Every issue, delegate, revoke, and declassify is written to an append-o
 
 Above the broker sit the isolation profiles: **foreign workers** (C/Python in a separate minimal-
 privilege subprocess, so a segfault kills the worker, not your program) and the **microVM profile**
-(Firecracker-class, Linux-first, default-deny egress) for genuinely untrusted execution. The broker
-defends against *the program and its delegates* — not against the OS user, root, the kernel, or the
-hardware. That boundary is stated plainly and never oversold.
+(Firecracker-class, Linux-first, default-deny egress) for genuinely untrusted execution.
+
+**The microVM profile is specified and not built, and this paragraph used to read as though it
+were.** `--isolation microvm` is a probe: it checks for `/dev/kvm` and a VMM binary, names whichever
+is missing, and then refuses with `DL1408` **even when both are present**, because the guest launch
+itself — read-only rootfs, virtio-fs mounts matching the granted `fs.*` scopes, the default-deny
+egress proxy, the vsock broker proxy — is unwritten. Nothing weaker ever launches under the
+`microvm` name, which is the correct refusal and is why you will never silently get less isolation
+than you asked for. But the profile you can actually run today is the foreign worker, and for
+genuinely untrusted execution the boundary is a separate OS account rather than a VM.
+
+The broker defends against *the program and its delegates* — not against the OS user, root, the
+kernel, or the hardware. That boundary is stated plainly and never oversold.
 
 Which raises the only deployment question that really matters: **what OS user does the untrusted code
 run as?** If the answer is "the same one as the broker", nothing in this chapter contains it — that
@@ -1219,7 +1230,8 @@ The sequence, as history rather than plan:
   checker; packages, provenance, the authority-versioning laws; the WASM containment floor, the `.dwx`
   artifact, and two-engine parity. The thesis, working, tested at scale.
 - **Stage 4 — Foreign:** C FFI and embedded Python behind the `ForeignCall` line.
-- **Stage 5 — Custody:** the broker, the grant tree, revocation, foreign workers, the microVM profile.
+- **Stage 5 — Custody:** the broker, the grant tree, revocation, foreign workers, and the microVM
+  profile's *refusal path* (the guest launch itself is platform-pending — see below).
 - **Stage 6 — Live:** runtime plugins (Verified and Contained), the DIR typed IR.
 - **Stage 7 — Concurrent:** actors and reference capabilities; data-race freedom.
 - **Stage 8 — Surface:** the LSP, the formatter, the authority-isolated test runner, localization, the
@@ -1241,9 +1253,20 @@ dead-man actuator leases, the operator e-stop, declared fail-states, the sim-to-
 heterogeneous compute behind one authority model, hybrid post-quantum signing (behind `--unstable`,
 because the implementations are unaudited by their own authors), cloud deploy plans, fleet rollouts,
 and broker federation. **Not built:** the optimizing backend described in spec §2.1, any native
-backend, and a multi-threaded WASM engine — each deferred with a published note rather than quietly
-dropped. The JIT exists only as a leash: `exec_native` is hard-coded false on the lease path, so a
-delegation can never confer it.
+backend, a multi-threaded WASM engine, and **the microVM guest launch** — each deferred with a
+published note rather than quietly dropped. The JIT exists only as a leash: `exec_native` is
+hard-coded false on the lease path, so a delegation can never confer it.
+
+The microVM entry is the one worth reading twice, because unlike the others it is a *specified
+isolation layer* rather than a performance tier: `--isolation microvm` probes for KVM and a VMM
+binary and then refuses with `DL1408` **even when both are present**. You never get weaker isolation
+than you asked for — you also do not get that layer, and Chapter 15 now says so where it describes
+the profiles.
+
+**One more entry belongs on this list and was missing until 2026-08-23: the standard library.**
+`list` has four methods — `len`, `get`, `push`, `map` — and there is no `Map`/`Dict`/`Set` type
+among the sixteen prelude types. That is not a deferral anyone ruled on; it is how far the prelude
+got. Anyone planning real programs should learn it here rather than at their first `filter`.
 
 ### What actually remains
 
@@ -1262,6 +1285,15 @@ Ordered by what would most change the language's usefulness, not by ease:
 
 None of that is a promise with a date. It is the list a maintainer would work from, kept in the same
 voice as the rest of this chapter: what is true, what is not, and which is which.
+
+**The complete list is now written down.** Six entries is what fits in a closing chapter;
+[`../REMAINING_WORK.md`](../REMAINING_WORK.md) is the whole set — sixty items across the language,
+the backends, containment, proof, tooling and platform, each checked against the current binary
+rather than inherited from prose, and each with what closing it would actually take. It exists
+because every one of those facts was already written down somewhere in this repository and none of
+them had ever been in the same place. Three that a reader of this chapter would not otherwise
+meet: the microVM layer above, the four-method standard library, and a complete CLI-localization
+mechanism with zero strings registered in it.
 
 Beyond v1.0, the language changes only through a public **RFC process**, with entrenchment analysis
 required for anything touching the constitution's core or its honesty limits. The stability contract

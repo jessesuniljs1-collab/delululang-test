@@ -1,5 +1,37 @@
 # The Language Specification & Constitution
 
+> ## ⚠ STATUS: SUPERSEDED EARLY DRAFT — kept for provenance, not for planning
+>
+> **This is the pre-implementation vision document, written before Stage 1.** It is superseded by
+> [`CONSTITUTION.md`](CONSTITUTION.md) (the normative core) and the ten
+> `STAGE<N>_SPECIFICATION.md` files (what each stage is contractually required to do).
+> `docs/REPOSITORY_STRUCTURE.md` has described it as superseded for some time; **the document
+> itself did not say so until 2026-08-23**, so a reader who opened it directly met the line below
+> calling it *"the definitive design specification"* and had no way to know otherwise. A document's
+> status belongs in the document.
+>
+> **Read it for the arguments, not the inventory.** The reasoning here — the irreducibility test,
+> why each rejected alternative was rejected, why this had to be a new language — is still the best
+> statement of *why* DeluluLang exists, and none of it has been retracted. But its "Decision:"
+> paragraphs describe an intended system, and several describe things that were later changed or
+> were never built:
+>
+> - **§5.9, §5.11 (guarantee 5) and Part III name a Firecracker-class microVM** as the runtime
+>   containment layer for untrusted code. **It is not built** — `--isolation microvm` is a probe
+>   that refuses with `DL1408` on every host (see [`../REMAINING_WORK.md`](../REMAINING_WORK.md)
+>   §4.1). The Stage 5 roadmap entry in Part IV says the same.
+> - **§5.10 describes a tiered JIT** with profiling, on-stack replacement and deoptimization.
+>   **None of it exists**; `@jit` is a leash (`DL1906`), and there is no native tier.
+> - **§5.3 promises Pony-style reference capabilities** as the destination, with a GC MVP and the
+>   rcaps as "the north-star the language migrates toward". All six *did* land in Stage 7 and work
+>   today — this one came out ahead of the draft.
+> - **§5.8 makes asynchrony an effect** tracked in the row. That held: `Async` is one of the ten
+>   core effects. What did **not** hold is any `async`/`await` *surface syntax* — rejected outright
+>   by Constitution decision 12, so the words stay reserved and unbuilt.
+>
+> Where this file and `CONSTITUTION.md` disagree, the constitution wins. Where the constitution and
+> the code disagree, `REMAINING_WORK.md` records which.
+
 *A production programming language defined by one durable, intrinsic property — with a staged path to build it. This is the definitive design specification, not a research exploration.*
 
 ---

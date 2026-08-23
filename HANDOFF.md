@@ -418,6 +418,14 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 
 ## 8. Problems — what is open, and why
 
+> **The complete inventory is [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md)** (2026-08-23) —
+> sixty items across the language, backends, containment, proof, tooling and platform, each
+> verified against the binary and each with what closing it takes. This section stays because it is
+> the *briefing* version: the things you must know before touching anything. That file is the list
+> you plan from. It also carries a §1 this section cannot: **eleven** places where the *documents*
+> disagreed with the code — ten corrected, one (Constitution §5.15) left for the project lead
+> because the file is entrenched.
+
 ### Blocked on the owner (not on engineering)
 
 | | |
@@ -453,6 +461,24 @@ done.
   authority, but it still distorts measured intervals.
 - **The WASM backend is a fragment.** The interpreter is the language.
 - **The optimizer in spec §2.1 is not implemented**, and there is no native backend.
+- **The microVM isolation layer is not built** — and it is a *specified defence layer*, not a
+  performance tier. Constitution §5.14 names four layers; `crates/delulu/src/microvm.rs` is 58 lines
+  and `probe()` returns `Err` on **every** path, including a fully-provisioned Linux+KVM host. The
+  read-only rootfs, virtio-fs scope mounts, egress proxy and vsock broker proxy are unwritten, so
+  `--isolation microvm` refuses with `DL1408` everywhere. Nothing weaker ever launches under the
+  name — the right refusal — but §5.15 guarantee 5 rests today on the **WASM half only**.
+- **The standard library is four list methods** — `len`, `get`, `push`, `map`. No `filter`, `fold`,
+  `sort`, `contains`; no `Map`/`Dict`/`Set` among the 16 prelude types; 15 prelude builtins.
+  `check.rs::is_higher_order_method` still names `List.filter`, which answers `DL0405`. Nobody ruled
+  on this; it is how far the prelude got.
+- **CLI-string localization has zero registered strings.** `delulu_diag::catalog::CLI_STRINGS` is an
+  empty array, so no CLI prose is localizable in any locale, and every `[cli.*]` key the
+  localization guide documents would get `DL1704` and fall back. Diagnostics *do* localize (8 codes
+  in the shipped `delulu-slang` catalog, out of 154).
+- **Type inference is exponential on a small class of programs** — reproduced 2026-08-23 at
+  **10.2 s from 29 lines** (`type Pair[L, R]`, depth 22, doubling per level). No fuel bound, no
+  `--max-type-size`, no timeout, and `delulu check` is the agent hot loop. A bound is
+  language-visible, so it is an RFC.
 - **Deadlock, livelock, starvation and mailbox exhaustion are not prevented.**
 - **Multi-tenancy is not provided.** Separate OS accounts are required.
 - **`pyo3` stays at 0.25** with two CVEs, ignored on *reachability* — and that argument is now a test
@@ -506,7 +532,12 @@ still claimed four reachable advisories after the wasmtime 27→47 upgrade had c
 
 ## 9. Current numbers
 
-### Measured 2026-08-10, on an untouched tree (current)
+### Measured 2026-08-10, re-verified 2026-08-23 on an untouched tree (current)
+
+The 2026-08-23 run was taken after the documentation pass that produced `REMAINING_WORK.md` and
+returned **exactly** the figures below — 124 binaries, 1,645 passed, 0 failed, 4 ignored, cargo's
+own exit code 0. That is the point of quoting it: a pass that touched thirteen files and one code
+comment moved nothing.
 
 | | Windows | Linux |
 | --- | --- | --- |

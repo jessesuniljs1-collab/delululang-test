@@ -148,6 +148,19 @@ The list is fixed when the loop starts, so mutating it inside the body cannot ch
 the loop runs. `break`/`continue` outside a loop are a compile error (`DL0412`), and `for` over
 anything that is not a list is `DL0411`.
 
+> **The list surface is small, and it is better to learn that here than at your first `filter`.**
+> `List` has exactly four methods — `len`, `get`, `push`, `map` — and `Str` has six (`len`, `trim`,
+> `contains`, `starts_with`, `split`, `slice`). There is **no `filter`, `fold`, `sort`, `find`,
+> `reverse`, `concat` or `join`**, and **no `Map`/`Dict`/`Set` type** in the prelude. Write those as
+> a `for` loop over an accumulator, which is what the examples above do.
+>
+> This is not a deferral anyone ruled on — it is how far the prelude got, and it is the largest gap
+> between what DeluluLang *is* and what someone arriving from another language expects. It is
+> recorded in [`REMAINING_WORK.md`](REMAINING_WORK.md) §2.1 rather than left for you to discover.
+> Nothing about it touches the authority guarantee: growing the prelude is additive work, and a
+> higher-order addition like `filter` would carry its callback's effect row exactly as `map` already
+> does (audit rule R-4).
+
 ## 4. Errors
 
 [`examples/guide/03_errors.delulu`](../examples/guide/03_errors.delulu)

@@ -91,7 +91,7 @@ hidden:
 | **The runtime and the primitive table** | A wrong row in the table is a wrong answer everywhere. |
 | **The host OS and hardware** | Capability enforcement is host-side code; a kernel that lies makes it moot. |
 | **Cryptographic primitives** | BLAKE3, Ed25519 as used. Post-quantum options are gated behind `--unstable` and are **not** validated against NIST vectors here. |
-| **The hypervisor**, if you use microVM containment | Standard containment assumption. |
+| **The hypervisor**, if you use microVM containment | Standard containment assumption — **and today it is hypothetical**, because the microVM profile is a probe that always refuses (`DL1408`). You cannot currently use it, so this row describes a trust assumption you cannot yet take on. See `REMAINING_WORK.md` §4.1. |
 | **Side channels** | Timing, cache and power channels are **out of scope**. `Secret.verify` is constant-time; nothing else claims to be. |
 
 Anything that can be stated honestly is stated **relative to that base**. The correct sentence is
@@ -433,7 +433,16 @@ wrote — which is the use case this language was built for — that difference 
 And the honest counterweight: **a sandbox does not care whether the compiler has a bug.** §1.1 is
 exactly the case where the type-level answer was wrong and a lower layer was the thing that held.
 Which is why the design is explicitly defense in depth — type proof → WASM/WASI floor → microVM
-containment → human-held broker keys — rather than a claim that any one layer suffices.
+isolation → human-held broker keys — rather than a claim that any one layer suffices.
+
+**Three of those four layers are built; the microVM one is not.** `--isolation microvm` is a probe
+that names the missing prerequisite and refuses with `DL1408` on every host, including a
+fully-provisioned Linux+KVM one — so the layer that would contain *genuinely untrusted* execution
+is, today, the layer that is absent. That is stated here rather than left to be discovered, because
+this section is an argument *for* defense in depth and it would be a poor one if it counted a layer
+nobody can turn on. What holds instead is the WASM/WASI floor plus the broker, and — for untrusted
+code — a separate OS account (`DEPLOYMENT.md` Tier 2), which is the boundary this project actually
+verified with a second UID.
 
 ### 2.2 Can DeluluLang run inside a sandbox?
 

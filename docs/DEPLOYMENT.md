@@ -173,6 +173,14 @@ These are known, documented, and not fixable by configuration:
   language bounds *reachability*, not behaviour.
 - **The hardware adapter.** `--adapter-cmd` runs an operator-supplied subprocess. The envelope is
   enforced host-side before dispatch, but the driver itself is not sandboxed and is not signature-checked.
+- **The microVM isolation profile — because it does not exist yet.** `delulu run --isolation microvm`
+  is a *probe*: it looks for `/dev/kvm` and a VMM binary, names whichever is missing, and then
+  refuses with `DL1408` **even when both are present**, because the guest launch (read-only rootfs,
+  virtio-fs mounts matching the granted `fs.*` scopes, default-deny egress proxy, vsock broker
+  proxy) is unwritten. **This is the correct failure mode** — you never silently get weaker
+  isolation than you asked for — but do not plan a deployment around it. The profiles that work are
+  `none` and `process` (the foreign worker). For genuinely untrusted code the boundary is Tier 2
+  above, not a VM. Detail: [`REMAINING_WORK.md`](REMAINING_WORK.md) §4.1.
 
 ---
 

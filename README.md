@@ -39,6 +39,7 @@ What that does and does not mean:
 | **Deployment** | What a deployment actually protects, and what you must do to get it, is [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — three tiers, and `delulu doctor` reports which one you are actually in. The short version: a program running as **your own OS user** is not contained by anything here; run untrusted or autonomous code as a separate account. |
 | **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). |
 | **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
+| **Specified, not built** | Named here because a status table listing only what exists is half a status. [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) is the full set — 60 items, each checked against the current binary. The three a new reader would otherwise meet the hard way: **the microVM isolation layer** of the constitution's four is a probe that always refuses (the other three are built); **the standard library is four list methods** (`len`, `get`, `push`, `map`, no `Map`/`Dict`/`Set`); and **the DIR-level optimizer and native backend do not exist** (`@jit` is a leash, not a tier). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
 
 A continuing hardening effort — testing every stage to failure and fixing what breaks — is tracked in
@@ -210,9 +211,17 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 ## Honesty
 
 This project never claims "faster than C," "lowest tokens," or "unbreakable." Guarantees are
-stated relative to a named threat model; strength comes from defense in depth (type-system proof
-→ WASM/WASI floor → microVM containment → human-held broker keys), and every trust assumption
-(compiler, hardware, hypervisor, side channels) is named. See the constitution, §5.14 and §9.
+stated relative to a named threat model, and every trust assumption (compiler, hardware,
+hypervisor, side channels) is named. See the constitution, §5.14 and §9.
+
+Strength comes from defense in depth, and **the honest form of that sentence names which layers
+actually exist.** The constitution specifies four: type-system proof → WASM/WASI floor → microVM
+isolation → human-held broker keys. **Three of them are built. The microVM layer is not** — it is a
+probe that reports which prerequisite is missing and refuses with `DL1408`, on every host including
+a fully-provisioned Linux+KVM one. Nothing weaker ever launches under the `microvm` name, which is
+the right refusal; but a reader should not count a layer that is not there. This line listed all
+four as sources of strength until 2026-08-23.
+[`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) §4.1 has the detail.
 
 **The word "unbreakable" is never used, and on 2026-08-03 two adversarial passes showed why.** A
 nine-line program made the toolchain report `effects: (none — provably pure)` for something that

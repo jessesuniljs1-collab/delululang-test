@@ -47,8 +47,16 @@ measurement is given.
 ## 1. Corrections found while checking — claims that are stale, in both directions
 
 These are not remaining work; they are **documents that disagree with the code today**. They are
-listed first because a reader who trusts them would mis-plan. All are fixed in the same commit as
-this file except where noted.
+listed first because a reader who trusts them would mis-plan. All are fixed except **1.11**, which
+is in an entrenched file and is the project lead's to make (7.10a).
+
+Two categories are deliberately **left alone**, and both are conventions this project already
+holds. **Historical campaign records** — `CHANGELOG.md`, `HARDENING_CAMPAIGN.md`,
+`STAGE10_BUILD_ORDER.md`, `docs/maintenance/` — carry the pre-fix statements as dated records of
+what was true when written; this project does not rewrite its own history. And **the `dist/`
+archive** (`dist/delulu-1.0.0-.../README.md`) is a frozen snapshot of what the 1.0.0 release
+actually shipped, including its copy of the four-layer sentence. Editing it would misrepresent the
+artifact. Release documents are exempt from the freshness scan for exactly this reason.
 
 | # | Where | Said | Actually | Fixed |
 |---|---|---|---|---|
@@ -60,6 +68,9 @@ this file except where noted.
 | 1.6 | `crates/delulu-syntax/src/token.rs` | `ref`/`box`/`trn` are *"genuinely unbuilt"* | **All six reference capabilities work.** Verified by checking `iso`/`val`/`ref`/`box`/`trn`/`tag` as type prefixes — all six compile clean. They are reserved as *identifiers*; that is a different claim. | ✅ |
 | 1.7 | `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` §1 | delulu-slang *"Ships 100% of CLI strings"* | **Zero.** `CLI_STRINGS` is an empty array — see 6.1. | ✅ |
 | 1.8 | `docs/lang/delulu-slang.md` | `coverage = { cli = 100, diagnostics = 90, explain = 25 }`, version 1.0.0 | Shipped catalog is **version 0.8.0, 8 of 154 diagnostics, 0 CLI strings**. | ✅ |
+| 1.9 | `README.md` **Honesty section** | *"strength comes from defense in depth (type-system proof → WASM/WASI floor → **microVM containment** → human-held broker keys)"* | **Three of those four layers exist.** An unbuilt layer named as a source of strength, in the section whose entire subject is not overstating things. Also in `QUESTIONS.md` §1.3 and §2.1, and the Book Ch. 14, 15 and 20. | ✅ |
+| 1.10 | `docs/design/LANGUAGE_SPECIFICATION.md` | *"This is the definitive design specification"* | It is the **superseded pre-implementation draft**. `REPOSITORY_STRUCTURE.md` had said so for some time; the document itself did not, so anyone opening it directly was told the opposite. Now carries its own status header naming the four decisions that did not survive contact. | ✅ |
+| 1.11 | `docs/design/CONSTITUTION.md` §5.15 | Guarantee 5 names the microVM layer | Same overstatement — **but the file is ENTRENCHED** and reserved to the project lead. **Not edited.** Recorded as 7.10a. | ⛔ owner |
 
 Historical campaign records (`CHANGELOG.md`, `HARDENING_CAMPAIGN.md`, `STAGE10_BUILD_ORDER.md`,
 `docs/maintenance/`) also contain the pre-fix parser statements. Those are **dated records of what
@@ -162,6 +173,7 @@ history. Only current-state documents were corrected.
 | 7.8 | **Five `SECURITY.md` controls are `PENDING-PUBLIC`**: the `security@` disclosure address and its PGP key, branch protection / two-person review, signed commits and tags (Sigstore needs OIDC identity), SLSA L3 attestation, and the OpenSSF Scorecard floor. | **Blocked on hosting** | `SECURITY.md` §6; `CHECKLIST-1.0.md` §"Blocked on public hosting (D2)". Each ships as written policy plus committed configuration that activates on publication. | Public hosting. Two-person review is enforced *procedurally* today: the agent that writes a phase never commits it. |
 | 7.9 | **rustfmt is not adopted and formatting is unenforced.** rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). | **Owner** | No `rustfmt.toml` exists — verified. The CI step was removed with the reason written into `ci.yml`, because a permanently red job teaches people that red is normal. | **The owner's call.** Adopting it rewrites every file in one unreviewable commit, and this project's comments carry much of its value. |
 | 7.10 | **`CODE_OF_CONDUCT.md` is absent.** | **Owner** | Verified absent. | A policy commitment, not a cleanup task. |
+| 7.10a | **Constitution §5.15 guarantee 5 counts a layer that does not exist** — *"Violations are contained at the WASM/microVM layer even if the type system is bypassed."* The WASM half holds; the microVM half is 4.1. §5.14's four-layer list has the same shape. | **Owner — ENTRENCHED, not edited** | `docs/design/CONSTITUTION.md:383`. `delulu-survey query doc:docs/design/CONSTITUTION.md` reports **ENTRENCHED** — `.github/CODEOWNERS` reserves it to the project lead specifically, not any maintainer (Constitution §10, invariant 44). **I did not change it.** Every *non*-entrenched site making the same claim was corrected in this pass: `README.md` (the Honesty section, which named all four layers as sources of strength), `QUESTIONS.md` §1.3 and §2.1, and the Book Ch. 14/15/20. | **The project lead's call, and it needs no RFC by the precedent already on file** — `ENTRENCHED_CHANGE_RECORD.md` records the 2026-08-08 case where a binding honesty clause in `DELULU_CORE.md` was factually false and was corrected under owner approval with the deviation recorded. The minimal edit is to qualify guarantee 5 with which half is built, exactly as the sites above now do. Until then the constitution overstates by one layer, and this row exists so that is a *known* overstatement rather than a hidden one. |
 | 7.11 | **RFC 0001's governance debt.** Phase F1 shipped **before** the RFC had a sponsor or a comment period; F2–F6 were built concurrently with the open period. | **Open, recorded** | `rfcs/README.md`; ruling **D21(g)**. | Nothing to build. It is **never to be restated as compliance** — the commitment stands that if the RFC is amended or rejected, the code changes with it. |
 | 7.12 | **The timed LTS cycle is PENDING-ADOPTION.** The *mechanism* is built and drilled end to end (`measurements/lts-cycle/`, 6/6); a real 12-week train, a real 24-month backport and a real CVE/CNA need calendar time. | **Pending adoption** | `STAGE10_BUILD_ORDER.md:1621`. No CVE was invented to fake it. | Time. |
 | 7.13 | **`pyo3` stays at 0.25 with two CVEs**, ignored on *reachability* — and that argument is now a test (`governance.rs::the_ignored_pyo3_advisories_are_still_unreachable`). | **Deliberately deferred** | `CHECKPOINT-1.0.md` §8.11. | The real fix is 0.25 → 0.29, which removes `Python::with_gil`. Deferred **deliberately**, because GIL handling is exactly where a hasty migration introduces undefined behaviour. |
