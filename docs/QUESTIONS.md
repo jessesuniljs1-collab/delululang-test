@@ -296,7 +296,7 @@ The realistic risks during an agent authoring loop, and where each stands:
 | `delulu fix` quietly widens a row | **Refused by default.** A widening repair is never applied unless the operator names that exact repair id with `--accept-widening`. Six attempts at an accept-all wildcard left the file byte-identical. As of C90 the report line also stops calling an accepted widening "changes nothing". |
 | An agent hides code from its reviewer | **Two variants closed.** Bidi controls (DL0107) and, as of C89, six characters that *render* as a line break without acting as one (DL0108) — the second is Trojan Source inverted: a guard clause visible to the reviewer and absent from the compiled program. |
 | A dependency's authority drifts | `delulu authority --diff` compares two lockfiles; a manifest ceiling bounds each package. |
-| An agent exhausts the machine | **Open, named.** Type inference is exponential on a small class of programs — 28 lines can exhaust memory — and the parser has no depth bound. `delulu check` is the agent hot loop, so this is a real denial-of-service surface. Not fixed; see `HARDENING_CAMPAIGN.md` P16. |
+| An agent exhausts the machine | **Partly closed, partly open.** *Closed:* the parser is bounded at 128 levels in all four recursive-descent classes (`DL0210`/`DL0211`/`DL0212`/`DL0213`, 2026-08-04/09), so deep input is refused with a diagnostic and exit 1 instead of crashing — see §1.7. *Still open:* type inference is exponential on a small class of programs — 29 lines reach 10.2 s at depth 22, doubling per level — with no fuel bound, no `--max-type-size` and no timeout, and checking is quadratic in nesting depth. `delulu check` is the agent hot loop, so this remains a real denial-of-service surface. A bound is language-visible and belongs in an RFC; see `HARDENING_CAMPAIGN.md` P16 and `REMAINING_WORK.md` §2.3. |
 
 ### 1.7 Are there known leaks?
 
@@ -671,9 +671,12 @@ Repeated here so no reader has to assemble it from the rest:
 12. **Post-quantum options are unvalidated** and gated behind `--unstable`.
 13. **Nothing is hosted.** No registry, no download page, no public repository — you build from
     source or produce your own archive.
-14. **Open robustness defects**: exponential type inference on a small class of programs, quadratic
-    checking in nesting depth, and an unbounded parser recursion that crashes outside the exit-code
-    contract.
+14. **Open robustness defects**: exponential type inference on a small class of programs, and
+    quadratic checking in nesting depth. Both are unbounded — no fuel, no `--max-type-size`, no
+    timeout. (The third defect this item used to name — an unbounded parser recursion that crashed
+    outside the exit-code contract — was **closed** in 2026-08-04/09; all four recursive-descent
+    nesting classes are now capped at 128 levels, `DL0210`–`DL0213`. It is listed here as fixed
+    rather than deleted, because this list is what a reader checks against.)
 15. **Type inference is order-dependent and has no principal types** — swapping two parameters can
     decide whether a program compiles. Fail-closed, so no authority escapes, but undocumented until
     now.

@@ -230,6 +230,7 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 | **`docs/for-agents.md`** | **You are an AI agent driving the toolchain.** Exit codes, `--json` envelopes, how to batch `check`, and what to ask the LSP instead of shelling out. |
 | **`docs/QUESTIONS.md`** | Someone asks "can this be broken?" It answers the hard questions with evidence, and enumerates the known leaks rather than implying there are none. |
 | **`docs/DEPLOYMENT.md`** | **You are about to run code you did not write.** What a deployment actually protects, the three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and why strict mode is not yet the default. |
+| **`docs/REMAINING_WORK.md`** | **You are deciding what to build next, or wondering whether a feature exists.** Every gap between what a document in this repository describes and what the code does, each row re-verified against the current binary. Also carries §1: the places where the *documents* were stale and the code had moved ahead. |
 | **`docs/survey/SURVEY.md`** | You are about to change the compiler and want the blast radius. |
 
 ### Reference
@@ -287,9 +288,12 @@ twenty known limitations named without softening. `SUPPORT_MATRIX.md`, `SBOM-1.0
 
 The whole system, and the thing to be most careful with.
 
-- **Effects** — a fixed core set of eleven: `Read`, `Write`, `Net`, `Async`, `Clock`, `Rand`, `Load`,
-  `User`, `Actuate`, `ForeignCall`, `Declassify` — carried in a function's row and inferred
-  transitively.
+- **Effects** — a fixed core set of **ten**: `Read`, `Write`, `Net`, `Async`, `Clock`, `Rand`,
+  `Load`, `Actuate`, `ForeignCall`, `Declassify` — carried in a function's row and inferred
+  transitively. A module may declare its own with `effect Name`; those are `Effect::User(String)`,
+  which is the *variant that carries a user effect*, **not** an eleventh core effect. This line said
+  "eleven" and counted `User` as one until 2026-08-23; `CORE_EFFECT_NAMES` and
+  `Effect::core_from_name` both hold exactly ten.
 - **Capability scopes** — an effect is not enough. A `Cap[FsRead]` is scoped to *paths*; `Cap[Net]` to
   *hosts*; devices to named dimensions with numeric envelopes. `Scopes` carries seven set-valued
   dimensions (`fs_read`, `fs_write`, `net`, `secrets`, `declassify`, `foreign_c`, `foreign_python`)
@@ -933,7 +937,7 @@ and conflating them misleads in both directions.
 | execute | `delulu-runtime` | the tree-walking interpreter — **the interpreter is the language** |
 | compile to WASM | `delulu-wasm` | a *subset* backend under a deny-by-default Wasmtime host |
 
-**148 registered diagnostic codes** (the Survey's measured count today; `CHECKPOINT-1.0.md` says 145
+**154 registered diagnostic codes** (the Survey's measured count today; `CHECKPOINT-1.0.md` says 145
 and is correct *as a 1.0 snapshot* — release documents are deliberately exempt from the
 freshness scan). Codes are **add-only** from 1.0, each with an accepting *and* a rejecting conformance
 witness; coverage is 100% and hard-gated per commit. The grammar is normative

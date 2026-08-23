@@ -297,6 +297,13 @@ DeluluLang/
     │                               #   `delulu doctor`, honest per-platform status, the list of
     │                               #   things that are NOT protected, and the recorded ruling on
     │                               #   why strict mode is not yet the default
+    ├── REMAINING_WORK.md           # [2026-08-23] everything SPECIFIED, DESCRIBED or IMPLIED that
+    │                               #   is not built, in one place — assembled by reading all 161
+    │                               #   markdown files and checking each claim against the CURRENT
+    │                               #   binary. Sections: the language and compiler, backends,
+    │                               #   containment, proof, tooling, platform. §1 runs the other
+    │                               #   way: documents that were STALE because the code had moved
+    │                               #   ahead of them. Not a schedule and not a promise.
     ├── editors.md                  # editor/LSP setup
     ├── design/                     # the committed design corpus (constitution, audit, stages)
     │   ├── CONSTITUTION.md
@@ -473,6 +480,7 @@ accounted for by name or by its group.
 | `QUESTIONS.md` | The hard questions answered with evidence — can an agent bypass Authority, is any of this real mathematics — and an enumerated list of known leaks. |
 | `DEPLOYMENT.md` | **What a deployment actually protects, and what you must do to get it.** Three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and the recorded ruling on why strict anchored-root mode is not yet the default. |
 | `MATHEMATICS.md` | Every formal claim with its evidence category (1–7). **A claim with no category is a claim to be deleted or demoted.** |
+| `REMAINING_WORK.md` | **Everything specified, described or implied that is not built** — the join across `CHECKPOINT-1.0.md` §8/§9, `QUESTIONS.md` Part 5, `MATHEMATICS.md` §12, the Book's Ch. 20 and `HANDOFF.md` §8, with every row re-checked against the current binary instead of inherited from prose. §1 records the reverse case: current-state documents that had gone stale because the code moved ahead of them. |
 | `REPOSITORY_STRUCTURE.md` | This file. |
 | `editors.md` | One server, every editor. Per-editor setup, what the server does and cannot do, and the editor surface's security history. |
 

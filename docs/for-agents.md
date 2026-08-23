@@ -283,8 +283,16 @@ authority. This is the check to run in CI on every dependency bump.
 
 ## [agents.effects] The effect kinds
 
-`Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`, `ForeignCall`. A module may declare more with
-`effect`.
+There are **ten** core effects: `Read`, `Write`, `Net`, `Clock`, `Rand`, `Declassify`,
+`ForeignCall`, `Load` (bringing in a plugin after compile time), `Async` (`spawn` and behaviour
+sends — an effect only; there is no futures runtime and no `await`), and `Actuate` (commanding a
+physical device). A module may declare more with `effect Name`; those are user effects and are
+reported by name.
+
+The list is closed — `delulu_check::ty::Effect::core_from_name` accepts exactly these ten and
+nothing else, and a `type` or `effect` declaration that shadows one is refused rather than silently
+ignored. If you are enumerating effects in a harness, enumerate all ten: a report carrying `Load`,
+`Async` or `Actuate` is not malformed.
 
 **Kind is static; scope is runtime.** The type proves what *kind* of thing a function can do; the
 capability decides *which* file or host. Do not report path-level guarantees as static — they are

@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 224 |
-| Rust lines | 111136 |
+| Rust lines | 111148 |
 | Rust files outside `src/` (test/bench targets) | 94 |
-| Markdown documents | 154 |
-| Markdown lines | 41918 |
+| Markdown documents | 155 |
+| Markdown lines | 42187 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1119 / 9890 |
+| Nodes / edges in this map | 1120 / 9958 |
 | Open discrepancies | 2 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -318,7 +318,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7439 lines
+- **Modules:** 9 files, 7451 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -330,7 +330,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 | `src/morph.rs` | 734 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 113 | The language's one rule for turning written decimal text into a `Float`. |
 | `src/parser.rs` | 2847 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
-| `src/token.rs` | 455 | The Stage-1 token model (spec §2). |
+| `src/token.rs` | 467 | The Stage-1 token model (spec §2). |
 
 ### `delulu-wasm`
 

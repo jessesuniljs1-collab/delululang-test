@@ -253,10 +253,22 @@ pub fn keyword(word: &str) -> Option<TokenKind> {
 /// deviation 5) — activation is not tokenization — and DL0106 keeps rejecting them as declared
 /// names, which is exactly what makes the contextual reading unambiguous.
 /// Tier 1 (owner-directed 2026-08-08) removed `for`, `in`, `break` and `continue` — now active
-/// keywords for bounded iteration. The remaining reserved words are genuinely unbuilt: `async`/
-/// `await` (Async is an effect, not surface syntax — Constitution decision 12 rejected a parallel
-/// async system), `trait`/`impl`/`where` (no typeclass design), the three extra Pony rcaps
-/// `ref`/`box`/`trn` (soundness-critical lattice extensions), and `pure` (redundant with `!{}`).
+/// keywords for bounded iteration.
+///
+/// **Reserved here means "not usable as an identifier". It does not mean "unbuilt", and this
+/// comment used to conflate the two.** The list below splits on that line:
+///
+/// - **Reserved AND built:** the six Pony reference capabilities `iso`/`val`/`ref`/`box`/`trn`/
+///   `tag`. All six parse as a contextual type prefix (`parse_type_prefixed`, build-order
+///   deviation 5) and all six carry full deny tables in `delulu_check::rcaps`. They are reserved
+///   as identifiers precisely *because* they are live in type position. Until 2026-08-23 this
+///   comment called `ref`/`box`/`trn` "genuinely unbuilt", which was wrong in a way a reader
+///   could act on — and singled out three of six words that are in every respect alike.
+/// - **Reserved and genuinely unbuilt:** `async`/`await` (Async is an effect, not surface syntax —
+///   Constitution decision 12 rejected a parallel async system), `trait`/`impl`/`where` (no
+///   typeclass design exists), and `pure` (redundant with `!{}`).
+/// - **Reserved as namespace guards:** `plugin`, `secret`, `cap` — the authority-bearing type
+///   names, kept out of the identifier space so a user declaration cannot shadow them (C23).
 pub const RESERVED: &[&str] = &[
     "async", "await", "iso", "val", "ref", "box", "tag", "trn", "plugin",
     "secret", "cap", "trait", "impl", "where",

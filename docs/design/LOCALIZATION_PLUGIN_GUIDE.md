@@ -35,9 +35,18 @@ richly localizable precisely *because* the machine side is frozen. (See `AI_NATI
 
 - **`en-US`** (English, United States) — the base. **Complete by construction:** the compiler refuses
   to build with a missing `en-US` key. Every other locale falls back to it.
-- **`delulu-slang`** — Gen-Z spoken English, the project's default voice option. Ships 100% of CLI
-  strings + the top-priority diagnostic set; long-form `explain` docs are en-US except the 50
-  most-hit codes (the catalog `[meta]` declares its coverage; the picker shows it).
+- **`delulu-slang`** — Gen-Z spoken English, the project's default voice option. **It is a starter
+  catalog, and this line overstated it until 2026-08-23.** What actually ships is version `0.8.0`
+  with **8 of 154 diagnostic codes** and **zero CLI strings**; long-form `explain` is en-US
+  throughout. The catalog `[meta].coverage` string is the honest one and the picker shows it.
+
+  **The CLI half cannot be authored yet, and that is a gap in the loader rather than in the
+  catalog.** `delulu_diag::catalog::CLI_STRINGS` — the table whose entries *are* the key space, so
+  that a missing en-US text is a compile error — is currently **empty**. Every `[cli.*]` key this
+  guide documents below is therefore unknown to the validator: a catalog using one gets DL1704 and
+  falls back. Registering those strings at their call sites is tracked in
+  [`../REMAINING_WORK.md`](../REMAINING_WORK.md) §6.1, and it is a prerequisite for any locale's
+  CLI coverage, not just this one's.
 
 Both are embedded in the binary. **Every other language ships as a catalog plugin** — authored by
 anyone (human or AI), added/removed/edited freely. AI-generated community translations are the

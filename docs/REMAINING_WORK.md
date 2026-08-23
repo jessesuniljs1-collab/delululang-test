@@ -1,0 +1,217 @@
+# What remains to be implemented in DeluluLang
+
+**Written:** 2026-08-23. **Method:** every markdown file in this repository was read — all 161 that
+existed before this one — every feature claim in them was checked against the code, and every item
+below was verified against the **current binary** rather than against what a document said. **Tree at the time of
+writing:** 186 commits past the local `v1.0.0` tag, 13 workspace members (9 shipped language
+crates, 4 repository tooling), 111,148 lines of Rust, 154 registered diagnostic codes,
+`delulu doctor` 17/17, Survey 0 errors.
+
+> Every count in the line above is the Survey's, recounted from the tree. That is not a stylistic
+> choice: the first draft of this file quoted **"308 registered diagnostic codes"**, taken from a
+> grep of `codes.rs` that counted each code once per table and swept in the `UNALLOCATED` entries
+> beside them. The Survey rejected it on the next build and named the real figure. A number in this
+> repository that was not recounted is a number that is probably wrong — which is the argument §1
+> of this document is largely made of.
+
+**This document is a list of gaps, not a list of defects.** Almost everything here is *already
+named honestly somewhere in the repository* — that is the point of the project's honesty clauses,
+and the reason this file could be assembled at all. What this file adds is a single place to see
+the whole set, each item verified rather than inherited, with what closing it would actually take.
+
+> **The one thing to understand before reading.** DeluluLang v1.0 is a working
+> authority-and-effect-typed language whose central claim holds and has been attacked repeatedly.
+> The gaps below are overwhelmingly **breadth** (a small standard library, one platform never run,
+> a backend that compiles a subset) and **depth of evidence** (a paper proof rather than a
+> mechanized one), not holes in the guarantee. Where a gap *is* in the guarantee — the microVM
+> layer, the same-uid boundary — it is called out as such and it is already documented.
+
+---
+
+## 0. How to read the status column
+
+| Marker | Meaning |
+|---|---|
+| **Not built** | The mechanism does not exist in the tree. Verified by reading the code, not by trusting a document. |
+| **Partial** | Something ships and is narrower than the specification or the prose describes. |
+| **Deferred (RFC)** | A ruling deferred it and named the reason; changing it needs the RFC process. |
+| **Owner** | Reserved to the project lead. Not an engineering task. |
+| **Environment** | Blocked by hardware or hosting this project does not have. No code closes it. |
+| **Category 7** | Outside the proof boundary by construction (`MATHEMATICS.md` §12). Cannot be closed by code. |
+
+Every row's *Verified* column says how I checked it in this pass. Where I reproduced a defect, the
+measurement is given.
+
+---
+
+## 1. Corrections found while checking — claims that are stale, in both directions
+
+These are not remaining work; they are **documents that disagree with the code today**. They are
+listed first because a reader who trusts them would mis-plan. All are fixed in the same commit as
+this file except where noted.
+
+| # | Where | Said | Actually | Fixed |
+|---|---|---|---|---|
+| 1.1 | `docs/QUESTIONS.md` §1.6 | *"the parser has no depth bound … Not fixed"* | All four recursive-descent classes are bounded at 128 — `DL0210`/`DL0211`/`DL0212`/`DL0213`. Reproduced: 50,000-deep expression → `DL0210`, **exit 1**, in contract. | ✅ |
+| 1.2 | `docs/QUESTIONS.md` Part 5 item 14 | *"an unbounded parser recursion that crashes outside the exit-code contract"* | Same as above. The same file already said so correctly at §1.7 — it **contradicted itself**. | ✅ |
+| 1.3 | `docs/design/AUTHORITY_GUARD_CAPSTONE.md` §2 surface 1 | Parser *"**Guarded, with one open crash**"*, *"no recursion bound … (P16, open)"* | Closed 2026-08-04/09. This is a current-state audit table, not a historical log, so it had to move. | ✅ |
+| 1.4 | `docs/for-agents.md` `[agents.effects]` | Seven effect kinds | **Ten.** `Load`, `Async` and `Actuate` were missing from the one page an agent harness is told to pin. | ✅ |
+| 1.5 | `HANDOFF.md` §6 | *"a fixed core set of **eleven**"* | **Ten.** `User` is the user-declared variant, not a fixed core effect. `CORE_EFFECT_NAMES` and the capstone both say ten. | ✅ |
+| 1.6 | `crates/delulu-syntax/src/token.rs` | `ref`/`box`/`trn` are *"genuinely unbuilt"* | **All six reference capabilities work.** Verified by checking `iso`/`val`/`ref`/`box`/`trn`/`tag` as type prefixes — all six compile clean. They are reserved as *identifiers*; that is a different claim. | ✅ |
+| 1.7 | `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` §1 | delulu-slang *"Ships 100% of CLI strings"* | **Zero.** `CLI_STRINGS` is an empty array — see 6.1. | ✅ |
+| 1.8 | `docs/lang/delulu-slang.md` | `coverage = { cli = 100, diagnostics = 90, explain = 25 }`, version 1.0.0 | Shipped catalog is **version 0.8.0, 8 of 154 diagnostics, 0 CLI strings**. | ✅ |
+
+Historical campaign records (`CHANGELOG.md`, `HARDENING_CAMPAIGN.md`, `STAGE10_BUILD_ORDER.md`,
+`docs/maintenance/`) also contain the pre-fix parser statements. Those are **dated records of what
+was true when written** and are deliberately left alone — this project does not rewrite its own
+history. Only current-state documents were corrected.
+
+---
+
+## 2. The language and the compiler
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 2.1 | **The standard library is very small.** `list` has exactly four methods — `len`, `get`, `push`, `map`. No `filter`, `fold`, `find`, `sort`, `contains`, `reverse`, `concat`, `is_empty`, `pop`, `slice`, `join`. `str` has six. There is **no `Map`/`Dict`/`Set` type** among the 16 prelude types, and 15 prelude builtins in total. | **Not built** | `docs/reference/primitives.md` (generated from `PRIM_TABLE`); `PRELUDE_TYPES`/`PRELUDE_BUILTINS` in `check.rs:46,29`. Confirmed by running `xs.filter(…)` → `DL0405 type List[Int] has no method filter`. | Additive, so minor-version work, not an RFC. Each method needs a prim-table row, an interpreter and a WASM lowering, and both conformance witnesses. Higher-order ones (`filter`, `fold`) must carry the callback's row variable under audit rule **R-4**. |
+| 2.2 | **`is_higher_order_method` names `List.filter`, which does not exist.** Fail-safe (it can never be called), but it is a hand-maintained list that has drifted from the table that defines it — design rule 1 in `STAGE10_BUILD_ORDER.md` §D14(d). | **Partial** | `check.rs:3281`. Recorded in `HARDENING_CAMPAIGN.md` §"Findings recorded and NOT fixed"; still present. | Delete the entry, or add `filter` (2.1) and keep it. Not both silently. |
+| 2.3 | **Type inference is exponential on a small class of programs.** No fuel bound, no `--max-type-size`, no timeout. `delulu check` is the agent hot loop, so this is a real denial-of-service surface. | **Deferred (RFC)** | **Reproduced this pass.** `type Pair[L, R]` with `let aN = Pair { l: aN-1, r: aN-1 }`: **29 lines, depth 22 → 10.2 s**, doubling per level (78 ms @ 12, 539 ms @ 18, 2.5 s @ 20). Note the shape matters — a *single*-parameter `Pair[T]` is linear and stays at ~120 ms to depth 60. | A bound is language-visible (it refuses programs that compile today), so it is an RFC, exactly as `DL0210` was. |
+| 2.4 | **Type checking is quadratic in nesting depth.** 16 KB of nested list literals took 17.8 s when measured; `fmt --check` on the same input is linear, so it is the checker. | **Open** | `HARDENING_CAMPAIGN.md` P16 findings list. | Profiling work; not a language change, so no RFC. |
+| 2.5 | **No principal types.** Inference is order-dependent — swapping two parameters can decide whether a program compiles. Fail-closed, so no authority escapes. | **Open (F4)** | `SOUNDNESS_AUDIT.md` F-4; `CHECKPOINT-1.0.md` §8.16. | A real type-system change; RFC and probably a rewrite of `unify.rs`'s ordering. |
+| 2.6 | **`Secret.verify` declassifies without requiring `Cap[Declassify]`**, while `expose` requires it. It *declares* the effect (so it is visible in the authority report) but needs no capability. Holding a secret therefore grants one chosen bit per call. | **Open (R-5 residue)** | `SOUNDNESS_AUDIT.md` F-5 box; witness `crates/delulu-check/tests/secret_oracle.rs`. Blocked concretely: closing it means `verify` returning `Secret[Bool]`, and `SecretVal` is **String-only** (`value.rs:620`). | RFC. Needs a non-String `SecretVal` representation first. |
+| 2.7 | **No implicit-flow tracking.** This is not noninterference, and is not claimed to be. | **Category 7** | `MATHEMATICS.md` §12 "outside the boundary" item 1. | A different type system. Named as out of scope, not as a to-do. |
+| 2.8 | **Resumable algebraic effect handlers.** Constitution §5.8 rejects exceptions and continuations for v1.0 and says handlers *"may be revisited post-1.0 only with a design that preserves the security reading of rows."* | **Deferred (RFC)** | No `handler` production in `parser.rs`. | RFC with a soundness argument — non-local control flow is exactly what effect rows are protecting. |
+| 2.9 | **Reserved keywords with nothing behind them:** `async`, `await` (rejected by Constitution decision 12 — `Async` is an effect, not surface syntax), `trait`, `impl`, `where` (no typeclass design exists), `pure` (redundant with `!{}`), plus `plugin`, `secret`, `cap`. | **Deferred / rejected** | `token.rs:260` `RESERVED`. | `trait`/`impl`/`where` need a typeclass design and an RFC. The rest are decisions, not gaps. |
+| 2.10 | **Record field access is O(record width)** at run time (finding C55). Measured, U-shaped, minimum near width 20. | **Open** | `CHECKPOINT-1.0.md` §8.6. | Static field indices through the DIR, plus a name→index map in the checker (also closes C48's residual scan). |
+
+---
+
+## 3. Backends and execution
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 3.1 | **The DIR-level optimizer described in spec §2.1 does not exist** — no cross-package inlining, no monomorphization, no escape analysis. | **Not built (RFC-gated)** | `AUTHORITY_GUARD_CAPSTONE.md` §2 surface 3: *"none is implemented"*; `STAGE10_BUILD_ORDER.md:2060`. | A real optimizer plus evidence the passes pay off. Deferred under ruling **D18c** partly because no such evidence exists yet. |
+| 3.2 | **There is no native backend.** `@jit` exists only as a *leash*: without `--grant exec.native` the hint is ignored with **DL1906**, and `exec_native: false` is hard-coded on the lease path so a federation delegation can never confer it. | **Not built (deliberately leashed)** | `run_cmd.rs:375`, `cli.rs:2553`, `codes.rs:1444`. The CLI itself says *"no native tier exists in v1.x"*. | A native tier plus the invariant-45 obligation that every mode passes the same suites. Constitution §5.11 also requires that only human-controlled policy may grant native emission. |
+| 3.3 | **The tiered execution model of Constitution §5.11 does not exist.** No profiling, no on-stack replacement, no deoptimization. `@aot`/`@interpret`/`@jit` parse and are reported; nothing switches tiers. | **Not built** | Same as 3.2; `attributes_cli.rs` tests only that the hints are *recorded*. | Follows 3.2. |
+| 3.4 | **The WASM backend compiles a subset of the language.** Five of six benchmark kernels hit **DL1201** and fall back to the interpreter — unbounded loops in `main`, string building, and the macro workloads are outside it. **Stage 10 acceptance criterion 1 is NOT MET** and is published as such. | **Partial** | `measurements/study-c/HOT_PATH_TABLE.md`; `STAGE10_BUILD_ORDER.md` D18b. Interpreter is 2.0×–60.5× C. | Either widen the backend past its fragment **or retire the parity claim to match what it is** — `CHECKPOINT-1.0.md` §9.3 offers both as acceptable. |
+| 3.5 | **A multi-threaded WASM engine** — Wasmtime running the actor scheduler across OS threads with shared-everything-GC. | **Deferred, with published note** | `docs/design/THREADED_WASM_DEFERRAL.md`. Nothing is lost today: multi-threaded actors already ship TSAN-clean **on the interpreter**; the WASM scheduler is cooperative single-threaded by design. | Re-opens when the wasm shared-everything-GC + threads proposals mature in a pinned Wasmtime. Then port the scheduler and **re-run Stage-7 criteria 1, 6, 7 on the new engine**. |
+| 3.6 | **Bare-metal / MCU targets** — compiling DeluluLang itself for microcontrollers. | **Deferred (RFC)** | `STAGE10_SPECIFICATION.md:346`. | RFC. Not a claimed capability anywhere. |
+
+---
+
+## 4. Containment and security
+
+> This section is the one where a gap can touch the guarantee. Read 4.1 and 4.4 in particular.
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 4.1 | **The microVM isolation layer is not built.** Constitution §5.14 names four defence layers and **layer 3 (Firecracker-class microVM) has no implementation**. `crates/delulu/src/microvm.rs` is 58 lines and is a *probe*: `probe()` **returns `Err` on every path**, including the fully-provisioned one. The read-only rootfs, virtio-fs scope mounts, default-deny egress proxy and vsock broker proxy are all unwritten. | **Not built (platform-pending)** | Read the module in full. `--isolation microvm` refuses with **DL1408** everywhere, and the module's own doc says the launch is *"platform-pending"*. Stage 5 acceptance **criterion 8 is PLATFORM-PENDING**, its test gated behind `cfg(delulu_kvm)`. | A Linux+KVM host, a real guest launch path, and criterion 8 un-gated. **This is honestly labelled everywhere I checked** — nothing weaker ever launches under the `microvm` name, which is the right refusal. But Constitution §5.15 guarantee 5 (*"violations are contained at the WASM/microVM layer"*) rests today on the **WASM half only**. |
+| 4.2 | **Per-plugin microVMs.** Plugins share the host's profile in v1.0. | **Not built** | `STAGE6_SPECIFICATION.md:298`, `STAGE6_PLUGINS_GUIDE.md:56`. | Follows 4.1. |
+| 4.3 | **A real seccomp filter** for foreign workers. The shipped isolation is the process-separated worker; seccomp *"needs a heavy dep and is deferred."* | **Deferred** | `STAGE5_SPECIFICATION.md:653`. | A dependency decision plus Linux-only code. |
+| 4.4 | **The same-OS-user boundary cannot be closed by code.** To the kernel, a process running as your user *is* you: it can read `broker.key`, edit `root_policy.json`, or kill the broker. | **Category 7** | `ROOT_ISSUANCE_TRUST_BOUNDARY.md` §1–§2; verified with a real second UID in `docs/security/red-team-p21-crossaccount-2026-08-08/`. | **Nothing. This is a deployment decision, not an engineering task** — run untrusted code as a separate OS account (Tier 2 of `DEPLOYMENT.md`). Naming it as remaining *work* would be the mistake. |
+| 4.5 | **Strict anchored-root mode (the DISC-1 mitigation) is opt-in.** Legacy is still the default, so a same-user process can mint root authority unless the operator turns the gate on. | **Owner / next major** | `broker start --require-anchored-roots` works end to end (fixed 2026-08-10); `doctor` reports the mode; the banner reports all three states. Default flip is analysed in `ROOT_ISSUANCE_TRUST_BOUNDARY.md` §10. | A **major** version, a loud migration note, an `--allow-unsigned-roots` escape, and the auto-root re-pointed at "adopt a pre-issued root". §10(E) lists the compatibility shims that would *weaken* the boundary and must be refused. |
+| 4.6 | **CONTAIN-TOCTOU-1.** Filesystem containment is check-then-open, so a *concurrent* writer into a granted directory can swap a checked file for a symlink in between. | **Accepted residual** | `prim.rs`; documented in `DEPLOYMENT.md` §5. The confined program cannot win this race through the primitive table — no symlink-creating operation exists. | Closing it properly needs `O_NOFOLLOW`/`openat2` — the platform-dependent containment this project deliberately refuses. Deployment rule instead: grant scopes only to directories the program's own user can write. |
+| 4.7 | **A signed Verified-class hardware adapter.** What ships is an operator-supplied **subprocess** over a stdio line protocol, not specification §5.4's signed plugin. **There is no signature check on the adapter itself**, and no trust policy unless the operator pins a key. | **Not built (D23, named)** | `CROSS_PLATFORM_VERIFICATION.md` §"first hardware adapter"; `AUTHORITY_GUARD_CAPSTONE.md` §2 surface 8. | The §5.4 signed-plugin path. Named in `CHECKPOINT-1.0.md` §9.6 as what a real device deployment would require. |
+| 4.8 | **The audit anchor is not tamper-proof.** It catches truncation and naive tampering; an attacker who rewrites the log *and* `ANCHOR.json` is not caught. | **Named residual** | `MATHEMATICS.md` §12 item 2; pinned by a **passing** test. | An external witness — a second party or an append-only service. Not a code fix inside this repository. |
+| 4.9 | **Multi-tenancy is not provided.** Every part of the model assumes one holder per host. Under a *shared* broker state directory a co-tenant can enumerate the grant tree and read `broker.key`. | **Not provided (by design)** | `AUTHORITY_GUARD_CAPSTONE.md` §3; `broker_transport.rs:5` confirms peer credentials check "same user", never multi-tenant auth. | Separate OS accounts or containers. Named as the answer, not as a gap to fill. |
+| 4.10 | **Post-quantum signing is unstable and unvalidated.** Every PQC operation refuses without `--unstable` (**DL1910**). The `ml-dsa`/`ml-kem` crates are, by their own authors' statement, never independently audited. | **Partial** | `measurements/pqc/KAT_RECORD.md`. **The NIST ACVP vectors were obtained and are saved** in `measurements/pqc/vectors/` across five test types — but **no automated KAT test consumes them**: `grep -i kat crates/**/*.rs` finds only the CLI's own "pre-KAT" help string. One vector was checked by hand. | Two independent gates from invariant 51 / ruling **D14b**: (a) wire the saved vectors into a byte-exact test — the vectors are already in the tree, so this is the cheapest item in this document; (b) an independent audit of the crates, which is not something this project can perform. |
+
+---
+
+## 5. Proof and verification
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 5.1 | **Delulu Core §1–§7 is not mechanized.** No capabilities, no store, no secrets, no attenuation, **no Progress and no Preservation**. What *is* machine-checked is the higher-order fragment only. | **Open — the headline evidence gap** | `DELULU_CORE.md` §9; `MATHEMATICS.md` §12 category 2. Lean 4.32.2, `#print axioms` reports no axioms at all for all three theorems — genuinely strong, and genuinely narrow. | A ~500-line Lean or Coq development. `CONTRIBUTING.md` records it as open, invited work, and `CHECKPOINT-1.0.md` §9.2 ranks it second on the roadmap. |
+| 5.2 | **Theorem 1 (Progress) is FALSE as stated** and must be restated before it can be mechanized. `E-Op` carries *"scope of κ permits the arguments"* as a premise, so a well-typed closed term with a present-but-too-narrow capability is **stuck** — which §7 forbids. | **Known defective (P17-T2)** | `DELULU_CORE.md` §9's second box. Observed: a program granted `fs.read=./data` reading `../outside.txt` checks clean and faults at run time with `DL0904`. The document contains no fault configuration at all. | Restate as **progress-or-fault** and add the fault configuration, *before* Preservation can be stated over it. This is a prerequisite for 5.1, not a parallel task. |
+| 5.3 | **The calculus models no primitive that invokes a function argument**, so mechanizing §1–§7 *as written* would not have caught C88 — the worst soundness hole the project has had. | **Known defective (P17-T1)** | `DELULU_CORE.md` §9's first box: zero occurrences of `higher-order`, `callback`, `invoke` or `map` in §1–§7. | Extend the calculus with a higher-order primitive form first. Already done for the Lean fragment; §1–§7 still carries the old rule. |
+| 5.4 | **`cargo-fuzz` targets are not written, and sanitizers are unexercised.** Category 6 (*fuzz verified*) is **Partial**: the differential harness runs, but there is no `fuzz/` directory and no `fuzz_targets`. | **Partial** | Verified: no `fuzz/` directory exists; `crates/delulu-fuzz` is the differential harness (`danger.rs`, `lib.rs`, `main.rs`), not a libFuzzer target set. `MATHEMATICS.md` §12 category 6; `PROOF_CAMPAIGN.md:581`. | Write the targets. Independent of everything else here and mechanical. |
+| 5.5 | **Federation is not model-checked** — nor are concurrency, partitions, or clock skew. That last one matters, because the uplink lease exists to bound behaviour during exactly a partition. | **Open** | `QUESTIONS.md` Part 5 item 3. Leases and certificate adoption **are** model-checked (`Custody.tla`, 2,421 states), which is where both real federation vulnerabilities were found. | A TLA+ model of the federation protocol. The existing `Custody.tla` is the obvious starting point. |
+
+---
+
+## 6. Tooling, ecosystem and surfaces
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 6.1 | **CLI-string localization has zero registered strings.** The mechanism is complete — catalog format, loader, DL1704 fallback, `--locale`, `delulu locale add <file.dpx>` — and **`CLI_STRINGS` is an empty array**, so no CLI prose is localizable at all. Its own comment says *"the first-run picker (8c) lands the first entries"*; that never happened. | **Not built** | `crates/delulu-diag/src/catalog.rs:32`. Confirmed end to end: `DELULU_LOCALE=delulu-slang delulu check` localizes the **diagnostic** and nothing else. The catalog keys the guide documents (`cli.grant-prompt.title`, `cli.authority.header`) do not exist, so a catalog using them gets DL1704 and falls back. | Register each named CLI string with its en-US text at its call site. Purely additive; the loader already handles everything downstream. |
+| 6.2 | **The shipped `delulu-slang` catalog is a starter.** Version **0.8.0**, **8 of 154** diagnostic codes (5.2%), **0** CLI strings — against documents claiming `cli = 100, diagnostics = 90`. Also: `code_placeholders` knows placeholders for only four codes; every other code accepts none. | **Partial** | `crates/delulu-diag/catalogs/delulu-slang.toml` read in full. | Author the remaining entries. Blocked on 6.1 for the CLI half. |
+| 6.3 | **Nine of the ten language packs have no shipped catalog.** `zh-CN`, `ja-JP`, `ko-KR`, `hi-IN`, `ar-SA`, `fr-FR`, `de-DE`, `es-ES`, `pt-BR` exist as **starter/overview** content sources in `docs/lang/` (50–80 lines each: terminology decided, strings not written). Only `en-US` and `delulu-slang` are built in. | **Not built** | `docs/lang/README.md` status table; `delulu locale list` returns exactly two. | Complete each catalog from `en-US.md` §3's key list. Explicitly designed as AI-completable work (Constitution §8.5). |
+| 6.4 | **Five morph features named in `SYNTAX_MORPH_SPEC.md` do not ship**: `.dpx` plugin delivery (`morph add`/`remove`), per-reader LSP view morphs, `fmt --to-morph`/`--to-canonical`, the `[style] morph` repo policy key, and morph-aware **package** builds. | **Not built (named in the spec header)** | All five verified: `delulu morph` offers only `list\|info\|check\|render`; `delulu fmt` has no morph flags; no `[style]` key in the manifest parser; `lsp.rs` uses canonical keywords only. | Each is independent. Note the spec argues package `src/` **should** stay canonical, so the last one may be a decision rather than a gap. |
+| 6.5 | **There is no read-only Guard/broker status view in the editor.** No policy tiers, no pending approval requests, no live permits. | **Not built** | `HANDOFF.md` §13.1 names it as *"genuinely missing rather than deliberately absent"*. Confirmed: `lsp.rs` has no guard surface. | It would **not** require the server to hold authority — it could shell out to `delulu guard status --json`. That is what makes it tractable without touching the analysis-only rule. |
+| 6.6 | **`delulu deploy plan` compares effects only.** Spec §9.2 defines the full authority answer as effects, **capability scopes, and foreign holes**; scopes and foreign holes are not compared against the environment profile. | **Partial (recorded in code)** | `deploy.rs`: `COMPARED_DIMENSIONS = ["effects"]`, `NOT_COMPARED = ["capability scopes (fs/net/secrets/declassify/device)", "foreign holes"]`. The module doc states the gap rather than implying coverage. | Extend the comparison to the other two dimensions. The plumbing for the effects half already exists. |
+| 6.7 | **The compute manifest ceiling is not built.** A `[authority] compute.kernels` declaration mirroring `foreign.c`'s reviewable-intent ceiling does not exist — the grant enumerates kernels today. | **Not built** | `STAGE10_BUILD_ORDER.md:322`, recorded there rather than implied. | Manifest key, checker plumbing, and both witnesses. |
+| 6.8 | **Git dependency resolution is deferred, not faked.** A git source is parsed and validated (unpinned → **DL1007**) but never fetched. | **Deferred** | `manifest.rs:42`: *"resolution is deferred"*; `deps.rs:211`. | A fetcher plus the vendoring/lockfile story. The refusal is honest today. |
+| 6.9 | **Multi-module plugin packages are unsupported**, with no fake repair offered. | **Not built** | `STAGE6_BUILD_ORDER.md:120`. | Deferred by ruling with reasons of record. |
+| 6.10 | **Actor gaps:** per-SPAWN mailbox configuration (deferred to an RFC — spawn-site config is a language-visible change), **supervision trees** (named, RFC-deferred), and a **work-stealing scheduler** (load balance is round-robin at spawn). Pony's field-consume subtleties are also deferred (`DL1602`). | **Deferred (RFC)** | `actors.rs:12` states the round-robin choice; `STAGE10_BUILD_ORDER.md:91`; `STAGE7_SPECIFICATION.md:130`. Grepping for supervision finds only *test programs* named "supervisor", not a language feature. | Each needs its own RFC. `CHECKPOINT-1.0.md` §9.7 groups them. |
+| 6.11 | **Deadlock, livelock, starvation and mailbox exhaustion are not prevented.** Race freedom is static; liveness is not. | **By design, named** | `CHECKPOINT-1.0.md` §8.9. | A different analysis. Named as out of scope. |
+| 6.12 | **The CNA nuance for advisories is named, not built.** | **Not built** | `STAGE10_BUILD_ORDER.md:556`. | Registry work plus a process decision. |
+
+---
+
+## 7. Platform, distribution and process
+
+| # | Item | Status | Verified | What closing it takes |
+|---|---|---|---|---|
+| 7.1 | **macOS has never been executed. Not once, in any phase.** | **Environment** | Re-measured 2026-08-10: `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` type-check for `aarch64-apple-darwin`; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) *before* reaching DeluluLang code. So **no DeluluLang source has been shown to fail — and most has not been shown to compile either.** Exactly one line branches on macOS (`SUN_PATH_MAX` 104 vs 108). | **One command on any Mac: `cargo test --workspace`.** This is #1 on every roadmap in the repository and it is the cheapest high-value item here. Note `--no-default-features` is the macOS-safe path until a real run exists (the pyo3/CPython link is unproven there). |
+| 7.2 | **CI has never executed.** The YAML parses and every command in it has been run by hand. | **Environment (owner rule)** | The repository is never pushed — standing owner instruction. | Nothing, while that rule stands. *"Prepared"* and *"green"* are kept as different words throughout. |
+| 7.3 | **The Dockerfile and devcontainer have never been built.** Both exist (written 2026-08-07); the Docker daemon was not running. | **Prepared, not built** | `CROSS_PLATFORM_VERIFICATION.md` §"Containers: PREPARED, NOT BUILT". Files confirmed present. | One `docker build`, treated as an experiment — Dockerfiles fail for reasons invisible by reading. |
+| 7.4 | **`editors/vscode/e2e.js` has never been run on Linux.** The extension is platform-independent JS and `server-resolve.js` is unit-tested for POSIX lookup, but *"the unit tests cover the POSIX branch"* and *"the extension works on Linux"* are different claims. | **Not run** | `HANDOFF.md` §13. | `node e2e.js <path-to-delulu>` on a Linux box with a display. |
+| 7.5 | **Nothing is distributed.** No crates.io entry, no release binary, no public repository, no download page. | **Owner decision** | `INSTALL.md` §3 explains why `cargo install delulu` is deliberately *not* offered: publishing the CLI would require publishing nine path-dependency siblings, and `STABILITY.md` §2 promises the opposite. Every crate but the CLI carries `publish = false`. | A decision, then version fields on path dependencies and signed release binaries. `CHECKPOINT-1.0.md` §9.5 calls it *"a decision nobody has made rather than an obstacle anyone has hit."* |
+| 7.6 | **No physical device has ever been commanded.** Every demonstration drives the simulator; no driver for any real device ships in-tree. | **Environment** | `CHECKPOINT-1.0.md` §8.4. The `hw:` profile refuses without a sign-off record (**DL1905**) rather than reporting success for a machine that never moved. | Hardware, plus 4.7. Ranked #2 in the Book's own remaining list. |
+| 7.7 | **Certification is NONE** — no safety standard, no external audit, no third-party review, in any regime, for any domain. | **Environment / process** | `CHECKPOINT-1.0.md` §8.3. | External bodies. Not an engineering task. |
+| 7.8 | **Five `SECURITY.md` controls are `PENDING-PUBLIC`**: the `security@` disclosure address and its PGP key, branch protection / two-person review, signed commits and tags (Sigstore needs OIDC identity), SLSA L3 attestation, and the OpenSSF Scorecard floor. | **Blocked on hosting** | `SECURITY.md` §6; `CHECKLIST-1.0.md` §"Blocked on public hosting (D2)". Each ships as written policy plus committed configuration that activates on publication. | Public hosting. Two-person review is enforced *procedurally* today: the agent that writes a phase never commits it. |
+| 7.9 | **rustfmt is not adopted and formatting is unenforced.** rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). | **Owner** | No `rustfmt.toml` exists — verified. The CI step was removed with the reason written into `ci.yml`, because a permanently red job teaches people that red is normal. | **The owner's call.** Adopting it rewrites every file in one unreviewable commit, and this project's comments carry much of its value. |
+| 7.10 | **`CODE_OF_CONDUCT.md` is absent.** | **Owner** | Verified absent. | A policy commitment, not a cleanup task. |
+| 7.11 | **RFC 0001's governance debt.** Phase F1 shipped **before** the RFC had a sponsor or a comment period; F2–F6 were built concurrently with the open period. | **Open, recorded** | `rfcs/README.md`; ruling **D21(g)**. | Nothing to build. It is **never to be restated as compliance** — the commitment stands that if the RFC is amended or rejected, the code changes with it. |
+| 7.12 | **The timed LTS cycle is PENDING-ADOPTION.** The *mechanism* is built and drilled end to end (`measurements/lts-cycle/`, 6/6); a real 12-week train, a real 24-month backport and a real CVE/CNA need calendar time. | **Pending adoption** | `STAGE10_BUILD_ORDER.md:1621`. No CVE was invented to fake it. | Time. |
+| 7.13 | **`pyo3` stays at 0.25 with two CVEs**, ignored on *reachability* — and that argument is now a test (`governance.rs::the_ignored_pyo3_advisories_are_still_unreachable`). | **Deliberately deferred** | `CHECKPOINT-1.0.md` §8.11. | The real fix is 0.25 → 0.29, which removes `Python::with_gil`. Deferred **deliberately**, because GIL handling is exactly where a hasty migration introduces undefined behaviour. |
+| 7.14 | **There is no bundling story for CPython.** `pyo3` is a default-on, all-OS build dependency; the Python-less build (`--no-default-features`) is the mitigation. | **Unwritten** | `CROSS_PLATFORM_VERIFICATION.md` §6 "Named, not fixed". `INSTALL.md` explains the shipped binary carries no embedded Python for exactly this reason. | A decision — bundle vs. system CPython — then the packaging work. |
+| 7.15 | **Miri cannot reach the FFI.** It cannot execute `dlopen` or Windows API calls, so **37 `unsafe` sites** in `delulu`'s Windows transport stay uninterpreted. | **Explicit assumption** | `CHECKPOINT-1.0.md` §8.17. Stated as an assumption, not a to-do. | A different tool. The highest-risk *reachable* function (`validate_c_string`) **is** interpreted — 6 tests, 0 UB. |
+| 7.16 | **`broker_unreachable_is_dl1401_fast` can flake under pathological concurrent load** — a 10 s wall-clock budget, starved scheduler rather than a hang. | **Known weakness** | `CROSS_PLATFORM_VERIFICATION.md` §6. | A monotonic-deadline assertion less sensitive to scheduling. |
+
+---
+
+## 8. If you are picking one thing
+
+Ordered by value returned per unit of effort, which is **not** the order the roadmaps use (they
+order by importance):
+
+1. **Run `cargo test --workspace` on any Mac** (7.1). One command; converts the project's largest
+   standing caveat from an argument into evidence. Nothing else about the third platform matters
+   until this happens.
+2. **Wire the saved NIST KAT vectors into a test** (4.10a). The vectors are already in the tree.
+   This is the only item here whose inputs are already committed.
+3. **Write the `cargo-fuzz` targets** (5.4). Mechanical, independent of everything else, and it is
+   what would move proof-boundary category 6 from *Partial* — where the differential harness runs
+   but no coverage-guided target exists — to genuinely populated.
+4. **Register the CLI strings** (6.1). Purely additive; turns a complete-but-empty mechanism into a
+   working one and makes 6.2/6.3 possible.
+5. **Grow the standard library** (2.1). The largest gap between what the language *is* and what a
+   user expects. `filter` and `fold` are the two that make the higher-order machinery — already
+   built and audited under R-4 — actually worth having.
+6. **Restate Progress as progress-or-fault** (5.2). Cheap, and it is a hard prerequisite for the
+   mechanization that is second on every roadmap in the repository.
+
+**What not to do first:** the optimizer (3.1) and the native backend (3.2). Both are deferred with
+published reasoning, and ruling D18c's argument still holds — there is no evidence the passes would
+pay off, and building an optimizer before you can measure it is how a deferral becomes a claim.
+
+---
+
+## 9. What this document is not
+
+It is **not** a promise, a schedule, or a commitment. `CHECKPOINT-1.0.md` §9 puts it well: *"None
+of that is a promise with a date. It is the list a maintainer would work from."*
+
+It is also not a list of everything that could be better. It is the set of things that a document
+in this repository **describes, specifies, or implies**, and that the code does not do — plus the
+handful of places where the code has moved ahead of the documents (§1).
+
+**Related reading.** `docs/release/CHECKPOINT-1.0.md` §8 (twenty known limitations) and §9 (the
+roadmap) · `docs/QUESTIONS.md` Part 5 (the short list of things this project cannot claim) ·
+`docs/MATHEMATICS.md` §12 (the proof-boundary ledger, including the categories that are empty or
+partial) · `docs/book/THE_DELULULANG_BOOK.md` Ch. 20 ("What actually remains") ·
+`docs/DEPLOYMENT.md` §5 (what is not protected) · `HANDOFF.md` §8 (what is open, and why).
+
+Those six are the sources. This file is the join across them, with every row re-checked against the
+binary rather than inherited from the prose.
