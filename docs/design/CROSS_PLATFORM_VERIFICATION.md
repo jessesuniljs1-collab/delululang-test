@@ -869,3 +869,47 @@ PowerShell, whose start-up on a loaded two-core runner sits inside the adapter's
 first exchange — and the test spawns five drivers in a row. It is the cause `hw_adapter_cli` hit in
 run 2, with the same fix: the adapter's unit-test drivers are Python now. Until a run passes with it,
 this document does not call Windows green on CI.
+
+### Run 4 — the same day (run `34844151767`, on `ef9cb49`)
+
+**Windows went green end to end — its first complete pass on CI** (2026-09-14). Every step of the
+Windows test job passed: 125 test binaries with 1,647 tests passed, 0 failed and 4 ignored; `fmt
+--check` clean; the Python-less build; conformance at 330 of 330 anchors; the reference in sync; the
+CLI sweep; and the fuzz campaign, 30,198 programs executed with no trace escaping its row. The Python
+fake drivers held. Linux x86-64 and arm64 were green again, as were clippy, `cargo deny`, the editor,
+the formal models and Miri on `delulu-atlas`, `delulu-diag` and the FFI decoder; `miri-slow` and
+`heavy-gates` were skipped, by design. So every operating system in the matrix has now passed the
+whole suite on CI — macOS in run 3, Windows in run 4, Linux in both — though not yet all in one run.
+
+**macOS failed one test, and the test was measuring the runner.**
+`device::tests::a_beaten_lease_is_never_revoked` grants a lease with a 120 ms heartbeat and beats it
+every 20 ms for 600 ms; on the macOS runner a command found the lease revoked for a missed heartbeat.
+The watchdog revokes only when `now − last_beat` exceeds the heartbeat on a monotonic clock; it
+samples `now` before taking the lease lock, so a beat that lands in between makes it *more* lenient;
+and nothing else holds that lock for long. So the lease really had gone 120 ms without a beat: the
+runner had left the test's thread unscheduled for more than 100 ms, early in a test binary whose
+other tests are CPU-heavy. The dead-man did its job. The test's premise — *this lease is being
+beaten* — is what failed.
+
+That was measured rather than assumed, on the development machine (2026-09-14):
+
+| Experiment | Result |
+|---|---|
+| The unmodified test, idle machine | 25 of 25 passed: nothing fires on its own |
+| The unmodified test with its thread starved (a high-priority busy loop on the same CPU, 150 ms busy, 40 ms idle) | failed 5 of 8 runs, **with CI's message word for word** |
+| One extra pause injected into the drive | a 20 ms period survives a stall of about 100 ms, a 50 ms period only 60–70 ms — so a longer sleep would have made it worse |
+| A mutant watchdog that fires 200 ms early | caught by this test, and **by no other device test** |
+
+**The fix judges each revocation against the gap the thread actually left.** The lease cannot have
+gone unbeaten longer than the time since the last accepted command was sent. If the broker reports
+more than that — the heartbeat plus its own `overdue_us` — the watchdog fired on a healthy lease and
+the test fails at once; that is what the mutant hits. A revocation the gap explains proves nothing
+either way, so the drive restarts on a fresh broker until one runs clean, and if none does within
+10 s the test fails as *not measured* rather than passing on a property it never saw. Moving the test
+to the stepped clock was considered and rejected: that clock never runs the wall-clock watchdog, and
+a stepped version passed the mutant. After the fix: 25 of 25 idle, 12 of 12 starved (every
+revocation it judged followed a real gap of 150–172 ms), and the mutant still caught. The two sibling
+tests with tighter timing — `safe_park_returns_the_simulated_device_to_its_park_pose` (40 ms) and
+`crates/delulu/tests/dead_man_cli.rs`'s `a_program_that_stops_beating_loses_its_device_mid_run` (25 ms
+to its first command) — passed all 20 starved runs between them, so neither is recorded as exposed.
+The fix is pending the next run.

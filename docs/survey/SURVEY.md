@@ -23,15 +23,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 225 |
-| Rust lines | 111388 |
+| Rust lines | 111437 |
 | Rust files outside `src/` (test/bench targets) | 95 |
 | Markdown documents | 155 |
-| Markdown lines | 42638 |
+| Markdown lines | 42703 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1120 / 10005 |
+| Nodes / edges in this map | 1120 / 10007 |
 | Open discrepancies | 2 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -269,7 +269,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 13082 lines
+- **Modules:** 16 files, 13131 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -279,7 +279,7 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 255 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
-| `src/device.rs` | 1355 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
+| `src/device.rs` | 1404 | Stage 10 phase 10f — the device broker: dead-man leases, the reference simulator, and the |
 | `src/foreign.rs` | 458 | Stage 4 C FFI runtime (spec §4). **Every native-dependency line in the interpreter lives here** |
 | `src/interp.rs` | 2103 | The Stage-1 tree-walking interpreter (spec §7). It runs the *checked* AST, so it assumes |
 | `src/lib.rs` | 439 | DeluluLang runtime: values, the capability table, the Stage-1 grant broker, and the |

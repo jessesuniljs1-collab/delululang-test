@@ -1098,21 +1098,70 @@ mod tests {
 
     /// The safety half, and the one a bug would silently break: a lease that IS being beaten must
     /// never be revoked. A dead-man that fires under a healthy program is worse than none, because
-    /// it teaches operators to disable it.
+    /// it teaches operators to disable it. No other test in this module catches that: a watchdog
+    /// made to fire 200 ms early passes every one of them (checked 2026-09-14).
+    ///
+    /// "Being beaten" is a fact about wall time, and this thread does not own a core. CI run 4
+    /// (`34844151767`, macOS) left it unscheduled for over 100 ms between two 20 ms sleeps, and the
+    /// watchdog was right to fire: the lease really had gone 120 ms without a beat. So a revocation
+    /// is judged against the gap this thread actually left. The lease cannot have gone unbeaten for
+    /// longer than the time since the last accepted command was SENT; a watchdog that reports more
+    /// than that fired on a healthy lease, and the test fails on the spot. A revocation the gap
+    /// explains proves nothing either way, so the drive starts again on a fresh broker until one
+    /// runs clean — and if none does within 10 s, the test fails as NOT MEASURED rather than
+    /// passing on a property it never saw. A longer sleep would be the wrong fix: it shrinks the
+    /// stall a drive survives, measured at about 100 ms for a 20 ms period and 60–70 ms for 50 ms.
     #[test]
     fn a_beaten_lease_is_never_revoked() {
         let e = env("arm0/elbow", 120, 60_000);
-        let b = DeviceBroker::new(Profile::Sim { seed: 7 }, std::slice::from_ref(&e), &[]);
-        let until = Instant::now() + Duration::from_millis(600);
-        while Instant::now() < until {
-            b.command("arm0/elbow", &[("angle_deg".to_string(), 5.0)]).expect("in-envelope");
-            std::thread::sleep(Duration::from_millis(20));
+        let hb = Duration::from_millis(e.heartbeat_ms);
+        let give_up = Instant::now() + Duration::from_secs(10);
+        let mut gaps = Vec::new();
+        while Instant::now() < give_up {
+            // The grant is the lease's first beat, and it happens inside `new`, after this instant.
+            let mut last_sent = Instant::now();
+            let b = DeviceBroker::new(Profile::Sim { seed: 7 }, std::slice::from_ref(&e), &[]);
+            let until = Instant::now() + Duration::from_millis(600);
+            let mut refused = false;
+            while Instant::now() < until {
+                let sent = Instant::now();
+                match b.command("arm0/elbow", &[("angle_deg".to_string(), 5.0)]) {
+                    Ok(()) => last_sent = sent,
+                    Err(CommandRefusal::Revoked(_)) => {
+                        refused = true;
+                        break;
+                    }
+                    Err(other) => panic!("an in-envelope command on a live lease was refused: {other:?}"),
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let Some(r) = b.revocation("arm0/elbow") else {
+                assert!(!refused, "a command was refused as Revoked with no revocation on record");
+                b.shutdown();
+                if !gaps.is_empty() {
+                    eprintln!("a clean drive after {} starved: {gaps:?}", gaps.len());
+                }
+                return; // five heartbeat periods of healthy driving, and the device was kept
+            };
+            // Read AFTER the revocation was seen, so it bounds the unbeaten time from above.
+            let gap = last_sent.elapsed();
+            assert_eq!(r.cause, RevokeCause::MissedHeartbeat, "{r:?}");
+            // `due` fires at `since_beat > hb` and reports `since_beat - hb` as `overdue_us`. The
+            // extra microsecond covers both timestamps being truncated to whole microseconds.
+            let unbeaten = hb + Duration::from_micros(r.overdue_us);
+            assert!(
+                unbeaten <= gap + Duration::from_micros(1),
+                "the watchdog says the lease went {unbeaten:?} unbeaten, but this thread sent its last \
+                 accepted command only {gap:?} before seeing the revocation: a dead-man firing under a \
+                 healthy program"
+            );
+            gaps.push(gap);
+            b.shutdown();
         }
-        assert!(
-            b.revocation("arm0/elbow").is_none(),
-            "five heartbeat periods of healthy driving must not lose the device"
+        panic!(
+            "NOT MEASURED: in 10 s this thread never kept the lease beaten within {hb:?} for one whole \
+             600 ms drive; every revocation followed a real gap ({gaps:?}), so the property was never seen"
         );
-        b.shutdown();
     }
 
     /// The grant is the authority of record. The capability value's scope is a copy; if the two

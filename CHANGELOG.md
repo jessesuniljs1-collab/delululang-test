@@ -98,6 +98,23 @@ each was authorized by the owner on the day, in the session that made it, and is
   runner because its PowerShell fake driver started too slowly for the 2000 ms exchange budget — the
   cause `hw_adapter_cli` hit in run 2 — so the adapter's unit-test drivers are Python now too.
 
+### The fourth run (`34844151767`)
+
+- **Windows green end to end on CI for the first time** — 1,647 tests, 0 failed, and every gate after
+  them; the Python fake drivers held. Linux x86-64 and arm64 were green again. Every operating system
+  has now passed on CI, though not yet all in one run.
+- **A dead-man test that measured the runner.** On the macOS runner
+  `a_beaten_lease_is_never_revoked` — a 120 ms lease beaten every 20 ms — found its lease revoked: the
+  runner had left the test's thread unscheduled for more than 100 ms, so the lease really had missed
+  its heartbeat and the watchdog was right. Reproduced by starving the thread on the development
+  machine (5 of 8 starved runs failed with CI's exact message; 25 of 25 idle runs passed). The test
+  now judges each revocation against the gap its thread actually left: a watchdog that reports the
+  lease unbeaten for longer than that fails it at once — a mutant firing 200 ms early does, and passes
+  every other device test — while a revocation the gap explains restarts the drive on a fresh broker,
+  and ten seconds without one clean drive fails as *not measured*. A longer sleep between beats was
+  measured and rejected (it shrinks the stall a drive survives from about 100 ms to 60–70 ms), and so
+  was the stepped clock, which never runs the wall-clock watchdog.
+
 ## Unreleased — containment + deployment hardening, 2026-08-10
 
 Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can
