@@ -678,8 +678,9 @@ Repeated here so no reader has to assemble it from the rest:
 10. **Foreign calls are outside the proof.** Enumerated, not eliminated.
 11. **Side channels are out of scope.**
 12. **Post-quantum options are unvalidated** and gated behind `--unstable`.
-13. **Nothing is hosted.** No registry, no download page, no public repository — you build from
-    source or produce your own archive.
+13. **Nothing is published.** No registry, no download page, no public repository — you build from
+    source or produce your own archive. (Since 2026-09-14 the source is pushed to a *private* GitHub
+    repository, for cross-OS CI and editing from the cloud. That is not distribution.)
 14. **Open robustness defects**: exponential type inference on a small class of programs, and
     quadratic checking in nesting depth. Both are unbounded — no fuel, no `--max-type-size`, no
     timeout. (The third defect this item used to name — an unbounded parser recursion that crashed

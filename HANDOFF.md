@@ -2,10 +2,13 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Last updated:** 2026-08-10, at the end of the containment + deployment hardening campaign.
-**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,136 lines of Rust**
-(measured by the Survey, not remembered).
-**State:** clean tree, **177 commits past the local `v1.0.0` tag**, **never pushed anywhere**.
+**Last updated:** 2026-09-14 — the repository's first push, to a private testing remote (§1.1).
+Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
+**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,148 lines of Rust**
+(measured by the Survey on 2026-09-14, not remembered) — and, since 2026-09-14, **privately** on
+GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
+**State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
+**189 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -47,7 +50,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 
 | Rule | Why |
 | --- | --- |
-| **NEVER push to GitHub.** No remote, no `git push`, no PR. | Owner's standing instruction. The repository is private and local. CI exists as YAML and has *never executed* for this reason. |
+| **Push only to the private testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, a **private** repository. No other remote, and never rewrite history that has been pushed. | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**. **The public repository is a later step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **Never auto-decide the licence.** | Owner-reserved. Apache-2.0 + NOTICE + TRADEMARK is *recommended* and staged, not decided. Present options and wait. |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
@@ -56,6 +59,33 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **The word "graphify" appears nowhere in the repository or product surfaces.** | Owner ruling. (The `dcg` credit in the Guard docs stands and is unrelated.) |
 | **Regenerate the Survey after any change, before running the suite.** | `cargo run -p delulu-survey -- build`. A test enforces freshness; see §4. |
 | **Run `delulu doctor` — it is the one command that answers "is this healthy?"** | Three sections: **environment** (install, state directory, audit chain), **security posture** (root-issuance mode, anchor-key custody, whether the filesystem can enforce owner-only permissions, and whether the RUNNING broker agrees with the policy on disk), and **repository** (the map's freshness and integrity). Exit 0 healthy, **1 when a problem remains**, 2 on a bad invocation. `--check` never writes; `--json` emits one envelope. Run it **on the deployment host, as the account your agents use** — see §11.4 and `docs/DEPLOYMENT.md`. |
+
+### 1.1 The private testing remote (since 2026-09-14)
+
+| | |
+| --- | --- |
+| **Where** | `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git`, a **private** repository. |
+| **Why** | In the owner's words: for testing DeluluLang *"in mac os and other os"*, and for *"editing and working on delululang from the cloud"*. It is not a distribution channel — README's *Not distributed* row still holds. |
+| **What was pushed** | `master` (the GitHub default branch; local `master` tracks `origin/master`), `rc/1.0.0-drill` (DRILL-001's one unmerged commit, kept as a record) and the annotated tag `v1.0.0` (`198bf44`). The branch stays `master`, the name this history has always used, rather than GitHub's suggested `main`; `ci.yml` triggers on both. |
+| **What it switched on** | `.github/workflows/ci.yml` — the three-OS matrix **including `macos-latest`**, arm64, clippy, Miri, the editor build, `cargo deny` and the formal models — on every push to `master`, on pull requests, **nightly at 03:00 UTC**, and by hand. **Activated is not executed.** No run's result has been read into this repository yet. The first one goes into `docs/design/CROSS_PLATFORM_VERIFICATION.md` with its run ID, failures included, and every *never executed* row in these documents stands until then. |
+| **What it costs** | A private repository's Actions minutes come out of the account's quota, and macOS and Windows runners are charged at a higher rate than Linux. The nightly schedule re-runs **every** job, not only the heavy gates, so check the account's usage page before leaving it on. |
+
+**Before the public push — the owner's decisions, written down here so they come up before that
+push rather than after it:**
+
+1. **The word §1 bans is in the history.** Commit `0a58451` (2026-07-14) put it, with the tool's
+   address, into `docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md` and into its own commit message.
+   `f4ffd01` anonymised the document but not the history, and §1 and §11.1 spell the word in stating
+   the rule. The private remote already holds that history, because the push carried all of it; a
+   public push would publish it. The choices are a fresh history for the public repository, a
+   rewrite (which changes every hash from `0a58451` onward — and these documents cite hashes
+   throughout), or accepting it.
+2. **Every commit records its author's e-mail address**, which a public push makes public.
+3. **`.github/CODEOWNERS` names a deliberate placeholder**, `@PENDING-PUBLIC-project-lead`. GitHub
+   reports it as an unknown owner until it is replaced at public launch, as the file's own header
+   says.
+4. **The `SECURITY.md` §6 controls marked `PENDING-PUBLIC`** switch on with public hosting, not with
+   this push (`docs/REMAINING_WORK.md` 7.8).
 
 ---
 
@@ -444,8 +474,8 @@ done.
 
 | | Why |
 | --- | --- |
-| **macOS has never been executed. Not once, in any phase.** | No Apple hardware. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **One command on any Mac closes this: `cargo test --workspace`.** |
-| **CI has never executed.** | The repository is not pushed and will not be. The YAML parses and every command in it has been run by hand — but *"written"* and *"green"* are different claims. |
+| **macOS has never been executed. Not once, in any phase.** | No Apple hardware. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **One command on any Mac closes this: `cargo test --workspace`.** Since 2026-09-14 it no longer needs this machine: the private testing remote (§1.1) activates CI's `macos-latest` job. Until that run's result is read and recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md`, this row stands. |
+| **CI: activated 2026-09-14, no result recorded.** | Until 2026-09-14 the repository was never pushed, so CI never ran. The first push, to the private testing remote (§1.1), activated `ci.yml`. The YAML parses and every command in it has been run by hand, but no run's outcome has been read into this repository — *"written"*, *"triggered"* and *"green"* are three different claims. Reading the first run and transcribing it is the next step. |
 | **The Dockerfile has never been built.** | `Dockerfile` and `.devcontainer/devcontainer.json` were written 2026-08-07. Docker CLI 29.5.2 is installed; **the daemon was not running**. Dockerfiles fail for boring reasons that are invisible by reading. Treat the first `docker build` as an experiment. |
 
 ### Known technical limits, deliberately not softened
@@ -621,7 +651,12 @@ wins, and you should update the memory to match.
 
 ### 11.1 Standing owner instructions — the ones that never expire
 
-- **NEVER push to GitHub.** No remote, no `git push`, no PR, ever. This is why CI has never executed.
+- **Push only to the private testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
+  (owner instruction, 2026-09-14). It replaced *"NEVER push to GitHub"*, which held from the first
+  commit and is why CI never ran before that date. The remote is for cross-OS testing and editing from
+  the cloud. **The public repository is a later step the owner takes personally**: never create one,
+  push to one, or add any other remote, and never rewrite history that has been pushed. §1.1 has the
+  details, and the owner's list of decisions for before the public push.
 - **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
   and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
   hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and
@@ -667,7 +702,10 @@ wins, and you should update the memory to match.
   disk — rather than respawning it.
 - **The laptop's BSOD problem is resolved** (NVIDIA `nvlddmkm`, fixed at source 2026-07-12). Build
   caps are lifted. The commit-often habit remains sensible.
-- **A local `v1.0.0` tag exists and was never pushed.** The tree is 177 commits past it (2026-08-10).
+- **The `v1.0.0` tag (`198bf44`) was pushed to the private testing remote on 2026-09-14**, together
+  with `master` and `rc/1.0.0-drill`; before that it was local only. A clone of that remote lands in
+  `delululang-test/` unless you name the directory, which is why `README.md` and `INSTALL.md` now
+  clone into `DeluluLang` explicitly.
 - **Linux verification runs in WSL2 Ubuntu-20.04, and the harness has three rules that cost time to
   learn.** Drive it from **PowerShell, not Git-Bash** — Git-Bash rewrites `/mnt/...` into
   `C:/Program Files/Git/mnt/...` and the command silently fails. Pass **script files**, not inline
@@ -909,7 +947,9 @@ path** until a real Mac run exists.
 
 macOS is *"engineered for, analyzed, and unproven"* — **not** "supported" in the sense the other two
 now are. Type-checking is not running, and a matrix entry naming `macos-latest` is a plan, not a
-result.
+result. **Since 2026-09-14 that plan is live:** the private testing remote (§1.1) triggers the
+`macos-latest` job on every push to `master`. This section changes when a run's result is read and
+recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md` — not when a run merely starts.
 
 ### The three surfaces, per platform
 

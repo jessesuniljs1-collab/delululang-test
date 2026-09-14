@@ -35,9 +35,9 @@ What that does and does not mean:
 | **Formally checked (in part)** | The custody grant tree is **model-checked** — TLA+/TLC explores 585,771 distinct states of grant/delegate/revoke/expire and finds no invariant violation ([`docs/design/models/`](docs/design/models/)), and the model is *shown* to have teeth by rediscovering a real historical bug when the fix is removed. Order-theoretic laws of the `⊑` order are checked by exhaustive enumeration and proved in Z3 — and since 2026-08-06 `⊑` is a genuine partial order on the canonical representatives the broker actually stores, rather than only a preorder on spellings. The **higher-order fragment of the effect calculus is machine-checked in Lean 4.32.2** ([`docs/design/models/lean/`](docs/design/models/lean/)), including a proof that the calculus *as written* admitted a trace escaping its row (finding C88); `#print axioms` reports all three theorems depend on **no axioms at all**. **The full type system is still NOT mechanized** — the Lean development covers the higher-order fragment, and `DELULU_CORE.md` §9's formalization of the rest remains open. |
 | **Mapped** | [`docs/survey/`](docs/survey/) — a map of this repository generated from this repository, where every edge cites the file and line it was read from. Ask it `impact <id>` before changing anything: it walks the whole blast radius, citing every hop. Start there. |
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
-| **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. A per-crate `cargo check --target aarch64-apple-darwin` type-checks `delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey`; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain — so **no DeluluLang source has been shown to fail for macOS, and most of it has not been shown to compile either.** One command on any Mac closes the gap: `cargo test --workspace`. |
+| **Never executed on** | **macOS.** No Apple hardware is available to the project. The Unix code path is the same one Linux runs green, which is an argument, not an execution. A per-crate `cargo check --target aarch64-apple-darwin` type-checks `delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey`; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain — so **no DeluluLang source has been shown to fail for macOS, and most of it has not been shown to compile either.** One command on any Mac closes the gap: `cargo test --workspace`. **Since 2026-09-14 CI can run it:** the repository is pushed to a private testing remote, which activates the `macos-latest` job in `.github/workflows/ci.yml` on every push to `master`. Activated is not executed — this row changes when a run's result is recorded in [`CROSS_PLATFORM_VERIFICATION.md`](docs/design/CROSS_PLATFORM_VERIFICATION.md), not before. |
 | **Deployment** | What a deployment actually protects, and what you must do to get it, is [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — three tiers, and `delulu doctor` reports which one you are actually in. The short version: a program running as **your own OS user** is not contained by anything here; run untrusted or autonomous code as a separate account. |
-| **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). |
+| **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). The source is also pushed to a **private** GitHub repository — for cross-OS CI and for editing from the cloud, not for distribution; a public repository is a later step. |
 | **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
 | **Specified, not built** | Named here because a status table listing only what exists is half a status. [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) is the full set — 60 items, each checked against the current binary. The three a new reader would otherwise meet the hard way: **the microVM isolation layer** of the constitution's four is a probe that always refuses (the other three are built); **the standard library is four list methods** (`len`, `get`, `push`, `map`, no `Map`/`Dict`/`Set`); and **the DIR-level optimizer and native backend do not exist** (`@jit` is a leash, not a tier). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
@@ -55,8 +55,9 @@ being green is where the search starts, not where it ends.
 
 ## Installing
 
-**Nothing is hosted yet** — this project publishes to no registry and no download page, so there is
-no URL to fetch. What exists is the ability to *produce* a self-contained archive from this tree:
+**Nothing is published yet** — this project publishes to no registry, no download page and no public
+repository, so there is no URL to fetch. What exists is the ability to *produce* a self-contained
+archive from this tree:
 
 ```sh
 scripts/package-toolchain.sh          # → dist/delulu-<version>-<target>.tar.gz
@@ -74,9 +75,9 @@ To build and use it directly from source instead:
 `rustup default stable`; the pin exists so that every build is reproducible.
 
 ```sh
-git clone <this repository>          # or use the tree you already have
+git clone <this repository> DeluluLang   # or use the tree you already have
 cd DeluluLang
-cargo build --release                # first build fetches and compiles dependencies
+cargo build --release                    # first build fetches and compiles dependencies
 ./target/release/delulu --help
 ```
 

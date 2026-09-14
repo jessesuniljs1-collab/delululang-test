@@ -9,15 +9,19 @@ badge that never executed.
 
 `.github/workflows/ci.yml` declares a three-OS matrix (`ubuntu-latest`, `macos-latest`,
 `windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
-GitHub." **This repository is never pushed** (owner policy), so that matrix **has never executed.**
-Everything below is a *local* replay of those same gates, which is the only cross-platform evidence
-that actually exists for this project.
+GitHub." **Until 2026-09-14 this repository was never pushed** (owner policy), so that matrix **never
+executed.** On 2026-09-14 the owner had it pushed to a **private testing remote** (`HANDOFF.md`
+§1.1), which activates the workflow. *Activated* is not *executed*: no run's result has been read
+into this document yet. The first one will be transcribed here with its run ID, failures included,
+and every macOS cell below stands until then. Everything below is a *local* replay of those same
+gates, which is still the only cross-platform evidence recorded for this project.
 
 The gates replayed (from `ci.yml`): `cargo test --workspace`; `delulu fmt --check examples`;
 `delulu fmt --check docs/book/samples`; `cargo check -p delulu --no-default-features` (the
 Python-less build); plus this project's own `delulu-conform --coverage` (invariant 42) and
-`delulu-conform --check-reference` (the hard Book-vs-source gate). `clippy` is tracked as a quality
-baseline; it is **not** a CI gate (there is no `-D warnings` anywhere in the tree).
+`delulu-conform --check-reference` (the hard Book-vs-source gate). When this section was first
+written, `clippy` was a tracked baseline rather than a gate. It is a gate now: `ci.yml`'s `lints` job
+runs it with `-D warnings`.
 
 **The lint baseline is per-platform, and the third number has never been seen.** Windows and Linux
 **no longer differ**: cold and findings-only they are **14 on both** as of 2026-08-03. The one-warning

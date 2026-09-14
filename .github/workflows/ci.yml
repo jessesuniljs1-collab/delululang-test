@@ -80,9 +80,10 @@ jobs:
 
       # ---- P17 proof campaign gates -------------------------------------------------------
       # Every step below runs a check the campaign added. They are written here so the evidence
-      # is reproducible by anyone; NONE of them has ever executed on a runner, because this
-      # repository is not pushed. See docs/design/CROSS_PLATFORM_VERIFICATION.md — "prepared but
-      # unverified" is a different claim from "green", and this file must not blur them.
+      # is reproducible by anyone. NONE of them executed on a runner before the repository's first
+      # push (2026-09-14, to a private testing remote), and none counts as green until a run's result
+      # is recorded in docs/design/CROSS_PLATFORM_VERIFICATION.md — "prepared but unverified" is a
+      # different claim from "green", and this file must not blur them.
 
       # P17-F: the CLI + compiler sweep, 22 cases with exact exit codes. It replaced a procedure
       # that had been performed BY HAND every pass, which is the drift design rule 1 warns about.
@@ -103,7 +104,7 @@ jobs:
   # docs/design/CROSS_PLATFORM_VERIFICATION.md §5). An ARM Linux runner does not prove macOS, but it
   # does exercise every non-Apple-specific ARM code path, which nothing currently does.
   #
-  # NEVER EXECUTED, like everything else in this file.
+  # Never executed before the first push (2026-09-14), like everything else in this file.
   arm64:
     runs-on: ubuntu-24.04-arm
     steps:

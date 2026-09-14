@@ -273,7 +273,7 @@ DeluluLang/
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
 ├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
-├── .github/workflows/              # the three-OS CI matrix (NEVER executed — repo is not pushed)
+├── .github/workflows/              # the three-OS CI matrix (live since the 2026-09-14 push; no result read yet)
 │
 ├── measurements/                   # [Stage 9] the published proof (studies A/B/C), reproducible
 │   └── METHODOLOGY.md              # how every published number was produced

@@ -14,6 +14,9 @@ crates, 4 repository tooling), 111,148 lines of Rust, 154 registered diagnostic 
 > repository that was not recounted is a number that is probably wrong — which is the argument §1
 > of this document is largely made of.
 
+**Updated 2026-09-14** for the repository's first push, to a private testing remote: rows 7.1 and
+7.2 (under a new §0 marker, *Pending result*) and §8 item 1. Nothing else was re-verified in that pass.
+
 **This document is a list of gaps, not a list of defects.** Almost everything here is *already
 named honestly somewhere in the repository* — that is the point of the project's honesty clauses,
 and the reason this file could be assembled at all. What this file adds is a single place to see
@@ -37,6 +40,7 @@ the whole set, each item verified rather than inherited, with what closing it wo
 | **Deferred (RFC)** | A ruling deferred it and named the reason; changing it needs the RFC process. |
 | **Owner** | Reserved to the project lead. Not an engineering task. |
 | **Environment** | Blocked by hardware or hosting this project does not have. No code closes it. |
+| **Pending result** | Something has been triggered where this repository cannot observe it — CI on a remote — and no outcome has been read and recorded here yet. It is evidence in neither direction until it is. |
 | **Category 7** | Outside the proof boundary by construction (`MATHEMATICS.md` §12). Cannot be closed by code. |
 
 Every row's *Verified* column says how I checked it in this pass. Where I reproduced a defect, the
@@ -163,8 +167,8 @@ history. Only current-state documents were corrected.
 
 | # | Item | Status | Verified | What closing it takes |
 |---|---|---|---|---|
-| 7.1 | **macOS has never been executed. Not once, in any phase.** | **Environment** | Re-measured 2026-08-10: `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` type-check for `aarch64-apple-darwin`; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) *before* reaching DeluluLang code. So **no DeluluLang source has been shown to fail — and most has not been shown to compile either.** Exactly one line branches on macOS (`SUN_PATH_MAX` 104 vs 108). | **One command on any Mac: `cargo test --workspace`.** This is #1 on every roadmap in the repository and it is the cheapest high-value item here. Note `--no-default-features` is the macOS-safe path until a real run exists (the pyo3/CPython link is unproven there). |
-| 7.2 | **CI has never executed.** The YAML parses and every command in it has been run by hand. | **Environment (owner rule)** | The repository is never pushed — standing owner instruction. | Nothing, while that rule stands. *"Prepared"* and *"green"* are kept as different words throughout. |
+| 7.1 | **macOS has never been executed. Not once, in any phase.** | **Environment** | Re-measured 2026-08-10: `delulu-diag`, `delulu-syntax`, `delulu-measure`, `delulu-survey` type-check for `aarch64-apple-darwin`; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) *before* reaching DeluluLang code. So **no DeluluLang source has been shown to fail — and most has not been shown to compile either.** Exactly one line branches on macOS (`SUN_PATH_MAX` 104 vs 108). | **One command on any Mac: `cargo test --workspace`.** This is #1 on every roadmap in the repository and it is the cheapest high-value item here. Note `--no-default-features` is the macOS-safe path until a real run exists (the pyo3/CPython link is unproven there). **Since 2026-09-14 CI runs it:** the private testing remote triggers `ci.yml`'s `macos-latest` job on every push to `master` (7.2), so closing this is now reading that result and recording it. |
+| 7.2 | **CI is activated, and no result has been recorded.** Until 2026-09-14 the repository was never pushed, so CI never ran. The YAML parses and every command in it has been run by hand. | **Pending result** | The owner had the repository pushed to a private testing remote on 2026-09-14 (`HANDOFF.md` §1.1). That activates `ci.yml` on every push to `master`, on pull requests, nightly, and by hand. No run's outcome has been read into this repository. | Read the first run and transcribe it into `CROSS_PLATFORM_VERIFICATION.md` — run ID and per-job outcome, failures included — with each failure becoming a row here. *"Triggered"* and *"green"* are kept as different words, as *"prepared"* and *"green"* always were. |
 | 7.3 | **The Dockerfile and devcontainer have never been built.** Both exist (written 2026-08-07); the Docker daemon was not running. | **Prepared, not built** | `CROSS_PLATFORM_VERIFICATION.md` §"Containers: PREPARED, NOT BUILT". Files confirmed present. | One `docker build`, treated as an experiment — Dockerfiles fail for reasons invisible by reading. |
 | 7.4 | **`editors/vscode/e2e.js` has never been run on Linux.** The extension is platform-independent JS and `server-resolve.js` is unit-tested for POSIX lookup, but *"the unit tests cover the POSIX branch"* and *"the extension works on Linux"* are different claims. | **Not run** | `HANDOFF.md` §13. | `node e2e.js <path-to-delulu>` on a Linux box with a display. |
 | 7.5 | **Nothing is distributed.** No crates.io entry, no release binary, no public repository, no download page. | **Owner decision** | `INSTALL.md` §3 explains why `cargo install delulu` is deliberately *not* offered: publishing the CLI would require publishing nine path-dependency siblings, and `STABILITY.md` §2 promises the opposite. Every crate but the CLI carries `publish = false`. | A decision, then version fields on path dependencies and signed release binaries. `CHECKPOINT-1.0.md` §9.5 calls it *"a decision nobody has made rather than an obstacle anyone has hit."* |
@@ -190,7 +194,8 @@ order by importance):
 
 1. **Run `cargo test --workspace` on any Mac** (7.1). One command; converts the project's largest
    standing caveat from an argument into evidence. Nothing else about the third platform matters
-   until this happens.
+   until this happens. Since 2026-09-14 CI's `macos-latest` job runs it on every push to the private
+   testing remote (7.2), so this item is now *reading that result and recording it*, not finding a Mac.
 2. **Wire the saved NIST KAT vectors into a test** (4.10a). The vectors are already in the tree.
    This is the only item here whose inputs are already committed.
 3. **Write the `cargo-fuzz` targets** (5.4). Mechanical, independent of everything else, and it is

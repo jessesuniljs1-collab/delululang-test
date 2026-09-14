@@ -39,7 +39,7 @@ the published one.
 ## 2. From source — needs Rust (see `rust-toolchain.toml` for the pinned version)
 
 ```
-git clone <repository> && cd DeluluLang
+git clone <repository> DeluluLang && cd DeluluLang
 cargo install --path crates/delulu        # installs to ~/.cargo/bin
 ```
 
