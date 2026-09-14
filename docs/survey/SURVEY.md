@@ -23,10 +23,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 225 |
-| Rust lines | 111375 |
+| Rust lines | 111388 |
 | Rust files outside `src/` (test/bench targets) | 95 |
 | Markdown documents | 155 |
-| Markdown lines | 42634 |
+| Markdown lines | 42638 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -269,12 +269,12 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 16 files, 13069 lines
+- **Modules:** 16 files, 13082 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1159 | The native actor runtime (Stage 7 phase 7g, spec §6). |
-| `src/adapter.rs` | 529 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
+| `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 410 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 255 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |

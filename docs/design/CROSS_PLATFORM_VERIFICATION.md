@@ -864,5 +864,8 @@ skipped, by design, on a push.
 
 **Windows passed 1,646 of 1,647.** The one failure was
 `adapter::tests::a_garbled_reading_is_an_error_never_a_none_and_never_a_number`, which passes on the
-development machine and passed on the Windows runner in run 2. It is under investigation, and until it
-is understood this document does not call Windows green on CI.
+development machine and passed on the Windows runner in run 2. The cause: its fake driver was
+PowerShell, whose start-up on a loaded two-core runner sits inside the adapter's deliberate 2000 ms
+first exchange — and the test spawns five drivers in a row. It is the cause `hw_adapter_cli` hit in
+run 2, with the same fix: the adapter's unit-test drivers are Python now. Until a run passes with it,
+this document does not call Windows green on CI.

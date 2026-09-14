@@ -95,7 +95,8 @@ each was authorized by the owner on the day, in the session that made it, and is
 - **macOS, Linux x86-64 and Linux arm64 green end to end** — the whole suite (1,657 tests, 0
   failed), the CLI sweep, the fuzz campaign and every other gate. REMAINING_WORK 7.1, *macOS has never
   been executed*, is closed. **Windows passed 1,646 of 1,647**: one adapter unit test failed on the
-  runner, and is under investigation.
+  runner because its PowerShell fake driver started too slowly for the 2000 ms exchange budget — the
+  cause `hw_adapter_cli` hit in run 2 — so the adapter's unit-test drivers are Python now too.
 
 ## Unreleased — containment + deployment hardening, 2026-08-10
 

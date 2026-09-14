@@ -295,24 +295,38 @@ mod tests {
     use super::*;
 
     /// Drive the adapter with a tiny script instead of real hardware — no fixture binary, no
-    /// laboratory. PowerShell on Windows and `sh` elsewhere; both ship with the OS, and both take
-    /// the script as a single argument so nothing depends on shell quoting surviving `Command`.
+    /// laboratory. Python on Windows and `sh` elsewhere, each taking the script as a single argument
+    /// so nothing depends on shell quoting surviving `Command`.
+    ///
+    /// Windows used PowerShell until the third CI run (2026-09-14), where a garbled-reading test got
+    /// `Timeout` instead of the protocol error it checks for: PowerShell's start-up on a loaded
+    /// two-core runner sits inside the adapter's first 2000 ms exchange, and one of five did not make
+    /// it. That budget is deliberate and stays; these tests measure the protocol, not how fast a shell
+    /// starts. Python starts in a fraction of it, and the default build already needs a CPython on
+    /// Windows.
     fn echo_adapter(script: &str) -> ProcessAdapter {
         #[cfg(windows)]
-        let (prog, args) = (
-            "powershell",
-            vec!["-NoProfile".to_string(), "-Command".to_string(), script.to_string()],
-        );
+        let (prog, args) = ("python", vec!["-c".to_string(), script.to_string()]);
         #[cfg(not(windows))]
         let (prog, args) = ("sh", vec!["-c".to_string(), script.to_string()]);
         ProcessAdapter::spawn("test-adapter", prog, &args).expect("spawn")
+    }
+
+    /// A Windows driver loop: `body` runs once per request line, with the line (newline stripped) in
+    /// `l`, until the adapter closes the pipe.
+    #[cfg(windows)]
+    fn py_loop(body: &str) -> String {
+        format!(
+            "import sys\nwhile True:\n    l = sys.stdin.readline()\n    if not l:\n        break\n    \
+             l = l.rstrip('\\r\\n')\n    {body}\n"
+        )
     }
 
     /// A "reply the same line to every request" driver.
     fn responder(reply: &str) -> String {
         #[cfg(windows)]
         {
-            format!("while ($l = [Console]::In.ReadLine()) {{ Write-Output '{reply}' }}")
+            py_loop(&format!("print({reply:?}, flush=True)"))
         }
         #[cfg(not(windows))]
         {
@@ -325,7 +339,7 @@ mod tests {
     fn echoer() -> String {
         #[cfg(windows)]
         {
-            "while ($l = [Console]::In.ReadLine()) { Write-Output \"ERR saw $l\" }".to_string()
+            py_loop("print('ERR saw ' + l, flush=True)")
         }
         #[cfg(not(windows))]
         {
@@ -337,7 +351,7 @@ mod tests {
     fn silent() -> String {
         #[cfg(windows)]
         {
-            "while ($l = [Console]::In.ReadLine()) { }".to_string()
+            py_loop("pass")
         }
         #[cfg(not(windows))]
         {
@@ -460,7 +474,7 @@ mod tests {
     fn two_line_responder(reply: &str) -> String {
         #[cfg(windows)]
         {
-            format!("while ($l = [Console]::In.ReadLine()) {{ Write-Output '{reply}'; Write-Output '{reply}' }}")
+            py_loop(&format!("print({reply:?}, flush=True); print({reply:?}, flush=True)"))
         }
         #[cfg(not(windows))]
         {
@@ -475,8 +489,7 @@ mod tests {
         #[cfg(windows)]
         {
             format!(
-                "$l = [Console]::In.ReadLine(); [Console]::Out.Write('ERR '); \
-                 [Console]::Out.Write('x' * {size}); [Console]::Out.Write(\"`n\")"
+                "import sys\nsys.stdin.readline()\nsys.stdout.write('ERR ' + 'x' * {size} + '\\n')\nsys.stdout.flush()\n"
             )
         }
         #[cfg(not(windows))]
