@@ -11,7 +11,8 @@ badge that never executed.
 `windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
 GitHub." **Until 2026-09-14 this repository was never pushed** (owner policy), so that matrix **never
 executed.** On 2026-09-14 the owner had it pushed to a **private testing remote** (`HANDOFF.md`
-§1.1), which activated the workflow, and its first run is transcribed in **§9** — failures first.
+§1.1), which activated the workflow, and its first run is transcribed in **§9** — failures first. The fifth
+run, the same day, was the first with no failures: all three operating systems green in one run.
 Everything from here to §9 predates that run and is kept as the record of what was known before it:
 a *local* replay of the same gates, which until then was the only cross-platform evidence this
 project had.
@@ -912,4 +913,28 @@ revocation it judged followed a real gap of 150–172 ms), and the mutant still 
 tests with tighter timing — `safe_park_returns_the_simulated_device_to_its_park_pose` (40 ms) and
 `crates/delulu/tests/dead_man_cli.rs`'s `a_program_that_stops_beating_loses_its_device_mid_run` (25 ms
 to its first command) — passed all 20 starved runs between them, so neither is recorded as exposed.
-The fix is pending the next run.
+The fix passed in run 5, below.
+
+### Run 5 — the same day (run `34849980129`, on `010c36c`)
+
+**The first run with no failures: every job green, all three operating systems in one run**
+(2026-09-14). Eleven jobs passed; `heavy-gates` and `miri-slow` were skipped, by design, because they
+run only on a schedule or by hand.
+
+| Job | Result |
+|---|---|
+| `test (macos-latest)` | ✅ 125 test binaries: 1,657 passed, 0 failed, 4 ignored. Then every step: `fmt --check` on the examples and the Book's samples, the Python-less build, conformance at 330 of 330 anchors, the reference in sync, the CLI sweep at 27 of 27, and the fuzz campaign — 50,000 generated, 30,198 executed, no trace escaping its row |
+| `test (ubuntu-latest)` | ✅ The same, number for number |
+| `test (windows-latest)` | ✅ 125 test binaries: 1,647 passed, 0 failed, 4 ignored — ten fewer tests are compiled there, all platform-gated — and every later step |
+| `arm64` (Linux aarch64) | ✅ 125 test binaries: 1,657 passed, 0 failed, 4 ignored |
+| `lints`, `supply-chain`, `editor`, `formal` | ✅ |
+| `miri` on `delulu-atlas` and `delulu-diag`; `miri-ffi` | ✅ |
+| `heavy-gates`, `miri-slow` | skipped — schedule or manual trigger only |
+
+`device::tests::a_beaten_lease_is_never_revoked`, the test run 4 failed on macOS, passed on all four
+test runners. `REMAINING_WORK.md` 7.2 closes on this run, as its own row said it would.
+
+**What a green run does not show.** Nothing here has run on a developer's Mac, and the VS Code
+extension has been exercised end to end on Windows only. The Tier-2 cross-account boundary was tested
+with a real second user on Linux, not on macOS. `heavy-gates` and `miri-slow` have not yet run on a
+runner at all, so the 240-minute Miri budget is still unconfirmed.

@@ -115,6 +115,14 @@ each was authorized by the owner on the day, in the session that made it, and is
   measured and rejected (it shrinks the stall a drive survives from about 100 ms to 60–70 ms), and so
   was the stepped clock, which never runs the wall-clock watchdog.
 
+### The fifth run (`34849980129`)
+
+- **The first run with no failures** — every job green, all three operating systems in one run:
+  1,657 tests on macOS and on Linux (x86-64 and arm64) and 1,647 on Windows, which compiles ten
+  platform-gated tests fewer; 0 failed anywhere; the CLI sweep, the fuzz campaign, conformance,
+  clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder. The
+  dead-man test fixed after run 4 passed on every platform. REMAINING_WORK 7.2 is closed.
+
 ## Unreleased — containment + deployment hardening, 2026-08-10
 
 Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can

@@ -631,3 +631,13 @@ audit. The honest split of PROVEN-from-here vs REQUIRES-A-REAL-MAC is the point 
 CI needs no macOS-specific amendment: `.github/workflows/ci.yml` already installs clang-by-default
 (the runner image) and pinned CPython 3.13 with `setup-python`, then runs `cargo test --workspace`
 plus the `--no-default-features` check across all three OSes.
+
+**2026-09-14 — what the runner showed.** The repository was pushed to a private testing remote and
+the `macos-latest` job ran: the suite executed on macOS for the first time in run 2 and passed end to
+end in run 3 (`CROSS_PLATFORM_VERIFICATION.md` §9). The list above held — the `libm.dylib` `cos`
+mirror (`run_foreign_cos_end_to_end_with_foreigncall_traced`), the FFI and cross-engine `cos` tests,
+and the live NumPy demo through embedded Python all pass there, and the wasmtime C builds compile
+under Apple clang — with one exception the audit did not foresee: the vendored **libffi** does not.
+`libffi-sys` 2.3.0 bundles libffi 3.4.4, whose aarch64 assembly current Apple clang rejects, so macOS
+links the system libffi instead (`crates/delulu-runtime/Cargo.toml`, scoped to macOS). `ci.yml`
+itself still needed no macOS-specific change.

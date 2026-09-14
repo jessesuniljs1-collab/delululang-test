@@ -521,7 +521,10 @@ bug, because `resolve_workspace` requires a manifest and would have refused a pl
 modules; the loader is chosen, not forced. (2) *"CI is Windows-only so far"* —
 `.github/workflows/ci.yml` declares a three-OS matrix. That is a *declaration*, not a result: the
 workflow **has never executed**, because this repository has never been pushed. See
-`CROSS_PLATFORM_VERIFICATION.md`, which states the same thing in the same words.
+`CROSS_PLATFORM_VERIFICATION.md`, which states the same thing in the same words. *(2026-09-14: no
+longer true either. The repository was pushed to a private testing remote, the workflow has run, and
+every operating system in its matrix has passed the whole suite on it — `CROSS_PLATFORM_VERIFICATION.md`
+§9.)*
 
 *Stage 2 is complete: the dependency graph is a place where authority cannot hide, and the
 Effect-Soundness theorem holds across 83k fuzzed executions.*

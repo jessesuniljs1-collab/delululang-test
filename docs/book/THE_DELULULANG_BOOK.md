@@ -1225,7 +1225,9 @@ DeluluLang **does not claim**, ever:
   It said yes. The third run passed on macOS end to end — 1,657 tests, the 27-case CLI sweep, and
   50,000 generated programs of which none let a trace escape its row — and **the count of macOS
   executions that passed is no longer zero.** What has not been run is anything outside CI: a Mac on
-  someone's desk, and the editor extension on it.
+  someone's desk, and the editor extension on it. Windows went green on CI in the fourth run, and the
+  fifth — the same day — was the first with nothing red at all: macOS, Linux on two architectures,
+  and Windows, in one run.
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.

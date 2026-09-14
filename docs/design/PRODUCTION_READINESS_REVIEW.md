@@ -217,7 +217,9 @@ Recorded because a review that only reports problems is not a review:
   the comment is stale.
 - **The `macos-latest` CI matrix is not an overclaim.** `CROSS_PLATFORM_VERIFICATION.md` §"Nothing in
   this repository may describe DeluluLang as supported on three platforms" already states that the
-  matrix names macOS and **has never executed**. The project got there first.
+  matrix names macOS and **has never executed**. The project got there first. *(2026-09-14: it has
+  executed since, on a private testing remote, and macOS went green on it —
+  `CROSS_PLATFORM_VERIFICATION.md` §9.)*
 
 ### 3.5 One Cargo field is already answering two different questions
 
@@ -262,7 +264,7 @@ wrong by three before anything moved.
 | 5 | Re-verify and correct every quoted test count | Survey note ×1 | The Survey deliberately will not guess; a reviewer can measure. The front door is where staleness costs most |
 | 6 | Correct the three statements in §2.3 | this review | **DONE — D70.** All three corrected in place rather than deleted, so the record still reads as a record |
 | 10 | Make the reference's grammar index reach the grammar | this review (§2.5) | **DONE — D70.** Six of twenty-seven anchors named productions no specification defined; a three-way gate now holds the correspondence |
-| 7 | Name the macOS socket-path limit in a diagnostic rather than surfacing a raw OS error | this review (macOS-1) | Testable on Linux today; turns an obscure failure into a named one on the day a Mac exists |
+| 7 | Name the macOS socket-path limit in a diagnostic rather than surfacing a raw OS error | this review (macOS-1) | Testable on Linux today; turns an obscure failure into a named one on the day a Mac exists. **That day came on 2026-09-14 (CI run 2):** the named refusal fired, but inside the detached broker daemon, so it reached only `broker.log` and the user saw a five-second timeout; `broker start` now runs the same check before spawning (`28e10e6`) |
 | 8 | Decompose `cli.rs` along the seams already established | this review | **PARTLY DONE — D69.** `delulu run` (1,116 lines) extracted after measuring the coupling: 24 of 143 items reached, sixteen of them its own. `cli.rs` 8,856 → 7,740. **Shared helpers deliberately stayed** — moving them would assert a false owner. The remaining clusters (broker-facing commands ≈1,050 lines; authority reporting ≈800) are characterised and mechanical |
 | 9 | Separate "not shipped language surface" from "not publishable" before enforcing either | this review (§3.5) | **DONE — D69**, and it corrected a published count that had been right by coincidence |
 
@@ -283,6 +285,6 @@ wrong by three before anything moved.
 | Item | Status |
 |---|---|
 | C55 — record field access is O(record width) at runtime | **Accepted limit**, published with its curve. Measured U-shaped with a minimum at width 20; a short `Vec` scan is genuinely faster for ordinary records. The real fix is static field indices through the DIR — a change to the IR, not a patch |
-| macOS execution | **Blocked, not deferred.** There is no Apple hardware. Every cell that mentions macOS says "never run", and none says "untested" or "pending" — those invite a reader to assume someone tried |
+| macOS execution | **Unblocked 2026-09-14, by CI rather than hardware:** the private testing remote's `macos-latest` runner passed the whole suite end to end in run 3 (`CROSS_PLATFORM_VERIFICATION.md` §9). Still unrun: a developer's Mac. *(Was: blocked, not deferred — there was no Apple hardware, and every macOS cell said "never run" rather than "untested" or "pending", because those invite a reader to assume someone tried.)* |
 | The optimizer (spec §2.1) and a native backend | **Honestly deferred**, RFC-gated, with published notes. Neither is claimed to exist |
 | Multi-threaded WASM engine | **Deferred with its honesty note** (`THREADED_WASM_DEFERRAL.md`) — the sanctioned passing outcome, not an omission |

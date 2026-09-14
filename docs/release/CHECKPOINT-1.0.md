@@ -195,7 +195,9 @@ very first finding was that this page's front door was *false*; this is it being
    was emulated. Every conditional-compilation site was enumerated and is exhaustive for macOS, and
    the one macOS-specific hazard the audit could quantify — `sun_path` is 104 bytes there against 108
    on Linux — is now refused with both figures. **A path that should work and a path that has been
-   run are different claims.**
+   run are different claims.** *(Superseded 2026-09-14: CI's macOS runner passed the whole suite end
+   to end — [`CROSS_PLATFORM_VERIFICATION.md`](../design/CROSS_PLATFORM_VERIFICATION.md) §9. What is
+   still unrun is a developer's Mac.)*
 2. **Nothing is distributed.** No crates.io entry, no release binary, no public repository. The CLI
    could not be published even deliberately: its path dependencies carry no version numbers, so
    `cargo publish` refuses it. Only the CLI is *permitted* to publish; the libraries are refused by a
