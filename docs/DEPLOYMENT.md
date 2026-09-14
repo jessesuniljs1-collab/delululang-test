@@ -151,7 +151,7 @@ delulu audit tail | grep root-policy-mode
 |---|---|
 | **Linux** | Verified. Full suite executed; cross-account boundary tested with a real second UID. |
 | **Windows 11** | Verified. Full suite executed. Note that unprivileged symlink creation is not available, which blocks one class of workspace-delivered attack that POSIX permits. |
-| **macOS** | **Designed for, not executed.** The first real attempt — CI's macOS runner, 2026-09-14 — stopped building `libffi-sys`'s bundled libffi, whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran; the next run links macOS's own libffi. Earlier, a per-crate `cargo check --target aarch64-apple-darwin` from Windows type-checked 4 of the workspace's members and stopped at third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) for the rest. Exactly one line in the codebase branches on macOS (`SUN_PATH_MAX`); everything else is `cfg(unix)`, which Linux exercises. **No macOS claim here is backed by a successful run.** |
+| **macOS** | **Runs; not yet green.** CI's macOS runner (Apple Silicon) built the whole workspace on 2026-09-14 — linking macOS's own libffi, since the copy `libffi-sys` bundles does not assemble with current Apple clang — and passed 1,654 of 1,655 tests. The one failure was the one line that branches on macOS doing its job: a test's state directory put the broker socket over macOS's 104-byte `sun_path` (`SUN_PATH_MAX`), and `broker start` now says so before spawning anything. **On a Mac, keep `DELULU_STATE_DIR` short** — the socket lives inside it, and macOS allows 103 bytes. Fixed; the next run shows whether it holds. **No deployment claim here rests on macOS yet.** |
 
 ---
 

@@ -270,8 +270,8 @@ Recorded so no reader mistakes the shape of the claim:
   of programs (28 lines can exhaust memory), quadratic checking in nesting depth, and unbounded
   parser recursion that crashes outside the exit-code contract. `delulu check` is the agent hot loop,
   so these are denial-of-service surfaces against the intended workflow.
-- **macOS has never been executed.** Windows and Linux are green at every commit; the one macOS
-  attempt (CI, 2026-09-14) stopped building a dependency. This is not "supported on three platforms".
+- **macOS is not yet green.** Windows and Linux are green at every commit; macOS first ran on CI on
+  2026-09-14 and passed 1,654 of 1,655 tests. This is not "supported on three platforms".
 - **No physical device has ever been commanded.** Every demonstration drives the simulator.
 - **Certification is NONE.** No functional-safety or security certification of any kind.
 - **The adapter has no signature check** (§1.11) — isolation and reach, not supply-chain assurance.

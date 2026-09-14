@@ -111,10 +111,14 @@ struct Fixture {
 }
 
 fn setup(tag: &str) -> Fixture {
-    let base = std::env::temp_dir().join(format!("delulu_fed_{tag}_{}", std::process::id()));
+    // Short names on purpose. The broker's socket lives inside the state dir, and macOS allows a
+    // socket path of 103 bytes under a temp dir that is already 49 long. The first macOS CI run
+    // (2026-09-14) refused the old names for the "revoke_restart" tag at 106 bytes, and they left
+    // "reconcile" 2 bytes inside the limit; these come to at most 93 for every tag in this file.
+    let base = std::env::temp_dir().join(format!("dfed_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let cwd = base.join("work");
-    let state = base.join("vehicle-state");
+    let state = base.join("vstate");
     std::fs::create_dir_all(&cwd).unwrap();
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(cwd.join("sat.delulu"), sat_program()).unwrap();

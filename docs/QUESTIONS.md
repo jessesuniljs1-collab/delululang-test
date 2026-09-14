@@ -626,8 +626,8 @@ be most dangerous.
 - **No driver for any real device ships in this repository.**
 - **Certification is NONE** — no functional-safety or security certification of any kind, for any
   domain. Not DO-178C, not ISO 26262, not IEC 61508.
-- **macOS has never been executed** — the first attempt, by CI on 2026-09-14, stopped building a
-  dependency before any DeluluLang code ran.
+- **macOS is not yet green.** CI's macOS runner first built and ran the suite on 2026-09-14: 1,654 of
+  1,655 tests passed, and the one failure is fixed, pending the next run.
 
 So the correct sentence is: *the authority model was designed with these systems in mind, and the
 device-scoping, envelope and dead-man machinery is built and tested against a simulator.* It is
@@ -670,8 +670,8 @@ Repeated here so no reader has to assemble it from the rest:
 4. **`Secret.verify` reveals one chosen bit per call without a declassify capability.** It now
    declares the `Declassify` effect, so it is always visible in the authority report — but visible
    is not impossible, and holding a secret is not the same as being allowed to read it.
-5. **macOS has never been executed.** The first attempt (CI, 2026-09-14) stopped building a
-   dependency's bundled C code.
+5. **macOS is not yet green.** It runs — 1,654 of 1,655 tests on CI's macOS runner (2026-09-14) —
+   and the one failure is fixed, pending the next run.
 6. **No physical device has ever been commanded**, and no real driver ships in-tree.
 7. **No certification, in any regime, for any domain.**
 8. **Multi-tenancy is not provided** — several agents with different authority need separate OS

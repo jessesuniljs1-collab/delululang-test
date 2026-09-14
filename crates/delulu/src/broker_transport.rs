@@ -425,7 +425,7 @@ mod imp {
     /// Checked *before* `bind` rather than translating its error afterwards, because the failure is
     /// worth describing in terms the caller can act on: shorten the state directory. Returns the
     /// address when it fits.
-    fn checked_address(state_dir: &Path) -> io::Result<String> {
+    pub(super) fn checked_address(state_dir: &Path) -> io::Result<String> {
         let address = address_for(state_dir);
         // The NUL terminator counts against the limit, so a path of exactly SUN_PATH_MAX is already
         // one byte too long.
@@ -548,3 +548,21 @@ mod imp {
 }
 
 pub use imp::{connect, Connection, Listener};
+
+/// Refuse, before anything is spawned, a state directory whose transport address this platform
+/// cannot hold.
+///
+/// Unix names the broker socket from the state directory, so a deep one can exceed `sun_path` (104
+/// bytes on macOS, 108 on Linux; see `SUN_PATH_MAX` in the Unix transport). The listener refuses such
+/// a path by name, but it runs inside the detached daemon, whose output goes to `broker.log` — so
+/// `broker start` calls this first, and the refusal reaches the person who asked for the broker.
+#[cfg(unix)]
+pub fn check_state_dir(state_dir: &Path) -> io::Result<()> {
+    imp::checked_address(state_dir).map(|_| ())
+}
+
+/// Windows names its pipe from a fixed-length hash of the state directory, so any directory fits.
+#[cfg(windows)]
+pub fn check_state_dir(_state_dir: &Path) -> io::Result<()> {
+    Ok(())
+}

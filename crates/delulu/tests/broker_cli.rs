@@ -45,6 +45,66 @@ impl Drop for DaemonGuard {
     }
 }
 
+/// A state directory whose socket path the kernel cannot hold is refused BY NAME, before a daemon
+/// is spawned — not after a five-second wait.
+///
+/// `broker_transport` has refused such paths legibly for a long time: the byte count, the platform
+/// limit, the remedy. But the check ran only inside the detached daemon, whose output goes to
+/// `broker.log`. So the first time it fired on a real Mac — CI, 2026-09-14, a test's state dir under
+/// macOS's 49-character temp dir making a 106-byte socket path against the 103 macOS allows — the
+/// user saw only "broker daemon did not come up within 5s". A refusal written to be legible,
+/// delivered illegibly.
+///
+/// The path here is too long on EVERY Unix (Linux allows 107), so this runs — and can fail — on
+/// Linux, the platform this project can run locally, not only on a Mac.
+#[cfg(unix)]
+#[test]
+fn broker_start_names_an_unholdable_socket_path_instead_of_timing_out() {
+    let state = std::env::temp_dir().join(format!("dl_sun_{}_{}", std::process::id(), "x".repeat(100)));
+    // Created first, as the federation fixture that failed on macOS created its own: the directory's
+    // NAME is fine; only the socket path inside it is too long. Without this the old code failed for
+    // a different reason (it could not spawn into a missing directory), which proves nothing here.
+    std::fs::create_dir_all(&state).expect("create the state dir");
+    let started = std::time::Instant::now();
+    let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "start"]);
+    let took = started.elapsed();
+    let _guard = DaemonGuard { state: state.clone() }; // in case a regression DID start one
+    let _ = std::fs::remove_dir_all(&state);
+    let err = stderr(&o);
+    assert!(!o.status.success(), "a broker whose socket cannot be bound must not report started:\n{err}");
+    assert!(err.contains("broker socket path is"), "the refusal must name the problem, not time out:\n{err}");
+    assert!(err.contains("--state-dir"), "and name the remedy:\n{err}");
+    assert!(
+        took < std::time::Duration::from_secs(3),
+        "refused before spawning, not after waiting {took:?} for a daemon that could never bind"
+    );
+}
+
+/// `broker start` into a state directory that does not exist yet must create it and start.
+///
+/// The daemon is spawned with the state dir as its working directory, and nothing on the default
+/// path created that directory first — only `--guard-policy` and `--require-anchored-roots` happened
+/// to — so a fresh `DELULU_STATE_DIR` (a new deployment account, a CI job) failed with "cannot spawn
+/// the broker daemon" and the OS's word for a missing directory. Found on 2026-09-14 while witnessing
+/// the socket-path fix above: the first version of that test forgot to create its directory, and
+/// the failure it hit was this one.
+#[test]
+fn broker_start_creates_a_state_dir_that_does_not_exist_yet() {
+    let state = std::env::temp_dir().join(format!("dl_fresh_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&state);
+    assert!(!state.exists(), "precondition: the state dir must not exist yet");
+    let o = delulu_in(&std::env::temp_dir(), &state, &["broker", "start"]);
+    let guard = DaemonGuard { state: state.clone() };
+    assert!(
+        o.status.success(),
+        "broker start must create a missing state dir, not fail to spawn into it:\n{}",
+        stderr(&o)
+    );
+    assert!(state.is_dir(), "and the directory exists afterwards");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&state);
+}
+
 #[test]
 fn daemon_lifecycle_run_expose_stop_fail_closed() {
     // ----- arrange: temp workspace + programs + broker-resident secret ------------------------

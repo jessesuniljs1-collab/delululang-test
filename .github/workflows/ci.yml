@@ -186,6 +186,9 @@ jobs:
   # sentence, and this repository's rule is that a gate which cannot fail is not a gate.
   #
   # `timeout-minutes` makes a regression in this cost surface as a failure rather than a long bill.
+  #
+  # Every push runs the crates that fit. `delulu-broker`, `delulu-syntax` and `delulu-check` are in
+  # `miri-slow` below, and the numbers that put them there are in its comment.
   miri:
     if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
@@ -193,7 +196,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [delulu-diag, delulu-atlas, delulu-broker, delulu-syntax, delulu-check]
+        crate: [delulu-diag, delulu-atlas]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -203,6 +206,34 @@ jobs:
       # the toolchain this job installs, and Miri exists only on nightly — so a bare `cargo miri`
       # fails in seconds: "the 'miri' component ... is not available for the '1.96.1' toolchain".
       # That was reproduced locally on 2026-09-14, the day this workflow first ran and went red.
+      - name: Miri — ${{ matrix.crate }}
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo +nightly miri test --lib -p ${{ matrix.crate }}
+
+  # The three crates whose Miri runs do not fit a push. On the first run that reached them
+  # (2026-09-14, a 2-vCPU runner) each was cancelled at the 45-minute cap with no UB found in what it
+  # had interpreted: delulu-broker finished 95 of 150 tests and then spent 39 minutes on one;
+  # delulu-syntax finished 103 of 130 and then spent 24 minutes on one; delulu-check finished 25 of
+  # 237 at about 30 seconds each, which is two hours at that rate. None of the three contains an
+  # `unsafe` block (see `miri-ffi`), so what Miri checks here is safe code and the dependencies' unsafe
+  # beneath it. That is worth running, but not worth 135 runner-minutes and a red cross on every
+  # push. It runs nightly where NIGHTLY is on, and by hand, with a 240-minute budget — which no run
+  # has yet confirmed is enough.
+  miri-slow:
+    if: (github.event_name == 'schedule' && vars.NIGHTLY == 'on') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [delulu-broker, delulu-syntax, delulu-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with: { components: "miri, rust-src" }
+      - uses: Swatinem/rust-cache@v2
+      # `+nightly`: the pin in rust-toolchain.toml outranks the installed toolchain (see `miri`).
       - name: Miri — ${{ matrix.crate }}
         env:
           MIRIFLAGS: -Zmiri-disable-isolation

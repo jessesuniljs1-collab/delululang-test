@@ -71,20 +71,33 @@ fn rig(tag: &str, program: &str) -> Rig {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("arm.delulu"), program).unwrap();
 
+    // Windows used to run this driver as a PowerShell script. The first CI run on a Windows runner
+    // (2026-09-14) timed it out: the adapter's first exchange has 2000 ms (`EXCHANGE_TIMEOUT`,
+    // deliberately not stretchable), and that budget includes the driver's own start-up — which for
+    // Windows PowerShell on a loaded two-core VM is seconds. The property under test is WHERE the
+    // envelope is enforced, not how fast PowerShell starts, so the driver is now Python, which the
+    // default build already requires on Windows. Same log, same ±60° hard stop, same replies.
     #[cfg(windows)]
     {
-        let script = "$log = \"adapter-saw.txt\"\n\
-             while ($l = [Console]::In.ReadLine()) {\n\
-             \x20 Add-Content -Path $log -Value $l\n\
-             \x20 if ($l -match '^CMD .* angle_deg=([-0-9.]+)') {\n\
-             \x20   $a = [double]$Matches[1]\n\
-             \x20   if ([Math]::Abs($a) -gt 60) { Write-Output \"ERR joint hard stop at 60 deg\" }\n\
-             \x20   else { Write-Output \"OK\" }\n\
-             \x20 } elseif ($l -match '^READ') { Write-Output \"VAL 21.5\" }\n\
-             \x20 else { Write-Output \"ERR unknown request\" }\n\
-             }\n";
-        std::fs::write(dir.join("driver.ps1"), script).unwrap();
-        Rig { dir, adapter_cmd: "powershell -NoProfile -File driver.ps1".to_string() }
+        let script = "import re, sys\n\
+             log = open('adapter-saw.txt', 'a')\n\
+             while True:\n\
+             \x20   line = sys.stdin.readline()\n\
+             \x20   if not line:\n\
+             \x20       break\n\
+             \x20   l = line.rstrip('\\r\\n')\n\
+             \x20   log.write(l + '\\n')\n\
+             \x20   log.flush()\n\
+             \x20   m = re.match(r'^CMD .* angle_deg=([-0-9.]+)', l)\n\
+             \x20   if m:\n\
+             \x20       reply = 'ERR joint hard stop at 60 deg' if abs(float(m.group(1))) > 60 else 'OK'\n\
+             \x20   elif l.startswith('READ'):\n\
+             \x20       reply = 'VAL 21.5'\n\
+             \x20   else:\n\
+             \x20       reply = 'ERR unknown request'\n\
+             \x20   print(reply, flush=True)\n";
+        std::fs::write(dir.join("driver.py"), script).unwrap();
+        Rig { dir, adapter_cmd: "python driver.py".to_string() }
     }
     #[cfg(not(windows))]
     {
@@ -508,7 +521,7 @@ fn the_signed_bytes_can_be_named_apart_from_the_command_that_runs() {
     r.signoff("signoff.json");
 
     // The real driver is the script; the command names the interpreter.
-    let script = if cfg!(windows) { "driver.ps1" } else { "driver.sh" };
+    let script = if cfg!(windows) { "driver.py" } else { "driver.sh" };
     let seed = [11u8; 32];
     let key = delulu_runtime::plugin::public_key_hex(&seed);
     let bytes = std::fs::read(r.dir.join(script)).unwrap();

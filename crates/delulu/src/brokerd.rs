@@ -1164,6 +1164,22 @@ fn start_detached(state_dir: &Path, json: bool, bypass: bool) -> i32 {
         }
         return 0;
     }
+    // Create a missing state directory HERE, not in the daemon: the daemon is spawned WITH it as its
+    // working directory, so a missing one failed the spawn itself — "cannot spawn the broker daemon"
+    // plus the OS's word for a missing directory — for any fresh DELULU_STATE_DIR, unless
+    // `--guard-policy` or `--require-anchored-roots` happened to create it first. The daemon still
+    // applies the owner-only mode and the P21 filesystem check at startup, before any secret exists.
+    if let Err(e) = std::fs::create_dir_all(state_dir) {
+        eprintln!("error: cannot create state dir `{}`: {e}", state_dir.display());
+        return 2;
+    }
+    // The daemon refuses a socket path the kernel cannot hold, by name — but it is detached and its
+    // output goes to `broker.log`, so on the first real Mac (CI, 2026-09-14) that refusal reached the
+    // user as a five-second wait and "did not come up". The same check, here, where the user is.
+    if let Err(e) = crate::broker_transport::check_state_dir(state_dir) {
+        eprintln!("error: {e}");
+        return 2;
+    }
     let exe = match std::env::current_exe() {
         Ok(e) => e,
         Err(e) => {

@@ -1183,8 +1183,8 @@ DeluluLang **does not claim**, ever:
   project's own rule (*a runtime fault must be a diagnostic, never a host crash*) forbids. Teardown
   is iterative now, so depth costs heap instead of native stack. Worth stating in this chapter rather
   than a changelog, because "we bounded recursion" was said once and was only half true.
-- **Three-platform support.** DeluluLang is built and tested on **Windows and Linux**. It has
-  **never been executed on macOS** — not once, on any day of its development. The Unix code path is
+- **Three-platform support.** DeluluLang is built and tested on **Windows and Linux**. Until
+  2026-09-14 it had **never been executed on macOS** — not once, on any day of its development. The Unix code path is
   the one Linux runs green and the conditional compilation was audited site by site, but *a path
   that should work and a path that has been run are different claims*, and only the second one is
   evidence. On 2026-08-04 the evidence moved a little, and only a little: the pure-Rust core now
@@ -1214,6 +1214,13 @@ DeluluLang **does not claim**, ever:
   Apple clang rejects. No DeluluLang code ran, so **the count of macOS executions is still zero**;
   what changed is that the first blocker is a measured fact now, and it sits in a dependency. The next
   run uses macOS's own libffi.
+
+  The next run did, and the whole workspace built. **1,654 of 1,655 tests passed** — the first
+  DeluluLang code ever to execute on a Mac. The one failure was the one line of this codebase that
+  branches on macOS, doing its job: a test's state directory put the broker's socket path over
+  macOS's 104-byte limit. The refusal written to explain exactly that had reached nobody, because it
+  ran inside the detached daemon; `broker start` now says it before spawning anything. Whether macOS
+  is green is what the run after that says — and "ran" and "passed" stay different words until it does.
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.

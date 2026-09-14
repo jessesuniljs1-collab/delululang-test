@@ -345,12 +345,10 @@ codebase is written against, not three it has run on. Beyond them:
 
 ## 5. The macOS caveat, stated plainly
 
-> **2026-09-14:** the first real macOS attempt ran on CI and is recorded in §9. It reached no
-> DeluluLang code — the build stopped in a dependency — so what follows still describes everything
-> known about DeluluLang *on* macOS. Only the reason has changed: the project has no Apple hardware of
-> its own, but CI's macOS runner is Apple hardware.
+> **2026-09-14: superseded.** CI's macOS runner built the whole workspace and ran the suite, 1,654 of 1,655
+> tests passing (§9). What follows is what was known before that, kept as the record of it.
 
-**macOS has had zero live executions of DeluluLang code, ever** (the note above has the one attempt).
+**Before 2026-09-14, macOS had zero live executions of DeluluLang code** (§9 has what changed).
 Its standing rests on two things and no more: (1) the runtime's Unix half is `#[cfg(unix)]`, and that
 *same code* compiles and passes the full suite on Linux, which exercises the socket transport, the
 `0700` directory guard, and the interpreter; (2) static reading of the macOS-relevant `cfg` branches.
@@ -809,3 +807,46 @@ everything at once.
 
 **Fixed before the next push:** `a52dc39` (Miri via `+nightly`; wasmtime 47.0.4; the nightly schedule
 made opt-in), and the commit after it (the snapshot, the Survey, macOS's libffi, and this record).
+
+### Run 2 — the same day (run `34836508713`, on `6abdfae`)
+
+The first run's fixes, pushed together after a fresh-clone check reproduced green. **15 checks — 8
+passed, 1 skipped, 3 failed, 3 cancelled at their time cap.** Read job by job with `gh`; the three
+test jobs ran `--no-fail-fast` this time, so each reported everything.
+
+| Job | Result | Why |
+|---|---|---|
+| `test (macos-latest)` | ❌ **1,654 of 1,655 passed** | **The first execution of DeluluLang code on macOS.** The whole workspace built, on macOS's own libffi. The one failure: `a_revoked_certificate_stays_revoked_across_a_daemon_restart`, whose state directory under macOS's 49-character temp dir put the broker socket path at 106 bytes, over the 103 macOS allows. |
+| `test (ubuntu-latest)` | ❌ 1,654 of 1,655 | The actor speedup criterion at 4 workers, on a 2-vCPU runner: 1.04x. |
+| `test (windows-latest)` | ❌ 1,643 of 1,646 | The same speedup test (0.96x), and two hardware-adapter tests whose PowerShell driver did not start within the adapter's 2000 ms exchange budget. |
+| `arm64` (Linux aarch64) | ✅ | The whole suite, green. |
+| `supply-chain` | ✅ | wasmtime 47.0.4 cleared both advisories. |
+| `miri` `delulu-atlas`, `delulu-diag`; `miri-ffi` | ✅ 4.2 / 1.5 / 1.7 min | Miri's first completed runs on a runner; 0 UB. |
+| `miri` `delulu-broker`, `delulu-syntax`, `delulu-check` | ⛔ cancelled at 45 min | 0 UB in what they reached. broker: 95 of 150 tests, then 39 minutes on one; syntax: 103 of 130, then 24 minutes on one; check: 25 of 237 at about 30 s each. |
+| `lints`, `editor`, `formal` | ✅ | As in run 1. |
+| `heavy-gates` | skipped | By design. |
+
+**What it found that was real — two defects in `broker start`, each witnessed failing before its
+fix.** The daemon refuses a socket path the kernel cannot hold, naming the byte count, the limit
+and the remedy; but it is detached and its output goes to `broker.log`, so on macOS that refusal
+reached the user as "broker daemon did not come up within 5s". `broker start` now runs the same
+check before spawning (witnessed on Linux against the old code: the five-second timeout). And a
+state directory that did not exist yet could not be started in at all — the daemon is spawned with
+it as its working directory, which failed with "os error 267" on Windows and ENOENT on Linux unless
+`--guard-policy` or `--require-anchored-roots` happened to create it first. `broker start` now
+creates it (witnessed on Windows against the old code). The second defect was found by accident: the
+first witness for the socket-path fix forgot to create its directory, and the failure it hit was
+this one.
+
+**What it found that was the runner.** GitHub's standard runners for private repositories have two
+vCPUs. The actor speedup criterion is stated at 4 workers, so it is now asserted wherever at least
+4 hardware threads exist (2.16x on the development machine) and reported as not measured elsewhere;
+every semantic assertion in that test still runs everywhere. The hardware-adapter test's Windows
+driver is Python rather than PowerShell, since PowerShell's start-up on a loaded runner overran a
+budget that is deliberately not stretchable. The federation fixture uses short directory names.
+
+**What it found about Miri.** Three crates cannot finish under Miri inside a push's 45 minutes on
+this hardware, and none of them contains an `unsafe` block. They moved to a `miri-slow` job that runs
+nightly where `NIGHTLY` is on, and by hand, with a 240-minute budget no run has yet confirmed.
+`delulu-atlas`, `delulu-diag` and the FFI decoder — the one place Miri has real `unsafe` to watch —
+stay on every push.

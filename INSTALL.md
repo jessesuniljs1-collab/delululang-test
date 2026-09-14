@@ -87,8 +87,10 @@ Get-FileHash bin\delulu.exe             # Windows PowerShell, compare by eye
 ## Platform honesty
 
 **Windows and Linux** are built, tested, and verified — the suite, the gates and a hand-driven
-CLI/compiler sweep all run green on both. **macOS has never been executed**: the code is written for
-it and its conditional-compilation branches were audited, but the one attempt so far — CI's macOS
-runner, 2026-09-14 — stopped while building a dependency's bundled C code, before any DeluluLang code
-ran. A path that should work and a path that has been run are different claims.
+CLI/compiler sweep all run green on both. **macOS runs, and is not yet green**: CI's macOS runner
+(Apple Silicon) built the whole workspace on 2026-09-14 and passed 1,654 of 1,655 tests. The one
+failure was a test's socket path over macOS's limit; it is fixed, and the next run is what shows it.
+On a Mac, keep a custom state directory short — the broker's socket lives inside it, and macOS allows
+103 bytes of socket path. A path that should work and a path that has been run are different claims,
+and so are "ran" and "passed".
 `docs/design/CROSS_PLATFORM_VERIFICATION.md` carries the detail.

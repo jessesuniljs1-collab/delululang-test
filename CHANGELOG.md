@@ -62,9 +62,33 @@ each was authorized by the owner on the day, in the session that made it, and is
   `libffi-sys` 2.3.0, which compiles the libffi it bundles (3.4.4) — and current Apple clang rejects
   that version's aarch64 assembly (`invalid CFI advance_loc expression`). No DeluluLang code ran.
   macOS now links the system libffi (`features = ["system"]`, scoped to macOS, so Windows and Linux
-  build exactly as before and `Cargo.lock` is unchanged). Untested until the next macOS run.
+  build exactly as before and `Cargo.lock` is unchanged). The next run confirmed it: the whole
+  workspace built, and 1,654 of 1,655 tests passed — the first DeluluLang code to run on a Mac.
 - **arm64: the first execution on any ARM target.** Linux aarch64 ran all 124 test binaries — 1,649
-  passed — and its only failures were the two artifacts above.
+  passed — and its only failures were the two artifacts above. In the next run it passed outright.
+
+### Found by the second run (`34836508713`)
+
+- **`broker start` names a socket path the kernel cannot hold, before spawning anything.** That
+  refusal — byte count, platform limit, remedy — had always existed, inside the detached daemon, whose
+  output goes to `broker.log`. So on the first Mac it reached the user as "broker daemon did not come
+  up within 5s". Witnessed on Linux against the old code (exactly that five-second timeout), then
+  passing.
+- **`broker start` creates a state directory that does not exist yet.** The daemon is spawned with it
+  as its working directory, so a fresh `DELULU_STATE_DIR` failed to spawn at all — "os error 267" on
+  Windows, ENOENT on Linux — unless `--guard-policy` or `--require-anchored-roots` happened to create
+  it first. Found while witnessing the fix above; witnessed failing on Windows before the fix.
+- **Tests that failed because of where they ran, not what they checked**, now say so instead: the
+  actor speedup criterion is asserted wherever at least 4 hardware threads exist and reported as not
+  measured elsewhere (2-vCPU runners measured 1.04x and 0.96x); the hardware-adapter test's Windows
+  driver is Python rather than PowerShell, whose start-up on a loaded VM overran the adapter's
+  deliberate 2000 ms budget; and the federation fixture uses short directory names, because one
+  test's socket path came to 106 bytes against the 103 macOS allows.
+- **Miri on three crates moved to a nightly/manual job, `miri-slow`.** On a 2-vCPU runner
+  `delulu-broker`, `delulu-syntax` and `delulu-check` were cancelled at the 45-minute cap with no UB in
+  what they had interpreted (95 of 150, 103 of 130 and 25 of 237 runnable tests respectively). None contains
+  an `unsafe` block. `delulu-atlas`, `delulu-diag` and the FFI decoder, where the real `unsafe` is,
+  still run on every push. The new job's 240-minute budget is not yet confirmed by a run.
 
 ## Unreleased — containment + deployment hardening, 2026-08-10
 
