@@ -235,9 +235,11 @@ proof-boundary assignment for every claim is in [`../MATHEMATICS.md`](../MATHEMA
 
     The two **wasmtime** advisories that used to dominate this entry are genuinely gone: the 27 → 47
     upgrade (2026-08-04) closed **RUSTSEC-2026-0096**, the aarch64 Cranelift sandbox escape, along
-    with sixteen others. `Cargo.lock` pins `wasmtime 47.0.3`. This item previously said "four
-    reachable advisories" and was **stale** — that is documentation drift, found by re-running the
-    tool rather than re-reading the page.
+    with sixteen others. `Cargo.lock` pinned `wasmtime 47.0.3` until 2026-09-14, when two advisories
+    published after this re-measurement (RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI
+    functionality DeluluLang never uses) failed the gate on the first CI run; the patch release
+    `47.0.4` closed both. This item previously said "four reachable advisories" and was **stale** —
+    that is documentation drift, found by re-running the tool rather than re-reading the page.
 
     What remains is **two pyo3 CVEs in a default build** (`pyo3 0.25.1`; `python` is a default
     feature). They are ignored on **reachability**, verified rather than asserted: RUSTSEC-2026-0176

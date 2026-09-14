@@ -9,6 +9,34 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — the first push, and what the first CI run found, 2026-09-14
+
+The repository was pushed for the first time, to a **private** testing remote (`HANDOFF.md` §1.1),
+which switched on `.github/workflows/ci.yml` after its whole life as prepared-but-unexecuted YAML. The
+first run went red, and both causes found so far are real. No numbered ruling covers these entries:
+each was authorized by the owner on the day, in the session that made it, and is recorded in
+`HANDOFF.md` §1.1.
+
+### Security
+
+- **wasmtime 47.0.3 → 47.0.4** (lockfile only; `Cargo.toml` still says `"47"`). `cargo deny` failed on
+  two advisories published after its last clean run (2026-08-07): **RUSTSEC-2026-0268**, a
+  guest-controlled host heap allocation through WASIp3 streams, and **RUSTSEC-2026-0269**, a
+  filesystem sandbox escape through trailing slashes. Both sit in WASI functionality DeluluLang never
+  uses — it depends on no `wasmtime-wasi` and makes no WASI calls — but the gate blocks on any new
+  advisory by design, and the patch release closes both without a reachability argument to maintain.
+
+### CI
+
+- **Every Miri job had been unable to run at all.** They installed nightly and then ran a bare
+  `cargo miri`, which the pin in `rust-toolchain.toml` (1.96.1) overrides — and Miri is nightly-only.
+  The jobs now say `cargo +nightly miri` and install `rust-src`. The documents had said every command
+  in `ci.yml` had been run by hand; this one, as written, cannot run in this tree, and it took the
+  first real run to show it.
+- **The nightly schedule is opt-in on a private repository.** It re-runs every job, not only the
+  heavy gates, against billed minutes, so each job now skips a scheduled run unless the repository
+  variable `NIGHTLY` is `on`. Pushes, pull requests and manual runs are unaffected.
+
 ## Unreleased — containment + deployment hardening, 2026-08-10
 
 Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can

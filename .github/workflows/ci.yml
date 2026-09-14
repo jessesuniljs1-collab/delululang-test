@@ -10,12 +10,20 @@ on:
   # The heavy gates below are too slow for every push and were therefore `#[ignore]`d — and then
   # nothing ever ran them. A nightly schedule and a manual button are what turn "run it explicitly"
   # from an instruction nobody follows into something that actually happens.
+  #
+  # On a PRIVATE repository every scheduled minute is billed, and this schedule re-runs every job
+  # below, not only the heavy gates. So the nightly is opt-in: each job carries
+  # `if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'`, and a scheduled run does work
+  # only where the repository variable NIGHTLY is `on` (Settings → Secrets and variables → Actions
+  # → Variables). Pushes, pull requests and the manual button are unaffected. Owner decision,
+  # 2026-09-14, the day the repository was first pushed — to a private testing remote.
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
 
 jobs:
   test:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +114,7 @@ jobs:
   #
   # Never executed before the first push (2026-09-14), like everything else in this file.
   arm64:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +147,7 @@ jobs:
   # repository and this project's comments carry much of its value. Until that decision is made,
   # formatting is not enforced, and this comment is where that is admitted.
   lints:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -174,6 +184,7 @@ jobs:
   #
   # `timeout-minutes` makes a regression in this cost surface as a failure rather than a long bill.
   miri:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -183,12 +194,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
-        with: { components: miri }
+        with: { components: "miri, rust-src" }
       - uses: Swatinem/rust-cache@v2
+      # `+nightly` is load-bearing. `rust-toolchain.toml` pins 1.96.1 for the whole tree and outranks
+      # the toolchain this job installs, and Miri exists only on nightly — so a bare `cargo miri`
+      # fails in seconds: "the 'miri' component ... is not available for the '1.96.1' toolchain".
+      # That was reproduced locally on 2026-09-14, the day this workflow first ran and went red.
       - name: Miri — ${{ matrix.crate }}
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
-        run: cargo miri test --lib -p ${{ matrix.crate }}
+        run: cargo +nightly miri test --lib -p ${{ matrix.crate }}
 
   # ---- The gates that were `#[ignore]`d and then never run -----------------------------------
   # Two tests carry acceptance criteria the project states about itself, and both were marked
@@ -205,7 +220,7 @@ jobs:
   # Nightly rather than per-push because they are genuinely slow, and `workflow_dispatch` so a
   # release can demand them on the spot instead of waiting for the clock.
   heavy-gates:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' && vars.NIGHTLY == 'on') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -239,17 +254,19 @@ jobs:
   # caught as "at or beyond the end of the allocation of size 4 bytes". A gate that cannot fail is
   # not a gate, and that applies to the tool as much as to the test.
   miri-ffi:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
-        with: { components: miri }
+        with: { components: "miri, rust-src" }
       - uses: Swatinem/rust-cache@v2
+      # `+nightly`: the pin in rust-toolchain.toml outranks the installed toolchain (see `miri`).
       - name: Miri — the raw-pointer decoding in delulu-runtime
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
-        run: cargo miri test --lib -p delulu-runtime -- foreign::tests
+        run: cargo +nightly miri test --lib -p delulu-runtime -- foreign::tests
 
   # ---- Editor surface ----------------------------------------------------------------------
   # The VS Code extension shipped for the life of the project with a command-injection hole (the
@@ -259,6 +276,7 @@ jobs:
   # server is Rust, the client is JavaScript, and nothing read both. `editor_contract.rs` (run by the
   # workspace suite) compares them; this job proves the artifact a user would actually install works.
   editor:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -281,11 +299,16 @@ jobs:
   # reports "advisories ok". A check that passes and CANNOT FAIL THE BUILD is not a gate, so the
   # flag is gone: from here a new advisory blocks.
   #
+  # It did, on the first real run (2026-09-14): two advisories published after 2026-08-07 against
+  # wasmtime 47.0.3 — RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI functionality this
+  # project never calls. The 47.0.4 patch release closed both. The gate did its job on its first day.
+  #
   # Two pyo3 entries remain ignored on reachability grounds, and that argument is itself gated by
   # `governance.rs::the_ignored_pyo3_advisories_are_still_unreachable` — because an `ignore` whose
   # reason has quietly stopped being true is worse than no gate at all: the tool prints a green
   # line, and the green line is what people read.
   supply-chain:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -302,6 +325,7 @@ jobs:
   # P17-C/8/9. Each of these has been executed locally and its verbatim output is recorded in
   # docs/design/models/README.md; these steps make them reproducible rather than transcribed.
   formal:
+    if: github.event_name != 'schedule' || vars.NIGHTLY == 'on'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
