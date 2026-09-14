@@ -4,11 +4,11 @@
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
 **Last updated:** 2026-09-14 — the repository's first push, to a private testing remote (§1.1).
 Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
-**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,148 lines of Rust**
+**Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,250 lines of Rust**
 (measured by the Survey on 2026-09-14, not remembered) — and, since 2026-09-14, **privately** on
 GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**189 commits past `v1.0.0`** at this update.
+**191 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -22,7 +22,8 @@ GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.gi
 >   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) now says what a deployment actually protects.
 >
 > **Current status: PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS** — Windows and Linux,
-> in the Tier-2 deployment of `DEPLOYMENT.md`. **macOS is not covered and has still never been run.**
+> in the Tier-2 deployment of `DEPLOYMENT.md`. **macOS is not covered: DeluluLang has still never run
+> there — the first attempt (CI, 2026-09-14) stopped while building a dependency.**
 
 Read §1 and §2 before touching anything. The rest is reference.
 
@@ -67,9 +68,9 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **Where** | `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git`, a **private** repository. |
 | **Why** | In the owner's words: for testing DeluluLang *"in mac os and other os"*, and for *"editing and working on delululang from the cloud"*. It is not a distribution channel — README's *Not distributed* row still holds. |
 | **What was pushed** | `master` (the GitHub default branch; local `master` tracks `origin/master`), `rc/1.0.0-drill` (DRILL-001's one unmerged commit, kept as a record) and the annotated tag `v1.0.0` (`198bf44`). The branch stays `master`, the name this history has always used, rather than GitHub's suggested `main`; `ci.yml` triggers on both. |
-| **What it switched on** | `.github/workflows/ci.yml` — the three-OS matrix **including `macos-latest`**, arm64, clippy, Miri, the editor build, `cargo deny` and the formal models — on every push to `master`, on pull requests and by hand — and **nightly at 03:00 UTC only where the repository variable `NIGHTLY` is `on`** (see *What it costs*). **Activated is not executed.** No run's result has been read into this repository yet. The first one goes into `docs/design/CROSS_PLATFORM_VERIFICATION.md` with its run ID, failures included, and every *never executed* row in these documents stands until then. |
+| **What it switched on** | `.github/workflows/ci.yml` — the three-OS matrix **including `macos-latest`**, arm64, clippy, Miri, the editor build, `cargo deny` and the formal models — on every push to `master`, on pull requests and by hand — and **nightly at 03:00 UTC only where the repository variable `NIGHTLY` is `on`** (see *What it costs*). **Activated is not executed**, and the first run's result is read and recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **What it costs** | A private repository's Actions minutes come out of the account's quota, and macOS and Windows runners are charged at a higher rate than Linux. The nightly schedule re-runs **every** job, not only the heavy gates, so since 2026-09-14 it is **opt-in** (owner decision): every job skips a scheduled run unless the repository variable `NIGHTLY` is `on` (Settings → Secrets and variables → Actions → Variables). Pushes, pull requests and manual runs are unaffected. |
-| **The first run** | Went red on 2026-09-14: the branch page showed ✕ with **3 / 15** checks while the run was still going. Two causes were reproduced locally and fixed in the next commit. **All six Miri jobs** ran a bare `cargo miri` under the stable toolchain `rust-toolchain.toml` pins (Miri is nightly-only; the job now says `+nightly`). **`cargo deny`** found two advisories published after its last clean run (2026-08-07) against wasmtime 47.0.3 — RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI functionality DeluluLang never uses (no `wasmtime-wasi`, no WASI calls), both closed by the patch release **47.0.4**. The run's own logs have not been read into this repository yet. |
+| **The first run** | Run `34830053479` (2026-09-14), read with `gh`: **3 passed** — clippy, the editor build and the formal models, each on a runner for the first time — **1 skipped, 11 failed**, and every failure accounted for. Two gates had never been able to pass. **All six Miri jobs** ran a bare `cargo miri` under the stable toolchain `rust-toolchain.toml` pins (Miri is nightly-only; the job now says `+nightly`). **`cargo deny`** found two advisories published after its last clean run (2026-08-07) against wasmtime 47.0.3 — RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI functionality DeluluLang never uses (no `wasmtime-wasi`, no WASI calls), both closed by the patch release **47.0.4**. Two artifacts had been recorded from this machine's disk rather than from git: the **core-invariance snapshot** counted carriage returns that 58 CRLF working-tree files had and the committed LF files do not, and the **Survey** mapped a gitignored `.vsix`. **arm64** ran all 124 test binaries and failed only on those two. **macOS** stopped building `libffi-sys`'s bundled libffi, whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran; it now links macOS's own libffi, untested until the next run. Full record: `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 
 **Before the public push — the owner's decisions, written down here so they come up before that
 push rather than after it:**
@@ -475,8 +476,8 @@ done.
 
 | | Why |
 | --- | --- |
-| **macOS has never been executed. Not once, in any phase.** | No Apple hardware. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **One command on any Mac closes this: `cargo test --workspace`.** Since 2026-09-14 it no longer needs this machine: the private testing remote (§1.1) activates CI's `macos-latest` job. Until that run's result is read and recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md`, this row stands. |
-| **CI: activated 2026-09-14; the first run went red, and its logs are not yet read.** | Until 2026-09-14 the repository was never pushed, so CI never ran. The first push, to the private testing remote (§1.1), activated `ci.yml`, and the first run went red. This row used to say *"every command in it has been run by hand"*; the Miri command, as written, could never run in this tree (§1.1, *The first run*), so that was not true of it. The run's logs have not been read into this repository — *"written"*, *"triggered"* and *"green"* are three different claims. Reading that run and transcribing it is the next step. |
+| **macOS has never been executed.** | The project has no Apple hardware of its own. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **`cargo test --workspace` on a Mac was expected to close this; the first time it ran — CI's macOS runner, 2026-09-14 — the build stopped in `libffi-sys`**, compiling a bundled libffi whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran. The next run links macOS's own libffi (§1.1, *The first run*). |
+| **CI: the first run (2026-09-14) went red — read, recorded, and every cause fixed.** | Until 2026-09-14 the repository was never pushed, so CI never ran. The first push, to the private testing remote (§1.1), activated `ci.yml`, and the first run went red. This row used to say *"every command in it has been run by hand"*; the Miri command, as written, could never run in this tree (§1.1, *The first run*), so that was not true of it. The run is transcribed in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9; whether the fixes hold is what the next run shows — *"written"*, *"triggered"* and *"green"* are three different claims. |
 | **The Dockerfile has never been built.** | `Dockerfile` and `.devcontainer/devcontainer.json` were written 2026-08-07. Docker CLI 29.5.2 is installed; **the daemon was not running**. Dockerfiles fail for boring reasons that are invisible by reading. Treat the first `docker build` as an experiment. |
 
 ### Known technical limits, deliberately not softened
@@ -897,7 +898,7 @@ The distinction this section turns on is the one the whole project turns on: **e
 
 | | Windows 11 (x86_64-msvc) | Linux (WSL2 Ubuntu) | macOS |
 | --- | --- | --- | --- |
-| Full test suite | ✅ **124 binaries / 1,645 tests / 0 failed** | ✅ **124 binaries / 1,654 tests / 0 failed** | ❌ **never executed, not once, in any phase.** A per-crate `cargo check --target aarch64-apple-darwin` type-checks four workspace members; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`), so **no DeluluLang source was shown to fail — and most was not shown to compile either** |
+| Full test suite | ✅ **124 binaries / 1,645 tests / 0 failed** | ✅ **124 binaries / 1,654 tests / 0 failed** | ❌ **never executed** — the one attempt, CI's macOS runner on 2026-09-14, stopped building `libffi-sys`. A per-crate `cargo check --target aarch64-apple-darwin` type-checks four workspace members; the rest stop in third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`), so **no DeluluLang source was shown to fail — and most was not shown to compile either** |
 | CLI sweep (`cli-sweep.sh`) | ✅ 27/27 | ✅ run in earlier passes | ❌ |
 | Compiler + interpreter | ✅ | ✅ | ❌ |
 | WASM engine | ✅ | ✅ (plus 5 live-engine tests Windows refuses by design) | ❌ |
@@ -931,8 +932,9 @@ document does not blur them. Running it needs a display; the command is
 
 ### macOS — engineered for, analyzed, and unproven
 
-**Zero live executions, ever.** There is no Apple hardware or VM available to this project. What the
-standing rests on:
+**Zero executions of DeluluLang code, ever.** The project has no Apple hardware of its own; the one
+attempt so far, on CI's macOS runner (2026-09-14), stopped building a dependency
+(`docs/design/CROSS_PLATFORM_VERIFICATION.md` §9). What the standing rests on:
 
 1. The runtime's Unix half is `#[cfg(unix)]`, and *that same code* passes the full suite on Linux —
    which exercises the socket transport, the `0700` directory guard, and the interpreter.
@@ -949,8 +951,9 @@ path** until a real Mac run exists.
 macOS is *"engineered for, analyzed, and unproven"* — **not** "supported" in the sense the other two
 now are. Type-checking is not running, and a matrix entry naming `macos-latest` is a plan, not a
 result. **Since 2026-09-14 that plan is live:** the private testing remote (§1.1) triggers the
-`macos-latest` job on every push to `master`. This section changes when a run's result is read and
-recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md` — not when a run merely starts.
+`macos-latest` job on every push to `master`, and its first result is recorded
+(`docs/design/CROSS_PLATFORM_VERIFICATION.md` §9): the build stopped in `libffi-sys` before any
+DeluluLang code ran. The next run tries macOS's own libffi.
 
 ### The three surfaces, per platform
 

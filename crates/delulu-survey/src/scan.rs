@@ -4,7 +4,7 @@
 //! confirm any classification by looking at the path, which is the property that makes the rest of
 //! the map auditable.
 
-use crate::{NodeKind, EXCLUDED_DIRS};
+use crate::{NodeKind, EXCLUDED_DIRS, EXCLUDED_FILE_EXTENSIONS};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,8 +78,8 @@ pub fn id_prefix(k: NodeKind) -> &'static str {
     }
 }
 
-/// Walk `root`, skipping [`EXCLUDED_DIRS`]. Entries are sorted at every level, so the resulting
-/// order is the same on any filesystem.
+/// Walk `root`, skipping [`EXCLUDED_DIRS`] and [`EXCLUDED_FILE_EXTENSIONS`]. Entries are sorted at
+/// every level, so the resulting order is the same on any filesystem.
 pub fn walk(root: &Path) -> Vec<ScannedFile> {
     let mut out = Vec::new();
     descend(root, root, &mut out);
@@ -99,6 +99,11 @@ fn descend(root: &Path, dir: &Path, out: &mut Vec<ScannedFile>) {
                 continue;
             }
             descend(root, &path, out);
+        } else if EXCLUDED_FILE_EXTENSIONS
+            .iter()
+            .any(|(e, _)| name.rsplit_once('.').is_some_and(|(_, x)| x == *e))
+        {
+            continue;
         } else if let Some(f) = classify(root, &path, &name) {
             // The Survey's own generated output is never read back. See `OUTPUT_FILES`.
             if crate::OUTPUT_FILES.contains(&f.rel.as_str()) {

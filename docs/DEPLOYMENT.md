@@ -151,7 +151,7 @@ delulu audit tail | grep root-policy-mode
 |---|---|
 | **Linux** | Verified. Full suite executed; cross-account boundary tested with a real second UID. |
 | **Windows 11** | Verified. Full suite executed. Note that unprivileged symlink creation is not available, which blocks one class of workspace-delivered attack that POSIX permits. |
-| **macOS** | **Designed for, not executed.** A per-crate `cargo check --target aarch64-apple-darwin` type-checks 4 of the workspace's members for macOS; the rest are blocked by third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) needing an Apple cross-toolchain this bench does not have — **no DeluluLang source was shown to fail.** Exactly one line in the codebase branches on macOS (`SUN_PATH_MAX`); everything else is `cfg(unix)`, which Linux exercises. **No macOS claim here is backed by a run.** One command closes it: `cargo test --workspace` on any Mac. |
+| **macOS** | **Designed for, not executed.** The first real attempt — CI's macOS runner, 2026-09-14 — stopped building `libffi-sys`'s bundled libffi, whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran; the next run links macOS's own libffi. Earlier, a per-crate `cargo check --target aarch64-apple-darwin` from Windows type-checked 4 of the workspace's members and stopped at third-party C build scripts (`blake3`, `zstd-sys`, `libffi-sys`) for the rest. Exactly one line in the codebase branches on macOS (`SUN_PATH_MAX`); everything else is `cfg(unix)`, which Linux exercises. **No macOS claim here is backed by a successful run.** |
 
 ---
 

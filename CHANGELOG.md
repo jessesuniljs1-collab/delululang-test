@@ -13,7 +13,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
 The repository was pushed for the first time, to a **private** testing remote (`HANDOFF.md` §1.1),
 which switched on `.github/workflows/ci.yml` after its whole life as prepared-but-unexecuted YAML. The
-first run went red, and both causes found so far are real. No numbered ruling covers these entries:
+first run (`34830053479`) went red; this section is everything it found, and none of it is a defect
+in the language. No numbered ruling covers these entries:
 each was authorized by the owner on the day, in the session that made it, and is recorded in
 `HANDOFF.md` §1.1.
 
@@ -36,6 +37,34 @@ each was authorized by the owner on the day, in the session that made it, and is
 - **The nightly schedule is opt-in on a private repository.** It re-runs every job, not only the
   heavy gates, against billed minutes, so each job now skips a scheduled run unless the repository
   variable `NIGHTLY` is `on`. Pushes, pull requests and manual runs are unaffected.
+- **The x86 test jobs run with `--no-fail-fast`.** Without it cargo stops at the first failing test
+  binary: on the first run every x86 job reported one failure and hid whatever came after it.
+
+### Reproducibility — two artifacts had been recorded from the development machine, not from git
+
+- **The core-invariance snapshot counted carriage returns no checkout contains.** 58 tracked files had
+  CRLF line endings on the development machine while git stores them as LF — `.gitattributes`
+  normalizes what is committed, not what a tool writes to disk — and three of them were the
+  depth-limit fixtures (`DL0211`/`DL0212`/`DL0213`), so the snapshot recorded byte offsets that no
+  clean checkout produces. Every local run passed, because Windows and WSL read the same disk. The
+  files were rewritten to their committed bytes (each checked identical to its index blob first; git
+  records no change) and the snapshot re-recorded: exactly 12 `"byte"` values moved, all in those
+  three cases, and each now equals what the CI runners printed.
+- **The Survey mapped a file git ignores** — the packaged VS Code extension, gitignored build output —
+  so every clean checkout counted one node fewer and failed the freshness gate and three `delulu
+  doctor` tests. Build-output files are now excluded by extension (`EXCLUDED_FILE_EXTENSIONS`), and
+  `crates/delulu-survey/tests/clean_checkout.rs` asks git which files the Survey reads that git
+  ignores; it failed naming the file before the fix, and passes after it.
+
+### Platforms
+
+- **macOS: the first real attempt, and its first blocker.** CI's macOS runner stopped building
+  `libffi-sys` 2.3.0, which compiles the libffi it bundles (3.4.4) — and current Apple clang rejects
+  that version's aarch64 assembly (`invalid CFI advance_loc expression`). No DeluluLang code ran.
+  macOS now links the system libffi (`features = ["system"]`, scoped to macOS, so Windows and Linux
+  build exactly as before and `Cargo.lock` is unchanged). Untested until the next macOS run.
+- **arm64: the first execution on any ARM target.** Linux aarch64 ran all 124 test binaries — 1,649
+  passed — and its only failures were the two artifacts above.
 
 ## Unreleased — containment + deployment hardening, 2026-08-10
 

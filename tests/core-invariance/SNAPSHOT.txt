@@ -7781,14 +7781,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 974,
+            "byte": 968,
             "col": 653,
             "line": 7
           },
           "file": "tests/conformance/reject/DL0211_deep_type.delulu",
           "label": "name an inner type with a `type` alias instead of nesting this far",
           "start": {
-            "byte": 970,
+            "byte": 964,
             "col": 649,
             "line": 7
           }
@@ -7804,14 +7804,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 974,
+            "byte": 968,
             "col": 653,
             "line": 7
           },
           "file": "tests/conformance/reject/DL0211_deep_type.delulu",
           "label": "not a type",
           "start": {
-            "byte": 970,
+            "byte": 964,
             "col": 649,
             "line": 7
           }
@@ -7863,14 +7863,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 1185,
+            "byte": 1175,
             "col": 649,
             "line": 11
           },
           "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
           "label": "simplify or split this pattern",
           "start": {
-            "byte": 1181,
+            "byte": 1171,
             "col": 645,
             "line": 11
           }
@@ -7886,14 +7886,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 1742,
+            "byte": 1732,
             "col": 1206,
             "line": 11
           },
           "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
           "label": "not a sum type",
           "start": {
-            "byte": 541,
+            "byte": 531,
             "col": 5,
             "line": 11
           }
@@ -7909,14 +7909,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 1742,
+            "byte": 1732,
             "col": 1206,
             "line": 11
           },
           "file": "tests/conformance/reject/DL0212_deep_pattern.delulu",
           "label": "wrong number of fields",
           "start": {
-            "byte": 541,
+            "byte": 531,
             "col": 5,
             "line": 11
           }
@@ -7975,14 +7975,14 @@ exit 1
       "spans": [
         {
           "end": {
-            "byte": 2159,
+            "byte": 2151,
             "col": 1673,
             "line": 9
           },
           "file": "tests/conformance/reject/DL0213_deep_blocks.delulu",
           "label": "flatten the nested blocks — extract an inner function",
           "start": {
-            "byte": 2158,
+            "byte": 2150,
             "col": 1672,
             "line": 9
           }

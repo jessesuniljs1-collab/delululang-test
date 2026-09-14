@@ -11,10 +11,10 @@ badge that never executed.
 `windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
 GitHub." **Until 2026-09-14 this repository was never pushed** (owner policy), so that matrix **never
 executed.** On 2026-09-14 the owner had it pushed to a **private testing remote** (`HANDOFF.md`
-§1.1), which activates the workflow. *Activated* is not *executed*: no run's result has been read
-into this document yet. The first one will be transcribed here with its run ID, failures included,
-and every macOS cell below stands until then. Everything below is a *local* replay of those same
-gates, which is still the only cross-platform evidence recorded for this project.
+§1.1), which activated the workflow, and its first run is transcribed in **§9** — failures first.
+Everything from here to §9 predates that run and is kept as the record of what was known before it:
+a *local* replay of the same gates, which until then was the only cross-platform evidence this
+project had.
 
 The gates replayed (from `ci.yml`): `cargo test --workspace`; `delulu fmt --check examples`;
 `delulu fmt --check docs/book/samples`; `cargo check -p delulu --no-default-features` (the
@@ -345,7 +345,12 @@ codebase is written against, not three it has run on. Beyond them:
 
 ## 5. The macOS caveat, stated plainly
 
-**macOS has had zero live executions, ever** — no Apple hardware or VM is available to this project.
+> **2026-09-14:** the first real macOS attempt ran on CI and is recorded in §9. It reached no
+> DeluluLang code — the build stopped in a dependency — so what follows still describes everything
+> known about DeluluLang *on* macOS. Only the reason has changed: the project has no Apple hardware of
+> its own, but CI's macOS runner is Apple hardware.
+
+**macOS has had zero live executions of DeluluLang code, ever** (the note above has the one attempt).
 Its standing rests on two things and no more: (1) the runtime's Unix half is `#[cfg(unix)]`, and that
 *same code* compiles and passes the full suite on Linux, which exercises the socket transport, the
 `0700` directory guard, and the interpreter; (2) static reading of the macOS-relevant `cfg` branches.
@@ -740,3 +745,67 @@ to the earlier readiness audit:
   it has never been exposed — but it ships source, and anyone building on an Apple Silicon Mac would
   be. That is the first macOS-specific *security* consequence this document has had to record, and
   it is recorded as an unverified exposure rather than a measured one.
+
+---
+
+## 9. The first CI run — 2026-09-14 (run `34830053479`)
+
+The repository's first push (commit `5471d05`, to a private testing remote) ran
+`.github/workflows/ci.yml` for the first time in its life: **15 checks — 3 passed, 1 skipped, 11
+failed**, in about eleven minutes. It was read with the GitHub CLI (`gh run view --log-failed`), job
+by job, not from the summary page. Every failure is accounted for below, and **none of them is a
+defect in the language**: two gates that had never been able to pass, two artifacts recorded from
+the development machine's disk instead of from what git stores, and one third-party C build that
+current Apple tooling rejects.
+
+| Job | Result | Why |
+|---|---|---|
+| `lints` (clippy `-D warnings`) | ✅ passed | First run on a runner. |
+| `editor` (build the `.vsix`, prove it activates) | ✅ passed | First run on a runner. |
+| `formal` (both TLA+ models, the three teeth tests, Z3, Lean) | ✅ passed | First run on a runner. Each teeth step fails the job unless TLC fails, so a pass means all three still catch their bug. |
+| `heavy-gates` | skipped | Schedule or manual trigger only, by design. |
+| `miri` ×5, `miri-ffi` | ❌ ~25 s each | A bare `cargo miri` under the stable toolchain `rust-toolchain.toml` pins. Miri is nightly-only; the runner's error matched the local reproduction word for word. |
+| `supply-chain` | ❌ | RUSTSEC-2026-0268 and RUSTSEC-2026-0269 against wasmtime 47.0.3, published after the gate's last clean run (2026-08-07). |
+| `test (ubuntu-latest)` | ❌ | `the_core_still_answers_exactly_as_recorded`. Cargo stopped at that first failing binary: 21 binaries had reported, 263 tests passed. |
+| `test (windows-latest)` | ❌ | The same single failure and the same stop: 21 binaries, 258 passed. |
+| `arm64` (Linux aarch64) | ❌ | All 124 binaries ran (`--no-fail-fast`): **1,649 passed, 5 failed, 4 ignored.** The five are the snapshot test, three `delulu doctor` tests and the Survey's freshness test. |
+| `test (macos-latest)` | ❌ ~1 min | The build stopped in `libffi-sys` (below). No test binary was produced. |
+
+**Two were defects in this repository's own reproducibility**, and both had passed every local run,
+because Windows and WSL read the same disk:
+
+1. **The core-invariance snapshot counted carriage returns no checkout contains.** 58 tracked files
+   had CRLF line endings on the development machine while git holds them as LF — `.gitattributes`
+   normalizes what is committed, not what a tool writes into the working tree. Three were the
+   depth-limit fixtures (`DL0211`/`DL0212`/`DL0213`), so the snapshot carried byte offsets that
+   counted CRs. Every such file was rewritten to its committed bytes (each checked identical to its
+   index blob first; git records no change) and the snapshot re-recorded. **Exactly 12 values moved,
+   every one a `"byte"` offset in those three cases, and each now equals what the runners printed.**
+   No line, no column and no other case changed.
+2. **The Survey mapped a file git ignores.** The packaged VS Code extension — build output,
+   gitignored — was a node in the committed map, so every clean checkout counted one node fewer and
+   failed the freshness gate and the three `doctor` tests that lean on it. Build-output files are now
+   excluded by extension (`EXCLUDED_FILE_EXTENSIONS`, beside `EXCLUDED_DIRS`), and
+   `crates/delulu-survey/tests/clean_checkout.rs` asks git which of the files the Survey reads it
+   ignores. Run before the fix, it failed naming the file; after it, it passes.
+
+**macOS — the first measurement.** On real Apple hardware cargo compiled `blake3`'s C code — the very
+build script that stopped the Windows cross-check on 2026-08-10, so that blocker really was the
+bench and not the code — and four DeluluLang crates (`delulu-diag`, `delulu-syntax`, `delulu-check`,
+`delulu-broker`) with no reported error. Then `libffi-sys` 2.3.0 compiled the libffi it bundles
+(3.4.4), and current Apple clang rejected that version's aarch64 `sysv` assembly with
+`invalid CFI advance_loc expression`. The build stopped there, so **no DeluluLang code has run on
+macOS yet.** The next run links macOS's own libffi instead (`crates/delulu-runtime/Cargo.toml`,
+scoped to macOS; Windows and Linux are untouched), and whether that links and runs is what it will
+show.
+
+**ARM — the first measurement.** Until this run nothing here had executed on any ARM target. The
+arm64 job ran the whole suite on Linux aarch64, and its only failures were the two artifacts above,
+which are about the development machine rather than the architecture.
+
+**What this run does not show:** anything after `core_invariance` on the x86 jobs, which stopped at
+their first failing test binary. They now run with `--no-fail-fast`, so the next run reports
+everything at once.
+
+**Fixed before the next push:** `a52dc39` (Miri via `+nightly`; wasmtime 47.0.4; the nightly schedule
+made opt-in), and the commit after it (the snapshot, the Survey, macOS's libffi, and this record).

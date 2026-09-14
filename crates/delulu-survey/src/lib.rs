@@ -65,6 +65,18 @@ pub const EXCLUDED_DIRS: &[(&str, &str)] = &[
     ("node_modules", "vendored JavaScript dependencies"),
 ];
 
+/// Files the Survey never reads, by extension, with the reason each is excluded.
+///
+/// The same argument as [`EXCLUDED_DIRS`]: these are build OUTPUTS, present only on a machine that
+/// ran the build. Mapping one makes the committed map depend on that machine, and every clean
+/// checkout then disagrees with it. That is not hypothetical — the packaged VS Code extension was a
+/// node in the committed map until the first CI run (2026-09-14) built the map from a fresh clone
+/// and counted one node fewer. `tests/clean_checkout.rs` asks git which files it ignores, so the next
+/// artifact that belongs in this list fails a test before it can reach a commit.
+pub const EXCLUDED_FILE_EXTENSIONS: &[(&str, &str)] = &[
+    ("vsix", "the packaged VS Code extension — build output of `npm run package`, gitignored"),
+];
+
 /// The Survey's own output, excluded because it must not map itself.
 ///
 /// This is a correctness requirement, not tidiness. `DISCREPANCIES.md` quotes the paths it reports

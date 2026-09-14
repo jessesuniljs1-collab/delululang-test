@@ -68,3 +68,13 @@ libffi = "3"
 # lazily on the first grant-checked `root.python(...)` call). Isolated behind `src/python.rs` and the
 # `python` feature. Optional so `--no-default-features` builds a Python-less delulu.
 pyo3 = { version = "0.25", optional = true }
+
+# macOS links the SYSTEM libffi instead of compiling the copy `libffi-sys` vendors (libffi 3.4.4),
+# whose aarch64 assembly current Apple clang rejects — "invalid CFI advance_loc expression" in
+# `src/aarch64/sysv.S` — which stopped the macOS build before any DeluluLang source compiled. Found
+# by the first CI run (2026-09-14, run 34830053479). With `system`, libffi-sys builds nothing and
+# emits only `-lffi`; macOS ships libffi as a system library, and whether it links and runs is what
+# the next macOS run tests. Target-scoped (resolver 2): Windows and Linux still build the vendored
+# copy exactly as before, and Cargo.lock does not change.
+[target.'cfg(target_os = "macos")'.dependencies]
+libffi = { version = "3", features = ["system"] }

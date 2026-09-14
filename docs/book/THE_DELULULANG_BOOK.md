@@ -1207,6 +1207,13 @@ DeluluLang **does not claim**, ever:
   `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain — so no DeluluLang source has been
   shown to fail for macOS, **and most of it has not been shown to compile either.** Both halves of
   that sentence are the claim. One command on any Mac would replace all of it: `cargo test --workspace`.
+
+  2026-09-14 was the first day that command ran on Apple hardware — CI's macOS runner, once the
+  repository was pushed to a private testing remote — and it replaced none of it. The build stopped
+  inside `libffi-sys`, compiling the copy of libffi that crate bundles, whose aarch64 assembly current
+  Apple clang rejects. No DeluluLang code ran, so **the count of macOS executions is still zero**;
+  what changed is that the first blocker is a measured fact now, and it sits in a dependency. The next
+  run uses macOS's own libffi.
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.

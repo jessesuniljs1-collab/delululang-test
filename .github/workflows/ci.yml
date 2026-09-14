@@ -47,8 +47,11 @@ jobs:
       - name: Install NumPy (criterion-2 demo)
         run: python -m pip install numpy
 
+      # `--no-fail-fast`: without it cargo stops at the first failing test BINARY. On the first run
+      # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
+      # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.
       - name: Full workspace test suite
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       # Stage 8 criterion 10: `delulu fmt --check` and locale invariance are permanent CI
       # gates. The suite already carries them (fmt identity/idempotence over the corpus +

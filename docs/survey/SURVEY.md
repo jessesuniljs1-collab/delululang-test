@@ -22,16 +22,16 @@ files, so it still opens when the tree does not build.
 | Workspace members | 13 |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 224 |
-| Rust lines | 111148 |
-| Rust files outside `src/` (test/bench targets) | 94 |
+| Rust files | 225 |
+| Rust lines | 111250 |
+| Rust files outside `src/` (test/bench targets) | 95 |
 | Markdown documents | 155 |
-| Markdown lines | 42415 |
+| Markdown lines | 42529 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1120 / 9989 |
+| Nodes / edges in this map | 1120 / 10005 |
 | Open discrepancies | 2 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -296,20 +296,20 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 4058 lines
+- **Modules:** 11 files, 4075 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 625 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/lib.rs` | 637 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 242 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 422 | Reading Markdown. |
 | `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
 | `src/render.rs` | 279 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 407 | Reading Rust source as text. |
-| `src/scan.rs` | 209 | Walking the tree and deciding what each file *is*. |
+| `src/scan.rs` | 214 | Walking the tree and deciding what each file *is*. |
 | `src/verify.rs` | 624 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`

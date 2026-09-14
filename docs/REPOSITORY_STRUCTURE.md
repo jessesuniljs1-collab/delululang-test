@@ -273,7 +273,7 @@ DeluluLang/
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
 ├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
-├── .github/workflows/              # the three-OS CI matrix (live since the 2026-09-14 push; no result read yet)
+├── .github/workflows/              # the three-OS CI matrix (live since 2026-09-14; first run: CROSS_PLATFORM_VERIFICATION §9)
 │
 ├── measurements/                   # [Stage 9] the published proof (studies A/B/C), reproducible
 │   └── METHODOLOGY.md              # how every published number was produced
@@ -341,7 +341,7 @@ DeluluLang/
     │   │   └── README.md            #   results, bounds, and what is NOT modelled (the MAC itself,
     │   │                            #   audit hashing, federation, concurrency, clock skew).
     │   │                            #   tla2tools.jar is NOT vendored — fetch it.
-    │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; macOS NEVER executed, said plainly
+    │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; the first CI run (§9); macOS not yet built, said plainly
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).
     │   │                                #   §9's ~500-line Lean/Coq mechanization of §1–§7 is still

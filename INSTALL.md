@@ -87,7 +87,8 @@ Get-FileHash bin\delulu.exe             # Windows PowerShell, compare by eye
 ## Platform honesty
 
 **Windows and Linux** are built, tested, and verified — the suite, the gates and a hand-driven
-CLI/compiler sweep all run green on both. **macOS has never been executed**, not once: the code is
-written for it and its conditional-compilation branches were audited, but no Apple hardware has been
-available to this project. A path that should work and a path that has been run are different claims.
+CLI/compiler sweep all run green on both. **macOS has never been executed**: the code is written for
+it and its conditional-compilation branches were audited, but the one attempt so far — CI's macOS
+runner, 2026-09-14 — stopped while building a dependency's bundled C code, before any DeluluLang code
+ran. A path that should work and a path that has been run are different claims.
 `docs/design/CROSS_PLATFORM_VERIFICATION.md` carries the detail.
