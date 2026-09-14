@@ -151,7 +151,7 @@ delulu audit tail | grep root-policy-mode
 |---|---|
 | **Linux** | Verified. Full suite executed; cross-account boundary tested with a real second UID. |
 | **Windows 11** | Verified. Full suite executed. Note that unprivileged symlink creation is not available, which blocks one class of workspace-delivered attack that POSIX permits. |
-| **macOS** | **Runs; not yet green.** CI's macOS runner (Apple Silicon) built the whole workspace on 2026-09-14 — linking macOS's own libffi, since the copy `libffi-sys` bundles does not assemble with current Apple clang — and passed 1,654 of 1,655 tests. The one failure was the one line that branches on macOS doing its job: a test's state directory put the broker socket over macOS's 104-byte `sun_path` (`SUN_PATH_MAX`), and `broker start` now says so before spawning anything. **On a Mac, keep `DELULU_STATE_DIR` short** — the socket lives inside it, and macOS allows 103 bytes. Fixed; the next run shows whether it holds. **No deployment claim here rests on macOS yet.** |
+| **macOS** | **Verified by CI** (Apple Silicon runner, 2026-09-14): the whole suite — 1,657 tests, 0 failed — plus the CLI sweep, the fuzz campaign and every other gate in `ci.yml`. It links macOS's own libffi, because the copy `libffi-sys` bundles does not assemble with current Apple clang. **On a Mac, keep `DELULU_STATE_DIR` short** — the socket lives inside it and macOS allows 103 bytes (`SUN_PATH_MAX`); `broker start` refuses a longer one by name. The Tier-2 cross-account boundary was tested with a real second UID on Linux, not on macOS. |
 
 ---
 

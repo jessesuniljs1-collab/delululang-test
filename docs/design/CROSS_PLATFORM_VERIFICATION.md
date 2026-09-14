@@ -345,8 +345,8 @@ codebase is written against, not three it has run on. Beyond them:
 
 ## 5. The macOS caveat, stated plainly
 
-> **2026-09-14: superseded.** CI's macOS runner built the whole workspace and ran the suite, 1,654 of 1,655
-> tests passing (§9). What follows is what was known before that, kept as the record of it.
+> **2026-09-14: superseded.** CI's macOS runner went green — the whole suite and every gate, in run 3
+> (§9). What follows is what was known before that, kept as the record of it.
 
 **Before 2026-09-14, macOS had zero live executions of DeluluLang code** (§9 has what changed).
 Its standing rests on two things and no more: (1) the runtime's Unix half is `#[cfg(unix)]`, and that
@@ -850,3 +850,19 @@ this hardware, and none of them contains an `unsafe` block. They moved to a `mir
 nightly where `NIGHTLY` is on, and by hand, with a 240-minute budget no run has yet confirmed.
 `delulu-atlas`, `delulu-diag` and the FFI decoder — the one place Miri has real `unsafe` to watch —
 stay on every push.
+
+### Run 3 — the same day (run `34841317790`, on `28e10e6`)
+
+**macOS, Linux x86-64 and Linux arm64 went green end to end.** On each, every step of the test job
+passed (2026-09-14): 125 test binaries with 1,657 tests passed and 0 failed; `fmt --check` clean on
+the examples and the Book's samples; the Python-less build; conformance coverage at 330 of 330
+anchors; the reference in sync; the CLI sweep at 27 of 27; and the effect-soundness fuzz campaign —
+50,000 generated programs, 30,198 executed, no trace escaping its row, with identical counts on macOS
+and Linux because the seed is fixed. clippy, `cargo deny`, the editor build, the formal models, and
+Miri on `delulu-atlas`, `delulu-diag` and the FFI decoder passed; `miri-slow` and `heavy-gates` were
+skipped, by design, on a push.
+
+**Windows passed 1,646 of 1,647.** The one failure was
+`adapter::tests::a_garbled_reading_is_an_error_never_a_none_and_never_a_number`, which passes on the
+development machine and passed on the Windows runner in run 2. It is under investigation, and until it
+is understood this document does not call Windows green on CI.

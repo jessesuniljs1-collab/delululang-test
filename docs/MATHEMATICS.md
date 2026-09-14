@@ -470,8 +470,8 @@ question that cost this project its worst soundness hole, and it settles nothing
 6. **Foreign code.** A `ForeignCall` is a hole in the guarantee — enumerated, not eliminated.
 7. **Multi-tenancy.** Not provided; separate OS accounts required.
 8. **Concurrency, partitions and clock skew** in the broker model.
-9. **macOS.** Runs, not yet green: 1,654 of 1,655 tests on CI's macOS runner (2026-09-14); the one
-   failure is fixed, pending the next run.
+9. **macOS.** Verified only by CI: the whole suite and every gate green on its Apple Silicon runner
+   (2026-09-14).
 10. **Side channels**, including timing.
 11. **Root issuance against a same-OS-user adversary (DISC-1, 2026-08-08).** The Guard gates
     *delegated* grants; in the LEGACY default **root** creation is ungated and headless

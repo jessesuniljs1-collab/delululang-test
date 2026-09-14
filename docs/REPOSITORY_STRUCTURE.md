@@ -341,7 +341,7 @@ DeluluLang/
     │   │   └── README.md            #   results, bounds, and what is NOT modelled (the MAC itself,
     │   │                            #   audit hashing, federation, concurrency, clock skew).
     │   │                            #   tla2tools.jar is NOT vendored — fetch it.
-    │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green; CI runs recorded (§9); macOS runs, not yet green
+    │   ├── CROSS_PLATFORM_VERIFICATION.md # Windows + Linux green locally; CI runs recorded (§9), macOS green there
     │   ├── STABILITY.md                # what is promised to stay put (exit codes 0/1/2/3)
     │   ├── DELULU_CORE.md              # the formal calculus (paper sketches; honesty-labeled).
     │   │                                #   §9's ~500-line Lean/Coq mechanization of §1–§7 is still

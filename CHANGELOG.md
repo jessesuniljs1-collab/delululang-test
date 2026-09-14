@@ -90,6 +90,13 @@ each was authorized by the owner on the day, in the session that made it, and is
   an `unsafe` block. `delulu-atlas`, `delulu-diag` and the FFI decoder, where the real `unsafe` is,
   still run on every push. The new job's 240-minute budget is not yet confirmed by a run.
 
+### The third run (`34841317790`)
+
+- **macOS, Linux x86-64 and Linux arm64 green end to end** — the whole suite (1,657 tests, 0
+  failed), the CLI sweep, the fuzz campaign and every other gate. REMAINING_WORK 7.1, *macOS has never
+  been executed*, is closed. **Windows passed 1,646 of 1,647**: one adapter unit test failed on the
+  runner, and is under investigation.
+
 ## Unreleased — containment + deployment hardening, 2026-08-10
 
 Full record: `docs/design/PRODUCTION_READINESS_2026-08-10.md`. Nothing here widens what a package can

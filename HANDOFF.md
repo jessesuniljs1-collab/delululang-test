@@ -8,7 +8,7 @@ Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deploy
 (measured by the Survey on 2026-09-14, not remembered) — and, since 2026-09-14, **privately** on
 GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**192 commits past `v1.0.0`** at this update.
+**193 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -22,8 +22,9 @@ GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.gi
 >   [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) now says what a deployment actually protects.
 >
 > **Current status: PRODUCTION READY WITH DOCUMENTED DEPLOYMENT REQUIREMENTS** — Windows and Linux,
-> in the Tier-2 deployment of `DEPLOYMENT.md`. **macOS is not covered yet — but it runs: the second CI
-> run (2026-09-14) passed 1,654 of 1,655 tests there, and the one failure is fixed, pending the next.**
+> in the Tier-2 deployment of `DEPLOYMENT.md`. **macOS is now verified by CI (green on its Apple Silicon
+> runner, 2026-09-14), but is not covered by this verdict: the Tier-2 cross-account boundary was tested
+> with a real second UID on Linux only.**
 
 Read §1 and §2 before touching anything. The rest is reference.
 
@@ -72,6 +73,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **What it costs** | A private repository's Actions minutes come out of the account's quota, and macOS and Windows runners are charged at a higher rate than Linux. The nightly schedule re-runs **every** job, not only the heavy gates, so since 2026-09-14 it is **opt-in** (owner decision): every job skips a scheduled run unless the repository variable `NIGHTLY` is `on` (Settings → Secrets and variables → Actions → Variables). Pushes, pull requests and manual runs are unaffected. |
 | **The first run** | Run `34830053479` (2026-09-14), read with `gh`: **3 passed** — clippy, the editor build and the formal models, each on a runner for the first time — **1 skipped, 11 failed**, and every failure accounted for. Two gates had never been able to pass. **All six Miri jobs** ran a bare `cargo miri` under the stable toolchain `rust-toolchain.toml` pins (Miri is nightly-only; the job now says `+nightly`). **`cargo deny`** found two advisories published after its last clean run (2026-08-07) against wasmtime 47.0.3 — RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI functionality DeluluLang never uses (no `wasmtime-wasi`, no WASI calls), both closed by the patch release **47.0.4**. Two artifacts had been recorded from this machine's disk rather than from git: the **core-invariance snapshot** counted carriage returns that 58 CRLF working-tree files had and the committed LF files do not, and the **Survey** mapped a gitignored `.vsix`. **arm64** ran all 124 test binaries and failed only on those two. **macOS** stopped building `libffi-sys`'s bundled libffi, whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran; it now links macOS's own libffi, untested until the next run. Full record: `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **The second run** | Run `34836508713`: **macOS built the whole workspace and passed 1,654 of 1,655 tests — the first DeluluLang code ever to run on a Mac.** arm64, clippy, `cargo deny`, the editor, the formal models, and Miri on `delulu-atlas`, `delulu-diag` and the FFI decoder passed. The rest failed where a test met the runner (a speedup criterion on 2-vCPU machines; a PowerShell driver too slow to start inside the adapter's deliberate 2000 ms budget), where it found a real defect (a socket-path refusal that never left the detached daemon; a fresh state directory the broker could not start in), or where it ran out of time (Miri on three crates with no `unsafe`, now nightly/manual as `miri-slow`). All fixed in the next commit; the record is in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
+| **The third run** | Run `34841317790`, on `28e10e6`: **green everywhere but one Windows test.** macOS end to end — 1,657 tests, the CLI sweep 27/27, the fuzz campaign's 50,000 programs with no trace escaping its row — and the same on Linux x86-64 and arm64, plus clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder. Windows passed 1,646 of 1,647: `adapter::tests::a_garbled_reading_is_an_error_never_a_none_and_never_a_number` failed on the runner (it passes locally, and passed there in run 2), under investigation. |
 
 **Before the public push — the owner's decisions, written down here so they come up before that
 push rather than after it:**
@@ -477,8 +479,8 @@ done.
 
 | | Why |
 | --- | --- |
-| **macOS runs on CI, and is not yet green.** | The project has no Apple hardware of its own. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **`cargo test --workspace` on a Mac was expected to close this, and on CI's macOS runner it nearly has:** the first run stopped building `libffi-sys` (now linked to macOS's own libffi), and the second passed 1,654 of 1,655 tests. The last failure is fixed; the next run shows whether it holds (§1.1). |
-| **CI: two runs on 2026-09-14, both read and recorded.** | Until 2026-09-14 the repository was never pushed, so CI never ran. The first push, to the private testing remote (§1.1), activated `ci.yml`, and the first run went red. This row used to say *"every command in it has been run by hand"*; the Miri command, as written, could never run in this tree (§1.1, *The first run*), so that was not true of it. Both runs are transcribed in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9 — the second got macOS running, and failed only where a test met the runner, found a real defect, or ran out of time; whether the fixes hold is what the third run shows — *"written"*, *"triggered"* and *"green"* are three different claims. |
+| ~~**macOS has never been executed.**~~ **Closed 2026-09-14: green on CI.** | The project has no Apple hardware of its own. Re-measured per crate 2026-08-10 with `cargo check --target aarch64-apple-darwin`: **`delulu-diag`, `delulu-syntax`, `delulu-measure` and `delulu-survey` type-check**; every remaining member stops inside a **third-party C build script** (`blake3`, `zstd-sys`, `libffi-sys`) for want of an Apple cross-toolchain, *before* the compiler reaches DeluluLang code. So **no DeluluLang source was shown to fail — and most was not shown to compile either.** Both halves are the claim. Exactly one line in the tree branches on macOS (`broker_transport.rs`, `SUN_PATH_MAX` 104 vs 108); the rest is `cfg(unix)`, which Linux exercises. A matrix entry naming `macos-latest` is a plan, not a result. **`cargo test --workspace` on a Mac was expected to close this, and on CI's macOS runner it did:** the first run stopped building `libffi-sys` (now linked to macOS's own libffi), the second passed 1,654 of 1,655, and the third was green end to end (§1.1). What CI cannot close: a developer's Mac. |
+| **CI: three runs on 2026-09-14, all read and recorded; the third green but for one Windows test.** | Until 2026-09-14 the repository was never pushed, so CI never ran. The first push, to the private testing remote (§1.1), activated `ci.yml`, and the first run went red. This row used to say *"every command in it has been run by hand"*; the Miri command, as written, could never run in this tree (§1.1, *The first run*), so that was not true of it. All three are transcribed in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9 — the third was green on macOS and Linux, and failed one adapter test on the Windows runner, under investigation — *"written"*, *"triggered"* and *"green"* are three different claims. |
 | **The Dockerfile has never been built.** | `Dockerfile` and `.devcontainer/devcontainer.json` were written 2026-08-07. Docker CLI 29.5.2 is installed; **the daemon was not running**. Dockerfiles fail for boring reasons that are invisible by reading. Treat the first `docker build` as an experiment. |
 
 ### Known technical limits, deliberately not softened
@@ -899,8 +901,8 @@ The distinction this section turns on is the one the whole project turns on: **e
 
 | | Windows 11 (x86_64-msvc) | Linux (WSL2 Ubuntu) | macOS |
 | --- | --- | --- | --- |
-| Full test suite | ✅ **124 binaries / 1,645 tests / 0 failed** | ✅ **124 binaries / 1,654 tests / 0 failed** | ⚠️ **1,654 / 1,655 passed** on CI's macOS runner (run 2, 2026-09-14) — the first macOS execution. The one failure (a test's socket path over macOS's limit) is fixed, pending the next run |
-| CLI sweep (`cli-sweep.sh`) | ✅ 27/27 | ✅ run in earlier passes | ❌ not yet reached on CI — it runs after the suite step |
+| Full test suite | ✅ **124 binaries / 1,645 tests / 0 failed** | ✅ **124 binaries / 1,654 tests / 0 failed** | ✅ **125 binaries / 1,657 tests / 0 failed** on CI's macOS runner (run 3, 2026-09-14) |
+| CLI sweep (`cli-sweep.sh`) | ✅ 27/27 | ✅ run in earlier passes | ✅ 27/27 on CI (run 3) |
 | Compiler + interpreter | ✅ | ✅ | ✅ via CI's suite (run 2) |
 | WASM engine | ✅ | ✅ (plus 5 live-engine tests Windows refuses by design) | ✅ via CI's suite (run 2) |
 | Language server | ✅ | ✅ (via the suite's `lsp_cli.rs`) | ✅ via CI's `lsp_cli.rs` (run 2) |
@@ -931,11 +933,12 @@ unit tests cover the POSIX branch"* and *"the extension works on Linux"* are dif
 document does not blur them. Running it needs a display; the command is
 `node e2e.js <path-to-delulu>`.
 
-### macOS — built and run on CI, one failure from green
+### macOS — green on CI, and only on CI
 
 **First executed 2026-09-14, on CI's macOS runner** (the project has no Apple hardware of its own). The
 first run stopped building a dependency; the second built the whole workspace and passed 1,654 of
-1,655 tests (`docs/design/CROSS_PLATFORM_VERIFICATION.md` §9). Before that, the standing rested on:
+1,655 tests; the third was green end to end (`docs/design/CROSS_PLATFORM_VERIFICATION.md` §9).
+Before that, the standing rested on:
 
 1. The runtime's Unix half is `#[cfg(unix)]`, and *that same code* passes the full suite on Linux —
    which exercises the socket transport, the `0700` directory guard, and the interpreter.
@@ -945,15 +948,13 @@ first run stopped building a dependency; the second built the whole workspace an
    workspace cannot be checked from this host because `libffi-sys` picks its MSVC path from the
    Windows host.
 
-Run 2 proved more than that reading could: the default build, CPython embedding included, links and
-passes on macOS, so `--no-default-features` is no longer the only macOS-safe path. What is still
-**not** proven: the CLI sweep (the step after the suite has not run there yet), and whatever the one
-failing test would have gone on to check.
+Runs 2 and 3 proved more than that reading could: the default build, CPython embedding included,
+links and passes on macOS, and in run 3 so did the CLI sweep and the fuzz campaign. What is still
+**not** proven: anything outside CI's runner — a developer's Mac, and the VS Code extension on one.
 
-macOS is *built and run, one failure short of green* — **not** "supported" in the sense the other two
-now are, because a run with a failure in it is not a green run. The private testing remote (§1.1)
-triggers the `macos-latest` job on every push to `master`, and "supported" waits for a run with no
-failures in it.
+macOS is *green on CI, and only on CI*. The private testing remote (§1.1) triggers the `macos-latest`
+job on every push to `master`, so every push re-checks it; what no push can check is a Mac outside that
+runner.
 
 ### The three surfaces, per platform
 
@@ -961,8 +962,7 @@ failures in it.
   each of 27 cases. macOS unverified.
 - **Compiler** — Windows and Linux both run the full suite including the conformance corpus and the
   core-invariance snapshot (the exact bytes the toolchain answers with, for all 108 shipped programs,
-  so tooling work cannot quietly move the language). macOS: the same suite ran on CI (run 2), and
-  its one failure was in a broker test, not the compiler.
+  so tooling work cannot quietly move the language). macOS: the same suite runs green on CI (run 3).
 - **VS Code extension** — verified end to end on **Windows only**. The `.vsix` is platform-independent
   and its unit tests cover POSIX path resolution, but no editor has been launched against a server on
   Linux or macOS.

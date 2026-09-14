@@ -1221,6 +1221,11 @@ DeluluLang **does not claim**, ever:
   macOS's 104-byte limit. The refusal written to explain exactly that had reached nobody, because it
   ran inside the detached daemon; `broker start` now says it before spawning anything. Whether macOS
   is green is what the run after that says — and "ran" and "passed" stay different words until it does.
+
+  It said yes. The third run passed on macOS end to end — 1,657 tests, the 27-case CLI sweep, and
+  50,000 generated programs of which none let a trace escape its row — and **the count of macOS
+  executions that passed is no longer zero.** What has not been run is anything outside CI: a Mac on
+  someone's desk, and the editor extension on it.
 - **A tested hardware story.** Every demonstration in Chapter 16 drives the **simulator**. No
   physical device has ever been commanded by this toolchain, and the one hardware adapter is an
   operator-supplied subprocess rather than the specification's signed Verified-class plugin.
