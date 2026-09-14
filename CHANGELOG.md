@@ -39,6 +39,11 @@ each was authorized by the owner on the day, in the session that made it, and is
   variable `NIGHTLY` is `on`. Pushes, pull requests and manual runs are unaffected.
 - **The x86 test jobs run with `--no-fail-fast`.** Without it cargo stops at the first failing test
   binary: on the first run every x86 job reported one failure and hid whatever came after it.
+- **A manual run can run the heavy jobs alone** (owner request). The *Run workflow* button now asks
+  which jobs to run and defaults to `heavy`: `heavy-gates` and `miri-slow`, the two jobs no push
+  runs. `heavy-gates` or `miri-slow` picks one, and `everything` is what a manual run used to do.
+  Before, a manual run re-ran the whole push matrix as well, so checking those two cost a full run
+  on top. Every push, pull-request and nightly run starts exactly the jobs it did before.
 
 ### Reproducibility — two artifacts had been recorded from the development machine, not from git
 

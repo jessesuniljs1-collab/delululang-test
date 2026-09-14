@@ -937,4 +937,6 @@ test runners. `REMAINING_WORK.md` 7.2 closes on this run, as its own row said it
 **What a green run does not show.** Nothing here has run on a developer's Mac, and the VS Code
 extension has been exercised end to end on Windows only. The Tier-2 cross-account boundary was tested
 with a real second user on Linux, not on macOS. `heavy-gates` and `miri-slow` have not yet run on a
-runner at all, so the 240-minute Miri budget is still unconfirmed.
+runner at all, so the 240-minute Miri budget is still unconfirmed. Since 2026-09-14 the manual button
+runs just those two by default (Actions → CI → *Run workflow*, `jobs: heavy`), so confirming it no
+longer means paying for the whole matrix again.
