@@ -2,14 +2,14 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Last updated:** 2026-09-14 — the repository's first push, to a private testing remote, and CI
-green on all three operating systems in one run (§1.1).
+**Last updated:** 2026-09-17 — the owner made the testing remote public (§1.1). Before that,
+2026-09-14: its first push, and CI green on all three operating systems in one run.
 Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**
-(measured by the Survey on 2026-09-14, not remembered) — and, since 2026-09-14, **privately** on
-GitHub: `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
+(measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
+(privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**197 commits past `v1.0.0`** at this update.
+**198 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -53,7 +53,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 
 | Rule | Why |
 | --- | --- |
-| **Push only to the private testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, a **private** repository. No other remote, and never rewrite history that has been pushed. | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**. **The public repository is a later step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
+| **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **Never auto-decide the licence.** | Owner-reserved. Apache-2.0 + NOTICE + TRADEMARK is *recommended* and staged, not decided. Present options and wait. |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
@@ -63,37 +63,43 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **Regenerate the Survey after any change, before running the suite.** | `cargo run -p delulu-survey -- build`. A test enforces freshness; see §4. |
 | **Run `delulu doctor` — it is the one command that answers "is this healthy?"** | Three sections: **environment** (install, state directory, audit chain), **security posture** (root-issuance mode, anchor-key custody, whether the filesystem can enforce owner-only permissions, and whether the RUNNING broker agrees with the policy on disk), and **repository** (the map's freshness and integrity). Exit 0 healthy, **1 when a problem remains**, 2 on a bad invocation. `--check` never writes; `--json` emits one envelope. Run it **on the deployment host, as the account your agents use** — see §11.4 and `docs/DEPLOYMENT.md`. |
 
-### 1.1 The private testing remote (since 2026-09-14)
+### 1.1 The testing remote (since 2026-09-14; public since 2026-09-17)
 
 | | |
 | --- | --- |
-| **Where** | `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git`, a **private** repository. |
+| **Where** | `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git`. **Public since 2026-09-17**, when the owner changed its visibility; private from its first push on 2026-09-14 until then. It is a testing repository: the project's final public repository will be a different one. |
 | **Why** | In the owner's words: for testing DeluluLang *"in mac os and other os"*, and for *"editing and working on delululang from the cloud"*. It is not a distribution channel — README's *Not distributed* row still holds. |
 | **What was pushed** | `master` (the GitHub default branch; local `master` tracks `origin/master`), `rc/1.0.0-drill` (DRILL-001's one unmerged commit, kept as a record) and the annotated tag `v1.0.0` (`198bf44`). The branch stays `master`, the name this history has always used, rather than GitHub's suggested `main`; `ci.yml` triggers on both. |
-| **What it switched on** | `.github/workflows/ci.yml` — the three-OS matrix **including `macos-latest`**, arm64, clippy, Miri, the editor build, `cargo deny` and the formal models — on every push to `master` and on pull requests; **by hand** from Actions → CI → *Run workflow*, whose `jobs` choice defaults to `heavy`, meaning `heavy-gates` and `miri-slow` only, the two jobs no push runs (`heavy-gates` or `miri-slow` alone, or `everything`, are the other choices; since 2026-09-14); and **nightly at 03:00 UTC only where the repository variable `NIGHTLY` is `on`** (see *What it costs*). **Activated is not executed**, and the first run's result is read and recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
-| **What it costs** | A private repository's Actions minutes come out of the account's quota, and macOS and Windows runners are charged at a higher rate than Linux. The nightly schedule re-runs **every** job, not only the heavy gates, so since 2026-09-14 it is **opt-in** (owner decision): every job skips a scheduled run unless the repository variable `NIGHTLY` is `on` (Settings → Secrets and variables → Actions → Variables). Pushes, pull requests and manual runs are unaffected by it. A manual run costs what it is asked for: the button runs the two heavy jobs alone unless told `everything` — before 2026-09-14, checking them meant paying for the whole matrix as well. |
+| **What it switched on** | `.github/workflows/ci.yml` — the three-OS matrix **including `macos-latest`**, arm64, clippy, Miri, the editor build, `cargo deny` and the formal models — on every push to `master` and on pull requests; **by hand** from Actions → CI → *Run workflow*, whose `jobs` choice runs `everything` by default, or just `heavy` (`heavy-gates` and `miri-slow`, the two jobs no push runs), or one of those two; and **nightly at 03:00 UTC, every job, unless the repository variable `NIGHTLY` is `off`** (see *What it costs*). **Activated is not executed**, and the first run's result is read and recorded in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
+| **What it costs** | **Nothing, since 2026-09-17.** GitHub documents its standard hosted runners as *free and unlimited on public repositories*. While the repository was private (2026-09-14 to 2026-09-17) its minutes came out of the account's quota, with macOS and Windows billed at higher rates than Linux, so three things were rationed: the nightly schedule was **opt-in** (it ran only where the repository variable `NIGHTLY` was `on`), the manual button defaulted to the two heavy jobs, and docs-only commits said `[skip ci]`. On 2026-09-17 the owner asked for the restrictions kept for cost to be reconsidered, and all three were lifted: the nightly runs every job unless `NIGHTLY` is `off` (Settings → Secrets and variables → Actions → Variables) — kept as an off-switch for a private copy, which would pay again — the button defaults to `everything`, and every push runs CI. Two things remain true: a nightly run re-tests the newest commit on `master` whether or not anything changed, and GitHub disables a public repository's scheduled workflows after 60 days without activity. |
+| **Public since 2026-09-17** | The owner made the repository public. For CI that changes two things, both from GitHub's documentation: runners are free and unlimited, and they are larger — **4 CPUs and 16 GB** for Linux x64, Linux arm64 and Windows (2 CPUs and 8 GB on a private repository); macOS stays at 3 (M1) and 7 GB. The second has a consequence nobody has measured yet: `actors_pingpong`'s speedup criterion (at least 1.5× at 4 workers) is asserted only where 4 hardware threads exist, so it has never been asserted on a CI runner, and from the next run it will be on Linux x64, Linux arm64 and Windows. On the development machine, pinned to 4 or 8 of its 16 logical CPUs, it measured 0.65–1.14× (unpinned it passes, at 2.16×). A pinned laptop is not a faithful 4-CPU runner, so the next run is the real measurement — and it may fail there. Recorded before that run in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **The first run** | Run `34830053479` (2026-09-14), read with `gh`: **3 passed** — clippy, the editor build and the formal models, each on a runner for the first time — **1 skipped, 11 failed**, and every failure accounted for. Two gates had never been able to pass. **All six Miri jobs** ran a bare `cargo miri` under the stable toolchain `rust-toolchain.toml` pins (Miri is nightly-only; the job now says `+nightly`). **`cargo deny`** found two advisories published after its last clean run (2026-08-07) against wasmtime 47.0.3 — RUSTSEC-2026-0268 and RUSTSEC-2026-0269, both in WASI functionality DeluluLang never uses (no `wasmtime-wasi`, no WASI calls), both closed by the patch release **47.0.4**. Two artifacts had been recorded from this machine's disk rather than from git: the **core-invariance snapshot** counted carriage returns that 58 CRLF working-tree files had and the committed LF files do not, and the **Survey** mapped a gitignored `.vsix`. **arm64** ran all 124 test binaries and failed only on those two. **macOS** stopped building `libffi-sys`'s bundled libffi, whose aarch64 assembly current Apple clang rejects, before any DeluluLang code ran; it now links macOS's own libffi, untested until the next run. Full record: `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **The second run** | Run `34836508713`: **macOS built the whole workspace and passed 1,654 of 1,655 tests — the first DeluluLang code ever to run on a Mac.** arm64, clippy, `cargo deny`, the editor, the formal models, and Miri on `delulu-atlas`, `delulu-diag` and the FFI decoder passed. The rest failed where a test met the runner (a speedup criterion on 2-vCPU machines; a PowerShell driver too slow to start inside the adapter's deliberate 2000 ms budget), where it found a real defect (a socket-path refusal that never left the detached daemon; a fresh state directory the broker could not start in), or where it ran out of time (Miri on three crates with no `unsafe`, now nightly/manual as `miri-slow`). All fixed in the next commit; the record is in `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **The third run** | Run `34841317790`, on `28e10e6`: **green everywhere but one Windows test.** macOS end to end — 1,657 tests, the CLI sweep 27/27, the fuzz campaign's 50,000 programs with no trace escaping its row — and the same on Linux x86-64 and arm64, plus clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder. Windows passed 1,646 of 1,647: `adapter::tests::a_garbled_reading_is_an_error_never_a_none_and_never_a_number` failed on the runner (it passes locally, and passed there in run 2): its PowerShell fake driver started too slowly for the adapter's 2000 ms budget. The drivers are Python now — run 4 confirmed it. |
 | **The fourth run** | Run `34844151767`, on `ef9cb49`: **Windows green end to end, its first complete pass on CI** — 125 test binaries, 1,647 tests passed and 0 failed; conformance 330 of 330; the reference in sync; the CLI sweep; the fuzz campaign with no trace escaping its row — and Linux x86-64 and arm64 green again, with clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder. **macOS failed one test.** `device::tests::a_beaten_lease_is_never_revoked` beats a 120 ms lease every 20 ms, and a command found it revoked for a missed heartbeat: the runner had left the test's thread unscheduled for more than 100 ms, so the lease really had gone unbeaten past its heartbeat and the watchdog was right. Reproduced here by starving the thread — the unmodified test failed 5 of 8 starved runs with CI's message word for word, and passed 25 of 25 idle. The test now judges each revocation against the gap its thread actually left and restarts the drive when the gap explains it; a watchdog made to fire 200 ms early still fails it, and passes every other device test. Run 5 passed with it on macOS, Linux x86-64 and arm64. Record: `docs/design/CROSS_PLATFORM_VERIFICATION.md` §9. |
 | **The fifth run** | Run `34849980129`, on `010c36c` (2026-09-14): **the first run with no failures — every job green, all three operating systems in one run.** macOS, Linux x86-64 and Linux arm64 each passed 125 test binaries, 1,657 tests, 0 failed; Windows 125 binaries, 1,647 tests, 0 failed (it compiles ten platform-gated tests fewer). On the three x86 test runners every later step passed too — `fmt --check`, the Python-less build, conformance 330 of 330, the reference in sync, the CLI sweep 27 of 27, and the fuzz campaign with no trace escaping its row. clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder passed; `heavy-gates` and `miri-slow` were skipped, by design. The dead-man test run 4 failed passed on every platform, and `docs/REMAINING_WORK.md` 7.2 is closed. |
 
-**Before the public push — the owner's decisions, written down here so they come up before that
-push rather than after it:**
+**Before the final public repository — the owner's decisions.** This testing repository has been
+public since 2026-09-17, so everything below is already visible here. The list stands for the final
+public repository, which will be a different one:
 
 1. **The word §1 bans is in the history.** Commit `0a58451` (2026-07-14) put it, with the tool's
    address, into `docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md` and into its own commit message.
    `f4ffd01` anonymised the document but not the history, and §1 and §11.1 spell the word in stating
-   the rule. The private remote already holds that history, because the push carried all of it; a
-   public push would publish it. The choices are a fresh history for the public repository, a
+   the rule. This testing repository holds that history, because the push carried all of it, and
+   since 2026-09-17 it is public. For the final public repository the choices are a fresh history, a
    rewrite (which changes every hash from `0a58451` onward — and these documents cite hashes
    throughout), or accepting it.
-2. **Every commit records its author's e-mail address**, which a public push makes public.
+2. **Every commit records its author's e-mail address**, which this testing repository has shown
+   publicly since 2026-09-17.
 3. **`.github/CODEOWNERS` names a deliberate placeholder**, `@PENDING-PUBLIC-project-lead`. GitHub
    reports it as an unknown owner until it is replaced at public launch, as the file's own header
    says.
-4. **The `SECURITY.md` §6 controls marked `PENDING-PUBLIC`** switch on with public hosting, not with
-   this push (`docs/REMAINING_WORK.md` 7.8).
+4. **The `SECURITY.md` controls marked `PENDING-PUBLIC`** — the disclosure address and its PGP key,
+   branch protection, signed commits, SLSA L3 and the Scorecard floor — are written for the final
+   public repository (`docs/REMAINING_WORK.md` 7.8). `SECURITY.md` is entrenched and still says the
+   repository is not publicly hosted and has no disclosure inbox. Since 2026-09-17 the testing
+   repository is public, so whether it needs a disclosure channel now is the owner's decision.
 
 ---
 
@@ -526,7 +532,8 @@ done.
 - **Miri cannot reach the FFI.** It cannot execute `dlopen` or Windows API calls, so 37 `unsafe` sites
   in `delulu`'s Windows transport stay uninterpreted. This is an explicit assumption, not a to-do.
 - **Certification is NONE.** No safety standard, no external audit, no third-party review.
-- **Nothing is distributed.** No registry entry, no release binary, no public repository.
+- **Nothing is distributed.** No registry entry, no release binary, and no final public repository —
+  the public testing repository of §1.1 is not a release.
 - **No physical device has ever been commanded.** Every demonstration drives the simulator.
 - **The RFC 0001 governance debt** — a core authority change shipped without its comment period. Open,
   recorded, and never to be restated as compliance.
@@ -659,12 +666,13 @@ wins, and you should update the memory to match.
 
 ### 11.1 Standing owner instructions — the ones that never expire
 
-- **Push only to the private testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
-  (owner instruction, 2026-09-14). It replaced *"NEVER push to GitHub"*, which held from the first
-  commit and is why CI never ran before that date. The remote is for cross-OS testing and editing from
-  the cloud. **The public repository is a later step the owner takes personally**: never create one,
-  push to one, or add any other remote, and never rewrite history that has been pushed. §1.1 has the
-  details, and the owner's list of decisions for before the public push.
+- **Push only to the testing remote**, `origin` → `github.com/jessesuniljs1-collab/delululang-test`
+  (owner instruction, 2026-09-14; public since 2026-09-17). It replaced *"NEVER push to GitHub"*,
+  which held from the first commit and is why CI never ran before that date. The remote is for
+  cross-OS testing and editing from the cloud. **The final public repository will be a different one,
+  a step the owner takes personally**: never create one, push to one, or add any other remote, and
+  never rewrite history that has been pushed. §1.1 has the details, and the owner's list of decisions
+  for the final public repository.
 - **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
   and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
   hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and
@@ -958,7 +966,7 @@ Runs 2 and 3 proved more than that reading could: the default build, CPython emb
 links and passes on macOS, and in run 3 so did the CLI sweep and the fuzz campaign. What is still
 **not** proven: anything outside CI's runner — a developer's Mac, and the VS Code extension on one.
 
-macOS is *green on CI, and only on CI*. The private testing remote (§1.1) triggers the `macos-latest`
+macOS is *green on CI, and only on CI*. The testing remote (§1.1) triggers the `macos-latest`
 job on every push to `master`, so every push re-checks it; what no push can check is a Mac outside that
 runner.
 

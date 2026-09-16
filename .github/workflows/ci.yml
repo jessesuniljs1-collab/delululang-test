@@ -11,33 +11,34 @@ on:
   # nothing ever ran them. A nightly schedule and a manual button are what turn "run it explicitly"
   # from an instruction nobody follows into something that actually happens.
   #
-  # On a PRIVATE repository every scheduled minute is billed, and this schedule re-runs every job
-  # below, not only the heavy gates. So the nightly is opt-in: every job's `if:` requires
-  # `vars.NIGHTLY == 'on'` when `github.event_name` is `schedule`, and a scheduled run does work
-  # only where the repository variable NIGHTLY is `on` (Settings → Secrets and variables → Actions
-  # → Variables). Pushes, pull requests and the manual button are unaffected. Owner decision,
-  # 2026-09-14, the day the repository was first pushed — to a private testing remote.
+  # The nightly runs every job below, the heavy gates included, unless the repository variable
+  # NIGHTLY is `off` (Settings → Secrets and variables → Actions → Variables). From 2026-09-14 to
+  # 2026-09-17 it was the other way round — off unless NIGHTLY was `on` — because the repository was
+  # PRIVATE and every scheduled minute was billed, macOS and Windows at a premium. On 2026-09-17 the
+  # owner made it public, where GitHub's standard runners are free, and asked for the restrictions
+  # kept for cost to be reconsidered. The variable survives as an off-switch for a private copy of
+  # this workflow, which would pay for the nightly again. GitHub disables a public repository's
+  # schedule after 60 days without activity.
   schedule:
     - cron: "0 3 * * *"
-  # The manual button (Actions → CI → Run workflow) asks which jobs to run, and its default is the
-  # heavy gates ONLY. Until 2026-09-14 a manual run also re-ran the whole push matrix, every macOS
-  # and Windows minute of it, so checking the two jobs no push ever runs cost a full run on top.
-  # `heavy-gates` or `miri-slow` picks one of them (miri-slow is the expensive one: three crates, up
-  # to 240 minutes each); `everything` is what a manual run used to do. Every other job checks the
-  # same choice in its `if:`, so a run of the heavy gates cannot quietly pay for the matrix as well.
-  # To re-run the push jobs themselves, the Re-run button on an existing run needs no dispatch.
-  # Owner request, 2026-09-14.
+  # The manual button (Actions → CI → Run workflow) asks which jobs to run. `everything`, the
+  # default, runs every job, the heavy gates included; `heavy` runs heavy-gates and miri-slow alone,
+  # and `heavy-gates` or `miri-slow` one of them (miri-slow is the slow one: three crates, up to 240
+  # minutes each). Every other job checks the same choice in its `if:`. The choice was added on
+  # 2026-09-14, when the repository was private and a manual run of the heavy gates also paid for the
+  # whole matrix, so `heavy` was the default then. Since 2026-09-17 the repository is public and its
+  # runners are free, so the default is `everything` again and the narrower choices are for speed.
   workflow_dispatch:
     inputs:
       jobs:
-        description: "Which jobs: heavy = heavy-gates + miri-slow; one of them alone; or everything (the push matrix too)"
+        description: "Which jobs: everything (default); heavy = heavy-gates + miri-slow; or one of those two alone"
         type: choice
-        options: [heavy, heavy-gates, miri-slow, everything]
-        default: heavy
+        options: [everything, heavy, heavy-gates, miri-slow]
+        default: everything
 
 jobs:
   test:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     strategy:
       fail-fast: false
       matrix:
@@ -131,7 +132,7 @@ jobs:
   #
   # Never executed before the first push (2026-09-14), like everything else in this file.
   arm64:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -164,7 +165,7 @@ jobs:
   # repository and this project's comments carry much of its value. Until that decision is made,
   # formatting is not enforced, and this comment is where that is admitted.
   lints:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -204,7 +205,7 @@ jobs:
   # Every push runs the crates that fit. `delulu-broker`, `delulu-syntax` and `delulu-check` are in
   # `miri-slow` below, and the numbers that put them there are in its comment.
   miri:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -232,10 +233,10 @@ jobs:
   # 237 at about 30 seconds each, which is two hours at that rate. None of the three contains an
   # `unsafe` block (see `miri-ffi`), so what Miri checks here is safe code and the dependencies' unsafe
   # beneath it. That is worth running, but not worth 135 runner-minutes and a red cross on every
-  # push. It runs nightly where NIGHTLY is on, and by hand (Run workflow → `heavy` or `miri-slow`),
-  # with a 240-minute budget — which no run has yet confirmed is enough.
+  # push. It runs nightly (unless NIGHTLY is `off`) and by hand (Run workflow → `everything`, `heavy`
+  # or `miri-slow`), with a 240-minute budget — which no run has yet confirmed is enough.
   miri-slow:
-    if: (github.event_name == 'schedule' && vars.NIGHTLY == 'on') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
+    if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
     runs-on: ubuntu-latest
     timeout-minutes: 240
     strategy:
@@ -266,10 +267,10 @@ jobs:
   # is the more dangerous kind, because the test EXISTS and reads as coverage.
   #
   # Nightly rather than per-push because they are genuinely slow, and `workflow_dispatch` so a
-  # release can demand them on the spot instead of waiting for the clock (Run workflow → `heavy` or
-  # `heavy-gates`).
+  # release can demand them on the spot instead of waiting for the clock (Run workflow → `everything`,
+  # `heavy` or `heavy-gates`).
   heavy-gates:
-    if: (github.event_name == 'schedule' && vars.NIGHTLY == 'on') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'miri-slow')
+    if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'miri-slow')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -303,7 +304,7 @@ jobs:
   # caught as "at or beyond the end of the allocation of size 4 bytes". A gate that cannot fail is
   # not a gate, and that applies to the tool as much as to the test.
   miri-ffi:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -325,7 +326,7 @@ jobs:
   # server is Rust, the client is JavaScript, and nothing read both. `editor_contract.rs` (run by the
   # workspace suite) compares them; this job proves the artifact a user would actually install works.
   editor:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -357,7 +358,7 @@ jobs:
   # reason has quietly stopped being true is worse than no gate at all: the tool prints a green
   # line, and the green line is what people read.
   supply-chain:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -374,7 +375,7 @@ jobs:
   # P17-C/8/9. Each of these has been executed locally and its verbatim output is recorded in
   # docs/design/models/README.md; these steps make them reproducible rather than transcribed.
   formal:
-    if: (github.event_name != 'schedule' || vars.NIGHTLY == 'on') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -9,6 +9,25 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — the testing repository made public, 2026-09-17
+
+The owner made the testing repository (`HANDOFF.md` §1.1) public; the project's final public
+repository will be a different one. The language code did not change; `.github/workflows/ci.yml` did.
+Documents that said the source sat in a
+*private* repository, or that no public repository existed, now say what is true: the source is in a
+public **testing** repository, and nothing is released (README, `HANDOFF.md`, `QUESTIONS.md`,
+`REMAINING_WORK.md` 5.6, 7.5 and 7.8, the Book, `CHECKPOINT-1.0.md`, `CROSS_PLATFORM_VERIFICATION.md`).
+
+- **The restrictions kept for cost are lifted** (owner request). CI minutes are free on a public
+  repository, so: the nightly schedule now runs every job, the heavy gates included, unless the
+  repository variable `NIGHTLY` is `off` (before, it ran only where `NIGHTLY` was `on`); the manual
+  button defaults to `everything` (before, to the two heavy jobs); and docs-only commits no longer say
+  `[skip ci]`. For every trigger and every choice other than the defaults, the same jobs run as before.
+- **Public runners are larger** — 4 CPUs on Linux x64, Linux arm64 and Windows, where private ones had
+  2 — which switches on an assertion CI has never run: the actor ping-pong speedup criterion. Pinned to
+  4 or 8 of the development machine's CPUs it measured 0.65–1.14× against its 1.5× bar; the next run is
+  the real measurement (`CROSS_PLATFORM_VERIFICATION.md` §9).
+
 ## Unreleased — the first push, and what the first CI run found, 2026-09-14
 
 The repository was pushed for the first time, to a **private** testing remote (`HANDOFF.md` §1.1),

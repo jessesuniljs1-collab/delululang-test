@@ -10,7 +10,7 @@ badge that never executed.
 `.github/workflows/ci.yml` declares a three-OS matrix (`ubuntu-latest`, `macos-latest`,
 `windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
 GitHub." **Until 2026-09-14 this repository was never pushed** (owner policy), so that matrix **never
-executed.** On 2026-09-14 the owner had it pushed to a **private testing remote** (`HANDOFF.md`
+executed.** On 2026-09-14 the owner had it pushed to a **private testing remote**, public since 2026-09-17 (`HANDOFF.md`
 §1.1), which activated the workflow, and its first run is transcribed in **§9** — failures first. The fifth
 run, the same day, was the first with no failures: all three operating systems green in one run.
 Everything from here to §9 predates that run and is kept as the record of what was known before it:
@@ -938,5 +938,35 @@ test runners. `REMAINING_WORK.md` 7.2 closes on this run, as its own row said it
 extension has been exercised end to end on Windows only. The Tier-2 cross-account boundary was tested
 with a real second user on Linux, not on macOS. `heavy-gates` and `miri-slow` have not yet run on a
 runner at all, so the 240-minute Miri budget is still unconfirmed. Since 2026-09-14 the manual button
-runs just those two by default (Actions → CI → *Run workflow*, `jobs: heavy`), so confirming it no
-longer means paying for the whole matrix again.
+can run just those two (Actions → CI → *Run workflow*, `jobs: heavy`), and since 2026-09-17 the
+nightly schedule runs them by default.
+
+### 2026-09-17 — the testing remote made public
+
+The owner made the repository public. GitHub's documentation gives public repositories larger
+runners — **4 CPUs and 16 GB** for Linux x64, Linux arm64 and Windows, against 2 CPUs and 8 GB on a
+private repository; macOS stays at 3 (M1) and 7 GB — and makes standard runners free and unlimited.
+The restrictions kept for cost were lifted the same day at the owner's request: the nightly schedule
+runs every job unless the repository variable `NIGHTLY` is `off`, the manual button defaults to
+`everything`, and docs-only commits no longer skip CI. Nothing below has run on the new runners yet.
+
+**One test changes behaviour on them.**
+`criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel` asserts a speedup of at
+least 1.5× at 4 workers only where the machine offers 4 hardware threads. Every CI runner so far had
+fewer (2 on Linux and Windows, 3 on macOS), so on CI it has only ever printed *NOT MEASURED*. From the
+next run it is asserted on Linux x64, Linux arm64 and Windows. On the development machine (8 cores, 16
+logical processors), pinned with a processor-affinity mask, it measured on 2026-09-17:
+
+| CPUs available to the test | Speedup (first measure, then the test's own retry) |
+|---|---|
+| 16 logical, unpinned | 2.16× — passes |
+| 8 logical (4 cores × 2 threads) | 1.11×, 1.12× |
+| 4 logical, one per physical core | 1.01×, 0.66×; 0.74×, 0.65× |
+| 4 logical (2 cores × 2 threads) | 1.13×, 1.14×; 1.09×, 1.06×; 1.10×, 1.09× |
+| 2 logical | 0.93×, 0.95× |
+
+The runtime sizes nothing by CPU count — the test starts exactly 1 or 4 workers — but a pinned laptop
+is still not a 4-CPU virtual machine (background load, core ranking, power management), so these
+numbers predict a risk rather than a result: **the next run may fail this test on the 4-CPU runners.**
+Whether a failure there would be the runner or the runtime is the question that run poses; it is
+written down here before the run, so the answer cannot be fitted to it afterwards.

@@ -37,7 +37,7 @@ What that does and does not mean:
 | **Verified on** | Windows (native) and Linux (WSL), every gate green on both. |
 | **Verified on CI** | **Green on all three operating systems in the same run** — run 5, 2026-09-14, every job: the whole suite on macOS (Apple Silicon) and on Linux x86-64 and arm64 (1,657 tests each) and on Windows (1,647), 0 failed anywhere; the CLI sweep, the 50,000-program fuzz campaign, conformance, clippy, `cargo deny`, the editor build, the formal models, and Miri on `delulu-atlas`, `delulu-diag` and the FFI decoder. It took four earlier runs, each read and recorded with what it found. macOS links its own libffi, because the copy `libffi-sys` bundles has aarch64 assembly current Apple clang rejects. Nothing has run on a developer's Mac. Details: [`CROSS_PLATFORM_VERIFICATION.md`](docs/design/CROSS_PLATFORM_VERIFICATION.md) §9. |
 | **Deployment** | What a deployment actually protects, and what you must do to get it, is [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — three tiers, and `delulu doctor` reports which one you are actually in. The short version: a program running as **your own OS user** is not contained by anything here; run untrusted or autonomous code as a separate account. |
-| **Not distributed** | There is no release binary, no package-manager entry, and no public repository. You build from source. See [Installing](#installing). The source is also pushed to a **private** GitHub repository — for cross-OS CI and for editing from the cloud, not for distribution; a public repository is a later step. |
+| **Not distributed** | There is no release binary and no package-manager entry. You build from source. See [Installing](#installing). The source is also on GitHub, in a **public testing repository** (public since 2026-09-17) — for cross-OS CI and for editing from the cloud, not for distribution; the project's final public repository will be a different one. |
 | **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
 | **Specified, not built** | Named here because a status table listing only what exists is half a status. [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) is the full set — 60 items, each checked against the current binary. The three a new reader would otherwise meet the hard way: **the microVM isolation layer** of the constitution's four is a probe that always refuses (the other three are built); **the standard library is four list methods** (`len`, `get`, `push`, `map`, no `Map`/`Dict`/`Set`); and **the DIR-level optimizer and native backend do not exist** (`@jit` is a leash, not a tier). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
@@ -55,9 +55,9 @@ being green is where the search starts, not where it ends.
 
 ## Installing
 
-**Nothing is published yet** — this project publishes to no registry, no download page and no public
-repository, so there is no URL to fetch. What exists is the ability to *produce* a self-contained
-archive from this tree:
+**Nothing is released yet** — no registry entry, no download page and no release binary, so there is
+no URL to fetch a build from. (The source sits in a public *testing* repository on GitHub; that is not
+a release channel.) What exists is the ability to *produce* a self-contained archive from this tree:
 
 ```sh
 scripts/package-toolchain.sh          # → dist/delulu-<version>-<target>.tar.gz

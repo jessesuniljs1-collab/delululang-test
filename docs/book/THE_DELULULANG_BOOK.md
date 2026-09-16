@@ -1299,7 +1299,8 @@ Ordered by what would most change the language's usefulness, not by ease:
 3. **Mechanize Delulu Core.** The soundness argument is design-level and test-enforced; a
    machine-checked core is what would make the strongest claims safe to state without hedging.
 4. **Widen the WASM backend** past its measured fragment, or retire the parity claim to match it.
-5. **Decide distribution.** Nothing is published anywhere, and that is a decision nobody has made
+5. **Decide distribution.** Nothing is released anywhere — the source has sat in a public *testing*
+   repository since 2026-09-17, which is not a release — and that is a decision nobody has made
    rather than an obstacle anyone has hit.
 6. **A signed Verified-class hardware adapter**, which is what the specification describes and what a
    real deployment would require.

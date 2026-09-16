@@ -198,7 +198,9 @@ very first finding was that this page's front door was *false*; this is it being
    run are different claims.** *(Superseded 2026-09-14: CI's macOS runner passed the whole suite end
    to end — [`CROSS_PLATFORM_VERIFICATION.md`](../design/CROSS_PLATFORM_VERIFICATION.md) §9. What is
    still unrun is a developer's Mac.)*
-2. **Nothing is distributed.** No crates.io entry, no release binary, no public repository. The CLI
+2. **Nothing is distributed.** No crates.io entry, no release binary, no public repository. *(2026-09-17:
+   the source is now in a public **testing** repository; nothing is released, and the final public
+   repository will be a different one.)* The CLI
    could not be published even deliberately: its path dependencies carry no version numbers, so
    `cargo publish` refuses it. Only the CLI is *permitted* to publish; the libraries are refused by a
    gate, because `STABILITY.md` §2 says they are not a stable interface.
