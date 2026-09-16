@@ -9,7 +9,7 @@ Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deploy
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
 (privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**199 commits past `v1.0.0`** at this update.
+**200 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -54,6 +54,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 | Rule | Why |
 | --- | --- |
 | **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
+| **The final public repository is gated on the owner's decisions — remind him first, then wait.** Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
 | **Never auto-decide the licence.** | Owner-reserved. Apache-2.0 + NOTICE + TRADEMARK is *recommended* and staged, not decided. Present options and wait. |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
@@ -80,9 +81,11 @@ Read §1 and §2 before touching anything. The rest is reference.
 | **The fifth run** | Run `34849980129`, on `010c36c` (2026-09-14): **the first run with no failures — every job green, all three operating systems in one run.** macOS, Linux x86-64 and Linux arm64 each passed 125 test binaries, 1,657 tests, 0 failed; Windows 125 binaries, 1,647 tests, 0 failed (it compiles ten platform-gated tests fewer). On the three x86 test runners every later step passed too — `fmt --check`, the Python-less build, conformance 330 of 330, the reference in sync, the CLI sweep 27 of 27, and the fuzz campaign with no trace escaping its row. clippy, `cargo deny`, the editor, the formal models and Miri on atlas, diag and the FFI decoder passed; `heavy-gates` and `miri-slow` were skipped, by design. The dead-man test run 4 failed passed on every platform, and `docs/REMAINING_WORK.md` 7.2 is closed. |
 | **The sixth run** | Run `35147900141` (2026-09-17), started by hand on `51aab51` with `everything`, because that push's commit message quoted GitHub's skip token and so started no run. **The first run on the public runners:** every push job green — 1,657 tests on macOS, Linux x64 and arm64, 1,647 on Windows, 0 failed; the sweep, the fuzz campaign, conformance and the reference as before — and faster (Windows 10.4 min, against 15–28). **`heavy-gates` passed its first run ever.** The ping-pong speedup criterion, asserted on CI for the first time, passed. `miri-slow` was still running when this was written. |
 
-**Before the final public repository — the owner's decisions.** This testing repository has been
-public since 2026-09-17, so everything below is already visible here. The list stands for the final
-public repository, which will be a different one:
+**Before the final public repository — a gate, not a to-do list.** This testing repository has been
+public since 2026-09-17, so everything below is already visible here. **Before the final public
+repository is created, added as a remote, or pushed to, put this list and the suggestions after it in
+front of the owner, and wait for his decision on each item. Nothing is pushed there until all of them
+are decided** (owner's instruction, 2026-09-17; §1). The list:
 
 1. **The word §1 bans is in the history.** Commit `0a58451` (2026-07-14) put it, with the tool's
    address, into `docs/design/SURFACE_ATLAS_PALETTE_ADDENDUM.md` and into its own commit message.
@@ -102,6 +105,19 @@ public repository, which will be a different one:
    2026-09-17: `SECURITY.md` §1 now routes reports through GitHub's private vulnerability reporting,
    switched on that day together with secret scanning and push protection (approval record:
    `docs/design/ENTRENCHED_CHANGE_RECORD.md`).
+
+**Suggested on 2026-09-17 — not decided, and not to be acted on without the owner.** He asked for no
+change to these yet, only for this reminder:
+
+| Item | This testing repository | The final public repository |
+|---|---|---|
+| 1. The banned word | Reword the two rule lines in §1 and §11.1 so they do not spell it; the old commit stays in history | Start from a fresh history |
+| 2. The author e-mail | New commits use GitHub's private no-reply address. Change git's `user.email` **before** switching on GitHub's *Block command line pushes that expose my email*, or pushes are refused | A fresh history, authored with the no-reply address |
+| 3. The CODEOWNERS placeholder | Leave it as it is | Replace it with the owner's real handle, and update `governance.rs::pending_public_controls_are_still_marked_as_pending`, which requires the placeholder today |
+| 4. The `PENDING-PUBLIC` controls | They stay pending; the testing repository has the interim reporting channel above | Decide which to switch on at launch: the `security@` address and its PGP key, branch protection, signed commits, SLSA L3, the Scorecard floor |
+
+Rewriting *this* repository's history would remove items 1 and 2 from it, and is not recommended: it
+changes every commit hash from July onward, and these documents cite hashes throughout.
 
 ---
 
@@ -674,7 +690,9 @@ wins, and you should update the memory to match.
   cross-OS testing and editing from the cloud. **The final public repository will be a different one,
   a step the owner takes personally**: never create one, push to one, or add any other remote, and
   never rewrite history that has been pushed. §1.1 has the details, and the owner's list of decisions
-  for the final public repository.
+  for the final public repository. **Before that repository is created, added as a remote or pushed
+  to, remind the owner of those decisions and wait for each one** (owner's instruction, 2026-09-17):
+  no push to it until they are all made.
 - **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
   and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
   hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and

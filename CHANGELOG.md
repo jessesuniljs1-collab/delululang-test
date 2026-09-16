@@ -34,6 +34,11 @@ public **testing** repository, and nothing is released (README, `HANDOFF.md`, `Q
   checked), GitHub's private vulnerability reporting, secret scanning and push protection were
   switched on for the testing repository, and §1 now routes reports there. The `security@` address,
   its PGP key and the other `PENDING-PUBLIC` controls stay pending for the final public repository.
+- **A gate before the final public repository** (owner's instruction). `HANDOFF.md` §1 and §1.1 now
+  require that, before that repository is created, added as a remote or pushed to, the owner is
+  reminded of four decisions — the banned word in the history, the author e-mail in every commit, the
+  CODEOWNERS placeholder, the `PENDING-PUBLIC` controls — with the suggestions recorded beside them,
+  and that nothing is pushed there until he has made each one. None of the four was changed.
 
 ## Unreleased — the first push, and what the first CI run found, 2026-09-14
 
