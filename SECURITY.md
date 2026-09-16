@@ -2,24 +2,30 @@
 
 **Status:** normative from 1.0. **Governs:** Constitution §9 (governance and honesty clauses),
 `STAGE9_SPECIFICATION.md` §4. **The patch runbook in §4 has been rehearsed** — the drill timeline is
-in `docs/security/DRILL-001.md`.
+in `docs/security/DRILL-001.md`. **Updated 2026-09-17**, when the testing repository became public: §1
+(a private reporting channel is open) and §6 (which GitHub protections are live). Approval record:
+`docs/design/ENTRENCHED_CHANGE_RECORD.md`.
 
 ---
 
 ## 1. Reporting a vulnerability
 
-**Contact:** `PENDING-PUBLIC` — assigned at public launch, together with the PGP key that signs
-advisories. Until then this repository is not publicly hosted and has no disclosure inbox.
+**Report privately through GitHub.** On this repository, open the **Security** tab and choose
+**Report a vulnerability** — GitHub's private vulnerability reporting, enabled on 2026-09-17, when the
+testing repository became public. A report is visible only to you and to the repository's
+administrators, and nothing about it is public unless and until an advisory is published.
 
-That is stated rather than papered over with an address nobody reads. A security policy that lists
-a channel which does not answer is worse than one that admits it is not open yet: it costs a
-reporter the window in which the bug could have been fixed.
+**Still `PENDING-PUBLIC`:** a dedicated `security@` address and the PGP key that signs advisories,
+assigned when the project's final public repository launches. Until then the private report above is
+the only channel, and no e-mail address is listed, because none is monitored yet.
 
-When the channel opens, it will be:
+That is stated rather than papered over. A security policy that lists a channel which does not answer
+is worse than one that admits it is not open yet: it costs a reporter the window in which the bug
+could have been fixed. The channel above answers, on these terms:
 
-- a dedicated `security@` address, **not** a public issue tracker;
-- a PGP key published in this file and on the release page;
-- an acknowledgement within **3 working days**, and a substantive response within **10**.
+- it is private — **not** a public issue tracker;
+- an acknowledgement within **3 working days**, and a substantive response within **10**;
+- when the `security@` address opens, its PGP key is published in this file and on the release page.
 
 **Please do not** open a public issue for a suspected vulnerability, and please do not test against
 infrastructure you do not own.
@@ -151,9 +157,11 @@ branch. Timeline, target times, and what the drill exposed: **`docs/security/DRI
 
 ## 6. Supporting controls
 
-Several controls below require public hosting and its CI identity infrastructure. Each ships as
-written policy plus committed configuration that activates on publication, marked `PENDING-PUBLIC`.
-Nothing here is claimed to be live that is not — see `STAGE9_BUILD_ORDER.md` D2.
+Several controls below require the project's final public repository and its CI identity
+infrastructure. Each ships as written policy plus committed configuration that activates on that
+publication, marked `PENDING-PUBLIC`. The testing repository has been public since 2026-09-17, but it is
+not that publication, so those rows stay pending; the GitHub protections switched on for it are listed
+as live. Nothing here is claimed to be live that is not — see `STAGE9_BUILD_ORDER.md` D2.
 
 | Control | Status |
 |---|---|
@@ -163,9 +171,11 @@ Nothing here is claimed to be live that is not — see `STAGE9_BUILD_ORDER.md` D
 | SLSA provenance | Local in-toto statement generated; **L3 attestation is `PENDING-PUBLIC`** and the builder identity is stated honestly as a local runner |
 | Reproducible builds | **LIVE** — see `STAGE9_BUILD_ORDER.md` D6 |
 | SBOM (CycloneDX) per release | **LIVE** |
-| OpenSSF Scorecard floor | `PENDING-PUBLIC` (needs a public repository to score) |
+| OpenSSF Scorecard floor | `PENDING-PUBLIC` — set for the final public repository; the testing repository is public and could be scored, but no floor is claimed for it |
 | AI-contribution policy | **LIVE** — `CONTRIBUTING.md` §AI |
 | AI-overseer monitoring | Advisory only, never merge authority — Constitution §9: the guarantees hold even if every overseer colludes |
+| Private vulnerability reporting | **LIVE** on the testing repository since 2026-09-17 (GitHub) — the channel in §1 |
+| Secret scanning and push protection | **LIVE** on the testing repository since 2026-09-17 (GitHub): a push carrying a credential GitHub recognizes is refused |
 
 ## 7. Our own limits
 

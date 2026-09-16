@@ -25,8 +25,15 @@ public **testing** repository, and nothing is released (README, `HANDOFF.md`, `Q
   `[skip ci]`. For every trigger and every choice other than the defaults, the same jobs run as before.
 - **Public runners are larger** — 4 CPUs on Linux x64, Linux arm64 and Windows, where private ones had
   2 — which switches on an assertion CI has never run: the actor ping-pong speedup criterion. Pinned to
-  4 or 8 of the development machine's CPUs it measured 0.65–1.14× against its 1.5× bar; the next run is
-  the real measurement (`CROSS_PLATFORM_VERIFICATION.md` §9).
+  4 or 8 of the development machine's CPUs it measured 0.65–1.14× against its 1.5× bar; the next run was
+  the real measurement, and the prediction was wrong: run 6 (`35147900141`) passed it on all three
+  4-CPU runners, and `heavy-gates` passed its first run (`CROSS_PLATFORM_VERIFICATION.md` §9).
+- **`SECURITY.md`: a private reporting channel exists.** It had said the repository was not publicly
+  hosted and had no disclosure inbox; the first half stopped being true. At the owner's instruction
+  (the file is entrenched — `docs/design/ENTRENCHED_CHANGE_RECORD.md` has the approval and what was
+  checked), GitHub's private vulnerability reporting, secret scanning and push protection were
+  switched on for the testing repository, and §1 now routes reports there. The `security@` address,
+  its PGP key and the other `PENDING-PUBLIC` controls stay pending for the final public repository.
 
 ## Unreleased — the first push, and what the first CI run found, 2026-09-14
 

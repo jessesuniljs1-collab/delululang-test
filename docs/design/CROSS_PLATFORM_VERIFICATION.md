@@ -970,3 +970,26 @@ is still not a 4-CPU virtual machine (background load, core ranking, power manag
 numbers predict a risk rather than a result: **the next run may fail this test on the 4-CPU runners.**
 Whether a failure there would be the runner or the runtime is the question that run poses; it is
 written down here before the run, so the answer cannot be fitted to it afterwards.
+
+### Run 6 — the same day (run `35147900141`, started by hand on `51aab51`)
+
+The push of `51aab51` started no run: its commit message quoted GitHub's skip token while explaining
+that docs commits would stop using it, and GitHub honours the token anywhere in a message. The run was
+started by hand instead, with the manual button's `everything` — the first run on the public runners,
+and the first ever to include `heavy-gates` and `miri-slow`.
+
+| Job | Result (2026-09-17) |
+|---|---|
+| `test (ubuntu-latest)` | ✅ 125 test binaries: 1,657 passed, 0 failed, 4 ignored; the CLI sweep 27 of 27; the fuzz campaign with no trace escaping its row over 30,198 executed programs — 6.8 min (7.8–12.3 on the private runners) |
+| `test (macos-latest)` | ✅ The same — 7.0 min |
+| `test (windows-latest)` | ✅ 125 test binaries: 1,647 passed, 0 failed, 4 ignored; conformance 330 of 330; the reference in sync; the sweep 27 of 27; the fuzz campaign as above — 10.4 min (15.1–28.3 before) |
+| `arm64` (Linux aarch64) | ✅ 125 test binaries: 1,657 passed, 0 failed, 4 ignored — 5.3 min |
+| `heavy-gates` | ✅ **Its first run ever**: the 100k-program formatter gate, LSP latency on 10 kLOC in release mode, and the differential wasm gate — 7.7 min |
+| `lints`, `supply-chain`, `editor`, `formal`, `miri` ×2, `miri-ffi` | ✅ |
+| `miri-slow` (`delulu-broker`, `delulu-syntax`, `delulu-check`) | Still running when this was written; its result is recorded when it finishes |
+
+**The prediction above was wrong.**
+`criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel` passed on Linux x64, Linux
+arm64 and Windows, where the 1.5× assertion now applies, and on macOS, where 3 CPUs still skip it.
+The pinned laptop was not a faithful model of a 4-CPU runner. That is why the prediction was written
+down first: a wrong one stays recorded as wrong.
