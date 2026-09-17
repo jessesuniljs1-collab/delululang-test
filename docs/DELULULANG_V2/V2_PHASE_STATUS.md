@@ -7,7 +7,7 @@ are named in its `V2_EXECUTION_LOG.md` entry, never dropped.
 
 | # | Phase | State | Started | Completed | Commit | CI run | Notes |
 |---|---|---|---|---|---|---|---|
-| 0 | V2-0 workspace + documentation migration | complete — commit, push and CI recorded in the next edit | 2026-09-17 | 2026-09-17 | pending (recording edit) | pending (recording edit) | 32 files archived; the Survey's archive-mirror rule; the V2 folder created |
+| 0 | V2-0 workspace + documentation migration | complete | 2026-09-17 | 2026-09-17 | `e48f9c3` | `35258166713` — success | 32 files archived; the Survey's archive-mirror rule; the V2 folder created |
 | 1 | P1 machine-contract truth | not started | — | — | — | — | |
 | 2 | PS-0 sandbox truth, probes, cheap hardenings | not started | — | — | — | — | |
 | 3 | PS-A L1 process sandbox + effect channel + STRICT/AUDIT modes | not started | — | — | — | — | asks D-NE-24/26/31/33 at start |

@@ -139,6 +139,32 @@ here, this log says so and the archive is not edited.
 - **Why:** a second name for one command is a decision for P4 (an alias widens the surface the gate
   binds), not a gap to close in a documentation phase. Recorded so the omission is visible.
 
+## D-V2-17 — P1-11 (`[run-authority]`) and the `test --test-authority` flag are deferred to P2's ruling on operator-side grant sources — TAKEN (reversible)
+- **Evidence:** both are new sources of authority outside the program (a manifest table for
+  `delulu run`; a command-line ceiling for `delulu test`); P2 must rule the loading grant's
+  spelling (D-NE-10, the owner's), which is the same question.
+- **Why:** one ruling for every operator-side grant source keeps the ceiling law (a source can
+  never exceed the manifest's `[authority]`) stated once and tested once. P1 documents the rule
+  as it stands today (an effectful single-file test needs a package `[test-authority]`) and
+  builds nothing new. D-NE-17 stays the owner's.
+
+## D-V2-18 — Non-human users first; human surfaces are conveniences — RULED (owner, 2026-09-18)
+- **Evidence:** the owner's message of 2026-09-18: DeluluLang will have a majority of non-human
+  users — AI, LLMs, agents, robots, and future forms (AGI, ASI, physical AI); focus there; not every
+  feature is implementable on every surface, and that does not matter.
+- **What it means, concretely:** the machine channel (the CLI's `--json`, the LSP for harnesses,
+  the MCP server, the skill, the toolchain manifest, the sandbox, run-time plugin loading) is the
+  product; the VS Code extension and every human render are conveniences over the same compiler.
+  Every phase's acceptance is stated for the machine channel first; the editor gets no phase of its
+  own and the read-only Guard view (P4-07) moves to the end of P4; human-facing prose consolidation
+  stays P6; the AI usability benchmark (P4-08) is the measure of success. The surfaces that differ
+  by host (sandbox levels per OS; contained plugin execution refused on Windows) stay honest
+  through `sandbox probe` and `doctor`, never smoothed over.
+- **Order:** unchanged — the approved order already serves this (P1 machine contract, PS-0/PS-A a
+  safe place to run agent-written code, P2 the agent extends a running system, P4a the skill).
+  Offered to the owner, undecided: pulling P4b (`toolchain --json`, `schema`, `examples --json`)
+  directly after P1, because they are what an untrained model learns the language from.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
 D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,

@@ -174,12 +174,16 @@ repository
 ```
 
 ### CI
-Recorded in the edit that follows the push (the phase commit's hash, the push, the run id and its
-result are not known until then).
+Push run **`35258166713`** on `e48f9c3`, read with `gh run view` after it completed: **success** — every push job green (test on ubuntu-latest, windows-latest and macos-latest; arm64; supply-chain; miri on delulu-diag and delulu-atlas; miri-ffi; editor; lints; formal); heavy-gates and miri-slow skipped by design; 18:19Z to 18:30Z, 10.7 min.
+The recording commit that adds this paragraph starts a run of its own; it is read and recorded
+at the start of the next phase (the convention since the planning passes).
 
 ### GIT
-Recorded in the edit that follows the push (the phase commit's hash, the push, the run id and its
-result are not known until then).
+Phase commit **`e48f9c3`** (`e48f9c316436fd1d6c623afd6bdece02753e839e`) on `master`: 32 renames, 18 modified,
+12 added (the ten V2 files, the archive README, the owner's commission text), 0 deleted; the
+Survey regenerated as the last edit. Pushed to `origin` (the testing repository);
+`git ls-remote origin master` equal to the local head. No skip token in the message. The
+recording commit follows.
 
 ### AGENTS
 **Pass 1 — Opus 5, the documentation migration.** 274,080 tokens, 138 tool uses, 29 min 33 s.

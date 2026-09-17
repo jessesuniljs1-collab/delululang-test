@@ -59,3 +59,7 @@ is stopped safely, its completed work and findings saved, the interruption recor
   `moves` / `links` / `prose` / `all`, each idempotent, `--dry` to preview),
   `REPORT-migration-opus5.md` (the pass-1 report), `BRIEF-migration-opus5.md` and
   `BRIEF-finish-opus5.md` (the two briefs).
+- **Usage, both passes (from the harness):** 338,757 tokens, 192 tool uses, 41 min in total; pass 2
+  alone about 64,700 tokens, 54 tool uses, 11 min. The head chef verified the tree before the phase
+  commit `e48f9c3` (renames, deletions, Survey freshness, doctor, the banned word, the pointer edits,
+  the resolver's existence gate) and saved both reports beside the briefs.
