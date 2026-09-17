@@ -97,6 +97,21 @@ pub const OUTPUT_DIR: &str = "docs/survey";
 pub const OUTPUT_FILES: &[&str] =
     &["docs/survey/SURVEY.md", "docs/survey/DISCREPANCIES.md", "docs/survey/survey.json"];
 
+/// The V1 historical archive, created in phase V2-0 (2026-09-17).
+///
+/// The archive **mirrors the original paths relative to `docs/`**: what was `docs/<x>` is
+/// `docs/archive/v1/<x>`, and nothing is renamed on the way in. That single convention is what lets
+/// the map stay honest about a move that touched thirty-two documents.
+///
+/// A historical record cites the path that existed when it was written, and rewriting it would
+/// falsify the record — so the citations were deliberately left as written. Without a rule, each
+/// one becomes a `prose-cites-missing-path` warning and the map says the repository is full of
+/// dangling references when in fact every one of them resolves, one directory deeper. So a citation
+/// of `docs/<x>` that is no longer there is read as `docs/archive/v1/<x>` **when that file exists**,
+/// and reported as a note rather than a warning. The existence check is the whole gate: a citation
+/// of something that never moved and is simply gone is still missing, and still says so.
+pub const ARCHIVE_ROOT: &str = "docs/archive/v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {

@@ -24,6 +24,19 @@ pub enum Resolution {
     Found(String),
     /// More than one file could be meant. The reader cannot tell either.
     Ambiguous(Vec<String>),
+    /// The cited path is not in the tree, but the V1 archive holds the file it names.
+    ///
+    /// Phase V2-0 moved thirty-two documents into [`crate::ARCHIVE_ROOT`], which mirrors the
+    /// original paths relative to `docs/`. The records that cite the old paths were left as
+    /// written, because a historical record that is rewritten stops recording what it recorded.
+    /// This resolution is how the map says both true things at once: the path is not there, and
+    /// the file is.
+    Archived {
+        /// The root-relative path as the text names it, normalized.
+        cited: String,
+        /// Where that file is now.
+        archived: String,
+    },
     Missing,
 }
 
@@ -94,9 +107,33 @@ impl PathIndex {
         let tail = format!("/{hint}");
         let matches: Vec<String> = self.all.iter().filter(|p| p.ends_with(&tail)).cloned().collect();
         match matches.len() {
-            0 => Resolution::Missing,
+            // 5. The V1 archive mirrors `docs/`, so a citation of a path that moved there in V2-0
+            //    still names a file. Last, deliberately: every reading of the *present* tree is
+            //    tried first, so the archive can never shadow a live file of the same name.
+            0 => self.archived(hint),
             1 => Resolution::Found(matches.into_iter().next().unwrap_or_default()),
             _ => Resolution::Ambiguous(matches),
+        }
+    }
+
+    /// `docs/<x>` read as `docs/archive/v1/<x>`, when that file is really there.
+    ///
+    /// The existence check is the gate. A citation of a document that never moved and is simply
+    /// gone gets no mirror and stays [`Resolution::Missing`] — otherwise this would turn every
+    /// genuinely broken citation into a reassuring note, which is the failure mode a checker is
+    /// there to prevent.
+    fn archived(&self, hint: &str) -> Resolution {
+        let Some(cited) = normalize(hint) else { return Resolution::Missing };
+        // A path already inside the archive is never mirrored again: `docs/archive/v1/docs/...`
+        // names nothing, and a second hop would be the checker inventing a location.
+        if cited.starts_with(&format!("{}/", crate::ARCHIVE_ROOT)) || !cited.starts_with("docs/") {
+            return Resolution::Missing;
+        }
+        let candidate = format!("{}/{}", crate::ARCHIVE_ROOT, &cited["docs/".len()..]);
+        if self.exists(&candidate) {
+            Resolution::Archived { cited, archived: candidate }
+        } else {
+            Resolution::Missing
         }
     }
 }
@@ -222,6 +259,78 @@ mod tests {
         assert_eq!(idx.resolve("README.md:34", "", None), Resolution::Found("README.md".to_string()));
         assert_eq!(strip_line_suffix("a/b.rs:12:4"), "a/b.rs");
         assert_eq!(strip_line_suffix("a/b.rs"), "a/b.rs");
+    }
+
+    /// An index holding one archived document and the live tree around it.
+    fn archive_index() -> PathIndex {
+        PathIndex::new(&[
+            file("README.md"),
+            file("docs/design/CONSTITUTION.md"),
+            file("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"),
+        ])
+    }
+
+    /// Phase V2-0 moved thirty-two documents into `docs/archive/v1/`, which mirrors `docs/`. The
+    /// records that cite the pre-move paths were deliberately left as written, so the resolver has
+    /// to be able to say *both* that the path is not there and that the file is.
+    #[test]
+    fn a_path_that_moved_into_the_archive_still_names_its_file() {
+        let idx = archive_index();
+        assert_eq!(
+            idx.resolve("docs/playbooks/STAGE8_PLAYBOOK.md", "docs/design", None),
+            Resolution::Archived {
+                cited: "docs/playbooks/STAGE8_PLAYBOOK.md".to_string(),
+                archived: "docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md".to_string(),
+            }
+        );
+    }
+
+    /// The mirror is applied once. A second hop would look for `docs/archive/v1/archive/v1/…`,
+    /// which names nothing — and an archived record citing an archived path that is genuinely gone
+    /// deserves the same answer as anyone else: it is missing.
+    #[test]
+    fn a_path_already_in_the_archive_is_not_mirrored_again() {
+        let idx = archive_index();
+        assert_eq!(
+            idx.resolve("docs/archive/v1/playbooks/GONE.md", "docs", None),
+            Resolution::Missing,
+            "the archive does not mirror itself"
+        );
+        // And a path outside `docs/` is never mirrored at all.
+        assert_eq!(idx.resolve("crates/delulu/src/gone.rs", "docs", None), Resolution::Missing);
+    }
+
+    /// **The falsification.** The rule is *"the archive holds it"*, not *"the path starts with
+    /// `docs/`"*, and the difference is the whole gate: without the existence check every genuinely
+    /// broken citation would come back as a reassuring note. Take the archived file out of the
+    /// index and the very same citation must go back to being missing.
+    #[test]
+    fn without_the_archived_file_the_same_citation_is_still_missing() {
+        let without = PathIndex::new(&[file("README.md"), file("docs/design/CONSTITUTION.md")]);
+        assert_eq!(
+            without.resolve("docs/playbooks/STAGE8_PLAYBOOK.md", "docs/design", None),
+            Resolution::Missing,
+            "nothing is at that path and nothing is in the archive — the map must say so"
+        );
+        // Sanity: the only difference between the two indexes is the archived file itself.
+        assert!(matches!(
+            archive_index().resolve("docs/playbooks/STAGE8_PLAYBOOK.md", "docs/design", None),
+            Resolution::Archived { .. }
+        ));
+    }
+
+    /// A live file always wins. The archive is tried *after* every reading of the present tree, so
+    /// a document that exists at `docs/<x>` is never shadowed by an older copy of the same name.
+    #[test]
+    fn the_present_tree_is_read_before_the_archive() {
+        let idx = PathIndex::new(&[
+            file("docs/playbooks/STAGE8_PLAYBOOK.md"),
+            file("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"),
+        ]);
+        assert_eq!(
+            idx.resolve("docs/playbooks/STAGE8_PLAYBOOK.md", "", None),
+            Resolution::Found("docs/playbooks/STAGE8_PLAYBOOK.md".to_string())
+        );
     }
 
     /// The bug that produced thirty-five false "broken link" reports: Delulu and Rust generic

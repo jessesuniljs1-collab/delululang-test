@@ -41,11 +41,12 @@ What that does and does not mean:
 | **Licensed** | Code under **Apache-2.0**; the **DeluluLang** name is a trademark. Free to use, modify, and sell. See [License](#license). |
 | **Specified, not built** | Named here because a status table listing only what exists is half a status. [`docs/REMAINING_WORK.md`](docs/REMAINING_WORK.md) is the full set — 60 items, each checked against the current binary. The three a new reader would otherwise meet the hard way: **the microVM isolation layer** of the constitution's four is a probe that always refuses (the other three are built); **the standard library is four list methods** (`len`, `get`, `push`, `map`, no `Map`/`Dict`/`Set`); and **the DIR-level optimizer and native backend do not exist** (`@jit` is a leash, not a tier). |
 | **Not certified** | Under any regime, for any domain, including the autonomy domains Stage 10 addresses. |
+| **V2 in progress** | Since 2026-09-17 the project is executing [DeluluLang V2](docs/DELULULANG_V2/V2_README.md): machine-contract truth, a real execution-isolation layer, run-time plugin loading, a standard library, agent surfaces, a distribution — one phase at a time, each recorded. Nothing in this table changes until a phase's record says it did. |
 
 A continuing hardening effort — testing every stage to failure and fixing what breaks — is tracked in
 [`docs/design/HARDENING_CAMPAIGN.md`](docs/design/HARDENING_CAMPAIGN.md), with the later passes in
-their own dated records: [`PRODUCTION_READINESS_2026-08-09.md`](docs/design/PRODUCTION_READINESS_2026-08-09.md)
-and [`PRODUCTION_READINESS_2026-08-10.md`](docs/design/PRODUCTION_READINESS_2026-08-10.md). Each names
+their own dated records: [`PRODUCTION_READINESS_2026-08-09.md`](docs/archive/v1/design/PRODUCTION_READINESS_2026-08-09.md)
+and [`PRODUCTION_READINESS_2026-08-10.md`](docs/archive/v1/design/PRODUCTION_READINESS_2026-08-10.md). Each names
 the defects it found, the witness that failed against the pre-fix code, and what was left open.
 
 The most recent found a **dangling symlink that escaped filesystem containment** and a **guard seal
@@ -195,6 +196,7 @@ delulu completions bash        # also zsh, fish, powershell — see `delulu comp
 | Where | What |
 |---|---|
 | [`HANDOFF.md`](HANDOFF.md) | **Picking this repository up cold — human or AI.** Standing rules, what is built, which document to read for what, the features explained, and every open problem with the reason it is open. |
+| [`docs/DELULULANG_V2/V2_README.md`](docs/DELULULANG_V2/V2_README.md) | **DeluluLang V2 — the active development path since 2026-09-17.** The plan being executed, phase by phase, with its status, logs and decisions. |
 | [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) | Install → first program → real programs. Start here. |
 | [`docs/book/THE_DELULULANG_BOOK.md`](docs/book/THE_DELULULANG_BOOK.md) | The complete guide, 20 chapters. Read Ch. 6 if you review AI-written code. |
 | [`docs/for-agents.md`](docs/for-agents.md) | The one page an agent harness should pin. |

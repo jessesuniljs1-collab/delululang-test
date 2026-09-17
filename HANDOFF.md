@@ -2,17 +2,12 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Last updated:** 2026-09-17 — two planning passes on the owner's commission wrote
-`docs/NEXT_EVOLUTION_2026/` (the Next Evolution reassessment; the sandbox and VM isolation pass);
-**both await the owner's approval and nothing of them is built** (§8). The same day the owner made
-the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all
-three operating systems in one run.
-Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
+**Last updated:** 2026-09-17 — **DeluluLang V2 is executing.** The owner approved the 2026 evolution plan the same evening (`docs/design/DeluluLang_V2_Execution_Master_Prompt.md`); the active source of truth is now `docs/DELULULANG_V2/` (start at `V2_README.md`; phase state in `V2_PHASE_STATUS.md`), and the two planning passes that produced the plan were archived under `docs/archive/v1/NEXT_EVOLUTION_2026/` together with sixteen other historical documents (`docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md`). Earlier that day the owner made the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all three operating systems in one run. Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
 (privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**208 commits past `v1.0.0`** at this update.
+**209 commits past `v1.0.0`** at this update (the V2-0 phase commit).
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -296,7 +291,7 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 | **`docs/QUESTIONS.md`** | Someone asks "can this be broken?" It answers the hard questions with evidence, and enumerates the known leaks rather than implying there are none. |
 | **`docs/DEPLOYMENT.md`** | **You are about to run code you did not write.** What a deployment actually protects, the three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and why strict mode is not yet the default. |
 | **`docs/REMAINING_WORK.md`** | **You are deciding what to build next, or wondering whether a feature exists.** Every gap between what a document in this repository describes and what the code does, each row re-verified against the current binary. Also carries §1: the places where the *documents* were stale and the code had moved ahead. |
-| **`docs/NEXT_EVOLUTION_2026/README.md`** | **You are deciding what the project becomes next.** The 2026-09-17 plan: the reassessment against the AI-first goal, twenty-two verified findings (`NE-nn`), the field research, phases P1–P8 and the sandbox phases PS-0…PS-D, the decision records — **proposed, awaiting the owner; nothing implemented.** |
+| **`docs/DELULULANG_V2/V2_README.md`** | **You are working on DeluluLang V2 — the active path since 2026-09-17.** The one active source of truth: the master plan, the roadmap with every phase, the phase status, the execution and decision logs, the security model and the AI-native design. The V1 planning passes behind it are archived under `docs/archive/v1/NEXT_EVOLUTION_2026/`. |
 | **`docs/survey/SURVEY.md`** | You are about to change the compiler and want the blast radius. |
 
 ### Reference
@@ -498,7 +493,7 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 | --- | --- |
 | **rustfmt** | *(new, 2026-08-07)* There is no `rustfmt.toml`; rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). The choices are: reformat the whole tree (now ~111,000 lines) in one unreviewable commit, keep a permanently red CI step, or say the project has not adopted rustfmt. I removed the step and wrote the reason into `ci.yml`, because a permanently red job teaches people that red is normal. **Adopting rustfmt rewrites every file, and this project's comments carry much of its value — it is the owner's call.** Formatting is currently unenforced. |
 | **CODE_OF_CONDUCT.md** | Absent. A policy commitment, not a cleanup task. |
-| **The 2026 evolution plan** | *(new, 2026-09-17)* `docs/NEXT_EVOLUTION_2026/` — two passes (the Next Evolution reassessment and the sandbox/VM isolation pass) ended at the STOP the owner asked for. Implementation starts only on his approval of `MASTER_PLAN.md` §9 and §12.2 question 12: the phase order, the microVM's re-sequencing, the interpreter-in-guest deviation from Stage 5 §6, the profile names, the resource-limit defaults, the first network client's dependency, the guest kernel's licensing, the release channel and installer posture. |
+| **The 2026 evolution plan → DeluluLang V2** | *(updated 2026-09-17, evening)* Approved by the owner and executing (`docs/DELULULANG_V2/`). No longer blocked as a whole; the decisions still reserved to the owner are listed in `docs/DELULULANG_V2/V2_MASTER_PLAN.md` §7 and are asked at the start of the phase that needs each. |
 
 **Settled, and no longer blocking — the licence.** `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`
 and `GOVERNANCE.md` shipped at commit `42702e2` under ruling **D27**, closing hardening finding C9;
@@ -661,8 +656,8 @@ JSON, including on failure.
    If `doctor_cli` fails, run `cargo run -p delulu-survey -- build` and try again.
 3. Ask the Survey about anything you are about to change.
 4. Read `docs/release/CHECKPOINT-1.0.md` for the honest status,
-   `docs/design/P19_ECOSYSTEM_REVIEW.md` for the most recent adversarial pass, and
-   `docs/NEXT_EVOLUTION_2026/README.md` for what is proposed next — proposed, not built.
+   `docs/archive/v1/design/P19_ECOSYSTEM_REVIEW.md` for the most recent adversarial pass, and
+   and `docs/DELULULANG_V2/V2_README.md` for what is being built now (V2) and where it stands.
 5. When you add a test, **falsify it**. When you fix a bug, **witness it failing first**.
 6. Regenerate the Survey before you commit.
 
@@ -729,6 +724,7 @@ wins, and you should update the memory to match.
   chain-of-thought or hidden reasoning is saved or reproduced** — findings and decisions, not
   deliberation. Nothing an agent claims is used before the head chef verifies it against the current
   binary or source. The owner may change this rule; its current wording governs.
+- **V2 execution rules (owner, 2026-09-17, evening; `docs/design/DeluluLang_V2_Execution_Master_Prompt.md`):** Opus 5 is the main execution sous-chef and does most of the work — implementation, investigation, tests, refactors, security and adversarial testing, documentation migration, verification, cleanup; one strong agent at a time; the head chef writes the brief (objective, files, constraints, security and verification requirements, expected outputs), supervises, verifies every result against the binary, and commits; an agent asks rather than invents an architectural or security decision. Phases run one at a time in the approved order; after each phase's push and recorded result the work **stops, waits about sixty seconds for the owner, and continues to the next approved phase only if nothing arrives** — one controlled continuation, never a loop. The active source of truth is `docs/DELULULANG_V2/`; historical documents live in `docs/archive/v1/` and are neither maintained nor deleted.
 
 ### 11.2 Working rules the project has paid for
 
@@ -771,7 +767,7 @@ wins, and you should update the memory to match.
   cargo test --workspace` — an ext4 target is required, because a `drvfs` one breaks `libffi-sys`.
 - **`/home/user/delulu-f1` and `/home/user/delulu-linux2` are preserved snapshots, not junk.** Only
   `delulu-target` is a rebuildable cache.
-- **Disk cleanups have a written discipline** (`docs/maintenance/`): never delete a `.md`, confirm at
+- **Disk cleanups have a written discipline** (`docs/archive/v1/maintenance/`): never delete a `.md`, confirm at
   a gate before permanent deletion, keep the build caches, and verify WSL content by hash against
   `D:` HEAD before removing anything there.
 

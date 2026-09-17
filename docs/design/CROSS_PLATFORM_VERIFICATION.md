@@ -1017,6 +1017,6 @@ The documentation-only commits of that day's two planning passes (`1ac8ecb`, `0f
 `bd074ea`, `3fd69f2` and the commit recording them) each started a push run. Every one of those runs
 was read, and each result — including the two that were red on the Survey freshness gate alone,
 both predicted in writing before they ran — is recorded run by run in
-`docs/NEXT_EVOLUTION_2026/EXECUTION_LOG.md` ("CI results read this pass", Entries 2 and 3). They
+`docs/archive/v1/NEXT_EVOLUTION_2026/EXECUTION_LOG.md` ("CI results read this pass", Entries 2 and 3). They
 changed no platform claim, so they are not repeated here: this section stays the ledger of the runs
 that establish what each operating system has actually executed.

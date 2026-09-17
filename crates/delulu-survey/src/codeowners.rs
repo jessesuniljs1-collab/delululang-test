@@ -13,7 +13,7 @@
 //! placeholder until public launch, so the verb would be a constant function. That rejection was
 //! then wrongly applied to *this* — but "who reviews it" and "is it entrenched" are different
 //! claims, and only the second one is interesting while the first is a placeholder. Reversed in the
-//! production-readiness review; see `docs/design/PRODUCTION_READINESS_REVIEW.md` §3.2.
+//! production-readiness review; see `docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md` §3.2.
 //!
 //! Provenance is unchanged by any of this: a marking names the CODEOWNERS line it was read from, and
 //! the owner string is carried **verbatim, never interpreted**. The Survey has no opinion about who

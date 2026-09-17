@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 225 |
-| Rust lines | 111437 |
+| Rust lines | 111766 |
 | Rust files outside `src/` (test/bench targets) | 95 |
-| Markdown documents | 173 |
-| Markdown lines | 48212 |
+| Markdown documents | 185 |
+| Markdown lines | 51296 |
 | DeluluLang programs | 153 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1139 / 10266 |
-| Open discrepancies | 2 |
+| Nodes / edges in this map | 1151 / 10398 |
+| Open discrepancies | 27 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -296,21 +296,21 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 4075 lines
+- **Modules:** 11 files, 4404 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 637 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/lib.rs` | 652 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 242 | Cargo manifests — the ground truth for "which crate depends on which". |
-| `src/mdown.rs` | 422 | Reading Markdown. |
-| `src/paths.rs` | 236 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
+| `src/mdown.rs` | 541 | Reading Markdown. |
+| `src/paths.rs` | 345 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
 | `src/render.rs` | 279 | The three channels the Survey publishes on. |
-| `src/rust.rs` | 407 | Reading Rust source as text. |
+| `src/rust.rs` | 485 | Reading Rust source as text. |
 | `src/scan.rs` | 214 | Walking the tree and deciding what each file *is*. |
-| `src/verify.rs` | 624 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
+| `src/verify.rs` | 632 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
 

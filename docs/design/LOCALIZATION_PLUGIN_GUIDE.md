@@ -2,7 +2,7 @@
 
 **Status:** Design reference (normative for the catalog format and the `delulu locale` flow).
 **Implemented by:** Stage 8 (§6 — catalogs, picker, welcome) and Stage 6 (the plugin machinery a
-catalog rides on). **Companion:** `docs/playbooks/STAGE8_PLAYBOOK.md` (Phase 8b, 8f).
+catalog rides on). **Companion:** `docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md` (Phase 8b, 8f).
 **Related:** `docs/design/SYNTAX_MORPH_SPEC.md` (changing the *programming*-language surface — a
 different mechanism), `docs/lang/*.md` (the per-language packs this guide tells you how to build),
 `CONSTITUTION.md` §8.5 (localization; no discrimination; AI-generated translations are the intended

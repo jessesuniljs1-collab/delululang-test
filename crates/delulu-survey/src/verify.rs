@@ -39,6 +39,14 @@ fn describes_the_present(rel: &str) -> bool {
         // A dated audit quotes the numbers it found *in order to correct them*. Checking those
         // against today's tree would report the record of a fix as the very drift it recorded.
         || rel == "docs/survey/AUDIT.md"
+        // The V1 archive is where phase V2-0 put the documents that are records rather than
+        // descriptions — superseded drafts, dated campaign passes, process records, executed
+        // planning material. Every one of them is *about a moment*: "the suite stood at 1645"
+        // was true when it was written and is still a true record of that day. Checking those
+        // counts against today's tree would report correct history as drift, and the only way
+        // to silence it would be to edit the record — which is the one thing an archive exists
+        // to prevent. One prefix, so nothing has to be added here as the archive grows.
+        || rel.starts_with("docs/archive/")
     {
         return false; // records of what was true at a moment, and still are records of it
     }

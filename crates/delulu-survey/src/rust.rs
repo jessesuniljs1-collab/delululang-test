@@ -155,6 +155,24 @@ pub fn extract(idx: &PathIndex, f: &ScannedFile, b: &mut Builder) {
                     b.edge(EdgeKind::References, &self_id, &to, &f.rel, lineno);
                 }
                 Resolution::Ambiguous(_) => {}
+                // Phase V2-0 moved thirty-two documents into the V1 archive, which mirrors `docs/`.
+                // A comment that names the pre-move path still names a real file, so the reference
+                // is drawn and the hop is noted — not reported as a missing path it is not.
+                Resolution::Archived { cited, archived } => {
+                    let to = crate::mdown::target_node(idx, b, &archived);
+                    b.edge(EdgeKind::References, &self_id, &to, &f.rel, lineno);
+                    b.finding(
+                        Severity::Note,
+                        "comment-cites-archived-path",
+                        &f.rel,
+                        lineno,
+                        format!(
+                            "prose names `{cited}`, which moved to `{archived}` in V2-0; \
+                             the citation is historical and left as written"
+                        ),
+                        "a current document should cite the archived path",
+                    );
+                }
                 Resolution::Missing => b.finding(
                     Severity::Warning,
                     "comment-cites-missing-path",
@@ -403,5 +421,65 @@ mod tests {
         assert_eq!(cited_paths("// see crates/delulu-check/src/ty.rs for the rule"), vec!["crates/delulu-check/src/ty.rs"]);
         assert!(cited_paths("// everything under crates/ is a crate").is_empty(), "a bare prefix is not a file");
         assert!(cited_paths("// see docs/design/*.md").is_empty(), "a glob names no single file");
+    }
+
+    fn source(text: &str) -> ScannedFile {
+        ScannedFile {
+            rel: "crates/delulu-survey/src/codeowners.rs".to_string(),
+            abs: "crates/delulu-survey/src/codeowners.rs".into(),
+            kind: crate::scan::FileKind::RustSource,
+            lines: 1,
+            crate_name: Some("delulu-survey".to_string()),
+            text: text.to_string(),
+        }
+    }
+
+    fn doc(rel: &str) -> ScannedFile {
+        ScannedFile {
+            rel: rel.to_string(),
+            abs: rel.into(),
+            kind: crate::scan::FileKind::Doc,
+            lines: 0,
+            crate_name: None,
+            text: String::new(),
+        }
+    }
+
+    /// The V2-0 archive-mirror rule reaches **comments**, not only prose.
+    ///
+    /// Code in this repository names the decision that authorized it, and some of those records
+    /// moved into the V1 archive. A comment naming the pre-move path still names a real file, so
+    /// the reference is drawn to where the file is and the hop is a note — the alternative is a
+    /// `comment-cites-missing-path` warning about a document that is right there.
+    #[test]
+    fn a_comment_citing_an_archived_path_is_a_note_with_its_reference_drawn() {
+        let src = source("//! reversed in the review; see docs/design/PRODUCTION_READINESS_REVIEW.md §3.2\n");
+        let idx = PathIndex::new(&[src.clone(), doc("docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md")]);
+        let mut b = Builder::default();
+        extract(&idx, &src, &mut b);
+
+        let notes: Vec<&str> =
+            b.findings.iter().filter(|f| f.severity == Severity::Note).map(|f| f.class.as_str()).collect();
+        assert_eq!(notes, vec!["comment-cites-archived-path"]);
+        assert!(
+            b.edges.iter().any(|e| e.kind == EdgeKind::References
+                && e.to == "doc:docs/archive/v1/design/PRODUCTION_READINESS_REVIEW.md"),
+            "the reference points at the archived file: {:?}",
+            b.edges.iter().map(|e| e.to.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    /// **The falsification.** Take the archived file away and the identical comment is a warning
+    /// again. Without this the rule would be "any `docs/` path is fine", which is not a rule.
+    #[test]
+    fn with_no_archived_file_the_same_comment_is_a_warning_again() {
+        let src = source("//! reversed in the review; see docs/design/PRODUCTION_READINESS_REVIEW.md §3.2\n");
+        let idx = PathIndex::new(std::slice::from_ref(&src));
+        let mut b = Builder::default();
+        extract(&idx, &src, &mut b);
+
+        let classes: Vec<&str> = b.findings.iter().map(|f| f.class.as_str()).collect();
+        assert_eq!(classes, vec!["comment-cites-missing-path"]);
+        assert_eq!(b.findings[0].severity, Severity::Warning);
     }
 }

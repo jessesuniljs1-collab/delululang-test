@@ -255,7 +255,7 @@ fn every_cited_model_artifact_exists() {
         "CHANGELOG.md",
         "docs/design/PROOF_CAMPAIGN.md",
         "docs/design/HARDENING_CAMPAIGN.md",
-        "docs/design/P19_ECOSYSTEM_REVIEW.md",
+        "docs/archive/v1/design/P19_ECOSYSTEM_REVIEW.md",
     ];
     let mut missing = Vec::new();
     for file in shipped_markdown() {

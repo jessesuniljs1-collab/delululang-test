@@ -126,6 +126,40 @@ fn resolve(
             format!("`{target}` matches {} files: {}", candidates.len(), candidates.join(", ")),
             "write the path from the repository root so it names one file",
         ),
+        // The path moved into the V1 archive in phase V2-0. A *link* and a *mention* are not the
+        // same claim, so they do not get the same verdict: a link is navigation a reader clicks,
+        // and one that lands nowhere is broken however well the map understands why. A mention in
+        // a historical record is correct as written — it names where the file was when the record
+        // was made — so the map follows it to the archived file and merely notes the hop.
+        Resolution::Archived { cited, archived } => {
+            if explicit {
+                b.finding(
+                    Severity::Error,
+                    "broken-link",
+                    rel,
+                    lineno,
+                    format!(
+                        "link to `{target}` resolves to nothing in the tree \
+                         (the file moved to `{archived}`)"
+                    ),
+                    "correct the path, or remove the link",
+                );
+            } else {
+                let to = target_node(idx, b, &archived);
+                b.edge(EdgeKind::LinksTo, self_id, &to, rel, lineno);
+                b.finding(
+                    Severity::Note,
+                    "cites-archived-path",
+                    rel,
+                    lineno,
+                    format!(
+                        "prose names `{cited}`, which moved to `{archived}` in V2-0; \
+                         the citation is historical and left as written"
+                    ),
+                    "a current document should cite the archived path",
+                );
+            }
+        }
         Resolution::Missing => {
             if explicit {
                 b.finding(
@@ -329,6 +363,91 @@ pub fn id_citations(t: &str, letter: char) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scan::{FileKind, ScannedFile};
+
+    fn scanned(rel: &str) -> ScannedFile {
+        ScannedFile {
+            rel: rel.to_string(),
+            abs: rel.into(),
+            kind: FileKind::Doc,
+            lines: 0,
+            crate_name: None,
+            text: String::new(),
+        }
+    }
+
+    /// The tree after phase V2-0: one document archived, the live tree around it.
+    fn archive_index() -> PathIndex {
+        PathIndex::new(&[
+            scanned("README.md"),
+            scanned("docs/design/STAGE8_BUILD_ORDER.md"),
+            scanned("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"),
+        ])
+    }
+
+    fn report(idx: &PathIndex, target: &str, explicit: bool) -> (Builder, Vec<(Severity, String)>) {
+        let mut b = Builder::default();
+        resolve(
+            idx,
+            &mut b,
+            "doc:docs/design/STAGE8_BUILD_ORDER.md",
+            "docs/design/STAGE8_BUILD_ORDER.md",
+            "docs/design",
+            7,
+            target,
+            explicit,
+        );
+        let found = b.findings.iter().map(|f| (f.severity, f.class.clone())).collect();
+        (b, found)
+    }
+
+    /// A build order names the playbook it was written beside. The playbook moved into the V1
+    /// archive in V2-0 and the sentence was left as written, because rewriting a record of what was
+    /// true in 2026-07 is how a record stops being one. The map follows it to the archived file and
+    /// says so — a **note**, not the warning it would have been.
+    #[test]
+    fn a_prose_citation_of_an_archived_path_is_a_note_and_still_draws_its_edge() {
+        let idx = archive_index();
+        let (b, findings) = report(&idx, "docs/playbooks/STAGE8_PLAYBOOK.md", false);
+        assert_eq!(findings, vec![(Severity::Note, "cites-archived-path".to_string())]);
+        assert!(
+            b.findings[0].message.contains("docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"),
+            "the note must say where the file went: {}",
+            b.findings[0].message
+        );
+        let to: Vec<&str> = b.edges.iter().map(|e| e.to.as_str()).collect();
+        assert_eq!(to, vec!["doc:docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md"], "the edge is real");
+    }
+
+    /// A **link** is navigation. Knowing why it dangles does not make it work for the reader who
+    /// clicks it, so an explicit link to a path that moved is still an error — with the new
+    /// location in the message, because the fix should not require a search.
+    #[test]
+    fn an_explicit_link_to_an_archived_path_is_still_an_error() {
+        let idx = archive_index();
+        let (b, findings) = report(&idx, "docs/playbooks/STAGE8_PLAYBOOK.md", true);
+        assert_eq!(findings, vec![(Severity::Error, "broken-link".to_string())]);
+        assert!(
+            b.findings[0].message.contains("the file moved to `docs/archive/v1/playbooks/STAGE8_PLAYBOOK.md`"),
+            "the error must name the new location: {}",
+            b.findings[0].message
+        );
+        assert!(b.edges.is_empty(), "a broken link is not an edge, however well understood");
+    }
+
+    /// **The falsification.** Take the archived file out of the index and the identical citation
+    /// must go back to `prose-cites-missing-path` at `Warning`. A rule that reported a note either
+    /// way would be a rule that cannot fail, and this repository does not keep those.
+    #[test]
+    fn with_no_archived_file_the_same_citation_is_a_warning_again() {
+        let without = PathIndex::new(&[scanned("README.md"), scanned("docs/design/STAGE8_BUILD_ORDER.md")]);
+        let (_, findings) = report(&without, "docs/playbooks/STAGE8_PLAYBOOK.md", false);
+        assert_eq!(findings, vec![(Severity::Warning, "prose-cites-missing-path".to_string())]);
+        // The explicit form, too: still an error, and now with nothing to add about where it went.
+        let (b, findings) = report(&without, "docs/playbooks/STAGE8_PLAYBOOK.md", true);
+        assert_eq!(findings, vec![(Severity::Error, "broken-link".to_string())]);
+        assert!(!b.findings[0].message.contains("moved to"), "there is no archived file to name");
+    }
 
     /// Ruling numbers are allocated once per stage. Fusing `D21` from two build orders into one
     /// node would merge two unrelated decisions — a mistake this project has already made once in

@@ -159,7 +159,7 @@ fn no_governance_document_makes_a_rule_depend_on_the_kind_of_party() {
         "CONTRIBUTING.md",
         "GOVERNANCE.md",
         "docs/design/CONSTITUTION.md",
-        "docs/design/LANGUAGE_SPECIFICATION.md",
+        "docs/archive/v1/design/LANGUAGE_SPECIFICATION.md",
     ];
 
     let mut violations: Vec<String> = Vec::new();

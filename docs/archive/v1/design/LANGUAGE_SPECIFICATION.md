@@ -3,7 +3,7 @@
 > ## ⚠ STATUS: SUPERSEDED EARLY DRAFT — kept for provenance, not for planning
 >
 > **This is the pre-implementation vision document, written before Stage 1.** It is superseded by
-> [`CONSTITUTION.md`](CONSTITUTION.md) (the normative core) and the ten
+> [`CONSTITUTION.md`](../../../design/CONSTITUTION.md) (the normative core) and the ten
 > `STAGE<N>_SPECIFICATION.md` files (what each stage is contractually required to do).
 > `docs/REPOSITORY_STRUCTURE.md` has described it as superseded for some time; **the document
 > itself did not say so until 2026-08-23**, so a reader who opened it directly met the line below
@@ -18,7 +18,7 @@
 >
 > - **§5.9, §5.11 (guarantee 5) and Part III name a Firecracker-class microVM** as the runtime
 >   containment layer for untrusted code. **It is not built** — `--isolation microvm` is a probe
->   that refuses with `DL1408` on every host (see [`../REMAINING_WORK.md`](../REMAINING_WORK.md)
+>   that refuses with `DL1408` on every host (see [`../REMAINING_WORK.md`](../../../REMAINING_WORK.md)
 >   §4.1). The Stage 5 roadmap entry in Part IV says the same.
 > - **§5.10 describes a tiered JIT** with profiling, on-stack replacement and deoptimization.
 >   **None of it exists**; `@jit` is a leash (`DL1906`), and there is no native tier.

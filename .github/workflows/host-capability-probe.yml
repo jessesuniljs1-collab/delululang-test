@@ -1,4 +1,4 @@
-# Host-capability probe for the sandbox research pass (docs/NEXT_EVOLUTION_2026/SANDBOX_RESEARCH.md).
+# Host-capability probe for the sandbox research pass (docs/archive/v1/NEXT_EVOLUTION_2026/SANDBOX_RESEARCH.md).
 #
 # Runs ONLY by hand (workflow_dispatch). It builds nothing and tests nothing: it prints what each
 # GitHub-hosted runner actually offers an execution sandbox — KVM, unprivileged user namespaces,

@@ -59,7 +59,7 @@ is in an entrenched file and is the project lead's to make (7.10a).
 
 Two categories are deliberately **left alone**, and both are conventions this project already
 holds. **Historical campaign records** — `CHANGELOG.md`, `HARDENING_CAMPAIGN.md`,
-`STAGE10_BUILD_ORDER.md`, `docs/maintenance/` — carry the pre-fix statements as dated records of
+`STAGE10_BUILD_ORDER.md`, `docs/archive/v1/maintenance/` — carry the pre-fix statements as dated records of
 what was true when written; this project does not rewrite its own history. And **the `dist/`
 archive** (`dist/delulu-1.0.0-.../README.md`) is a frozen snapshot of what the 1.0.0 release
 actually shipped, including its copy of the four-layer sentence. Editing it would misrepresent the
@@ -76,11 +76,11 @@ artifact. Release documents are exempt from the freshness scan for exactly this 
 | 1.7 | `docs/design/LOCALIZATION_PLUGIN_GUIDE.md` §1 | delulu-slang *"Ships 100% of CLI strings"* | **Zero.** `CLI_STRINGS` is an empty array — see 6.1. | ✅ |
 | 1.8 | `docs/lang/delulu-slang.md` | `coverage = { cli = 100, diagnostics = 90, explain = 25 }`, version 1.0.0 | Shipped catalog is **version 0.8.0, 8 of 154 diagnostics, 0 CLI strings**. | ✅ |
 | 1.9 | `README.md` **Honesty section** | *"strength comes from defense in depth (type-system proof → WASM/WASI floor → **microVM containment** → human-held broker keys)"* | **Three of those four layers exist.** An unbuilt layer named as a source of strength, in the section whose entire subject is not overstating things. Also in `QUESTIONS.md` §1.3 and §2.1, and the Book Ch. 14, 15 and 20. | ✅ |
-| 1.10 | `docs/design/LANGUAGE_SPECIFICATION.md` | *"This is the definitive design specification"* | It is the **superseded pre-implementation draft**. `REPOSITORY_STRUCTURE.md` had said so for some time; the document itself did not, so anyone opening it directly was told the opposite. Now carries its own status header naming the four decisions that did not survive contact. | ✅ |
+| 1.10 | `docs/archive/v1/design/LANGUAGE_SPECIFICATION.md` | *"This is the definitive design specification"* | It is the **superseded pre-implementation draft**. `REPOSITORY_STRUCTURE.md` had said so for some time; the document itself did not, so anyone opening it directly was told the opposite. Now carries its own status header naming the four decisions that did not survive contact. | ✅ |
 | 1.11 | `docs/design/CONSTITUTION.md` §5.15 | Guarantee 5 names the microVM layer | Same overstatement — **but the file is ENTRENCHED** and reserved to the project lead. **Not edited.** Recorded as 7.10a. | ⛔ owner |
 
 Historical campaign records (`CHANGELOG.md`, `HARDENING_CAMPAIGN.md`, `STAGE10_BUILD_ORDER.md`,
-`docs/maintenance/`) also contain the pre-fix parser statements. Those are **dated records of what
+`docs/archive/v1/maintenance/`) also contain the pre-fix parser statements. Those are **dated records of what
 was true when written** and are deliberately left alone — this project does not rewrite its own
 history. Only current-state documents were corrected.
 

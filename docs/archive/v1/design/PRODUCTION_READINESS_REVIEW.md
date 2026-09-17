@@ -24,7 +24,7 @@ with no mechanism, a crate count derived from a proxy, an index that led nowhere
 four corrections to its *own* earlier conclusions, which are in §3 rather than quietly dropped.
 
 The release state, evidence and remaining limitations are in
-[`docs/release/CHECKPOINT-1.0.md`](../release/CHECKPOINT-1.0.md).
+[`docs/release/CHECKPOINT-1.0.md`](../../../release/CHECKPOINT-1.0.md).
 
 ## 1. Method, and why it differed
 
