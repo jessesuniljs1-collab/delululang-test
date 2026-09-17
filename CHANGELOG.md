@@ -39,6 +39,12 @@ public **testing** repository, and nothing is released (README, `HANDOFF.md`, `Q
   reminded of four decisions — the banned word in the history, the author e-mail in every commit, the
   CODEOWNERS placeholder, the `PENDING-PUBLIC` controls — with the suggestions recorded beside them,
   and that nothing is pushed there until he has made each one. None of the four was changed.
+- **`miri-slow`'s first run did not fit its budget.** In run 6 all three crates were cancelled at 240
+  minutes on the public runners, with no undefined behaviour in what they reached — `delulu-broker`
+  124 of 150 tests, `delulu-syntax` 104 of 131 (still inside the test run 2 stalled in),
+  `delulu-check` 30 of 237. The budget set in advance is now measured as too small; until the slow
+  tests shrink under `cfg!(miri)` (REMAINING_WORK 5.6), `miri-slow` ends cancelled, the nightly's
+  included.
 
 ## Unreleased — the first push, and what the first CI run found, 2026-09-14
 

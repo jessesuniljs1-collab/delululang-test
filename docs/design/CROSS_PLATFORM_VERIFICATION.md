@@ -986,10 +986,27 @@ and the first ever to include `heavy-gates` and `miri-slow`.
 | `arm64` (Linux aarch64) | ✅ 125 test binaries: 1,657 passed, 0 failed, 4 ignored — 5.3 min |
 | `heavy-gates` | ✅ **Its first run ever**: the 100k-program formatter gate, LSP latency on 10 kLOC in release mode, and the differential wasm gate — 7.7 min |
 | `lints`, `supply-chain`, `editor`, `formal`, `miri` ×2, `miri-ffi` | ✅ |
-| `miri-slow` (`delulu-broker`, `delulu-syntax`, `delulu-check`) | Still running when this was written; its result is recorded when it finishes |
+| `miri-slow` | ⛔ **Cancelled at the 240-minute budget, all three crates**, with no Undefined Behavior in what they reached — so the run's overall conclusion is *cancelled*, though every other job passed. `delulu-broker`: 124 of 150 tests. `delulu-syntax`: 104 of 131. `delulu-check`: 30 of 237 |
 
 **The prediction above was wrong.**
 `criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel` passed on Linux x64, Linux
 arm64 and Windows, where the 1.5× assertion now applies, and on macOS, where 3 CPUs still skip it.
 The pinned laptop was not a faithful model of a 4-CPU runner. That is why the prediction was written
 down first: a wrong one stays recorded as wrong.
+
+**`miri-slow`'s first run measured its budget, and the budget is too small** (read 2026-09-17, by a
+one-shot wake-up armed for it). Under Miri the test harness runs one test at a time, in name order — in
+none of the three logs does a finished test come after an unfinished one — so the test in flight at the
+cutoff is the first unfinished name:
+
+| Crate | Finished in 240 min (run 6, 4 CPUs) | Finished in 45 min (run 2, 2 CPUs) | In flight at the cutoff |
+|---|---|---|---|
+| `delulu-broker` | 124 of 150 | 95 of 150 | `path::tests::set_canonicalization_preserves_the_covered_region_on_generated_input` |
+| `delulu-syntax` | 104 of 131 (one ignored) | 103 of 130 | `parser::tests::nesting_past_the_limit_is_refused_with_a_diagnostic_not_a_crash` — the test run 2 was inside too, so it has now run for well over three hours |
+| `delulu-check` | 30 of 237 | 25 of 237 | `dir::tests::no_byte_flip_ever_verifies_with_altered_authority` |
+
+Four CPUs changed little, as expected: Miri interprets on a single host thread. Nothing here is a
+finding of undefined behaviour — none was reported — and nothing here is a pass either, because an
+unfinished run is not a pass. Until those tests shrink under `cfg!(miri)` (`REMAINING_WORK.md` 5.6), a
+`miri-slow` job cannot finish, and since the nightly schedule now runs it by default, the nightly will
+end *cancelled*. Whether `miri-slow` stays in the nightly meanwhile is the owner's call.
