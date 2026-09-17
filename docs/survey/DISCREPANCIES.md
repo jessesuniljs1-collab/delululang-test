@@ -9,8 +9,15 @@ graded by how bad they look — an `error` is a statement that contradicts the t
 
 | Severity | Class | Count |
 |---|---|---:|
+| error | `broken-link` | 1 |
 | note | `c-token-not-a-campaign-finding` | 1 |
 | note | `ruling-cited-without-its-stage` | 1 |
+
+## error — `broken-link` (1)
+
+**What to do:** correct the path, or remove the link
+
+- `docs/NEXT_EVOLUTION_2026/SANDBOX_RESEARCH.md:7` — link to `SANDBOX_IMPLEMENTATION_PLAN.md` resolves to nothing in the tree
 
 ## note — `c-token-not-a-campaign-finding` (1)
 

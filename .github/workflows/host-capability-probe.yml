@@ -1,0 +1,71 @@
+# Host-capability probe for the sandbox research pass (docs/NEXT_EVOLUTION_2026/SANDBOX_RESEARCH.md).
+#
+# Runs ONLY by hand (workflow_dispatch). It builds nothing and tests nothing: it prints what each
+# GitHub-hosted runner actually offers an execution sandbox — KVM, unprivileged user namespaces,
+# the Landlock ABI, hypervisor support on macOS, the Windows Hypervisor Platform / Hyper-V state.
+# Every step is `continue-on-error` so a missing capability is a recorded fact, never a red run.
+# The result is read with `gh run view` and transcribed into the research record; "activated" is
+# not "executed", and an unread run is evidence of nothing.
+name: host-capability-probe
+on:
+  workflow_dispatch:
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: kernel, kvm, user namespaces, landlock
+        continue-on-error: true
+        run: |
+          set +e
+          echo "== kernel =="; uname -r
+          echo "== /dev/kvm =="; ls -la /dev/kvm 2>&1; echo "exit=$?"
+          echo "== cpu virt flags =="; grep -c -E 'vmx|svm' /proc/cpuinfo
+          echo "== kvm-ok (if present) =="; command -v kvm-ok && kvm-ok 2>&1
+          echo "== unprivileged user namespaces =="; cat /proc/sys/kernel/unprivileged_userns_clone 2>&1; cat /proc/sys/user/max_user_namespaces 2>&1
+          echo "== apparmor restrict unprivileged userns =="; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>&1
+          echo "== unshare -Ur true =="; unshare -Ur true; echo "exit=$?"
+          echo "== unshare -Urm true (mount ns) =="; unshare -Urm true; echo "exit=$?"
+          echo "== unshare -Urn true (net ns) =="; unshare -Urn true; echo "exit=$?"
+          echo "== landlock ABI (via python ctypes landlock_create_ruleset LANDLOCK_CREATE_RULESET_VERSION) =="
+          python3 - <<'PY'
+          import ctypes, os
+          libc = ctypes.CDLL(None, use_errno=True)
+          SYS_landlock_create_ruleset = 444
+          r = libc.syscall(SYS_landlock_create_ruleset, None, 0, 1)
+          print("landlock ABI version:", r, "errno:", ctypes.get_errno())
+          PY
+          echo "== seccomp =="; grep -i seccomp /proc/self/status
+          echo "== bwrap / firecracker / cloud-hypervisor / virtiofsd / docker / runsc on PATH =="; for b in bwrap firecracker cloud-hypervisor virtiofsd docker runsc podman; do printf "%s: " "$b"; command -v $b || echo "absent"; done
+          echo "== cgroup v2 =="; stat -fc %T /sys/fs/cgroup 2>&1; cat /sys/fs/cgroup/cgroup.controllers 2>&1
+          echo "== systemd-run --user available? =="; systemd-run --user --scope -p MemoryMax=64M true 2>&1; echo "exit=$?"
+          echo "== nproc / mem =="; nproc; free -m | head -2
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: hypervisor support, sandbox-exec, arch
+        continue-on-error: true
+        run: |
+          set +e
+          echo "== sw_vers =="; sw_vers
+          echo "== arch =="; uname -m
+          echo "== kern.hv_support =="; sysctl kern.hv_support 2>&1
+          echo "== sandbox-exec present =="; ls -la /usr/bin/sandbox-exec 2>&1
+          echo "== sandbox-exec deny-all can run /bin/echo? =="; sandbox-exec -p '(version 1) (deny default) (allow process-exec (literal "/bin/echo")) (allow file-read* (literal "/bin/echo") (subpath "/usr/lib") (subpath "/System/Library"))' /bin/echo hi 2>&1; echo "exit=$?"
+          echo "== sandbox-exec: network denied? (curl to localhost should fail) =="; sandbox-exec -p '(version 1) (deny default) (allow process-exec*) (allow file-read*) (deny network*)' /usr/bin/curl -s -m 3 http://127.0.0.1:1/ 2>&1; echo "exit=$?"
+          echo "== virtualization entitlement helpers: container CLI? =="; command -v container || echo "absent"
+          echo "== nproc / mem =="; sysctl -n hw.ncpu hw.memsize
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: hyper-v / WHP / job objects / appcontainer
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          Write-Host "== OS =="; (Get-CimInstance Win32_OperatingSystem).Caption; [Environment]::OSVersion.Version
+          Write-Host "== hypervisor present (systeminfo Hyper-V section) =="; systeminfo | Select-String -Pattern 'Hyper-V|Virtualization'
+          Write-Host "== optional features (HypervisorPlatform, Microsoft-Hyper-V, Containers, VirtualMachinePlatform) =="
+          foreach ($f in 'HypervisorPlatform','Microsoft-Hyper-V-All','Containers','VirtualMachinePlatform','Microsoft-Windows-Subsystem-Linux') { try { $s = (Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction Stop).State; Write-Host "$f : $s" } catch { Write-Host "$f : query failed ($($_.Exception.Message))" } }
+          Write-Host "== is this session admin? =="; ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          Write-Host "== docker on PATH =="; Get-Command docker -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          Write-Host "== nproc / mem =="; $env:NUMBER_OF_PROCESSORS; (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
