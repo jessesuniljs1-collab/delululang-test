@@ -100,3 +100,30 @@ them.
 
 ### Unresolved
 Everything in `MASTER_PLAN.md` §9 (owner decisions). The plan waits for approval.
+
+---
+
+## Entry 2 — 2026-09-17, the plan committed and pushed
+
+### Verification run before the commit (all on this machine, Windows 11)
+- `delulu doctor` → 17 checks passed; the Survey regenerated (the folder's nine files are now
+  nodes); discrepancies **0 error, 0 warning, 2 note** (the two standing notes).
+- The five `prose-cites-missing-path` warnings the first draft produced were real: the audit
+  named archive destinations and the moved commission file in path form. Reworded, not silenced.
+- `cargo test -p delulu --test evidence_claims --test distribution --test governance
+  --test doctor_cli --test book --test json_contract --test cli_contract` → **all passed**
+  (3 / 4 / 11 / 11 / 9 / 6 / 17), cargo exit 0.
+- `cargo test -p delulu-survey` → all passed, exit 0.
+- The full workspace suite was **not** run locally for this docs-only change; CI runs it.
+
+### Commit and push
+- Commit **`1ac8ecb`** on `master` (13 files: the nine plan documents, `REPOSITORY_STRUCTURE.md`
+  §5, and the three regenerated Survey files). Message carries no skip token.
+- `git push origin master` → `52eecbe..1ac8ecb`; `git ls-remote origin master` = local HEAD.
+- CI run **`35193023549`** started by the push (status at the time of writing: *queued*).
+  **Activated is not executed**: its result is to be read with `gh run view 35193023549` and
+  recorded here by whoever continues, before it is described as green anywhere.
+
+### State after this entry
+Tree clean but for this entry. The plan waits for the owner's approval (`MASTER_PLAN.md` §9).
+Nothing else is scheduled; no autonomous continuation was set up.
