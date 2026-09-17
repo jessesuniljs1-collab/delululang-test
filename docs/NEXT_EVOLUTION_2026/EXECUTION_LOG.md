@@ -136,3 +136,115 @@ next commit, which regenerates the map as its last edit. Rule kept from it: the 
 regenerated after the final edit of a commit, and the log entry that records a commit is written
 before that regeneration, never after. CI runs for `0fca1ef` are expected to fail the freshness
 test; the run for the fixing commit is the one to read.
+
+---
+
+## Entry 3 — 2026-09-17 (afternoon), the sandbox + VM isolation research pass (Claude Fable 5.1, head chef; two sous-chefs)
+
+**Commission:** `docs/design/DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md` (the owner
+also returned the first commission to `docs/design`). **Instruction honoured:** no implementation;
+the previous roadmap treated as unapproved; the result integrated into the existing plan.
+
+### Read
+`MASTER_PLAN.md`, `RESEARCH.md`, `VERIFICATION_FINDINGS.md`, `IMPLEMENTATION_ROADMAP.md`,
+`DECISION_LOG.md`, `EXECUTION_LOG.md` (this pass's own inputs); `crates/delulu/src/microvm.rs`
+(all 58 lines), `run_cmd.rs` 200–270 (the isolation gate), `foreign_worker.rs` 1–60 and 345–370,
+`broker_transport.rs` 1–40, `crates/delulu-wasm/src/host.rs` and `limits.rs` headers,
+`crates/delulu-runtime/src/prim.rs` (containment and the `http.get` arm), `crates/delulu/src/main.rs`
+(the Linux gate), `tests/microvm_criterion8.rs`; `STAGE5_SPECIFICATION.md` §5, §6, §6.1, §10, §11
+chunk 5; `ROOT_ISSUANCE_TRUST_BOUNDARY.md` in full; `THREADED_WASM_DEFERRAL.md`; the autonomy
+addendum's invariant 52; `deny.toml`; the never-built `Dockerfile` and devcontainer;
+`CROSS_PLATFORM_VERIFICATION.md`'s container and microVM lines.
+
+### Web research (about 65 fetches and searches; sources in `SANDBOX_RESEARCH.md` §4)
+Every URL the commission listed (AISI Inspect and its sandboxing toolkit and k8s provider, MITRE's
+page — 403, NayaOne, AI Verify, Cloudflare Sandbox SDK, Vercel Sandbox, Firecracker's design,
+production-host, snapshot, vsock and image docs, gVisor's security and platform guides, Kata's
+architecture, Cloud Hypervisor and its virtio-fs doc, Nitro Enclaves and attestation, Azure dynamic
+sessions — the custom-sessions page was 404, Foundry's code interpreter, Modal, Daytona), plus
+Hyperlight and hyperlight-wasm, libkrun, Apple Containerization, Landlock's kernel doc, Windows
+Hyper-V isolation, Wasmtime's security page, Chromium's Windows sandbox design, Claude Code's
+sandbox runtime, Codex's security page, E2B's infrastructure, Docker Sandboxes' architecture post,
+SandboxEscapeBench (arXiv 2603.02277), ControlArena, the runc breakout CVEs, Confidential
+Containers, the bubblewrap/nsjail/firejail comparison, the Rust `landlock`/`seccompiler`/`birdcage`
+crates, GitHub Actions KVM reports, WSL2's shared-kernel discussion, macOS `sandbox-exec`
+deprecation, AWS AgentCore's DNS finding, Google's GKE Agent Sandbox, and CVE-2026-1386 (verified
+against NVD/OSV/the GitHub advisory after the Sonnet sous-chef cited it).
+
+### Commands run
+- `delulu run hello.delulu --isolation none|process|microvm` (+ `--json`), `explain DL1408`,
+  `doctor` (no isolation section); `grep` for fuel/epoch/limiter/timeout/rlimit in the run path,
+  the WASM host and the worker; the net check at `prim.rs:275`; the `microvm` module gate.
+- `gh run view 35193023549 / 35193076106 / 35193171249` — the three runs from the morning pass,
+  read and recorded below.
+- Added `.github/workflows/host-capability-probe.yml` (dispatch-only; every step
+  `continue-on-error`; builds nothing), regenerated the Survey, committed **`bd074ea`**, pushed,
+  `gh workflow run`, and read run **`35218542442`** (`completed success`, 17 s): the facts in
+  `SANDBOX_IMPLEMENTATION_PLAN.md` §0.
+- Reproduced the red team's device-name and trailing-character claims in a scratch directory
+  (`write_text` of `NUL`, `CON`, `trail.txt.`, `space.txt ` under `--grant fs.write=.`); checked the
+  `--json` envelope for an isolation field (none).
+- Sous-chefs (owner-directed, D-NE-32): Opus 5 "red-team sandbox attack surfaces" (81 tool uses,
+  ~14 min) and Sonnet 5 "host sandbox capability facts" (95 tool uses, ~17 min), each in an
+  isolated worktree, each writing one notes file; both finished; nothing modified, built or pushed
+  by either. Their notes: `agent-notes/RED-TEAM-SANDBOX-SURFACES-opus5.md` (344 lines) and
+  `agent-notes/HOST-CAPABILITY-FACTS-sonnet5.md` (521 lines). Their worktree scratch files (probe
+  programs, intermediate notes) copied to durable storage beside the repository at
+  `D:\nelan\DeluluLang-agent-transcripts\2026-09-17-sandbox-pass\`. No reasoning transcript is
+  kept — the owner's rule, as revised later the same day, forbids saving chain-of-thought; the
+  agents' findings, decisions and outputs are their notes and those scratch files.
+
+### CI results read this pass
+| Run | Commit | Result |
+|---|---|---|
+| `35193023549` | `1ac8ecb` (the plan) | **green** — every push job (test ×3 OSes, arm64, supply-chain, miri ×2, miri-ffi, editor, lints, formal); heavy-gates and miri-slow skipped by design |
+| `35193076106` | `0fca1ef` (the log entry that made the map stale) | **red** — the four test jobs failed (exit 101/1: the Survey freshness gate, as predicted in Entry 2); every other job green |
+| `35193171249` | `9584011` (the fix) | **green** — every push job |
+| `35218542442` | `bd074ea` (the probe, by hand) | **success** — three jobs, facts transcribed |
+
+Note on `bd074ea`: its committed map was regenerated while four then-untracked draft files (the
+sandbox documents of the interrupted first attempt of this pass) were on disk, so on CI its
+freshness gate is expected to be **red**, exactly as `0fca1ef`'s was. The pass's final commit
+regenerates the map as its last edit with every file committed. Recorded here rather than hidden.
+
+### Found
+NE-16b, NE-16c, NE-17 (no network client), NE-18, NE-19, NE-20, NE-21, NE-22, and the runners'
+capabilities — `VERIFICATION_FINDINGS.md` §4.
+
+### Failed attempts and corrections (kept)
+- The first attempt at this pass was interrupted by the owner while writing
+  `SANDBOX_TEST_PLAN.md`; four draft files survived on disk with the test plan cut mid-sentence.
+  They were identified as this session's own drafts (section titles matching the head chef's
+  design line by line; no other Claude process on the machine), reviewed, and completed.
+- The first probe-log extraction used a `/tmp` path Windows Python cannot open; redone with a
+  converted path.
+- The two macOS Seatbelt probes in the CI workflow were badly designed (a too-strict profile; a
+  closed port) and are recorded as inconclusive, to be redone in PS-0-08.
+- A Bash echo string containing backticks executed `delulu run` by command substitution; harmless,
+  and the wanted grep output was still produced.
+
+### Created / changed
+Created: `SANDBOX_RESEARCH.md`, `SANDBOX_ARCHITECTURE.md`, `SANDBOX_THREAT_MODEL.md`,
+`SANDBOX_TEST_PLAN.md`, `SANDBOX_IMPLEMENTATION_PLAN.md`, `agent-notes/` (two files),
+`.github/workflows/host-capability-probe.yml`. Changed: `MASTER_PLAN.md` (status, §8's order,
+§9, new §12), `IMPLEMENTATION_ROADMAP.md` (the PS section), `DECISION_LOG.md` (D-NE-20…D-NE-33),
+`VERIFICATION_FINDINGS.md` (§4), `README.md` (this folder), `OWNER_COMMISSION.md` (now a pointer),
+`docs/REPOSITORY_STRUCTURE.md` §5.3 and §5.11, `HANDOFF.md` §11.1 (the owner's agent rule, then
+its revision) and its pointer to this folder, `DOCUMENTATION_AUDIT.md` (rows for the two commission
+texts, the five sandbox documents and the agent notes), `docs/design/DeluluLang_Fable_5.1_Master_Prompt.md`
+(the banned word redacted in place, header note), `docs/design/DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md`
+(committed for the first time, verbatim), and this file. No source file, test, example,
+specification or entrenched document changed.
+
+### Owner rules recorded this pass
+- Sous-chefs (stated by the owner during this pass and revised by the owner later the same day;
+  the revision governs): Opus/Sonnet only, and only where an agent adds real value; high effort for
+  difficult briefs; if the session limit is reached, agents are stopped gracefully and all completed
+  work preserved — task progress, decisions, completed actions, pending tasks, relevant outputs and
+  work state saved to the `.md` progress files and project storage before stopping; no private
+  chain-of-thought or hidden reasoning saved or reproduced (`HANDOFF.md` §11.1; assistant memory
+  `agent-usage-rule-2026-09-17`).
+
+### Unresolved
+The owner's decisions in `MASTER_PLAN.md` §9 items 9 and §12.2 question 12; whether PS-A precedes
+P2 (the plan's recommendation) or follows it.

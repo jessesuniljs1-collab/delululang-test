@@ -179,5 +179,35 @@ D-NE-3 (snapshot regeneration review in P1-04/P1-08), D-NE-5, D-NE-6, D-NE-7, D-
 D-NE-11, D-NE-12, D-NE-17; the entrenched edits in P7; anything in P8.
 
 ## What must remain deferred
-The microVM layer, native backend and optimizer, principal types, `Secret[Bool]`, multi-tenancy,
-federation model-checking, a physical device, certification, the final public repository.
+~~The microVM layer,~~ the native backend and optimizer, principal types, `Secret[Bool]`,
+multi-tenancy, federation model-checking, a physical device, certification, the final public
+repository. *(The microVM layer moved from "deferred" to phase PS-C on 2026-09-17 — see below.)*
+
+---
+
+## PS — The sandbox phases (added by the sandbox pass, 2026-09-17; full detail in `SANDBOX_IMPLEMENTATION_PLAN.md`)
+
+| Phase | Goal | Effort | Needs an owner decision | Depends on |
+|---|---|---|---|---|
+| **PS-0** Truth, probes and cheap hardenings — *inside P1* | every isolation statement true; a `run --json` sandbox object; `DL1408`'s promised repair; `delulu sandbox probe`; the `doctor` sandbox section; refuse Windows device names, trailing dots and spaces, and drive-relative spellings at the primitive table; the worker read deadline; special-use addresses in `--grant net=`; CI experiments (KVM openability plus a VMM boot, a differential Seatbelt probe, a restricted-token child on Windows) | 5–6 S | D-NE-28 (address spelling) | P1-02 (envelope sweep), P1-05 (repair rule) |
+| **PS-A** L1: the process jail with the effect channel | the whole program as a guest holding no OS authority on Linux, Windows and macOS; the channel protocol with a fuzz target from day one; policy derivation and profiles; the launchers; environment hygiene; the CLI and machine surface; audit lifecycle; docs | 12–17 S | D-NE-24, D-NE-26, D-NE-31 (D-NE-25 if met) | PS-0 |
+| **PS-B** Limits, egress, identity | resource budgets for the main program on every engine; the host-side egress proxy as the **first network client** (there is none today); identity separation where the OS allows an unprivileged launcher one; channel batching after measurement | 6–8 S | D-NE-28 (TLS dependency) | PS-A |
+| **PS-C** L2: the microVM on Linux/KVM | the interpreter in a kernel-only guest, vsock only, Firecracker under its jailer; the pinned image; criterion 8 un-gated on a KVM runner; a red-team record | 8–10 S | D-NE-23, D-NE-27 | PS-B; a KVM host (CI, subject to PS-0-08) |
+| **PS-D** L3 external launchers and the L4 seam | operator-supplied environments carrying the channel over stdio, labelled `external`, guarantees `unknown`; the attestation seam with a fake attester | 3–4 S | hardware for anything beyond the seam | PS-A |
+
+**Revised recommended order (supersedes the one above):** P1 (+PS-0) → PS-A → P2 → P4-01 → P3 →
+PS-B → P4-02…07 → PS-C → P6 → P5 → P7 → PS-D → P8.
+
+**Dependencies added to the graph:** PS-0 ⊂ P1; PS-A → P2 (claims only); PS-A → P4-01; PS-A →
+PS-B → PS-C; PS-C → P5-02 (the image artifact); PS-A → P8; P7's fuzz scaffolding is shared with
+PS-A's channel target.
+
+**What can be done now (added):** all of PS-0 except PS-0-09's spelling; PS-A-02 (the channel and
+its fuzz target), PS-A-06 (policy derivation), and the Windows launcher — none of which needs admin
+rights, KVM or a Mac.
+
+**What requires Linux/KVM/cloud (added):** PS-C entirely; PS-D beyond the seam.
+
+**What remains deferred (added):** microVMs on Windows and macOS, snapshots and warm pools, a
+DeluluLang-owned container runtime, guest-side foreign libraries — each with its re-open trigger in
+`SANDBOX_IMPLEMENTATION_PLAN.md` §6.

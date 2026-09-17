@@ -2,8 +2,11 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Last updated:** 2026-09-17 — the owner made the testing remote public (§1.1). Before that,
-2026-09-14: its first push, and CI green on all three operating systems in one run.
+**Last updated:** 2026-09-17 — two planning passes on the owner's commission wrote
+`docs/NEXT_EVOLUTION_2026/` (the Next Evolution reassessment; the sandbox and VM isolation pass);
+**both await the owner's approval and nothing of them is built** (§8). The same day the owner made
+the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all
+three operating systems in one run.
 Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
@@ -293,6 +296,7 @@ delulu atlas node <name> | callers <fn> | calls <fn> | why <Effect> | path <A> <
 | **`docs/QUESTIONS.md`** | Someone asks "can this be broken?" It answers the hard questions with evidence, and enumerates the known leaks rather than implying there are none. |
 | **`docs/DEPLOYMENT.md`** | **You are about to run code you did not write.** What a deployment actually protects, the three tiers (single-user legacy / strict anchored roots with an offline anchor / separate OS account), the exact commands, how to verify each with `delulu doctor`, per-platform status, an explicit list of what is NOT protected, and why strict mode is not yet the default. |
 | **`docs/REMAINING_WORK.md`** | **You are deciding what to build next, or wondering whether a feature exists.** Every gap between what a document in this repository describes and what the code does, each row re-verified against the current binary. Also carries §1: the places where the *documents* were stale and the code had moved ahead. |
+| **`docs/NEXT_EVOLUTION_2026/README.md`** | **You are deciding what the project becomes next.** The 2026-09-17 plan: the reassessment against the AI-first goal, twenty-two verified findings (`NE-nn`), the field research, phases P1–P8 and the sandbox phases PS-0…PS-D, the decision records — **proposed, awaiting the owner; nothing implemented.** |
 | **`docs/survey/SURVEY.md`** | You are about to change the compiler and want the blast radius. |
 
 ### Reference
@@ -494,6 +498,7 @@ node e2e.js <path-to-delulu>     # launches REAL VS Code against a REAL server
 | --- | --- |
 | **rustfmt** | *(new, 2026-08-07)* There is no `rustfmt.toml`; rustfmt's default style disagrees with this hand-written codebase **3,890** times (2,766 even at `max_width=120`). The choices are: reformat the whole tree (now ~111,000 lines) in one unreviewable commit, keep a permanently red CI step, or say the project has not adopted rustfmt. I removed the step and wrote the reason into `ci.yml`, because a permanently red job teaches people that red is normal. **Adopting rustfmt rewrites every file, and this project's comments carry much of its value — it is the owner's call.** Formatting is currently unenforced. |
 | **CODE_OF_CONDUCT.md** | Absent. A policy commitment, not a cleanup task. |
+| **The 2026 evolution plan** | *(new, 2026-09-17)* `docs/NEXT_EVOLUTION_2026/` — two passes (the Next Evolution reassessment and the sandbox/VM isolation pass) ended at the STOP the owner asked for. Implementation starts only on his approval of `MASTER_PLAN.md` §9 and §12.2 question 12: the phase order, the microVM's re-sequencing, the interpreter-in-guest deviation from Stage 5 §6, the profile names, the resource-limit defaults, the first network client's dependency, the guest kernel's licensing, the release channel and installer posture. |
 
 **Settled, and no longer blocking — the licence.** `LICENSE` (Apache-2.0), `NOTICE`, `TRADEMARK.md`
 and `GOVERNANCE.md` shipped at commit `42702e2` under ruling **D27**, closing hardening finding C9;
@@ -655,8 +660,9 @@ JSON, including on failure.
    *pipe's* status, which is how a red gate once survived a whole campaign described as green.
    If `doctor_cli` fails, run `cargo run -p delulu-survey -- build` and try again.
 3. Ask the Survey about anything you are about to change.
-4. Read `docs/release/CHECKPOINT-1.0.md` for the honest status, and
-   `docs/design/P19_ECOSYSTEM_REVIEW.md` for the most recent adversarial pass.
+4. Read `docs/release/CHECKPOINT-1.0.md` for the honest status,
+   `docs/design/P19_ECOSYSTEM_REVIEW.md` for the most recent adversarial pass, and
+   `docs/NEXT_EVOLUTION_2026/README.md` for what is proposed next — proposed, not built.
 5. When you add a test, **falsify it**. When you fix a bug, **witness it failing first**.
 6. Regenerate the Survey before you commit.
 
@@ -713,6 +719,16 @@ wins, and you should update the memory to match.
   fresher instruction.
 - **Never update memory before independent verification succeeds**, and **never fabricate evidence**.
   Only claim results that actually ran.
+- **Sous-chef agents (owner's rule, 2026-09-17, revised by the owner the same day — the revision
+  governs):** Opus or Sonnet only, and only where an agent adds real independent value — credits are
+  not spent on agents for their own sake; high effort for the difficult briefs (the harness offers no
+  reasoning switch, so the brief carries it); **if the session limit is reached, stop every agent
+  gracefully and preserve all completed work** — before stopping, the agent's task progress,
+  decisions, completed actions, pending tasks, relevant outputs and work state go to the phase's
+  `.md` progress files and to project storage, so the work can be resumed later; **no private
+  chain-of-thought or hidden reasoning is saved or reproduced** — findings and decisions, not
+  deliberation. Nothing an agent claims is used before the head chef verifies it against the current
+  binary or source. The owner may change this rule; its current wording governs.
 
 ### 11.2 Working rules the project has paid for
 

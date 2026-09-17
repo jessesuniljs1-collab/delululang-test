@@ -193,3 +193,134 @@ Status key: **PROPOSED** (needs the owner), **TAKEN** (within the head chef's re
   documented as open (RW 2.1).
 - **Why:** an undocumented gap in the flagship costs more credibility than a documented breadth gap.
 - **Confidence:** medium — a user-first view could reasonably put P3 first.
+
+---
+
+## Records added by the sandbox pass (2026-09-17, afternoon)
+
+## D-NE-20 — The owner's commission files live in `docs/design`, the first redacted in place — RULED (by the owner's action); supersedes D-NE-12
+- **Evidence:** the owner moved the first commission back to `docs/design` and placed the second
+  beside it; the first contained the banned word three times; the Survey walks every markdown file
+  on disk, so an untracked file breaks the freshness gate on one side or the other.
+- **Why:** the owner's placement is the decision; the banned-word rule is also the owner's; the only
+  way to honour both is to redact the word in place (a header note says so) and commit both files,
+  keeping the precedent of committing commission texts beside the founding one.
+- **Confidence:** high. The old redacted copy became a pointer.
+
+## D-NE-21 — Sandboxing is a cross-cutting execution layer, introduced early; the microVM is re-sequenced, not deferred — PROPOSED
+- **Evidence:** `MASTER_PLAN.md` §12.1's four points; `SANDBOX_RESEARCH.md` §0 and §1.6;
+  `VERIFICATION_FINDINGS.md` §4; the runners' measured capabilities.
+- **Assumptions:** the effect-channel model costs one IPC round trip per synchronous effect and that
+  cost is acceptable at the command layer (measured in PS-A before PS-B batches anything).
+- **Alternatives:** (a) keep microVM deferred and sandboxing in P8; (b) microVM first (Linux-only,
+  leaving Windows and macOS users with nothing); (c) OS-policy translation instead of a channel.
+- **Why:** (a) leaves every "untrusted code" claim unbacked on the developer's own machine; (b) builds
+  the strongest tier for the fewest users; (c) is three encodings of one authority. The chosen order
+  gives every OS a real boundary first and the hypervisor second, on one protocol.
+- **Confidence:** high on the layer and the order; medium on effort.
+- **Needs verification:** the round-trip measurement; PS-0-08's CI experiments.
+
+## D-NE-22 — The guest performs no effects: capabilities are handles, the host performs everything over one bounded channel — PROPOSED (design)
+- **Evidence:** the WASM host already works this way (opaque handles, the host performs effects); the
+  foreign worker is the same shape inverted; Nitro, Hyperlight and Docker Sandboxes all keep
+  authority outside the guest (`SANDBOX_RESEARCH.md` §3).
+- **Alternatives:** the guest holds capabilities and the OS policy mirrors the scopes.
+- **Why:** one policy for every backend ("nothing but the channel"); no scope is ever re-encoded;
+  secrets and the broker address never enter the guest (`SANDBOX_ARCHITECTURE.md` §2.1).
+- **Confidence:** high. **Needs:** the `EffectSink` seam kept byte-identical for the local path (the
+  core-invariance snapshot), the channel fuzzed from day one.
+
+## D-NE-23 — The microVM guest runs the interpreter, not the WASM engine — PROPOSED (a Stage 5 §6 deviation; a ruling)
+- **Evidence:** the WASM backend compiles 6 of 19 entry programs (`HOT_PATH_TABLE.md`); a tier that
+  refuses most programs with `DL1201` is a tier in name.
+- **Why:** the microVM supplies the boundary the WASM floor stood in for; the WASM engine keeps its
+  in-process containment role. No language semantics change; a build-order deviation, recorded.
+- **Confidence:** high.
+
+## D-NE-24 — Levels L0–L4 as honest labels; profiles as named policies; `--isolation process` strengthened and versioned — PROPOSED
+- **Evidence:** `STABILITY.md` §2 allows a profile's *strength* to improve while its label stays
+  honest; today's `process` isolates foreign code only and its label is absent under `--json`.
+- **Why:** keep the flag, strengthen its meaning, announce it; the narrow behaviour stays reachable as
+  `--foreign-isolation process`. **Owner:** the profile names (`dev`, `contained`, `hostile-agent`).
+- **Confidence:** medium-high.
+
+## D-NE-25 — `Secret.map` under strong profiles: refuse first — PROPOSED (owner)
+- **Evidence:** `map` hands a closure the plaintext; under "secrets never enter the guest" it cannot
+  run there (`SANDBOX_ARCHITECTURE.md` §8.3).
+- **Alternatives:** execute the closure host-side; allow plaintext under a labelled flag.
+- **Why:** refusal is honest and safe; the host-side option is a follow-up once measured. It changes
+  what a valid program does under a profile, hence the owner.
+- **Confidence:** medium.
+
+## D-NE-26 — No VMM crate; drive VMM binaries; rulings for the `landlock` and `seccompiler` crates; `birdcage` rejected — PROPOSED (owner: the two crates)
+- **Evidence:** `landlock` 0.4.7 (MIT or Apache, maintained); `seccompiler` (Apache or BSD-3, now in
+  the rust-vmm monorepo) — both checked by the Sonnet sous-chef and by the head chef's own fetches;
+  `birdcage` is GPL-3.0 and archived (2026-07); Firecracker and Cloud Hypervisor are driven over a
+  Unix-socket HTTP API a hand-written client can speak; `bubblewrap` is LGPL and an *external*
+  binary — not a linked dependency, so not an allowlist question — and is not relied on anyway,
+  because unprivileged user namespaces are blocked on Ubuntu 24.04 defaults.
+- **Why:** dependency austerity; `deny.toml`'s allowlist; the VMM stays a process the jailer
+  confines. Windows needs nothing new (`windows-sys` already carries Job Objects, tokens and
+  AppContainer); macOS needs one `sandbox_init` FFI declaration.
+- **Confidence:** high.
+
+## D-NE-27 — Distributing a built guest kernel is a licensing act — PROPOSED (owner)
+- **Evidence:** the Linux kernel is GPL-2.0; shipping a built kernel requires offering its source;
+  `deny.toml`'s allowlist governs crates, not this.
+- **Alternatives:** ship the image; ship only a build script; point at a vendor's published guest
+  kernel by hash.
+- **Why:** an owner decision with a licensing consequence, like the licence itself.
+- **Confidence:** high that it is the owner's.
+
+## D-NE-28 — The first network client is the host-side egress proxy; special-use addresses need their own spelling — PROPOSED (owner)
+- **Evidence:** `http.get` returns `Err(Refused)` unconditionally (NE-17); `--grant net=169.254.169.254`
+  is accepted silently (NE-18); the AgentCore DNS channel and the metadata-credential class
+  (`SANDBOX_RESEARCH.md` §1.2); the Claude Code runtime's resolve-once-and-pin rule.
+- **Alternatives:** a full HTTP crate with TLS (a large tree) versus a minimal client; refusing
+  special-use ranges outright versus a distinct grant spelling.
+- **Why:** whichever client is chosen, it is one implementation serving L0 and guests alike, built with
+  the allowlist, pinned addresses, SNI/Host agreement and special-use refusal from its first line;
+  the TLS dependency is the largest this project would take and needs the owner and a `cargo deny`
+  pass.
+- **Confidence:** high on the design; the dependency is the owner's.
+
+## D-NE-29 — Windows reserved device names, trailing characters and drive-relative spellings are refused at the primitive table — PROPOSED (a P1 hardening)
+- **Evidence:** NE-19, NE-20 and the drive-relative case, reproduced by the head chef after the red
+  team reported them.
+- **Why:** the 2026-08-10 search key — a decision on an unnormalized spelling; the audit record must
+  carry the resolved name. Independent of the sandbox: the host performs the write either way.
+- **Confidence:** high.
+
+## D-NE-30 — The foreign-worker channel gets IPC-1's read deadline — PROPOSED (a P1 hardening)
+- **Evidence:** NE-21 (`WorkerConn::call` reads unbounded; `set_read_timeout` is used only by the daemon).
+- **Why:** the one profile that exists to contain foreign code can be hung by it.
+- **Confidence:** high.
+
+## D-NE-31 — The main program gets resource budgets on every engine — PROPOSED (owner: the defaults)
+- **Evidence:** NE-22 (no bound on either engine; an unbounded mailbox reaches beyond a gigabyte with
+  only a console grant).
+- **Why:** a limit kill must reuse `limits.rs`'s attribution rule (never a widening repair); "never
+  unlimited" is the plugin precedent. Defaults are the owner's.
+- **Confidence:** high on need; medium on the mechanism (an interpreter step budget versus OS controls).
+
+## D-NE-32 — Sous-chefs were used on this pass at the owner's direction, under the owner's rule of 2026-09-17 — RULED (owner) / TAKEN (application)
+- **Evidence:** the owner's messages ("use opus 5 and sonnet 5 as agents"; then the agent rule). Two
+  agents: Opus 5 (attack surfaces and the adversarial matrix) and Sonnet 5 (host-capability facts).
+  Both ran in isolated worktrees, modified nothing, and wrote one notes file each; the notes are in
+  `agent-notes`, their worktree files are copied to durable storage beside the repository
+  (`EXECUTION_LOG.md` Entry 3), and every claim used in these documents was re-verified by the head
+  chef (the http stub, the worker deadline, the device names, the trailing characters, CVE-2026-1386).
+  One agent claim was **contradicted by measurement** (Windows Hypervisor Platform "off by default" on
+  `windows-latest`; the probe measured it enabled) and the measurement stands.
+- **Why:** real independent value — a second reader of the containment code found what the head
+  chef's own battery had not (the device names, the worker deadline); the host-fact research would
+  have cost the head chef forty fetches.
+- **Confidence:** high.
+
+## D-NE-33 — `--sandbox` stays off by default in 1.x; a package may require a level — PROPOSED (owner)
+- **Evidence:** `DEPLOYMENT.md` §6's reasoning for not flipping strict mode: a default that breaks the
+  primary workflow teaches people to disable it.
+- **Why:** the honest default is refusal-or-run under the level the operator chose; a
+  `[sandbox] require_level` in `delulu.toml` lets a package demand a level without changing every
+  user's default. Flipping the default is a major-version act, like strict roots.
+- **Confidence:** medium — the owner may prefer sandbox-on for `--json` or non-TTY runs.

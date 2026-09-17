@@ -86,7 +86,8 @@ are load-bearing for the map. Revisit only with a scanner change in the same com
 | `AUTHORITY_GUARD_CAPSTONE.md`, `ROOT_ISSUANCE_TRUST_BOUNDARY.md`, `ENTRENCHED_CHANGE_RECORD.md` | D | 4–7 | current-state audits and the approval log; keep |
 | `LANGUAGE_SPECIFICATION.md` | H | 2 | the superseded pre-implementation draft (its own header says so since 2026-08-23); **move** to `docs/archive/design/`, update the 2 links |
 | `DeluluLang_PROMPT.md` | G | 1 | the founding commission, kept verbatim; **keep in place** (origin document; the plan cites it) |
-| `DeluluLang_Fable_5.1_Master_Prompt.md` | — | 0 | the 2026-09-17 commission; contains the banned word; **moved beside the repository** (D-NE-12); redacted copy in this folder |
+| `DeluluLang_Fable_5.1_Master_Prompt.md` | G (commission) | 0 | the 2026-09-17 morning commission, kept where the owner placed it, one banned word redacted in place (D-NE-20; the earlier move under D-NE-12 was reversed by the owner) |
+| `DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md` | G (commission) | 0 | the 2026-09-17 afternoon commission (sandbox and VM isolation), verbatim |
 
 ## `docs/playbooks/`
 
@@ -145,6 +146,8 @@ are load-bearing for the map. Revisit only with a scanner change in the same com
 | File | Cat |
 |---|---|
 | `README.md`, `MASTER_PLAN.md`, `RESEARCH.md`, `VERIFICATION_FINDINGS.md`, `IMPLEMENTATION_ROADMAP.md`, `DECISION_LOG.md`, `EXECUTION_LOG.md`, `DOCUMENTATION_AUDIT.md`, `OWNER_COMMISSION.md` | D (active planning record) |
+| `SANDBOX_RESEARCH.md`, `SANDBOX_ARCHITECTURE.md`, `SANDBOX_THREAT_MODEL.md`, `SANDBOX_TEST_PLAN.md`, `SANDBOX_IMPLEMENTATION_PLAN.md` | D (active planning record; supporting documents of the master plan) |
+| `agent-notes/RED-TEAM-SANDBOX-SURFACES-opus5.md`, `agent-notes/HOST-CAPABILITY-FACTS-sonnet5.md` | D (evidence records; never rewritten — the red-team precedent; the Sonnet file carries one marked head-chef annotation) |
 
 ## Proposed move manifest (to be executed in P6, each row re-verified first)
 

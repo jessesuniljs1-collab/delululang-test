@@ -515,6 +515,7 @@ See §4 for how to cite a bare `D<n>`.
 | `REGISTRY_POLICY.md` | What the registry accepts, and why it recomputes authority server-side rather than trusting the client's claim. |
 | `AI_NATIVE_DESIGN.md` | Why the language is shaped for machine consumers as much as human ones. |
 | `DeluluLang_PROMPT.md` | The original brief the project was built from. Historical. |
+| `DeluluLang_Fable_5.1_Master_Prompt.md`, `DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md` | The owner's two commissions of 2026-09-17 (the Next Evolution reassessment; the sandbox and VM isolation pass), kept verbatim where the owner placed them — the first with one banned word redacted in place. Their outcomes are `docs/NEXT_EVOLUTION_2026/`. |
 
 **Reviews, audits and campaigns** — the adversarial history:
 
@@ -619,13 +620,17 @@ compliance.
 ### 5.11 `docs/NEXT_EVOLUTION_2026/` — the 2026 evolution plan (active planning record)
 
 Written 2026-09-17 on the owner's commission and awaiting the owner's approval before any
-implementation: `README.md` (index), `MASTER_PLAN.md` (the reassessment against the AI-first goal),
-`RESEARCH.md` (what the field does, with sources — named there and on no product surface),
-`VERIFICATION_FINDINGS.md` (findings `NE-nn` from driving the real binary),
-`IMPLEMENTATION_ROADMAP.md` (phases P1–P8), `DECISION_LOG.md` (records `D-NE-nn`),
-`DOCUMENTATION_AUDIT.md` (every markdown file classified; proposed moves, none executed),
-`EXECUTION_LOG.md` (what each pass actually ran, found, committed and pushed), and
-`OWNER_COMMISSION.md` (the owner's commission text, redacted of one banned word).
+implementation: `README.md` (index), `MASTER_PLAN.md` (the reassessment against the AI-first goal;
+§12 carries the sandbox decision), `RESEARCH.md` (what the field does, with sources — named there
+and on no product surface), `VERIFICATION_FINDINGS.md` (findings `NE-nn` from driving the real
+binary), `IMPLEMENTATION_ROADMAP.md` (phases P1–P8 and the sandbox phases PS-0…PS-D),
+`DECISION_LOG.md` (records `D-NE-nn`), `DOCUMENTATION_AUDIT.md` (every markdown file classified;
+proposed moves, none executed), `EXECUTION_LOG.md` (what each pass actually ran, found, committed
+and pushed), `OWNER_COMMISSION.md` (a pointer to the two commission texts in `docs/design`), the
+five sandbox documents of the same day's second pass — `SANDBOX_RESEARCH.md`,
+`SANDBOX_ARCHITECTURE.md`, `SANDBOX_THREAT_MODEL.md`, `SANDBOX_TEST_PLAN.md`,
+`SANDBOX_IMPLEMENTATION_PLAN.md` — and `agent-notes/` (the sous-chefs' verbatim records from that
+pass, two files, kept as evidence exactly as the red-team directories under `docs/security/` are).
 
 ### 5.12 Generated documents — do not hand-edit
 

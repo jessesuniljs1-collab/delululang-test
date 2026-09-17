@@ -252,3 +252,82 @@ fn main(root: Root) ! {Load, Read, Write} {
 | Positive claims re-verified | 22 |
 
 None of the counts above is a test count; test counts come from `cargo test`.
+
+---
+
+## 4. Findings added by the sandbox pass (2026-09-17, afternoon)
+
+Same binary (`target/release/delulu.exe` from `52eecbe`), same discipline. Findings marked *(red
+team)* were first reported by the Opus 5 sous-chef and then **reproduced by the head chef**; the
+commands below are the head chef's.
+
+### NE-16b — `--isolation` is invisible under `--json`
+`run hello.delulu --grant console --isolation process --json` → the envelope contains no
+`isolation` or `sandbox` field (0 occurrences); the label is printed only on stderr and only when
+`--json` is absent (`run_cmd.rs`, the `if !opts.json` branch). The machine consumer that most
+needs the fact gets nothing. **Phase:** PS-0-02.
+
+### NE-16c — `DL1408` ships without the repair its specification promises
+`run --isolation microvm --json` on Windows → `"repairs": []`, while `STAGE5_SPECIFICATION.md` §8's
+table says `fallback command shown; requires_human: true`. **Phase:** PS-0-03.
+
+### NE-17 — `http.get` has no network client behind it
+`crates/delulu-runtime/src/prim.rs`, the `(ResourceKind::Http, "get")` arm: after the `https://`
+check and the allowlist check comes the comment *"Stage-1 runtime bundles no network client; the
+authority path is what matters"* and an unconditional `Ok(Value::err(net_err("Refused")))`. So the
+`Net` effect, `Cap[Http]`, the `net` grant, the manifest ceiling and the audit path all exist, and
+no byte has ever left a DeluluLang program over the network. My `agent_tool.delulu` run printed
+"fetch failed" for this reason, not for a network reason. **Not in `REMAINING_WORK.md`**; the guide
+and the Book present `client.get(url)` as working. *(Red team's reading; head chef verified against
+the source.)* **Phase:** PS-0-01 (record it), PS-B-02 (the egress proxy is the first client).
+
+### NE-18 — Special-use addresses are ordinary grant values
+`--grant net=169.254.169.254` and `--grant net=localhost` are accepted without a warning; the host
+check at `prim.rs:275` is an exact-string match against the granted list; there is no notion of
+loopback, link-local, private or metadata ranges anywhere. *(Red team; verified by reading.)*
+**Phase:** PS-0-09 / PS-B-02.
+
+### NE-19 — Windows reserved device names pass filesystem containment *(red team; reproduced)*
+Under `--grant fs.write=.` in an empty scratch directory (Windows 11):
+`w.write_text("NUL", …)` → `Ok`, and no file exists afterwards — the bytes went to the null
+device; `w.write_text("CON", …)` → `Ok`, and **a 20-byte file literally named `CON`** exists
+afterwards — the containment walk canonicalizes the parent to a verbatim `\?\` path, under which
+Win32 does not apply reserved-name parsing, so the name became a real file (one that ordinary
+tools cannot open or delete). The red team observed `CON` reaching the console instead; the
+difference is the path form the write took, and both outcomes are wrong. `COM1`/`LPT1` were not
+tried (no such devices here). Cause: `canonical_existing` asks only whether a component is a
+symlink and re-appends everything else. **Phase:** PS-0-06 (D-NE-29).
+
+### NE-20 — Trailing dots and spaces are stripped after the decision *(red team; reproduced)*
+Same setup: `write_text("trail.txt.", "x")` and `write_text("space.txt ", "x")` both return `Ok`
+and create `trail.txt` and `space.txt`; the effect trace and the audit record carry the requested
+spelling, not the name the OS used. A guard rule keyed on the stripped name would not match the
+request (the GUARD-SPELL-1 shape; **not witnessed** — a test to write). **Phase:** PS-0-06.
+
+### NE-21 — The foreign-worker channel has no read deadline *(red team; verified against the source)*
+`WorkerConn::call` (`foreign_worker.rs`) writes a frame and blocks in `read_frame` with no
+`set_read_timeout`; the only `set_read_timeout` calls in the tree are the daemon's (IPC-1's fix,
+`brokerd.rs`). A foreign library that never returns hangs the host process. **Phase:** PS-0-07
+(D-NE-30).
+
+### NE-22 — No resource bound on the main program, on either engine
+`run --help` has no limit flag; `run_cmd.rs` has no timeout, deadline or rlimit; the WASM store for
+the main program (`host.rs`) sets no fuel, epoch or limiter — those exist only in `limits.rs` for
+Contained plugins and are refused on Windows; the interpreter bounds call depth (10,000) only. The
+red team measured 3,000,000 sends to one actor under `--grant console` alone reaching ~1.2 GB RSS
+in 30 s; the head chef did not re-run that measurement at full scale (the mechanism — an unbounded
+default mailbox, `actors.rs` — is documented in `STAGE7_ACTORS_GUIDE.md` and needs no second
+demonstration). **Phase:** PS-B-01 (D-NE-31).
+
+### CI host capabilities — measured by the dispatch-only probe (run `35218542442`)
+Transcribed in `SANDBOX_RESEARCH.md` §1.6 and `SANDBOX_IMPLEMENTATION_PLAN.md` §0. Headlines:
+`ubuntu-latest` has `/dev/kvm`, Landlock ABI 7 and a working user cgroup but **no unprivileged
+user namespaces**; `macos-latest` has **no hypervisor support**; `windows-latest` has the
+**Windows Hypervisor Platform enabled**. Two macOS probes were inconclusive and are redone in
+PS-0-08.
+
+### What the red team reported that the head chef did not adopt
+- "`CON` writes to the console" — the head chef's reproduction created a file instead (NE-19 records
+  both; the class is the same).
+- Items the red team itself marked *not verified* (`COM1`/`LPT1`, whether any suite already pins the
+  runnable rows) stay unverified here.

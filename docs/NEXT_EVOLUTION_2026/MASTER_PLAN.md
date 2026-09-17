@@ -4,8 +4,11 @@
 ([`OWNER_COMMISSION.md`](OWNER_COMMISSION.md), a redacted copy; `EXECUTION_LOG.md` §Housekeeping
 says where the original lives and why).
 **Status:** **PLAN COMPLETE — AWAITING THE OWNER'S APPROVAL.** No implementation has started.
-The only tree changes made by this pass are this folder, one line in
-`docs/REPOSITORY_STRUCTURE.md` §5 accounting for it, and the regenerated Survey.
+**Revised the same day by a second, owner-commissioned research pass on sandboxing and VM isolation:
+§12 carries its decision and supersedes §6's order; the sandbox documents listed in §12 are
+supporting documents of this plan, not a second roadmap.** The only tree changes made by these two
+passes are this folder, the accounting lines in `docs/REPOSITORY_STRUCTURE.md` §5, a dispatch-only
+CI probe workflow, one owner-rule line in `HANDOFF.md` §11.1, and the regenerated Survey.
 **Companions:** [`RESEARCH.md`](RESEARCH.md) (what the field does),
 [`VERIFICATION_FINDINGS.md`](VERIFICATION_FINDINGS.md) (what the binary does),
 [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) (the phases),
@@ -234,9 +237,13 @@ sessions (S = one session of a few hours of head-chef work with verification inc
 | P7 Verification depth | 3–4 S | yes | none |
 | P8 Safe autonomy | 3–5 S for the adapter | the adapter only | hardware, KVM host, final repository |
 
-**Recommended order:** P1 → P2 → P4a (skill) → P3 → P4b–d → P6 → P5 → P7 → P8. P1 first
-because every later phase's agents will use the contract; P2 second because it is the identity's
-own demo; the skill early because it is cheap and makes every subsequent agent session cheaper.
+**Recommended order (superseded by §12.3 after the sandbox pass):** P1 (+PS-0) → PS-A → P2 →
+P4a (skill) → P3 → PS-B → P4b–d → PS-C → P6 → P5 → P7 → PS-D → P8. P1 first because every
+later phase's agents will use the contract; the L1 sandbox next because it makes every later
+"untrusted code" sentence true on the developer's own machine; P2 third because it is the
+identity's own demo and its code does not block on PS-A; the skill early because it is cheap and
+makes every subsequent agent session cheaper. The sandbox phases (PS-0…PS-D) and their effort are
+in `SANDBOX_IMPLEMENTATION_PLAN.md`.
 
 ## 9. What requires the owner, listed once
 
@@ -249,9 +256,15 @@ own demo; the skill early because it is cheap and makes every subsequent agent s
 4. The loading grant grammar (`--grant plugin=<path>` or a manifest `[plugins]` ceiling).
 5. Constitution §5.15 guarantee 5 wording (entrenched; `REMAINING_WORK.md` 7.10a) — still pending.
 6. rustfmt adoption and `CODE_OF_CONDUCT.md` — still pending from `HANDOFF.md` §8.
-7. Where the owner's commission file lives (see `EXECUTION_LOG.md` §"Housekeeping"): it quotes the
-   banned word, so it cannot be committed as written and cannot stay in the walked tree either.
+7. ~~Where the owner's commission file lives~~ — settled by the owner the same afternoon: both
+   commission files live in `docs/design`, the first with one banned word redacted in place
+   (`DECISION_LOG.md` D-NE-20).
 8. The four pre-public-repository decisions (unchanged; nothing here touches them).
+9. **From the sandbox pass (§12.2, question 12):** the interpreter-in-the-guest deviation from
+   Stage 5 §6, the profile names and the strengthening of the `process` label, `Secret.map` under
+   strong profiles, the two sandboxing crates, distributing a built (GPL) kernel image, the first
+   network client's TLS dependency and the special-address spelling, resource-limit defaults, and
+   whether `--sandbox` ever becomes the default.
 
 ## 10. What must remain deferred
 
@@ -270,3 +283,87 @@ a real device (hardware), certification (external), and the final public reposit
 - Want to know which document is current, normative, historical or generated?
   `DOCUMENTATION_AUDIT.md`.
 - Want to know what this session actually ran? `EXECUTION_LOG.md`.
+- Want the execution layer — sandboxing, isolation levels, the microVM — and what it changes
+  about all of the above? §12, and the five `SANDBOX_*` documents it names.
+
+---
+
+## 12. The execution layer — what sandboxing changes about this plan (second pass, 2026-09-17)
+
+**Commission:** `docs/design/DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md`. **Evidence:**
+[`SANDBOX_RESEARCH.md`](SANDBOX_RESEARCH.md) (the field, and a CI probe of what the runners
+offer), [`VERIFICATION_FINDINGS.md`](VERIFICATION_FINDINGS.md) §4 (the binary), and the two
+sous-chef records under `agent-notes` (verified before use). **Design:**
+[`SANDBOX_ARCHITECTURE.md`](SANDBOX_ARCHITECTURE.md), [`SANDBOX_THREAT_MODEL.md`](SANDBOX_THREAT_MODEL.md),
+[`SANDBOX_TEST_PLAN.md`](SANDBOX_TEST_PLAN.md), [`SANDBOX_IMPLEMENTATION_PLAN.md`](SANDBOX_IMPLEMENTATION_PLAN.md).
+**Status: proposed; nothing built; §12.3's order supersedes §6's and §8's.**
+
+### 12.1 The decision
+
+**Sandboxing is a cross-cutting architecture beneath the runtime, plugins, agents and autonomy,
+introduced early** — its truth-and-probe half inside P1, its minimum useful form (L1, the process
+jail with the effect channel) as the phase immediately after P1 — **and the microVM is no longer
+"deferred": it becomes an engineering phase gated on Linux + KVM**, which the public CI runners now
+measurably have, while microVMs on Windows and macOS stay deferred with named triggers. This is
+the combination the commission listed as option 4 (an early phase, a later phase, and a
+cross-cutting layer), reached from four pieces of evidence rather than assumed:
+
+1. **The field converged on enforcing the boundary outside the guest** (every cloud sandbox, both
+   local agent tools, the evaluation frameworks) and on stating what the boundary does not cover.
+   DeluluLang already enforces *authority* outside the program's code path (the primitive table,
+   the broker); it has no *OS or hardware* boundary for the verified program at all.
+2. **The binary today:** `--isolation process` isolates foreign code only; the main program has no
+   CPU, memory, wall-clock or disk bound on either engine; `http.get` has no client behind it; a
+   hung foreign worker hangs the host; Windows device names and trailing characters slip past
+   containment (all verified this pass). A sandbox layer does not fix these — they are runtime
+   hardenings, scheduled into P1 — but each is a reason the layer must exist.
+3. **The same-OS-user residual (category 7)** is closed only by identity separation or an
+   out-of-band key. A launcher that runs the guest under a restricted token, an AppContainer, a
+   mapped uid or a VM *is* identity separation, provided by the toolchain instead of the operator.
+   Sandboxing is how `DEPLOYMENT.md`'s Tier 2 stops being an instruction and becomes a mechanism.
+4. **CI reality, measured:** `ubuntu-latest` has `/dev/kvm` and Landlock ABI 7 but blocks
+   unprivileged user namespaces; `macos-latest` has no hypervisor support; `windows-latest` has the
+   Windows Hypervisor Platform enabled. So an L1 jail must not depend on user namespaces, an L2
+   microVM can be exercised on Linux CI, and the honest Windows and macOS tier is L1.
+
+The load-bearing design choice is that **the guest performs no effects**: it holds opaque handles
+and asks the host over one bounded channel; the host runs today's custody, Guard, containment and
+audit code and performs the effect. Adding a backend can therefore never re-encode authority, the
+guest never learns a broker address, secrets never enter it, and the microVM becomes "the same
+guest behind a hypervisor" rather than a second design. The Stage 5 §6 requirement that the guest
+run the WASM engine is replaced by running the interpreter (a ruled deviation, not a semantics
+change), because a tier that refuses most programs with `DL1201` is a tier in name.
+
+### 12.2 The fifteen questions, answered
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does sandbox/VM change the previous roadmap? | **Yes.** PS-0 joins P1; PS-A (L1) becomes the phase after P1; P2 keeps its code order but its "untrusted plugin on your own machine" claim waits for PS-A; PS-B (limits, the first network client as an egress proxy, identity separation) precedes P4's remaining surfaces; PS-C (microVM) replaces P8's deferral; P5 gains the guest image and the probe; P8's control program runs in a guest. Effort grows by roughly 30–40 sessions. |
+| 2 | Should microVM remain deferred? | **No, not as a category.** Its Linux/KVM implementation is PS-C, after L1, because it reuses the channel; its cross-platform forms (Hyperlight on WHP, libkrun or Virtualization.framework) stay deferred with triggers in `SANDBOX_IMPLEMENTATION_PLAN.md` §6. |
+| 3 | Should sandboxing move earlier than P8? | **Yes.** PS-0 inside P1 now; PS-A immediately after P1; PS-B and PS-C interleaved with P3 and P4 as ordered in §12.3. |
+| 4 | Cross-cutting for P2, P4, P8? | **Yes.** P2: the load sequence runs host-side for guests, Contained exports execute host-side, nothing plugin-specific is needed. P4: the MCP server stays analysis-only and gains a read-only probe tool; the skill teaches the profiles. P8: the adapter and the dead-man watchdog stay host-side (invariant 52 untouched); the control program is contained. |
+| 5 | Does real plugin loading depend on sandboxing? | **Technically no** — the Stage 6 load sequence is host-side and can ship first. **For the claim, yes:** "code that arrives after compile time cannot overreach *on your own machine*" is true only with L1 under it. Order: P2's code may proceed in parallel; the sentence is published after PS-A's witnesses are green. |
+| 6 | Does agent execution, MCP or tool execution need the sandbox first? | **MCP and the LSP do not** — analysis-only by construction, never launching a guest. **Agent-run programs do:** `delulu run` under a harness should have `--sandbox` before the skill tells agents to run generated code; the skill lands after PS-A or says the profile is not yet available. |
+| 7 | Does distribution need to account for backend availability? | **Yes.** The archive ships the guest mode (the same binary); the L2 image is a separate, checksummed, attested artifact whose kernel is GPL (an owner decision); `sandbox probe` and `doctor` report what the installed host can do; no installer may imply L2 where KVM is absent. |
+| 8 | Which sandbox features belong in the core language? | **None.** No syntax, no semantics change; the effect row is already the tool list. A `[sandbox]` table in `delulu.toml` is package metadata, bounded by `[authority]`. |
+| 9 | Which belong in the runtime? | The `EffectSink` seam (local versus channel), the guest mode, capability handles, resource budgets, the device-name and trailing-character refusals, the worker read deadline, the empty-environment rule for children. |
+| 10 | Which belong in the host/launcher? | Policy derivation, host-capability probes, the launchers (process, microvm, external), the channel server and host effect proxy, the egress proxy, audit lifecycle records, the `sandbox` subcommands, the `doctor` section, the `--json` fields. |
+| 11 | Which belong in deployment/cloud infrastructure? | L3 launchers (Docker with gVisor, Kata, Kubernetes, cloud sandboxes), jailer uid provisioning, image hosting, the attestation relying party (L4), operator recipes for identity separation where the OS gives an unprivileged launcher none. |
+| 12 | Which parts require owner decisions? | D-NE-23 (the interpreter in the guest — a Stage 5 §6 deviation), D-NE-24 (profile names; strengthening the `process` label), D-NE-25 (`Secret.map` under strong profiles), D-NE-26 (the `landlock` and `seccompiler` crates), D-NE-27 (distributing a built kernel), D-NE-28 (the first network client's TLS dependency and the special-address spelling), D-NE-31 (resource-limit defaults), D-NE-33 (whether `--sandbox` ever becomes the default). |
+| 13 | Which parts can be implemented immediately after approval? | All of PS-0: the documentation truth, the `run --json` field, the DL1408 repair, `sandbox probe`, the `doctor` section, the four runtime hardenings, the CI experiments; then PS-A's channel protocol and fuzz target, the policy derivation, the Windows launcher (restricted token plus Job Object, no admin needed), the Linux launcher on Landlock 7 + seccomp + rlimits + a user cgroup, the macOS Seatbelt launcher. |
+| 14 | Which parts require Linux/KVM/cloud infrastructure? | PS-C entirely (KVM on CI subject to PS-0-08's experiment; Linux to build the image; a jailer uid); PS-D's L3 and L4; anything multi-tenant. |
+| 15 | What is the minimum useful secure sandbox before a full microVM? | **L1 as specified:** the guest holds no OS authority and reaches only the channel; Landlock + seccomp + rlimits + a user cgroup on Linux, a restricted token + Job Object (+ AppContainer) on Windows, Seatbelt on macOS; identity separation where the OS permits; hard resource limits; the host-side egress proxy as the only network path; generated boundary tests and mutant launchers green on all three CI runners, with the residuals (kernel bugs, side channels, hosts without the controls) named in `host_guarantees`. |
+
+### 12.3 The revised order
+
+`P1 (+PS-0)` → `PS-A` → `P2` → `P4-01 skill` → `P3` → `PS-B` → `P4-02…07` → `PS-C` → `P6` →
+`P5` → `P7` → `PS-D` → `P8`. The owner may swap PS-A and P2; the plan's argument for PS-A first is
+that it makes every later "untrusted code" sentence true on the developer's own machine, and that
+P2's code does not block on it.
+
+### 12.4 What does not change
+
+Authority and the Guard mean what they meant. No holder-kind branch. No silent fallback: a profile
+that cannot be honoured is refused, as `DL1408` already is. The WASM engine keeps its in-process
+containment role. Certification stays none. Nothing here is claimed until its witness is green and
+its mutant is red.
