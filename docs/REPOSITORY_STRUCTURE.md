@@ -616,7 +616,18 @@ dropped. `rfcs/0001-broker-federation.md` is the federation RFC: **sponsored, an
 its own comment period**, which is recorded as a governance deviation and must never be restated as
 compliance.
 
-### 5.11 Generated documents — do not hand-edit
+### 5.11 `docs/NEXT_EVOLUTION_2026/` — the 2026 evolution plan (active planning record)
+
+Written 2026-09-17 on the owner's commission and awaiting the owner's approval before any
+implementation: `README.md` (index), `MASTER_PLAN.md` (the reassessment against the AI-first goal),
+`RESEARCH.md` (what the field does, with sources — named there and on no product surface),
+`VERIFICATION_FINDINGS.md` (findings `NE-nn` from driving the real binary),
+`IMPLEMENTATION_ROADMAP.md` (phases P1–P8), `DECISION_LOG.md` (records `D-NE-nn`),
+`DOCUMENTATION_AUDIT.md` (every markdown file classified; proposed moves, none executed),
+`EXECUTION_LOG.md` (what each pass actually ran, found, committed and pushed), and
+`OWNER_COMMISSION.md` (the owner's commission text, redacted of one banned word).
+
+### 5.12 Generated documents — do not hand-edit
 
 `docs/survey/SURVEY.md`, `survey.json`, `DISCREPANCIES.md` and `REMOVALS.md` are produced by
 `cargo run -p delulu-survey -- build` and **committed**, so the map travels with the tree. A test
