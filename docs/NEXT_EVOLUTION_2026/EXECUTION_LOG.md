@@ -127,3 +127,12 @@ Everything in `MASTER_PLAN.md` §9 (owner decisions). The plan waits for approva
 ### State after this entry
 Tree clean but for this entry. The plan waits for the owner's approval (`MASTER_PLAN.md` §9).
 Nothing else is scheduled; no autonomous continuation was set up.
+
+### Correction, same day
+Commit `0fca1ef` appended Entry 2 to this file **after** the Survey had been regenerated, so the
+committed map was stale against the tree (`delulu-survey check` → stale, exit 1) — the
+self-inflicted failure `HANDOFF.md` §4 warns about, committed by the head chef anyway. Fixed by the
+next commit, which regenerates the map as its last edit. Rule kept from it: the Survey is
+regenerated after the final edit of a commit, and the log entry that records a commit is written
+before that regeneration, never after. CI runs for `0fca1ef` are expected to fail the freshness
+test; the run for the fixing commit is the one to read.
