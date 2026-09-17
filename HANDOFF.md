@@ -9,7 +9,7 @@ Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deploy
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
 (privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**201 commits past `v1.0.0`** at this update.
+**202 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:
@@ -53,7 +53,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 
 | Rule | Why |
 | --- | --- |
-| **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
+| **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **The final public repository is gated on the owner's decisions — remind him first, then wait.** Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
 | **Never auto-decide the licence.** | Owner-reserved. Apache-2.0 + NOTICE + TRADEMARK is *recommended* and staged, not decided. Present options and wait. |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
@@ -693,6 +693,11 @@ wins, and you should update the memory to match.
   for the final public repository. **Before that repository is created, added as a remote or pushed
   to, remind the owner of those decisions and wait for each one** (owner's instruction, 2026-09-17):
   no push to it until they are all made.
+- **Commit and push every change to the testing remote, without asking** (owner's standing
+  permission, 2026-09-17): *"for push everything and anything to the github test repo, no need to ask
+  my permission everytime. commit locally and commit to github test repo always, both should be in
+  sync."* Confirm the sync after each push, never force-push, and keep GitHub's skip token out of any
+  commit message whose push should run CI. The final public repository's gate above is unaffected.
 - **Never auto-decide the licence.** It is already decided: **Apache-2.0** for the code plus `NOTICE`
   and `TRADEMARK.md` for the name, shipped under ruling **D27** (commit `42702e2`) and discharging
   hardening finding C9. The rule still binds any *change* to it — owner-reserved, present options and

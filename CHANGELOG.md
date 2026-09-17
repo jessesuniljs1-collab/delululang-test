@@ -45,6 +45,9 @@ public **testing** repository, and nothing is released (README, `HANDOFF.md`, `Q
   `delulu-check` 30 of 237. The budget set in advance is now measured as too small; until the slow
   tests shrink under `cfg!(miri)` (REMAINING_WORK 5.6), `miri-slow` ends cancelled, the nightly's
   included.
+- **Every commit is pushed to the testing repository** (owner's standing permission, recorded in
+  `HANDOFF.md` §1 and §11.1): the local repository and GitHub stay in sync without a push being asked
+  for each time. The final public repository's gate is unaffected.
 
 ## Unreleased — the first push, and what the first CI run found, 2026-09-14
 
