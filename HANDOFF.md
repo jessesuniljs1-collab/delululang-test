@@ -12,7 +12,7 @@ Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deploy
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
 (privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
 **State:** clean tree; `master`, `rc/1.0.0-drill` and the `v1.0.0` tag pushed to `origin`;
-**202 commits past `v1.0.0`** at this update.
+**208 commits past `v1.0.0`** at this update.
 
 > **If you are starting today, read this first.** Two campaigns have run since this document was
 > written, and the second changed what you should assume:

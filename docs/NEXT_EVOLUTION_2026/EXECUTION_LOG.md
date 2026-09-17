@@ -201,6 +201,8 @@ against NVD/OSV/the GitHub advisory after the Sonnet sous-chef cited it).
 | `35193076106` | `0fca1ef` (the log entry that made the map stale) | **red** — the four test jobs failed (exit 101/1: the Survey freshness gate, as predicted in Entry 2); every other job green |
 | `35193171249` | `9584011` (the fix) | **green** — every push job |
 | `35218542442` | `bd074ea` (the probe, by hand) | **success** — three jobs, facts transcribed |
+| `35218534498` | `bd074ea` (push) | **red** — the four test jobs (ubuntu, windows, macos, arm64) failed on the Survey freshness gate alone (`3 behind the tree: SURVEY.md, DISCREPANCIES.md, survey.json`), exactly as the note below predicted; the other nine jobs green |
+| `35223153049` | `3fd69f2` (the sandbox pass) | **green** — every push job (test ×3 OSes, arm64, supply-chain, miri ×2, miri-ffi, editor, lints, formal), 10.5 min; heavy-gates and miri-slow skipped by design |
 
 Note on `bd074ea`: its committed map was regenerated while four then-untracked draft files (the
 sandbox documents of the interrupted first attempt of this pass) were on disk, so on CI its
@@ -235,6 +237,16 @@ texts, the five sandbox documents and the agent notes), `docs/design/DeluluLang_
 (the banned word redacted in place, header note), `docs/design/DeluluLang_Sandbox_VM_Integrated_Next_Evolution_Prompt.md`
 (committed for the first time, verbatim), and this file. No source file, test, example,
 specification or entrenched document changed.
+
+### Committed and pushed
+- **`3fd69f2`** — everything this pass created and changed (22 files), the Survey regenerated as
+  the last edit (1,139 nodes, 10,265 edges, 0 errors, 0 warnings — the five path warnings that
+  appeared were upstream documentation paths in the Sonnet notes, resolved by a marked annotation);
+  beforehand the four documentation gates (`evidence_claims` 9, `book` 4, `governance` 3,
+  `distribution` 11) and `delulu doctor` (17 checks) green; pushed to the testing remote;
+  `git ls-remote` equal to the local head. Its push run is `35223153049` (table above).
+- The commit after it records this paragraph and the two run results, with the map regenerated
+  last again, and corrects `HANDOFF.md`'s commit count.
 
 ### Owner rules recorded this pass
 - Sous-chefs (stated by the owner during this pass and revised by the owner later the same day;

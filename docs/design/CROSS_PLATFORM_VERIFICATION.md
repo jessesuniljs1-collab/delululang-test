@@ -1010,3 +1010,13 @@ finding of undefined behaviour — none was reported — and nothing here is a p
 unfinished run is not a pass. Until those tests shrink under `cfg!(miri)` (`REMAINING_WORK.md` 5.6), a
 `miri-slow` job cannot finish, and since the nightly schedule now runs it by default, the nightly will
 end *cancelled*. Whether `miri-slow` stays in the nightly meanwhile is the owner's call.
+
+### Runs on the planning commits of 2026-09-17
+
+The documentation-only commits of that day's two planning passes (`1ac8ecb`, `0fca1ef`, `9584011`,
+`bd074ea`, `3fd69f2` and the commit recording them) each started a push run. Every one of those runs
+was read, and each result — including the two that were red on the Survey freshness gate alone,
+both predicted in writing before they ran — is recorded run by run in
+`docs/NEXT_EVOLUTION_2026/EXECUTION_LOG.md` ("CI results read this pass", Entries 2 and 3). They
+changed no platform claim, so they are not repeated here: this section stays the ledger of the runs
+that establish what each operating system has actually executed.
