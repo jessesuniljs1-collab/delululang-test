@@ -154,7 +154,7 @@ pub fn spawn_and_serve(
     let exe = std::env::current_exe()?;
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
-    let mut child = std::process::Command::new(exe).arg(GUEST_SUBCOMMAND).arg(&dir).spawn()?;
+    let mut child = guest_command(&exe, &dir).spawn()?;
     // PS-A-04: the OS jail, applied before the guest has been told what to run — it is still waiting
     // for a hello at this point, so it has executed no program bytes yet. (Creating the child
     // suspended and assigning before its first instruction is the stronger form, and needs a
@@ -180,6 +180,34 @@ pub fn spawn_and_serve(
         )),
         Err(_) => Ok(status.code().unwrap_or(1)),
     }
+}
+
+/// How the guest is started (PS-A-05): an EMPTY environment plus the few variables the operating
+/// system needs to load a process at all, no arguments beyond the channel directory, and no standard
+/// input.
+///
+/// Environment variables are where secrets live in practice — tokens, keys, cloud credentials — and
+/// none of them are authority DeluluLang granted. Inheriting the parent's environment would hand a
+/// guest everything the operator's shell happens to hold, which is the opposite of the arrangement.
+/// The program's own output is performed by the host, so the guest needs no standard input and
+/// writes nothing to standard output; its standard error stays attached, because a guest that fails
+/// must be able to say so.
+fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg(GUEST_SUBCOMMAND).arg(dir);
+    cmd.env_clear();
+    // Windows loads a process's DLLs through `PATH` and the system directories: with an entirely
+    // empty environment the guest dies at 0xC0000135, DLL not found, before it runs a line. These
+    // four are what the loader needs, and none of them is authority.
+    #[cfg(windows)]
+    for name in ["SystemRoot", "SystemDrive", "WINDIR", "PATH"] {
+        if let Ok(v) = std::env::var(name) {
+            cmd.env(name, v);
+        }
+    }
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd
 }
 
 /// Connect to the guest, tell it what to run, and serve it until it is done.
@@ -211,10 +239,34 @@ fn converse(
     host.serve(&mut conn)
 }
 
+
 /// A per-call channel name: the clock alone collides when runs start together.
 fn channel_tag() -> String {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
     format!("{t}-{n}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// PS-A-05: a guest inherits nothing. The environment is where secrets actually live, so the
+    /// child gets an empty one plus only what the OS needs to start a process at all.
+    #[test]
+    fn a_guest_inherits_no_environment_and_no_standard_input() {
+        let cmd = guest_command(std::path::Path::new("delulu"), std::path::Path::new("chan"));
+        let names: Vec<String> =
+            cmd.get_envs().map(|(k, _)| k.to_string_lossy().to_string()).collect();
+        let allowed: &[&str] =
+            if cfg!(windows) { &["SystemRoot", "SystemDrive", "WINDIR", "PATH"] } else { &[] };
+        for n in &names {
+            assert!(allowed.contains(&n.as_str()), "the guest would inherit `{n}`");
+        }
+        // The arguments carry the channel directory and nothing else: no secret is ever on a command
+        // line, where every process on the machine can read it.
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+        assert_eq!(args, vec![GUEST_SUBCOMMAND.to_string(), "chan".to_string()]);
+    }
 }
