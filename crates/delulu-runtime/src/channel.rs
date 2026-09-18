@@ -172,6 +172,9 @@ pub struct Request {
 pub enum ReqBody {
     /// One capability operation: the primitive table's shape, by handle.
     CapMethod { cap: Handle, method: String, args: Vec<WireValue>, file: u32, start: u32, end: u32 },
+    /// Minting from the root (`root.console()`, `root.fs_read("./x")`, …). The guest never holds a
+    /// root: the host mints from the real one and answers with a handle (PS-A-03).
+    RootMethod { method: String, args: Vec<WireValue>, file: u32, start: u32, end: u32 },
     /// The guest has finished; the host stops reading.
     Done { exit: i32 },
 }
@@ -217,11 +220,20 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
 pub struct HostChannel<S: crate::sink::EffectSink> {
     sink: S,
     caps: Vec<std::rc::Rc<CapVal>>,
+    /// The REAL root, held only here. A guest asks; the host mints. Absent means the run granted
+    /// nothing, and every mint is refused rather than defaulted.
+    root: Option<std::rc::Rc<crate::value::RootVal>>,
 }
 
 impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn new(sink: S) -> Self {
-        HostChannel { sink, caps: Vec::new() }
+        HostChannel { sink, caps: Vec::new(), root: None }
+    }
+
+    /// Give the host the root this run was granted, so the guest can mint from it by asking.
+    pub fn with_root(mut self, root: std::rc::Rc<crate::value::RootVal>) -> Self {
+        self.root = Some(root);
+        self
     }
 
     /// Mint a handle for a capability the host holds. Handles start at 1, so 0 is never valid.
@@ -245,6 +257,29 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
         }
         match &req.body {
             ReqBody::Done { .. } => Response::Ok(WireValue::Unit),
+            ReqBody::RootMethod { method, args, file, start, end } => {
+                let Some(root) = self.root.clone() else {
+                    return Response::Error {
+                        code: "DL1401".into(),
+                        message: "this run has no root to mint from".into(),
+                    };
+                };
+                let mut resolve = |h: Handle| self.caps.get(h.wrapping_sub(1) as usize).cloned();
+                let mut decoded = Vec::with_capacity(args.len());
+                for a in args {
+                    match a.clone().into_value(&mut resolve) {
+                        Ok(v) => decoded.push(v),
+                        Err(Untransferable(why)) => {
+                            return Response::Error { code: "DL1401".into(), message: format!("an argument is {why}") }
+                        }
+                    }
+                }
+                let span = delulu_diag::Span::new(*file, *start, *end);
+                match self.sink.root_method(&root, method, &decoded, span) {
+                    Ok(v) => self.encode_result(v),
+                    Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },
+                }
+            }
             ReqBody::CapMethod { cap, method, args, file, start, end } => {
                 let Some(capv) = self.resolve(*cap) else {
                     return Response::Error {
@@ -264,28 +299,27 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 }
                 let span = delulu_diag::Span::new(*file, *start, *end);
                 match self.sink.cap_method(&capv, method, &decoded, span) {
-                    Ok(v) => {
-                        // A result may itself be a capability (a narrowed one): mint a handle for it
-                        // rather than sending anything that names a resource.
-                        let mut minted: Vec<std::rc::Rc<CapVal>> = Vec::new();
-                        let wire = WireValue::from_value(&v, &mut |c: &std::rc::Rc<CapVal>| {
-                            minted.push(c.clone());
-                            0
-                        });
-                        match wire {
-                            Ok(w) => {
-                                let w = self.remint(w, &minted);
-                                Response::Ok(w)
-                            }
-                            Err(Untransferable(why)) => Response::Error {
-                                code: "DL1401".into(),
-                                message: format!("the result is {why}, which does not cross the channel"),
-                            },
-                        }
-                    }
+                    Ok(v) => self.encode_result(v),
                     Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },
                 }
             }
+        }
+    }
+
+    /// Encode a result for the guest. A capability in it — a freshly minted one, or a narrowed one —
+    /// becomes a handle; nothing that names a resource is ever sent.
+    fn encode_result(&mut self, v: Value) -> Response {
+        let mut minted: Vec<std::rc::Rc<CapVal>> = Vec::new();
+        let wire = WireValue::from_value(&v, &mut |c: &std::rc::Rc<CapVal>| {
+            minted.push(c.clone());
+            0
+        });
+        match wire {
+            Ok(w) => Response::Ok(self.remint(w, &minted)),
+            Err(Untransferable(why)) => Response::Error {
+                code: "DL1401".into(),
+                message: format!("the result is {why}, which does not cross the channel"),
+            },
         }
     }
 
@@ -360,6 +394,27 @@ impl<T: Read + Write> ChannelSink<T> {
         self.seq.set(n);
         n
     }
+
+    /// One request, one reply: the only shape this side ever uses. A transport failure is a fault,
+    /// never a value, so a guest can never mistake a broken channel for a performed effect.
+    fn exchange(&self, req: Request, span: delulu_diag::Span) -> Result<Value, crate::value::Fault> {
+        let fault = |m: String| crate::value::Fault::at("DL1401", m, span);
+        let mut io = self.io.borrow_mut();
+        write_frame(&mut *io, &req).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
+        let resp: Response = read_frame(&mut *io).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
+        match resp {
+            Response::Ok(w) => {
+                w.into_guest_value().map_err(|Untransferable(why)| fault(format!("the reply carried {why}")))
+            }
+            // The host's own answer, carried through unchanged: an unregistered code would be a lie
+            // about which diagnostic this is, so it becomes the channel's own DL1401 instead.
+            Response::Fault { code, message } | Response::Error { code, message } => Err(crate::value::Fault::at(
+                delulu_diag::static_code(&code).unwrap_or("DL1401"),
+                message,
+                span,
+            )),
+        }
+    }
 }
 
 impl<T: Read + Write> crate::sink::EffectSink for ChannelSink<T> {
@@ -399,19 +454,42 @@ impl<T: Read + Write> crate::sink::EffectSink for ChannelSink<T> {
                 end: span.end,
             },
         };
-        let mut io = self.io.borrow_mut();
-        write_frame(&mut *io, &req).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
-        let resp: Response = read_frame(&mut *io).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
-        match resp {
-            Response::Ok(w) => w.into_guest_value().map_err(|Untransferable(why)| fault(format!("the reply carried {why}"))),
-            // The host's own answer, carried through unchanged: an unregistered code would be a lie
-            // about which diagnostic this is, so it becomes the channel's own DL1401 instead.
-            Response::Fault { code, message } | Response::Error { code, message } => Err(crate::value::Fault::at(
-                delulu_diag::static_code(&code).unwrap_or("DL1401"),
-                message,
-                span,
-            )),
+        self.exchange(req, span)
+    }
+
+    fn root_method(
+        &self,
+        _root: &crate::value::RootVal,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, crate::value::Fault> {
+        // The guest's own root value carries nothing: the HOST holds the real one and mints from it.
+        // So the request names the method and the arguments, never the root's contents.
+        let fault = |m: String| crate::value::Fault::at("DL1401", m, span);
+        let mut encode = |c: &std::rc::Rc<CapVal>| match c.scope {
+            crate::value::CapScope::Handle(h) => h,
+            _ => 0,
+        };
+        let mut wire_args = Vec::with_capacity(args.len());
+        for a in args {
+            match WireValue::from_value(a, &mut encode) {
+                Ok(w) => wire_args.push(w),
+                Err(Untransferable(why)) => return Err(fault(format!("an argument is {why}"))),
+            }
         }
+        let req = Request {
+            version: CHANNEL_VERSION.into(),
+            seq: self.next_seq(),
+            body: ReqBody::RootMethod {
+                method: method.to_string(),
+                args: wire_args,
+                file: span.file,
+                start: span.start,
+                end: span.end,
+            },
+        };
+        self.exchange(req, span)
     }
 
     fn backend(&self) -> &'static str {
@@ -560,6 +638,46 @@ mod tests {
         assert_eq!(got.display(), Value::Int(1_234).display());
         assert_eq!(sink.backend(), "channel");
         crate::prim::set_fixed_clock_ms(None);
+    }
+
+    /// The shape a real program takes: the guest mints from a root it does not hold, gets a handle,
+    /// and uses it. Both halves cross the channel, and the host performs both.
+    #[test]
+    fn a_guest_mints_from_the_hosts_root_and_then_uses_the_handle() {
+        use crate::sink::EffectSink;
+        let root = crate::value::RootVal { console: true, ..Default::default() };
+        let host = HostChannel::new(crate::sink::LocalSink).with_root(std::rc::Rc::new(root));
+        let sink = ChannelSink::new(Loopback { host, inbox: Vec::new(), replies: Default::default() });
+        // The guest's own root value is empty — it grants nothing and is never consulted.
+        let empty_root = crate::value::RootVal::default();
+        let span = delulu_diag::Span::new(0, 0, 1);
+
+        let console = sink.root_method(&empty_root, "console", &[], span).expect("the host mints it");
+        let Value::Cap(c) = &console else { panic!("minting must answer with a capability") };
+        assert!(
+            matches!(c.scope, crate::value::CapScope::Handle(_)),
+            "the guest must receive a handle, never a scope"
+        );
+
+        crate::prim::set_capture(true);
+        sink.cap_method(c, "println", &[Value::str("from the guest".to_string())], span).expect("the host performs it");
+        let out = crate::prim::take_capture().unwrap_or_default();
+        assert!(out.contains("from the guest"), "the host performed the effect: {out:?}");
+    }
+
+    /// A run that granted nothing mints nothing: the refusal is explicit, never an empty default.
+    #[test]
+    fn a_guest_cannot_mint_when_the_host_has_no_root() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let req = Request {
+            version: CHANNEL_VERSION.into(),
+            seq: 1,
+            body: ReqBody::RootMethod { method: "console".into(), args: vec![], file: 0, start: 0, end: 1 },
+        };
+        match host.answer(&req) {
+            Response::Error { message, .. } => assert!(message.contains("no root"), "{message}"),
+            other => panic!("minting without a root must be refused, got {other:?}"),
+        }
     }
 
     /// A handle the host never minted buys nothing: the answer is a refusal, not an effect.

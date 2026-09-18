@@ -1285,7 +1285,9 @@ impl Interp {
             // T-ForeignBind (spec §4): binding a lib is handled here, not in `prim`, because it needs
             // the checker's bind-site → lib map, the grant paths, and the native loader.
             Value::Root(_) if name.name == "foreign" => self.bind_foreign(node_id, span),
-            Value::Root(r) => prim::call_root_method(r, &name.name, &argvals, span),
+            // PS-A-03: minting is on the seam too — a guest that could mint its own capabilities
+            // would be granting itself authority. `LocalSink` calls the primitive table as before.
+            Value::Root(r) => self.effects.root_method(r, &name.name, &argvals, span),
             // `Secret.expose` (Declassify): in daemon mode the receiver is an opaque broker HANDLE and
             // the bytes cross for the first time here, via `Custody::expose` (audited with the span).
             // In embedded mode the secret is local and reveals in-process (Stage 1–4 behavior).

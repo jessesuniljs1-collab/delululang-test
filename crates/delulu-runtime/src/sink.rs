@@ -16,7 +16,7 @@
 
 use delulu_diag::Span;
 
-use crate::value::{CapVal, Fault, Value};
+use crate::value::{CapVal, Fault, RootVal, Value};
 
 /// Where an effect goes when the interpreter performs it.
 ///
@@ -25,6 +25,13 @@ use crate::value::{CapVal, Fault, Value};
 pub trait EffectSink {
     /// Perform one capability operation, or refuse it exactly as the primitive table would.
     fn cap_method(&self, cap: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault>;
+
+    /// Mint a capability from the root, or refuse it exactly as the primitive table would.
+    ///
+    /// This is on the seam for the same reason the operations are: a guest that could mint its own
+    /// capabilities would be granting itself authority. In guest mode the host holds the real root,
+    /// mints from it, and returns a handle.
+    fn root_method(&self, root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault>;
 
     /// A short name for the run report and the audit record (`inproc` for the local path).
     fn backend(&self) -> &'static str {
@@ -39,6 +46,10 @@ pub struct LocalSink;
 impl EffectSink for LocalSink {
     fn cap_method(&self, cap: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
         crate::prim::call_cap_method(cap, method, args, span)
+    }
+
+    fn root_method(&self, root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+        crate::prim::call_root_method(root, method, args, span)
     }
 }
 
