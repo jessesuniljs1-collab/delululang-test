@@ -56,6 +56,20 @@ pub struct Repair {
     pub authority_widening: bool,
     pub requires_human: bool,
     pub edits: Vec<Edit>,
+    /// Why this repair carries no edits — the judgement the tool will not make.
+    ///
+    /// **A repair with `edits: []` is documentation of a decision, not something to apply**, and
+    /// verification finding NE-07 found the two channels saying opposite things about the same
+    /// one: `check --json` reported DL0502's `remove_effect_from_row` as `confidence: "safe"`,
+    /// `requires_human: false`, `edits: []` — flags that read as *apply me* — while
+    /// `fix --dry-run --json` correctly refused it with `verdict: "requires-human"`, and the LSP
+    /// offered it as `isPreferred: true` with no `edit` at all. A harness following the flags
+    /// would have concluded there was a fix and found nothing to do.
+    ///
+    /// [`Diagnostic::with_repair`] now makes an editless repair `requires_human` on the way in, so
+    /// no site can forget, and this field says *why* rather than leaving a caller to guess from the
+    /// id. `None` for a repair that carries edits.
+    pub reason: Option<&'static str>,
 }
 
 #[derive(Clone, Debug)]
@@ -129,7 +143,22 @@ impl Diagnostic {
         self
     }
 
-    pub fn with_repair(mut self, repair: Repair) -> Self {
+    /// Attach a typed repair — the ONE path a repair reaches a diagnostic by, which is why the
+    /// editless-repair rule is enforced here rather than at each construction site (NE-07).
+    ///
+    /// A repair with no edits cannot be applied by anything, so it must not advertise otherwise:
+    /// `requires_human` is set on the way in. The `debug_assert` makes a site that forgot the
+    /// `reason` fail loudly in tests instead of shipping a flag with no explanation; in release the
+    /// normalization still holds, because failing closed matters more than being noisy.
+    pub fn with_repair(mut self, mut repair: Repair) -> Self {
+        if repair.edits.is_empty() {
+            debug_assert!(
+                repair.reason.is_some(),
+                "repair `{}` carries no edits and no reason — say why a human must decide",
+                repair.id
+            );
+            repair.requires_human = true;
+        }
         self.repairs.push(repair);
         self
     }

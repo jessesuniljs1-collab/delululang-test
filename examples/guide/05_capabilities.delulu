@@ -48,11 +48,16 @@ fn main(root: Root) ! {Net, Read, Write} {
     let reader = root.fs_read("./config")
     let writer = root.fs_write("./out")
     let client = root.http(["example.com"])
-    match read_config(reader, "./config/app.txt") {
+    // A PATH IS RELATIVE TO THE CAPABILITY, not to the working directory: `reader` is rooted at
+    // `./config`, so the file it reads is named `app.txt`. Writing `"./config/app.txt"` here would
+    // look for `./config/config/app.txt` and take the `Err` branch with no diagnostic — this
+    // example did exactly that until 2026-09-18, and printed "no config" forever (NE-03). The rule
+    // is the attenuation working: a capability cannot name anything outside its own scope.
+    match read_config(reader, "app.txt") {
         Ok(text) => out.println("config: " + text)
         Err(e) => out.println("no config")
     }
-    match save(writer, "./out/log.txt", "started") {
+    match save(writer, "log.txt", "started") {
         Ok(u) => out.println("wrote log")
         Err(e) => out.println("could not write")
     }

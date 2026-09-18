@@ -143,7 +143,8 @@ controls*. [designed]
 | **L3 `external`** | an operator-supplied launcher (Docker + gVisor, Kata, a cloud sandbox, Kubernetes, ssh) carrying the channel over stdio; the level is labelled `external` and the guarantees `unknown` unless attested | wherever the operator runs | designed; PS-D |
 | **L4 `attested`** | L2/L3 whose guest attests the pinned image before any lease is delegated | specific hardware | deferred; the seam is designed with a fake attester (PS-D-02) |
 
-**Machine-readable output** (`run --json`'s additive `sandbox` object; `delulu sandbox probe --json`
+**Machine-readable output** (the run report that `run --json --report-out <path>` writes, never the program's own standard
+output, which the program could forge (D-V2-21); `delulu sandbox probe --json`
 before running; `doctor` for the host) reports: requested level, actual level, backend, host
 capabilities, guarantees, limitations, resource limits and what remains, network posture,
 filesystem posture, identity posture, sandbox state, whether restrictions are fully enforced, and

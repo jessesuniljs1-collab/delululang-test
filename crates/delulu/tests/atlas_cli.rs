@@ -50,14 +50,40 @@ fn output_is_byte_identical_across_runs_every_format() {
 #[test]
 fn atlas_json_is_a_versioned_envelope_with_stable_ids() {
     let o = delulu(&["atlas", DEMO, "--format", "json"]);
-    let v: Value = serde_json::from_str(&stdout(&o)).expect("valid JSON");
+    let env: Value = serde_json::from_str(&stdout(&o)).expect("valid JSON");
+    // P1-02/NE-05: stdout is the documented `--json` envelope, and the versioned `atlas/1`
+    // document — unchanged, additive evolution only — rides inside it under `atlas`.
+    assert_eq!(env["command"], "atlas");
+    assert_eq!(env["schema"], 1);
+    assert!(env["delulu_version"].is_string());
+    assert!(env["diagnostics"].is_array());
+    assert_eq!(env["summary"]["errors"], 0);
+    let v = &env["atlas"];
     assert_eq!(v["atlas"], "atlas/1", "versioned envelope");
     assert_eq!(v["root"], "demo");
     assert!(v["nodes"].as_array().unwrap().iter().any(|n| n["id"] == "fn:demo/demo.main"));
     assert_eq!(v["custody"], Value::Null, "no overlay without --custody");
     // Round-trips through serde (re-serialize the parsed value equals the text's value).
-    let reparsed: Value = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
-    assert_eq!(reparsed, v);
+    let reparsed: Value = serde_json::from_str(&serde_json::to_string(v).unwrap()).unwrap();
+    assert_eq!(&reparsed, v);
+
+    // The `--out DIR` bundle still writes the BARE `atlas/1` document, because `delulu atlas
+    // <atlas.json>` reads it back — and that reader accepts the enveloped spelling too, so a
+    // caller who redirected `--format json` to a file is not stranded.
+    let dir = std::env::temp_dir().join(format!("delulu-atlas-envelope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let o = delulu(&["atlas", DEMO, "--out", dir.to_str().unwrap()]);
+    assert!(o.status.success(), "atlas --out: {}", stderr(&o));
+    let bare: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("atlas.json")).unwrap()).unwrap();
+    assert_eq!(bare["atlas"], "atlas/1", "the bundle file is the bare document");
+    let reread = delulu(&["atlas", dir.join("atlas.json").to_str().unwrap(), "--json"]);
+    assert!(reread.status.success(), "the bare file is readable: {}", stderr(&reread));
+    let enveloped = dir.join("enveloped.json");
+    std::fs::write(&enveloped, stdout(&reread)).unwrap();
+    let again = delulu(&["atlas", enveloped.to_str().unwrap(), "--json"]);
+    assert!(again.status.success(), "the ENVELOPED file is readable too: {}", stderr(&again));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -183,7 +209,8 @@ fn digest_honors_budget_through_the_binary() {
 
 #[test]
 fn atlas_authority_matches_delulu_authority_exactly() {
-    let atlas: Value = serde_json::from_str(&stdout(&delulu(&["atlas", DEMO, "--json"]))).unwrap();
+    let env: Value = serde_json::from_str(&stdout(&delulu(&["atlas", DEMO, "--json"]))).unwrap();
+    let atlas: Value = env["atlas"].clone();
     let authority: Value =
         serde_json::from_str(&stdout(&delulu(&["authority", DEMO, "--json"]))).unwrap();
     // The atlas embeds the authority report's compiler-computed fields verbatim; `delulu authority`
@@ -279,7 +306,8 @@ fn foreign_boundary_appears_in_atlas_json_with_nodes_and_edges() {
     let o = delulu(&["atlas", NUMPY, "--json"]);
     assert!(o.status.success(), "atlas on the numpy example: {}", stderr(&o));
     let s = stdout(&o);
-    let v: Value = serde_json::from_str(&s).expect("valid atlas/1 JSON");
+    let env: Value = serde_json::from_str(&s).expect("valid atlas/1 JSON");
+    let v: Value = env["atlas"].clone();
     // The Python module node.
     let numpy = v["nodes"]
         .as_array()

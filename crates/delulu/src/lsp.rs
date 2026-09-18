@@ -1100,7 +1100,11 @@ impl Server {
                 let mut action = json!({
                     "title": title,
                     "kind": "quickfix",
-                    "isPreferred": !widening && !r.requires_human,
+                    // NE-07: never preferred without an edit. `with_repair` already makes an
+                    // editless repair `requires_human`, and the rule is restated here because this
+                    // is where it is observable — an action a client can apply must have something
+                    // to apply.
+                    "isPreferred": !widening && !r.requires_human && !r.edits.is_empty(),
                     "diagnostics": [lsp_diagnostic(text, d)],
                     "data": {
                         "code": d.code,

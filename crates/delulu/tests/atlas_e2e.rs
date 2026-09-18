@@ -92,7 +92,8 @@ fn atlas_custody_overlay_live_then_degraded_end_to_end() {
 
     let o = delulu_state(&state, &["atlas", DEMO, "--custody", "--json"]);
     assert!(o.status.success(), "atlas --custody: {}", stderr(&o));
-    let v: Value = serde_json::from_str(&stdout(&o)).expect("atlas --custody --json is valid JSON");
+    let env: Value = serde_json::from_str(&stdout(&o)).expect("atlas --custody --json is valid JSON");
+    let v: Value = env["atlas"].clone();
     assert_eq!(v["atlas"], "atlas/1");
     // The overlay is present and carries the delegated grant.
     assert!(!v["custody"].is_null(), "custody overlay attached");
@@ -127,7 +128,9 @@ fn atlas_custody_overlay_live_then_degraded_end_to_end() {
     let e = stderr(&o);
     assert!(e.contains("DL1781"), "the degradation is a DL1781 note: {e}");
     assert!(e.contains("atlas emitted without it"), "the note says the atlas still ships: {e}");
-    let v: Value = serde_json::from_str(&stdout(&o)).expect("stdout is still the clean machine channel");
+    let env: Value =
+        serde_json::from_str(&stdout(&o)).expect("stdout is still the clean machine channel");
+    let v: Value = env["atlas"].clone();
     assert_eq!(v["atlas"], "atlas/1", "the atlas is emitted without the overlay");
     assert!(v["custody"].is_null(), "no overlay when the broker is down");
 

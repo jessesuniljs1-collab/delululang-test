@@ -738,6 +738,7 @@ impl<'a> Checker<'a> {
                             end_byte: span.end,
                             insert: target,
                         }],
+                        reason: None,
                     }),
                 );
                 return;
@@ -1037,12 +1038,21 @@ impl<'a> Checker<'a> {
                 .with_arg("fn", subj.desc.clone())
                 .with_arg("effect", list.clone())
                 .with_span(row.span, "declared here")
+                // NE-07: this repair has never carried edits, and the flags said otherwise.
+                // Narrowing a row is not a mechanical deletion — the effect may be declared
+                // because a caller is about to need it, or because the row is a published
+                // interface — so the decision is a person's and the flags now say so. Removing it
+                // NARROWS authority, which is why it is `safe` rather than `authority_widening`;
+                // the two are different questions and the answers stay separate.
                 .with_repair(Repair {
                     id: "remove_effect_from_row",
                     confidence: Confidence::Safe,
                     authority_widening: false,
-                    requires_human: false,
+                    requires_human: true,
                     edits: vec![],
+                    reason: Some(
+                        "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+                    ),
                 }),
             );
         }
@@ -1069,6 +1079,7 @@ impl<'a> Checker<'a> {
             authority_widening: true,
             requires_human: false,
             edits: vec![Edit { file: subj.head_span.file, start_byte: start, end_byte: end, insert: text }],
+            reason: None,
         }
     }
 
@@ -2655,6 +2666,7 @@ impl<'a> Checker<'a> {
                                 end_byte: prefix.end,
                                 insert: String::new(),
                             }],
+                            reason: None,
                         }),
                     );
                 }

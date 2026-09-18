@@ -226,10 +226,9 @@ pub fn cmd_keygen(rest: &[String]) -> i32 {
     let pub_path = key_path.with_extension("pub");
     let _ = std::fs::write(&pub_path, format!("{pubhex}\n"));
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
-            json!({ "command": "keygen", "key": key_path.display().to_string(), "public_key": pubhex })
+        crate::cli::print_success_envelope(
+            "keygen",
+            json!({ "key": key_path.display().to_string(), "public_key": pubhex }),
         );
     } else {
         println!("keygen: wrote {} (public key {pubhex})", key_path.display());
@@ -288,12 +287,11 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
     }
     let signer = delulu_runtime::public_key_hex(&seed);
     if json {
-        let mut obj = json!({ "command": "sign", "artifact": artifact, "signature": sig_path, "signer": signer });
+        let mut obj = json!({ "artifact": artifact, "signature": sig_path, "signer": signer });
         if hybrid {
             obj["algorithms"] = json!([delulu_runtime::pqc::ALG_ED25519, delulu_runtime::pqc::ALG_ML_DSA_65]);
         }
-        crate::cli::note_json_emitted();
-        println!("{obj}");
+        crate::cli::print_success_envelope("sign", obj);
     } else if hybrid {
         println!(
             "sign: wrote {sig_path} (signed by {signer}, hybrid {}+{})",
@@ -389,7 +387,7 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
         _ => "DL1705",
     };
     if json {
-        let mut obj = json!({ "command": command, "artifact": artifact, "verdict": verdict });
+        let mut obj = json!({ "artifact": artifact, "verdict": verdict });
         match status {
             SignatureStatus::Valid { signer } => {
                 obj["signer"] = json!(signer);
@@ -397,10 +395,12 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
             _ => {
                 obj["code"] = json!(code);
                 obj["detail"] = json!(detail);
+                // Anything but `Valid` exits nonzero, so the envelope must not report zero errors:
+                // a verdict string and an exit code that disagree is DRILL-001.
+                obj["summary"] = json!({ "errors": 1 });
             }
         }
-        crate::cli::note_json_emitted();
-        println!("{obj}");
+        crate::cli::print_success_envelope(command, obj);
     } else {
         match status {
             SignatureStatus::Valid { signer } => println!("verify-sig: {artifact} — valid, signed by {signer}"),
@@ -417,8 +417,13 @@ fn report_sig(command: &str, artifact: &str, status: &SignatureStatus, json: boo
 /// {reason}` line, or the JSON equivalent with a `code` field.
 fn report_refusal(command: &str, artifact: &str, code: &str, reason: &str, json: bool) {
     if json {
-        crate::cli::note_json_emitted();
-        println!("{}", json!({ "command": command, "artifact": artifact, "code": code, "error": reason }));
+        crate::cli::print_success_envelope(
+            command,
+            json!({
+                "artifact": artifact, "code": code, "error": reason,
+                "summary": { "errors": 1 },
+            }),
+        );
     } else {
         eprintln!("{code}: {artifact} — {reason}");
     }
@@ -475,8 +480,10 @@ pub fn cmd_login(rest: &[String]) -> i32 {
 
     if json {
         // The token itself is deliberately absent from the output.
-        crate::cli::note_json_emitted();
-        println!("{}", json!({ "command": "login", "registry": registry, "stored": path.display().to_string() }));
+        crate::cli::print_success_envelope(
+            "login",
+            json!({ "registry": registry, "stored": path.display().to_string() }),
+        );
     } else {
         println!("login: token stored for {registry}");
         println!("  credentials: {} (not echoed)", path.display());
@@ -575,15 +582,14 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     let have_token = registry.as_deref().map(|r| stored_token(r).is_some());
 
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
+        crate::cli::print_success_envelope(
+            "publish",
             json!({
-                "command": "publish", "mode": "dry-run", "name": name, "version": version,
+                "mode": "dry-run", "name": name, "version": version,
                 "signed": sig_present, "index_line": line,
                 "registry": registry, "authenticated": have_token,
                 "prior_version": prior.as_ref().and_then(|p| p.get("version").cloned()),
-            })
+            }),
         );
     } else {
         println!("publish --dry-run: {name} {version} is publishable");
@@ -630,10 +636,9 @@ pub fn cmd_add(rest: &[String]) -> i32 {
     let effects: Vec<&str> =
         line.get("effects").and_then(Value::as_array).map(|xs| xs.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
-            json!({ "command": "add", "name": pkg, "version": version, "authority": { "effects": effects }, "from": "index-line-only" })
+        crate::cli::print_success_envelope(
+            "add",
+            json!({ "name": pkg, "version": version, "authority": { "effects": effects }, "from": "index-line-only" }),
         );
     } else {
         println!("add: {pkg} {version}");
@@ -707,14 +712,15 @@ fn add_path_dependency(dir: &str, accept: bool, json: bool) -> i32 {
 
     if !effects.is_empty() && !accept {
         if json {
-            crate::cli::note_json_emitted();
-            println!(
-                "{}",
+            crate::cli::print_success_envelope(
+                "add",
                 json!({
-                    "command": "add", "name": name, "path": rel, "written": false,
+                    "name": name, "path": rel, "written": false,
                     "authority": { "effects": effects },
                     "refused": "granting authority to a dependency is a decision for a person",
-                })
+                    // Nothing was written and the exit below is 1.
+                    "summary": { "errors": 1 },
+                }),
             );
         } else {
             eprintln!("add: `{name}` needs authority you have not granted — nothing was written.");
@@ -749,13 +755,12 @@ fn add_path_dependency(dir: &str, accept: bool, json: bool) -> i32 {
     }
 
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
+        crate::cli::print_success_envelope(
+            "add",
             json!({
-                "command": "add", "name": name, "path": rel, "written": true,
+                "name": name, "path": rel, "written": true,
                 "authority": { "effects": effects },
-            })
+            }),
         );
     } else {
         println!("add: {name} (path {rel})");
@@ -812,8 +817,13 @@ fn read_index_line(index_dir: &str, name: &str) -> Option<Value> {
 
 fn report_publish(pkg: &str, code: &str, message: &str, json: bool) {
     if json {
-        crate::cli::note_json_emitted();
-        println!("{}", json!({ "command": "publish", "package": pkg, "code": code, "error": message }));
+        crate::cli::print_success_envelope(
+            "publish",
+            json!({
+                "package": pkg, "code": code, "error": message,
+                "summary": { "errors": 1 },
+            }),
+        );
     } else {
         eprintln!("{code}: {pkg} — {message}");
     }

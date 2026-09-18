@@ -1063,6 +1063,102 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         assert!(e.contains(&"DL1603".to_string()), "an explicit `ref` keeps its meaning: {e:?}");
     }
 
+    // ----- NE-02: the `val` container over `ref` contents ---------------------------------
+
+    /// NE-02. `let xs: val C = [ … ]` with a `ref` element was refused DL1603 with **no repair**, a
+    /// message that named nothing ("a fresh value whose contents forbid the lift"), and an
+    /// `explain DL1603` about a `val` closure capturing a `ref` — a different case. The rule is
+    /// right; everything that makes a rule learnable was missing.
+    ///
+    /// The refusal is unchanged in OUTCOME. What is tested here is that it now points at the
+    /// element, says why, and carries a way out.
+    #[test]
+    fn a_val_container_over_ref_contents_names_the_element_and_offers_a_repair() {
+        let src = "module m\nfn f() {\n let a: ref List[Int] = [1, 2]\n let rows: val List[List[Int]] = [a]\n}\n";
+        let c = check(src);
+        let d = c
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "DL1603")
+            .unwrap_or_else(|| panic!("the refusal must stand: {:?}", c.diagnostics));
+
+        // It says what the writer has to decide, not only that a rule was broken.
+        assert!(
+            d.message.contains("deeply immutable"),
+            "the message must say why a `val` container needs `val` contents: {}",
+            d.message
+        );
+        // It points at the element that forbids the lift. The primary span is the binding; the
+        // secondary one is the offending element, and a reader with ten elements needs that.
+        let blamed = d
+            .spans
+            .iter()
+            .find(|s| s.secondary)
+            .unwrap_or_else(|| panic!("the element must be pointed at: {:?}", d.spans));
+        assert!(
+            blamed.label.as_deref().unwrap_or("").contains("`ref`"),
+            "and the label must name its capability: {:?}",
+            blamed.label
+        );
+        let elem = &src[blamed.span.start as usize..blamed.span.end as usize];
+        assert_eq!(elem, "a", "the span must cover the element, not the whole literal");
+
+        // And a way out: `safe`, because deleting an annotation the author wrote is a judgement
+        // about intent — `delulu fix` applies only `exact` repairs and will not do this one.
+        let r = d
+            .repairs
+            .iter()
+            .find(|r| r.id == "drop-val-annotation")
+            .unwrap_or_else(|| panic!("a repair must be offered: {:?}", d.repairs));
+        assert_eq!(r.confidence, delulu_diag::Confidence::Safe);
+        assert!(!r.authority_widening, "dropping an rcap annotation is not an authority change");
+        assert_eq!(r.edits.len(), 1);
+        let e = &r.edits[0];
+        assert_eq!(
+            &src[e.start_byte as usize..e.end_byte as usize],
+            ": val List[List[Int]]",
+            "the WHOLE annotation goes: an annotated `List[List[Int]]` still defaults to `val`"
+        );
+        // The repair, applied, produces a program that checks. A repair that does not is worse than
+        // none, because it looks like progress.
+        let mut fixed = src.to_string();
+        fixed.replace_range(e.start_byte as usize..e.end_byte as usize, &e.insert);
+        let after = check(&fixed);
+        assert!(
+            !after.has_errors(),
+            "the repair must actually fix it — got {:?} for:\n{fixed}",
+            after.diagnostics
+        );
+    }
+
+    /// The control, and the reason the rule is not "reject `val` containers": a `val` container of
+    /// immutable data is accepted, and so is one built from a fresh literal, which lifts on its own.
+    #[test]
+    fn a_val_container_of_val_contents_is_still_accepted() {
+        let c = check("module m\nfn f() {\n let xs: val List[Int] = [1, 2, 3]\n}\n");
+        assert!(!c.has_errors(), "{:?}", c.diagnostics);
+        let c2 = check("module m\nfn f() {\n let rows: val List[List[Int]] = [[1], [2]]\n}\n");
+        assert!(!c2.has_errors(), "a fresh inner literal lifts: {:?}", c2.diagnostics);
+    }
+
+    /// The enrichment must not leak into the OTHER DL1603 cases. A `val` closure over a `ref`
+    /// capture is the case the explanation always described, and it has no element to blame and no
+    /// annotation whose removal would fix it.
+    #[test]
+    fn the_closure_case_keeps_its_own_shape() {
+        let c = check(
+            "module m\nfn g() {\n\
+             let xs: ref List[Int] = [1]\n\
+             let f: val fn() -> Int = fn() -> Int { xs.len() }\n}\n",
+        );
+        let d = c.diagnostics.iter().find(|d| d.code == "DL1603").expect("still DL1603");
+        assert!(
+            d.repairs.iter().all(|r| r.id != "drop-val-annotation"),
+            "the closure case must not be offered the container repair: {:?}",
+            d.repairs
+        );
+    }
+
     // ===== C12 · a diagnostic names the types it is about ==================================
     //
     // `Type::Record`/`Type::Sum` store a table INDEX, and the printer had no table, so every

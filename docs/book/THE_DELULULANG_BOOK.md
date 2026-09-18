@@ -270,6 +270,22 @@ command line: always `⊑`, always shrinking.
 `Root` is the origin: the single capability `main` receives, from which `console()`, `fs_read(path)`,
 `clock()`, `net(host)`, and the rest are derived — each derivation checked against what you granted.
 
+**A path you pass through a capability is relative to that capability, not to your working
+directory.** This is the one rule in this chapter that costs people an afternoon, because getting it
+wrong produces no diagnostic at all — only an `Err(IoErr)` your program probably reports as "file not
+found":
+
+```delulu
+let reader = root.fs_read("./config")
+reader.read_text("app.txt")            // reads ./config/app.txt      — right
+reader.read_text("./config/app.txt")   // looks under ./config/config — wrong, and silent
+```
+
+The scope *is* the root. That is what makes it an attenuation rather than a filter: a `Cap[FsRead]`
+for `./config` cannot name anything outside `./config`, and the containment resolver refuses `..`, a
+symlink pointing out, and a spelling that normalizes elsewhere. If you need two subtrees, mint two
+capabilities. `delulu explain E-DL0703` states the rule again at the point of failure.
+
 ### Secrets
 
 Some values must *flow through* your program without being *readable* by it — an API key you pass to
@@ -560,9 +576,23 @@ that never arrives.
 
 ## Chapter 10 — Plugins: Code That Arrives at Runtime and Still Can't Overreach
 
-Here is the demo that sells the language. A running program loads a plugin it has never seen —
-downloaded moments ago, written by a stranger or an AI — and the plugin **still cannot exceed the
-authority the host granted it.** Not by policy. By construction.
+> **Read this box before the chapter. The in-language LOAD surface is a runtime stub today.**
+> `root.plugin_host()` faults with `DL0703` — *"plugin hosting is not available in the Stage-1
+> runtime"* (`crates/delulu-runtime/src/prim.rs:366`), and no `--grant` spelling enables it. So the
+> program below **checks**, its authority **is reported** (plugin and load site included), and it
+> does **not run**. What is built and witnessed is everything around the load: building, verifying
+> and inspecting a `.dpx`; the class rules; re-checking a Verified plugin's DIR; the resource limits
+> on the live engine; and `delulu plugin verify` giving verdicts identical to a real load. What is
+> not built is a *running program* reaching for a plugin. The gap is
+> [`REMAINING_WORK.md`](../REMAINING_WORK.md) row 4.11 and is V2 phase **P2**
+> (`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`). Everything else in this chapter describes
+> mechanisms that exist; this sentence exists because the chapter used to read as though the demo
+> ran, and it did not.
+
+Here is the demo that will sell the language, and the shape it already has at the command line. A
+running program loads a plugin it has never seen — downloaded moments ago, written by a stranger or
+an AI — and the plugin **cannot exceed the authority the host granted it.** Not by policy. By
+construction.
 
 ```delulu
 let summarize = host.load[Verified](plugin_host, "summarize.dpx",
@@ -573,8 +603,9 @@ let result = f(document)                                 // pure transform, prov
 
 The plugin was granted an empty authority. `f`'s type is `fn(Str) -> Str ! {}` — pure. If the plugin
 tried to read a file, tell time, or reach the network, it would be **refused at load** — and the
-host's own authority is unchanged by loading it. You extended a running system with untrusted code
-and lost nothing.
+host's own authority is unchanged by loading it. That is the design, and the load-time checks it
+rests on are the ones `delulu plugin verify` runs today, with verdicts identical to a real load. The
+`load(...)` call itself does not execute yet: see the box at the top of this chapter.
 
 DeluluLang ships two plugin classes, and the difference is a *trust statement, not a quality ranking*:
 
@@ -591,10 +622,13 @@ DeluluLang ships two plugin classes, and the difference is a *trust statement, n
 And a plugin's grant is a **child node in the authority tree** (Chapter 15): unloading it revokes its
 authority; revoking the host cascades to every plugin it loaded. Resource limits (fuel, memory,
 wall-clock) are grant data — a runaway Contained plugin is *terminated and gone*, not wounded, without
-harming the host.
+harming the host. The limits are live on the Linux engine and witnessed by the Stage-6 library tests;
+the grant-tree child node arrives with the run-time load path in P2.
 
-This is what "authority-bounded" means when the code arrives after compile time: the same guarantee,
-the same `⊑`, the same tree — extended to the runtime frontier.
+This is what "authority-bounded" is designed to mean when the code arrives after compile time: the
+same guarantee, the same `⊑`, the same tree — extended to the runtime frontier. Today that frontier
+is reached through the CLI (`plugin build`, `verify`, `inspect`) and through the library tests, not
+from inside a running program.
 
 ---
 

@@ -165,6 +165,64 @@ here, this log says so and the archive is not edited.
   Offered to the owner, undecided: pulling P4b (`toolchain --json`, `schema`, `examples --json`)
   directly after P1, because they are what an untrained model learns the language from.
 
+## D-V2-19 — The DL0301 → DL0404 cascade is fixed by poison propagation, as follow-up P1-F1, not inside P1 — TAKEN (reversible)
+- **Evidence:** Entry P1, DECISIONS item 3: `unknown name f` (DL0301) is followed by "value of type
+  `'t0` is not callable" (DL0404), naming a type the source never writes;
+  `examples/greeter/src/main.delulu` reached as loose files yields the pair twice over. The naive
+  fix, suppressing DL0404 whenever the callee's type is an inference variable, would let
+  `fn apply[F](f: F, x: Int) { f(x) }` compile. That program is refused with a correct DL0404 today,
+  so the naive fix would change the accepted language.
+- **Alternatives:** leave the cascade (rejected: it is the NE-04 shape on the machine channel, where
+  an agent receives every diagnostic); the naive suppression (rejected: a language change); **poison
+  propagation**, where an inference variable created for a name that failed to resolve is marked as
+  born from an error and DL0404 is suppressed only when the callee's type is such a variable
+  (chosen).
+- **Why not inside P1:** it is a type-checker change in `delulu-check` (`check.rs`, blast radius 145
+  in the Survey) that P1's brief did not name. It deserves its own brief, witnesses and snapshot
+  review, and P1's verification is closed.
+- **Acceptance (P1-F1):** the cascade program yields DL0301 alone; `fn apply[F](f: F, x: Int) { f(x) }`
+  still yields DL0404; every conformance case keeps its outcome; the snapshot moves only diagnostic
+  counts in cases that contain the cascade; a mutant that suppresses on every inference variable
+  makes the generic witness fail.
+
+## D-V2-20 — The sous-chef's two judgements in P1 are confirmed — TAKEN
+- **`required_grants` does not list `exec.native`.** Head chef, on the P1 binary:
+  `authority tests/conformance/accept/25_attributes_hints.delulu --json` reports
+  `required_grants: ["console"]` while `native_emission` reads `{requested: true, via: "@jit"}`.
+  Invariant 45 (an attribute is a hint and changes nothing observable) holds, and the list stays
+  true: the program runs interpreted without that grant (DL1906). The request remains visible where
+  it already lived.
+- **`drop-val-annotation` removes the whole type annotation.** Head chef, on the NE-02 shape
+  (`let rows: val List[List[Int]] = [a]` with `a: ref List[Int]`): the repair's one edit removes
+  `: val List[List[Int]]`, and the program then checks clean. Removing only the keyword
+  (`let rows: List[List[Int]] = [a]`) still yields DL1603, "where `val` is required (binding)". The
+  repair is `safe`, not `exact`, so `delulu fix` lists it as a suggestion and does not apply it on
+  its own, which is the rule for every `safe` repair.
+
+## D-V2-21 — The `sandbox` object travels in a run report the runtime writes to a file, never on the program's standard output — TAKEN (reversible; re-specifies PS-0-02)
+- **Evidence:** under `--json`, `delulu run` keeps the program's own bytes as its standard output
+  (`crates/delulu/tests/json_contract.rs`, `NO_SUCCESS_SWEEP`). The effect trace already takes the
+  file route (`--trace-effects --trace-out <path>`, or standard error without a path). PS-0-02 as
+  first written put the `sandbox` object on the standard output of `run --json`.
+- **Alternatives:** the object on standard output (rejected: it interleaves with the program's
+  bytes, and **the program writes to standard output too, so it could print a counterfeit `sandbox`
+  object** claiming a confinement it does not have); standard error (rejected for the same reason:
+  the program writes there as well); **a report file named by a flag and written only by the
+  runtime** (chosen).
+- **The ruling:** (1) `delulu run --json --report-out <path>` writes one envelope
+  (`command: "run"`) to `<path>` carrying the `sandbox` object, the execution mode, the budgets and
+  the run's outcome, both when the program ran and when the run was refused before it started, so
+  the report exists in every outcome. (2) The program's standard output and standard error are
+  untouched; without `--report-out` nothing changes. (3) The report is the runtime's alone: a
+  `<path>` inside a scope the program is granted to write is refused before the program starts,
+  because a program must never be able to write, or redirect, the report of its own confinement.
+  PS-0 checks whether `--trace-out` needs the same rule. (4) Wherever a V2 document says the
+  `sandbox` object, the mode or the budgets appear "in `run --json`", it means this report. (5) The
+  spelling `--report-out` (unused today; it mirrors `--trace-out`) is PS-0's to confirm; PS-0's
+  success sweep drives `run` through it, and `run` leaves `NO_SUCCESS_SWEEP`.
+- **Why:** non-human users first (D-V2-18). An agent has to learn what confined a program from a
+  channel the program cannot forge.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
 D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,

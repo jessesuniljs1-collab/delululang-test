@@ -1455,3 +1455,52 @@ fn a_multi_root_workspace_indexes_every_folder_not_just_the_first() {
     c.shutdown();
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// NE-07, the editor half. DL0502's `remove_effect_from_row` carries **no edit**, and the server
+/// offered it as `isPreferred: true` anyway — a client that applies the preferred action would have
+/// applied nothing and reported success. An action a client can apply must have something to apply.
+#[test]
+fn a_code_action_with_no_edit_is_never_preferred() {
+    const UNUSED: &str = "module m\nfn main(root: Root) ! {Write} {\n    let x = 1\n}\n";
+    let mut c = Client::start();
+    c.open("file:///unused.delulu", UNUSED);
+    let diags = c.wait_diagnostics("file:///unused.delulu");
+    let d = diags
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["code"] == "DL0502")
+        .expect("DL0502 is published for a declared-but-unperformed effect")
+        .clone();
+
+    let actions = c.request(
+        "textDocument/codeAction",
+        json!({
+            "textDocument": { "uri": "file:///unused.delulu" },
+            "range": d["range"],
+            "context": { "diagnostics": [d] }
+        }),
+    );
+    let a = actions
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["data"]["repair_id"] == "remove_effect_from_row")
+        .expect("the DL0502 repair is offered");
+    assert!(a["edit"].is_null(), "this repair has no edit to offer: {a}");
+    assert_eq!(a["isPreferred"], false, "an action with no edit must not be preferred: {a}");
+    assert_eq!(a["data"]["requires_human"], true, "and its data says a human must decide: {a}");
+
+    // Every action the server offers, swept: no edit ⇒ not preferred. One action out of one is a
+    // property about that action; the sweep is the property about the server.
+    for a in actions.as_array().unwrap() {
+        if a["edit"].is_null() {
+            assert_eq!(
+                a["isPreferred"], false,
+                "`{}` has no edit and is marked preferred: {a}",
+                a["data"]["repair_id"]
+            );
+        }
+    }
+    c.shutdown();
+}

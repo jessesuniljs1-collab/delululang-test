@@ -118,18 +118,17 @@ fn cmd_deploy_plan(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     if json {
         let services_json: Vec<Value> =
             reports.iter().map(|(name, effects)| json!({ "name": name, "effects": effects })).collect();
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
+        crate::cli::print_success_envelope(
+            "deploy",
             json!({
-                "command": "deploy", "subcommand": "plan", "env": env_path, "approved": true,
+                "subcommand": "plan", "env": env_path, "approved": true,
                 "services": services_json,
                 // What the approval actually rests on. The module header has always recorded that
                 // this compares effects only; a caller reading `"approved": true` had no way to see
                 // it. An approval that does not carry its own scope is read as broader than it is —
                 // the C36 lesson (a mermaid graph away from its docs) applied to a security verdict.
                 "compared": COMPARED_DIMENSIONS, "not_compared": UNCOMPARED_DIMENSIONS,
-            })
+            }),
         );
     } else {
         for (name, effects) in &reports {
@@ -157,10 +156,12 @@ fn report_check_failure(env_path: &str, name: &str, dir: &str, json: bool) -> i3
     let message =
         format!("service `{name}` ({dir}) does not check cleanly — fix its errors before it can be part of a deployment plan");
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
-            json!({ "command": "deploy", "subcommand": "plan", "env": env_path, "approved": false, "error": message })
+        crate::cli::print_success_envelope(
+            "deploy",
+            json!({
+                "subcommand": "plan", "env": env_path, "approved": false, "error": message,
+                "summary": { "errors": 1 },
+            }),
         );
     } else {
         eprintln!("error: {message}");
@@ -190,13 +191,13 @@ fn report_ceiling_violation(env_path: &str, violations: &[(String, Vec<String>)]
     );
     let d = Diagnostic::error("DL1909", message);
     if json {
-        crate::cli::note_json_emitted();
-        println!(
-            "{}",
+        crate::cli::print_success_envelope(
+            "deploy",
             json!({
-                "command": "deploy", "subcommand": "plan", "env": env_path, "approved": false,
+                "subcommand": "plan", "env": env_path, "approved": false,
                 "code": d.code, "error": d.message,
-            })
+                "summary": { "errors": 1 },
+            }),
         );
     } else {
         eprint!("{}", render_human(&d, &SourceMap::new()));

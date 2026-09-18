@@ -1,6 +1,6 @@
 //! Command dispatch and the four Stage-1 commands (§9.5).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use delulu_check::{
     authority_report, authority_widened, check_pins, check_program, check_self_authority,
@@ -230,6 +230,11 @@ pub(crate) struct Opts {
     pub(crate) accept_authority: Vec<String>,
     /// `--diff <old.lock>`: for `authority`, the previous lockfile to diff against (§8).
     pub(crate) diff: Option<String>,
+    /// `--grants`: for `authority`, print the exact `--grant` flags this program needs (NE-10).
+    ///
+    /// Deliberately NOT `grants`, which is the LIST OF GRANTS a caller passed with `--grant`. Two
+    /// fields one letter apart would be a trap, and this one only asks a question.
+    pub(crate) show_grants: bool,
     /// `--trace-effects`: emit one JSON trace record per effectful operation (spec §6.1).
     pub(crate) trace_effects: bool,
     /// `--trace-out <file>`: write the trace there instead of stderr.
@@ -343,6 +348,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         locked: false,
         accept_authority: Vec::new(),
         diff: None,
+        show_grants: false,
         trace_effects: false,
         trace_out: None,
         assert_trace: false,
@@ -642,6 +648,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--sign=") => opts.sign = Some(s["--sign=".len()..].to_string()),
+            "--grants" => opts.show_grants = true,
             "--grant" => {
                 if i + 1 < rest.len() {
                     opts.grants.push(rest[i + 1].clone());
@@ -905,7 +912,14 @@ fn run_inner(args: &[String]) -> i32 {
             0
         }
         "--version" | "-V" => {
-            println!("delulu {}", env!("CARGO_PKG_VERSION"));
+            // `--version --json` printed the human line and exited 0 (NE-05): a caller that asked
+            // the machine channel for the toolchain version got prose. `delulu_version` is already
+            // an envelope field, so the answer is the envelope itself.
+            if rest.iter().any(|a| a == "--json") || args.iter().any(|a| a == "--json") {
+                print_success_envelope("version", json!({}));
+            } else {
+                println!("delulu {}", env!("CARGO_PKG_VERSION"));
+            }
             0
         }
         other => {
@@ -1045,7 +1059,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --adapter-artifact PATH names WHICH bytes were signed (an interpreter-hosted driver\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 names the interpreter in --adapter-cmd, not the driver), and --adapter-signer HEX pins\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53)\n\
-     \x20 delulu authority <file.delulu | package-dir> [--json]\n\
+     \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
      \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]
@@ -1104,6 +1118,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--locale en-US|delulu-slang]  (env DELULU_LOCALE; human prose only — codes & JSON never change)\n\
      \n\
      `delulu authority` prints the compiler-computed answer to \"what can this program do?\"\n\
+     `delulu authority --grants` prints the exact `--grant` flags a program needs to run — a requirement, not a permission (an UPPERCASE word is a placeholder you fill in).\n\
      `delulu authority --diff` compares two lockfile states and reports authority widening.\n\
      `delulu why <Effect>` explains, at function granularity, why a program can perform an\n\
      effect — the shortest chain of calls from `main` down to the function that performs it.\n\
@@ -1316,9 +1331,14 @@ fn cmd_fmt(args: &[String]) -> i32 {
             "changed": changed,
             "unchanged": unchanged,
             "refused": refused,
+            // The exit below is 1 exactly when `--check` found a file that would change or a file
+            // the parser refused, so `summary.errors` counts those and nothing else: a verdict and
+            // an exit code that disagree is the defect DRILL-001 is on record for.
+            "summary": {
+                "errors": if check { changed.len() } else { 0 } + refused.len(),
+            },
         });
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_success_envelope("fmt", report);
     } else if check {
         for f in &changed {
             println!("would reformat: {f}");
@@ -1390,8 +1410,7 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
             "files_changed": changed,
             "renames": total_renames,
         });
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_success_envelope("fmt", report);
     } else if total_renames == 0 {
         println!("migrate 0.7: nothing to do ({} file(s) scanned)", files.len());
     } else {
@@ -1486,11 +1505,28 @@ fn cmd_test(rest: &[String]) -> i32 {
         i += 1;
     }
     if paths.is_empty() {
-        let default = std::path::PathBuf::from("tests");
-        if default.is_dir() {
-            paths.push(default);
+        // Inside a package, bare `delulu test` means "test this package" (NE-09).
+        //
+        // `delulu new hello` scaffolds a package whose one test lives in `src/main.delulu`, prints
+        // `delulu test .` in its own next steps — and bare `delulu test` then exited **2** with
+        // "no ./tests directory here". The first command a new user runs after the scaffold said
+        // the scaffold was wrong. `new_cli.rs` had recorded the trap and fixed the printed
+        // instructions rather than the default, which left the tool disagreeing with every other
+        // package tool a person arrives with.
+        //
+        // The package is the target because that is what `delulu test .` already collected: every
+        // `.delulu` under it, `tests/` included, so a package that keeps its tests in `tests/` runs
+        // at least what it ran before. Outside a package there is nothing to infer and the refusal
+        // is unchanged — guessing a directory would be worse than asking.
+        let here = std::path::Path::new(".");
+        let tests_dir = std::path::PathBuf::from("tests");
+        if here.join("delulu.toml").is_file() {
+            paths.push(here.to_path_buf());
+        } else if tests_dir.is_dir() {
+            paths.push(tests_dir);
         } else {
-            eprintln!("error: `delulu test` needs test files/directories (no ./tests directory here)");
+            eprintln!("error: `delulu test` needs test files/directories (no `delulu.toml` and no ./tests directory here)");
+            eprintln!("note: `delulu test <file|dir>`, or run it inside a package");
             return 2;
         }
     }
@@ -1523,6 +1559,12 @@ fn cmd_test(rest: &[String]) -> i32 {
 
     let seed_base = seed_flag.unwrap_or(0xDE1);
     let mut reports: Vec<Json> = Vec::new();
+    // NE-08: the envelope said `{"file": …, "status": "check-failed"}` and the DL render went to
+    // **stderr**, so the machine channel named a failure and withheld its cause; a ceiling failure
+    // carried a message string with the code spliced into prose and no span, code field or repair.
+    // The diagnostics belong where the contract says diagnostics live, and under `--json` nothing
+    // human-rendered goes to stderr at all.
+    let mut diags_json: Vec<Json> = Vec::new();
     let mut failed = 0usize;
     let mut passed = 0usize;
     let t_all = std::time::Instant::now();
@@ -1534,9 +1576,14 @@ fn cmd_test(rest: &[String]) -> i32 {
         };
         let checked = check_source(id, &src);
         if errors(&checked.diagnostics) > 0 {
-            print_diagnostics("test", &checked.diagnostics, &map, None, false);
+            if json {
+                diags_json.extend(diagnostics_json(&checked.diagnostics, &map));
+            } else {
+                print_diagnostics("test", &checked.diagnostics, &map, None, false);
+            }
             reports.push(json!({
                 "file": f.display().to_string(), "status": "check-failed",
+                "errors": errors(&checked.diagnostics),
             }));
             failed += 1;
             continue;
@@ -1589,10 +1636,18 @@ fn cmd_test(rest: &[String]) -> i32 {
                     ),
                 )
                 .with_span(delulu_diag::Span::new(id, t.name_span.start, t.name_span.end), "narrow the row, or widen delulu.toml's [test-authority] — a real review decision");
-                print_diagnostics("test", &[d], &map, None, false);
+                if json {
+                    diags_json.extend(diagnostics_json(std::slice::from_ref(&d), &map));
+                } else {
+                    print_diagnostics("test", std::slice::from_ref(&d), &map, None, false);
+                }
                 reports.push(json!({
                     "name": t.name, "file": f.display().to_string(),
-                    "status": "fail", "failure": { "message": format!("DL1703: effect `{excess}` exceeds the test ceiling") },
+                    "status": "fail",
+                    "failure": {
+                        "code": "DL1703",
+                        "message": format!("DL1703: effect `{excess}` exceeds the test ceiling"),
+                    },
                     "effects_traced": [],
                 }));
                 failed += 1;
@@ -1699,16 +1754,19 @@ fn cmd_test(rest: &[String]) -> i32 {
     };
 
     if json {
-        note_json_emitted();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "delulu_version": env!("CARGO_PKG_VERSION"), "schema": 1, "command": "test",
+        print_success_envelope(
+            "test",
+            json!({
                 "tests": reports,
-                "summary": { "passed": passed, "failed": failed, "ms": t_all.elapsed().as_millis() as u64 },
+                "diagnostics": diags_json,
+                // `errors` is the field a caller branches on before reading anything else, and the
+                // exit code below is 1 exactly when `failed > 0`, so the two agree by construction.
+                "summary": {
+                    "passed": passed, "failed": failed, "errors": failed,
+                    "ms": t_all.elapsed().as_millis() as u64,
+                },
                 "custody": custody,
-            }))
-            .unwrap()
+            }),
         );
     } else {
         println!("test result: {} passed, {} failed", passed, failed);
@@ -1867,14 +1925,13 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 return 2;
             }
             if json {
-                note_json_emitted();
-                println!(
-                    "{}",
+                print_success_envelope(
+                    "locale",
                     json!({
                         "command": "locale", "subcommand": "add", "locale": cat.locale,
                         "entries": cat.len(), "coverage": cat.coverage,
                         "warnings": cat_warnings.len(),
-                    })
+                    }),
                 );
             } else {
                 ok_line!(
@@ -1943,8 +2000,10 @@ fn cmd_locale(rest: &[String]) -> i32 {
                 }
             }
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "locale", "subcommand": "list", "locales": rows }));
+                print_success_envelope(
+                    "locale",
+                    json!({ "command": "locale", "subcommand": "list", "locales": rows }),
+                );
             } else {
                 for r in &rows {
                     let b = if r["builtin"].as_bool().unwrap_or(false) { " (built-in)" } else { "" };
@@ -1989,8 +2048,7 @@ fn cmd_morph(rest: &[String]) -> i32 {
                         serde_json::json!({ "morph": id, "path": path.display().to_string() })
                     })
                     .collect();
-                note_json_emitted();
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "morphs": arr })).unwrap());
+                print_success_envelope("morph", json!({ "subcommand": "list", "morphs": arr }));
                 return 0;
             }
             if found.is_empty() {
@@ -2028,14 +2086,13 @@ fn cmd_morph(rest: &[String]) -> i32 {
                     .entries()
                     .map(|(c, a)| serde_json::json!({ "canonical": c, "alias": a }))
                     .collect();
-                note_json_emitted();
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
+                print_success_envelope(
+                    "morph",
+                    json!({
+                        "subcommand": "info",
                         "morph": m.id, "name": m.name, "version": m.version,
                         "kind": m.kind.name(), "keywords": kw
-                    }))
-                    .unwrap()
+                    }),
                 );
                 return 0;
             }
@@ -2278,8 +2335,7 @@ fn authority_artifact(file: &str, opts: &Opts) -> i32 {
             "authority": artifact.authority,
             "summary": { "effects": effects.len(), "secrets": secrets.len(), "errors": 0 },
         });
-        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
-        note_json_emitted();
+        print_success_envelope("authority", report);
         return 0;
     }
     println!("Authority of `{file}` — a COMPILED ARTIFACT's own embedded manifest, re-verified:");
@@ -2327,6 +2383,91 @@ static JSON_EMITTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 
 pub(crate) fn note_json_emitted() {
     JSON_EMITTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Build a **success** envelope: the five documented fields (`command`, `schema`,
+/// `delulu_version`, `diagnostics`, `summary`) with the command's own report merged in beside
+/// them.
+///
+/// `docs/for-agents.md` [agents.json-envelope] promises the same object on success as on failure,
+/// and only the failure half was ever gated. Verification finding **NE-05** drove eight commands by
+/// hand: `why` printed a bare `{effect, path, performs}`, `plugin inspect` printed `command` and
+/// nothing else, `--version --json` printed text — so a caller could not read `summary.errors`,
+/// which is the documented definition of "this passed", from any of them.
+///
+/// `report`'s keys are merged at the TOP level, which makes this strictly additive: every field an
+/// existing caller reads stays exactly where it was and keeps its meaning, and the missing contract
+/// fields appear beside it. A report that wants its own namespace passes a single-key object
+/// (`explain`, `atlas`).
+///
+/// Three keys are handled rather than merged blindly:
+/// - `command`, `schema` and `delulu_version` are the envelope's own and a report cannot change them;
+/// - `diagnostics` from the report wins when it is an array, so a command that has diagnostics to
+///   report (`test`) carries them where the contract says they live;
+/// - `summary` is merged key by key with the report winning, so a command whose verdict is not
+///   counted in errors and warnings (`test`'s `passed`/`failed`/`ms`) keeps its own fields and can
+///   state `errors` itself. **A command whose exit code can be nonzero on this path must set
+///   `summary.errors`**: a verdict string and an exit code that disagree is the defect on record in
+///   `docs/security/DRILL-001.md`, and `summary.errors == 0` is the documented definition of "this
+///   passed". `json_contract.rs` gates both directions.
+///
+/// The five-field guarantee lives in one helper rather than at each of the emitters for the reason
+/// this campaign keeps relearning: a rule enforced at every site is a rule the next site forgets.
+/// The gate is `every_json_success_emits_the_documented_envelope`, in
+/// `crates/delulu/tests/json_contract.rs`.
+pub(crate) fn success_envelope(command: &str, report: Json) -> Json {
+    let map = SourceMap::new();
+    let base = delulu_diag::envelope(command, &[], None, &map);
+    let mut out = serde_json::Map::new();
+    if let Some(src) = report.as_object() {
+        for (k, v) in src {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    let mut summary = report.get("summary").cloned().unwrap_or_else(|| json!({}));
+    if let Some(b) = base.as_object() {
+        for (k, v) in b {
+            match k.as_str() {
+                "summary" => {
+                    if let (Some(dst), Some(src)) = (summary.as_object_mut(), v.as_object()) {
+                        for (sk, sv) in src {
+                            dst.entry(sk.clone()).or_insert_with(|| sv.clone());
+                        }
+                    }
+                }
+                // The report's own diagnostics, where it has any, are the contract's array.
+                "diagnostics" if report.get("diagnostics").is_some_and(Json::is_array) => {}
+                _ => {
+                    out.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
+    out.insert("summary".into(), summary);
+    Json::Object(out)
+}
+
+/// The already-positioned `diagnostics` array for a set of diagnostics under one source map.
+///
+/// `test` walks many files, each with its own `SourceMap`, so it cannot hand a single map to the
+/// envelope builder; it serializes per file and concatenates. Spans stay byte-exact because each
+/// batch is positioned against the map it came from.
+pub(crate) fn diagnostics_json(diags: &[Diagnostic], map: &SourceMap) -> Vec<Json> {
+    delulu_diag::envelope("", diags, None, map)["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Print [`success_envelope`] on stdout and record that an envelope was emitted, so the nonzero
+/// fallback in [`run`] can never double-report.
+pub(crate) fn print_success_envelope(command: &str, report: Json) {
+    note_json_emitted();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&success_envelope(command, report))
+            .expect("the success envelope serializes")
+    );
 }
 
 pub(crate) fn print_diagnostics(command: &str, diags: &[Diagnostic], map: &SourceMap, authority: Option<Json>, json: bool) {
@@ -2514,6 +2655,11 @@ fn cmd_authority(rest: &[String]) -> i32 {
     stamp_isolation(&mut report, &opts);
     stamp_plugins(&mut report, &checked.module, &file, &map);
     stamp_native_emission(&mut report, &checked.module);
+    stamp_grants(&mut report, &[&checked.module]);
+    if opts.show_grants && !opts.json {
+        print!("{}", render_required_grants(&report));
+        return 0;
+    }
     if opts.json {
         note_json_emitted();
         println!("{}", envelope_to_string("authority", &[], Some(report), &map));
@@ -2521,6 +2667,372 @@ fn cmd_authority(rest: &[String]) -> i32 {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+/// `delulu authority <file> --grants`: the exact `--grant` flags, one per line, ready to paste.
+///
+/// NE-10: the archive's `INSTALL.txt` said *"Run `delulu authority <file>` first and the required
+/// grants are the list it prints"* and the report printed no such list — the grammar lived only in
+/// `crates/delulu-runtime/src/broker.rs`, or could be discovered by provoking `DL0703` one flag at
+/// a time. The lines below are the answer to "what do I type to run this?", and they are a
+/// REQUIREMENT, never a permission: printing them grants nothing.
+fn render_required_grants(report: &Json) -> String {
+    let grants: Vec<&str> = report["required_grants"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let mut out = String::new();
+    if grants.is_empty() {
+        out.push_str("(no grants needed — this program is provably pure)\n");
+        return out;
+    }
+    out.push_str("Grants `");
+    out.push_str(report["program"].as_str().unwrap_or("?"));
+    out.push_str("` requires — what to type, not what it has been given:\n");
+    for g in &grants {
+        out.push_str("  --grant ");
+        out.push_str(g);
+        out.push('\n');
+    }
+    // An UPPERCASE placeholder is a shape to fill in, and saying so once is cheaper than a reader
+    // pasting `fs.read=PATH` and watching it fail.
+    const PLACEHOLDERS: [&str; 7] = ["PATH", "HOST", "VALUE", "DEVICE", "PATTERN", "LOGICAL", "DIM"];
+    if grants.iter().any(|g| PLACEHOLDERS.iter().any(|p| g.contains(p))) {
+        out.push_str(
+            "\nAn UPPERCASE word is a placeholder the program does not name in its source — you \
+             choose the value. A scope shown as written is what the program ASKS for; what it \
+             receives is your decision.\n",
+        );
+    }
+    out
+}
+
+/// A read-only AST walk collecting the literal scope arguments a program writes at its
+/// capability-minting sites, per resource kind (verification findings NE-10 and NE-14).
+///
+/// `delulu authority agent_tool.delulu` printed `FsRead  (scope granted at runtime)` and
+/// `"scopes": []` for a program whose source says `root.fs_read("./config")` and
+/// `root.http(["example.com"])` in as many words, and the Atlas dropped them the same way. The
+/// information was never missing — nothing read it.
+///
+/// **These are REQUESTED scopes, never granted ones**, and the two are not the same claim: kind is
+/// static and scope is runtime (`docs/for-agents.md` [agents.effects]). What a program asks for is
+/// in its text; what it receives is the operator's decision, and only `scopes` — computed from the
+/// manifest and the grant — may be read as the second. A computed argument (`root.fs_read(dir)`)
+/// is simply absent here: this walk reports literals and never guesses.
+struct ScopeWalk {
+    found: BTreeMap<String, Vec<String>>,
+}
+
+impl ScopeWalk {
+    fn record(&mut self, kind: &str, lit: &str) {
+        let slot = self.found.entry(kind.to_string()).or_default();
+        if !slot.iter().any(|s| s == lit) {
+            slot.push(lit.to_string());
+        }
+    }
+
+    fn walk_block(&mut self, b: &delulu_syntax::ast::Block) {
+        for s in &b.stmts {
+            self.walk_stmt(s);
+        }
+    }
+
+    fn walk_stmt(&mut self, s: &delulu_syntax::ast::Stmt) {
+        use delulu_syntax::ast::Stmt::*;
+        match s {
+            Let { value, .. } => self.walk_expr(value),
+            Assign { value, .. } => self.walk_expr(value),
+            While { cond, body, .. } => {
+                self.walk_expr(cond);
+                self.walk_block(body);
+            }
+            For { iter, body, .. } => {
+                self.walk_expr(iter);
+                self.walk_block(body);
+            }
+            Break { .. } | Continue { .. } => {}
+            Return { value, .. } => {
+                if let Some(e) = value {
+                    self.walk_expr(e);
+                }
+            }
+            Expr(e) => self.walk_expr(e),
+        }
+    }
+
+    fn walk_expr(&mut self, e: &delulu_syntax::ast::Expr) {
+        use delulu_syntax::ast::Expr::*;
+        match e {
+            Method { recv, name, args, .. } => {
+                self.walk_expr(recv);
+                for a in args {
+                    self.walk_expr(a);
+                }
+                // The receiver is the `Root` slice by NAME, not by type: this walk runs on the
+                // parsed module beside `stamp_plugins`, and the name is what the source shows. A
+                // shadowed binding would over-report rather than under-report, which is the safe
+                // direction for a field labelled *requested*.
+                let is_root = matches!(&**recv, Var { path, .. }
+                    if path.segs.len() == 1 && path.segs[0].name == "root");
+                if !is_root {
+                    return;
+                }
+                let kind = match name.name.as_str() {
+                    "fs_read" => "FsRead",
+                    "fs_write" => "FsWrite",
+                    "http" => "Http",
+                    "sensor" => "Sensor",
+                    "actuator" => "Actuator",
+                    "compute" => "Compute",
+                    "secret" => "Secret",
+                    "python" => "Python",
+                    "foreign" => "ForeignLoad",
+                    _ => return,
+                };
+                let Some(first) = args.first() else { return };
+                match first {
+                    List { items, .. } => {
+                        for it in items {
+                            if let Some(s) = literal_str(it) {
+                                self.record(kind, &s);
+                            }
+                        }
+                    }
+                    other => {
+                        if let Some(s) = literal_str(other) {
+                            self.record(kind, &s);
+                        }
+                    }
+                }
+            }
+            List { items, .. } => items.iter().for_each(|it| self.walk_expr(it)),
+            Record { fields, .. } => fields.iter().for_each(|(_, v)| self.walk_expr(v)),
+            Call { callee, args, .. } => {
+                self.walk_expr(callee);
+                args.iter().for_each(|a| self.walk_expr(a));
+            }
+            Field { recv, .. } => self.walk_expr(recv),
+            Index { recv, index, .. } => {
+                self.walk_expr(recv);
+                self.walk_expr(index);
+            }
+            Unary { operand, .. } => self.walk_expr(operand),
+            Binary { lhs, rhs, .. } => {
+                self.walk_expr(lhs);
+                self.walk_expr(rhs);
+            }
+            If { cond, then_, else_, .. } => {
+                self.walk_expr(cond);
+                self.walk_block(then_);
+                if let Some(e) = else_ {
+                    self.walk_expr(e);
+                }
+            }
+            Match { scrutinee, arms, .. } => {
+                self.walk_expr(scrutinee);
+                arms.iter().for_each(|a| self.walk_expr(&a.body));
+            }
+            Lambda { body, .. } => self.walk_block(body),
+            Try { inner, .. } => self.walk_expr(inner),
+            Block(b) => self.walk_block(b),
+            Spawn { args, .. } => args.iter().for_each(|a| self.walk_expr(a)),
+            Recover { body, .. } => self.walk_block(body),
+            Lit { .. } | Var { .. } | Consume { .. } => {}
+        }
+    }
+}
+
+fn requested_scopes(modules: &[&delulu_syntax::ast::Module]) -> BTreeMap<String, Vec<String>> {
+    let mut w = ScopeWalk { found: BTreeMap::new() };
+    for m in modules {
+        for item in &m.items {
+            match item {
+                Item::Fn(f) => w.walk_block(&f.body),
+                Item::Test(t) => w.walk_block(&t.body),
+                Item::Const(c) => w.walk_expr(&c.value),
+                Item::Actor(a) => {
+                    w.walk_block(&a.ctor.body);
+                    for b in &a.behaviors {
+                        w.walk_block(&b.body);
+                    }
+                    for f in &a.fns {
+                        w.walk_block(&f.body);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for v in w.found.values_mut() {
+        v.sort();
+        v.dedup();
+    }
+    w.found
+}
+
+/// The exact `--grant` flags this program needs, derived from its own authority report.
+///
+/// NE-10: the grant grammar was discoverable only by reading `crates/delulu-runtime/src/broker.rs`
+/// or by provoking `DL0703` one flag at a time, while the shipped `INSTALL.txt` told an operator
+/// *"Run `delulu authority <file>` first and the required grants are the list it prints."* It was
+/// not. This is what makes that sentence true.
+///
+/// Where a scope is visible in the source the flag is spelled with it; where it is not, the flag
+/// carries its placeholder (`fs.read=PATH`) — a shape to fill in, not a value to copy. The list is
+/// what the program **requires**, never what it has been granted: nothing here reports a decision
+/// the operator has not made.
+fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    fn push(out: &mut Vec<String>, s: String) {
+        if !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    let scopes_for = |kind: &str, placeholder: &str| -> Vec<String> {
+        let mut all: Vec<String> = report["capabilities"]
+            .as_array()
+            .map(|caps| {
+                caps.iter()
+                    .filter(|c| c["kind"] == kind)
+                    .flat_map(|c| c["scopes"].as_array().cloned().unwrap_or_default())
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for s in requested.get(kind).cloned().unwrap_or_default() {
+            if !all.contains(&s) {
+                all.push(s);
+            }
+        }
+        if all.is_empty() {
+            vec![placeholder.to_string()]
+        } else {
+            all
+        }
+    };
+
+    let kinds: Vec<String> = report["capabilities"]
+        .as_array()
+        .map(|caps| caps.iter().filter_map(|c| c["kind"].as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+    let effects: Vec<String> = report["effects"]
+        .as_array()
+        .map(|es| es.iter().filter_map(|e| e.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+
+    for k in &kinds {
+        match k.as_str() {
+            "Console" => push(&mut out, "console".into()),
+            "Clock" => push(&mut out, "clock".into()),
+            "Rand" => push(&mut out, "rand".into()),
+            "FsRead" => {
+                for s in scopes_for("FsRead", "PATH") {
+                    push(&mut out, format!("fs.read={s}"));
+                }
+            }
+            "FsWrite" => {
+                for s in scopes_for("FsWrite", "PATH") {
+                    push(&mut out, format!("fs.write={s}"));
+                }
+            }
+            "Http" => {
+                for s in scopes_for("Http", "HOST") {
+                    push(&mut out, format!("net={s}"));
+                }
+            }
+            "Actuator" => {
+                for s in requested.get("Actuator").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                    push(&mut out, format!("actuator={s}:DIM=lo..hi"));
+                }
+            }
+            "Sensor" => {
+                for s in requested.get("Sensor").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                    push(&mut out, format!("sensor={s}"));
+                }
+            }
+            "Compute" => {
+                for s in requested.get("Compute").cloned().unwrap_or_else(|| vec!["DEVICE".into()]) {
+                    push(&mut out, format!("compute={s}:memory_bytes=N"));
+                }
+            }
+            _ => {}
+        }
+    }
+    // `Declassify` is reported as an effect, not as a capability line (spec §6), so it is read from
+    // there — the one exception a reader would otherwise have to know.
+    if effects.iter().any(|e| e == "Declassify") {
+        push(&mut out, "declassify".into());
+    }
+    for s in report["secrets"].as_array().cloned().unwrap_or_default() {
+        if let Some(name) = s.as_str() {
+            push(&mut out, format!("secret:{name}=VALUE"));
+        }
+    }
+    // The two foreign flags come from the foreign section, because that is where a program's holes
+    // in the proof are enumerated (spec §6) and nowhere else. The section carries three `abi`s —
+    // `c`, `python` and `compute` — and only the first two are grants; `compute` already produced
+    // its flag from the capability line above, so it must not also be read as a C library.
+    for fc in report["foreign_calls"].as_array().cloned().unwrap_or_default() {
+        match fc["abi"].as_str() {
+            Some("python") => {
+                let allow: Vec<String> = fc["allowlist"]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                    .unwrap_or_default();
+                // The manifest's allowlist is the authoritative answer; without one, the modules the
+                // program statically imports are what it is asking for. `PATTERN` only when neither
+                // is known, because a placeholder that could have been a real name is a worse
+                // answer than the name.
+                let seen: Vec<String> = fc["imports_seen"]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                    .unwrap_or_default();
+                let pats = if !allow.is_empty() {
+                    allow
+                } else if !seen.is_empty() {
+                    seen
+                } else {
+                    vec!["PATTERN".into()]
+                };
+                for p in pats {
+                    push(&mut out, format!("foreign.python={p}"));
+                }
+            }
+            Some("compute") => {}
+            _ => {
+                let lib = fc["lib"].as_str().unwrap_or("LOGICAL");
+                push(&mut out, format!("foreign.c={lib}:PATH"));
+            }
+        }
+    }
+    // `exec.native` is deliberately NOT here. A `@jit` hint does not make a program need the grant:
+    // without it the program runs interpreted and says so with a DL1906 note (invariant 45 — a hint
+    // may not change what a program may do, and `required_grants` is part of the authority report).
+    // Claiming it as required would be an overstatement, and `attributes_cli.rs`'s twin test catches
+    // exactly that. The request is already reported, as `native_emission.requested`, which is where
+    // a caller reads it and where the grant grammar stays discoverable from the report.
+    out
+}
+
+/// Stamp `requested_scopes` (per capability and as a top-level map) and `required_grants` onto an
+/// authority report. Strictly additive: no existing field changes type or meaning (NE-10, NE-14).
+fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
+    let requested = requested_scopes(modules);
+    if let Some(caps) = report["capabilities"].as_array_mut() {
+        for c in caps.iter_mut() {
+            let kind = c["kind"].as_str().unwrap_or("").to_string();
+            let v = requested.get(&kind).cloned().unwrap_or_default();
+            if let Some(obj) = c.as_object_mut() {
+                obj.insert("requested_scopes".into(), json!(v));
+            }
+        }
+    }
+    let grants = required_grants(report, &requested);
+    if let Some(obj) = report.as_object_mut() {
+        obj.insert("requested_scopes".into(), json!(requested));
+        obj.insert("required_grants".into(), json!(grants));
+    }
 }
 
 /// Stamp the `plugins` array on an authority report (Stage 6 "Live", spec §6): the runtime plugins
@@ -3171,14 +3683,13 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
                 _ => None,
             };
             if opts.json {
-                note_json_emitted();
-                println!(
-                    "{}",
+                print_success_envelope(
+                    "plugin",
                     json!({
                         "command": "plugin", "subcommand": "verify", "artifact": file,
                         "class": report.class.as_str(), "verdict": "ok",
                         "exports": report.exports, "signed_by": signed_by,
-                    })
+                    }),
                 );
             } else {
                 let sig_note = signed_by.as_deref().map(|s| format!(", signed by {s}")).unwrap_or_default();
@@ -3353,9 +3864,8 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     }
     if opts.json {
         // Machine channel: never styled; deterministic (BTreeMap-ordered exports, sorted keys).
-        note_json_emitted();
-        println!(
-            "{}",
+        print_success_envelope(
+            "plugin",
             json!({
                 "command": "plugin", "subcommand": "build",
                 "artifact": out_path, "bytes": dpx.len(),
@@ -3471,9 +3981,8 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
     let null = Json::Null;
     let get = |k: &str| dpx.manifest.get(k).unwrap_or(&null).clone();
     if opts.json {
-        note_json_emitted();
-        println!(
-            "{}",
+        print_success_envelope(
+            "plugin",
             json!({
                 "command": "plugin", "subcommand": "inspect",
                 "artifact": file,
@@ -3490,7 +3999,7 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
                 },
                 "signed_by": signed_by,
                 "wasm_cache_valid": dpx.wasm_cache_valid,
-            })
+            }),
         );
     } else {
         let name = get("name");
@@ -3962,7 +4471,8 @@ fn authority_workspace(dir: &str, opts: &Opts) -> i32 {
         .clone()
         .or_else(|| ws.root_pkg().map(|p| p.name.clone()))
         .unwrap_or_else(|| "package".to_string());
-    emit_authority(&program, &name, dir, &ws.source_map, opts)
+    let modules: Vec<&delulu_syntax::ast::Module> = ws.modules.iter().map(|m| &m.unit.module).collect();
+    emit_authority(&program, &name, dir, &ws.source_map, &modules, opts)
 }
 
 /// The loose-directory path: no manifest, so no dependency graph and nothing to resolve.
@@ -3976,7 +4486,8 @@ fn authority_loose_dir(dir: &str, opts: &Opts) -> i32 {
         return 1;
     }
     let name = program.entry_module.clone().unwrap_or_else(|| "package".to_string());
-    emit_authority(&program, &name, dir, &pkg.source_map, opts)
+    let modules: Vec<&delulu_syntax::ast::Module> = pkg.modules.iter().map(|m| &m.module).collect();
+    emit_authority(&program, &name, dir, &pkg.source_map, &modules, opts)
 }
 
 /// The shared tail: compute the report, stamp the run-time facts, emit it on the caller's surface.
@@ -3986,6 +4497,7 @@ fn emit_authority(
     name: &str,
     dir: &str,
     map: &SourceMap,
+    modules: &[&delulu_syntax::ast::Module],
     opts: &Opts,
 ) -> i32 {
     let scopes = scopes_in_dir(std::path::Path::new(dir));
@@ -3993,6 +4505,11 @@ fn emit_authority(
     stamp_custody(&mut report, opts);
     stamp_foreign_isolation(&mut report, opts);
     stamp_isolation(&mut report, opts);
+    stamp_grants(&mut report, modules);
+    if opts.show_grants && !opts.json {
+        print!("{}", render_required_grants(&report));
+        return 0;
+    }
     if opts.json {
         note_json_emitted();
         println!("{}", envelope_to_string("authority", &[], Some(report), map));
@@ -4107,8 +4624,9 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
     });
 
     if opts.json {
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).expect("diff report serializes"));
+        // Merged at the top level, not nested: `verdict` and the four change maps are where a
+        // caller has always read them, and the five contract fields join them (NE-05).
+        print_success_envelope("authority", report);
     } else {
         println!("Authority diff: {old_path} -> {new_arg}");
         if added_effects.is_empty() && removed_effects.is_empty() && added_scopes.is_empty() && api_row_changes.is_empty() {
@@ -4257,12 +4775,7 @@ fn cmd_why(rest: &[String]) -> i32 {
 
     if !main_facts.effects.iter().any(|e| e.name() == effect_name) {
         if opts.json {
-            note_json_emitted();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": false, "path": [] }))
-                    .expect("why report serializes")
-            );
+            print_success_envelope("why", json!({ "effect": effect_name, "performs": false, "path": [] }));
         } else {
             println!("program cannot perform `{effect_name}`");
         }
@@ -4305,12 +4818,7 @@ fn cmd_why(rest: &[String]) -> i32 {
     }
 
     if opts.json {
-        note_json_emitted();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "effect": effect_name, "performs": true, "path": path_nodes }))
-                .expect("why report serializes")
-        );
+        print_success_envelope("why", json!({ "effect": effect_name, "performs": true, "path": path_nodes }));
     } else {
         let mut out = String::new();
         for (i, key) in path_nodes.iter().enumerate() {
@@ -4365,15 +4873,13 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
             .unwrap_or_default();
         let declares = ceiling.iter().any(|e| e == effect_name);
         if opts.json {
-            note_json_emitted();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
+            print_success_envelope(
+                "why",
+                json!({
                     "effect": effect_name, "plugin": name, "class": "contained",
                     "boundary": true, "declares": declares,
                     "edge": if declares { format!("→ [contained plugin {name}] — {effect_name}") } else { Json::Null.to_string() },
-                }))
-                .expect("why report serializes")
+                }),
             );
         } else if declares {
             // The spec §6 labeled edge, verbatim shape.
@@ -4417,11 +4923,9 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
         .find(|ex| dir.facts.get(*ex).is_some_and(|f| f.effects.iter().any(|e| e.name() == effect_name)));
     let Some(start) = start else {
         if opts.json {
-            note_json_emitted();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": false, "path": [] }))
-                    .expect("why report serializes")
+            print_success_envelope(
+                "why",
+                json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": false, "path": [] }),
             );
         } else {
             println!("verified plugin `{name}` has no export that performs `{effect_name}`");
@@ -4431,11 +4935,9 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
 
     let chain = plugin_why_chain(&dir.facts, start, effect_name);
     if opts.json {
-        note_json_emitted();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": true, "path": chain }))
-                .expect("why report serializes")
+        print_success_envelope(
+            "why",
+            json!({ "effect": effect_name, "plugin": name, "class": "verified", "performs": true, "path": chain }),
         );
     } else {
         println!("[verified plugin {name}] {} — {effect_name}", chain.join(" -> "));
@@ -4836,6 +5338,11 @@ fn cmd_secrets(rest: &[String]) -> i32 {
         eprintln!("error: `secrets` needs a subcommand: set NAME VALUE | list [--state-dir DIR]");
         return 2;
     };
+    // `--json` was on the accepted-flag list and read by nothing: `secrets list --json` printed
+    // bare names and `secrets set --json` printed an `ok:` line, which is the "accepted and then
+    // ignored" shape NE-06 found on `explain`. On a security surface a machine caller must be able
+    // to learn what happened without parsing English.
+    let json = rest.iter().any(|a| a == "--json");
     let state_flag = rest.iter().position(|a| a == "--state-dir").and_then(|i| rest.get(i + 1)).cloned();
     let Some(state_dir) = crate::brokerd::resolve_state_dir(state_flag.as_deref()) else {
         eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE) — pass --state-dir DIR");
@@ -4861,8 +5368,22 @@ fn cmd_secrets(rest: &[String]) -> i32 {
             };
             match store.set(name.as_str(), value.as_str()) {
                 Ok(()) => {
-                    ok_line!("ok: secret `{name}` stored (broker-resident; bytes enter a program only on `expose`)");
-                    eprintln!("note: a running broker daemon loads the store at startup — restart it to pick up new names");
+                    if json {
+                        // `--json` was accepted and then ignored here, exactly as it was on
+                        // `explain` (NE-06): the flag parsed, the human line printed, and a
+                        // machine caller got prose. `secrets` is a security surface, so "what
+                        // happened" must be answerable without reading English.
+                        print_success_envelope(
+                            "secrets",
+                            json!({
+                                "subcommand": "set", "name": name, "stored": true,
+                                "store": state_dir.join("secrets.json").display().to_string(),
+                            }),
+                        );
+                    } else {
+                        ok_line!("ok: secret `{name}` stored (broker-resident; bytes enter a program only on `expose`)");
+                        eprintln!("note: a running broker daemon loads the store at startup — restart it to pick up new names");
+                    }
                     0
                 }
                 Err(e) => {
@@ -4873,6 +5394,16 @@ fn cmd_secrets(rest: &[String]) -> i32 {
         }
         "list" => {
             let names = store.names();
+            if json {
+                print_success_envelope(
+                    "secrets",
+                    json!({
+                        "subcommand": "list", "names": names,
+                        "store": state_dir.join("secrets.json").display().to_string(),
+                    }),
+                );
+                return 0;
+            }
             if names.is_empty() {
                 // Silence is ambiguous, and here it is ambiguous about a SECURITY store: a reader
                 // cannot tell "there are no secrets" from "the store could not be read" from "the
@@ -7201,8 +7732,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                 if let Some(detail) = &integrity {
                     obj.insert("chain_error".into(), json!(detail));
                 }
-                note_json_emitted();
-                println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
+                print_success_envelope("audit", report);
             } else {
                 if let Some(detail) = &integrity {
                     eprintln!(
@@ -7249,8 +7779,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                         "first_seq": summary.first_seq, "last_seq": summary.last_seq,
                         "head": summary.head,
                     });
-                    note_json_emitted();
-                    println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
+                    print_success_envelope("audit", report);
                 } else if bundle_out.is_some() {
                     eprintln!(
                         "wrote {} — {} record(s), seq {}..{}, digest {}",
@@ -7334,8 +7863,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                             "digest": s.digest, "records": s.records,
                             "first_seq": s.first_seq, "last_seq": s.last_seq, "head": s.head,
                         });
-                        note_json_emitted();
-                        println!("{}", serde_json::to_string_pretty(&report).expect("serializes"));
+                        print_success_envelope("audit", report);
                     } else {
                         ok_line!(
                             "ok: reconciled {} record(s), seq {}..{} — cross-linked in this chain \
@@ -7370,8 +7898,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
                         "records": stats.records,
                         "head": stats.head,
                     });
-                    note_json_emitted();
-                    println!("{}", serde_json::to_string_pretty(&report).expect("audit report serializes"));
+                    print_success_envelope("audit", report);
                 } else {
                     ok_line!(
                         "ok: audit chain verified — {} record(s) across {} file(s), head {}",
@@ -7422,12 +7949,25 @@ fn cmd_atlas(rest: &[String]) -> i32 {
 /// exit code to propagate. `gods` is the god-node cap.
 fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32> {
     // A persisted graph: reuse it directly (agents can `atlas <pkg> --out .` then query atlas.json).
+    //
+    // Two spellings are accepted, and that is deliberate. `--out DIR` writes the BARE `atlas/1`
+    // document, which is what this reader has always read; since P1-02 the `--format json` channel
+    // wraps the same document in the `--json` envelope, so a caller who redirected stdout to a file
+    // holds the enveloped spelling. Refusing that would turn a documented pipeline into a puzzle.
     if target.ends_with(".json") {
         return match std::fs::read_to_string(target) {
-            Ok(s) => serde_json::from_str::<Atlas>(&s).map_err(|e| {
-                eprintln!("error: `{target}` is not a valid atlas/1 file: {e}");
-                2
-            }),
+            Ok(s) => serde_json::from_str::<Atlas>(&s)
+                .or_else(|_| {
+                    serde_json::from_str::<Json>(&s)
+                        .ok()
+                        .and_then(|v| v.get("atlas").cloned())
+                        .and_then(|a| serde_json::from_value::<Atlas>(a).ok())
+                        .ok_or(())
+                })
+                .map_err(|_| {
+                    eprintln!("error: `{target}` is not a valid atlas/1 file (bare or enveloped)");
+                    2
+                }),
             Err(e) => {
                 eprintln!("error: cannot read `{target}`: {e}");
                 Err(2)
@@ -7454,7 +7994,12 @@ fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32
             return Err(1);
         };
         let scopes = scopes_in_dir(std::path::Path::new(target));
-        let authority = program_authority(&program, &root, &scopes);
+        let mut authority = program_authority(&program, &root, &scopes);
+        // NE-14: the Atlas dropped the requested scopes exactly as the authority report did. Same
+        // walk, same labelling — a map that omits what the program asks for is not a map of it.
+        let atlas_modules: Vec<&delulu_syntax::ast::Module> =
+            ws.modules.iter().map(|m| &m.unit.module).collect();
+        stamp_grants(&mut authority, &atlas_modules);
         let modules: Vec<ModuleView> = ws
             .modules
             .iter()
@@ -7500,7 +8045,8 @@ fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32
     let mut scopes = manifest_scopes(target);
     let python_allowlist = manifest_python_allowlist(target);
     scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
-    let authority = authority_report(&root, &checked.result, &scopes);
+    let mut authority = authority_report(&root, &checked.result, &scopes);
+    stamp_grants(&mut authority, &[&checked.module]);
     let modules = vec![ModuleView { package: root.clone(), name: root.clone(), module: &checked.module }];
     let packages = vec![PackageView { name: root.clone(), deps: vec![], is_root: true }];
     Ok(Atlas::build(BuildInput {
@@ -7728,7 +8274,11 @@ fn atlas_graph_cmd(args: &[String]) -> i32 {
             print!("{}", colorize_atlas_tree(&atlas.render_tree(), &palette_stdout()));
         }
         "digest" => print!("{}", atlas.render_digest(budget)),
-        "json" => println!("{}", atlas.to_json_string()),
+        // The `atlas/1` document is carried INSIDE the envelope (NE-05): the five contract
+        // fields come first for a caller that branches on them, and `atlas` is the versioned
+        // document, unchanged, additive evolution only. The `--out DIR` bundle still writes the
+        // bare `atlas/1` document to `atlas.json`, and `atlas_from_target` reads either spelling.
+        "json" => print_success_envelope("atlas", json!({ "atlas": atlas.to_json() })),
         "dot" => print!("{}", atlas.render_dot()),
         "mermaid" => print!("{}", atlas.render_mermaid()),
         "html" => print!("{}", atlas.render_html()),
@@ -7762,8 +8312,7 @@ fn atlas_query_cmd(verb: &str, args: &[String]) -> i32 {
     let a = &f.positionals[0];
     let b = if verb == "path" { Some(f.positionals[1].as_str()) } else { None };
     if f.json {
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&atlas.query_json(verb, a, b)).expect("query json"));
+        print_success_envelope("atlas", atlas.query_json(verb, a, b));
         return 0;
     }
     let text = match verb {
@@ -7806,15 +8355,32 @@ fn colorize_atlas_tree(text: &str, palette: &Palette) -> String {
     out
 }
 
+/// `delulu explain <CODE> [--json]`.
+///
+/// `--json` was **accepted and then ignored** (verification finding NE-06): the option parser
+/// exempted it from the unknown-option refusal and nothing else ever read it, so
+/// `delulu explain DL0501 --json` printed prose and exited 0. Two rules of this project's own
+/// making were broken at once — "an option nobody understood is refused, never ignored" (it was
+/// understood by no one and refused by no one), and "every `--json` command emits one object" —
+/// and `explain` sat in `json_contract.rs`'s sweep the whole time, passing, because the sweep only
+/// ever drove it to failure.
+///
+/// The machine channel carries `explain: {code, title, body, disposition, kind}`. `kind` says which
+/// of the three registries answered — `"topic"` for a named `E-…` topic, `"code"` for an allocated
+/// diagnostic, `"unallocated"` for a code with a recorded disposition — because those are three
+/// genuinely different answers and a caller must not have to guess from the prose which it got.
+/// `body` and `disposition` are **always present**, `null` where they do not apply: a missing field
+/// cannot be told apart from "this tool did not answer" (`docs/for-agents.md` [agents.survey]).
 fn cmd_explain(rest: &[String]) -> i32 {
-    // `explain` takes no options at all, so anything flag-shaped is a mistake worth naming rather
-    // than skipping past to the first bare word.
+    // `explain` takes no options at all besides `--json`, so anything else flag-shaped is a mistake
+    // worth naming rather than skipping past to the first bare word.
     if let Some(bad) = rest.iter().find(|a| a.starts_with('-') && a.as_str() != "--json") {
         eprintln!("error: `explain` does not know the option `{bad}`");
         eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
         eprintln!("note: `delulu explain <CODE>` takes a diagnostic code, e.g. `delulu explain DL0501`");
         return 2;
     }
+    let json = rest.iter().any(|a| a == "--json");
     let code = rest.iter().find(|a| !a.starts_with('-')).map(|s| s.trim_start_matches("E-").to_string());
     let Some(code) = code else {
         eprintln!("error: `explain` needs a code, e.g. `delulu explain DL0501`");
@@ -7823,12 +8389,33 @@ fn cmd_explain(rest: &[String]) -> i32 {
     // Named topics (Stage 5 phase 5j): `delulu explain E-REVOKE` states the spec §4.2 revocation
     // latency bound VERBATIM (playbook trap 3 — never "immediate").
     if let Some((title, body)) = delulu_diag::topic_explain(&code) {
-        println!("E-{code}: {title}");
-        println!("\n{body}");
+        if json {
+            print_success_envelope(
+                "explain",
+                json!({ "explain": {
+                    "code": format!("E-{code}"), "title": title, "body": body,
+                    "disposition": Json::Null, "kind": "topic",
+                } }),
+            );
+        } else {
+            println!("E-{code}: {title}");
+            println!("\n{body}");
+        }
         return 0;
     }
     match delulu_diag::code_title(&code) {
         Some(title) => {
+            if json {
+                print_success_envelope(
+                    "explain",
+                    json!({ "explain": {
+                        "code": code, "title": title,
+                        "body": delulu_diag::code_explain(&code),
+                        "disposition": Json::Null, "kind": "code",
+                    } }),
+                );
+                return 0;
+            }
             println!("{code}: {title}");
             // A longer explanation, where one exists (DL13xx foreign codes carry the spec §10
             // honesty caveats verbatim — reachability-not-behavior, link forward to Stage 5).
@@ -7842,6 +8429,19 @@ fn cmd_explain(rest: &[String]) -> i32 {
         // a recorded disposition is explained; anything else is still an honest dead end.
         None => match delulu_diag::unallocated(&code).filter(|u| u.disposition.is_explainable()) {
             Some(u) => {
+                if json {
+                    print_success_envelope(
+                        "explain",
+                        json!({ "explain": {
+                            "code": code,
+                            "title": format!("{} — this compiler cannot emit it", u.disposition.word()),
+                            "body": u.why,
+                            "disposition": u.disposition.word(),
+                            "kind": "unallocated",
+                        } }),
+                    );
+                    return 0;
+                }
                 println!("{code}: {} — this compiler cannot emit it", u.disposition.word());
                 println!("\n{}", u.why);
                 0

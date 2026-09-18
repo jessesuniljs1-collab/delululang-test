@@ -935,3 +935,356 @@ fn a_morph_id_may_not_escape_the_search_path() {
     assert_eq!(o.status.code(), Some(1));
     assert!(stderr(&o).contains("not a valid morph id"), "{}", stderr(&o));
 }
+// ----- one defect, one diagnostic (verification finding NE-04) ------------------------------------
+
+/// NE-04. A 200-deep parenthesised expression produced **145 errors for one cause**: 73 × `DL0210`,
+/// one per level past the cap, plus 72 × `DL0404` ("value of type `'t0` is not callable") because
+/// `parse_postfix_on` read the unconsumed `(`s as CALLS on the depth guard's placeholder and the
+/// checker then type-checked that invented chain. The machine channel is uncapped by contract, so an
+/// agent received all 145 — for one mistake with one fix.
+///
+/// The cap is right and unchanged; this is about how many times it speaks. `delulu explain DL0210`
+/// tells a code generator to emit a `let` per level, which is exactly the reader who hits this.
+#[test]
+fn one_over_deep_expression_yields_exactly_one_diagnostic() {
+    let dir = std::env::temp_dir().join(format!("delulu-cascade-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("deep.delulu");
+    let src = format!("module deep\n\nfn main(root: Root) {{\n    let x = {}1{}\n}}\n", "(".repeat(200), ")".repeat(200));
+    std::fs::write(&f, src).unwrap();
+
+    let o = delulu(&["check", f.to_str().unwrap(), "--json"]);
+    assert_eq!(o.status.code(), Some(1), "the program is still refused: {}", stderr(&o));
+    let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
+    let diags = v["diagnostics"].as_array().expect("diagnostics");
+    let codes: Vec<&str> = diags.iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    assert_eq!(
+        codes,
+        vec!["DL0210"],
+        "one defect, one diagnostic — got {} diagnostics: {:?}",
+        codes.len(),
+        codes
+    );
+    assert_eq!(v["summary"]["errors"], 1);
+    // The invented call chain is gone, so the checker never sees a type it made up.
+    assert!(
+        !stdout(&o).contains("is not callable"),
+        "the recovery placeholder must not be type-checked as a call:\n{}",
+        stdout(&o)
+    );
+
+    // TWO independent over-deep expressions are two SITES and report twice: the rule is one
+    // diagnostic per overflow site, not one per file. Without this the "fix" would be a silencer.
+    let g = dir.join("two.delulu");
+    let one = format!("{}1{}", "(".repeat(200), ")".repeat(200));
+    std::fs::write(
+        &g,
+        format!("module two\n\nfn main(root: Root) {{\n    let a = {one}\n    let b = {one}\n}}\n"),
+    )
+    .unwrap();
+    let o2 = delulu(&["check", g.to_str().unwrap(), "--json"]);
+    let v2: Value = serde_json::from_str(&stdout(&o2)).expect("one envelope");
+    let codes2: Vec<&str> =
+        v2["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    assert_eq!(codes2, vec!["DL0210", "DL0210"], "two sites report twice: {codes2:?}");
+
+    // The second mechanism, with its own witness. Consuming the refused operand is not enough on
+    // its own: an over-deep wrapper around a call whose ARGUMENTS each start at the capped depth
+    // makes the guard fire once per argument. At 126 levels around `g((1), (1), (1), (1), (1))`
+    // the per-site latch is what turns 5 identical `DL0210`s into 1 — measured both ways.
+    let m = dir.join("args.delulu");
+    let inner = "g((1), (1), (1), (1), (1))";
+    std::fs::write(
+        &m,
+        format!(
+            "module argsdeep
+
+fn g(a: Int, b: Int, c: Int, d: Int, e: Int) -> Int {{ a }}
+
+             fn main(root: Root) {{
+    let x = {}{inner}{}
+}}
+",
+            "(".repeat(126),
+            ")".repeat(126)
+        ),
+    )
+    .unwrap();
+    let o4 = delulu(&["check", m.to_str().unwrap(), "--json"]);
+    let v4: Value = serde_json::from_str(&stdout(&o4)).expect("one envelope");
+    let codes4: Vec<&str> =
+        v4["diagnostics"].as_array().unwrap().iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    assert_eq!(codes4, vec!["DL0210"], "one site, one report — got {codes4:?}");
+
+    // And the control: nesting WITHIN the cap is still accepted. A guard that refused everything
+    // would pass the assertion above while destroying the language.
+    let h = dir.join("ok.delulu");
+    std::fs::write(
+        &h,
+        format!("module okdepth\n\nfn main(root: Root) {{\n    let x = {}1{}\n}}\n", "(".repeat(64), ")".repeat(64)),
+    )
+    .unwrap();
+    let o3 = delulu(&["check", h.to_str().unwrap(), "--json"]);
+    assert_eq!(o3.status.code(), Some(0), "64 levels still check clean: {}", stdout(&o3));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The other three recursive-descent classes, same rule. Each is its own guard with its own
+/// counter, and a fix applied to one of four places is a fix that holds nowhere (C23/D30).
+#[test]
+fn each_nesting_class_reports_its_cap_once_per_site() {
+    let dir = std::env::temp_dir().join(format!("delulu-cascade4-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let n = 200usize;
+    let cases: &[(&str, &str, String)] = &[
+        (
+            "DL0211",
+            "type",
+            format!("module t\n\nfn f(x: {}Int{}) {{}}\n", "List[".repeat(n), "]".repeat(n)),
+        ),
+        (
+            "DL0212",
+            "pattern",
+            format!(
+                "module p\n\nfn f(x: Int) -> Int {{ match x {{ {}y{} => 0\n_ => 1 }} }}\n",
+                "Some(".repeat(n),
+                ")".repeat(n)
+            ),
+        ),
+        (
+            "DL0213",
+            "block",
+            format!("module b\n\nfn f() {{ {}{} }}\n", "while true { ".repeat(n), "}".repeat(n)),
+        ),
+    ];
+    for (code, what, src) in cases {
+        let f = dir.join(format!("{what}.delulu"));
+        std::fs::write(&f, src).unwrap();
+        let o = delulu(&["check", f.to_str().unwrap(), "--json"]);
+        assert_eq!(o.status.code(), Some(1), "the {what} case is still refused");
+        let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
+        let n_code = v["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|d| d["code"] == *code)
+            .count();
+        assert_eq!(n_code, 1, "one {code} for one over-deep {what}, got {n_code}: {}", v["diagnostics"]);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- the grant grammar, derivable from the report (NE-10, NE-14) --------------------------------
+
+/// Every grant key the RUNTIME parses, read out of the runtime that parses them.
+///
+/// `Grants::add`, in `crates/delulu-runtime/src/broker.rs`, is the definition of what `--grant` accepts,
+/// and NE-10's finding is that it was the *only* place the grammar existed: an operator learned it
+/// by reading Rust, or by provoking `DL0703` one flag at a time. A hand-copied list here would
+/// drift from it exactly as the documentation did, so the list is read from the source.
+fn grant_keys_the_runtime_parses() -> Vec<String> {
+    let src = std::fs::read_to_string(workspace_root().join("crates/delulu-runtime/src/broker.rs"))
+        .expect("broker.rs must be readable — it is the grammar this gate reads");
+    let start = src.find("pub fn add(&mut self, spec: &str)").expect("Grants::add");
+    let body = &src[start..];
+    let end = body.find("\n    /// Accept an entire manifest").unwrap_or(body.len());
+    let body = &body[..end];
+
+    let mut keys: Vec<String> = Vec::new();
+    // The prefixed form: `spec.strip_prefix("secret:")`.
+    if let Some(i) = body.find("strip_prefix(\"") {
+        let rest = &body[i + 14..];
+        if let Some(j) = rest.find('"') {
+            keys.push(rest[..j].trim_end_matches(':').to_string());
+        }
+    }
+    // The match arms, both the `k=v` table and the bare-word table: `"a" | "b" => …`.
+    for line in body.lines() {
+        let t = line.trim();
+        let Some((pats, _)) = t.split_once("=>") else { continue };
+        let pats = pats.trim();
+        if !pats.starts_with('"') {
+            continue;
+        }
+        for p in pats.split('|') {
+            let k = p.trim().trim_matches('"');
+            if !k.is_empty() && !keys.iter().any(|x| x == k) {
+                keys.push(k.to_string());
+            }
+        }
+    }
+    assert!(
+        keys.len() >= 13,
+        "the grant-grammar scan found only {} keys — a gate that reads nothing passes everything: {keys:?}",
+        keys.len()
+    );
+    keys
+}
+
+/// NE-10 / NE-14. `delulu authority` reported `FsRead  (scope granted at runtime)` and
+/// `"scopes": []` for a program whose source says `root.fs_read("./config")`, and named no
+/// `--grant` flag at all — while the shipped `INSTALL.txt` promised *"run `delulu authority
+/// <file>` first and the required grants are the list it prints"*.
+///
+/// This gate holds the promise: **every grant kind the runtime parses is derivable from the
+/// report**, and the requested scopes a program writes in its own source reach both the report and
+/// the Atlas, labelled *requested* — never *granted*, because kind is static and scope is runtime.
+#[test]
+fn every_grant_kind_the_runtime_parses_is_derivable_from_the_report() {
+    let dir = std::env::temp_dir().join(format!("delulu-grants-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // One program per family, each asking for its capability in as many words.
+    let files: &[(&str, &str)] = &[
+        (
+            "every_cap.delulu",
+            "module everycap\n\n\
+             fn main(root: Root) ! {Read, Write, Net, Clock, Rand, Declassify, Actuate} {\n\
+             \x20   let out = root.console()\n\
+             \x20   let fs = root.fs_read(\"./config\")\n\
+             \x20   let w = root.fs_write(\"./out\")\n\
+             \x20   let http = root.http([\"example.com\"])\n\
+             \x20   let clk = root.clock()\n\
+             \x20   let rnd = root.rand()\n\
+             \x20   let dc = root.declassify()\n\
+             \x20   let key = root.secret(\"API_KEY\")\n\
+             \x20   let arm = root.actuator(\"arm0/elbow\")\n\
+             \x20   let temp = root.sensor(\"bay0/temp\")\n\
+             \x20   let gpu = root.compute(\"gpu0\")\n\
+             \x20   out.println(\"ready\")\n}\n",
+        ),
+        (
+            "foreign_c.delulu",
+            "module foreignc\n\nforeign \"c\" lib mathlib {\n  fn cos(x: Float) -> Float\n}\n",
+        ),
+        (
+            "py.delulu",
+            "module pyuse\n\n\
+             fn main(root: Root) ! {ForeignCall, Write} {\n\
+             \x20   let c = root.console()\n\
+             \x20   let load = root.foreign_load()\n\
+             \x20   match root.python(load) {\n\
+             \x20       Ok(py) => match py.import(\"numpy\") { Ok(m) => c.println(\"ok\"), Err(e) => c.println(\"no\") }\n\
+             \x20       Err(_) => c.println(\"unavailable\")\n\
+             \x20   }\n}\n",
+        ),
+        (
+            "jit.delulu",
+            "module jituse\n\n@jit\nfn hot(x: Int) -> Int {\n    x * 2\n}\n\n\
+             fn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(str(hot(21)))\n}\n",
+        ),
+    ];
+    // `exec.native` is derivable, and NOT from `required_grants`: a `@jit` hint does not make a
+    // program NEED the grant — without it the program runs interpreted and says so (DL1906), and
+    // invariant 45 forbids a hint from changing what the authority report says a program may do.
+    // So it is reported where it belongs, as the REQUEST, and checked below rather than swept.
+    let exec_native_field = "native_emission";
+
+    let mut all_grants: Vec<String> = Vec::new();
+    for (name, src) in files {
+        let f = dir.join(name);
+        std::fs::write(&f, src).unwrap();
+        let o = delulu(&["authority", f.to_str().unwrap(), "--json"]);
+        assert!(o.status.success(), "{name}: {}", stderr(&o));
+        let v: Value = serde_json::from_str(&stdout(&o)).expect("one envelope");
+        let g: Vec<String> = v["authority"]["required_grants"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name}: the report must carry required_grants: {v}"))
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+        assert!(!g.is_empty(), "{name} asks for authority and must name the flags: {v}");
+        all_grants.extend(g);
+
+        // The human channel answers the same question, and it is the one INSTALL.txt points at.
+        let human = delulu(&["authority", f.to_str().unwrap(), "--grants"]);
+        assert!(human.status.success(), "{name} --grants: {}", stderr(&human));
+        let text = stdout(&human);
+        for flag in v["authority"]["required_grants"].as_array().unwrap() {
+            let flag = flag.as_str().unwrap();
+            assert!(
+                text.contains(&format!("--grant {flag}")),
+                "{name}: `--grants` must print `--grant {flag}`:\n{text}"
+            );
+        }
+        // Never the word `granted` about a requirement: printing a list grants nothing.
+        assert!(
+            !text.to_lowercase().contains("granted:") ,
+            "{name}: the human line must not read as a grant already made:\n{text}"
+        );
+    }
+
+    // The `@jit` twin: the request is on the report, and `required_grants` does NOT claim it.
+    let jit = dir.join("jit.delulu");
+    let jo = delulu(&["authority", jit.to_str().unwrap(), "--json"]);
+    let jv: Value = serde_json::from_str(&stdout(&jo)).expect("one envelope");
+    assert_eq!(
+        jv["authority"][exec_native_field]["requested"], true,
+        "the hint is reported as a request: {}",
+        jv["authority"]
+    );
+    let jg: Vec<&str> = jv["authority"]["required_grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|x| x.as_str())
+        .collect();
+    assert!(
+        !jg.contains(&"exec.native"),
+        "a hint must not appear as a REQUIREMENT — invariant 45, and the program runs without it: {jg:?}"
+    );
+
+    // Every key the runtime parses must be the head of at least one derived flag. `exec.native` is
+    // excused with its reason and checked above instead, on `native_emission`.
+    let mut missing: Vec<String> = Vec::new();
+    for key in grant_keys_the_runtime_parses() {
+        if key == "exec.native" {
+            continue;
+        }
+        let hit = all_grants.iter().any(|g| {
+            g == &key || g.starts_with(&format!("{key}=")) || g.starts_with(&format!("{key}:"))
+        });
+        if !hit {
+            missing.push(key);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these grant kinds the runtime parses are not derivable from any authority report: {missing:?}\n\
+         derived: {all_grants:?}"
+    );
+
+    // NE-14: the Atlas carries the same requested scopes, from the same walk.
+    let f = dir.join("every_cap.delulu");
+    let atlas = delulu(&["atlas", f.to_str().unwrap(), "--json"]);
+    assert!(atlas.status.success(), "{}", stderr(&atlas));
+    let av: Value = serde_json::from_str(&stdout(&atlas)).expect("one envelope");
+    let arep = &av["atlas"]["authority"];
+    assert_eq!(
+        arep["requested_scopes"]["FsRead"][0], "./config",
+        "the Atlas carries the requested scope the source names: {}",
+        arep["requested_scopes"]
+    );
+    assert!(arep["required_grants"].is_array(), "and the flags: {arep}");
+
+    // The honesty split, stated as a test: a scope the program REQUESTS is not a scope it was
+    // GRANTED. With no manifest and no grant, `scopes` stays empty and `requested_scopes` carries
+    // the literal — collapsing the two would be the claim this language refuses to make.
+    let o = delulu(&["authority", f.to_str().unwrap(), "--json"]);
+    let v: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    let fsread = v["authority"]["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["kind"] == "FsRead")
+        .expect("an FsRead capability")
+        .clone();
+    assert_eq!(fsread["scopes"].as_array().unwrap().len(), 0, "nothing was granted: {fsread}");
+    assert_eq!(fsread["requested_scopes"][0], "./config", "and the ask is reported: {fsread}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

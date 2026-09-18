@@ -935,7 +935,19 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL0703" => "The program tried to use a root slice it was not granted. The slice — a path \
              prefix, a host list — is runtime scope carried by the capability, checked when the \
              operation runs (§5.3). The static row proves what KIND of thing the program can do; \
-             the scope decides which resource.",
+             the scope decides which resource.\n\n\
+             PATHS ARE RELATIVE TO THE CAPABILITY, NOT TO THE WORKING DIRECTORY. This is the rule \
+             that costs the most time to discover, because getting it wrong produces no diagnostic \
+             at all — only an `Err(IoErr)` the program then reports as \"file not found\":\n\n\
+             \x20   let reader = root.fs_read(\"./config\")\n\
+             \x20   reader.read_text(\"app.txt\")            // reads ./config/app.txt      — OK\n\
+             \x20   reader.read_text(\"./config/app.txt\")   // looks for ./config/./config/app.txt\n\n\
+             The capability's scope IS the root of the paths you pass through it. That is what makes \
+             it an attenuation: a `Cap[FsRead]` for `./config` cannot name anything outside \
+             `./config`, and the containment resolver refuses `..`, a symlink out, and a spelling \
+             that normalizes elsewhere. So pass the path relative to what you asked for, and if you \
+             need two subtrees, mint two capabilities. The same holds for `fs_write`: \
+             `root.fs_write(\"./out\")` then `write_text(\"tool.log\")`, not `\"./out/tool.log\"`.",
 
         // ===== DL08xx — custody ============================================
         "DL0801" => "This reference was revoked and cannot be called through. Revocation is \
@@ -1081,7 +1093,29 @@ pub fn code_explain(code: &str) -> Option<String> {
         "DL1603" => "This alias violates a reference capability's deny property — for example a \
              `val` (immutable, shareable) closure capturing a `ref` (mutable, local). The deny \
              properties are what let the compiler conclude that a shared value cannot change under \
-             another actor's feet.",
+             another actor's feet.\n\n\
+             THE CASE PEOPLE MEET FIRST: a `val` container built from `ref` contents.\n\n\
+             \x20   let a: ref List[Int] = [1, 2]\n\
+             \x20   let rows: val List[List[Int]] = [a]      // DL1603\n\n\
+             `val` means DEEPLY immutable and freely shareable — that is what lets a `val` cross to \
+             another actor. So every element has to be able to live under deep immutability, and \
+             `a` cannot: it is `ref`, which means mutable and aliasable, and the program could \
+             write through `a` after the container was shared. The container's own freshness is not \
+             the question; its contents are.\n\n\
+             Three ways forward, and which one is right depends on what you meant:\n\n\
+             \x20 1. You only ever READ the list. Drop the annotation (`let rows = [a]`) and let \
+             the binding take the value's own capability. This is the `drop-val-annotation` repair, \
+             offered as `safe` rather than `exact` — a tool will not delete an annotation you wrote, \
+             because the annotation may have been the point.\n\
+             \x20 2. You meant to SHARE it (send it to an actor, keep it after the call). Then build \
+             `val` contents: drop `ref` from the element's own annotation, or construct the elements \
+             inline in the literal, where a fresh literal lifts on its own.\n\
+             \x20 3. You meant the container mutable. Annotate it `ref List[List[Int]]` and say so.\n\n\
+             Note the asymmetry that surprises people: `let xs: val List[Int] = [1, 2, 3]` is fine, \
+             because `Int` is immutable data. It is containers of containers — and records or sums \
+             holding a mutable field — where the rule bites. Removing the keyword alone usually does \
+             NOT help: an annotated `List[List[Int]]` still defaults to `val` under the spec §2 rule, \
+             so the repair removes the whole annotation.",
         "DL1604" => "The access is denied by the receiver's capability: no write through `box`, no \
              field read through `tag`, no synchronous call on `tag`. A `tag` is an identity you may \
              send messages to, not a window into another actor's state.",

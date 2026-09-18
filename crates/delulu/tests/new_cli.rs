@@ -301,3 +301,58 @@ fn a_name_that_merely_contains_a_device_word_is_still_fine() {
         assert!(o.status.success(), "`{name}` is a perfectly good package name: {}", stderr(&o));
     }
 }
+
+/// NE-09. `delulu new hello && cd hello && delulu test` exited **2** — "needs test
+/// files/directories (no ./tests directory here)" — although the scaffold's one test lives in
+/// `src/main.delulu` and `delulu test .` passed. The trap was on record here and the printed
+/// instructions were fixed rather than the default, so the tool went on disagreeing with every
+/// other package tool a person arrives with.
+///
+/// Inside a package, bare `delulu test` now targets the package. Outside one it still refuses,
+/// because there is nothing to infer and guessing a directory would be worse than asking.
+#[test]
+fn bare_delulu_test_passes_inside_a_freshly_scaffolded_package() {
+    let w = scratch("baretest");
+    let created = delulu_in(&w, &["new", "myapp"]);
+    assert_eq!(created.status.code(), Some(0), "{}", stderr(&created));
+    let pkg = w.join("myapp");
+
+    let bare = delulu_in(&pkg, &["test"]);
+    assert_eq!(
+        bare.status.code(),
+        Some(0),
+        "bare `delulu test` must pass in a scaffold:\n{}{}",
+        stdout(&bare),
+        stderr(&bare)
+    );
+    let reported = format!("{}{}", stdout(&bare), stderr(&bare));
+    assert!(reported.contains("1 passed"), "and must actually RUN the test:\n{reported}");
+
+    // The same answer as the explicit form, so the default is the package and not a narrower guess.
+    let explicit = delulu_in(&pkg, &["test", "."]);
+    assert_eq!(
+        stdout(&bare).trim(),
+        stdout(&explicit).trim(),
+        "bare `delulu test` and `delulu test .` must agree inside a package"
+    );
+
+    // A package that keeps its tests in `tests/` still runs them, and also runs the ones in `src/`:
+    // the package is the target, so this is a superset of what `tests/` alone produced.
+    std::fs::create_dir_all(pkg.join("tests")).unwrap();
+    std::fs::write(
+        pkg.join("tests").join("extra.delulu"),
+        "module extra\n\ntest \"extra runs too\" {\n    assert_eq(str(1), str(1))\n}\n",
+    )
+    .unwrap();
+    let both = delulu_in(&pkg, &["test"]);
+    assert_eq!(both.status.code(), Some(0), "{}", stderr(&both));
+    let both_out = format!("{}{}", stdout(&both), stderr(&both));
+    assert!(both_out.contains("2 passed"), "both the src/ and tests/ tests ran:\n{both_out}");
+
+    // Outside a package the refusal is unchanged: exit 2, and it says what to do.
+    let outside = scratch("baretest-outside");
+    let refused = delulu_in(&outside, &["test"]);
+    assert_eq!(refused.status.code(), Some(2), "outside a package the refusal stays");
+    let err = stderr(&refused);
+    assert!(err.contains("needs test files/directories"), "and says so: {err}");
+}

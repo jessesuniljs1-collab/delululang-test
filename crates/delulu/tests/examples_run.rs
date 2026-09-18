@@ -99,3 +99,99 @@ fn no_example_that_checks_clean_fails_with_a_checker_bug_code() {
         );
     }
 }
+
+/// NE-03. The CI gate above asserts a guide example does not fail with a **compiler-bug** code. It
+/// says nothing about whether the example does what the guide says it does — and
+/// `examples/guide/05_capabilities.delulu`, the file `GETTING_STARTED.md` §6 is built from, passed
+/// it for its whole life while reading nothing: it minted `root.fs_read("./config")` and then asked
+/// for `"./config/app.txt"`, which resolves under the capability's own root to
+/// `./config/config/app.txt`. It took the `Err` branch every time and printed "no config". Two
+/// shipped examples disagreed — `examples/demo.delulu` had it right — and nothing stated the rule.
+///
+/// So this asserts the outcome, not the absence of a crash: with the files present and the grants
+/// given, the guide's capability example **reads its file and writes its log**.
+#[test]
+fn the_capabilities_guide_actually_reads_and_writes() {
+    let w = std::env::temp_dir().join(format!("delulu-guide-caps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(w.join("config")).unwrap();
+    std::fs::create_dir_all(w.join("out")).unwrap();
+    std::fs::write(w.join("config").join("app.txt"), "hello-from-config").unwrap();
+    let src = root().join("examples").join("guide").join("05_capabilities.delulu");
+    std::fs::copy(&src, w.join("05_capabilities.delulu")).expect("copy the guide example");
+
+    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&w)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args([
+            "run",
+            "05_capabilities.delulu",
+            "--no-prompt",
+            "--grant",
+            "console",
+            "--grant",
+            "fs.read=./config",
+            "--grant",
+            "fs.write=./out",
+            "--grant",
+            "net=example.com",
+        ])
+        .output()
+        .expect("run delulu");
+    let out = text(&o);
+    assert_eq!(o.status.code(), Some(0), "the example must run:\n{out}");
+    assert!(
+        out.contains("config: hello-from-config"),
+        "the guide's READ must succeed and show the file's contents:\n{out}"
+    );
+    assert!(out.contains("wrote log"), "and its WRITE must succeed:\n{out}");
+    assert!(
+        w.join("out").join("log.txt").is_file(),
+        "the file must be where the capability's scope puts it, not where the literal reads"
+    );
+    // The network branch is allowed to fail: a test must not depend on reaching a host. What it must
+    // not do is fail for the same reason the read used to.
+    assert!(
+        !out.contains("no config") && !out.contains("could not write"),
+        "neither filesystem branch may take its Err path:\n{out}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}
+
+/// The falsification, standing: the wrong spelling must still fail, so the assertion above is
+/// measuring the rule and not the weather. Written as its own program rather than by editing the
+/// shipped one, because a test that mutates a repository file is a test that can leave it mutated.
+#[test]
+fn a_path_that_repeats_the_capability_scope_finds_nothing() {
+    let w = std::env::temp_dir().join(format!("delulu-guide-caps-neg-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(w.join("config")).unwrap();
+    std::fs::write(w.join("config").join("app.txt"), "hello-from-config").unwrap();
+    std::fs::write(
+        w.join("wrong.delulu"),
+        "module wrongpath\n\n\
+         fn main(root: Root) ! {Read, Write} {\n\
+         \x20   let out = root.console()\n\
+         \x20   let reader = root.fs_read(\"./config\")\n\
+         \x20   match reader.read_text(\"./config/app.txt\") {\n\
+         \x20       Ok(t) => out.println(\"read: \" + t)\n\
+         \x20       Err(e) => out.println(\"no config\")\n\
+         \x20   }\n}\n",
+    )
+    .unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&w)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "wrong.delulu", "--no-prompt", "--grant", "console", "--grant", "fs.read=./config"])
+        .output()
+        .expect("run delulu");
+    let out = text(&o);
+    assert!(
+        out.contains("no config"),
+        "a path that repeats the capability's own scope must NOT find the file — otherwise the \
+         assertion in the test above proves nothing:\n{out}"
+    );
+    let _ = std::fs::remove_dir_all(&w);
+}

@@ -1,7 +1,13 @@
 # The flagship plugin: a zero-authority text transform
 
 This is the demo that sells the language (Constitution §4, Possibility 2): **code that arrives after
-compile time and still cannot exceed its grant.** `shout` is a third-party text transform whose
+compile time and cannot exceed its grant.**
+
+> **What runs here, and what does not.** Everything below — `plugin build`, `plugin verify`,
+> `plugin inspect`, the rigged variant's refusal, signing — runs today, from this directory. The one
+> thing that does **not** is a DeluluLang program loading this plugin: `root.plugin_host()` is a
+> runtime stub and faults with `DL0703` (`crates/delulu-runtime/src/prim.rs:366`), so there is no
+> host program in this directory to run. See `docs/REMAINING_WORK.md` row 4.11; it is V2 phase P2. `shout` is a third-party text transform whose
 authority ceiling is *empty*. Because its type is a pure `fn(Str) -> Str` and it holds no capability,
 the type system — re-checked at load — forbids it from reading a file, telling the time, or reaching
 the network. There is nothing to trust; the guarantee is by construction.
@@ -64,9 +70,11 @@ $ delulu plugin inspect shout-signed.dpx
 refuses an *unsigned* plugin (DL1511); a plugin whose signature does not verify is a *different*
 fault (DL1510).
 
-## What actually runs it
+## What would actually run it — the shape, not a working program
 
-When a host loads this plugin, it holds `p.get("shout")` as
+**This section describes the load surface, which is a runtime stub** (see the box at the top). It is
+kept because the shape is the thing to know, and because `delulu plugin verify` already gives the
+same verdicts the load steps would. When a host loads this plugin, it will hold `p.get("shout")` as
 `let f: fn(Str) -> Str ! {} = p.get("shout")?` (the annotation form — the spec's `p.get[F]` bracket
 notation does not parse; see `delulu explain E-PLUGIN`), and calling `f("hello")` returns `"hello!"`
 — with the host's own effect row unchanged, because a pure export adds nothing to any caller's row.

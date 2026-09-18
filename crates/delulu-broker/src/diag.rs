@@ -182,12 +182,18 @@ impl Denial {
                 // encode that guarantee as a typed repair (authority_widening: false, Exact). The
                 // concrete edit needs a source span (wired in chunk 3); the narrowing target is the
                 // intersection carried structurally on this `Denial`.
+                // NE-07: exact, and with no edits — the intersection is computed here, but the
+                // SOURCE span that would have to change lives in the caller's grant request, which
+                // this crate never sees. Flagged for a human rather than advertised as applicable.
                 let repair = Repair {
                     id: "R-DL0802-attenuate-to-intersection",
                     confidence: Confidence::Exact,
                     authority_widening: false,
-                    requires_human: false,
+                    requires_human: true,
                     edits: Vec::new(),
+                    reason: Some(
+                        "the narrowing target is exact, but the text to change is the grant                          request in your own invocation or manifest, which the broker cannot see                          or edit. Narrow it to the intersection named in the message.",
+                    ),
                 };
                 let _ = requested; // full requested authority is carried structurally on the Denial
                 Diagnostic::error(
@@ -374,7 +380,18 @@ mod tests {
         let repair = diag.repairs.first().expect("DL0802 carries a repair");
         assert!(!repair.authority_widening, "the attenuation repair NEVER widens (spec §8)");
         assert_eq!(repair.confidence, delulu_diag::Confidence::Exact);
-        assert!(!repair.requires_human);
+        // It IS exact — the intersection is computed, not guessed — and it carries **no edits**,
+        // because the text that would have to change is the caller's own grant request, which this
+        // crate never sees. So it is `requires_human`, and it says why (NE-07): the flags a repair
+        // publishes must not read as "apply me" when there is nothing to apply. `exact` and
+        // `requires_human` are answers to different questions and both are true here.
+        assert!(repair.edits.is_empty(), "the broker has no source span to edit");
+        assert!(repair.requires_human, "a repair with no edits is not machine-applicable");
+        assert!(
+            repair.reason.is_some_and(|r| r.contains("grant")),
+            "and it names what the human has to change: {:?}",
+            repair.reason
+        );
     }
 
     #[test]

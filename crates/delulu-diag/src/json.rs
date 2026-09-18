@@ -66,6 +66,9 @@ fn diagnostic_json(map: &SourceMap, d: &Diagnostic) -> Value {
                 "authority_widening": r.authority_widening,
                 "requires_human": r.requires_human,
                 "edits": edits,
+                // Always present, `null` where the repair carries edits: a missing field cannot
+                // be told apart from "this tool did not answer" (`docs/for-agents.md`).
+                "reason": r.reason,
             })
         })
         .collect();
@@ -141,6 +144,7 @@ mod tests {
                     Edit { file: f, start_byte: 0, end_byte: 0, insert: "a".into() },
                     Edit { file: 9, start_byte: 0, end_byte: 0, insert: "b".into() },
                 ],
+                reason: None,
             });
         let env = envelope("check", &[d], None, &map);
         let diag = &env["diagnostics"][0];
@@ -166,6 +170,7 @@ mod tests {
                 authority_widening: true,
                 requires_human: false,
                 edits: vec![Edit { file: f, start_byte: 6, end_byte: 6, insert: " ! {Net}".into() }],
+                reason: None,
             });
         let env = envelope("check", &[d], None, &map);
         assert_eq!(env["schema"], 1);

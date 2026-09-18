@@ -298,6 +298,24 @@ ignored. If you are enumerating effects in a harness, enumerate all ten: a repor
 capability decides *which* file or host. Do not report path-level guarantees as static — they are
 not, and saying so would be a claim the language deliberately refuses to make.
 
+### [agents.cap-paths] A path is relative to the capability, not to the working directory
+
+**If you generate DeluluLang, this is the rule most likely to make your program wrong while every
+check passes.** A `Cap[FsRead]` minted for `./config` is *rooted* there, so the path you hand it is
+relative to that root:
+
+```delulu
+let reader = root.fs_read("./config")
+reader.read_text("app.txt")            // reads ./config/app.txt
+reader.read_text("./config/app.txt")   // looks under ./config/config — returns Err(IoErr::NotFound)
+```
+
+There is **no diagnostic** for the second line: it is a well-typed program that asks for a file that
+is not there, so you get an ordinary `Err` and a plausible-looking "not found". The same holds for
+`fs_write`. Two subtrees means two capabilities. `delulu explain E-DL0703` repeats the rule, and
+`examples/guide/05_capabilities.delulu` had it wrong until 2026-09-18 — the CI gate now asserts that
+the guide's read *succeeds*, not merely that it runs.
+
 ## [agents.tests] Running tests
 
 ```
@@ -306,6 +324,22 @@ delulu test --json
 
 Tests hold **no ambient authority** (invariant 41): each gets exactly its declared row, bounded by
 the package's `[test-authority]` ceiling. An absent ceiling means PURE. Exceeding it is `DL1703`.
+
+**An effectful test needs a package, and there is no flag that substitutes for one.** The ceiling
+comes from `delulu.toml`'s `[test-authority]` and from nowhere else, so a `test "…" ! {Write}` in a
+standalone file is `DL1703` however you invoke it — `delulu test --test-authority Write` does not
+exist, and granting test authority from a command line would be a new authority source, which is the
+project lead's decision and is not built (finding NE-13). If you generate tests that perform effects,
+generate a package around them:
+
+```toml
+[test-authority]
+effects = ["Write"]
+fs_read = ["./fixtures"]
+```
+
+Inside a package, bare `delulu test` targets the package; outside one it refuses rather than guess a
+directory.
 
 ## [agents.registry] Registry
 

@@ -307,6 +307,7 @@ pub fn check_plugin_module(
                         end_byte: line.end,
                         insert: format!("{name} = \"{regenerated}\""),
                     }],
+                    reason: None,
                 }),
             );
         }

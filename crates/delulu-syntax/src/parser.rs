@@ -138,7 +138,26 @@ struct Parser {
     pat_depth: u32,
     /// Current block nesting depth, bounded by [`MAX_BLOCK_DEPTH`] (overnight red-team 2026-08-09).
     block_depth: u32,
+    /// One depth refusal **per overflow site**, per class (verification finding NE-04).
+    ///
+    /// Each guard used to fire once per level past its cap, so a single 200-deep expression
+    /// produced 73 identical `DL0210`s — the same sentence, 73 times, for one cause — and the
+    /// recovery junk the parser then assembled produced 72 more diagnostics from the checker:
+    /// **145 errors for one defect**, all of them on the uncapped machine channel, where an agent
+    /// receives every one of them. The cap itself is right; repeating its report is not.
+    ///
+    /// A flag is set when a class first refuses and cleared when that class's depth counter returns
+    /// to zero — that is, when the parser has left the construct entirely. So one over-deep
+    /// expression yields one `DL0210`, and a second, independent over-deep expression later in the
+    /// file yields its own: *a site*, not *a level* and not *a file*.
+    depth_reported: [bool; 4],
 }
+
+/// Indices into [`Parser::depth_reported`], one per recursive-descent class.
+const D_EXPR: usize = 0;
+const D_TYPE: usize = 1;
+const D_PAT: usize = 2;
+const D_BLOCK: usize = 3;
 
 impl Parser {
     fn new(file: FileId, tokens: Vec<Token>) -> Self {
@@ -153,7 +172,33 @@ impl Parser {
             type_depth: 0,
             pat_depth: 0,
             block_depth: 0,
+            depth_reported: [false; 4],
         }
+    }
+
+    /// Refuse an over-deep construct **once per site**: emit only if this class has not already
+    /// reported inside the construct the parser is currently in (NE-04). Returns whether the
+    /// diagnostic was emitted, so a caller can tell a first refusal from a suppressed repeat.
+    ///
+    /// `error` itself is not enough: it suppresses a cascade only until the next successful
+    /// `expect`, and an over-deep expression clears `panicking` on every closing paren.
+    fn depth_error(
+        &mut self,
+        class: usize,
+        code: &'static str,
+        msg: impl Into<String>,
+        span: Span,
+        label: impl Into<String>,
+    ) -> bool {
+        if self.depth_reported[class] {
+            return false;
+        }
+        self.depth_reported[class] = true;
+        // `error` is still the emitter: a depth refusal is an ordinary parse error and must set
+        // `panicking` exactly as one.
+        let before = self.diags.len();
+        self.error(code, msg, span, label);
+        self.diags.len() > before
     }
 
     // ----- node ids and cursor --------------------------------------------
@@ -507,6 +552,7 @@ impl Parser {
                         end_byte: a.span.end,
                         insert: String::new(),
                     }],
+                    reason: None,
                 }),
             );
         }
@@ -545,6 +591,7 @@ impl Parser {
                         end_byte: attr.span.end,
                         insert: String::new(),
                     }],
+                    reason: None,
                 }),
         );
     }
@@ -824,6 +871,7 @@ impl Parser {
                                     end_byte: bad.end,
                                     insert: String::new(),
                                 }],
+                                reason: None,
                             }),
                         );
                     }
@@ -950,6 +998,7 @@ impl Parser {
                     end_byte: span.end,
                     insert: renamed,
                 }],
+                reason: None,
             }),
         );
     }
@@ -1184,7 +1233,8 @@ impl Parser {
         // without a cascade, exactly as the DL0210 expression guard does.
         if self.type_depth >= MAX_TYPE_DEPTH {
             let span = self.span();
-            self.error(
+            self.depth_error(
+                D_TYPE,
                 "DL0211",
                 format!("type nests deeper than {MAX_TYPE_DEPTH} levels"),
                 span,
@@ -1199,6 +1249,9 @@ impl Parser {
         self.type_depth += 1;
         let t = self.parse_type_prefixed();
         self.type_depth -= 1;
+        if self.type_depth == 0 {
+            self.depth_reported[D_TYPE] = false;
+        }
         t
     }
 
@@ -1338,7 +1391,8 @@ impl Parser {
         // ONE brace-balanced pass and consume its own `}` — so the enclosing statement loop does not
         // re-parse the tail (the quadratic shape the pattern guard, DL0212, hit before its recovery).
         if self.block_depth >= MAX_BLOCK_DEPTH {
-            self.error(
+            self.depth_error(
+                D_BLOCK,
                 "DL0213",
                 format!("block nests deeper than {MAX_BLOCK_DEPTH} levels"),
                 start,
@@ -1370,6 +1424,9 @@ impl Parser {
             }
         });
         self.block_depth -= 1;
+        if self.block_depth == 0 {
+            self.depth_reported[D_BLOCK] = false;
+        }
         self.expect(TokenKind::RBrace);
         let span = start.to(self.prev_span());
         Block { stmts, id: self.node_id(), span }
@@ -1560,24 +1617,84 @@ impl Parser {
     /// is one that can be skipped. Now the deep input gets a diagnostic like any other refusal.
     fn parse_unary(&mut self, allow_struct: bool) -> Expr {
         if self.depth >= MAX_EXPR_DEPTH {
-            // Refuse to go deeper. No token is consumed: the placeholder returns through the
-            // callers already on the stack, each of which unwinds normally, and `panicking`
-            // suppresses the cascade of "expected `)`" that the unclosed parens would otherwise
-            // produce. Progress is guaranteed because every caller either consumes a token or
-            // returns — see `error_recovery_surfaces_multiple_diagnostics`.
+            // Refuse to go deeper, ONCE for this expression (NE-04), then consume the over-deep
+            // operand in one balanced pass so the callers already on the stack meet their own
+            // closers and unwind normally.
+            //
+            // Returning without consuming was correct for termination and wrong for everything
+            // else: the 72 unread `(`s were then read by `parse_postfix_on` as CALLS on the
+            // placeholder, so the checker was handed a 72-deep call chain the programmer never
+            // wrote and answered it with 72 × `DL0404: value of type `'t0` is not callable` — a
+            // type name that appears nowhere in the source, about a call that is not in the source
+            // either. The recovery junk must not be type-checked, so it is no longer built.
+            // Progress is still guaranteed: this path either consumes tokens or returns without
+            // consuming, exactly as before (`error_recovery_surfaces_multiple_diagnostics`).
             let start = self.span();
-            self.error(
+            self.depth_error(
+                D_EXPR,
                 "DL0210",
                 format!("expression nests deeper than {MAX_EXPR_DEPTH} levels"),
                 start,
                 "simplify or split this expression",
             );
+            self.skip_over_deep_operand();
             return Expr::Lit { kind: LitKind::Int(0), id: self.node_id(), span: start };
         }
         self.depth += 1;
         let e = self.parse_unary_inner(allow_struct);
         self.depth -= 1;
+        if self.depth == 0 {
+            // Out of the expression entirely: the next one that overflows is a new site.
+            self.depth_reported[D_EXPR] = false;
+        }
         e
+    }
+
+    /// Consume the operand the depth guard refused, balancing `(`…`)` and `[`…`]`, and stop before
+    /// any closer that belongs to a caller already on the stack.
+    ///
+    /// Modelled on the `DL0212` pattern guard's recovery, for the same two reasons: recovery stays
+    /// linear (a naive return re-parsed the same tail once per enclosing level), and the parser
+    /// stops inventing structure out of tokens it has refused to read.
+    fn skip_over_deep_operand(&mut self) {
+        let mut parens: u32 = 0;
+        let mut brackets: u32 = 0;
+        while !self.at_eof() {
+            match self.peek() {
+                TokenKind::LParen => {
+                    parens += 1;
+                    self.bump();
+                }
+                TokenKind::LBracket => {
+                    brackets += 1;
+                    self.bump();
+                }
+                TokenKind::RParen => {
+                    if parens == 0 {
+                        break; // a caller's closer
+                    }
+                    parens -= 1;
+                    self.bump();
+                }
+                TokenKind::RBracket => {
+                    if brackets == 0 {
+                        break;
+                    }
+                    brackets -= 1;
+                    self.bump();
+                }
+                // At the top of the refused operand these end it: the statement, the argument
+                // list, or the enclosing block. Inside a group they are ordinary tokens.
+                TokenKind::Term | TokenKind::Comma | TokenKind::LBrace | TokenKind::RBrace
+                    if parens == 0 && brackets == 0 =>
+                {
+                    break;
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+        }
     }
 
     fn parse_unary_inner(&mut self, allow_struct: bool) -> Expr {
@@ -1697,7 +1814,8 @@ impl Parser {
             chain += 1;
             if chain > MAX_EXPR_DEPTH {
                 let span = e.span();
-                self.error(
+                self.depth_error(
+                    D_EXPR,
                     "DL0210",
                     format!("expression nests deeper than {MAX_EXPR_DEPTH} levels"),
                     span,
@@ -1924,6 +2042,7 @@ impl Parser {
                                 Edit { file: bad.file, start_byte: bad.start, end_byte: bad.start, insert: "{ ".into() },
                                 Edit { file: bad.file, start_byte: bad.end, end_byte: bad.end, insert: " }".into() },
                             ],
+                            reason: None,
                         }),
                 );
             }
@@ -1949,7 +2068,8 @@ impl Parser {
         // every nested field re-enters, so the counter rises once per level.
         if self.pat_depth >= MAX_PATTERN_DEPTH {
             let start = self.span();
-            self.error(
+            self.depth_error(
+                D_PAT,
                 "DL0212",
                 format!("pattern nests deeper than {MAX_PATTERN_DEPTH} levels"),
                 start,
@@ -1984,6 +2104,9 @@ impl Parser {
         self.pat_depth += 1;
         let p = self.parse_pattern_inner();
         self.pat_depth -= 1;
+        if self.pat_depth == 0 {
+            self.depth_reported[D_PAT] = false;
+        }
         p
     }
 

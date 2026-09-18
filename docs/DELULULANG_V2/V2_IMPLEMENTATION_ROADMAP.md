@@ -37,7 +37,7 @@ enters the tree; research sources are named only in the archive's research recor
 
 ---
 
-## V2-0 — the V2 workspace and the documentation migration — IN PROGRESS
+## V2-0 — the V2 workspace and the documentation migration — COMPLETE (`e48f9c3`)
 
 | Id | Task | Verification |
 |---|---|---|
@@ -75,12 +75,22 @@ Acceptance: every `--json` success emits the envelope (gated); `explain` has a m
 `delulu test` passes bare; `authority` prints the grant line; the guide corpus reads its files;
 `REMAINING_WORK.md` names NE-01; CI green on three OSes.
 
+**Follow-ups recorded at P1's close (2026-09-18).** Each is a small brief of its own; none blocks
+PS-0; when they run is the owner's decision.
+
+| Id | Task | Source | Verification |
+|---|---|---|---|
+| P1-F1 | the DL0301 → DL0404 cascade: suppress DL0404 only when the callee's type is an inference variable born from an error (poison propagation) | D-V2-19; Entry P1, DECISIONS 3 | the cascade program yields DL0301 alone; `fn apply[F](f: F, x: Int) { f(x) }` still yields DL0404; conformance outcomes unchanged; mutant: suppress on every inference variable and watch the generic witness fail |
+| P1-F2 | the `grants` and `guard` verbs print their `--json` successes inside the envelope; a success sweep that starts a broker in a temporary state directory drives them | the head chef's P1 verification | the sweep; `grants` and `guard` leave `NO_SUCCESS_SWEEP` |
+| P1-F3 | a flag the shared option parser knows is refused by every command that does not own it (a per-command allowlist), as an unknown flag is today | Entry P1, PROBLEMS 3 | `check x.delulu --grants` and `check x.delulu --diff foo` exit 2; the refusal sweep covers every command against every shared flag |
+| P1-F4 | `delulu test <package directory>` resolves the package with all its modules, as bare `delulu test` inside it now does | Entry P1, PROBLEMS 4 | `delulu test examples/greeter` passes; a test that reaches a package by path |
+
 ## PS-0 — sandbox truth, probes and the cheap hardenings (5–6 S)
 
 | Id | Task | Finding | Verification |
 |---|---|---|---|
 | PS-0-01 | `REMAINING_WORK.md` rows for NE-17, NE-19/20, NE-21, NE-22; correct `README.md`, `GETTING_STARTED.md` §6 and the Book where `http.get` is presented as working; say that `--isolation process` isolates foreign code only, in `run --help` and the label | NE-17…22 | evidence and book gates |
-| PS-0-02 | `run --json` gains an additive `sandbox` object even at L0: `{backend:"inproc", level:0, requested, granted, host_guarantees:[], limits:null, mode:"strict", break_glass:false}` | NE-16b | the envelope sweep |
+| PS-0-02 | the run report (D-V2-21): `run --json --report-out <path>` writes an envelope with an additive `sandbox` object even at L0, `{backend:"inproc", level:0, requested, granted, host_guarantees:[], limits:null, mode:"strict", break_glass:false}`, both when the program ran and when the run was refused; the program's standard output is untouched; a `<path>` inside a scope the program may write is refused before the run | NE-16b | the envelope sweep drives `run` through `--report-out` and `run` leaves `NO_SUCCESS_SWEEP`; a refusal witness for a report path inside an `fs.write` scope; a program that prints a counterfeit `sandbox` object changes nothing in the report |
 | PS-0-03 | `DL1408` gains its promised repair (`requires_human: true`, `edits: []`, the fallback command) | NE-16c | coverage gate; the P1-05 rule |
 | PS-0-04 | `delulu sandbox probe [--json]`: per level, present/absent with the first missing prerequisite; every line an attempt, never a version string | — | asserted on CI per OS against the measured facts; a mutant probe that reports "present" without attempting must fail |
 | PS-0-05 | the `doctor` sandbox section built on PS-0-04: backends, level available, KVM, OS primitives, network and filesystem enforcement, identity separation, resource controls, the active profile, break-glass status, any intentionally relaxed restriction — only lines that change a decision | commission §24 | `doctor_cli.rs` |

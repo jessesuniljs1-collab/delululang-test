@@ -111,20 +111,26 @@ if [ -d pkgbin ]; then
     if [ "$got" = 0 ]; then PASS=$((PASS+1)); printf '  ok    %-46s exit %s\n' "check a generated package" "$got"
     else FAIL=$((FAIL+1)); printf '  FAIL  %-46s exit %s (wanted 0)\n' "check a generated package" "$got"; sed 's/^/          /' err.txt | head -4; fi
 
-    # `delulu test .`, NOT bare `delulu test` — the bare form looks for a `./tests` directory and
-    # correctly refuses without one. The dotted form is what the scaffold's own next-steps message
-    # prints, and `new.rs` explains why. An earlier draft of this sweep used the bare form and
-    # reported a defect that did not exist.
     ( cd pkgbin && "$DL" test . ) >out.txt 2>err.txt
     got=$?
     if [ "$got" = 0 ]; then PASS=$((PASS+1)); printf '  ok    %-46s exit %s\n' "test a generated package" "$got"
     else FAIL=$((FAIL+1)); printf '  FAIL  %-46s exit %s (wanted 0)\n' "test a generated package" "$got"; sed 's/^/          /' err.txt | head -4; fi
 
-    # The bare form MUST refuse cleanly (usage error), not crash.
+    # Bare `delulu test` INSIDE a package targets the package (V2 P1-07, finding NE-09). It used to
+    # refuse with "no ./tests directory here" although the scaffold's one test lives in `src/`, so
+    # the first command a new user ran after `delulu new` failed. An earlier draft of this sweep
+    # recorded that refusal as correct; it was the defect.
     ( cd pkgbin && "$DL" test ) >out.txt 2>err.txt
     got=$?
-    if [ "$got" = 2 ]; then PASS=$((PASS+1)); printf '  ok    %-46s exit %s\n' "bare test refuses (no ./tests)" "$got"
-    else FAIL=$((FAIL+1)); printf '  FAIL  %-46s exit %s (wanted 2)\n' "bare test refuses (no ./tests)" "$got"; fi
+    if [ "$got" = 0 ]; then PASS=$((PASS+1)); printf '  ok    %-46s exit %s\n' "bare test inside a package" "$got"
+    else FAIL=$((FAIL+1)); printf '  FAIL  %-46s exit %s (wanted 0)\n' "bare test inside a package" "$got"; sed 's/^/          /' err.txt | head -4; fi
+
+    # And OUTSIDE a package it still refuses cleanly (usage error), because there is nothing to
+    # infer and guessing a directory would be worse than asking.
+    ( "$DL" test ) >out.txt 2>err.txt
+    got=$?
+    if [ "$got" = 2 ]; then PASS=$((PASS+1)); printf '  ok    %-46s exit %s\n' "bare test outside a package refuses" "$got"
+    else FAIL=$((FAIL+1)); printf '  FAIL  %-46s exit %s (wanted 2)\n' "bare test outside a package refuses" "$got"; fi
 fi
 
 echo

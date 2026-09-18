@@ -38,7 +38,12 @@ enum K {
     /// A freshly created composite literal — provably without aliases. `natural` is its rcap
     /// when bound without demand (`ref`); `lift_val`/`lift_iso` say whether its CONTENTS
     /// permit lifting the whole value to deep immutability / uniqueness.
-    Fresh { natural: Rcap, lift_val: bool, lift_iso: bool },
+    ///
+    /// `blame` is the span of the FIRST element that forbids the `val` lift (verification finding
+    /// NE-02). Without it the refusal said only "a fresh value whose contents forbid the lift" —
+    /// true, and unusable: a reader with a ten-element literal was told one of them is the problem
+    /// and left to find out which.
+    Fresh { natural: Rcap, lift_val: bool, lift_iso: bool, blame: Option<Span> },
     Unknown,
 }
 
@@ -439,6 +444,78 @@ impl<'a> Pass<'a> {
         self.pop_scope();
     }
 
+    /// Enrich the one case NE-02 found unclimbable: `let xs: val C = [ … ]` where an element of the
+    /// literal is `ref`, refused `DL1603` with **no repair**, a message about "the lift" naming
+    /// nothing, and an `explain DL1603` that talked about a `val` closure capturing a `ref` — a
+    /// different case entirely. The rule itself is right: a `val` container is deeply immutable, so
+    /// its contents must be able to live under deep immutability. What was missing was everything
+    /// that makes a rule learnable.
+    ///
+    /// Three things are added, and only when the shape matches exactly: the element that forbids
+    /// the lift is pointed at, the message says what the writer has to decide, and a `safe` repair
+    /// drops the `val` annotation (the binding then takes its default rcap and the program checks).
+    /// The repair is `safe`, never `exact`, so `delulu fix` will NOT apply it for you: deleting an
+    /// annotation the author wrote is a judgement about intent, and `val` may be exactly what was
+    /// meant — in which case the fix is to build `val` contents instead. Nothing here changes what
+    /// is accepted; the same programs are refused, with a refusal a reader can act on.
+    fn explain_val_binding(
+        &mut self,
+        before: usize,
+        vk: K,
+        dest: Rcap,
+        ty: Option<&TypeExpr>,
+        name_span: Span,
+    ) {
+        if self.diags.len() != before + 1 || dest != Rcap::Val {
+            return;
+        }
+        let K::Fresh { lift_val: false, blame, .. } = vk else { return };
+        let Some(TypeExpr::Rcap { rcap: Rcap::Val, inner, span: rcap_span }) = ty else { return };
+        let d = &mut self.diags[before];
+        if d.code != "DL1603" {
+            return;
+        }
+        d.message.push_str(
+            " — a `val` container is deeply immutable, so every element must be able to live under \
+             deep immutability, and this one cannot",
+        );
+        if let Some(b) = blame {
+            d.spans.push(delulu_diag::LabeledSpan {
+                span: b,
+                label: Some("this element is `ref`: it is mutable and aliasable".to_string()),
+                secondary: true,
+            });
+        }
+        // The WHOLE annotation goes, not just the word `val`, and the difference is the fix
+        // working: `List[List[Int]]` defaults to `val` under the spec §2 rule, so deleting the
+        // keyword alone leaves the same demand and the same refusal. With no annotation the binding
+        // takes the literal's own `ref`, which is what NE-02 recorded as the shape that checks and
+        // runs. From just after the name to the end of the type: `: val List[List[Int]]`.
+        let _ = inner;
+        let cut_start = name_span.end;
+        let cut_end = rcap_span.end;
+        if cut_end > cut_start {
+            let repair = Repair {
+                id: "drop-val-annotation",
+                confidence: Confidence::Safe,
+                authority_widening: false,
+                requires_human: false,
+                edits: vec![Edit {
+                    file: rcap_span.file,
+                    start_byte: cut_start,
+                    end_byte: cut_end,
+                    insert: String::new(),
+                }],
+                reason: None,
+            };
+            // Through `with_repair`, not by pushing onto `repairs` directly: that builder is the one
+            // place the editless-repair rule is enforced (NE-07), and a site that goes around it is
+            // a site the rule does not reach.
+            let taken = self.diags.remove(before);
+            self.diags.insert(before, taken.with_repair(repair));
+        }
+    }
+
     fn walk_stmt(&mut self, stmt: &Stmt, ret_dest: Option<Rcap>, has_ret: bool) {
         match stmt {
             Stmt::Let { name, ty, value, span, .. } => {
@@ -449,7 +526,9 @@ impl<'a> Pass<'a> {
                     ty.as_ref().and_then(|_| vty.as_ref().and_then(|t| self.default_of(t)));
                 let dest = written.or(annotated_default);
                 if let Some(d) = dest {
+                    let before = self.diags.len();
                     self.check_storable(vk, d, *span, "binding", written.is_some());
+                    self.explain_val_binding(before, vk, d, ty.as_ref(), name.span);
                 }
                 // The binding's rcap: the annotation's demand, else what the value provides.
                 let rcap = dest.or(match vk {
@@ -628,7 +707,7 @@ impl<'a> Pass<'a> {
             b.rcap = Some(Rcap::Val);
             b.fresh_lift = None;
         }
-        K::Fresh { natural, lift_val, lift_iso }
+        K::Fresh { natural, lift_val, lift_iso, blame: None }
     }
 
     /// The `fresh_lift` of a bare-variable expression, if it still has one. Read at argument sites
@@ -652,7 +731,7 @@ impl<'a> Pass<'a> {
         let ok = match k {
             K::Known(kk) => subcap(alias(kk), dest),
             K::Unaliased(kk) => subcap(kk, dest),
-            K::Fresh { natural, lift_val, lift_iso } => match dest {
+            K::Fresh { natural, lift_val, lift_iso, .. } => match dest {
                 Rcap::Val => lift_val,
                 Rcap::Iso | Rcap::Trn => lift_iso,
                 d => subcap(natural, d),
@@ -778,7 +857,7 @@ impl<'a> Pass<'a> {
         let ok = match k {
             K::Unaliased(kk) => subcap(kk, dest),
             K::Known(kk) => subcap(alias(kk), dest),
-            K::Fresh { natural, lift_val, lift_iso } => match dest {
+            K::Fresh { natural, lift_val, lift_iso, .. } => match dest {
                 Rcap::Val => lift_val,
                 Rcap::Iso | Rcap::Trn => lift_iso,
                 d => subcap(natural, d),
@@ -808,6 +887,7 @@ impl<'a> Pass<'a> {
                             end_byte: span.start,
                             insert: "consume ".into(),
                         }],
+                        reason: None,
                     });
                 }
                 self.diags.push(d);
@@ -961,14 +1041,16 @@ impl<'a> Pass<'a> {
             }
             Expr::List { items, .. } => {
                 let ks: Vec<K> = items.iter().map(|i| self.walk_expr(i)).collect();
+                let spans: Vec<Span> = items.iter().map(|i| i.span()).collect();
                 for (i, item) in items.iter().enumerate() {
                     self.escape_arg(item);
                     let _ = (i, &ks);
                 }
-                fresh_composite(&ks)
+                fresh_composite(&ks, &spans)
             }
             Expr::Record { path, fields, span, .. } => {
                 let mut ks = Vec::new();
+                let mut fspans: Vec<Span> = Vec::new();
                 for (fname, fe) in fields {
                     let k = self.walk_expr(fe);
                     self.escape_arg(fe);
@@ -983,9 +1065,10 @@ impl<'a> Pass<'a> {
                         }
                     }
                     ks.push(k);
+                    fspans.push(fe.span());
                 }
                 let _ = path;
-                fresh_composite(&ks)
+                fresh_composite(&ks, &fspans)
             }
             Expr::Call { callee, args, .. } => {
                 self.walk_expr(callee);
@@ -1366,10 +1449,20 @@ impl<'a> Pass<'a> {
 /// The K of a freshly built composite from its element Ks: `ref`-born; liftable to `val` iff
 /// every element may live under deep immutability; liftable to `iso` iff every element is
 /// sendable-or-unique (nothing aliased and mutable rides along).
-fn fresh_composite(elems: &[K]) -> K {
+///
+/// `spans` is positionally aligned with `elems` and only used to BLAME the first element that
+/// forbids the `val` lift, so the refusal can point at it (NE-02).
+fn fresh_composite(elems: &[K], spans: &[Span]) -> K {
     let mut lift_val = true;
     let mut lift_iso = true;
-    for k in elems {
+    let mut blame: Option<Span> = None;
+    for (i, k) in elems.iter().enumerate() {
+        let was = lift_val;
+        let note = |lift_val: bool, blame: &mut Option<Span>| {
+            if was && !lift_val && blame.is_none() {
+                *blame = spans.get(i).copied();
+            }
+        };
         match k {
             K::Known(kk) => {
                 if !subcap(alias(*kk), Rcap::Val) {
@@ -1396,8 +1489,9 @@ fn fresh_composite(elems: &[K]) -> K {
                 lift_iso = false;
             }
         }
+        note(lift_val, &mut blame);
     }
-    K::Fresh { natural: Rcap::Ref, lift_val, lift_iso }
+    K::Fresh { natural: Rcap::Ref, lift_val, lift_iso, blame }
 }
 
 /// Component types of a user type for the default-rcap rule (records: field types; sums: all

@@ -1,0 +1,30 @@
+module capability_paths
+
+// Chapter 5. A path passed THROUGH a capability is relative to that capability, not to the
+// working directory: `reader` is rooted at `./config`, so the file it reads is named `app.txt`.
+// Writing `"./config/app.txt"` here would look under `./config/config` and take the `Err` branch
+// with no diagnostic at all — which is exactly what `examples/guide/05_capabilities.delulu` did
+// until 2026-09-18 (verification finding NE-03). The rule is the attenuation working: a
+// capability cannot name anything outside its own scope.
+fn load_settings(reader: Cap[FsRead]) -> Result[Str, IoErr] ! {Read} {
+    reader.read_text("app.txt")
+}
+
+// The write side is the same: `writer` is rooted at `./out`, so the file is `log.txt`.
+fn note(writer: Cap[FsWrite], line: Str) -> Result[Unit, IoErr] ! {Write} {
+    writer.write_text("log.txt", line)
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let out = root.console()
+    let reader = root.fs_read("./config")
+    let writer = root.fs_write("./out")
+    match load_settings(reader) {
+        Ok(text) => out.println("config: " + text)
+        Err(e) => out.println("no config under the granted scope")
+    }
+    match note(writer, "started") {
+        Ok(u) => out.println("wrote log")
+        Err(e) => out.println("could not write under the granted scope")
+    }
+}

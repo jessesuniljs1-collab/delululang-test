@@ -85,8 +85,11 @@ richer example wants three grants, and refuses one at a time until it has them:
   delulu run examples/demo.delulu \\
       --grant console --grant fs.read=./config --grant secret:API_KEY=demo
 
-Run 'delulu authority <file>' first and the required grants are the list it
-prints. Package examples are directories: 'delulu run examples/greeter --grant console'.
+Run 'delulu authority <file> --grants' first and the required grants are the
+list it prints, one '--grant' flag per line, ready to paste. An UPPERCASE word
+in one of them is a placeholder the program does not name in its own source
+(a secret's value, a path it takes at runtime) and you choose it.
+Package examples are directories: 'delulu run examples/greeter --grant console'.
 
 This build has no embedded Python: root.python(...) returns DL1307
 (unavailable), exactly as on a machine with no interpreter. Build from source

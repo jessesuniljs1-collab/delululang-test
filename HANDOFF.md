@@ -168,7 +168,7 @@ has been in continuous adversarial review rather than feature work.
 | 3 | The WASM backend (a *fragment*, not the whole language) under an embedded deny-by-default Wasmtime host |
 | 4 | Foreign function interface, embedded Python, cross-engine parity |
 | 5 | **Custody**: the broker, the `⊑` attenuation lattice, the grant tree, revocation epochs, the hash-chained audit log, lease tokens — and **the Guard** |
-| 6 | **Plugins** (`.dpx`), two classes, signing, verification |
+| 6 | **Plugins** (`.dpx`), two classes, signing, verification — the artifact and its checks. The **in-language load surface is a runtime stub** (`prim.rs:366`, `DL0703`): a running program cannot load a plugin. `REMAINING_WORK.md` 4.11; V2 phase P2 |
 | 7 | **Actors** — message passing, per-sender-pair FIFO, bounded mailboxes, quiescence |
 | 8 | **The language server** (`delulu lsp`, LSP 3.17) and the editor surface |
 | 9 | The registry, publishing, deployment planning, the measurement program |
@@ -408,6 +408,15 @@ supervision model transferred. The credit is recorded in `STAGE5_GUARD_ADDENDUM.
 
 A `.dpx` claiming Verified whose DIR fails any check is refused (`DL1504`) and **never falls back to
 Contained**. `delulu plugin build | inspect | verify`.
+
+**What is NOT built: loading one from a running program.** `root.plugin_host()` is a stub —
+`prim.rs:366` faults `DL0703` "plugin hosting is not available in the Stage-1 runtime" — and no
+`--grant` spelling enables it (`plugin`, `plugin=…`, `plugin.load`, `load`, `plugins` are each
+"unknown grant"). Such a program still **checks clean** and `delulu authority` still reports the
+plugin and its load site, so nothing but `run` tells you. The load sequence's own mechanics are
+witnessed by the Stage-6e library tests and by `plugin verify`, whose verdicts are identical to a
+real load; what is missing is the wiring from a program to them. `REMAINING_WORK.md` row 4.11, V2
+phase **P2** (`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`).
 
 ### Actors
 

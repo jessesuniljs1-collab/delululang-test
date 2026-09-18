@@ -339,3 +339,210 @@ fn a_clean_delulu_file_still_reports_nothing_to_repair_and_succeeds() {
     assert!(o.status.success(), "a clean source file is not an error: {out}");
     assert!(out.contains("nothing to repair"), "and it says so plainly: {out}");
 }
+// ----- the repair registry, both channels (verification finding NE-07) ---------------------------
+
+/// Every repair id the compiler can construct, read out of the source that constructs them.
+///
+/// A hand-written list falls behind the thing that defines it (C31/C34/C35/C44/C52), so the
+/// definition is read instead: the `id:` line of every `Repair { … }` literal in the crates that
+/// build repairs.
+fn repair_ids_in_source() -> Vec<String> {
+    let files = [
+        "crates/delulu-syntax/src/parser.rs",
+        "crates/delulu-check/src/check.rs",
+        "crates/delulu-check/src/deps.rs",
+        "crates/delulu-check/src/plugin.rs",
+        "crates/delulu-check/src/rcap_check.rs",
+        "crates/delulu-broker/src/diag.rs",
+    ];
+    let mut ids: Vec<String> = Vec::new();
+    for f in files {
+        let src = std::fs::read_to_string(repo_root().join(f))
+            .unwrap_or_else(|e| panic!("{f} must be readable — it is what this gate reads: {e}"));
+        let mut rest = src.as_str();
+        while let Some(at) = rest.find("Repair {") {
+            rest = &rest[at + 8..];
+            // The `id:` of this literal is the first one after the brace.
+            let Some(idx) = rest.find("id: \"") else { break };
+            let after = &rest[idx + 5..];
+            let Some(end) = after.find('"') else { break };
+            let id = after[..end].to_string();
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    assert!(
+        ids.len() >= 10,
+        "the registry scan found only {} ids — a gate that reads nothing passes everything",
+        ids.len()
+    );
+    ids
+}
+
+/// Repair ids no single-file `check` can provoke, each with the reason. Everything else must be
+/// exercised by the corpus below, so a new repair cannot be born unexamined.
+const REPAIRS_NOT_REACHABLE_FROM_ONE_FILE: &[(&str, &str)] = &[
+    (
+        "insert_dependency_pin",
+        "needs a PACKAGE with an unpinned dependency, not a single file (covered by `tooling.rs`)",
+    ),
+    (
+        "regenerate_manifest_export",
+        "needs a plugin manifest that disagrees with its code (covered by `plugin_cli.rs`)",
+    ),
+    (
+        "R-DL0802-attenuate-to-intersection",
+        "built by the BROKER on a live attenuation denial, never by `check` (covered by `guard_e2e.rs`)",
+    ),
+    (
+        "name-the-marshallable-type",
+        "needs a `foreign` block with an unmarshallable type in its signature",
+    ),
+    ("delete-behavior-return-type", "needs an actor behavior declared with a return type"),
+    ("normalize-actor-rcap", "needs an actor-typed binding carrying a non-`tag` rcap"),
+    ("consume-iso-send", "needs an `iso` value sent across an actor boundary without `consume`"),
+    ("rename-v07-keyword", "needs pre-0.7 source using `consume`/`recover` as an identifier"),
+];
+
+/// Source files that provoke the repairs this gate sweeps. Each is written here rather than
+/// borrowed from the corpus so the gate states, in one place, exactly which repair it is about.
+fn repair_corpus() -> Vec<(&'static str, &'static str)> {
+    vec![
+        // DL0502 `remove_effect_from_row` — the NE-07 repair: safe, and with no edits.
+        (
+            "unused_effect.delulu",
+            "module unusedeffect\n\nfn main(root: Root) ! {Write} {\n    let x = 1\n}\n",
+        ),
+        // DL0501 `add_effect_to_row` — exact, WIDENING, with edits.
+        (
+            "undeclared_effect.delulu",
+            "module undeclared\n\nfn main(root: Root) {\n    let out = root.console()\n    out.println(\"x\")\n}\n",
+        ),
+        // DL0201 `brace-match-arm-assignment` — exact, with edits.
+        (
+            "match_assign.delulu",
+            "module matchassign\n\nfn f(flag: Bool) {\n    var n = 0\n    match flag {\n        true => n = 1\n        false => n = 2\n    }\n}\n",
+        ),
+        // `remove-unknown-attribute` — exact, with edits.
+        (
+            "bad_attribute.delulu",
+            "module badattr\n\n@nosuchattribute\nfn f() -> Int { 1 }\n",
+        ),
+        // DL1603 `drop-val-annotation` (NE-02) — safe, with edits, and NOT auto-applied.
+        (
+            "val_over_ref.delulu",
+            "module valoverref\n\nfn f() {\n    let a: ref List[Int] = [1, 2]\n    let rows: val List[List[Int]] = [a]\n}\n",
+        ),
+    ]
+}
+
+/// NE-07. DL0502 offered `remove_effect_from_row` with `confidence: "safe"`,
+/// `authority_widening: false`, `requires_human: false` and **`edits: []`** — every flag reading
+/// *apply me* — while `delulu fix --dry-run --json` refused the same repair with
+/// `verdict: "requires-human"` and the LSP offered it as `isPreferred: true` with no `edit`. Three
+/// channels, three answers, about one repair.
+///
+/// The rule this gate holds: **a repair with no edits carries `requires_human: true` and says
+/// why**, and the flags `check --json` publishes and the verdicts `fix` reaches never disagree.
+#[test]
+fn a_repair_with_no_edits_says_a_human_must_decide_and_why() {
+    let dir = scratch("registry");
+    let mut seen: Vec<String> = Vec::new();
+    let mut bad: Vec<String> = Vec::new();
+
+    for (name, src) in repair_corpus() {
+        let f = dir.join(name);
+        std::fs::write(&f, src).unwrap();
+        let path = f.to_str().unwrap();
+
+        let chk = delulu(&["check", path, "--json"]);
+        let cv: serde_json::Value =
+            serde_json::from_slice(&chk.stdout).unwrap_or_else(|e| panic!("{name}: check --json: {e}"));
+        let fix = delulu(&["fix", path, "--dry-run", "--json"]);
+        let fv: serde_json::Value =
+            serde_json::from_slice(&fix.stdout).unwrap_or_else(|e| panic!("{name}: fix --json: {e}"));
+
+        let mut repairs_here = 0usize;
+        for d in cv["diagnostics"].as_array().unwrap_or(&Vec::new()) {
+            for r in d["repairs"].as_array().unwrap_or(&Vec::new()) {
+                repairs_here += 1;
+                let id = r["id"].as_str().unwrap_or("").to_string();
+                if !seen.contains(&id) {
+                    seen.push(id.clone());
+                }
+                let editless = r["edits"].as_array().map(|a| a.is_empty()).unwrap_or(true);
+                if editless {
+                    if r["requires_human"] != true {
+                        bad.push(format!(
+                            "{name}: repair `{id}` has no edits but requires_human = {} — the flags \
+                             say a machine can apply a repair that cannot be applied at all",
+                            r["requires_human"]
+                        ));
+                    }
+                    match r["reason"].as_str() {
+                        Some(s) if s.len() > 20 => {}
+                        _ => bad.push(format!(
+                            "{name}: repair `{id}` has no edits and no usable `reason`: {}",
+                            r["reason"]
+                        )),
+                    }
+                } else if !r["reason"].is_null() {
+                    bad.push(format!(
+                        "{name}: repair `{id}` carries edits AND a reason — `reason` is why there is \
+                         nothing to apply, so it must be null here"
+                    ));
+                }
+
+                // The cross-channel agreement. `fix` classifies widening BEFORE requires_human, so
+                // the implication is one-directional for a widening repair — stated exactly rather
+                // than approximated, because an approximate gate passes what it does not model.
+                let verdict = fv["fix"]["repairs"]
+                    .as_array()
+                    .and_then(|a| a.iter().find(|x| x["id"] == r["id"]))
+                    .map(|x| x["verdict"].as_str().unwrap_or("").to_string())
+                    .unwrap_or_default();
+                if verdict.is_empty() {
+                    bad.push(format!("{name}: repair `{id}` has no verdict in `fix --dry-run --json`"));
+                    continue;
+                }
+                let requires_human = r["requires_human"] == true;
+                let widening = r["authority_widening"] == true;
+                if verdict == "requires-human" && !requires_human {
+                    bad.push(format!(
+                        "{name}: `fix` says `{id}` requires a human and `check --json` says it does not"
+                    ));
+                }
+                if requires_human && !widening && verdict != "requires-human" {
+                    bad.push(format!(
+                        "{name}: `check --json` flags `{id}` requires_human and `fix` reached `{verdict}`"
+                    ));
+                }
+                if widening && verdict != "widens-authority" {
+                    bad.push(format!(
+                        "{name}: `check --json` flags `{id}` authority_widening and `fix` reached `{verdict}`"
+                    ));
+                }
+            }
+        }
+        assert!(repairs_here > 0, "{name} must produce at least one repair, or it witnesses nothing");
+    }
+
+    // Completeness: every repair the source can construct is either exercised above or excused in
+    // writing. Without this the corpus could quietly stop covering a repair and the gate would
+    // still pass.
+    let mut unswept: Vec<String> = Vec::new();
+    for id in repair_ids_in_source() {
+        let excused = REPAIRS_NOT_REACHABLE_FROM_ONE_FILE.iter().any(|(n, _)| *n == id);
+        if !seen.contains(&id) && !excused {
+            unswept.push(id);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        unswept.is_empty(),
+        "these repairs are constructed by the compiler but no case here exercises them: {unswept:?}\n\
+         Add a case to `repair_corpus`, or an entry to REPAIRS_NOT_REACHABLE_FROM_ONE_FILE with the reason."
+    );
+    assert!(bad.is_empty(), "the repair channels must agree:\n  {}", bad.join("\n  "));
+}

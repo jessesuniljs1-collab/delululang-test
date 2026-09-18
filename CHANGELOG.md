@@ -9,6 +9,92 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 phase P1: machine-contract truth, 2026-09-18
+
+Every machine-facing promise in `docs/for-agents.md` is now true or is now named as untrue, and the
+walls a first program hits are gone. **No language-semantics change**: the accepted language is
+identical, and only diagnostic counts (P1-04), one message with its repair (P1-09) and additive JSON
+fields (P1-02, P1-06, P1-08) moved. Findings are `NE-nn` from
+`docs/archive/v1/NEXT_EVOLUTION_2026/VERIFICATION_FINDINGS.md`; tasks are `P1-nn` from
+`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`.
+
+### Added
+
+- **P1-02 — the success half of the `--json` envelope is gated.** `json_contract.rs` gained
+  `every_json_success_emits_the_documented_envelope` (33 real invocations against a fixture),
+  `a_report_shaped_failure_never_claims_zero_errors`, and a completeness gate that reads its own
+  table so a new subcommand cannot be born unswept. It failed on **seventeen** commands when
+  written (NE-05 named eight): `why` (all five emitters), `add`, `plugin build|verify|inspect`,
+  `atlas` and its query verbs, `locale`, `morph`, `fmt`, `test`, `audit`, `keygen`, `sign`,
+  `verify-sig`, `login`, `publish`, `deploy`, `authority --diff`, `authority <artifact>`,
+  `explain`, `--version`. All now carry `command`, `schema`, `delulu_version`, `diagnostics` and
+  `summary`; every pre-existing field stays where it was. **`secrets list --json` and
+  `secrets set --json` accepted `--json` and ignored it** — found by the sweep, not by the finding.
+- **P1-03 — `explain --json`.** The flag was accepted and then read by nothing (NE-06). It now
+  answers `explain: {code, title, body, disposition, kind}` inside the envelope, `kind` naming which
+  of the three registries answered. Every other unknown option is still refused with exit 2.
+- **P1-05 — a repair with no edits says so, and says why.** `Repair` gained `reason`, and
+  `Diagnostic::with_repair` — the one path a repair reaches a diagnostic by — now makes an editless
+  repair `requires_human`. DL0502's `remove_effect_from_row` advertised `requires_human: false` with
+  `edits: []` while `fix` refused it and the LSP offered it as `isPreferred` with no `edit` (NE-07);
+  DL0802's broker repair did the same. A gate over the repair registry asserts `check --json`'s flags
+  and `fix --dry-run --json`'s verdicts agree.
+- **P1-06 — `test --json` carries its diagnostics.** A check-failed file rendered its DL diagnostics
+  on **stderr** while the envelope said only `status: "check-failed"` (NE-08). The envelope now
+  carries `diagnostics` (codes, byte spans, repairs), a ceiling failure gains `failure.code`,
+  `summary` gains `errors`, and under `--json` nothing human-rendered goes to stderr.
+- **P1-08 — `delulu authority --grants`, and `required_grants` / `requested_scopes` in JSON.** The
+  report never said which `--grant` flags a program needs, and dropped the scope literals its own
+  source names — in the report and in the Atlas (NE-10, NE-14). Both are additive, and both are
+  labelled **requested**, never *granted*: kind is static, scope is runtime. A gate asserts every
+  grant kind `crates/delulu-runtime/src/broker.rs` parses is derivable from the report;
+  `exec.native` is excluded by name because a `@jit` hint must not change what the report says a
+  program needs (invariant 45). `scripts/package-toolchain.sh`'s `INSTALL.txt` sentence is now true.
+- **P1-12 — the `REPOSITORY_STRUCTURE.md` §5 accounting gate exists.** The document claimed *"both
+  directions are now checked mechanically"* and nothing checked the markdown half (NE-12).
+  `crates/delulu/tests/repository_structure.rs` reads the generated `docs/survey/survey.json` and §5,
+  and carries a mutant so it cannot pass vacuously. It found `measurements/METHODOLOGY.md`
+  unaccounted.
+
+### Changed
+
+- **P1-04 — one overflow site, one diagnostic.** A 200-deep parenthesised expression produced **145
+  errors for one cause**: 73 × `DL0210`, one per level past the cap, plus 72 × `DL0404` from the
+  recovery placeholder being read as a call chain and type-checked (NE-04). It now produces **one**.
+  Two mechanisms, each witnessed: the guard consumes the operand it refused, and a per-site latch
+  keeps one class from reporting twice inside one construct. `DL0211/0212/0213` are gated to the same
+  rule. **The cap itself and the accepted language are unchanged** — the same programs are refused.
+  The core-invariance snapshot was regenerated deliberately (D-NE-3); the diff is in
+  `V2_EXECUTION_LOG.md` entry P1.
+- **P1-07 — bare `delulu test` inside a package targets the package.** `delulu new hello && cd hello
+  && delulu test` exited 2 with "no ./tests directory here", although the scaffold's one test lives
+  in `src/main.delulu` (NE-09). Outside a package the refusal is unchanged. `scripts/cli-sweep.sh`
+  now asserts both directions.
+- **P1-09 — `DL1603` for a `val` container over `ref` contents** now names the element that forbids
+  the lift, explains why a `val` container needs `val` contents, and offers a `safe`
+  `drop-val-annotation` repair (NE-02). `delulu explain DL1603` gained the case it always talked
+  around. The refusal's outcome is unchanged; the closure case keeps its own shape.
+- **P1-10 — `examples/guide/05_capabilities.delulu` reads its file.** It minted
+  `root.fs_read("./config")` and then asked for `"./config/app.txt"`, so it took the `Err` branch
+  every time and printed "no config" (NE-03) — with no diagnostic, because it is a well-typed program
+  asking for a file that is not there. The rule is now stated in `delulu explain E-DL0703`,
+  `docs/for-agents.md` [agents.cap-paths] and the Book Ch. 5 (with a checked sample), and
+  `examples_run.rs` asserts the guide's read and write **succeed**, with a negative control.
+- **P1-01 / P1-13 — documentation made true.** `docs/REMAINING_WORK.md` gained **4.11** (a program
+  cannot load a plugin at run time — the flagship demo does not execute; `prim.rs:366`) and **6.13**
+  (a filesystem miss does not name the capability scope: a candidate, not a gap, because `IoErr`'s
+  variants are part of the accepted language). The Book Ch. 10, `STAGE6_PLUGINS_GUIDE.md`,
+  `examples/plugin_shout/README.md`, `README.md` and `HANDOFF.md` now say the in-language load
+  surface is a runtime stub until V2's P2. `GETTING_STARTED.md` §9 and `docs/for-agents.md` say an
+  effectful single-file test needs a package `[test-authority]`, and that
+  `delulu test --test-authority` does not exist (NE-13; D-NE-17 is the owner's).
+
+### Not done here
+
+- **P1-11** (`[run-authority]` in `delulu.toml`) is deferred by D-V2-17: it is a new operator-side
+  grant source and is ruled with the loading grant grammar in P2. Not implemented, and not documented
+  as coming.
+
 ## Unreleased — the testing repository made public, 2026-09-17
 
 The owner made the testing repository (`HANDOFF.md` §1.1) public; the project's final public

@@ -36,10 +36,14 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./config"
+        ],
         "scopes": []
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -57,6 +61,19 @@ exit 0
     "pure_functions": [
       "apply",
       "fib"
+    ],
+    "requested_scopes": {
+      "FsRead": [
+        "./config"
+      ],
+      "Secret": [
+        "API_KEY"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./config",
+      "console",
+      "secret:API_KEY=VALUE"
     ],
     "secrets": [
       "API_KEY"
@@ -121,6 +138,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -141,6 +159,10 @@ exit 0
     "pure_functions": [
       "greeter.greetings::salutation",
       "greeter.greetings::shout_count"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -211,6 +233,8 @@ exit 0
       "salutation",
       "shout_count"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -412,6 +436,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -429,6 +454,10 @@ exit 0
       "area",
       "insert",
       "size"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -490,6 +519,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -508,6 +538,10 @@ exit 0
       "evens_up_to",
       "largest",
       "sum"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -569,6 +603,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -585,6 +620,10 @@ exit 0
     "pure_functions": [
       "describe",
       "to_int"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -646,6 +685,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -664,6 +704,10 @@ exit 0
       "double",
       "normalize",
       "pure_use"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -725,20 +769,30 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./config"
+        ],
         "scopes": []
       },
       {
         "kind": "FsWrite",
+        "requested_scopes": [
+          "./out"
+        ],
         "scopes": []
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
       },
       {
         "kind": "Http",
+        "requested_scopes": [
+          "example.com"
+        ],
         "scopes": []
       }
     ],
@@ -753,6 +807,23 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "guide.capabilities",
     "pure_functions": [],
+    "requested_scopes": {
+      "FsRead": [
+        "./config"
+      ],
+      "FsWrite": [
+        "./out"
+      ],
+      "Http": [
+        "example.com"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./config",
+      "fs.write=./out",
+      "console",
+      "net=example.com"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -828,6 +899,8 @@ exit 0
       "Worker.new",
       "Worker.total"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -887,6 +960,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -901,6 +975,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "hello",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -961,6 +1039,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -990,6 +1069,11 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "numpy_mean",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "console",
+      "foreign.python=numpy"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -1063,6 +1147,8 @@ exit 0
     "pure_functions": [
       "shout::shout"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1175,6 +1261,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Clock",
+        "requested_scopes": [],
         "scopes": []
       }
     ],
@@ -1187,6 +1274,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "shout_rigged",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "clock"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -1254,6 +1345,8 @@ exit 0
     "pure_functions": [
       "shout"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1322,6 +1415,8 @@ exit 0
       "max",
       "square"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1381,6 +1476,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -1395,6 +1491,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "conf",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -1464,6 +1564,8 @@ exit 0
       "twice",
       "use_pure"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1523,6 +1625,7 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [],
         "scopes": []
       }
     ],
@@ -1535,6 +1638,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "conf",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "fs.read=PATH"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -1603,6 +1710,8 @@ exit 0
       "code",
       "describe"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1671,6 +1780,8 @@ exit 0
       "get_x",
       "origin"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1737,6 +1848,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "conf",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "declassify"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -1805,6 +1920,8 @@ exit 0
       "areas_sum",
       "make"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -1864,6 +1981,7 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [],
         "scopes": []
       }
     ],
@@ -1878,6 +1996,10 @@ exit 0
     "pure_functions": [
       "doubled",
       "first_or"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "fs.read=PATH"
     ],
     "secrets": []
   },
@@ -1939,6 +2061,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -1958,6 +2081,10 @@ exit 0
       "Counter.doubled",
       "Counter.new",
       "Counter.take"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -2019,6 +2146,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -2034,6 +2162,10 @@ exit 0
     "program": "accept21",
     "pure_functions": [
       "double"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -2103,6 +2235,8 @@ exit 0
       "clamp",
       "use_it"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -2182,6 +2316,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "conf",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "foreign.c=mathlib:PATH"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -2244,6 +2382,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -2259,6 +2398,10 @@ exit 0
     "program": "conf",
     "pure_functions": [
       "both2"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -2320,6 +2463,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -2340,6 +2484,10 @@ exit 0
     "pure_functions": [
       "cold",
       "hot"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -2402,10 +2550,16 @@ exit 0
     "capabilities": [
       {
         "kind": "Actuator",
+        "requested_scopes": [
+          "arm0/elbow"
+        ],
         "scopes": []
       },
       {
         "kind": "Sensor",
+        "requested_scopes": [
+          "arm0/angle"
+        ],
         "scopes": []
       }
     ],
@@ -2422,6 +2576,18 @@ exit 0
       "mint_angle",
       "mint_arm",
       "why"
+    ],
+    "requested_scopes": {
+      "Actuator": [
+        "arm0/elbow"
+      ],
+      "Sensor": [
+        "arm0/angle"
+      ]
+    },
+    "required_grants": [
+      "actuator=arm0/elbow:DIM=lo..hi",
+      "sensor=arm0/angle"
     ],
     "secrets": []
   },
@@ -2484,6 +2650,9 @@ exit 0
     "capabilities": [
       {
         "kind": "Compute",
+        "requested_scopes": [
+          "gpu0"
+        ],
         "scopes": []
       }
     ],
@@ -2514,6 +2683,14 @@ exit 0
     "pure_functions": [
       "mint_gpu",
       "why"
+    ],
+    "requested_scopes": {
+      "Compute": [
+        "gpu0"
+      ]
+    },
+    "required_grants": [
+      "compute=gpu0:memory_bytes=N"
     ],
     "secrets": []
   },
@@ -2586,6 +2763,8 @@ exit 0
       "discards",
       "side_effecting_pure_thing"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -2653,6 +2832,8 @@ exit 0
       "count_names",
       "sum_until_four"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -4086,3323 +4267,11 @@ exit 1
           }
         }
       ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 525,
-            "col": 133,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 524,
-            "col": 132,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 526,
-            "col": 134,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 525,
-            "col": 133,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 527,
-            "col": 135,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 526,
-            "col": 134,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 528,
-            "col": 136,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 527,
-            "col": 135,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 529,
-            "col": 137,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 528,
-            "col": 136,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 530,
-            "col": 138,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 529,
-            "col": 137,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 531,
-            "col": 139,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 530,
-            "col": 138,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 532,
-            "col": 140,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 531,
-            "col": 139,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 533,
-            "col": 141,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 532,
-            "col": 140,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 534,
-            "col": 142,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 533,
-            "col": 141,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 535,
-            "col": 143,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 534,
-            "col": 142,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 536,
-            "col": 144,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 535,
-            "col": 143,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 537,
-            "col": 145,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 536,
-            "col": 144,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 538,
-            "col": 146,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 537,
-            "col": 145,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 539,
-            "col": 147,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 538,
-            "col": 146,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 540,
-            "col": 148,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 539,
-            "col": 147,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 541,
-            "col": 149,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 540,
-            "col": 148,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 542,
-            "col": 150,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 541,
-            "col": 149,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 543,
-            "col": 151,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 542,
-            "col": 150,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 544,
-            "col": 152,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 543,
-            "col": 151,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 545,
-            "col": 153,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 544,
-            "col": 152,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 546,
-            "col": 154,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 545,
-            "col": 153,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 547,
-            "col": 155,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 546,
-            "col": 154,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 548,
-            "col": 156,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 547,
-            "col": 155,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 549,
-            "col": 157,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 548,
-            "col": 156,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 550,
-            "col": 158,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 549,
-            "col": 157,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 551,
-            "col": 159,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 550,
-            "col": 158,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 552,
-            "col": 160,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 551,
-            "col": 159,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 553,
-            "col": 161,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 552,
-            "col": 160,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 554,
-            "col": 162,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 553,
-            "col": 161,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 555,
-            "col": 163,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 554,
-            "col": 162,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 556,
-            "col": 164,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 555,
-            "col": 163,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 557,
-            "col": 165,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 556,
-            "col": 164,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 558,
-            "col": 166,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 557,
-            "col": 165,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 559,
-            "col": 167,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 558,
-            "col": 166,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 560,
-            "col": 168,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 559,
-            "col": 167,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 561,
-            "col": 169,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 560,
-            "col": 168,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 562,
-            "col": 170,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 561,
-            "col": 169,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 563,
-            "col": 171,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 562,
-            "col": 170,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 564,
-            "col": 172,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 563,
-            "col": 171,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 565,
-            "col": 173,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 564,
-            "col": 172,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 566,
-            "col": 174,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 565,
-            "col": 173,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 567,
-            "col": 175,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 566,
-            "col": 174,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 568,
-            "col": 176,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 567,
-            "col": 175,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 569,
-            "col": 177,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 568,
-            "col": 176,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 570,
-            "col": 178,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 569,
-            "col": 177,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 571,
-            "col": 179,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 570,
-            "col": 178,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 572,
-            "col": 180,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 571,
-            "col": 179,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 573,
-            "col": 181,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 572,
-            "col": 180,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 574,
-            "col": 182,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 573,
-            "col": 181,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 575,
-            "col": 183,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 574,
-            "col": 182,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 576,
-            "col": 184,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 575,
-            "col": 183,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 577,
-            "col": 185,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 576,
-            "col": 184,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 578,
-            "col": 186,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 577,
-            "col": 185,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 579,
-            "col": 187,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 578,
-            "col": 186,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 580,
-            "col": 188,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 579,
-            "col": 187,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 581,
-            "col": 189,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 580,
-            "col": 188,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 582,
-            "col": 190,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 581,
-            "col": 189,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 583,
-            "col": 191,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 582,
-            "col": 190,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 584,
-            "col": 192,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 583,
-            "col": 191,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 585,
-            "col": 193,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 584,
-            "col": 192,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 586,
-            "col": 194,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 585,
-            "col": 193,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 587,
-            "col": 195,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 586,
-            "col": 194,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 588,
-            "col": 196,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 587,
-            "col": 195,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 589,
-            "col": 197,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 588,
-            "col": 196,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 590,
-            "col": 198,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 589,
-            "col": 197,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 591,
-            "col": 199,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 590,
-            "col": 198,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 592,
-            "col": 200,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 591,
-            "col": 199,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 593,
-            "col": 201,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 592,
-            "col": 200,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 594,
-            "col": 202,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 593,
-            "col": 201,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 595,
-            "col": 203,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 594,
-            "col": 202,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0210",
-      "explanation_id": "E-DL0210",
-      "message": "expression nests deeper than 128 levels",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 596,
-            "col": 204,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "simplify or split this expression",
-          "start": {
-            "byte": 595,
-            "col": 203,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `Int` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 524,
-            "col": 132,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t0` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 524,
-            "col": 132,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t1` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 525,
-            "col": 133,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t2` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 526,
-            "col": 134,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t3` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 527,
-            "col": 135,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t4` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 528,
-            "col": 136,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t5` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 529,
-            "col": 137,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t6` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 530,
-            "col": 138,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t7` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 531,
-            "col": 139,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t8` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 532,
-            "col": 140,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t9` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 533,
-            "col": 141,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t10` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 534,
-            "col": 142,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t11` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 535,
-            "col": 143,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t12` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 536,
-            "col": 144,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t13` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 537,
-            "col": 145,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t14` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 538,
-            "col": 146,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t15` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 539,
-            "col": 147,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t16` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 540,
-            "col": 148,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t17` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 541,
-            "col": 149,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t18` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 542,
-            "col": 150,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t19` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 543,
-            "col": 151,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t20` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 544,
-            "col": 152,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t21` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 545,
-            "col": 153,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t22` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 546,
-            "col": 154,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t23` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 547,
-            "col": 155,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t24` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 548,
-            "col": 156,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t25` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 549,
-            "col": 157,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t26` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 550,
-            "col": 158,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t27` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 551,
-            "col": 159,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t28` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 552,
-            "col": 160,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t29` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 553,
-            "col": 161,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t30` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 554,
-            "col": 162,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t31` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 555,
-            "col": 163,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t32` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 556,
-            "col": 164,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t33` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 557,
-            "col": 165,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t34` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 558,
-            "col": 166,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t35` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 559,
-            "col": 167,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t36` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 560,
-            "col": 168,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t37` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 561,
-            "col": 169,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t38` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 562,
-            "col": 170,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t39` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 563,
-            "col": 171,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t40` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 564,
-            "col": 172,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t41` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 565,
-            "col": 173,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t42` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 566,
-            "col": 174,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t43` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 567,
-            "col": 175,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t44` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 568,
-            "col": 176,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t45` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 569,
-            "col": 177,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t46` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 570,
-            "col": 178,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t47` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 571,
-            "col": 179,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t48` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 572,
-            "col": 180,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t49` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 573,
-            "col": 181,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t50` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 574,
-            "col": 182,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t51` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 575,
-            "col": 183,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t52` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 576,
-            "col": 184,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t53` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 577,
-            "col": 185,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t54` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 578,
-            "col": 186,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t55` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 579,
-            "col": 187,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t56` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 580,
-            "col": 188,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t57` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 581,
-            "col": 189,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t58` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 582,
-            "col": 190,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t59` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 583,
-            "col": 191,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t60` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 584,
-            "col": 192,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t61` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 585,
-            "col": 193,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t62` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 586,
-            "col": 194,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t63` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 587,
-            "col": 195,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t64` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 588,
-            "col": 196,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t65` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 589,
-            "col": 197,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t66` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 590,
-            "col": 198,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t67` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 591,
-            "col": 199,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t68` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 592,
-            "col": 200,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t69` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 593,
-            "col": 201,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t70` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 594,
-            "col": 202,
-            "line": 9
-          },
-          "file": "tests/conformance/reject/DL0210_deep_nesting.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 523,
-            "col": 131,
-            "line": 9
-          }
-        }
-      ]
     }
   ],
   "schema": 1,
   "summary": {
-    "errors": 145,
+    "errors": 1,
     "warnings": 0
   }
 }
@@ -7419,351 +4288,7 @@ error[DL0210]: expression nests deeper than 128 levels
    |                                                         ^ simplify or split this expression
   explain: delulu explain E-DL0210
 
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:132
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:133
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:134
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:135
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:136
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:137
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:138
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:139
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:140
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:141
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:142
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:143
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:144
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:145
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:146
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:147
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:148
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:149
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:150
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:151
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:152
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:153
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:154
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:155
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:156
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:157
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:158
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:159
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:160
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:161
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:162
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:163
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:164
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:165
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:166
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:167
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:168
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:169
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:170
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:171
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:172
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:173
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:174
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:175
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:176
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:177
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:178
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:179
-   |
- 9 | ...(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-error[DL0210]: expression nests deeper than 128 levels
-  --> tests/conformance/reject/DL0210_deep_nesting.delulu:9:180
-   |
- 9 | ...((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))...
-   |                                                         ^ simplify or split this expression
-  explain: delulu explain E-DL0210
-
-note: 95 more diagnostic(s) not shown (50 of 145 displayed) — fix these first, or re-run with `--json` for the complete list
-145 error(s)
+1 error(s)
 
 ===== tests/conformance/reject/DL0211_deep_type.delulu :: check --json =====
 exit 1
@@ -8519,7 +5044,8 @@ exit 1
           "confidence": "safe",
           "edits": [],
           "id": "remove_effect_from_row",
-          "requires_human": false
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
         }
       ],
       "severity": "warning",
@@ -8565,7 +5091,7 @@ warning[DL0502]: function `f` declares effect `Write` it never performs
    |
  3 | fn f(out: Cap[Console]) ! {Write} {
    |                         ^^^^^^^^^ declared here
-  repair: remove_effect_from_row (safe)
+  repair: remove_effect_from_row (safe)  [requires human decision]
   explain: delulu explain E-DL0502
 
 1 error(s)
@@ -8990,6 +5516,7 @@ exit 1
             }
           ],
           "id": "add_effect_to_row",
+          "reason": null,
           "requires_human": false
         }
       ],
@@ -9112,6 +5639,7 @@ exit 1
             }
           ],
           "id": "add_effect_to_row",
+          "reason": null,
           "requires_human": false
         }
       ],
@@ -9196,7 +5724,8 @@ exit 1
           "confidence": "safe",
           "edits": [],
           "id": "remove_effect_from_row",
-          "requires_human": false
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+          "requires_human": true
         }
       ],
       "severity": "warning",
@@ -9242,7 +5771,7 @@ warning[DL0502]: function `use_it` declares effect `Write` it never performs
    |
  9 | fn use_it(out: Cap[Console]) ! {Write} {
    |                              ^^^^^^^^^ declared here
-  repair: remove_effect_from_row (safe)
+  repair: remove_effect_from_row (safe)  [requires human decision]
   explain: delulu explain E-DL0502
 
 1 error(s)
@@ -9760,6 +6289,7 @@ exit 1
             }
           ],
           "id": "remove-unknown-attribute",
+          "reason": null,
           "requires_human": false
         }
       ],
@@ -9833,6 +6363,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -9848,6 +6379,10 @@ exit 0
     "program": "tier1",
     "pure_functions": [
       "area"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
     ],
     "secrets": []
   },
@@ -9909,6 +6444,7 @@ exit 0
     "capabilities": [
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -9923,6 +6459,10 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "tier1",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "console"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -9994,6 +6534,8 @@ exit 0
       "in_order",
       "insert"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -10061,6 +6603,8 @@ exit 0
       "gcd",
       "sum_list"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -10132,6 +6676,8 @@ exit 0
       "fold",
       "sum"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -10198,6 +6744,8 @@ exit 0
     "pure_functions": [
       "reverse"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -10257,10 +6805,14 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./data"
+        ],
         "scopes": []
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -10279,6 +6831,15 @@ exit 0
       "describe",
       "hottest",
       "temperature"
+    ],
+    "requested_scopes": {
+      "FsRead": [
+        "./data"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./data",
+      "console"
     ],
     "secrets": []
   },
@@ -10341,10 +6902,14 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./data"
+        ],
         "scopes": []
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -10361,6 +6926,15 @@ exit 0
     "program": "tier3",
     "pure_functions": [
       "count_words"
+    ],
+    "requested_scopes": {
+      "FsRead": [
+        "./data"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./data",
+      "console"
     ],
     "secrets": []
   },
@@ -10423,6 +6997,7 @@ exit 0
     "capabilities": [
       {
         "kind": "FsWrite",
+        "requested_scopes": [],
         "scopes": [
           "./out"
         ]
@@ -10449,6 +7024,10 @@ exit 0
       "reading::celsius_of",
       "reading::decode",
       "reading::sensor_of"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "fs.write=./out"
     ],
     "secrets": []
   },
@@ -10763,6 +7342,8 @@ exit 0
       "reading::decode",
       "reading::sensor_of"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -11161,6 +7742,8 @@ exit 0
       "reading::decode",
       "reading::sensor_of"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -11870,6 +8453,8 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "reading.types",
     "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -11929,18 +8514,25 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./data"
+        ],
         "scopes": [
           "./data"
         ]
       },
       {
         "kind": "FsWrite",
+        "requested_scopes": [
+          "./out"
+        ],
         "scopes": [
           "./out"
         ]
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -11976,6 +8568,19 @@ exit 0
       "reading::sensor_of",
       "station.report::reason",
       "station.report::summary"
+    ],
+    "requested_scopes": {
+      "FsRead": [
+        "./data"
+      ],
+      "FsWrite": [
+        "./out"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./data",
+      "fs.write=./out",
+      "console"
     ],
     "secrets": []
   },
@@ -13284,10 +9889,14 @@ exit 0
     "capabilities": [
       {
         "kind": "FsRead",
+        "requested_scopes": [
+          "./data"
+        ],
         "scopes": []
       },
       {
         "kind": "Console",
+        "requested_scopes": [],
         "scopes": [
           "stdio"
         ]
@@ -13303,6 +9912,15 @@ exit 0
     "foreign_isolation": "inproc",
     "program": "tier5",
     "pure_functions": [],
+    "requested_scopes": {
+      "FsRead": [
+        "./data"
+      ]
+    },
+    "required_grants": [
+      "fs.read=./data",
+      "console"
+    ],
     "secrets": []
   },
   "command": "authority",
@@ -13373,6 +9991,8 @@ exit 0
       "scramble",
       "transform"
     ],
+    "requested_scopes": {},
+    "required_grants": [],
     "secrets": []
   },
   "command": "authority",
@@ -13440,6 +10060,10 @@ exit 0
     "program": "tier5",
     "pure_functions": [
       "derive"
+    ],
+    "requested_scopes": {},
+    "required_grants": [
+      "declassify"
     ],
     "secrets": []
   },

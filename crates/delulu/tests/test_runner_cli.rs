@@ -99,8 +99,23 @@ fn criterion5_pure_tests_run_effects_traced_and_undeclared_is_refused() {
 
     // Overall: at least one failure ⇒ exit 1.
     assert_eq!(o.status.code(), Some(1));
+    // P1-06 (NE-08): the refusal used to surface as a HUMAN render on stderr while the envelope
+    // said only `status: "check-failed"` — the machine channel named a failure and withheld its
+    // cause. The diagnostics now ride in the envelope, with code, span and repairs, and under
+    // `--json` nothing human-rendered goes to stderr at all.
+    let codes: Vec<&str> =
+        v["diagnostics"].as_array().expect("the test envelope carries diagnostics")
+            .iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    assert!(codes.contains(&"DL0501"), "the real refusal is in the envelope: {}", v["diagnostics"]);
+    let first = &v["diagnostics"][0];
+    assert!(first["spans"][0]["start"]["byte"].is_number(), "with a byte span: {first}");
+    assert!(first["repairs"].is_array(), "and its repairs: {first}");
     let err = String::from_utf8_lossy(&o.stderr);
-    assert!(err.contains("DL0501"), "the real refusal surfaces on stderr: {err}");
+    assert!(
+        !err.contains("DL0501"),
+        "under --json the human render must not also go to stderr: {err}"
+    );
+    assert_eq!(v["summary"]["errors"], v["summary"]["failed"], "errors tracks the run's verdict");
 }
 
 #[test]
@@ -119,8 +134,28 @@ fn a_test_exceeding_the_package_ceiling_is_dl1703() {
     )
     .unwrap();
     let o = delulu(&dir, &["test", "--json"], None);
-    let err = String::from_utf8_lossy(&o.stderr);
-    assert!(err.contains("DL1703"), "exceeding the ceiling is DL1703: {err}");
+    // The human channel still renders it; the machine channel now carries it as a diagnostic with
+    // a code and a span rather than as a message string with the code spliced into prose (NE-08).
+    let human = delulu(&dir, &["test"], None);
+    assert!(
+        String::from_utf8_lossy(&human.stderr).contains("DL1703"),
+        "exceeding the ceiling is DL1703 on the human channel"
+    );
+    let v: Value = serde_json::from_slice(&o.stdout).expect("one envelope");
+    let codes: Vec<&str> = v["diagnostics"].as_array().expect("diagnostics array")
+        .iter().map(|d| d["code"].as_str().unwrap_or("")).collect();
+    assert!(codes.contains(&"DL1703"), "exceeding the ceiling is DL1703: {}", v["diagnostics"]);
+    assert!(
+        v["diagnostics"][0]["spans"][0]["start"]["line"].is_number(),
+        "and it names where: {}",
+        v["diagnostics"][0]
+    );
+    let failed = v["tests"].as_array().unwrap().iter().find(|t| t["status"] == "fail").expect("a failed test");
+    assert_eq!(failed["failure"]["code"], "DL1703", "the failure names the code as a field: {failed}");
+    assert!(
+        !String::from_utf8_lossy(&o.stderr).contains("DL1703"),
+        "under --json nothing human-rendered goes to stderr"
+    );
     assert_eq!(o.status.code(), Some(1));
 }
 

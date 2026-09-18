@@ -291,6 +291,433 @@ fn doctor_reporting_a_problem_still_emits_exactly_one_object() {
     );
 }
 
+// ----- the SUCCESS envelope (NE-05) --------------------------------------------------------------
+//
+// Everything above tests the FAILURE envelope. `docs/for-agents.md` [agents.json-envelope] promises
+// the same five fields on success — *"Every `--json` command emits one object: {command, schema,
+// delulu_version, diagnostics, summary}"* — and that half was never gated. Verification finding
+// NE-05 drove eight commands by hand and found `why` printing a bare `{effect, path, performs}`,
+// `plugin inspect` printing `command` alone, `test` carrying no `diagnostics`, `atlas` printing its
+// own `atlas/1` document, and `--version --json` printing text. A caller could not read
+// `summary.errors` — the documented definition of "this passed" — from any of them.
+//
+// The sweep below is written the way the failure sweep is: one table of real invocations, plus a
+// completeness check against `SUBCOMMANDS` so that a command added later cannot be born unswept.
+
+/// A success invocation: the argv (after the subcommand), and where to run it. `Cwd::Pkg` runs
+/// inside the fixture package, `Cwd::Repo` inside the repository (for paths under `examples/`).
+#[derive(Clone, Copy, PartialEq)]
+enum Cwd {
+    Pkg,
+    Repo,
+}
+
+/// Commands this sweep cannot drive to a `--json` success, each with the reason it cannot.
+/// A name belongs here only when the command cannot *reach* a success in a fixture — never
+/// because its envelope is inconvenient to fix.
+const NO_SUCCESS_SWEEP: &[(&str, &str)] = &[
+    (
+        "run",
+        "under `--json` stdout belongs to the PROGRAM: `run_cmd.rs` keeps the run's own bytes as \
+         the contract, so an envelope on stdout would interleave with program output. Changing \
+         that is a machine-surface decision of its own, not a wrapping.",
+    ),
+    ("grants", "every verb talks to a running broker daemon (invariant 27: no local fallback)"),
+    ("guard", "same as `grants` — every guard verb is a broker RPC and fails closed without one"),
+    ("fleet", "needs a fleet manifest and an artifact to roll out"),
+    ("completions", "emits a shell script; it refuses `--json` by design and says so"),
+    // Named in NOT_SWEPT above for the same reasons; repeated here so this table is readable on
+    // its own rather than by subtraction.
+    ("lsp", "a JSON-RPC server: it blocks on stdin by design and is not run-once"),
+    ("repl", "interactive: it reads a human line at a time and never exits on its own"),
+    ("broker", "can start a daemon; not run-once"),
+    ("doctor", "without `--check` it WRITES `docs/survey/`; covered by its own test above"),
+];
+
+fn fixture() -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("delulu-success-envelope-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+
+    // A dependency to `add --path`, and the package that adds it.
+    let dep = d.join("dep");
+    std::fs::create_dir_all(dep.join("src")).unwrap();
+    std::fs::write(
+        dep.join("delulu.toml"),
+        "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dep.join("src").join("dep.delulu"),
+        "module dep\n\npub fn v(x: Int) -> Int {\n    x + 1\n}\n",
+    )
+    .unwrap();
+
+    let pkg = d.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Write\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("main.delulu"),
+        "module pkg\n\nfn greet(name: Str) -> Str {\n    \"hi, \" + name\n}\n\n\
+         fn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(greet(\"world\"))\n}\n\n\
+         test \"greet builds the message\" {\n    assert_eq(greet(\"x\"), \"hi, x\")\n}\n",
+    )
+    .unwrap();
+    pkg
+}
+
+/// Every `--json` success must carry the five documented fields, typed.
+fn assert_envelope(label: &str, stdout: &str, want_command: &str) -> Vec<String> {
+    let mut bad = Vec::new();
+    let v: serde_json::Value = match serde_json::from_str(stdout.trim()) {
+        Ok(v) => v,
+        Err(e) => {
+            bad.push(format!("{label}: stdout is not one JSON value ({e}): {stdout}"));
+            return bad;
+        }
+    };
+    if v["command"] != serde_json::Value::String(want_command.to_string()) {
+        bad.push(format!("{label}: command = {} , want \"{want_command}\"", v["command"]));
+    }
+    if v["schema"] != 1 {
+        bad.push(format!("{label}: schema = {}, want 1", v["schema"]));
+    }
+    if !v["delulu_version"].is_string() {
+        bad.push(format!("{label}: delulu_version missing or not a string"));
+    }
+    if !v["diagnostics"].is_array() {
+        bad.push(format!("{label}: diagnostics missing or not an array"));
+    }
+    if !v["summary"].is_object() {
+        bad.push(format!("{label}: summary missing or not an object"));
+    }
+    // `summary.errors == 0` is the documented definition of "this passed", so on an exit of 0 it
+    // must be 0 — and it is checked here rather than trusted, because a verdict string and an exit
+    // code that disagree is the defect on record in `docs/security/DRILL-001.md`.
+    if v["summary"]["errors"] != 0 {
+        bad.push(format!(
+            "{label}: exited 0 but summary.errors = {} — a verdict that disagrees with the exit code",
+            v["summary"]["errors"]
+        ));
+    }
+    bad
+}
+
+#[test]
+fn every_json_success_emits_the_documented_envelope() {
+    let pkg = fixture();
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+    let home = pkg.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+
+    let run_in = |cwd: &std::path::Path, args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .current_dir(cwd)
+            .env("DELULU_HOME", &home)
+            .env("DELULU_STATE_DIR", &home)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .output()
+            .expect("the delulu binary must run")
+    };
+
+    // A plugin artifact for the three `plugin` verbs and for `why <file.dpx>`, and a `.dwx`
+    // artifact for the `authority <artifact>` path — both built through the CLI, so the fixture
+    // cannot drift from what the tool actually produces.
+    let dpx = pkg.join("shout.dpx");
+    let built = run_in(&repo, &["plugin", "build", "examples/plugin_shout", "-o", &dpx.display().to_string()]);
+    assert_eq!(built.status.code(), Some(0), "fixture plugin: {}", String::from_utf8_lossy(&built.stderr));
+    let dwx = pkg.join("pkg.dwx");
+    let wasm = run_in(
+        &pkg,
+        &["build", "src/main.delulu", "--target", "wasm", "-o", &dwx.display().to_string()],
+    );
+    assert_eq!(wasm.status.code(), Some(0), "fixture .dwx: {}", String::from_utf8_lossy(&wasm.stderr));
+    let locked = run_in(&pkg, &["lock", "."]);
+    assert_eq!(locked.status.code(), Some(0), "fixture lockfile: {}", String::from_utf8_lossy(&locked.stderr));
+    // The default signing key, so `sign`/`verify-sig` have one; the swept `keygen` case makes a
+    // second, named one (a `keygen` that would overwrite a key refuses, correctly).
+    let kg = run_in(&pkg, &["keygen"]);
+    assert_eq!(kg.status.code(), Some(0), "fixture key: {}", String::from_utf8_lossy(&kg.stderr));
+    std::fs::write(pkg.join("env.toml"), "[authority]
+effects = [\"Write\"]
+").unwrap();
+
+    // (subcommand, argv, cwd, the `command` field the envelope must carry)
+    let dpx_s = dpx.display().to_string();
+    let dwx_s = dwx.display().to_string();
+    let cases: Vec<(&str, Vec<&str>, Cwd, &str)> = vec![
+        ("check", vec!["check", ".", "--json"], Cwd::Pkg, "check"),
+        ("authority", vec!["authority", ".", "--json"], Cwd::Pkg, "authority"),
+        ("authority-artifact", vec!["authority", &dwx_s, "--json"], Cwd::Pkg, "authority"),
+        ("authority-diff", vec!["authority", "--diff", "delulu.lock", ".", "--json"], Cwd::Pkg, "authority"),
+        ("build", vec!["build", ".", "--json"], Cwd::Pkg, "build"),
+        ("lock", vec!["lock", ".", "--json"], Cwd::Pkg, "lock"),
+        ("fmt", vec!["fmt", "src", "--check", "--json"], Cwd::Pkg, "fmt"),
+        ("test", vec!["test", ".", "--json"], Cwd::Pkg, "test"),
+        ("fix", vec!["fix", "src/main.delulu", "--dry-run", "--json"], Cwd::Pkg, "fix"),
+        ("new", vec!["new", "scaffolded", "--json"], Cwd::Pkg, "new"),
+        ("add", vec!["add", "--path", "../dep", "--json"], Cwd::Pkg, "add"),
+        ("plugin-build", vec!["plugin", "build", "examples/plugin_shout", "-o", &dpx_s, "--json"], Cwd::Repo, "plugin"),
+        ("plugin-verify", vec!["plugin", "verify", &dpx_s, "--json"], Cwd::Pkg, "plugin"),
+        ("plugin-inspect", vec!["plugin", "inspect", &dpx_s, "--json"], Cwd::Pkg, "plugin"),
+        ("why", vec!["why", "Write", "src/main.delulu", "--json"], Cwd::Pkg, "why"),
+        ("why-absent", vec!["why", "Net", "src/main.delulu", "--json"], Cwd::Pkg, "why"),
+        ("why-dpx", vec!["why", "Read", &dpx_s, "--json"], Cwd::Pkg, "why"),
+        ("explain", vec!["explain", "DL0501", "--json"], Cwd::Pkg, "explain"),
+        ("explain-topic", vec!["explain", "E-PLUGIN", "--json"], Cwd::Pkg, "explain"),
+        ("explain-unallocated", vec!["explain", "DL0503", "--json"], Cwd::Pkg, "explain"),
+        ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
+        ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),
+        ("locale", vec!["locale", "list", "--json"], Cwd::Pkg, "locale"),
+        ("morph", vec!["morph", "list", "--json"], Cwd::Pkg, "morph"),
+        ("secrets", vec!["secrets", "list", "--json"], Cwd::Pkg, "secrets"),
+        ("audit", vec!["audit", "tail", "--json"], Cwd::Pkg, "audit"),
+        ("keygen", vec!["keygen", "--name", "swept", "--json"], Cwd::Pkg, "keygen"),
+        ("sign", vec!["sign", "src/main.delulu", "--json"], Cwd::Pkg, "sign"),
+        ("verify-sig", vec!["verify-sig", "src/main.delulu", "--json"], Cwd::Pkg, "verify-sig"),
+        ("login", vec!["login", "--registry", "http://127.0.0.1:1", "--token", "t", "--json"], Cwd::Pkg, "login"),
+        ("publish", vec!["publish", ".", "--dry-run", "--json"], Cwd::Pkg, "publish"),
+        ("deploy", vec!["deploy", "plan", "--service", "s=.", "--env", "env.toml", "--json"], Cwd::Pkg, "deploy"),
+        ("version", vec!["--version", "--json"], Cwd::Pkg, "version"),
+    ];
+
+    let mut bad: Vec<String> = Vec::new();
+    for (label, args, cwd, want) in &cases {
+        let dir: &std::path::Path = if *cwd == Cwd::Pkg { &pkg } else { &repo };
+        let out = run_in(dir, args);
+        let code = out.status.code().unwrap_or(-1);
+        let so = String::from_utf8_lossy(&out.stdout).to_string();
+        if code != 0 {
+            // A case that stopped succeeding proves nothing about the success envelope, so it is a
+            // failure of the sweep rather than a silent skip (the C19/P5 trap).
+            bad.push(format!(
+                "{label}: `delulu {}` exited {code}, so the success envelope was never exercised:\n{}\n{so}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr)
+            ));
+            continue;
+        }
+        if count_json_values(&so) != 1 {
+            bad.push(format!("{label}: stdout is not exactly one JSON value:\n{so}"));
+            continue;
+        }
+        bad.extend(assert_envelope(label, &so, want));
+    }
+    let _ = std::fs::remove_dir_all(pkg.parent().unwrap());
+    assert!(
+        bad.is_empty(),
+        "`--json` promises the same five fields on success as on failure:\n  {}",
+        bad.join("\n  ")
+    );
+}
+
+/// NE-06: `explain` accepted `--json` and ignored it. The option parser exempted the flag from its
+/// own "an option nobody understood is refused, never ignored" rule and then nothing read it, so
+/// `delulu explain DL0501 --json` printed prose and exited 0 — and `explain` sat inside
+/// `SUBCOMMANDS` the whole time, passing, because the sweep above only ever drove it to failure.
+///
+/// Both halves are tested here, because fixing the first could easily break the second: the flag
+/// must now be honoured, and every OTHER flag must still be refused with exit 2.
+#[test]
+fn explain_answers_on_the_machine_channel_for_all_three_registries() {
+    // (argv code, the `kind` the answer must carry, a word the body must contain)
+    let cases: &[(&str, &str, &str)] = &[
+        // An allocated diagnostic code.
+        ("DL0501", "code", "row"),
+        // A named topic (`E-…`), reachable with or without the prefix.
+        ("E-PLUGIN", "topic", "plugin"),
+        // A code the registry deliberately never allocated, with its recorded disposition.
+        ("DL0503", "unallocated", "retired"),
+    ];
+    for (code, kind, needle) in cases {
+        let out = run(&["explain", code, "--json"]);
+        assert_eq!(out.status.code(), Some(0), "`explain {code} --json` must answer");
+        let s = String::from_utf8_lossy(&out.stdout).to_string();
+        assert_eq!(count_json_values(&s), 1, "exactly one object for `{code}`:\n{s}");
+        let v: serde_json::Value = serde_json::from_str(s.trim()).unwrap();
+        assert_eq!(v["command"], "explain");
+        assert_eq!(v["schema"], 1);
+        assert_eq!(v["summary"]["errors"], 0);
+        let e = &v["explain"];
+        assert!(e.is_object(), "the answer rides in an `explain` object: {v}");
+        assert!(e["code"].is_string(), "`code` identifies the answer: {e}");
+        assert!(e["title"].is_string(), "`title` is the one-line answer: {e}");
+        assert_eq!(e["kind"], *kind, "which registry answered, for `{code}`: {e}");
+        // `body` and `disposition` are ALWAYS present — `null` where they do not apply. A missing
+        // field cannot be told apart from "this tool did not answer" (`docs/for-agents.md`).
+        assert!(e.get("body").is_some(), "`body` is present even when null: {e}");
+        assert!(e.get("disposition").is_some(), "`disposition` is present even when null: {e}");
+        let blob = format!("{} {}", e["title"], e["body"]).to_lowercase();
+        assert!(blob.contains(needle), "the body is the real explanation for `{code}`: {e}");
+        // The human channel is unchanged: prose, no JSON.
+        let human = run(&["explain", code]);
+        assert_eq!(human.status.code(), Some(0));
+        let h = String::from_utf8_lossy(&human.stdout).to_string();
+        assert_eq!(count_json_values(&h), usize::MAX, "the human channel stays prose:\n{h}");
+    }
+    // An allocated code carries `disposition: null` — it was allocated, so there is nothing to
+    // dispose of — while an unallocated one names the disposition. The two must not look alike.
+    let allocated: serde_json::Value =
+        serde_json::from_slice(&run(&["explain", "DL0501", "--json"]).stdout).unwrap();
+    assert!(allocated["explain"]["disposition"].is_null());
+    let retired: serde_json::Value =
+        serde_json::from_slice(&run(&["explain", "DL0503", "--json"]).stdout).unwrap();
+    assert_eq!(retired["explain"]["disposition"], "retired");
+}
+
+#[test]
+fn explain_still_refuses_an_option_it_does_not_know() {
+    // The rule `--json` was smuggled past. Honouring one flag must not turn `explain` into a
+    // command that ignores flags, and a refusal is exit 2 — usage, not a diagnostic.
+    for bad in ["--bogus", "--jsonn", "-j", "--json=1"] {
+        let out = run(&["explain", "DL0501", bad]);
+        assert_eq!(
+            out.status.code(),
+            Some(2),
+            "`explain DL0501 {bad}` must be refused, not ignored:\n{}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("does not know the option"), "and must say so: {err}");
+    }
+}
+
+/// The other direction of DRILL-001. The sweep above proves a zero exit reports zero errors; this
+/// proves the converse for the paths that **ran, produced their own report, and failed**. Those are
+/// the ones the argument-shape sweep can never reach, because it only ever produces refusals during
+/// argument parsing — and they are where a verdict and an exit code can quietly disagree.
+#[test]
+fn a_report_shaped_failure_never_claims_zero_errors() {
+    let d = std::env::temp_dir().join(format!("delulu-verdict-exit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let pkg = d.join("pkg");
+    let dep = d.join("dep");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::create_dir_all(dep.join("src")).unwrap();
+    let home = d.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+
+    // A dependency that performs an effect: `add --path` must refuse it without --accept-authority.
+    std::fs::write(
+        dep.join("delulu.toml"),
+        "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Write\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dep.join("src").join("dep.delulu"),
+        "module dep\n\npub fn shout(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(\"x\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n\n[authority]\neffects = [\"Write\"]\n",
+    )
+    .unwrap();
+    // Deliberately unformatted (double blank line, trailing spaces) so `fmt --check` fails.
+    std::fs::write(
+        pkg.join("src").join("main.delulu"),
+        "module pkg\n\n\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()   \n    out.println(\"hi\")\n}\n",
+    )
+    .unwrap();
+    // A test that fails at runtime, and an environment profile the package exceeds.
+    std::fs::write(
+        pkg.join("failing.delulu"),
+        "module failing\n\ntest \"two is three\" {\n    assert_eq(str(2), str(3))\n}\n",
+    )
+    .unwrap();
+    std::fs::write(pkg.join("pure-env.toml"), "[authority]\neffects = []\n").unwrap();
+
+    let run_in = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .current_dir(&pkg)
+            .env("DELULU_HOME", &home)
+            .env("DELULU_STATE_DIR", &home)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .output()
+            .expect("the delulu binary must run")
+    };
+
+    let cases: Vec<(&str, Vec<&str>)> = vec![
+        ("fmt-check-dirty", vec!["fmt", "src", "--check", "--json"]),
+        ("add-refused", vec!["add", "--path", "../dep", "--json"]),
+        ("verify-sig-unsigned", vec!["verify-sig", "src/main.delulu", "--json"]),
+        ("deploy-exceeds-ceiling", vec!["deploy", "plan", "--service", "s=.", "--env", "pure-env.toml", "--json"]),
+        ("test-failing", vec!["test", "failing.delulu", "--json"]),
+    ];
+
+    let mut bad: Vec<String> = Vec::new();
+    for (label, args) in &cases {
+        let out = run_in(args);
+        let code = out.status.code().unwrap_or(-1);
+        let so = String::from_utf8_lossy(&out.stdout).to_string();
+        if code == 0 {
+            bad.push(format!(
+                "{label}: `delulu {}` exited 0, so this case witnesses nothing:\n{so}",
+                args.join(" ")
+            ));
+            continue;
+        }
+        if count_json_values(&so) != 1 {
+            bad.push(format!("{label}: exited {code} without exactly one JSON object:\n{so}"));
+            continue;
+        }
+        let v: serde_json::Value = serde_json::from_str(so.trim()).expect("one object");
+        if v["summary"]["errors"] == 0 {
+            bad.push(format!(
+                "{label}: exited {code} while reporting summary.errors == 0 — a verdict and an exit \
+                 code that disagree (DRILL-001):\n{so}"
+            ));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&d);
+    assert!(bad.is_empty(), "verdict and exit code must agree:\n  {}", bad.join("\n  "));
+}
+
+/// The completeness half. The sweep above is a hand-written table, and a hand-written list falls
+/// behind the thing that defines it (C31/C34/C35/C44/C52 — the campaign's most repeated shape). So:
+/// every name in `SUBCOMMANDS` is either swept for its success envelope or named in
+/// `NO_SUCCESS_SWEEP` **with a reason**.
+#[test]
+fn every_subcommand_is_either_success_swept_or_excused_in_writing() {
+    let src = std::fs::read_to_string(std::path::Path::new(file!()))
+        .or_else(|_| {
+            std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("json_contract.rs"),
+            )
+        })
+        .expect("this test file must be readable — it is the table this gate reads");
+    let table = src
+        .split_once("let cases: Vec<(&str, Vec<&str>, Cwd, &str)> = vec![")
+        .map(|(_, rest)| rest.split_once("\n    ];").map(|(t, _)| t).unwrap_or(rest))
+        .expect("the success table must be present");
+    assert!(table.len() > 500, "the table scan broke, and a gate that reads nothing passes everything");
+
+    let mut missing: Vec<&str> = Vec::new();
+    for sub in SUBCOMMANDS {
+        let swept = table.contains(&format!("vec![\"{sub}\""));
+        let excused = NO_SUCCESS_SWEEP.iter().any(|(n, _)| n == sub);
+        if !swept && !excused {
+            missing.push(sub);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these subcommands have no success-envelope case and no recorded reason: {missing:?}\n\
+         Add an invocation to the table, or an entry to NO_SUCCESS_SWEEP saying why it cannot be driven."
+    );
+    for (_, why) in NO_SUCCESS_SWEEP {
+        assert!(why.len() > 20, "an exclusion needs a real reason, not a word");
+    }
+}
+
 // ----- the same contract over manifest CONTENT, not just argument shapes (C49) -------------------
 
 /// A `delulu.toml` is untrusted input in exactly the way a `.delulu` file is: it arrives from a repo

@@ -24,7 +24,11 @@ all**, and `delulu` omitted `run_cmd.rs` — so ten real modules appeared nowher
 missing eleven documents: five dated `red-team-*` directories with their agents' working notes,
 `DEPLOYMENT.md`, both 2026-08-1x campaign records, and a maintenance record. **Both directions are now
 checked mechanically** — every module in every crate appears here, no listed module is absent from the
-tree, and every markdown file is accounted for by name or by its group.
+tree, and every markdown file is accounted for by name or by its group. The last of those three was
+prose until 2026-09-18: `grep -rn REPOSITORY_STRUCTURE crates/ --include=*.rs` found nothing, so the
+claim of mechanical checking was itself unchecked (verification finding NE-12). The gate is now
+`crates/delulu/tests/repository_structure.rs`, which reads the generated `docs/survey/survey.json`
+for the file list and §5 for the accounting, and carries a mutant so it cannot pass vacuously.
 
 **This drifted twice in six weeks, which is the argument for not relying on it.** A hand-maintained
 map falls behind the thing it maps — the project's own design rule 1. `docs/survey/` is derived from
@@ -446,7 +450,11 @@ guide to the code only.
 
 Series (the 16 semantics chapters, the 11 localizations, the per-study measurement records, the
 red-team agents' working notes) are grouped where the group is the useful unit; every file is
-accounted for by name or by its group.
+accounted for by name or by its group — and that is **checked**, by
+`crates/delulu/tests/repository_structure.rs`, against the file list the Survey generates from the
+tree. A markdown file this section names neither by path, nor by bare name, nor by a directory it
+lists, fails the build. A top-level directory is deliberately not a group: naming `docs/` would
+account for everything and check nothing.
 
 ### 5.1 Root — the front door
 
@@ -599,7 +607,8 @@ published claim: `agent-loop` (why to batch `check`), `compute`, `dead-man`, `fe
 `first-run`, `fleet-update`, `lts-cycle`, `robotics-demo`, `satellite-demo`, `scale`,
 `pqc/KAT_RECORD.md`, and studies `a`, `b`, `c` (`study-c` also carries `HOT_PATH_TABLE.md`). These are
 **measurements, not benchmarks**: each records the machine, the method and the numbers, so a reader
-can disagree with the method rather than only with the conclusion.
+can disagree with the method rather than only with the conclusion. `measurements/METHODOLOGY.md` is
+the rule they all follow — what counts as a measurement here, and what disqualifies one.
 
 `rfcs/0000-template.md` is the RFC template — `governance.rs` pins its hard sections so they cannot be
 dropped. `rfcs/0001-broker-federation.md` is the federation RFC: **sponsored, and partly built during

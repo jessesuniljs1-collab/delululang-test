@@ -1023,6 +1023,7 @@ fn pin_insert_repair(pkg: &ResolvedPackage, dep: &crate::manifest::Dependency, a
         authority_widening: true,
         requires_human: false,
         edits: vec![Edit { file: pkg.manifest.file, start_byte: at, end_byte: at, insert }],
+        reason: None,
     }
 }
 

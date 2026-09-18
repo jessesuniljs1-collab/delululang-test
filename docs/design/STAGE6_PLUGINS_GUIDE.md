@@ -1,8 +1,20 @@
 # DeluluLang plugins — user guide (Stage 6 "Live")
 
-Runtime plugins are **code that arrives after compile time and still cannot exceed its grant.** This
+Runtime plugins are **code that arrives after compile time and cannot exceed its grant.** This
 guide is the user-facing companion to `STAGE6_SPECIFICATION.md`; for the same material inside the
-tool, run `delulu explain E-PLUGIN`. A runnable flagship lives in `examples/plugin_shout/`.
+tool, run `delulu explain E-PLUGIN`. The flagship artifact lives in `examples/plugin_shout/`.
+
+> **Scope of "runtime", stated before anything else.** The `.dpx` artifact, its two classes, its
+> signing, its DIR re-check and its resource limits all exist and are witnessed. **Loading one from
+> inside a running DeluluLang program does not:** `root.plugin_host()` faults with `DL0703` —
+> *"plugin hosting is not available in the Stage-1 runtime"* (`crates/delulu-runtime/src/prim.rs:366`)
+> — and no `--grant` spelling enables it. A host program **checks clean** and `delulu authority`
+> **reports the plugin and its load site**, so only `delulu run` tells you. `STAGE6_SPECIFICATION.md`'s
+> status log has recorded this since v0.6; this guide did not, and now does.
+> `docs/REMAINING_WORK.md` row 4.11 owns the gap; it is V2 phase **P2**
+> (`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`). Everything below that is reachable today is
+> reachable through `delulu plugin build | verify | inspect` and the Stage-6e library tests, whose
+> verify verdicts are identical to a real load.
 
 ## The two classes (a trust statement, not a quality ranking)
 

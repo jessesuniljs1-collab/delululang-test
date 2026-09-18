@@ -378,7 +378,26 @@ test "the console writes under a declared row" ! {Write} {
 ```
 
 Tests hold **no ambient authority**: each gets exactly its declared row, bounded by the package's
-`[test-authority]` ceiling. An absent ceiling means pure. Run them with `delulu test`.
+`[test-authority]` ceiling. An absent ceiling means pure. Run them with `delulu test` — inside a
+package that is all you type; outside one, name the file or directory.
+
+> **The second test above needs a PACKAGE, and today that is the only way to run it.** The ceiling
+> comes from `delulu.toml` and from nowhere else, so an effectful test in a standalone file is
+> refused with `DL1703` — *"the package [test-authority] ceiling allows only []"* — no matter how it
+> is invoked. There is no `delulu test --test-authority Write`: granting test authority on a command
+> line would be a new authority source, which is a decision for the project lead and is not built
+> (verification finding NE-13). What to do instead: `delulu new myapp`, put the test in `src/`, and
+> declare the ceiling.
+>
+> ```toml
+> [test-authority]
+> effects = ["Write"]
+> # fs_read = ["./fixtures"]   # scopes too, when a test reads
+> ```
+>
+> A ceiling is a *ceiling*, not a grant: a test still gets only what its own row declares, and a row
+> wider than the ceiling is `DL1703`. That is what makes the manifest line reviewable — one place a
+> reader sees the most any test in this package may do.
 
 ## 10. Things that will bite you
 
