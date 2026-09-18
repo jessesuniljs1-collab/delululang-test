@@ -23,7 +23,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 234 |
-| Rust lines | 118162 |
+| Rust lines | 118175 |
 | Rust files outside `src/` (test/bench targets) | 98 |
 | Markdown documents | 186 |
 | Markdown lines | 52131 |
@@ -84,7 +84,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 25 files, 22427 lines
+- **Modules:** 25 files, 22441 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -101,8 +101,8 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 324 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
-| `src/jail.rs` | 383 | PS-A-04: the OS jail around a sandbox guest. |
+| `src/guest.rs` | 332 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/jail.rs` | 389 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1947 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 78 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |

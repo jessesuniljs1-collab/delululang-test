@@ -274,3 +274,48 @@ jobs:
           echo "== what the system says it denied (the answer to WHY, when a shape fails) =="
           log show --style compact --last 3m --predicate 'process == "sandboxd" or senderImagePath contains "Sandbox"' 2>/dev/null | tail -40
           kill $SRV 2>/dev/null
+  macos-seatbelt-bind-spellings:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: which Seatbelt rule lets a confined process bind its own Unix socket?
+        continue-on-error: true
+        run: |
+          set +e
+          cat > "$RUNNER_TEMP/server.c" <<'CEOF'
+          #include <stdio.h>
+          #include <string.h>
+          #include <sys/socket.h>
+          #include <sys/un.h>
+          #include <unistd.h>
+          int main(int argc, char **argv) {
+            unlink(argv[1]);
+            int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+            if (fd < 0) { perror("socket"); return 11; }
+            struct sockaddr_un a; memset(&a, 0, sizeof a); a.sun_family = AF_UNIX;
+            strncpy(a.sun_path, argv[1], sizeof a.sun_path - 1);
+            if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0) { perror("bind"); return 12; }
+            if (listen(fd, 1) < 0) { perror("listen"); return 13; }
+            printf("BOUND\n");
+            return 0;
+          }
+          CEOF
+          cc -o "$RUNNER_TEMP/server" "$RUNNER_TEMP/server.c" || echo "RESULT bind-probe-build: FAIL"
+          S="$RUNNER_TEMP/s.sock"
+          try() {
+            name="$1"; rules="$2"
+            printf '(version 1)\n(allow default)\n(deny file-write*)\n(deny network*)\n(allow file-read* file-write* (literal "%s"))\n%s\n' "$S" "$rules" > "$RUNNER_TEMP/p.sb"
+            rm -f "$S"
+            sandbox-exec -f "$RUNNER_TEMP/p.sb" "$RUNNER_TEMP/server" "$S" >/dev/null 2>"$RUNNER_TEMP/err.txt"
+            rc=$?
+            if [ $rc -eq 0 ]; then echo "RESULT bind-$name: PASS"; else echo "RESULT bind-$name: FAIL rc=$rc $(head -c 120 "$RUNNER_TEMP/err.txt")"; fi
+          }
+          try "literal-network-bind" "(allow network-bind (literal \"$S\"))"
+          try "local-path" "(allow network-bind (local (literal \"$S\")))"
+          try "network-star-literal" "(allow network* (literal \"$S\"))"
+          try "network-inbound-too" "(allow network-bind network-inbound network-outbound (literal \"$S\"))"
+          # And the baseline: no network denial at all, which is what the jail ships with today.
+          printf '(version 1)\n(allow default)\n(deny file-write*)\n(allow file-read* file-write* (literal "%s"))\n' "$S" > "$RUNNER_TEMP/p.sb"
+          rm -f "$S"
+          sandbox-exec -f "$RUNNER_TEMP/p.sb" "$RUNNER_TEMP/server" "$S" >/dev/null 2>&1
+          if [ $? -eq 0 ]; then echo "RESULT bind-no-network-denial: PASS"; else echo "RESULT bind-no-network-denial: FAIL"; fi

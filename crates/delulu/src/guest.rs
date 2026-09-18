@@ -233,11 +233,19 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
     #[cfg(not(target_os = "macos"))]
     let (mut cmd, launched) = (plain(), Vec::new());
     cmd.env_clear();
-    // Windows loads a process's DLLs through `PATH` and the system directories: with an entirely
-    // empty environment the guest dies at 0xC0000135, DLL not found, before it runs a line. These
-    // four are what the loader needs, and none of them is authority.
+    // Every platform needs the few variables its LOADER uses, and nothing else. Learned twice, both
+    // times by a guest that died before running a line: Windows at 0xC0000135, DLL not found
+    // (CI-free, found locally), and Linux at 127, `libpython3.13.so.1.0: cannot open shared object
+    // file`, because this binary links CPython (CI run 35394515395). None of these is authority.
     #[cfg(windows)]
-    for name in ["SystemRoot", "SystemDrive", "WINDIR", "PATH"] {
+    let loader = ["SystemRoot", "SystemDrive", "WINDIR", "PATH"];
+    #[cfg(target_os = "linux")]
+    let loader = ["LD_LIBRARY_PATH"];
+    #[cfg(target_os = "macos")]
+    let loader = ["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"];
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    let loader: [&str; 0] = [];
+    for name in loader {
         if let Ok(v) = std::env::var(name) {
             cmd.env(name, v);
         }

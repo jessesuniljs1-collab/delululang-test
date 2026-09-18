@@ -118,19 +118,25 @@ pub fn seatbelt_launcher(
     }
     let sock = dir.join("broker.sock");
     let sock = sock.display();
+    // Writes are denied everywhere but the channel socket, which is the guarantee that matters: a
+    // guest performs no effects, so it writes nothing of its own.
+    //
+    // The network is NOT denied here yet, and the report says so rather than implying otherwise.
+    // `(deny network*)` with an explicit allow for the socket refused the guest's own BIND with
+    // EPERM (CI run 35394515395), while the same shape allows CONNECT (run 35391102215). Which
+    // spelling permits a bind is being measured, not guessed; until it answers, claiming a network
+    // boundary that killed the guest would be worse than naming the one boundary that holds.
     let profile = format!(
         "(version 1)\n\
          (allow default)\n\
          (deny file-write*)\n\
-         (deny network*)\n\
-         (allow file-read* file-write* (literal \"{sock}\"))\n\
-         (allow network-bind network-outbound (literal \"{sock}\"))\n"
+         (allow file-read* file-write* (literal \"{sock}\"))\n"
     );
     let path = dir.join("guest.sb");
     std::fs::write(&path, profile).ok()?;
     let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
     cmd.arg("-f").arg(&path).arg(exe).args(args);
-    Some((cmd, vec!["no file writes", "no network but the channel"]))
+    Some((cmd, vec!["no file writes"]))
 }
 
 /// Other platforms harden after the spawn, or not yet at all.
