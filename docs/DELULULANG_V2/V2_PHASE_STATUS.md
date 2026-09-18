@@ -10,7 +10,7 @@ are named in its `V2_EXECUTION_LOG.md` entry, never dropped.
 | 0 | V2-0 workspace + documentation migration | complete | 2026-09-17 | 2026-09-17 | `e48f9c3` | `35258166713` — success | 32 files archived; the Survey's archive-mirror rule; the V2 folder created |
 | 1 | P1 machine-contract truth | complete | 2026-09-18 | 2026-09-18 | `d8dbc24` | `35299533343` — success | 12 of 13 tasks, P1-11 deferred (D-V2-17); rulings D-V2-19 to D-V2-21; follow-ups P1-F1 to P1-F4, RW 6.13 and D-NE-17 closed by P1-F (V2_LOG); suite 1,674/0 on 126 binaries; snapshot regenerated (58 cases, all attributable) |
 | 2 | PS-0 sandbox truth, probes, cheap hardenings | complete | 2026-09-18 | 2026-09-18 | `32ba712` | `35376528795` — success | experiments `35376590803`; RW 4.18 closed (`35378619727`); D-V2-24 (a) awaits the owner |
-| 3 | PS-A L1 process sandbox + effect channel + STRICT/AUDIT modes | not started | — | — | — | — | asks D-NE-24/26/31/33 at start |
+| 3 | PS-A L1 process sandbox + effect channel + STRICT/AUDIT modes | **in progress**: PS-A1 done, PS-A2 jails green on all 3 systems (`35397042554`) | 2026-09-18 | — | — | — | D-V2-25 ruled; open: Landlock/seccomp, deny-default macOS profile, cargo-fuzz, PS-A3 CLI and report, PS-A4 modes |
 | 4 | P2 real plugin loading | not started | — | — | — | — | asks D-NE-10 at start |
 | 5 | P4a Agent Skill | not started | — | — | — | — | asks D-NE-5 at start |
 | 6 | P3 standard library | not started | — | — | — | — | |

@@ -54,3 +54,19 @@ are frozen at P1.
 - RW 4.18 closed: both were probe flaws (`if errorlevel 9` means 9 or higher; the baseline was not ready). Fixed
   in `85501ec`; run `35378619727`: the job blocks the grandchild (1816) and Seatbelt denies the network. Every
   L1 building block PS-A needs works on GitHub's Linux, macOS and Windows runners.
+
+## PS-A1 and PS-A2 (in progress) — 2026-09-19 — the guest runs jailed on all three systems
+- The effect seam (one door out of the interpreter), `delulu-sandbox-channel/1` (canonical CBOR over the
+  broker framing, deadlines both ways), the `__guest` child, and minting through the host: a program
+  runs holding only host-minted handles and performs nothing itself.
+- Jails: Windows Job Object (one process, 1 GiB, 5 min CPU, kill-on-close, UI limits, applied to a
+  SUSPENDED child); Linux pre-exec (no-new-privs, pdeathsig, RLIMIT_DATA/CPU/CORE); macOS Seatbelt
+  (no file writes, no network but the channel). Limits are D-V2-25's. Each platform reports only what
+  it applied.
+- CI green on Windows, Linux and macOS at `35397042554`. Five red runs first, each a real defect:
+  RLIMIT_NPROC counts the whole user; RLIMIT_AS caps reservations not use (the wasm engine reserves
+  gigabytes); a cleared environment needs each platform's LOADER variables; a Seatbelt literal must
+  name the RESOLVED path (`/private/var/folders/…`); and an error dropped in one branch made three of
+  those runs read as an unexplained timeout.
+- Open: Landlock and seccomp (the approved crates), a deny-default macOS profile, the cargo-fuzz
+  target, and the guest-mode fuzz run (trace ⊆ row).
