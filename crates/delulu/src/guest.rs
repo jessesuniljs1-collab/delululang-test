@@ -155,6 +155,17 @@ pub fn spawn_and_serve(
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
     let mut child = std::process::Command::new(exe).arg(GUEST_SUBCOMMAND).arg(&dir).spawn()?;
+    // PS-A-04: the OS jail, applied before the guest has been told what to run — it is still waiting
+    // for a hello at this point, so it has executed no program bytes yet. (Creating the child
+    // suspended and assigning before its first instruction is the stronger form, and needs a
+    // raw-handle spawn that `std::process::Command` does not offer; it lands with the rest of PS-A2.)
+    let (jail, enforced) = crate::jail::confine(&child, crate::jail::Limits::default());
+    if jail.is_enforced() {
+        eprintln!("sandbox: the guest is confined — {}", enforced.guarantees.join("; "));
+    } else {
+        // Never claim a boundary that was not applied: PS-0-04's rule, in the place it matters most.
+        eprintln!("sandbox: no OS jail on this host yet — the guest still holds no authority of its own");
+    }
     let served = converse(&dir, program, root, seed, fixed_clock_ms);
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();

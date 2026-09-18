@@ -82,6 +82,25 @@ fn a_guest_cannot_reach_what_was_not_granted() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The run says what the OS actually enforced, never what it meant to enforce. On Windows that is
+/// the Job Object's limits; elsewhere PS-A2 is still to come, and the run says so plainly.
+#[test]
+fn the_run_reports_what_the_jail_enforced() {
+    let dir = tmp("report");
+    let src = dir.join("p.delulu");
+    std::fs::write(&src, "module g\n\nfn main(root: Root) {\n}\n").unwrap();
+    let o = delulu(&["__sandbox_run", src.to_str().unwrap()]);
+    let err = String::from_utf8_lossy(&o.stderr);
+    if cfg!(windows) {
+        assert!(err.contains("the guest is confined"), "{err}");
+        assert!(err.contains("one process only"), "{err}");
+        assert!(err.contains("memory ceiling"), "{err}");
+    } else {
+        assert!(err.contains("no OS jail on this host yet"), "{err}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Started by hand, with no host on the other end, the guest does nothing at all.
 #[test]
 fn a_guest_started_without_a_channel_refuses_to_run() {

@@ -15,6 +15,7 @@ mod deploy;
 mod doctor;
 mod fix;
 mod guest;
+mod jail;
 mod fleet;
 mod foreign_worker;
 mod locale;
