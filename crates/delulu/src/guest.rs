@@ -182,7 +182,7 @@ pub fn spawn_and_serve(
         let _ = std::fs::remove_dir_all(&dir);
         return Err(io::Error::other("the sandbox guest could not be started under its jail"));
     }
-    let served = converse(&dir, program, root, seed, fixed_clock_ms);
+    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms);
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
@@ -243,6 +243,7 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
 
 /// Connect to the guest, tell it what to run, and serve it until it is done.
 fn converse(
+    child: &mut std::process::Child,
     dir: &std::path::Path,
     program: &str,
     root: Rc<RootVal>,
@@ -253,7 +254,21 @@ fn converse(
     let mut conn = loop {
         match crate::broker_transport::connect(dir) {
             Ok(c) => break c,
-            Err(e) if std::time::Instant::now() >= deadline => return Err(e),
+            Err(e) if std::time::Instant::now() >= deadline => {
+                // Say WHY, not just that it timed out. A guest killed by its own jail — a resource
+                // limit at startup, a profile that refused its socket — otherwise prints nothing at
+                // all, and the host sits out the deadline against a process that died in the first
+                // millisecond (CI run 35391962354 cost two red runs to that silence).
+                let died = child.try_wait().ok().flatten();
+                let how = match died {
+                    Some(status) => format!("the guest had already exited ({status})"),
+                    None => "the guest is running but never opened its channel".to_string(),
+                };
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("no channel after {CONNECT_DEADLINE:?}: {how} — {e}"),
+                ));
+            }
             Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
         }
     };

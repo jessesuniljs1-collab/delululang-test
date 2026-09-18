@@ -69,7 +69,12 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
                 let lim = libc::rlimit { rlim_cur: value, rlim_max: value };
                 libc::setrlimit(res, &lim);
             };
-            set(libc::RLIMIT_AS, limits.memory_bytes as libc::rlim_t);
+            // `RLIMIT_DATA`, not `RLIMIT_AS`. The memory ceiling is about memory the guest USES, and
+            // `RLIMIT_AS` caps the address space it RESERVES — which this binary does by the
+            // gigabyte before `main`, because the WebAssembly engine reserves guard regions up
+            // front. A 1 GiB `RLIMIT_AS` therefore killed the guest at startup, silently, and the
+            // host sat out its whole connect deadline (CI run 35391962354).
+            set(libc::RLIMIT_DATA, limits.memory_bytes as libc::rlim_t);
             set(libc::RLIMIT_CPU, limits.cpu_seconds as libc::rlim_t);
             // No core dump: a crash must not spill the guest's memory onto the disk, where it would
             // outlive the run and the scope it was granted.
