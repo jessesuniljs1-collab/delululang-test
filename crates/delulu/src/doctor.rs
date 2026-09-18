@@ -110,6 +110,7 @@ pub fn cmd_doctor(args: &[String]) -> i32 {
     // Before the repository map: this is about the machine the operator is deploying ON, which is
     // true whether or not they are standing in DeluluLang's own source tree.
     security_posture(&mut r);
+    sandbox_section(&mut r);
     match delulu_survey::find_source_tree() {
         Some(root) => repository(&mut r, &root, check_only),
         None => r.push(
@@ -221,6 +222,74 @@ fn environment(r: &mut Report) {
 /// reports them. They are `Note`, not `Problem`, where they are a legitimate choice: legacy mode is
 /// a supported configuration, and doctor's job here is to make the choice visible, not to fail a
 /// checkout for it.
+/// PS-0-05: what confines a program on THIS host, built on the `sandbox probe` attempts — only lines
+/// that change a decision, and none of them fails the run (a missing boundary is a fact, not a fault).
+fn sandbox_section(r: &mut Report) {
+    let levels = crate::sandbox::probe();
+    let top = levels.iter().filter(|l| l.available()).map(|l| l.level).max().unwrap_or(0);
+    let s = "sandbox";
+    r.push(s, "backend", Status::Note, "inproc — the language and custody in one process; no OS boundary around the program");
+    let next = levels.iter().find(|l| !l.available()).and_then(|l| l.first_missing().map(|a| (l.level, a)));
+    r.push(
+        s,
+        "level available",
+        Status::Note,
+        match next {
+            Some((lvl, a)) => format!("L{top} — L{lvl} is absent: {}: {}", a.what, a.detail),
+            None => format!("L{top}"),
+        },
+    );
+    let kvm = levels[2].attempts.iter().find(|a| a.what == "KVM");
+    r.push(
+        s,
+        "KVM",
+        Status::Note,
+        match kvm {
+            Some(a) if a.ok => format!("available — {}", a.detail),
+            Some(a) => format!("absent — {}", a.detail),
+            None => "not attempted".to_string(),
+        },
+    );
+    let prims: Vec<String> = levels[1]
+        .attempts
+        .iter()
+        .filter(|a| a.what != "the L1 guest launcher")
+        .map(|a| format!("{}: {}", a.what, if a.ok { "works" } else { "refused" }))
+        .collect();
+    r.push(s, "OS primitives", Status::Note, format!("{} (attempted now; the L1 jail that would use them is not built — PS-A)", prims.join(", ")));
+    r.push(
+        s,
+        "network enforcement",
+        Status::Note,
+        "grant allowlist, special-use addresses refused unless `net.special=`; there is no network client (RW 4.12)",
+    );
+    r.push(
+        s,
+        "filesystem enforcement",
+        Status::Note,
+        "primitive-table containment on resolved paths; hostile spellings refused (D-NE-29); check-then-open (RW 4.6)",
+    );
+    r.push(s, "identity separation", Status::Note, "none — the program runs as this OS user (RW 4.4, category 7)");
+    r.push(
+        s,
+        "resource controls",
+        Status::Note,
+        "none on the main program (RW 4.15); a foreign call is killed after its deadline (NE-21)",
+    );
+    r.push(s, "profile", Status::Note, "none — strict mode; sandbox profiles arrive with PS-A");
+    r.push(s, "break-glass", Status::Note, "off — no break-glass mechanism exists in this build");
+    let shortened = std::env::var("DELULU_FOREIGN_CALL_DEADLINE_MS").ok();
+    r.push(
+        s,
+        "relaxed restrictions",
+        Status::Note,
+        match shortened {
+            Some(v) => format!("none relaxed (DELULU_FOREIGN_CALL_DEADLINE_MS={v} can only tighten a bound)"),
+            None => "none".to_string(),
+        },
+    );
+}
+
 fn security_posture(r: &mut Report) {
     let Some(dir) = state_dir() else { return };
 

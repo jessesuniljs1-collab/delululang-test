@@ -170,16 +170,33 @@ impl Grants {
                 // itself — so a `--grant fs.read=$SHARE_DIR` with `SHARE_DIR` unset silently handed
                 // over the whole tree the command was run in. An unset variable is the ordinary way
                 // this happens, and it is silent in every shell.
-                "fs.read" | "fs.write" | "net" => {
+                "fs.read" | "fs.write" | "net" | "net.special" => {
                     let val = v.trim();
                     if val.is_empty() {
-                        let hint = if k.trim() == "net" { "HOST" } else { "PATH" };
+                        let hint = if k.trim().starts_with("net") { "HOST" } else { "PATH" };
                         return Err(format!(
                             "bad grant `{spec}` — the value is empty (use {}={hint}); an empty path \
                              would grant the whole working directory, so it is refused rather than \
                              guessed",
                             k.trim()
                         ));
+                    }
+                    // C-11 / D-NE-29: `fs.read=C:` meant "the current directory of drive C:",
+                    // silently. A grant is a path spelling too, and is refused on the same rules as a
+                    // program's (a `\\server\share` stays the operator's to name).
+                    if !k.trim().starts_with("net") {
+                        if let Some(why) = crate::prim::hostile_path(val, true) {
+                            return Err(format!("bad grant `{spec}` — {why}; refused rather than guessed"));
+                        }
+                    }
+                    // NE-18 / D-NE-28 (owner, 2026-09-18): a special-use address or name is refused under
+                    // plain `net=` and granted only by the explicit spelling `net.special=`.
+                    if k.trim() == "net" {
+                        if let Some(class) = crate::netclass::special_use_class(val) {
+                            return Err(format!(
+                                "bad grant `{spec}` — `{val}` is a special-use address: {class}. A plain `net=` grant never reaches one; if this program is meant to, grant it explicitly: `--grant net.special={val}`"
+                            ));
+                        }
                     }
                     match k.trim() {
                         "fs.read" => self.fs_read.push(val.to_string()),

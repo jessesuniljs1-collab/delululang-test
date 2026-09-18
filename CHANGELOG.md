@@ -9,6 +9,18 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-0: sandbox truth, probes and the cheap hardenings, 2026-09-18
+
+- **PS-0-01** — README, `GETTING_STARTED.md` §6 and the Book say `http.get` has no network client; `run --help`, the run label and the authority report say `--isolation process` isolates foreign code only; REMAINING_WORK 4.12–4.16.
+- **PS-0-02 (D-V2-21)** — `run --report-out <path>`: the runtime writes a `command: "run"` envelope with the `sandbox` object and the outcome in every outcome; the path (and `--trace-out`) is refused inside any `fs.write` grant and opened without following a final symlink.
+- **PS-0-03** — DL1408 carries its repair: `requires_human`, no edits, a reason, and the exact fallback command in the message.
+- **PS-0-04** — `delulu sandbox probe [--json]`: L0–L4, each present only when every attempt for it succeeded, with the first missing prerequisite.
+- **PS-0-05** — `doctor` has a `sandbox` section built on the probe (decision lines only; never a failure).
+- **PS-0-06 (D-NE-29)** — Windows reserved device names, trailing dots and spaces, `:` streams, drive-relative spellings, `\\?\`/`\\.\` and UNC paths are refused at the primitive table (DL0904) and in `fs.*` grants; an embedded NUL is refused everywhere.
+- **PS-0-07 (D-NE-30)** — the foreign-worker channel has a read deadline (60 s; `DELULU_FOREIGN_CALL_DEADLINE_MS` may only shorten it): a call that never returns kills the worker and is DL1409.
+- **PS-0-08** — `host-capability-probe.yml` gains three dispatch-only experiments: KVM + Firecracker booted to `/init`, a differential Seatbelt probe, a restricted-token child in a Job Object.
+- **PS-0-09 (D-NE-28, owner)** — special-use addresses and names are refused under `--grant net=` in every spelling (normalized, `inet_aton` forms included) and granted only by `--grant net.special=HOST`.
+
 ## Unreleased — V2 P1-F: P1's follow-ups, 2026-09-18
 
 - **P1-F1 (D-V2-19)** — `unknown name` (DL0301) is no longer followed by DL0404 on the checker's own placeholder type: an inference variable born from a reported error is poisoned and not re-reported; `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.

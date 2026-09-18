@@ -45,6 +45,9 @@ const FIXTURE_SRC: &str = r##"
     let p: *const i64 = std::ptr::null();
     unsafe { std::ptr::read_volatile(p) }
 }
+#[no_mangle] pub extern "C" fn dl_hang() -> i64 {
+    loop { std::thread::sleep(std::time::Duration::from_secs(3600)); }
+}
 "##;
 
 fn fixture_path() -> &'static str {
@@ -191,4 +194,41 @@ impl Drop for BrokerGuard {
             .args(["broker", "stop", "--state-dir", &self.state.to_string_lossy()])
             .output();
     }
+}
+
+/// NE-21 / D-NE-30 (PS-0-07, the characterization C-05 flipped): a foreign call that never returns
+/// no longer hangs the host. The worker channel carries IPC-1's read deadline; past it the worker is
+/// killed and the call is `WorkerDied` — DL1409, a clean exit 1. The deadline is shortened for the
+/// test with `DELULU_FOREIGN_CALL_DEADLINE_MS`, which can only shorten it.
+#[test]
+fn a_foreign_call_that_never_returns_is_dl1409_within_the_deadline() {
+    let dir = work_dir("hang");
+    let prog = dir.join("hang.delulu");
+    std::fs::write(&prog, program("dl_hang")).unwrap();
+    let grant = format!("foreign.c=crashlib:{}", fixture_path());
+    let t0 = std::time::Instant::now();
+    let mut child = Command::new(delulu())
+        .current_dir(&dir)
+        .args(["run", prog.to_str().unwrap(), "--foreign-isolation", "process", "--grant", "console", "--grant", &grant])
+        .env("DELULU_FOREIGN_CALL_DEADLINE_MS", "1500")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Our own watchdog, far past the deadline: if the host hangs, the test fails rather than hanging.
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if t0.elapsed() > std::time::Duration::from_secs(60) {
+            let _ = child.kill();
+            panic!("the host hung on a foreign call that never returns (NE-21)");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let o = child.wait_with_output().unwrap();
+    assert_eq!(o.status.code(), Some(1), "a clean diagnostic exit: {}", stderr(&o));
+    let err = stderr(&o);
+    assert!(err.contains("DL1409") && err.contains("no reply from the worker"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -260,6 +260,9 @@ Three more things worth knowing before you evaluate it:
   says so in those words.
 - **Foreign code is outside the proof.** A `ForeignCall` is a hole in the guarantee. It is
   *enumerated* in the authority report rather than hidden, which is the honest version, not a fix.
+- **There is no network client.** `Net` and `Cap[Http]` are typed, reported, granted and audited,
+  but `http.get` returns `Err(Refused)` after its checks: no byte leaves a program over the network
+  yet (`docs/REMAINING_WORK.md` 4.12).
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught by this, and nothing here claims
   otherwise.

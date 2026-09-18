@@ -6,6 +6,8 @@
 # Every step is `continue-on-error` so a missing capability is a recorded fact, never a red run.
 # The result is read with `gh run view` and transcribed into the research record; "activated" is
 # not "executed", and an unread run is evidence of nothing.
+# PS-0-08 added three EXPERIMENTS (KVM + a fetched Firecracker booted to /init; a differential Seatbelt
+# probe; a restricted-token child inside a Job Object). Each prints `RESULT <name>: PASS|FAIL` lines.
 name: host-capability-probe
 on:
   workflow_dispatch:
@@ -69,3 +71,119 @@ jobs:
           Write-Host "== is this session admin? =="; ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
           Write-Host "== docker on PATH =="; Get-Command docker -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
           Write-Host "== nproc / mem =="; $env:NUMBER_OF_PROCESSORS; (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+
+  # ---- PS-0-08 experiments (2026-09-18). Each prints a verdict line `RESULT <name>: <PASS|FAIL> …`
+  # that the head chef transcribes; `continue-on-error` keeps a missing capability a fact, not a red run.
+  linux-kvm-boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: can this runner open /dev/kvm, and boot a fetched VMM to /init?
+        continue-on-error: true
+        run: |
+          set +e
+          echo "== /dev/kvm before =="; ls -la /dev/kvm
+          python3 - <<'PY'
+          import os, fcntl
+          try:
+              fd = os.open("/dev/kvm", os.O_RDWR)
+              v = fcntl.ioctl(fd, 0xAE00)  # KVM_GET_API_VERSION
+              print("RESULT kvm-open-as-runner: PASS api", v)
+          except Exception as e:
+              print("RESULT kvm-open-as-runner: FAIL", e)
+          PY
+          # The runner user may not be in the kvm group; record, then grant it for the boot attempt.
+          sudo chmod 666 /dev/kvm; ls -la /dev/kvm
+          python3 -c 'import os,fcntl; fd=os.open("/dev/kvm",os.O_RDWR); print("RESULT kvm-open-after-chmod: PASS api", fcntl.ioctl(fd,0xAE00))' || echo "RESULT kvm-open-after-chmod: FAIL"
+          ARCH=$(uname -m); FC=v1.10.1
+          curl -fsSL -o fc.tgz "https://github.com/firecracker-microvm/firecracker/releases/download/${FC}/firecracker-${FC}-${ARCH}.tgz" || echo "RESULT vmm-fetch: FAIL"
+          tar xzf fc.tgz && cp release-${FC}-${ARCH}/firecracker-${FC}-${ARCH} ./firecracker && ./firecracker --version | head -1
+          curl -fsSL -o vmlinux "https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/${ARCH}/kernels/vmlinux.bin" || echo "RESULT kernel-fetch: FAIL"
+          # A kernel-only image whose /init prints a marker and powers off — the shape PS-C boots.
+          sudo apt-get update -qq >/dev/null; sudo apt-get install -y -qq busybox-static cpio >/dev/null
+          mkdir -p ird/bin && cp /bin/busybox ird/bin/ && ln -sf busybox ird/bin/sh && ln -sf busybox ird/bin/poweroff
+          printf '#!/bin/sh\necho DELULU_INIT_REACHED\n/bin/busybox poweroff -f\n' > ird/init && chmod +x ird/init
+          (cd ird && find . | cpio -o -H newc 2>/dev/null | gzip) > initrd.gz
+          cat > vm.json <<'JSON'
+          { "boot-source": { "kernel_image_path": "vmlinux", "initrd_path": "initrd.gz",
+                             "boot_args": "console=ttyS0 reboot=k panic=1 pci=off rdinit=/init" },
+            "drives": [],
+            "machine-config": { "vcpu_count": 1, "mem_size_mib": 128 } }
+          JSON
+          timeout 60 ./firecracker --no-api --config-file vm.json > boot.log 2>&1; echo "firecracker exit=$?"
+          tail -20 boot.log
+          if grep -q DELULU_INIT_REACHED boot.log; then echo "RESULT vmm-boot-to-init: PASS"; else echo "RESULT vmm-boot-to-init: FAIL"; fi
+
+  macos-seatbelt-differential:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: a differential Seatbelt probe — the same operation with and without a deny profile
+        continue-on-error: true
+        run: |
+          set +e
+          python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &
+          sleep 2
+          curl -s -m 3 -o /dev/null http://127.0.0.1:8765/; plain=$?
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' /usr/bin/curl -s -m 3 -o /dev/null http://127.0.0.1:8765/; boxed=$?
+          echo "network: plain exit=$plain boxed exit=$boxed"
+          if [ $plain -eq 0 ] && [ $boxed -ne 0 ]; then echo "RESULT seatbelt-denies-network: PASS"; else echo "RESULT seatbelt-denies-network: FAIL"; fi
+          T="$RUNNER_TEMP/sb"; mkdir -p "$T"
+          /bin/sh -c "echo x > '$T/plain.txt'"; plain=$?
+          sandbox-exec -p '(version 1) (allow default) (deny file-write*)' /bin/sh -c "echo x > '$T/boxed.txt'"; boxed=$?
+          echo "file write: plain exit=$plain boxed exit=$boxed; boxed file exists: $(test -e "$T/boxed.txt" && echo yes || echo no)"
+          if [ $plain -eq 0 ] && [ ! -e "$T/boxed.txt" ]; then echo "RESULT seatbelt-denies-write: PASS"; else echo "RESULT seatbelt-denies-write: FAIL"; fi
+          /bin/cat /etc/hosts >/dev/null; plain=$?
+          sandbox-exec -p '(version 1) (allow default) (deny file-read* (literal "/etc/hosts") (literal "/private/etc/hosts"))' /bin/cat /etc/hosts >/dev/null; boxed=$?
+          echo "file read: plain exit=$plain boxed exit=$boxed"
+          if [ $plain -eq 0 ] && [ $boxed -ne 0 ]; then echo "RESULT seatbelt-denies-read: PASS"; else echo "RESULT seatbelt-denies-read: FAIL"; fi
+
+  windows-restricted-job-child:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: spawn a restricted-token child inside a Job Object, and test the job's one-process limit
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          Add-Type -TypeDefinition @'
+          using System; using System.Runtime.InteropServices;
+          public static class RJ {
+            [StructLayout(LayoutKind.Sequential)] public struct SI { public int cb; public IntPtr r, d, t; public int x, y, xs, ys, xc, yc, fill, flags; public short show, r2; public IntPtr r3, i, o, e; }
+            [StructLayout(LayoutKind.Sequential)] public struct PI { public IntPtr hProcess, hThread; public int pid, tid; }
+            [StructLayout(LayoutKind.Sequential)] public struct BASIC { public long a, b; public uint LimitFlags; public UIntPtr min, max; public uint ActiveProcessLimit; public UIntPtr aff; public uint pri, sched; }
+            [StructLayout(LayoutKind.Sequential)] public struct IOC { public ulong a, b, c, d, e, f; }
+            [StructLayout(LayoutKind.Sequential)] public struct EXT { public BASIC Basic; public IOC Io; public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakP, PeakJ; }
+            [DllImport("advapi32.dll", SetLastError=true)] static extern bool OpenProcessToken(IntPtr p, uint a, out IntPtr t);
+            [DllImport("advapi32.dll", SetLastError=true)] static extern bool CreateRestrictedToken(IntPtr t, uint f, uint a, IntPtr b, uint c, IntPtr d, uint e, IntPtr g, out IntPtr n);
+            [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool CreateProcessAsUserW(IntPtr t, string app, string cmd, IntPtr pa, IntPtr ta, bool inh, uint flags, IntPtr env, string dir, ref SI si, out PI pi);
+            [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+            [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr CreateJobObjectW(IntPtr a, IntPtr n);
+            [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetInformationJobObject(IntPtr j, int c, ref EXT i, int l);
+            [DllImport("kernel32.dll", SetLastError=true)] static extern bool AssignProcessToJobObject(IntPtr j, IntPtr p);
+            [DllImport("kernel32.dll")] static extern uint ResumeThread(IntPtr t);
+            [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr h, uint ms);
+            [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint c);
+            public static string Run(string cmd) {
+              IntPtr tok, rt;
+              if (!OpenProcessToken(GetCurrentProcess(), 0x0001|0x0002|0x0008, out tok)) return "OpenProcessToken err " + Marshal.GetLastWin32Error();
+              if (!CreateRestrictedToken(tok, 0x1 /*DISABLE_MAX_PRIVILEGE*/, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, IntPtr.Zero, out rt)) return "CreateRestrictedToken err " + Marshal.GetLastWin32Error();
+              IntPtr job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+              var ext = new EXT(); ext.Basic.LimitFlags = 0x2000 | 0x0008 | 0x0100; ext.Basic.ActiveProcessLimit = 1; ext.ProcessMemoryLimit = (UIntPtr)(256UL<<20);
+              if (!SetInformationJobObject(job, 9, ref ext, Marshal.SizeOf(typeof(EXT)))) return "SetInformationJobObject err " + Marshal.GetLastWin32Error();
+              var si = new SI(); si.cb = Marshal.SizeOf(typeof(SI)); PI pi;
+              if (!CreateProcessAsUserW(rt, null, cmd, IntPtr.Zero, IntPtr.Zero, false, 0x4 /*CREATE_SUSPENDED*/, IntPtr.Zero, null, ref si, out pi)) return "CreateProcessAsUser err " + Marshal.GetLastWin32Error();
+              if (!AssignProcessToJobObject(job, pi.hProcess)) return "AssignProcessToJobObject err " + Marshal.GetLastWin32Error();
+              ResumeThread(pi.hThread); WaitForSingleObject(pi.hProcess, 30000); uint code; GetExitCodeProcess(pi.hProcess, out code);
+              return "exit " + code;
+            }
+          }
+          '@
+          $one = [RJ]::Run('cmd.exe /c exit 7')
+          Write-Host "restricted child in a job: $one"
+          if ($one -eq 'exit 7') { Write-Host 'RESULT windows-restricted-job-child: PASS' } else { Write-Host 'RESULT windows-restricted-job-child: FAIL' }
+          # The job allows ONE process: a child that tries to start a grandchild must fail to.
+          $two = [RJ]::Run('cmd.exe /c cmd.exe /c exit 9 & if errorlevel 9 (exit 9) else (exit 3)')
+          Write-Host "grandchild attempt: $two"
+          if ($two -ne 'exit 9') { Write-Host 'RESULT windows-job-one-process-limit: PASS' } else { Write-Host 'RESULT windows-job-one-process-limit: FAIL' }

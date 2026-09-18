@@ -30,3 +30,19 @@ are frozen at P1.
   and re-witnessed on 4 routes, both ways; snapshot re-checked structurally (12 cases, only DL0404 fell).
 - CI `35347357572` red on Windows only: a pre-existing temp-dir race in `for_loop_cli.rs` (clock-only tags);
   fixed with a counter, pinned by a 16-thread test that fails without it.
+- CI `35348430717` on `70864a2`: green on every job. P1 and P1-F complete.
+
+## PS-0 sandbox truth — 2026-09-18 — built by the sous-chef, verified by the head chef
+- 01 honest docs (no network client; `process` = foreign code only; RW 4.12–4.16); 02 `run --report-out`
+  (D-V2-21), refused in `fs.write` scopes with `--trace-out`, no final-symlink follow; 03 DL1408 repair;
+  04 `sandbox probe` (attempts only); 05 `doctor` sandbox section; 06 Windows hostile path spellings
+  refused (DL0904) + NUL; 07 worker read deadline (DL1409); 08 three CI experiments written, not run;
+  09 `net.special=` (D-NE-28).
+- Every task witnessed on `delulu-pre-ps0.exe` and falsified; snapshot unchanged; Linux build and
+  clippy checked in WSL. Open: a DL code for 09, POSIX name normalization, the 60 s deadline.
+- Handoff (owner moved to another account, 2026-09-18): the next steps, the head chef's leanings on the
+  sous-chef's questions a–e and a patch backup are in `D:\nelan\DeluluLang-agent-transcripts\2026-09-18-ps0\RESUME-PS0.md`.
+- Head chef verified 02/04/06/09 on the binary against the pre-PS-0 one (the pre binary WROTE a `CON` file and
+  accepted every special address; 26 extra address spellings refused, public ones allowed). Found and fixed:
+  a bare `--report-out rep.json` was refused as unresolvable (empty parent), with a falsified test; an
+  unresolvable write scope now refuses instead of being skipped. Questions a–e: D-V2-24.

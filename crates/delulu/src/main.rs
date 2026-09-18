@@ -28,6 +28,7 @@ mod signing;
 mod microvm;
 mod repl;
 mod run_cmd;
+mod sandbox;
 
 use std::process::ExitCode;
 

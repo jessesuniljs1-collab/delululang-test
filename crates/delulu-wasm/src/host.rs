@@ -689,6 +689,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: fs_read path pointer is out of bounds".into());
                 return -1;
             };
+            if let Some(why) = delulu_runtime::prim::hostile_path(&path, false) {
+                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", path.escape_debug()));
+                return -1;
+            }
             // Mint a scope exactly as the interpreter does: normalize(cwd/path), granted iff within a
             // granted subtree (§4 / prim.rs::fs_read).
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&path));
@@ -726,6 +730,10 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 caller.data_mut().refused = Some("DL0903: read_text path pointer is out of bounds".into());
                 return 0;
             };
+            if let Some(why) = delulu_runtime::prim::hostile_path(&rel, false) {
+                caller.data_mut().refused = Some(format!("DL0904: path `{}` is refused: {why}", rel.escape_debug()));
+                return 0;
+            }
             // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
             // Like the interpreter, it also names where the path pointed and the scope (RW 6.13).
             let pointed = normalize(&scope.join(&rel));

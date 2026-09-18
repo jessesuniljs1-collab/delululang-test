@@ -574,6 +574,14 @@ fn run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback() {
     let msg = v["diagnostics"][0]["message"].as_str().unwrap();
     assert!(msg.contains("--isolation process"), "the documented fallback command: {msg}");
     assert!(msg.contains("weaker"), "the fallback is labeled explicitly weaker: {msg}");
+    // PS-0-03 (NE-16c): the repair STAGE5 §8 promised — a human decision, no edit, and the
+    // fallback command ready to run.
+    let r = &v["diagnostics"][0]["repairs"][0];
+    assert_eq!(r["requires_human"], true, "{v}");
+    assert_eq!(r["edits"], serde_json::json!([]), "{v}");
+    assert!(r["reason"].as_str().is_some_and(|s| s.contains("--isolation process")), "{v}");
+    let exact = format!("delulu run {} --isolation process", file.to_str().unwrap());
+    assert!(msg.contains(&exact), "the exact fallback command: {msg}");
 }
 
 /// Phase 5i: `--isolation process` runs and labels itself honestly — foreign code in workers, the
@@ -585,6 +593,10 @@ fn run_isolation_process_is_labeled_honestly() {
     assert!(o.status.success(), "{}", stderr(&o));
     let err = stderr(&o);
     assert!(err.contains("isolation: process"), "the run is labeled: {err}");
+    // PS-0-01 (NE-16b): the label says what `process` does NOT do — it contains foreign code only.
+    assert!(err.contains("FOREIGN CODE ONLY") && err.contains("not sandboxed"), "{err}");
+    let help = String::from_utf8_lossy(&delulu(&["run", "--help"]).stdout).to_string();
+    assert!(help.contains("process isolates FOREIGN code only"), "{help}");
     assert!(err.contains("weaker than microvm"), "labeled weaker, honestly: {err}");
     // And the default run stays byte-identical (criterion 11): no isolation label without the flag.
     let o = delulu(&["run", file.to_str().unwrap()]);
@@ -1148,6 +1160,7 @@ fn every_grant_kind_the_runtime_parses_is_derivable_from_the_report() {
              \x20   let fs = root.fs_read(\"./config\")\n\
              \x20   let w = root.fs_write(\"./out\")\n\
              \x20   let http = root.http([\"example.com\"])\n\
+             \x20   let meta = root.http([\"169.254.169.254\"])\n\
              \x20   let clk = root.clock()\n\
              \x20   let rnd = root.rand()\n\
              \x20   let dc = root.declassify()\n\
@@ -1330,4 +1343,74 @@ fn a_filesystem_trace_record_names_the_resolved_path_and_the_scope_root() {
         assert!(write.get("resolved_path").is_none() && write.get("scope_root").is_none(), "{engine}: {write}");
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// PS-0-06 (D-NE-29): the characterization tests C-01, C-02 and C-11 flipped. On Windows a
+/// reserved device name, a trailing dot or space, a stream name, and a drive-relative grant are
+/// refused (DL0904 / a bad grant) and nothing is written — before, `NUL` wrote to the null device,
+/// `CON` created an undeletable file, `trail.txt.` created `trail.txt`, and `fs.read=C:` meant the
+/// current directory of drive C:.
+#[cfg(windows)]
+#[test]
+fn windows_hostile_names_are_refused_at_the_primitive_table() {
+    let base = std::env::temp_dir().join(format!("delulu_cli_hostile_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for (i, name) in ["NUL", "CON", "com1.txt", "LPT\u{b9}", "trail.txt.", "space.txt ", "ads.txt:hidden", "sub/aux.log"]
+        .iter()
+        .enumerate()
+    {
+        let dir = base.join(format!("c{i}"));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(
+            dir.join("w.delulu"),
+            format!(
+                "module w\n\nfn main(root: Root) ! {{Write}} {{\n    let out = root.console()\n    let w = root.fs_write(\".\")\n    \
+                 match w.write_text(\"{name}\", \"x\") {{\n        Ok(_) => out.println(\"ok\"),\n        Err(_) => out.println(\"err\"),\n    }}\n}}\n"
+            ),
+        )
+        .unwrap();
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args(["run", "w.delulu", "--grant", "console", "--grant", "fs.write=."])
+            .output()
+            .unwrap();
+        assert_eq!(o.status.code(), Some(1), "`{name}` must be refused: {}{}", stdout(&o), stderr(&o));
+        assert!(stderr(&o).contains("DL0904"), "`{name}`: {}", stderr(&o));
+        let left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n != "w.delulu" && n != "sub")
+            .collect();
+        assert!(left.is_empty(), "`{name}` wrote {left:?}");
+        assert_eq!(std::fs::read_dir(dir.join("sub")).unwrap().count(), 0, "`{name}` wrote into sub/");
+    }
+    // C-11: a drive-relative grant is a bad grant, not "the current directory of drive C:".
+    let o = delulu(&["run", "examples/demo.delulu", "--grant", "fs.read=C:"]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert!(stderr(&o).contains("drive-relative"), "{}", stderr(&o));
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// PS-0-09 (NE-18, owner ruling D-NE-28; C-04 flipped): a special-use address is refused under a
+/// plain `--grant net=` in every spelling, with a refusal that names the explicit spelling, and is
+/// granted by `net.special=`. An ordinary host is unaffected.
+#[test]
+fn special_use_addresses_need_the_explicit_net_special_spelling() {
+    let base = ["run", "examples/demo.delulu", "--grant", "console", "--grant", "fs.read=./config", "--grant", "secret:API_KEY=k", "--grant"];
+    for g in ["net=169.254.169.254", "net=127.1", "net=2130706433", "net=0x7f.0.0.1", "net=[::ffff:127.0.0.1]", "net=LOCALHOST.", "net=metadata.google.internal"] {
+        let mut args = base.to_vec();
+        args.push(g);
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(2), "`{g}` must be refused: {}", stderr(&o));
+        let host = g.trim_start_matches("net=");
+        assert!(stderr(&o).contains(&format!("--grant net.special={host}")), "the repair names the spelling: {}", stderr(&o));
+    }
+    for g in ["net.special=169.254.169.254", "net=example.com"] {
+        let mut args = base.to_vec();
+        args.push(g);
+        let o = delulu(&args);
+        assert!(o.status.success(), "`{g}` is granted: {}", stderr(&o));
+    }
 }

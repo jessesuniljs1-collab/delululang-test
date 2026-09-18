@@ -165,6 +165,10 @@ Every `--json` command emits one object:
   added because the promise used to be false — most commands emitted nothing at all on failure
   (campaign C2) — and because the first fix made two commands emit *two* objects, which a
   "does it look like JSON?" check would have missed.
+- **`run` is the exception, by design:** under `--json` its stdout is the PROGRAM's, so the run's
+  own envelope — the `sandbox` object (isolation level, mode, limits, break-glass) and the outcome —
+  goes to the file named by `--report-out <path>`, written by the runtime in every outcome and
+  refused inside any `fs.write` grant; never trust a `sandbox` object read from a program's stdout.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
   diagnostic; the human render caps at 50 with a note saying how many were withheld. If you are
   parsing, use `--json` and you lose nothing. (Campaign C32: one 10 KB file used to produce 76 MB of
@@ -405,6 +409,10 @@ overstate it downstream:
   state directory, the boundary is not there.
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught.
+- **There is no network client, and no OS sandbox around the program yet.** `http.get` returns
+  `Err(Refused)` after its checks; a special-use address (loopback, link-local/metadata, private)
+  needs `--grant net.special=HOST`, never plain `net=`; `delulu sandbox probe --json` says which
+  isolation level this host can give (today L0 only — `--isolation process` contains foreign code only).
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
 - **Soundness is design-level plus audit-rule plus test-enforced.** The Delulu Core mechanization is
   open work.

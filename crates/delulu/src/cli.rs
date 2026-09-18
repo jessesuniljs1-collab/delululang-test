@@ -243,6 +243,9 @@ pub(crate) struct Opts {
     pub(crate) trace_effects: bool,
     /// `--trace-out <file>`: write the trace there instead of stderr.
     pub(crate) trace_out: Option<String>,
+    /// `--report-out <file>` (D-V2-21, PS-0-02): the runtime writes the run report there — the
+    /// `sandbox` object and the outcome — never on the program's own stdout, which it could forge.
+    pub(crate) report_out: Option<String>,
     /// `--assert-trace`: verify trace ⊆ the checker's row of main; violations are DL1101, exit 3.
     pub(crate) assert_trace: bool,
     /// `--actors-threads N` (Stage 7): scheduler worker count; default = available parallelism.
@@ -356,6 +359,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         show_grants: false,
         trace_effects: false,
         trace_out: None,
+        report_out: None,
         assert_trace: false,
         actors_threads: None,
         on_quiesce_report: false,
@@ -426,6 +430,15 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--trace-out".to_string());
                 }
             }
+            "--report-out" => {
+                if i + 1 < rest.len() {
+                    opts.report_out = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--report-out".to_string());
+                }
+            }
+            s if s.starts_with("--report-out=") => opts.report_out = Some(s["--report-out=".len()..].to_string()),
             "--seed" => {
                 if i + 1 < rest.len() {
                     opts.seed = rest[i + 1].parse().ok();
@@ -994,6 +1007,7 @@ fn run_inner(args: &[String]) -> i32 {
         "grants" => cmd_grants(rest),
         "guard" => cmd_guard(rest),
         "broker" => crate::brokerd::cmd_broker(rest),
+        "sandbox" => crate::sandbox::cmd_sandbox(rest),
         // Hidden: the process-isolation foreign worker (spec §5 phase 5h), spawned by the host, not a
         // user-facing command. Loads one granted C library and serves marshalled calls over its pipe.
         s if s == crate::foreign_worker::WORKER_SUBCOMMAND => crate::foreign_worker::run_worker(rest),
@@ -1126,7 +1140,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
-    "repl", "audit", "grants", "guard", "broker", "fleet", "secrets", "locale", "morph", "explain",
+    "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
     "doctor", "completions",
 ];
 
@@ -1145,10 +1159,13 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 for execution; two modules declaring the same top-level name are refused, not guessed — D61)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--report-out F]  (the runtime writes the run report there — sandbox level, mode, outcome —\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 in every outcome; never on stdout, which the program could forge; refused inside a writable grant)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (process isolates FOREIGN code only — the program stays in-process;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
@@ -1177,6 +1194,8 @@ fn usage() -> &'static str {
      \x20 delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]\n\
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]\n\
+     \x20 delulu sandbox   probe [--json]   (which isolation levels this host can give a program, L0-L4, and for each\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 absent one the first missing prerequisite — every line an attempt, never a version string)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
@@ -3313,7 +3332,13 @@ fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> 
             }
             "Http" => {
                 for s in scopes_for("Http", "HOST") {
-                    push(&mut out, format!("net={s}"));
+                    // D-NE-28: a special-use host is granted only by its explicit spelling, so the
+                    // line to paste must be that spelling (a plain `net=` would be refused).
+                    if delulu_runtime::netclass::special_use_class(&s).is_some() {
+                        push(&mut out, format!("net.special={s}"));
+                    } else {
+                        push(&mut out, format!("net={s}"));
+                    }
                 }
             }
             "Actuator" => {
@@ -3812,7 +3837,12 @@ fn render_authority(report: &Json) -> String {
     // The isolation profile (Stage 5 phase 5i): present only when explicitly requested, so the
     // default report is byte-identical to prior stages (criterion 11).
     if let Some(iso) = report["isolation"].as_str() {
-        let _ = writeln!(out, "  isolation:    {iso}");
+        if iso == "process" {
+            // NE-16b/PS-0-01: `process` is a boundary around FOREIGN code, not around the program.
+            let _ = writeln!(out, "  isolation:    process (foreign code only — the verified program stays in-process)");
+        } else {
+            let _ = writeln!(out, "  isolation:    {iso}");
+        }
     }
     // Native-code emission (Stage 10, invariant 46): the line appears ONLY when the program
     // actually carries a `@jit` hint, so every hint-free report stays byte-identical to 1.0.

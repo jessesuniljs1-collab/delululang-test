@@ -21,7 +21,7 @@ use std::process::{Command, Output};
 const SUBCOMMANDS: &[&str] = &[
     "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "explain",
     "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
-    "plugin", "publish", "run", "secrets", "sign", "test", "verify-sig", "why",
+    "plugin", "publish", "run", "sandbox", "secrets", "sign", "test", "verify-sig", "why",
 ];
 
 /// Every run-once subcommand the dispatcher accepts must appear in [`SUBCOMMANDS`] AND in `--help`.
@@ -316,12 +316,6 @@ enum Cwd {
 /// A name belongs here only when the command cannot *reach* a success in a fixture — never
 /// because its envelope is inconvenient to fix.
 const NO_SUCCESS_SWEEP: &[(&str, &str)] = &[
-    (
-        "run",
-        "under `--json` stdout belongs to the PROGRAM: `run_cmd.rs` keeps the run's own bytes as \
-         the contract, so an envelope on stdout would interleave with program output. Changing \
-         that is a machine-surface decision of its own, not a wrapping.",
-    ),
     ("fleet", "needs a fleet manifest and an artifact to roll out"),
     ("completions", "emits a shell script; it refuses `--json` by design and says so"),
     // Named in NOT_SWEPT above for the same reasons; repeated here so this table is readable on
@@ -483,6 +477,7 @@ effects = [\"Write\"]
         ("publish", vec!["publish", ".", "--dry-run", "--json"], Cwd::Pkg, "publish"),
         ("deploy", vec!["deploy", "plan", "--service", "s=.", "--env", "env.toml", "--json"], Cwd::Pkg, "deploy"),
         ("version", vec!["--version", "--json"], Cwd::Pkg, "version"),
+        ("sandbox", vec!["sandbox", "probe", "--json"], Cwd::Pkg, "sandbox"),
     ];
 
     let mut bad: Vec<String> = Vec::new();
@@ -706,7 +701,9 @@ fn every_subcommand_is_either_success_swept_or_excused_in_writing() {
     let mut missing: Vec<&str> = Vec::new();
     for sub in SUBCOMMANDS {
         let swept = table.contains(&format!("vec![\"{sub}\""))
-            || broker_sweep.contains(&format!("step(&[\"{sub}\""));
+            || broker_sweep.contains(&format!("step(&[\"{sub}\""))
+            // `run` reports through `--report-out` (D-V2-21), swept by its own test.
+            || (*sub == "run" && src.contains("fn run_report_is_the_documented_envelope()"));
         let excused = NO_SUCCESS_SWEEP.iter().any(|(n, _)| n == sub);
         if !swept && !excused {
             missing.push(sub);
@@ -979,4 +976,115 @@ fn broker_verbs_emit_the_documented_envelope() {
     drop(daemon);
     let _ = std::fs::remove_dir_all(&base);
     assert!(bad.is_empty(), "broker verbs must print the documented envelope:\n  {}", bad.join("\n  "));
+}
+
+/// PS-0-02 (D-V2-21): `run --json --report-out <path>` — the runtime writes one envelope to the
+/// file, with the `sandbox` object and the outcome, whether the program ran or was refused. The
+/// program's stdout stays its own, and a program printing a counterfeit `sandbox` object changes
+/// nothing in the report.
+#[test]
+fn run_report_is_the_documented_envelope() {
+    let d = std::env::temp_dir().join(format!("delulu-run-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("out")).unwrap();
+    std::fs::create_dir_all(d.join("rep")).unwrap();
+    // The counterfeit: the program prints what a confused consumer might take for the report.
+    std::fs::write(
+        d.join("fake.delulu"),
+        "module fake\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    \
+         out.println(\"{\\\"sandbox\\\":{\\\"backend\\\":\\\"microvm\\\",\\\"level\\\":4,\\\"break_glass\\\":true}}\")\n}\n",
+    )
+    .unwrap();
+    std::fs::write(d.join("bad.delulu"), "module bad\n\nfn main(root: Root) ! {Write} {\n    let out = root.console()\n    out.println(nope)\n}\n")
+        .unwrap();
+    let go = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .current_dir(&d)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .output()
+            .expect("the delulu binary must run")
+    };
+    let expected_sandbox = serde_json::json!({
+        "backend": "inproc", "level": 0, "requested": "none", "granted": "none",
+        "host_guarantees": [], "limits": null, "mode": "strict", "break_glass": false,
+    });
+    let read = |p: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(d.join(p)).unwrap_or_else(|e| panic!("no report at {p}: {e}"));
+        assert_eq!(count_json_values(&text), 1, "one envelope: {text}");
+        serde_json::from_str(text.trim()).unwrap()
+    };
+
+    // It ran: the program's own bytes on stdout, the report in the file.
+    let o = go(&["run", "fake.delulu", "--grant", "console", "--json", "--report-out", "rep/ran.json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("\"level\":4"), "stdout is the program's");
+    let text = std::fs::read_to_string(d.join("rep/ran.json")).unwrap();
+    let bad = assert_envelope("run --report-out", &text, "run");
+    assert!(bad.is_empty(), "{bad:?}");
+    let v = read("rep/ran.json");
+    assert_eq!(v["sandbox"], expected_sandbox, "the counterfeit changed nothing: {v}");
+    assert_eq!(v["outcome"], serde_json::json!({ "ran": true, "exit": 0 }), "{v}");
+
+    // Refused before it started: the report still exists, and says so.
+    let o = go(&["run", "bad.delulu", "--grant", "console", "--json", "--report-out", "rep/refused.json"]);
+    assert_eq!(o.status.code(), Some(1));
+    let v = read("rep/refused.json");
+    assert_eq!(v["sandbox"], expected_sandbox, "{v}");
+    assert_eq!(v["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "{v}");
+    assert_eq!(v["summary"]["errors"], 1, "a failed run never reports zero errors: {v}");
+
+    // A bare file name means the current directory, the commonest spelling of all. The head chef's
+    // PS-0 verification found it refused as "cannot be resolved", because its parent is empty.
+    let o = go(&["run", "fake.delulu", "--grant", "console", "--json", "--report-out", "bare.json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(read("bare.json")["sandbox"], expected_sandbox);
+    let o = go(&["run", "fake.delulu", "--grant", "console", "--trace-effects", "--trace-out", "bare-trace.txt"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(d.join("bare-trace.txt").is_file(), "the bare-named trace was written");
+    // ... and a bare name is still refused when the current directory itself is writable.
+    let o = go(&["run", "fake.delulu", "--grant", "console", "--grant", "fs.write=.", "--report-out", "bare2.json"]);
+    assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(!d.join("bare2.json").exists(), "nothing written");
+
+    // Inside a writable grant — by any spelling — the report (and the trace) are refused, and
+    // nothing runs.
+    for (flag, path) in [
+        ("--report-out", "out/r.json"),
+        ("--report-out", "rep/../out/r.json"),
+        ("--trace-out", "out/t.txt"),
+    ] {
+        let mut args = vec!["run", "fake.delulu", "--grant", "console", "--grant", "fs.write=./out", flag, path];
+        if flag == "--trace-out" {
+            args.push("--trace-effects");
+        }
+        let o = go(&args);
+        assert_eq!(o.status.code(), Some(2), "`{}`: {}", args.join(" "), String::from_utf8_lossy(&o.stderr));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("D-V2-21"), "{}", String::from_utf8_lossy(&o.stderr));
+        assert!(!String::from_utf8_lossy(&o.stdout).contains("sandbox"), "nothing ran");
+        assert!(std::fs::read_dir(d.join("out")).unwrap().next().is_none(), "nothing written in the scope");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// PS-0-02: the runtime opens its report without following a symbolic link at the final component.
+#[cfg(unix)]
+#[test]
+fn run_report_does_not_follow_a_planted_link() {
+    let d = std::env::temp_dir().join(format!("delulu-run-report-link-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("p.delulu"), "module p\n\nfn main() {\n}\n").unwrap();
+    std::fs::write(d.join("victim.txt"), "keep").unwrap();
+    std::os::unix::fs::symlink(d.join("victim.txt"), d.join("r.json")).unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(["run", "p.delulu", "--json", "--report-out", "r.json"])
+        .current_dir(&d)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .output()
+        .unwrap();
+    assert_ne!(o.status.code(), Some(0), "a planted link is refused");
+    assert_eq!(std::fs::read_to_string(d.join("victim.txt")).unwrap(), "keep", "the link's target is untouched");
+    let _ = std::fs::remove_dir_all(&d);
 }

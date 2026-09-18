@@ -311,6 +311,12 @@ impl WorkerConn {
         let sig_map: HashMap<String, ForeignSig> = sigs.iter().map(|s| (s.name.clone(), s.clone())).collect();
         let mut conn = conn;
 
+        // NE-21 / D-NE-30: IPC-1's read deadline, on the one channel that exists to contain foreign
+        // code — a worker that never answers must not hang the host. The handshake gets the connect
+        // deadline; each call gets [`FOREIGN_CALL_DEADLINE`].
+        if conn.set_read_timeout(Some(Duration::from_secs(10))).is_err() {
+            return Err(ForeignErr::Unavailable("cannot bound the worker channel's reads".into()));
+        }
         // Bind handshake: send the path + sigs; the worker loads and replies.
         let req = WorkerReq::Bind {
             path: abs_path,
@@ -331,8 +337,34 @@ impl WorkerConn {
 
         // Success: the guard now lives inside the connection and cleans up on drop.
         let guard = std::mem::replace(&mut guard, WorkerGuard::empty());
-        Ok(WorkerConn { conn: std::cell::RefCell::new(conn), sigs: sig_map, _guard: guard })
+        let call_deadline = foreign_call_deadline();
+        if conn.set_read_timeout(Some(call_deadline)).is_err() {
+            return Err(ForeignErr::Unavailable("cannot bound the worker channel's reads".into()));
+        }
+        Ok(WorkerConn {
+            conn: std::cell::RefCell::new(conn),
+            sigs: sig_map,
+            guard: std::cell::RefCell::new(guard),
+            call_deadline,
+        })
     }
+}
+
+/// How long one foreign call may wait for its worker's reply before the worker is killed and the
+/// call returns `WorkerDied` (NE-21, D-NE-30). A bound, not a budget: a longer legitimate call needs a
+/// different design (the PS-B limits), not an unbounded wait.
+pub const FOREIGN_CALL_DEADLINE: Duration = Duration::from_secs(60);
+
+/// The deadline in force: [`FOREIGN_CALL_DEADLINE`], or a SHORTER one from
+/// `DELULU_FOREIGN_CALL_DEADLINE_MS` (tests; an operator who wants a tighter bound). It can only
+/// shorten: a longer or unparseable value is ignored, so the knob cannot remove the bound.
+fn foreign_call_deadline() -> Duration {
+    std::env::var("DELULU_FOREIGN_CALL_DEADLINE_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .filter(|d| *d > Duration::ZERO && *d < FOREIGN_CALL_DEADLINE)
+        .unwrap_or(FOREIGN_CALL_DEADLINE)
 }
 
 /// The host-side handle to one isolated worker (implements [`BoundForeign`]). Holds the private
@@ -340,7 +372,9 @@ impl WorkerConn {
 pub struct WorkerConn {
     conn: std::cell::RefCell<Connection>,
     sigs: HashMap<String, ForeignSig>,
-    _guard: WorkerGuard,
+    guard: std::cell::RefCell<WorkerGuard>,
+    /// How long one call may wait for its reply (NE-21, D-NE-30).
+    call_deadline: Duration,
 }
 
 impl BoundForeign for WorkerConn {
@@ -363,6 +397,15 @@ impl BoundForeign for WorkerConn {
             Ok(WorkerResp::Value(v)) => Ok(wire_to_fval(v)),
             Ok(WorkerResp::Err(e)) => Err(wire_to_err(e)),
             Ok(WorkerResp::Bound { .. }) => Err(ForeignErr::WorkerDied("worker sent a bind response to a call".into())),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {
+                // No reply within the deadline: the worker is killed (its guard), and the call is
+                // the same class of result as a crash — the host keeps running.
+                self.guard.borrow_mut().kill();
+                Err(ForeignErr::WorkerDied(format!(
+                    "no reply from the worker within {} ms; the worker was killed (NE-21)",
+                    self.call_deadline.as_millis()
+                )))
+            }
             Err(_) => Err(ForeignErr::WorkerDied("worker channel closed mid-call (segfault / hard crash)".into())),
         }
     }
@@ -378,6 +421,14 @@ struct WorkerGuard {
 }
 
 impl WorkerGuard {
+    /// Kill the worker now (a call that outlived its deadline). Idempotent; the drop cleans up.
+    fn kill(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
     fn empty() -> WorkerGuard {
         WorkerGuard {
             child: None,

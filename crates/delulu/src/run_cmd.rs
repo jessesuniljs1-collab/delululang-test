@@ -17,6 +17,7 @@ use std::rc::Rc;
 use delulu_check::check_source;
 use delulu_diag::{render_human_with, Diagnostic, SourceMap};
 use delulu_runtime::{parse_manifest, Grants, Interp, Value};
+use serde_json::{json, Value as Json};
 
 use super::cli::*;
 /// `run <package-dir>`: resolve the dependency graph, check it, and flatten it for execution.
@@ -180,6 +181,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
         rand_seed: opts.seed,
         ..delulu_wasm::HostConfig::default()
     };
+    note_program_started();
     match delulu_wasm::run_main(&artifact.wasm, &cfg) {
         Ok(output) => {
             print!("{output}");
@@ -194,7 +196,160 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
     }
 }
 
+// ----- the run report (D-V2-21, PS-0-02) ---------------------------------------------------------
+//
+// `--report-out <path>`: the runtime writes one envelope (`command: "run"`) carrying the `sandbox`
+// object and the outcome, whether the program ran or was refused before it started. It never goes
+// on the program's stdout or stderr — the program writes there too and could print a counterfeit.
+// The same two rules guard the report and `--trace-out`, the other file the runtime writes on the
+// program's behalf: a path inside a scope the program may WRITE is refused before the run (a
+// program must never write or redirect the record of its own confinement), and the file is opened
+// without following a symbolic link at its final component.
+
+thread_local! {
+    /// Whether `main` was reached (the report's `outcome.ran`), and whether a runtime-written path
+    /// was refused — a refused report path is never written, not even with the refusal.
+    static RUN_STATE: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
+}
+
+pub(crate) fn note_program_started() {
+    RUN_STATE.with(|s| s.set((true, s.get().1)));
+}
+
+/// Refuse `--report-out` / `--trace-out` inside any filesystem scope the program may write,
+/// comparing RESOLVED paths (links, `..`, case — `prim::resolve_for_decision`, the containment
+/// code's own resolution). A path that cannot be resolved is refused too: cannot tell is no.
+pub(crate) fn refuse_runtime_paths_in_write_scopes(opts: &Opts, write_roots: &[std::path::PathBuf]) -> Option<i32> {
+    for (flag, path) in [("--report-out", &opts.report_out), ("--trace-out", &opts.trace_out)] {
+        let Some(path) = path else { continue };
+        // A bare file name (`rep.json`) has an EMPTY parent, which no resolver can resolve; it means
+        // the current directory. Without this the commonest spelling was refused as unresolvable.
+        let p = std::path::Path::new(path);
+        let p = if p.parent().is_some_and(|d| d.as_os_str().is_empty()) {
+            std::path::Path::new(".").join(p)
+        } else {
+            p.to_path_buf()
+        };
+        let Some(target) = delulu_runtime::prim::resolve_for_decision(&p) else {
+            eprintln!("error: {flag} `{path}` cannot be resolved (a dangling link on the way?) — refused before the run");
+            RUN_STATE.with(|s| s.set((s.get().0, true)));
+            return Some(2);
+        };
+        for root in write_roots {
+            // A write scope that does not resolve cannot be compared, so it cannot be excluded:
+            // cannot tell is no (the skip-branch rule), never "skip this root".
+            let Some(r) = delulu_runtime::prim::resolve_for_decision(root) else {
+                eprintln!(
+                    "error: {flag} `{path}` cannot be checked against the write scope `{}`, which does not \
+                     resolve — refused before the run",
+                    root.display()
+                );
+                RUN_STATE.with(|s| s.set((s.get().0, true)));
+                return Some(2);
+            };
+            if target.starts_with(&r) {
+                eprintln!(
+                    "error: {flag} `{path}` lies inside `{}`, a scope this program is granted to write — \
+                     a program must never be able to write or redirect the runtime's own record of \
+                     its run (D-V2-21); nothing ran. Name a path outside every `fs.write` grant.",
+                    root.display()
+                );
+                RUN_STATE.with(|s| s.set((s.get().0, true)));
+                return Some(2);
+            }
+        }
+    }
+    None
+}
+
+/// Write a runtime-owned file without following a symbolic link at its final component.
+pub(crate) fn write_nofollow(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let p = std::path::Path::new(path);
+    if std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(std::io::Error::other("the path is a symbolic link; the runtime will not follow it"));
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create(true).truncate(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: a link raced in after the check is opened AS a link.
+        o.custom_flags(0x0020_0000);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.custom_flags(0o400_000); // O_NOFOLLOW
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.custom_flags(0x0100); // O_NOFOLLOW
+    }
+    let mut f = o.open(p)?;
+    if f.metadata()?.file_type().is_symlink() {
+        return Err(std::io::Error::other("the path became a symbolic link; the runtime will not follow it"));
+    }
+    f.write_all(bytes)
+}
+
+/// The run report envelope. At L0 the `sandbox` object is the in-process backend: level 0, no host
+/// guarantees, no limits, strict mode, no break-glass — measured facts, nothing claimed.
+fn run_report(opts: &Opts, exit: i32) -> Json {
+    let (ran, _) = RUN_STATE.with(|s| s.get());
+    let requested = opts.isolation.clone().unwrap_or_else(|| "none".to_string());
+    let mut env = success_envelope(
+        "run",
+        json!({
+            "sandbox": {
+                "backend": "inproc",
+                "level": 0,
+                "requested": requested,
+                "granted": "none",
+                "host_guarantees": [],
+                "limits": null,
+                "mode": "strict",
+                "break_glass": false,
+            },
+            "outcome": { "ran": ran, "exit": exit },
+        }),
+    );
+    if exit != 0 {
+        env["summary"]["errors"] = json!(1);
+    }
+    env
+}
+
 pub(crate) fn cmd_run(rest: &[String]) -> i32 {
+    RUN_STATE.with(|s| s.set((false, false)));
+    let (_, opts) = parse_opts(rest);
+    // The grants named on the command line are refused here, before anything else; a lease's or a
+    // manifest's are refused again once known (`cmd_run_inner`).
+    if opts.report_out.is_some() || opts.trace_out.is_some() {
+        let mut g = Grants::default();
+        for spec in &opts.grants {
+            let _ = g.add(spec);
+        }
+        if let Some(code) = refuse_runtime_paths_in_write_scopes(&opts, &g.build_root().fs_write) {
+            return code;
+        }
+    }
+    let code = cmd_run_inner(rest);
+    if let Some(path) = &opts.report_out {
+        let refused = RUN_STATE.with(|s| s.get().1);
+        if !refused {
+            let text = serde_json::to_string_pretty(&run_report(&opts, code)).expect("the run report serializes");
+            if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
+                eprintln!("error: cannot write the run report to `{path}`: {e}");
+                return if code == 0 { 2 } else { code };
+            }
+        }
+    }
+    code
+}
+
+fn cmd_run_inner(rest: &[String]) -> i32 {
     let (file, mut opts) = parse_opts(rest);
     if let Some(code) = refuse_extra_positionals("run", &opts) {
         return code;
@@ -223,12 +378,27 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
                         "DL1408",
                         format!(
                             "isolation profile `microvm` is unavailable: {detail} — fall back to \
-                             `--isolation process` (worker-style OS containment of the code \
+                             `delulu run {file} --isolation process` (worker-style OS containment of the code \
                              outside the proof; explicitly weaker: no guest boundary, no \
                              virtio-fs scope mounts, no default-deny egress) [a human must choose \
                              the weaker profile; see `delulu explain DL1408` and spec §6.1]"
                         ),
-                    );
+                    )
+                    // NE-16c / PS-0-03: the repair STAGE5 §8 promised. No edit — choosing a weaker
+                    // boundary is a person's decision — and the fallback command, ready to run.
+                    .with_repair(delulu_diag::Repair {
+                        id: "fall-back-to-isolation-process",
+                        confidence: delulu_diag::Confidence::Suggest,
+                        authority_widening: false,
+                        requires_human: true,
+                        edits: Vec::new(),
+                        reason: Some(
+                            "the fallback, `--isolation process`, is explicitly weaker (it contains \
+                             foreign code only; no guest boundary, no scope mounts, no default-deny \
+                             egress), so a human must choose it; the message names the exact \
+                             command: `delulu run <file> --isolation process`",
+                        ),
+                    });
                     print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
                     return 1;
                 }
@@ -256,8 +426,9 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         if !opts.json {
             let label = match iso.as_str() {
                 "process" => {
-                    "process — foreign code in minimum-privilege worker subprocesses; the \
-                     verified program remains in-process (weaker than microvm; spec §6.1)"
+                    "process — isolates FOREIGN CODE ONLY: foreign libraries run in \
+                     minimum-privilege worker subprocesses; the verified program itself stays \
+                     in-process and is not sandboxed (weaker than microvm; spec §6.1)"
                 }
                 _ => "none — in-process (language + custody enforcement only)",
             };
@@ -576,6 +747,12 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         }
     }
 
+    // D-V2-21 / PS-0-02, the second time: the grants are final now (a lease's or a manifest's
+    // scopes included), and neither runtime-written file may lie in a scope the program can write.
+    if let Some(code) = refuse_runtime_paths_in_write_scopes(&opts, &grants.build_root().fs_write) {
+        return code;
+    }
+
     // ----- foreign isolation selection (Stage 5 phase 5h) --------------------------------------
     // `process` runs each granted C library in an isolated worker subprocess (a worker crash is
     // DL1409, the host survives — spec §5, criterion 7); `inproc` is the Stage-4 in-process path.
@@ -648,6 +825,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         // labeled in output). A module without actors takes the byte-identical v0.6 path.
         let wasm_has_actors =
             checked.module.items.iter().any(|it| matches!(it, delulu_syntax::ast::Item::Actor(_)));
+        note_program_started();
         let run_result = if wasm_has_actors {
             eprintln!("engine: wasm (actors: cooperative single-threaded — semantics identical, parallelism absent)");
             let table = delulu_wasm::actor_table(&checked.module);
@@ -676,7 +854,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
                 let lines = s.to_json_lines();
                 match &opts.trace_out {
                     Some(path) => {
-                        if let Err(e) = std::fs::write(path, lines + "\n") {
+                        if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
                             eprintln!("error: cannot write trace to `{path}`: {e}");
                         }
                     }
@@ -946,6 +1124,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     } else {
         None
     };
+    note_program_started();
     let run_result = interp.run_main(root);
     // Quiescence exit (spec §6.1): `main` returned AND all mailboxes empty AND no turn
     // running — then report per flags.
@@ -1063,7 +1242,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             let lines = s.to_json_lines();
             match &opts.trace_out {
                 Some(path) => {
-                    if let Err(e) = std::fs::write(path, lines + "\n") {
+                    if let Err(e) = write_nofollow(path, (lines + "\n").as_bytes()) {
                         eprintln!("error: cannot write trace to `{path}`: {e}");
                     }
                 }

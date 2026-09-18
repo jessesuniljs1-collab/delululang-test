@@ -99,6 +99,13 @@ fn canonical_existing(p: &Path) -> Option<PathBuf> {
     }
 }
 
+/// The resolved form of `p` for a containment DECISION made outside the primitive table (the run
+/// report and the trace file, PS-0-02): [`canonical_existing`], so both sides of a comparison go
+/// through the one resolution the containment code trusts. `None` = cannot tell (refuse).
+pub fn resolve_for_decision(p: &Path) -> Option<PathBuf> {
+    canonical_existing(p)
+}
+
 /// Does `p` itself exist as a symbolic link (without following it)? `false` when `p` is absent or
 /// cannot be stat'd — the callers treat "cannot tell" as "do not admit".
 fn is_symlink(p: &Path) -> bool {
@@ -151,11 +158,85 @@ pub fn contains_on_disk(root: &Path, candidate: &Path) -> bool {
     }
 }
 
+/// Why a path SPELLING is refused before any containment decision (D-NE-29, NE-19/NE-20), or `None`.
+///
+/// Containment decides on a spelling; the OS then acts on what the spelling MEANS. On Windows those
+/// differ for a whole family of names, and each difference walked past a check: `NUL` wrote to the
+/// null device, `CON` became a real file through the `\\?\` path the containment walk produced,
+/// `trail.txt.` created `trail.txt` while the trace and audit recorded the other name, `C:foo` means
+/// "the current directory of drive C:", a `:` names an alternate data stream. They are refused, not
+/// normalized: a refusal cannot be walked past by a spelling nobody anticipated. On every platform an
+/// embedded NUL is refused (the OS would truncate the name at it).
+///
+/// `allow_unc`: an operator's `--grant` may name a `\\server\share`; a program's path may not.
+pub fn hostile_path(p: &str, allow_unc: bool) -> Option<String> {
+    if p.contains('\0') {
+        return Some("it contains an embedded NUL, at which the operating system would cut the name".into());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = allow_unc;
+        None
+    }
+    #[cfg(windows)]
+    {
+        windows_hostile_path(p, allow_unc)
+    }
+}
+
+#[cfg(any(windows, test))]
+fn windows_hostile_path(p: &str, allow_unc: bool) -> Option<String> {
+    let b = p.as_bytes();
+    let sep = |c: u8| c == b'\\' || c == b'/';
+    if b.len() >= 4 && sep(b[0]) && sep(b[1]) && (b[2] == b'?' || b[2] == b'.') && sep(b[3]) {
+        return Some("a `\\\\?\\` or `\\\\.\\` prefix bypasses Windows path parsing and names devices".into());
+    }
+    if b.len() >= 2 && sep(b[0]) && sep(b[1]) && !allow_unc {
+        return Some("a UNC path (`\\\\server\\share`) reaches another machine".into());
+    }
+    let drive = b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':';
+    if drive && (b.len() == 2 || !sep(b[2])) {
+        return Some(format!(
+            "`{}` is drive-relative — it means the current directory of drive {}:, whatever that is",
+            p,
+            (b[0] as char).to_ascii_uppercase()
+        ));
+    }
+    let body = if drive { &p[2..] } else { p };
+    for comp in body.split(['\\', '/']) {
+        if comp.is_empty() || comp == "." || comp == ".." {
+            continue;
+        }
+        if comp.contains(':') {
+            return Some(format!("`{comp}` names an alternate data stream (`:`)"));
+        }
+        if comp.ends_with('.') || comp.ends_with(' ') {
+            return Some(format!(
+                "`{comp}` ends in a dot or a space, which Windows strips — the file written would not be the one named"
+            ));
+        }
+        let stem = comp.split('.').next().unwrap_or(comp).trim_end_matches(' ').to_ascii_uppercase();
+        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+            || ["COM", "LPT"].iter().any(|dev| {
+                stem.strip_prefix(dev).is_some_and(|n| {
+                    matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "\u{b9}" | "\u{b2}" | "\u{b3}")
+                })
+            });
+        if reserved {
+            return Some(format!("`{comp}` is a Windows reserved device name"));
+        }
+    }
+    None
+}
+
 /// Resolve `rel` inside a capability's filesystem scope, refusing escapes (DL0904).
 ///
 /// Two gates, and the second is the one a link cannot walk past: the lexical check rejects `..`,
 /// then [`contains_on_disk`] rejects anything that *resolves* outside the root (C84).
 fn resolve_in_scope(root: &Path, rel: &str, span: Span) -> Result<PathBuf, Fault> {
+    if let Some(why) = hostile_path(rel, false) {
+        return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", rel.escape_debug()), span));
+    }
     let joined = normalize(&root.join(rel));
     if joined.starts_with(root) && contains_on_disk(root, &joined) {
         Ok(joined)
@@ -245,6 +326,9 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         }
         "fs_read" => {
             let p = str_arg(args, 0, span)?;
+            if let Some(why) = hostile_path(&p, false) {
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+            }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             // Both gates, for the same reason as `resolve_in_scope`: minting the capability
             // *rooted at* a junction would otherwise put every later read lexically "inside" a
@@ -260,6 +344,9 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         }
         "fs_write" => {
             let p = str_arg(args, 0, span)?;
+            if let Some(why) = hostile_path(&p, false) {
+                return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
+            }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
             match root
                 .fs_write
@@ -1025,5 +1112,42 @@ mod containment_tests {
              not a containment escape in the C84 sense"
         );
         let _ = fs::remove_dir_all(&base);
+    }
+}
+
+/// D-NE-29 (PS-0-06): the path spellings the primitive table refuses. The Windows rules are
+/// compiled everywhere under test, so a Linux CI run pins them too.
+#[cfg(test)]
+mod hostile_path_tests {
+    use super::*;
+
+    #[test]
+    fn windows_spellings_that_mean_something_else_are_refused() {
+        for p in [
+            "CON", "con", "NUL", "nul.txt", "PRN", "AUX.log", "COM1", "com9.dat", "LPT1", "lpt3.txt",
+            "COM\u{b9}", "LPT\u{b2}.x", "CONIN$", "CONOUT$", "a/b/CON", r"a\NUL\b", "CON .txt",
+            "trail.", "space ", "dir./x", "x.txt:stream", "x.txt::$DATA", "C:foo", "c:", r"D:x\y",
+            r"\\?\C:\x", "//?/C:/x", r"\\.\PhysicalDrive0", "//./pipe/x", r"\\server\share\x",
+        ] {
+            assert!(windows_hostile_path(p, false).is_some(), "`{p}` must be refused");
+        }
+    }
+
+    #[test]
+    fn ordinary_names_still_pass() {
+        for p in [
+            "a.txt", "sub/file.txt", "./x", "a/../b", "console.log", "nullable", "com10", "LPT0x",
+            "conx", r"C:\abs\file.txt", "D:/abs/file", "..", "a.b.c", "COMPANY.txt",
+        ] {
+            assert!(windows_hostile_path(p, false).is_none(), "`{p}` must pass: {:?}", windows_hostile_path(p, false));
+        }
+        // An operator's grant may name a share; a program's path may not.
+        assert!(windows_hostile_path(r"\\server\share", true).is_none());
+    }
+
+    #[test]
+    fn an_embedded_nul_is_refused_everywhere() {
+        assert!(hostile_path("a\0b", false).is_some());
+        assert!(hostile_path("a\0b", true).is_some());
     }
 }

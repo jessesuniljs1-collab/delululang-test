@@ -269,6 +269,10 @@ types, and it refuses to imply otherwise.
 
 Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
 
+**`Cap[Http]` has no network client behind it yet.** `client.get(url)` type-checks, is counted in
+the authority report and checked against the granted hosts, and then always returns
+`Err(Refused)`: no byte leaves a DeluluLang program over the network (`REMAINING_WORK.md` 4.12).
+
 Secrets have no string form and no equality. **Two** operations get information out, and **both
 carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in
 its type: `expose` yields the whole value and also needs `Cap[Declassify]`; `verify` yields one bit,
