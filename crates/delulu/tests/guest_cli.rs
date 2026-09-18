@@ -108,6 +108,7 @@ fn the_run_reports_what_the_jail_enforced() {
     }
     if cfg!(target_os = "macos") {
         assert!(err.contains("no file writes"), "{err}");
+        assert!(err.contains("no network but the channel"), "{err}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
