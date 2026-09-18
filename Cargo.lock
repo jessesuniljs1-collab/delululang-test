@@ -576,6 +576,7 @@ dependencies = [
 name = "delulu-runtime"
 version = "1.0.0"
 dependencies = [
+ "ciborium",
  "delulu-broker",
  "delulu-check",
  "delulu-diag",
@@ -586,6 +587,7 @@ dependencies = [
  "ml-dsa",
  "ml-kem",
  "pyo3",
+ "serde",
  "serde_json",
 ]
 

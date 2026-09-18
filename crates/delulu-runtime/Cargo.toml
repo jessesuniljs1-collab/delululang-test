@@ -41,6 +41,10 @@ delulu-broker = { path = "../delulu-broker" }
 # Stage 6 (Live): the `.dpx` plugin manifest is JSON, so the loader reads its ceiling/exports out of
 # a `serde_json::Value` (the container itself is parsed above this crate — see `plugin.rs` topology).
 serde_json = { workspace = true }
+# PS-A-02: the sandbox channel reuses the broker wire shape (canonical CBOR, length-prefixed), so it
+# adds no new dependency — both crates are already workspace dependencies.
+serde = { workspace = true }
+ciborium = { workspace = true }
 # Stage 6 (Live) phase 6h: ed25519 plugin signatures (spec §2.2/§3.1 step 6). House rule 5 pre-approves
 # ed25519-dalek v2 — cryptography is NEVER hand-rolled. Verification (load step 6) and signing (the
 # `plugin build --sign` helper) share ONE message-construction path here, so verify never drifts from
