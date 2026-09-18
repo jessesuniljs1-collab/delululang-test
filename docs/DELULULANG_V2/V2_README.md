@@ -13,6 +13,7 @@ it is here. When a V2 decision changes, these files change; the archive does not
 |---|---|---|
 | [`V2_MASTER_PLAN.md`](V2_MASTER_PLAN.md) | the goal, the architecture, the phases, the gaps V2 closes, what does not change, the owner's decisions | you want the whole picture |
 | [`V2_IMPLEMENTATION_ROADMAP.md`](V2_IMPLEMENTATION_ROADMAP.md) | every phase with its tasks, verification, dependencies, and the end-of-phase protocol | you are about to do the work |
+| [`V2_LOG.md`](V2_LOG.md) | the running log: one short block per phase | you want what happened, briefly |
 | [`V2_PHASE_STATUS.md`](V2_PHASE_STATUS.md) | one row per phase: state, commit, CI run, date | you want to know where V2 is right now |
 | [`V2_EXECUTION_LOG.md`](V2_EXECUTION_LOG.md) | per phase: what was implemented, files, commands and results, Survey, doctor, CI, git, agents, problems, decisions | you want to know what actually happened |
 | [`V2_DECISION_LOG.md`](V2_DECISION_LOG.md) | records `D-V2-nn`: evidence, alternatives, why, status (RULED by the owner / TAKEN by the head chef / PROPOSED) | you want to argue with a choice |

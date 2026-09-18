@@ -1,5 +1,7 @@
 # V2 execution log
 
+> **Frozen at P1 (owner, 2026-09-18, D-V2-22).** The running log is [`V2_LOG.md`](V2_LOG.md).
+
 Append-only; one entry per phase (or per interrupted attempt). Facts only: what was implemented,
 which files changed, which commands ran and what they returned, the Survey, `doctor` and CI results,
 the commits and pushes, what failed, what was fixed, what is unresolved, the owner's decisions, what

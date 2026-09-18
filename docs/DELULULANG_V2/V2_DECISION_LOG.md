@@ -223,6 +223,11 @@ here, this log says so and the archive is not edited.
 - **Why:** non-human users first (D-V2-18). An agent has to learn what confined a program from a
   channel the program cannot forge.
 
+## D-V2-22 — One small log — RULED (owner, 2026-09-18)
+- The owner: the logs cost more tokens than the work. From now on one short block per phase in
+  `V2_LOG.md`; `V2_EXECUTION_LOG.md` and `V2_AGENT_LOG.md` are frozen at P1 (kept, not deleted);
+  decision records are at most three lines. Evidence goes to project storage as raw command output.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
 D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,

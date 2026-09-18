@@ -10,6 +10,9 @@ is in focused sessions (S), an estimate, kept from the plan. State per phase: `V
 
 ## 0. The protocol every phase follows
 
+**Logging (owner, 2026-09-18, D-V2-22):** one short block per phase in `V2_LOG.md`, and a phase
+status row. No other log is written; evidence is raw command output in project storage.
+
 **At the start:** read the phase's objectives here; inspect the affected code; `cargo run -p
 delulu-survey -- impact <id>` for every module the phase touches; run the Survey and `doctor`;
 establish the baseline (the suite green, the core-invariance snapshot unchanged, the numbers

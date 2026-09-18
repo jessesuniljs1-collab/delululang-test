@@ -1,5 +1,7 @@
 # V2 agent log
 
+> **Frozen at P1 (owner, 2026-09-18, D-V2-22).** The running log is [`V2_LOG.md`](V2_LOG.md).
+
 What each sous-chef agent was asked, did, found and failed — conclusions, evidence and outputs only.
 No private reasoning or chain-of-thought is stored here or anywhere (owner's rule, 2026-09-17).
 Briefs, progress files, scripts and reports live in project storage beside the repository:

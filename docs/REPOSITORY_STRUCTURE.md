@@ -646,13 +646,14 @@ The source of truth for DeluluLang V2. Where `docs/archive/v1/NEXT_EVOLUTION_202
 material, this is the execution:
 
 - `V2_README.md` — the index and reading order; start here.
+- `V2_LOG.md` — the running log, one short block per phase (from 2026-09-18).
 - `V2_MASTER_PLAN.md` — what V2 is and what it commits to.
 - `V2_IMPLEMENTATION_ROADMAP.md` — phases, tasks, dependencies, verification.
-- `V2_EXECUTION_LOG.md` — what each phase actually ran, found, committed and pushed.
+- `V2_EXECUTION_LOG.md` — what V2-0 and P1 ran, found, committed and pushed (frozen at P1).
 - `V2_DECISION_LOG.md` — the decision records.
 - `V2_PHASE_STATUS.md` — where each phase stands.
 - `V2_DOC_MOVE_MANIFEST.md` — the V2-0 documentation migration, row by row.
-- `V2_AGENT_LOG.md` — which agent did what, and what was verified before it was believed.
+- `V2_AGENT_LOG.md` — which agent did what through P1, and what was verified (frozen at P1).
 - `V2_SECURITY_MODEL.md` — the security model V2 works to.
 - `V2_AI_NATIVE_DESIGN.md` — the machine-facing design for V2.
 
