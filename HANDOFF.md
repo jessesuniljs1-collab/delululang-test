@@ -2,7 +2,7 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Current state (2026-09-18):** V2 P1 complete (`70864a2`, CI green); **PS-0 built but UNCOMMITTED in the working tree**, so read `D:\nelan\DeluluLang-agent-transcripts\2026-09-18-ps0\RESUME-PS0.md` before touching anything; `docs/DELULULANG_V2/V2_LOG.md` is the short log.
+**Current state (2026-09-18):** V2 P1 and PS-0 complete (`32ba712`, CI green); next phase PS-A. The short log is `docs/DELULULANG_V2/V2_LOG.md`; the session resume note is `D:\nelan\DeluluLang-agent-transcripts\2026-09-18-ps0\RESUME-PS0.md`.
 
 **Last updated:** 2026-09-17 — **DeluluLang V2 is executing.** The owner approved the 2026 evolution plan the same evening (`docs/design/DeluluLang_V2_Execution_Master_Prompt.md`); the active source of truth is now `docs/DELULULANG_V2/` (start at `V2_README.md`; phase state in `V2_PHASE_STATUS.md`), and the two planning passes that produced the plan were archived under `docs/archive/v1/NEXT_EVOLUTION_2026/` together with sixteen other historical documents (`docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md`). Earlier that day the owner made the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all three operating systems in one run. Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**

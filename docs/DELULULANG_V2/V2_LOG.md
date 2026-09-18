@@ -32,7 +32,7 @@ are frozen at P1.
   fixed with a counter, pinned by a 16-thread test that fails without it.
 - CI `35348430717` on `70864a2`: green on every job. P1 and P1-F complete.
 
-## PS-0 sandbox truth — 2026-09-18 — built by the sous-chef, verified by the head chef
+## PS-0 sandbox truth — 2026-09-18 — complete
 - 01 honest docs (no network client; `process` = foreign code only; RW 4.12–4.16); 02 `run --report-out`
   (D-V2-21), refused in `fs.write` scopes with `--trace-out`, no final-symlink follow; 03 DL1408 repair;
   04 `sandbox probe` (attempts only); 05 `doctor` sandbox section; 06 Windows hostile path spellings
@@ -46,3 +46,8 @@ are frozen at P1.
   accepted every special address; 26 extra address spellings refused, public ones allowed). Found and fixed:
   a bare `--report-out rep.json` was refused as unresolvable (empty parent), with a falsified test; an
   unresolvable write scope now refuses instead of being skipped. Questions a–e: D-V2-24.
+- Commit `32ba712`, CI `35376528795` green on every job (the macOS Seatbelt code's first compile).
+- PS-0-08 experiments, run `35376590803`: Linux KVM needs a permission step, then a VMM boots to `/init`
+  (L2 is testable on GitHub). Seatbelt blocks reads and writes; its network result is void (the probe's own
+  baseline timed out). Windows restricted-token child works; the job's one-process limit did not stop a
+  grandchild (limit or probe: RW 4.18, settled at PS-A's start).
