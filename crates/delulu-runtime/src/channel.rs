@@ -601,6 +601,33 @@ mod tests {
         assert_eq!(err.code, "DL1401");
     }
 
+    /// Hostile bytes reach [`read_frame`] before anything else on this wire, so it must fail, never
+    /// panic and never trust a length. Ten thousand seeded pseudo-random frames, deterministic so a
+    /// failure is reproducible from the seed alone. (The roadmap's `cargo-fuzz` target is a separate
+    /// piece of infrastructure; this is the part that can run in the ordinary suite.)
+    #[test]
+    fn random_bytes_are_refused_and_never_panic() {
+        let mut state = 0x5EED_1234_5678_9ABCu64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..10_000 {
+            let len = (next() % 64) as usize;
+            let mut bytes: Vec<u8> = (0..len).map(|_| (next() & 0xff) as u8).collect();
+            // Half the cases get a plausible length prefix, so the body is what is under test.
+            if next() % 2 == 0 && bytes.len() >= 4 {
+                let body = (bytes.len() - 4) as u32;
+                bytes[..4].copy_from_slice(&body.to_le_bytes());
+            }
+            // The contract: a value or an error, never a panic and never an unbounded allocation.
+            let _ = read_frame::<Request>(&mut &bytes[..]);
+            let _ = read_frame::<WireValue>(&mut &bytes[..]);
+        }
+    }
+
     /// Canonical encoding: the same value is the same bytes, which is what makes a frame hashable
     /// and an audit record reproducible.
     #[test]
