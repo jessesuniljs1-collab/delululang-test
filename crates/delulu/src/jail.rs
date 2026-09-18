@@ -40,6 +40,62 @@ pub use windows_jail::{confine, Jail};
 #[allow(unused_imports)]
 pub use other::{confine, Jail};
 
+/// Harden the child BEFORE it is spawned, where the platform allows it.
+///
+/// On Linux this is the strongest moment there is: the hooks run in the forked child, before `exec`,
+/// so the limits are in force from the guest's first instruction rather than a moment after it. The
+/// kernel enforces them whatever the guest later does, including if it escapes the interpreter.
+///
+/// Returns what was applied, for the run's report. Nothing is claimed that was not requested of the
+/// kernel, and `no_new_privs` is set first so a later seccomp filter cannot be side-stepped through
+/// a setuid binary (PS-A2 adds Landlock and seccomp proper with the crates the owner approved).
+#[cfg(target_os = "linux")]
+pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static str> {
+    use std::os::unix::process::CommandExt as _;
+    // SAFETY: `pre_exec` runs in the forked child before `exec` and calls only async-signal-safe
+    // functions (`prctl`, `setrlimit`). A failure leaves the guest less confined, never more, and the
+    // report below says only what was asked of the kernel.
+    unsafe {
+        cmd.pre_exec(move || {
+            // A guest must never gain privileges through a setuid binary, and this must be set
+            // before any filter that a setuid exec could otherwise escape.
+            libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+            // Killed with the host, as the Windows job's kill-on-close does.
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+            // The resource argument is unsigned on glibc and signed on musl, so it is cast at the
+            // call rather than typed here. (Typed as `c_int`, this did not compile for Linux at all —
+            // caught by type-checking the module in WSL instead of letting CI find it.)
+            let set = |res, value: libc::rlim_t| {
+                let lim = libc::rlimit { rlim_cur: value, rlim_max: value };
+                libc::setrlimit(res, &lim);
+            };
+            set(libc::RLIMIT_AS, limits.memory_bytes as libc::rlim_t);
+            set(libc::RLIMIT_CPU, limits.cpu_seconds as libc::rlim_t);
+            // No new processes: the guest runs the interpreter and starts nothing, which is the same
+            // boundary the Windows job's one-process limit draws.
+            set(libc::RLIMIT_NPROC, 1);
+            // No core dump: a crash must not spill the guest's memory onto the disk, where it would
+            // outlive the run and the scope it was granted.
+            set(libc::RLIMIT_CORE, 0);
+            Ok(())
+        });
+    }
+    vec![
+        "memory ceiling",
+        "processor-time ceiling",
+        "no new processes",
+        "no privilege escalation",
+        "no core dump",
+        "killed with the host",
+    ]
+}
+
+/// Other platforms harden after the spawn, or not yet at all.
+#[cfg(not(target_os = "linux"))]
+pub fn harden(_cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static str> {
+    Vec::new()
+}
+
 /// The Windows jail: a Job Object carrying every limit this host will accept.
 ///
 /// `ActiveProcessLimit = 1` is the one that matters most and the one that was actually measured: the
@@ -70,12 +126,6 @@ mod windows_jail {
             if !self.0.is_null() {
                 unsafe { CloseHandle(self.0) };
             }
-        }
-    }
-
-    impl Jail {
-        pub fn is_enforced(&self) -> bool {
-            !self.0.is_null()
         }
     }
 
@@ -172,7 +222,7 @@ mod windows_tests {
         let mut child = waiting_child();
         let limits = super::Limits::default();
         let (jail, enforced) = super::confine(&child, limits);
-        assert!(jail.is_enforced(), "the job was not applied at all");
+        assert!(!enforced.guarantees.is_empty(), "the job was not applied at all");
 
         let mut in_job: i32 = 0;
         // SAFETY: the child is alive and its handle is valid until `wait`.
@@ -225,12 +275,6 @@ mod windows_tests {
 #[cfg(not(windows))]
 mod other {
     pub struct Jail;
-
-    impl Jail {
-        pub fn is_enforced(&self) -> bool {
-            false
-        }
-    }
 
     pub fn confine(_child: &std::process::Child, _limits: super::Limits) -> (Jail, super::Enforced) {
         (Jail, super::Enforced::default())
