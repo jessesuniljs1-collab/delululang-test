@@ -191,3 +191,46 @@ jobs:
           $two = [RJ]::Run('cmd.exe /v:on /c "cmd.exe /c exit 9 & if !errorlevel! equ 9 (exit 9) else (exit !errorlevel!)"')
           Write-Host "grandchild attempt: $two"
           if ($two -ne 'exit 9') { Write-Host 'RESULT windows-job-one-process-limit: PASS' } else { Write-Host 'RESULT windows-job-one-process-limit: FAIL' }
+  macos-seatbelt-guest-shape:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: under a deny-default profile, can a process still use its own Unix socket?
+        continue-on-error: true
+        run: |
+          set +e
+          SOCK="$RUNNER_TEMP/guest.sock"
+          rm -f "$SOCK"
+          python3 - "$SOCK" <<'PYEOF' &
+          import socket, sys, os
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.bind(sys.argv[1]); s.listen(1)
+          c, _ = s.accept(); c.sendall(b"hello"); c.close()
+          PYEOF
+          sleep 2
+          # The shape the guest needs: deny everything, allow the binary, the system libraries it
+          # loads, and exactly one socket path.
+          PROFILE='(version 1)
+          (deny default)
+          (allow process-exec*)
+          (allow process-fork)
+          (allow sysctl-read)
+          (allow mach-lookup)
+          (allow file-read-metadata)
+          (allow file-read* (subpath "/usr") (subpath "/System") (subpath "/Library") (subpath "/private/var/select"))
+          (allow file-read* file-write* (literal "SOCKPATH"))
+          (allow network-outbound (literal "SOCKPATH"))'
+          echo "${PROFILE//SOCKPATH/$SOCK}" > "$RUNNER_TEMP/guest.sb"
+          cat > "$RUNNER_TEMP/client.py" <<'PYC'
+          import socket, sys
+          s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          s.connect(sys.argv[1])
+          print("GOT", s.recv(16).decode())
+          PYC
+          sandbox-exec -f "$RUNNER_TEMP/guest.sb" /usr/bin/python3 "$RUNNER_TEMP/client.py" "$SOCK"
+          boxed=$?
+          echo "sandboxed client exit=$boxed"
+          if [ $boxed -eq 0 ]; then echo "RESULT seatbelt-allows-its-own-socket: PASS"; else echo "RESULT seatbelt-allows-its-own-socket: FAIL"; fi
+          # And the other half: the same profile must still refuse a file outside it.
+          sandbox-exec -f "$RUNNER_TEMP/guest.sb" /bin/cat /etc/hosts >/dev/null 2>&1
+          if [ $? -ne 0 ]; then echo "RESULT seatbelt-still-denies-other-files: PASS"; else echo "RESULT seatbelt-still-denies-other-files: FAIL"; fi
