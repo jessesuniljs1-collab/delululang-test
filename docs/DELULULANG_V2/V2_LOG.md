@@ -28,3 +28,5 @@ are frozen at P1.
 - P1-11 not built (owner ruling, D-V2-23).
 - Head chef: found that F6 could be widened by reaching a package's test file by its path from outside; fixed
   and re-witnessed on 4 routes, both ways; snapshot re-checked structurally (12 cases, only DL0404 fell).
+- CI `35347357572` red on Windows only: a pre-existing temp-dir race in `for_loop_cli.rs` (clock-only tags);
+  fixed with a counter, pinned by a 16-thread test that fails without it.

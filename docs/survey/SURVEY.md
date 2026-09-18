@@ -23,10 +23,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 226 |
-| Rust lines | 115141 |
+| Rust lines | 115166 |
 | Rust files outside `src/` (test/bench targets) | 96 |
 | Markdown documents | 186 |
-| Markdown lines | 52057 |
+| Markdown lines | 52059 |
 | DeluluLang programs | 154 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |

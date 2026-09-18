@@ -56,8 +56,33 @@ fn check_program(src: &str) -> String {
     String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr)
 }
 
-fn rand_tag() -> u128 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+/// A per-call unique directory tag. The clock alone is not unique: Windows ticks in 100 ns, and two
+/// tests running in parallel once got the same tag, shared one directory, and each read or deleted
+/// the other's `p.delulu` (CI run 35347357572). The counter makes every tag in this process distinct.
+fn rand_tag() -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    format!("{t}-{n}")
+}
+
+/// Pins the fix above the way the collision happened: many threads released at once, each taking
+/// tags, as parallel tests do. With the clock alone, simultaneous threads get equal tags.
+#[test]
+fn temp_dir_tags_never_repeat_across_parallel_threads() {
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+    let handles: Vec<_> = (0..16)
+        .map(|_| {
+            let b = barrier.clone();
+            std::thread::spawn(move || {
+                b.wait();
+                (0..2_000).map(|_| rand_tag()).collect::<Vec<_>>()
+            })
+        })
+        .collect();
+    let all: Vec<String> = handles.into_iter().flat_map(|h| h.join().unwrap()).collect();
+    let distinct: std::collections::HashSet<&String> = all.iter().collect();
+    assert_eq!(distinct.len(), all.len(), "parallel threads produced the same temp-dir tag");
 }
 
 fn stdout(o: &Output) -> String {
