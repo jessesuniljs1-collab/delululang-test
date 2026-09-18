@@ -260,6 +260,10 @@ pub struct Interp {
     /// not change `Interp::new`'s signature or behavior.
     trace: Option<TraceSink>,
     trace_seq: Cell<u64>,
+    /// PS-A-01: the ONE seam every capability operation leaves the interpreter through. Defaults to
+    /// [`crate::sink::LocalSink`], today's in-process path, byte for byte. PS-A's guest swaps in a
+    /// channel sink and holds no OS authority of its own.
+    effects: Rc<dyn crate::sink::EffectSink>,
     /// Foreign blocks by lib name (Stage 4): each declared function's marshalling signature, lowered
     /// from the module. Empty for a program with no `foreign` blocks — so nothing changes for it.
     foreign_blocks: HashMap<String, Vec<ForeignSig>>,
@@ -359,6 +363,7 @@ impl Interp {
             in_turn: Cell::new(false),
             cycle: std::cell::RefCell::new(crate::cycles::Registry::default()),
             trace: None,
+            effects: Rc::new(crate::sink::LocalSink),
             trace_seq: Cell::new(0),
             foreign_blocks,
             foreign_binds: HashMap::new(),
@@ -621,6 +626,13 @@ impl Interp {
     /// (attenuation, `verify`, `Str`/`List` methods, `Root` capability minting) are never traced.
     pub fn with_trace(mut self, sink: TraceSink) -> Interp {
         self.trace = Some(sink);
+        self
+    }
+
+    /// Send capability operations somewhere other than this process (PS-A-01). Without this the
+    /// interpreter uses [`crate::sink::LocalSink`] and behaves exactly as it always has.
+    pub fn with_effect_sink(mut self, sink: Rc<dyn crate::sink::EffectSink>) -> Interp {
+        self.effects = sink;
         self
     }
 
@@ -1294,7 +1306,9 @@ impl Interp {
             Value::Cap(c) if c.kind == ResourceKind::Compute => {
                 self.call_compute(c, &name.name, &argvals, span)
             }
-            Value::Cap(c) => prim::call_cap_method(c, &name.name, &argvals, span),
+            // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
+            // made before — so the local path is unchanged; a guest sends it to the host instead.
+            Value::Cap(c) => self.effects.cap_method(c, &name.name, &argvals, span),
             // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
             #[cfg(feature = "python")]

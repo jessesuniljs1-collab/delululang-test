@@ -15,6 +15,7 @@ pub mod plugin;
 pub mod pqc;
 pub mod netclass;
 pub mod prim;
+pub mod sink;
 pub mod python;
 pub mod trace;
 pub mod value;
