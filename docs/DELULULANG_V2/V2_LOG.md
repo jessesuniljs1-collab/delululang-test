@@ -51,3 +51,6 @@ are frozen at P1.
   (L2 is testable on GitHub). Seatbelt blocks reads and writes; its network result is void (the probe's own
   baseline timed out). Windows restricted-token child works; the job's one-process limit did not stop a
   grandchild (limit or probe: RW 4.18, settled at PS-A's start).
+- RW 4.18 closed: both were probe flaws (`if errorlevel 9` means 9 or higher; the baseline was not ready). Fixed
+  in `85501ec`; run `35378619727`: the job blocks the grandchild (1816) and Seatbelt denies the network. Every
+  L1 building block PS-A needs works on GitHub's Linux, macOS and Windows runners.
