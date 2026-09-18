@@ -35,6 +35,22 @@ const CONNECT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10)
 /// The internal subcommand name. Never advertised: the host passes it when it spawns the child.
 pub const GUEST_SUBCOMMAND: &str = "__guest";
 
+/// The ONLY environment variables a guest inherits: the ones its platform's LOADER needs to start a
+/// process at all. One list, read by the spawn and by the test that guards it, so the two cannot
+/// drift — the same reason P1-F3's flag allowlist is derived from the help text.
+///
+/// Learned twice from guests that died before running a line: Windows at 0xC0000135, DLL not found,
+/// and Linux at 127, `libpython3.13.so.1.0: cannot open shared object file`, because this binary
+/// links CPython. None of these names is authority.
+#[cfg(windows)]
+pub const LOADER_ENV: &[&str] = &["SystemRoot", "SystemDrive", "WINDIR", "PATH"];
+#[cfg(target_os = "linux")]
+pub const LOADER_ENV: &[&str] = &["LD_LIBRARY_PATH"];
+#[cfg(target_os = "macos")]
+pub const LOADER_ENV: &[&str] = &["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"];
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+pub const LOADER_ENV: &[&str] = &[];
+
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
     // The guest is the server on its own channel, as the foreign worker is: the HOST's wait is then
@@ -237,15 +253,7 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
     // times by a guest that died before running a line: Windows at 0xC0000135, DLL not found
     // (CI-free, found locally), and Linux at 127, `libpython3.13.so.1.0: cannot open shared object
     // file`, because this binary links CPython (CI run 35394515395). None of these is authority.
-    #[cfg(windows)]
-    let loader = ["SystemRoot", "SystemDrive", "WINDIR", "PATH"];
-    #[cfg(target_os = "linux")]
-    let loader = ["LD_LIBRARY_PATH"];
-    #[cfg(target_os = "macos")]
-    let loader = ["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"];
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
-    let loader: [&str; 0] = [];
-    for name in loader {
+    for name in LOADER_ENV {
         if let Ok(v) = std::env::var(name) {
             cmd.env(name, v);
         }
@@ -319,11 +327,13 @@ mod tests {
         let (cmd, _) = guest_command(std::path::Path::new("delulu"), std::path::Path::new("chan"));
         let names: Vec<String> =
             cmd.get_envs().map(|(k, _)| k.to_string_lossy().to_string()).collect();
-        let allowed: &[&str] =
-            if cfg!(windows) { &["SystemRoot", "SystemDrive", "WINDIR", "PATH"] } else { &[] };
+        // Read from the one list the spawn uses: a second copy here went stale twice, and a test
+        // that disagrees with the code it guards is worse than no test (CI runs 35390738394 and
+        // 35396024254 were red on exactly that).
         for n in &names {
-            assert!(allowed.contains(&n.as_str()), "the guest would inherit `{n}`");
+            assert!(LOADER_ENV.contains(&n.as_str()), "the guest would inherit `{n}`");
         }
+        assert!(names.len() <= LOADER_ENV.len(), "nothing beyond the loader list: {names:?}");
         // The arguments carry the channel directory and nothing else: no secret is ever on a command
         // line, where every process on the machine can read it.
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
