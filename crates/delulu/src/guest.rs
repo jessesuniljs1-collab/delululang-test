@@ -173,6 +173,14 @@ pub fn spawn_and_serve(
         eprintln!("sandbox: the guest is confined — {}", applied.join("; "));
     }
     let _ = &jail;
+    // Only now does the guest run: on Windows it was created suspended, so it meets its jail before
+    // its first instruction rather than a moment after.
+    if !crate::jail::resume(&child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(io::Error::other("the sandbox guest could not be started under its jail"));
+    }
     let served = converse(&dir, program, root, seed, fixed_clock_ms);
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();

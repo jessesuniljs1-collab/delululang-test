@@ -86,6 +86,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_Storage_FileSystem",
     "Win32_System_Threading",
+    # PS-A-04: resume a suspended guest after its jail is applied (thread snapshot).
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_IO",
     "Win32_System_JobObjects",
     "Win32_Security",

@@ -92,8 +92,66 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
 
 /// Other platforms harden after the spawn, or not yet at all.
 #[cfg(not(target_os = "linux"))]
-pub fn harden(_cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static str> {
+pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static str> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        // Created SUSPENDED so the jail is applied before the guest's first instruction rather than
+        // a moment after it. `resume` below starts it once the Job Object is in place.
+        const CREATE_SUSPENDED: u32 = 0x0000_0004;
+        cmd.creation_flags(CREATE_SUSPENDED);
+    }
+    let _ = cmd;
     Vec::new()
+}
+
+/// Start a guest that [`harden`] created suspended. On platforms that do not suspend, this is a
+/// no-op and the guest has been running since `spawn`.
+///
+/// Returns whether the guest is now running: a guest that cannot be resumed must not be waited on.
+#[cfg(windows)]
+pub fn resume(child: &std::process::Child) -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+
+    // `std::process::Child` does not hand out the thread handle, so the process's own threads are
+    // found the documented way. A suspended process has exactly one.
+    let pid = child.id();
+    let mut resumed = false;
+    // SAFETY: the snapshot and every thread handle opened from it are closed on both paths.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if snap.is_null() {
+            return false;
+        }
+        let mut entry: THREADENTRY32 = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+        let mut ok = Thread32First(snap, &mut entry);
+        while ok != 0 {
+            if entry.th32OwnerProcessID == pid {
+                let th = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                if !th.is_null() {
+                    // -1 means the call failed; anything else is the previous suspend count.
+                    if ResumeThread(th) != u32::MAX {
+                        resumed = true;
+                    }
+                    CloseHandle(th);
+                }
+            }
+            ok = Thread32Next(snap, &mut entry);
+        }
+        CloseHandle(snap);
+    }
+    resumed
+}
+
+/// Elsewhere the guest was never suspended, so it is already running.
+#[cfg(not(windows))]
+pub fn resume(_child: &std::process::Child) -> bool {
+    true
 }
 
 /// The Windows jail: a Job Object carrying every limit this host will accept.
