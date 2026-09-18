@@ -91,12 +91,24 @@ fn the_run_reports_what_the_jail_enforced() {
     std::fs::write(&src, "module g\n\nfn main(root: Root) {\n}\n").unwrap();
     let o = delulu(&["__sandbox_run", src.to_str().unwrap()]);
     let err = String::from_utf8_lossy(&o.stderr);
+    // Each platform reports what IT applied, so the assertion is per platform rather than one
+    // wording pretending they are the same. (CI run 35390738394 caught this test claiming Linux
+    // enforced nothing, on the very commit that made Linux enforce.)
+    assert!(err.contains("the guest is confined"), "{err}");
     if cfg!(windows) {
-        assert!(err.contains("the guest is confined"), "{err}");
         assert!(err.contains("one process only"), "{err}");
+    }
+    if cfg!(target_os = "linux") {
+        assert!(err.contains("no privilege escalation"), "{err}");
+        assert!(err.contains("killed with the host"), "{err}");
+    }
+    if cfg!(windows) || cfg!(target_os = "linux") {
         assert!(err.contains("memory ceiling"), "{err}");
-    } else {
-        assert!(err.contains("no OS jail on this host yet"), "{err}");
+        assert!(err.contains("processor-time ceiling"), "{err}");
+    }
+    if cfg!(target_os = "macos") {
+        assert!(err.contains("no file writes"), "{err}");
+        assert!(err.contains("no network but the channel"), "{err}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

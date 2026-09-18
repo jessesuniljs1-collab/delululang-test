@@ -155,9 +155,10 @@ pub fn spawn_and_serve(
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
     let limits = crate::jail::Limits::default();
-    let mut cmd = guest_command(&exe, &dir);
+    let (mut cmd, launched) = guest_command(&exe, &dir);
     // Where the platform allows it, the limits are in force from the guest's first instruction.
-    let before_exec = crate::jail::harden(&mut cmd, limits);
+    let mut before_exec = crate::jail::harden(&mut cmd, limits);
+    before_exec.extend(launched);
     let mut child = cmd.spawn()?;
     // PS-A-04: the OS jail, applied before the guest has been told what to run — it is still waiting
     // for a hello at this point, so it has executed no program bytes yet. (Creating the child
@@ -207,9 +208,24 @@ pub fn spawn_and_serve(
 /// The program's own output is performed by the host, so the guest needs no standard input and
 /// writes nothing to standard output; its standard error stays attached, because a guest that fails
 /// must be able to say so.
-fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> std::process::Command {
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg(GUEST_SUBCOMMAND).arg(dir);
+fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process::Command, Vec<&'static str>) {
+    // On macOS the guest is launched THROUGH the Seatbelt profile, so the confinement is in force
+    // from its first instruction, as the suspended start is on Windows and `pre_exec` is on Linux.
+    let plain = || {
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg(GUEST_SUBCOMMAND).arg(dir);
+        cmd
+    };
+    #[cfg(target_os = "macos")]
+    let (mut cmd, launched) = {
+        let args: Vec<&std::ffi::OsStr> = vec![GUEST_SUBCOMMAND.as_ref(), dir.as_os_str()];
+        match crate::jail::seatbelt_launcher(exe, dir, &args) {
+            Some(pair) => pair,
+            None => (plain(), Vec::new()),
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let (mut cmd, launched) = (plain(), Vec::new());
     cmd.env_clear();
     // Windows loads a process's DLLs through `PATH` and the system directories: with an entirely
     // empty environment the guest dies at 0xC0000135, DLL not found, before it runs a line. These
@@ -222,7 +238,7 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> std::process::
     }
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
-    cmd
+    (cmd, launched)
 }
 
 /// Connect to the guest, tell it what to run, and serve it until it is done.
@@ -271,7 +287,7 @@ mod tests {
     /// child gets an empty one plus only what the OS needs to start a process at all.
     #[test]
     fn a_guest_inherits_no_environment_and_no_standard_input() {
-        let cmd = guest_command(std::path::Path::new("delulu"), std::path::Path::new("chan"));
+        let (cmd, _) = guest_command(std::path::Path::new("delulu"), std::path::Path::new("chan"));
         let names: Vec<String> =
             cmd.get_envs().map(|(k, _)| k.to_string_lossy().to_string()).collect();
         let allowed: &[&str] =

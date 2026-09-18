@@ -71,23 +71,61 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
             };
             set(libc::RLIMIT_AS, limits.memory_bytes as libc::rlim_t);
             set(libc::RLIMIT_CPU, limits.cpu_seconds as libc::rlim_t);
-            // No new processes: the guest runs the interpreter and starts nothing, which is the same
-            // boundary the Windows job's one-process limit draws.
-            set(libc::RLIMIT_NPROC, 1);
             // No core dump: a crash must not spill the guest's memory onto the disk, where it would
             // outlive the run and the scope it was granted.
             set(libc::RLIMIT_CORE, 0);
+            // NOT `RLIMIT_NPROC`. It counts every process AND thread belonging to the whole user,
+            // not this process's children, so a value of 1 fails whatever else that user is already
+            // running and stops the guest creating a thread at all — CI run 35390738394 red on both
+            // Linux jobs. "No new processes" is seccomp's job (it refuses `fork`/`clone` of a new
+            // process), and it arrives with that layer; claiming it here would have been a guarantee
+            // this code does not make.
             Ok(())
         });
     }
     vec![
         "memory ceiling",
         "processor-time ceiling",
-        "no new processes",
         "no privilege escalation",
         "no core dump",
         "killed with the host",
     ]
+}
+
+/// The macOS jail: the guest runs under a Seatbelt profile that denies file writes and the network,
+/// and allows exactly one path — the channel socket it talks to the host on.
+///
+/// The shape is the measured one. A deny-by-default profile aborted even a plain C program before it
+/// reached its socket (experiment run 35391102215, exit 134), while allow-default with targeted
+/// denies connected and still refused writes. So this is what macOS enforces today, and the report
+/// says exactly that rather than implying a deny-default jail. Tightening it to deny-default, with
+/// the loader and Mach allowances a Mach-O binary needs, stays open work.
+///
+/// Returns the command to spawn instead, or `None` when this host cannot apply a profile at all.
+#[cfg(target_os = "macos")]
+pub fn seatbelt_launcher(
+    exe: &std::path::Path,
+    dir: &std::path::Path,
+    args: &[&std::ffi::OsStr],
+) -> Option<(std::process::Command, Vec<&'static str>)> {
+    if !std::path::Path::new("/usr/bin/sandbox-exec").is_file() {
+        return None;
+    }
+    let sock = dir.join("broker.sock");
+    let sock = sock.display();
+    let profile = format!(
+        "(version 1)\n\
+         (allow default)\n\
+         (deny file-write*)\n\
+         (deny network*)\n\
+         (allow file-read* file-write* (literal \"{sock}\"))\n\
+         (allow network-bind network-outbound (literal \"{sock}\"))\n"
+    );
+    let path = dir.join("guest.sb");
+    std::fs::write(&path, profile).ok()?;
+    let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
+    cmd.arg("-f").arg(&path).arg(exe).args(args);
+    Some((cmd, vec!["no file writes", "no network but the channel"]))
 }
 
 /// Other platforms harden after the spawn, or not yet at all.
