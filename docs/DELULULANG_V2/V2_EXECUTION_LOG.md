@@ -429,12 +429,24 @@ reads as a path) and three brace-grouped path lists in this very entry. `impact`
 25 note`.
 
 ### CI
-Pending — this entry is written before the commit; the head chef commits, pushes and records the run.
+Push run **`35299533343`** on `d8dbc24`, read with `gh run view` after it completed: **success**: every push job green (arm64; formal; test (macos-latest); lints; miri (delulu-atlas); supply-chain; editor; miri (delulu-diag); test (windows-latest); test (ubuntu-latest); miri-ffi); skipped by design: heavy-gates, miri-slow; 02:29Z to 02:40Z, 10.8 min.
+The recording commit that adds this paragraph starts a run of its own; it is read and recorded
+at the start of the next phase (the convention since the planning passes).
 Read at the start of this phase: run `35259510471` on V2-0's recording commit `94c6e29` —
 `completed`, `success`, every push job green. Both of V2-0's commits are therefore on green runs.
 
 ### GIT
-Pending — no commit and no push were made by the sous-chef, as the brief required.
+Phase commit **`d8dbc24`** (`d8dbc2498aef9d2833119f276b7d7100b8f5739c`) on `master`: 46 modified,
+2 added, 0 deleted, 0 renamed; the Survey regenerated as the last edit. Pushed to `origin` (the
+testing repository); `git ls-remote origin master` equal to the local head. No skip token in the
+message. The sous-chef made no commit and no push, as the brief required.
+Re-run by the head chef after the recording edits and before the commit, each exit status read
+directly: the documentation gates (`evidence_claims`, `governance`, `book`, `distribution`,
+`doctor_cli`, `repository_structure`: six binaries, 40 tests, all passed, exit 0); the Survey's
+freshness test (5 passed, exit 0); `survey build` (1,153 nodes, 10,636 edges, 0 errors, 2 warnings,
+the known `OLD_PLAN.md` pair, 25 notes); `survey check` (matches the tree, exit 0); `doctor --check`
+(17 checks passed, exit 0). Line endings of every staged file checked (no CRLF); the banned word:
+no hit. The recording commit follows.
 
 ### AGENTS
 One Opus 5 sous-chef, one session, no sub-delegation. See `V2_AGENT_LOG.md`.

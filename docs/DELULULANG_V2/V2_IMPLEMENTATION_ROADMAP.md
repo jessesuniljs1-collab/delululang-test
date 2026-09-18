@@ -49,7 +49,7 @@ enters the tree; research sources are named only in the archive's research recor
 
 No source file changes beyond the Survey rule and the two path strings. Nothing of the language moves.
 
-## P1 — machine-contract truth (3–5 S)
+## P1 — machine-contract truth (3–5 S) — COMPLETE (`d8dbc24`)
 
 Goal: every machine-facing promise in `docs/for-agents.md` true; the walls an agent hits in its first
 program removed. No language-semantics change; one diagnostic-count change (P1-04).
