@@ -16,7 +16,7 @@
 //! shape. What covers it instead is `tests/guest_cli.rs`, which drives the real binary end to end,
 //! including its refusal to run without a hello.
 
-use std::io::{self, Read, Write};
+use std::io;
 use std::rc::Rc;
 
 use delulu_runtime::channel::{read_frame, write_frame, ChannelSink, Hello, HostChannel, CHANNEL_VERSION};
@@ -24,37 +24,46 @@ use delulu_runtime::interp::Interp;
 use delulu_runtime::sink::LocalSink;
 use delulu_runtime::value::{RootVal, Value};
 
-/// The guest's two halves of one conversation: it reads replies from standard input and writes
-/// requests to standard output.
-struct Stdio {
-    r: io::Stdin,
-    w: io::Stdout,
-}
+/// How long either side waits for the other before giving up. A channel with no deadline is the
+/// IPC-1 shape: one stalled peer hangs the other for ever (PS-0-07 fixed the same hole for the
+/// foreign worker, which is why the guest borrows its transport rather than using pipes).
+const CHANNEL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
-impl Read for Stdio {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.r.lock().read(buf)
-    }
-}
-
-impl Write for Stdio {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.w.lock().write(buf)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        self.w.lock().flush()
-    }
-}
+/// How long the host waits for the guest to come up at all.
+const CONNECT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The internal subcommand name. Never advertised: the host passes it when it spawns the child.
 pub const GUEST_SUBCOMMAND: &str = "__guest";
 
 /// Run as the guest. Returns the process exit status.
-pub fn run_guest() -> i32 {
-    let mut io_pair = Stdio { r: io::stdin(), w: io::stdout() };
-    let hello: Hello = match read_frame(&mut io_pair) {
+pub fn run_guest(args: &[String]) -> i32 {
+    // The guest is the server on its own channel, as the foreign worker is: the HOST's wait is then
+    // bounded by a connect deadline rather than by an accept that could never return.
+    let Some(dir) = args.first().map(std::path::PathBuf::from) else {
+        eprintln!("error: the sandbox guest was started without a channel directory");
+        return 2;
+    };
+    let listener = match crate::broker_transport::Listener::bind(&dir) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("error: the sandbox guest cannot open its channel: {e}");
+            return 2;
+        }
+    };
+    let mut conn = match listener.accept() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: the sandbox guest was never contacted by a host: {e}");
+            return 2;
+        }
+    };
+    if conn.set_read_timeout(Some(CHANNEL_DEADLINE)).is_err() {
+        eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
+        return 2;
+    }
+    let hello: Hello = match read_frame(&mut conn) {
         Ok(h) => h,
-        // No hello, no run: a guest started by anything other than its host does nothing at all.
+        // No hello, no run: a guest reached by anything other than its host does nothing at all.
         Err(e) => {
             eprintln!("error: the sandbox guest was started without a hello frame ({e})");
             return 2;
@@ -80,7 +89,7 @@ pub fn run_guest() -> i32 {
     delulu_runtime::prim::set_rand_seed(hello.seed);
     delulu_runtime::prim::set_fixed_clock_ms(hello.fixed_clock_ms);
 
-    let sink = Rc::new(ChannelSink::new(io_pair));
+    let sink = Rc::new(ChannelSink::new(conn));
     let interp = Interp::new(&checked.module).with_effect_sink(sink.clone());
     // The guest's root grants NOTHING. Every capability the program obtains is minted by the host,
     // over the channel, from the root the operator actually granted.
@@ -96,12 +105,43 @@ pub fn run_guest() -> i32 {
     exit
 }
 
+/// The internal runner that drives the host half, so the whole arrangement is exercised through the
+/// real binary before `--sandbox` exists. Internal for the same reason the guest is: PS-A3 replaces
+/// it with the flag, the profiles and the run report the owner ruled on (D-V2-25).
+pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
+
+/// `__sandbox_run <file.delulu> [--grant …]`: run a program in a guest, serving it from here.
+pub fn run_sandboxed_cli(args: &[String]) -> i32 {
+    let (file, opts) = crate::cli::parse_opts(args);
+    let Some(file) = file else {
+        eprintln!("error: `{SANDBOX_RUN_SUBCOMMAND}` needs a file");
+        return 2;
+    };
+    let program = match std::fs::read_to_string(&file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let mut grants = delulu_runtime::broker::Grants::default();
+    for g in &opts.grants {
+        if let Err(e) = grants.add(g) {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    }
+    let root = Rc::new(crate::cli::build_root(&grants));
+    match spawn_and_serve(&program, root, 0xDE1, None) {
+        Ok(exit) => exit,
+        Err(e) => {
+            eprintln!("error: the sandboxed run failed: {e}");
+            1
+        }
+    }
+}
+
 /// The host half: launch a guest, hand it the program, and serve its effects under `root`.
-///
-/// Not yet reachable from the CLI: `--sandbox` and the profiles are PS-A3's, and wiring a half-built
-/// flag would be worse than leaving the function here with its tests. `tests/guest_cli.rs` drives the
-/// same arrangement against the real binary today.
-#[allow(dead_code)]
 ///
 /// Today the guest is an ordinary child process: it has no OS jail yet, which PS-A2 adds. What it
 /// already has is no capability of its own — it can only ask.
@@ -112,14 +152,42 @@ pub fn spawn_and_serve(
     fixed_clock_ms: Option<i64>,
 ) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
-    let mut child = std::process::Command::new(exe)
-        .arg("__guest")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()?;
-    let mut to_guest = child.stdin.take().expect("the guest's standard input is piped");
-    let mut from_guest = child.stdout.take().expect("the guest's standard output is piped");
+    let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
+    std::fs::create_dir_all(&dir)?;
+    let mut child = std::process::Command::new(exe).arg(GUEST_SUBCOMMAND).arg(&dir).spawn()?;
+    let served = converse(&dir, program, root, seed, fixed_clock_ms);
+    // Whatever happened on the channel, the child is not left running and the channel is removed.
+    let status = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+    let status = status?;
+    match served {
+        Ok(exit) => Ok(exit),
+        // A guest that dies without saying goodbye is a failure, never a silent success.
+        Err(e) if status.success() => Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("the guest stopped mid-conversation: {e}"),
+        )),
+        Err(_) => Ok(status.code().unwrap_or(1)),
+    }
+}
 
+/// Connect to the guest, tell it what to run, and serve it until it is done.
+fn converse(
+    dir: &std::path::Path,
+    program: &str,
+    root: Rc<RootVal>,
+    seed: u64,
+    fixed_clock_ms: Option<i64>,
+) -> io::Result<i32> {
+    let deadline = std::time::Instant::now() + CONNECT_DEADLINE;
+    let mut conn = loop {
+        match crate::broker_transport::connect(dir) {
+            Ok(c) => break c,
+            Err(e) if std::time::Instant::now() >= deadline => return Err(e),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    };
+    conn.set_read_timeout(Some(CHANNEL_DEADLINE))?;
     let hello = Hello {
         version: CHANNEL_VERSION.to_string(),
         program: program.to_string(),
@@ -127,16 +195,15 @@ pub fn spawn_and_serve(
         seed,
         fixed_clock_ms,
     };
-    write_frame(&mut to_guest, &hello)?;
-
+    write_frame(&mut conn, &hello)?;
     let mut host = HostChannel::new(LocalSink).with_root(root);
-    let served = host.serve(&mut from_guest, &mut to_guest);
-    // Whatever happened on the channel, the child is not left running.
-    let status = child.wait()?;
-    match served {
-        Ok(exit) => Ok(exit),
-        // A guest that dies without saying goodbye is a failure, never a silent success.
-        Err(e) if status.success() => Err(io::Error::new(io::ErrorKind::UnexpectedEof, format!("the guest stopped mid-conversation: {e}"))),
-        Err(_) => Ok(status.code().unwrap_or(1)),
-    }
+    host.serve(&mut conn)
+}
+
+/// A per-call channel name: the clock alone collides when runs start together.
+fn channel_tag() -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    format!("{t}-{n}")
 }

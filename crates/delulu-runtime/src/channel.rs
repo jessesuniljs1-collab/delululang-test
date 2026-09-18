@@ -368,13 +368,17 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     }
 
     /// Serve one guest until it says it is done, or the connection fails. Returns the guest's exit.
-    pub fn serve(&mut self, r: &mut impl Read, w: &mut impl Write) -> io::Result<i32> {
+    ///
+    /// One duplex, not a read half and a write half: the transports that carry this channel (a Unix
+    /// socket, a Windows named pipe) are single objects, and splitting them would mean cloning a
+    /// handle for no reason.
+    pub fn serve(&mut self, io: &mut (impl Read + Write)) -> io::Result<i32> {
         loop {
-            let req: Request = read_frame(r)?;
+            let req: Request = read_frame(io)?;
             let done = matches!(req.body, ReqBody::Done { .. });
             let exit = if let ReqBody::Done { exit } = req.body { exit } else { 0 };
             let resp = self.answer(&req);
-            write_frame(w, &resp)?;
+            write_frame(io, &resp)?;
             if done {
                 return Ok(exit);
             }

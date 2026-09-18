@@ -1021,7 +1021,8 @@ fn run_inner(args: &[String]) -> i32 {
         // never typed by a caller. Dispatched by constant through a guard arm, the shape the foreign
         // worker already uses for an internal subcommand: out of `--help`, out of completions, and
         // covered by `tests/guest_cli.rs` against the real binary.
-        s if s == crate::guest::GUEST_SUBCOMMAND => crate::guest::run_guest(),
+        s if s == crate::guest::GUEST_SUBCOMMAND => crate::guest::run_guest(rest),
+        s if s == crate::guest::SANDBOX_RUN_SUBCOMMAND => crate::guest::run_sandboxed_cli(rest),
         "completions" => crate::completions::cmd_completions(rest),
         // `delulu help <cmd>` is the same answer as `delulu <cmd> --help`, reached the way people
         // reach for it. It ignored its argument and printed the whole usage, which made the
