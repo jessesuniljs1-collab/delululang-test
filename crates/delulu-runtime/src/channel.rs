@@ -42,8 +42,9 @@ pub enum WireValue {
     List(Vec<WireValue>),
     Record { name: String, fields: Vec<(String, WireValue)> },
     Variant { name: String, fields: Vec<WireValue> },
-    /// A capability, by host-minted handle. The guest holds the number and nothing else.
-    Cap(Handle),
+    /// A capability, by host-minted handle plus its KIND. The guest needs the kind to type-check its
+    /// own use of the value; it never learns the scope, which is the part that names a resource.
+    Cap { handle: Handle, kind: String },
 }
 
 /// Why a value may not cross. Carried as a refusal, never silently dropped or coerced.
@@ -74,7 +75,7 @@ impl WireValue {
                 name: name.to_string(),
                 fields: fields.iter().map(|x| WireValue::from_value(x, cap)).collect::<Result<_, _>>()?,
             },
-            Value::Cap(c) => WireValue::Cap(cap(c)),
+            Value::Cap(c) => WireValue::Cap { handle: cap(c), kind: c.kind.name().to_string() },
             Value::Closure(_) => return Err(Untransferable("a closure")),
             Value::Root(_) => return Err(Untransferable("the root")),
             Value::Secret(_) => return Err(Untransferable("a secret")),
@@ -112,7 +113,42 @@ impl WireValue {
                     fields.into_iter().map(|x| x.into_value(cap)).collect::<Result<Vec<_>, _>>()?,
                 ),
             },
-            WireValue::Cap(h) => Value::Cap(cap(h).ok_or(Untransferable("an unknown capability handle"))?),
+            WireValue::Cap { handle, .. } => {
+                Value::Cap(cap(handle).ok_or(Untransferable("an unknown capability handle"))?)
+            }
+        })
+    }
+}
+
+impl WireValue {
+    /// Decode as the GUEST does: every capability becomes a handle-scoped [`CapVal`], carrying the
+    /// kind the host named and no scope at all. The guest cannot manufacture a scope this way, and
+    /// [`crate::prim::call_cap_method`] refuses such a capability if it ever reaches the local path.
+    pub fn into_guest_value(self) -> Result<Value, Untransferable> {
+        Ok(match self {
+            WireValue::Cap { handle, kind } => {
+                let kind = delulu_check::ResourceKind::from_name(&kind).ok_or(Untransferable("an unknown capability kind"))?;
+                Value::Cap(std::rc::Rc::new(CapVal { kind, scope: crate::value::CapScope::Handle(handle) }))
+            }
+            WireValue::List(items) => Value::List(std::rc::Rc::new(std::cell::RefCell::new(
+                items.into_iter().map(WireValue::into_guest_value).collect::<Result<Vec<_>, _>>()?,
+            ))),
+            WireValue::Record { name, fields } => Value::Record {
+                name: name.into(),
+                fields: std::rc::Rc::new(std::cell::RefCell::new(
+                    fields
+                        .into_iter()
+                        .map(|(k, x)| Ok((k, x.into_guest_value()?)))
+                        .collect::<Result<Vec<_>, Untransferable>>()?,
+                )),
+            },
+            WireValue::Variant { name, fields } => Value::Variant {
+                name: name.into(),
+                fields: VariantFields::new(
+                    fields.into_iter().map(WireValue::into_guest_value).collect::<Result<Vec<_>, _>>()?,
+                ),
+            },
+            plain => plain.into_value(&mut |_| None)?,
         })
     }
 }
@@ -174,6 +210,215 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     ciborium::from_reader(&buf[..]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
 }
 
+/// The host side of the channel: it mints the handles, resolves them, and performs each operation
+/// through an [`EffectSink`] — [`crate::sink::LocalSink`] today, so a guest's effect goes through
+/// exactly the checks a local run makes. The table is per run and per connection: a handle means
+/// nothing anywhere else, and a number the host never minted resolves to nothing.
+pub struct HostChannel<S: crate::sink::EffectSink> {
+    sink: S,
+    caps: Vec<std::rc::Rc<CapVal>>,
+}
+
+impl<S: crate::sink::EffectSink> HostChannel<S> {
+    pub fn new(sink: S) -> Self {
+        HostChannel { sink, caps: Vec::new() }
+    }
+
+    /// Mint a handle for a capability the host holds. Handles start at 1, so 0 is never valid.
+    pub fn mint(&mut self, cap: std::rc::Rc<CapVal>) -> Handle {
+        self.caps.push(cap);
+        self.caps.len() as Handle
+    }
+
+    pub fn resolve(&self, h: Handle) -> Option<std::rc::Rc<CapVal>> {
+        self.caps.get((h.checked_sub(1)?) as usize).cloned()
+    }
+
+    /// Answer one request. Every refusal is an answer: the guest is never left waiting, and the
+    /// host never guesses at a frame it does not understand.
+    pub fn answer(&mut self, req: &Request) -> Response {
+        if req.version != CHANNEL_VERSION {
+            return Response::Error {
+                code: "DL1401".into(),
+                message: format!("channel version `{}` is not `{CHANNEL_VERSION}`", req.version),
+            };
+        }
+        match &req.body {
+            ReqBody::Done { .. } => Response::Ok(WireValue::Unit),
+            ReqBody::CapMethod { cap, method, args, file, start, end } => {
+                let Some(capv) = self.resolve(*cap) else {
+                    return Response::Error {
+                        code: "DL1401".into(),
+                        message: format!("no capability handle {cap} in this run"),
+                    };
+                };
+                let mut resolve = |h: Handle| self.caps.get((h.wrapping_sub(1)) as usize).cloned();
+                let mut decoded = Vec::with_capacity(args.len());
+                for a in args {
+                    match a.clone().into_value(&mut resolve) {
+                        Ok(v) => decoded.push(v),
+                        Err(Untransferable(why)) => {
+                            return Response::Error { code: "DL1401".into(), message: format!("an argument is {why}") }
+                        }
+                    }
+                }
+                let span = delulu_diag::Span::new(*file, *start, *end);
+                match self.sink.cap_method(&capv, method, &decoded, span) {
+                    Ok(v) => {
+                        // A result may itself be a capability (a narrowed one): mint a handle for it
+                        // rather than sending anything that names a resource.
+                        let mut minted: Vec<std::rc::Rc<CapVal>> = Vec::new();
+                        let wire = WireValue::from_value(&v, &mut |c: &std::rc::Rc<CapVal>| {
+                            minted.push(c.clone());
+                            0
+                        });
+                        match wire {
+                            Ok(w) => {
+                                let w = self.remint(w, &minted);
+                                Response::Ok(w)
+                            }
+                            Err(Untransferable(why)) => Response::Error {
+                                code: "DL1401".into(),
+                                message: format!("the result is {why}, which does not cross the channel"),
+                            },
+                        }
+                    }
+                    Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },
+                }
+            }
+        }
+    }
+
+    /// Replace the placeholder handles in an encoded result with real minted ones, in the order the
+    /// encoder met them.
+    fn remint(&mut self, w: WireValue, minted: &[std::rc::Rc<CapVal>]) -> WireValue {
+        let mut next = 0usize;
+        self.walk(w, minted, &mut next)
+    }
+
+    fn walk(&mut self, w: WireValue, minted: &[std::rc::Rc<CapVal>], next: &mut usize) -> WireValue {
+        match w {
+            WireValue::Cap { kind, .. } => {
+                let cap = minted[*next].clone();
+                *next += 1;
+                WireValue::Cap { handle: self.mint(cap), kind }
+            }
+            WireValue::List(items) => {
+                WireValue::List(items.into_iter().map(|x| self.walk(x, minted, next)).collect())
+            }
+            WireValue::Record { name, fields } => WireValue::Record {
+                name,
+                fields: fields.into_iter().map(|(k, x)| (k, self.walk(x, minted, next))).collect(),
+            },
+            WireValue::Variant { name, fields } => WireValue::Variant {
+                name,
+                fields: fields.into_iter().map(|x| self.walk(x, minted, next)).collect(),
+            },
+            plain => plain,
+        }
+    }
+
+    /// Serve one guest until it says it is done, or the connection fails. Returns the guest's exit.
+    pub fn serve(&mut self, r: &mut impl Read, w: &mut impl Write) -> io::Result<i32> {
+        loop {
+            let req: Request = read_frame(r)?;
+            let done = matches!(req.body, ReqBody::Done { .. });
+            let exit = if let ReqBody::Done { exit } = req.body { exit } else { 0 };
+            let resp = self.answer(&req);
+            write_frame(w, &resp)?;
+            if done {
+                return Ok(exit);
+            }
+        }
+    }
+}
+
+/// The guest side: every capability operation becomes one request and one reply. The guest holds no
+/// scope of its own — each of its capabilities is a [`CapScope::Handle`] — so this sink cannot widen
+/// anything: the host decides what the handle means.
+pub struct ChannelSink<T: Read + Write> {
+    io: std::cell::RefCell<T>,
+    seq: std::cell::Cell<u64>,
+}
+
+impl<T: Read + Write> ChannelSink<T> {
+    pub fn new(io: T) -> Self {
+        ChannelSink { io: std::cell::RefCell::new(io), seq: std::cell::Cell::new(0) }
+    }
+
+    /// Tell the host the guest is finished, so it stops serving.
+    pub fn done(&self, exit: i32) -> io::Result<()> {
+        let req = Request { version: CHANNEL_VERSION.into(), seq: self.next_seq(), body: ReqBody::Done { exit } };
+        let mut io = self.io.borrow_mut();
+        write_frame(&mut *io, &req)?;
+        let _: Response = read_frame(&mut *io)?;
+        Ok(())
+    }
+
+    fn next_seq(&self) -> u64 {
+        let n = self.seq.get() + 1;
+        self.seq.set(n);
+        n
+    }
+}
+
+impl<T: Read + Write> crate::sink::EffectSink for ChannelSink<T> {
+    fn cap_method(
+        &self,
+        cap: &CapVal,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, crate::value::Fault> {
+        let fault = |m: String| crate::value::Fault::at("DL1401", m, span);
+        let crate::value::CapScope::Handle(h) = cap.scope else {
+            return Err(fault("a guest capability must be a host handle".into()));
+        };
+        let mut encode = |c: &std::rc::Rc<CapVal>| match c.scope {
+            crate::value::CapScope::Handle(h) => h,
+            // A guest that somehow holds a scoped capability must not send it: 0 is never a handle
+            // the host minted, so the host refuses it rather than acting on a scope it did not give.
+            _ => 0,
+        };
+        let mut wire_args = Vec::with_capacity(args.len());
+        for a in args {
+            match WireValue::from_value(a, &mut encode) {
+                Ok(w) => wire_args.push(w),
+                Err(Untransferable(why)) => return Err(fault(format!("an argument is {why}"))),
+            }
+        }
+        let req = Request {
+            version: CHANNEL_VERSION.into(),
+            seq: self.next_seq(),
+            body: ReqBody::CapMethod {
+                cap: h,
+                method: method.to_string(),
+                args: wire_args,
+                file: span.file,
+                start: span.start,
+                end: span.end,
+            },
+        };
+        let mut io = self.io.borrow_mut();
+        write_frame(&mut *io, &req).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
+        let resp: Response = read_frame(&mut *io).map_err(|e| fault(format!("the sandbox channel failed: {e}")))?;
+        match resp {
+            Response::Ok(w) => w.into_guest_value().map_err(|Untransferable(why)| fault(format!("the reply carried {why}"))),
+            // The host's own answer, carried through unchanged: an unregistered code would be a lie
+            // about which diagnostic this is, so it becomes the channel's own DL1401 instead.
+            Response::Fault { code, message } | Response::Error { code, message } => Err(crate::value::Fault::at(
+                delulu_diag::static_code(&code).unwrap_or("DL1401"),
+                message,
+                span,
+            )),
+        }
+    }
+
+    fn backend(&self) -> &'static str {
+        "channel"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,7 +455,7 @@ mod tests {
     /// An unknown handle is a refusal, never a capability conjured from a number.
     #[test]
     fn an_unknown_capability_handle_is_refused() {
-        let wire = WireValue::Cap(42);
+        let wire = WireValue::Cap { handle: 42, kind: "Clock".into() };
         // `Value` has no equality (a capability must not be comparable), so check the refusal itself.
         let err = wire.into_value(&mut |_| None).expect_err("an unknown handle must be refused");
         assert_eq!(err, Untransferable("an unknown capability handle"));
@@ -254,6 +499,106 @@ mod tests {
         let back: Request = read_frame(&mut &buf[..]).unwrap();
         assert_eq!(back, req);
         assert_eq!(back.version, CHANNEL_VERSION);
+    }
+
+    /// An in-process loopback: whatever the guest writes is answered by a real [`HostChannel`], so
+    /// the test exercises both sides and the frames between them, not a mock.
+    struct Loopback {
+        host: HostChannel<crate::sink::LocalSink>,
+        inbox: Vec<u8>,
+        replies: std::collections::VecDeque<u8>,
+    }
+
+    impl Write for Loopback {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.inbox.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            // A whole frame has arrived: answer it exactly as the host would on a socket.
+            let taken = std::mem::take(&mut self.inbox);
+            if taken.is_empty() {
+                return Ok(());
+            }
+            let req: Request = read_frame(&mut &taken[..])?;
+            let resp = self.host.answer(&req);
+            let mut out = Vec::new();
+            write_frame(&mut out, &resp)?;
+            self.replies.extend(out);
+            Ok(())
+        }
+    }
+
+    impl Read for Loopback {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = buf.len().min(self.replies.len());
+            for (i, slot) in buf.iter_mut().enumerate().take(n) {
+                *slot = self.replies.pop_front().expect("checked length");
+                let _ = i;
+            }
+            Ok(n)
+        }
+    }
+
+    /// The whole round trip: a guest holding nothing but a handle asks for the clock, and the host
+    /// performs it with the primitive table it always uses.
+    #[test]
+    fn a_guest_effect_is_performed_by_the_host_through_the_handle() {
+        use crate::sink::EffectSink;
+        crate::prim::set_fixed_clock_ms(Some(1_234));
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let handle = host.mint(std::rc::Rc::new(CapVal {
+            kind: delulu_check::ResourceKind::Clock,
+            scope: crate::value::CapScope::Clock,
+        }));
+        let guest_cap = CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Handle(handle) };
+        let sink = ChannelSink::new(Loopback { host, inbox: Vec::new(), replies: Default::default() });
+
+        let got = sink
+            .cap_method(&guest_cap, "now_ms", &[], delulu_diag::Span::new(0, 0, 1))
+            .expect("the host performs it");
+        assert_eq!(got.display(), Value::Int(1_234).display());
+        assert_eq!(sink.backend(), "channel");
+        crate::prim::set_fixed_clock_ms(None);
+    }
+
+    /// A handle the host never minted buys nothing: the answer is a refusal, not an effect.
+    #[test]
+    fn a_handle_the_host_never_minted_is_refused() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let req = Request {
+            version: CHANNEL_VERSION.into(),
+            seq: 1,
+            body: ReqBody::CapMethod { cap: 99, method: "now_ms".into(), args: vec![], file: 0, start: 0, end: 1 },
+        };
+        match host.answer(&req) {
+            Response::Error { code, message } => {
+                assert_eq!(code, "DL1401");
+                assert!(message.contains("no capability handle 99"), "{message}");
+            }
+            other => panic!("a forged handle must be refused, got {other:?}"),
+        }
+    }
+
+    /// A peer speaking another protocol is refused before anything is performed.
+    #[test]
+    fn a_version_mismatch_is_refused() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let req = Request {
+            version: "something-else/9".into(),
+            seq: 1,
+            body: ReqBody::CapMethod { cap: 1, method: "now_ms".into(), args: vec![], file: 0, start: 0, end: 1 },
+        };
+        assert!(matches!(host.answer(&req), Response::Error { .. }));
+    }
+
+    /// The local path must refuse a host-held capability rather than pretend it did the work.
+    #[test]
+    fn the_local_path_refuses_a_host_held_capability() {
+        let cap = CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Handle(7) };
+        let err = crate::prim::call_cap_method(&cap, "now_ms", &[], delulu_diag::Span::new(0, 0, 1))
+            .expect_err("a handle cannot be performed in this process");
+        assert_eq!(err.code, "DL1401");
     }
 
     /// Canonical encoding: the same value is the same bytes, which is what makes a frame hashable

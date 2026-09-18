@@ -604,6 +604,14 @@ pub enum CapScope {
     /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
     /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
     Python { allowlist: Vec<String> },
+    /// PS-A-02: a capability the HOST holds; this process has only the number the host minted for
+    /// it. A guest's capabilities are all of this shape, which is what "the guest performs no
+    /// effects" means concretely: there is no path, host or socket here to act on.
+    ///
+    /// The same shape as a daemon-mode `Secret` handle, and for the same reason. The primitive
+    /// table refuses it (DL1401): an in-process performer cannot perform a host-held capability, so
+    /// a handle that reaches the local path is a failure, never a silent no-op.
+    Handle(u64),
 }
 
 /// An unforgeable capability value: a resource kind plus its scope.

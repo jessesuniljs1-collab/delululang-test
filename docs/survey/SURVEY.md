@@ -23,7 +23,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 231 |
-| Rust lines | 116760 |
+| Rust lines | 117123 |
 | Rust files outside `src/` (test/bench targets) | 97 |
 | Markdown documents | 186 |
 | Markdown lines | 52131 |
@@ -31,7 +31,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1159 / 10710 |
+| Nodes / edges in this map | 1159 / 10730 |
 | Open discrepancies | 27 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -270,14 +270,14 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 13824 lines
+- **Modules:** 19 files, 14187 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1159 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 427 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 272 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
+| `src/channel.rs` | 617 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 255 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
@@ -288,11 +288,11 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 | `src/netclass.rs` | 171 | Special-use network addresses (NE-18, owner ruling D-NE-28, PS-0-09). |
 | `src/plugin.rs` | 2235 | The plugin loader (Stage 6 "Live", spec §3.1) — steps 1–4 land in phase 6d. |
 | `src/pqc.rs` | 495 | Stage 10 phase 10i — post-quantum signatures (Track G, spec §8, invariant 51). |
-| `src/prim.rs` | 1153 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
+| `src/prim.rs` | 1163 | The runtime primitive table (spec §7.3): the execution half of the effect truth. Every |
 | `src/python.rs` | 332 | Stage 4 embedded-CPython runtime (spec §5). **Every PyO3 line in the interpreter lives here**, |
 | `src/sink.rs` | 63 | The effect seam (PS-A-01): the ONE trait every capability operation passes through. |
 | `src/trace.rs` | 537 | Effect tracing (spec §6.1): the executable soundness witness. Every EFFECTFUL primitive |
-| `src/value.rs` | 864 | Runtime values, environments, and capability values (spec §7.1). |
+| `src/value.rs` | 872 | Runtime values, environments, and capability values (spec §7.1). |
 
 ### `delulu-survey`
 

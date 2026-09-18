@@ -462,6 +462,16 @@ fn cap(kind: ResourceKind, scope: CapScope) -> Value {
 // ----- capability operations (the effects themselves) ----------------------
 
 pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+    // PS-A-02: a host-held capability carries no path, host or socket — only the number the host
+    // minted. This process cannot perform it, and must not pretend to: a handle reaching the local
+    // path means the guest was wired to the wrong sink, which is a failure, not a quiet no-op.
+    if let CapScope::Handle(h) = capv.scope {
+        return Err(Fault::at(
+            "DL1401",
+            format!("capability handle {h} belongs to the host: this process cannot perform it"),
+            span,
+        ));
+    }
     match (capv.kind, method) {
         (ResourceKind::Console, "println") => {
             emit_console(&str_arg(args, 0, span)?, true);
