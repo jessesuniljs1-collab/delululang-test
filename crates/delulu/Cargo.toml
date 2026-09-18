@@ -45,6 +45,9 @@ delulu-syntax = { path = "../delulu-syntax" }
 delulu-check = { path = "../delulu-check" }
 delulu-atlas = { path = "../delulu-atlas" }
 delulu-runtime = { path = "../delulu-runtime", default-features = false }
+# PS-A-03: the sandbox guest verifies the program hash the host sent. blake3 is already used by
+# delulu-broker, delulu-check and delulu-wasm — the same dependency, not a new one.
+blake3 = "1"
 delulu-wasm = { path = "../delulu-wasm" }
 # Stage 5 chunk 2 (phase 5d): `delulu audit tail|query|verify` reads the hash-chained log files
 # directly. Chunk 3 (phases 5f/5g): the daemon owns a `Broker` + `AuditLog` + secret store; the

@@ -158,6 +158,21 @@ fn leaked_kind(_v: &Value) -> &'static str {
     "a value of a kind that does not cross the sandbox channel"
 }
 
+/// The one frame that travels HOST to GUEST, before the conversation turns around: what to run,
+/// the hash it must match, and the two knobs that make a run reproducible.
+///
+/// It carries no grant and no scope. The guest is told what to execute, never what it may reach —
+/// that stays with the host, which is the whole point of the arrangement.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Hello {
+    pub version: String,
+    pub program: String,
+    /// The program's blake3 hash, so a guest refuses anything swapped in flight.
+    pub hash: String,
+    pub seed: u64,
+    pub fixed_clock_ms: Option<i64>,
+}
+
 /// One request from the guest to the host.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Request {
