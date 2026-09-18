@@ -238,6 +238,11 @@ here, this log says so and the archive is not edited.
   (b) POSIX name normalization deferred (RW 4.17). (c) 60 s foreign-call deadline, env can only shorten: kept.
   (d) `--report-out` without `--json`: kept. (e) UNC allowed in operator `fs.*` grants only: kept (RW 4.17).
 
+## D-V2-25 — PS-A’s four owner rulings — RULED (owner, 2026-09-18)
+- D-NE-24 profiles `dev`, `contained`, `hostile-agent`. D-NE-26 the `landlock` and `seccompiler` crates approved.
+  D-NE-31 default budgets 1 GiB memory and 5 min CPU (never unlimited; the operator may change them).
+  D-NE-33 **sandbox ON by default everywhere** (supersedes D-NE-33’s off-by-default and D-V2-13). PS-A must say how a host without L1 behaves: refuse, never silently downgrade.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
 D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,
