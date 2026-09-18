@@ -123,9 +123,11 @@ jobs:
         run: |
           set +e
           python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &
-          sleep 2
-          curl -s -m 3 -o /dev/null http://127.0.0.1:8765/; plain=$?
-          sandbox-exec -p '(version 1) (allow default) (deny network*)' /usr/bin/curl -s -m 3 -o /dev/null http://127.0.0.1:8765/; boxed=$?
+          # Wait until the server answers: the first run's baseline timed out (exit 28), which voided
+          # the differential (RW 4.18). The baseline must succeed for a sandboxed failure to mean anything.
+          for i in $(seq 1 30); do curl -s -m 1 -o /dev/null http://127.0.0.1:8765/ && break; sleep 0.5; done
+          curl -s -m 5 -o /dev/null http://127.0.0.1:8765/; plain=$?
+          sandbox-exec -p '(version 1) (allow default) (deny network*)' /usr/bin/curl -s -m 5 -o /dev/null http://127.0.0.1:8765/; boxed=$?
           echo "network: plain exit=$plain boxed exit=$boxed"
           if [ $plain -eq 0 ] && [ $boxed -ne 0 ]; then echo "RESULT seatbelt-denies-network: PASS"; else echo "RESULT seatbelt-denies-network: FAIL"; fi
           T="$RUNNER_TEMP/sb"; mkdir -p "$T"
@@ -184,6 +186,8 @@ jobs:
           Write-Host "restricted child in a job: $one"
           if ($one -eq 'exit 7') { Write-Host 'RESULT windows-restricted-job-child: PASS' } else { Write-Host 'RESULT windows-restricted-job-child: FAIL' }
           # The job allows ONE process: a child that tries to start a grandchild must fail to.
-          $two = [RJ]::Run('cmd.exe /c cmd.exe /c exit 9 & if errorlevel 9 (exit 9) else (exit 3)')
+          # `if errorlevel 9` means ">= 9", so a BLOCKED grandchild (cmd reports 1816 or 9009) also read as 9
+          # (RW 4.18). Compare exactly, with delayed expansion, and pass any other code through to the log.
+          $two = [RJ]::Run('cmd.exe /v:on /c "cmd.exe /c exit 9 & if !errorlevel! equ 9 (exit 9) else (exit !errorlevel!)"')
           Write-Host "grandchild attempt: $two"
           if ($two -ne 'exit 9') { Write-Host 'RESULT windows-job-one-process-limit: PASS' } else { Write-Host 'RESULT windows-job-one-process-limit: FAIL' }
