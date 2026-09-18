@@ -189,12 +189,18 @@ pub fn spawn_and_serve(
     let status = status?;
     match served {
         Ok(exit) => Ok(exit),
-        // A guest that dies without saying goodbye is a failure, never a silent success.
-        Err(e) if status.success() => Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            format!("the guest stopped mid-conversation: {e}"),
-        )),
-        Err(_) => Ok(status.code().unwrap_or(1)),
+        // A guest that dies without saying goodbye is a failure, never a silent success — and the
+        // REASON is reported in both branches. This arm used to drop it whenever the child's exit
+        // status was non-zero, which is exactly when the reason matters most: the channel diagnosis
+        // was written, thrown away in a branch, and three CI runs read as an unexplained timeout.
+        Err(e) => {
+            eprintln!("sandbox: {e}");
+            if status.success() {
+                Err(io::Error::new(io::ErrorKind::UnexpectedEof, format!("the guest stopped mid-conversation: {e}")))
+            } else {
+                Ok(status.code().unwrap_or(1))
+            }
+        }
     }
 }
 
