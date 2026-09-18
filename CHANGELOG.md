@@ -9,6 +9,15 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P1-F: P1's follow-ups, 2026-09-18
+
+- **P1-F1 (D-V2-19)** — `unknown name` (DL0301) is no longer followed by DL0404 on the checker's own placeholder type: an inference variable born from a reported error is poisoned and not re-reported; `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.
+- **P1-F2** — every `grants` and `guard` verb prints its `--json` success inside the standard envelope (existing keys unchanged, at the top level); a broker-backed sweep drives each verb.
+- **P1-F3** — a flag the shared option parser knows is refused (exit 2, the unknown-option message) by every command whose `--help` does not document it; the allowlist is read from the same usage text `--help` prints, and the help now lists the flags commands already read.
+- **P1-F4** — `delulu test <package-dir>` (and bare `delulu test` in a package) tests the package with all its modules, as `run` executes it; tests are reported in their own files.
+- **P1-F5 (RW 6.13)** — under `--trace-effects` a filesystem record carries `resolved_path` and `scope_root` (additive; interpreter and WASM); `IoErr` is unchanged.
+- **P1-F6 (D-NE-17, owner 2026-09-18)** — `delulu test --test-authority <row>`, in the manifest's `[test-authority]` syntax: the only ceiling for a file outside a package; inside one it may only narrow the package's ceiling (a wider row is DL1703 before any test runs).
+
 ## Unreleased — V2 phase P1: machine-contract truth, 2026-09-18
 
 Every machine-facing promise in `docs/for-agents.md` is now true or is now named as untrue, and the

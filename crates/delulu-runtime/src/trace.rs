@@ -30,6 +30,13 @@ pub struct TraceRecord {
     pub cap_kind: String,
     pub detail: Option<String>,
     pub span: Option<(u32, u32, u32)>,
+    /// A filesystem effect only (REMAINING_WORK 6.13): the path the operation resolved to inside
+    /// its capability, and that capability's scope root. `detail` is the path as the program wrote
+    /// it, relative to the capability; these two say where that actually pointed, so a
+    /// `NotFound` from a path spelled relative to the working directory is explainable. Machine-only
+    /// and additive: both serialize ONLY when present, so every other record is byte-identical.
+    pub resolved_path: Option<String>,
+    pub scope_root: Option<String>,
     /// Stage 7 (spec §6.3): causal actor attribution — `"Ping#3"`. `None` for main-line
     /// records, and then NONE of the actor fields serialize (a program without actors keeps
     /// byte-identical trace output).
@@ -74,6 +81,14 @@ impl TraceRecord {
                 out.push_str(&format!("{{\"file\":{file},\"start\":{start},\"end\":{end}}}"));
             }
             None => out.push_str("null"),
+        }
+        if let Some(p) = &self.resolved_path {
+            out.push_str(",\"resolved_path\":");
+            out.push_str(&json_string(p));
+        }
+        if let Some(r) = &self.scope_root {
+            out.push_str(",\"scope_root\":");
+            out.push_str(&json_string(r));
         }
         // Actor attribution (spec §6.3) serializes ONLY when present — non-actor records
         // stay byte-identical to v0.6.

@@ -289,6 +289,26 @@ impl HostState {
             ..Default::default()
         });
     }
+
+    /// The `read_text` record, with the two additive filesystem fields the interpreter's record
+    /// carries (REMAINING_WORK 6.13): where the path pointed, and the scope it was resolved in.
+    #[allow(clippy::too_many_arguments)]
+    fn push_fs_read_trace(&mut self, rel: &str, pointed: &std::path::Path, scope: &std::path::Path, file: i32, start: i32, end: i32) {
+        let Some(sink) = &self.trace else { return };
+        let seq = self.trace_seq;
+        self.trace_seq += 1;
+        sink.push(TraceRecord {
+            seq,
+            effect: "Read".to_string(),
+            op: "read_text".to_string(),
+            cap_kind: "FsRead".to_string(),
+            detail: Some(rel.to_string()),
+            span: Some((file as u32, start as u32, end as u32)),
+            resolved_path: Some(pointed.to_string_lossy().to_string()),
+            scope_root: Some(scope.to_string_lossy().to_string()),
+            ..Default::default()
+        });
+    }
 }
 
 /// Format an `f64` EXACTLY as `Value::display` does (`{:.1}` for a finite integral value, else
@@ -707,7 +727,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 return 0;
             };
             // Record the Read `TraceRecord` (detail = the relative path, matching `trace_detail`).
-            caller.data_mut().push_trace("Read", "read_text", "FsRead", Some(rel.clone()), file, start, end);
+            // Like the interpreter, it also names where the path pointed and the scope (RW 6.13).
+            let pointed = normalize(&scope.join(&rel));
+            caller.data_mut().push_fs_read_trace(&rel, &pointed, &scope, file, start, end);
             // Resolve within scope; a `..` or symlink escape is a hard DL0904 refusal, not an `Err`.
             // The symlink half of that sentence was a comment and not a check until C84 — the
             // lexical pass below cannot see a link, so `contains_on_disk` asks the filesystem.

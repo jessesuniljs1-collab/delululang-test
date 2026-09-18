@@ -296,29 +296,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t0` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 129,
-            "col": 27,
-            "line": 7
-          },
-          "file": "examples/greeter/src/main.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 119,
-            "col": 17,
-            "line": 7
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `shout_count`",
@@ -340,34 +317,11 @@ exit 1
           }
         }
       ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t2` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 171,
-            "col": 32,
-            "line": 8
-          },
-          "file": "examples/greeter/src/main.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 160,
-            "col": 21,
-            "line": 8
-          }
-        }
-      ]
     }
   ],
   "schema": 1,
   "summary": {
-    "errors": 4,
+    "errors": 2,
     "warnings": 0
   }
 }
@@ -384,13 +338,6 @@ error[DL0301]: unknown name `salutation`
    |                 ^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t0` is not callable
-  --> examples/greeter/src/main.delulu:7:17
-   |
- 7 |     out.println(salutation("world"))
-   |                 ^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `shout_count`
   --> examples/greeter/src/main.delulu:8:21
    |
@@ -398,14 +345,7 @@ error[DL0301]: unknown name `shout_count`
    |                     ^^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t2` is not callable
-  --> examples/greeter/src/main.delulu:8:21
-   |
- 8 |     out.println(str(shout_count("hello there friends")))
-   |                     ^^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
-4 error(s)
+2 error(s)
 
 ===== examples/guide/01_types.delulu :: check --json =====
 exit 0
@@ -7161,29 +7101,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t3` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1028,
-            "col": 12,
-            "line": 24
-          },
-          "file": "tests/corpus/tier4-multimodule/archive/src/archive.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1019,
-            "col": 3,
-            "line": 24
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `celsius_of`",
@@ -7205,34 +7122,11 @@ exit 1
           }
         }
       ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t5` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1054,
-            "col": 38,
-            "line": 24
-          },
-          "file": "tests/corpus/tier4-multimodule/archive/src/archive.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1044,
-            "col": 28,
-            "line": 24
-          }
-        }
-      ]
     }
   ],
   "schema": 1,
   "summary": {
-    "errors": 7,
+    "errors": 5,
     "warnings": 0
   }
 }
@@ -7270,13 +7164,6 @@ error[DL0301]: unknown name `sensor_of`
    |   ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t3` is not callable
-  --> tests/corpus/tier4-multimodule/archive/src/archive.delulu:24:3
-   |
-24 |   sensor_of(s) + "," + str(celsius_of(s)) + "\n"
-   |   ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `celsius_of`
   --> tests/corpus/tier4-multimodule/archive/src/archive.delulu:24:28
    |
@@ -7284,14 +7171,7 @@ error[DL0301]: unknown name `celsius_of`
    |                            ^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t5` is not callable
-  --> tests/corpus/tier4-multimodule/archive/src/archive.delulu:24:28
-   |
-24 |   sensor_of(s) + "," + str(celsius_of(s)) + "\n"
-   |                            ^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
-7 error(s)
+5 error(s)
 
 ===== tests/corpus/tier4-multimodule/policy :: check --json =====
 exit 0
@@ -7429,29 +7309,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t1` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 329,
-            "col": 21,
-            "line": 10
-          },
-          "file": "tests/corpus/tier4-multimodule/policy/src/policy.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 319,
-            "col": 11,
-            "line": 10
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown type `Sample`",
@@ -7498,29 +7355,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t5` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 526,
-            "col": 25,
-            "line": 24
-          },
-          "file": "tests/corpus/tier4-multimodule/policy/src/policy.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 517,
-            "col": 16,
-            "line": 24
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `sensor_of`",
@@ -7544,29 +7378,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t7` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 569,
-            "col": 25,
-            "line": 25
-          },
-          "file": "tests/corpus/tier4-multimodule/policy/src/policy.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 560,
-            "col": 16,
-            "line": 25
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `sensor_of`",
@@ -7581,29 +7392,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/policy/src/policy.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 612,
-            "col": 15,
-            "line": 26
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t9` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 621,
-            "col": 24,
-            "line": 26
-          },
-          "file": "tests/corpus/tier4-multimodule/policy/src/policy.delulu",
-          "label": "not a function",
           "start": {
             "byte": 612,
             "col": 15,
@@ -7615,7 +7403,7 @@ exit 1
   ],
   "schema": 1,
   "summary": {
-    "errors": 10,
+    "errors": 6,
     "warnings": 0
   }
 }
@@ -7639,13 +7427,6 @@ error[DL0301]: unknown name `celsius_of`
    |           ^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t1` is not callable
-  --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:10:11
-   |
-10 |   let c = celsius_of(s)
-   |           ^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown type `Sample`
   --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:22:20
    |
@@ -7660,26 +7441,12 @@ error[DL0301]: unknown name `sensor_of`
    |                ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t5` is not callable
-  --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:24:16
-   |
-24 |     Nominal => sensor_of(s) + ": nominal",
-   |                ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `sensor_of`
   --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:25:16
    |
 25 |     Cold(c) => sensor_of(s) + ": COLD at " + str(c),
    |                ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t7` is not callable
-  --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:25:16
-   |
-25 |     Cold(c) => sensor_of(s) + ": COLD at " + str(c),
-   |                ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0301]: unknown name `sensor_of`
   --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:26:15
@@ -7688,14 +7455,7 @@ error[DL0301]: unknown name `sensor_of`
    |               ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t9` is not callable
-  --> tests/corpus/tier4-multimodule/policy/src/policy.delulu:26:15
-   |
-26 |     Hot(c) => sensor_of(s) + ": HOT at " + str(c)
-   |               ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
-10 error(s)
+6 error(s)
 
 ===== tests/corpus/tier4-multimodule/reading :: check --json =====
 exit 0
@@ -7875,29 +7635,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t4` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 592,
-            "col": 25,
-            "line": 16
-          },
-          "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 583,
-            "col": 16,
-            "line": 16
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `Malformed`",
@@ -7921,29 +7658,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t8` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 657,
-            "col": 26,
-            "line": 19
-          },
-          "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 648,
-            "col": 17,
-            "line": 19
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `Malformed`",
@@ -7958,29 +7672,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 728,
-            "col": 19,
-            "line": 21
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t12` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 737,
-            "col": 28,
-            "line": 21
-          },
-          "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
-          "label": "not a function",
           "start": {
             "byte": 728,
             "col": 19,
@@ -8004,29 +7695,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 814,
-            "col": 21,
-            "line": 23
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t16` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 824,
-            "col": 31,
-            "line": 23
-          },
-          "file": "tests/corpus/tier4-multimodule/reading/src/parse.delulu",
-          "label": "not a function",
           "start": {
             "byte": 814,
             "col": 21,
@@ -8061,7 +7729,7 @@ exit 1
   ],
   "schema": 1,
   "summary": {
-    "errors": 12,
+    "errors": 8,
     "warnings": 0
   }
 }
@@ -8099,26 +7767,12 @@ error[DL0301]: unknown name `Malformed`
    |                ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t4` is not callable
-  --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:16:16
-   |
-16 |     return Err(Malformed(text))
-   |                ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `Malformed`
   --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:19:17
    |
 19 |     None => Err(Malformed(text)),
    |                 ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t8` is not callable
-  --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:19:17
-   |
-19 |     None => Err(Malformed(text)),
-   |                 ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0301]: unknown name `Malformed`
   --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:21:19
@@ -8127,26 +7781,12 @@ error[DL0301]: unknown name `Malformed`
    |                   ^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t12` is not callable
-  --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:21:19
-   |
-21 |       None => Err(Malformed(text)),
-   |                   ^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `NotANumber`
   --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:23:21
    |
 23 |         None => Err(NotANumber(value)),
    |                     ^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t16` is not callable
-  --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:23:21
-   |
-23 |         None => Err(NotANumber(value)),
-   |                     ^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0301]: unknown type `Sample`
   --> tests/corpus/tier4-multimodule/reading/src/parse.delulu:24:23
@@ -8155,7 +7795,7 @@ error[DL0301]: unknown type `Sample`
    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not a type
   explain: delulu explain E-DL0301
 
-12 error(s)
+8 error(s)
 
 ===== tests/corpus/tier4-multimodule/reading/src/reading.delulu :: check --json =====
 exit 1
@@ -8225,29 +7865,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/reading/src/reading.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 398,
-            "col": 3,
-            "line": 11
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t2` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 409,
-            "col": 14,
-            "line": 11
-          },
-          "file": "tests/corpus/tier4-multimodule/reading/src/reading.delulu",
-          "label": "not a function",
           "start": {
             "byte": 398,
             "col": 3,
@@ -8351,7 +7968,7 @@ exit 1
   ],
   "schema": 1,
   "summary": {
-    "errors": 8,
+    "errors": 7,
     "warnings": 0
   }
 }
@@ -8382,13 +7999,6 @@ error[DL0301]: unknown name `decode_line`
    |   ^^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t2` is not callable
-  --> tests/corpus/tier4-multimodule/reading/src/reading.delulu:11:3
-   |
-11 |   decode_line(line)
-   |   ^^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown type `Sample`
   --> tests/corpus/tier4-multimodule/reading/src/reading.delulu:16:21
    |
@@ -8417,7 +8027,7 @@ error[DL0405]: type `'t6` has no field `celsius`
    |     ^^^^^^^ not a record
   explain: delulu explain E-DL0405
 
-8 error(s)
+7 error(s)
 
 ===== tests/corpus/tier4-multimodule/reading/src/types.delulu :: check --json =====
 exit 0
@@ -8909,29 +8519,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t2` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1122,
-            "col": 26,
-            "line": 35
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1115,
-            "col": 19,
-            "line": 35
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `decode`",
@@ -8946,29 +8533,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 1365,
-            "col": 9,
-            "line": 43
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t4` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1371,
-            "col": 15,
-            "line": 43
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
           "start": {
             "byte": 1365,
             "col": 9,
@@ -9038,29 +8602,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 1414,
-            "col": 19,
-            "line": 45
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t7` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1420,
-            "col": 25,
-            "line": 45
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
           "start": {
             "byte": 1414,
             "col": 19,
@@ -9162,29 +8703,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t10` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1477,
-            "col": 23,
-            "line": 49
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1469,
-            "col": 15,
-            "line": 49
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `s`",
@@ -9231,29 +8749,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t13` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1518,
-            "col": 26,
-            "line": 50
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1510,
-            "col": 18,
-            "line": 50
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `s`",
@@ -9291,29 +8786,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 1796,
-            "col": 13,
-            "line": 55
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t16` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1802,
-            "col": 19,
-            "line": 55
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
           "start": {
             "byte": 1796,
             "col": 13,
@@ -9461,29 +8933,6 @@ exit 1
       ]
     },
     {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t20` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1926,
-            "col": 18,
-            "line": 59
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
-          "start": {
-            "byte": 1918,
-            "col": 10,
-            "line": 59
-          }
-        }
-      ]
-    },
-    {
       "code": "DL0301",
       "explanation_id": "E-DL0301",
       "message": "unknown name `record_alarm`",
@@ -9498,29 +8947,6 @@ exit 1
           },
           "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
           "label": "not found in this scope",
-          "start": {
-            "byte": 1946,
-            "col": 15,
-            "line": 60
-          }
-        }
-      ]
-    },
-    {
-      "code": "DL0404",
-      "explanation_id": "E-DL0404",
-      "message": "value of type `'t22` is not callable",
-      "repairs": [],
-      "severity": "error",
-      "spans": [
-        {
-          "end": {
-            "byte": 1958,
-            "col": 27,
-            "line": 60
-          },
-          "file": "tests/corpus/tier4-multimodule/station/src/station.delulu",
-          "label": "not a function",
           "start": {
             "byte": 1946,
             "col": 15,
@@ -9624,7 +9050,7 @@ exit 1
   ],
   "schema": 1,
   "summary": {
-    "errors": 32,
+    "errors": 24,
     "warnings": 0
   }
 }
@@ -9641,26 +9067,12 @@ error[DL0301]: unknown name `summary`
    |                   ^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t2` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:35:19
-   |
-35 |       out.println(summary(alarms))
-   |                   ^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `decode`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:43:9
    |
 43 |   match decode(line) {
    |         ^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t4` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:43:9
-   |
-43 |   match decode(line) {
-   |         ^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0401]: cannot match variant `Err` against `'t5`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:44:5
@@ -9682,13 +9094,6 @@ error[DL0301]: unknown name `reason`
 45 |       out.println(reason(e))
    |                   ^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t7` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:45:19
-   |
-45 |       out.println(reason(e))
-   |                   ^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0301]: unknown name `e`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:45:26
@@ -9718,13 +9123,6 @@ error[DL0301]: unknown name `classify`
    |               ^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t10` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:49:15
-   |
-49 |       let v = classify(s, 15.0, 30.0)
-   |               ^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `s`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:49:24
    |
@@ -9739,13 +9137,6 @@ error[DL0301]: unknown name `describe`
    |                  ^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t13` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:50:18
-   |
-50 |       let text = describe(s, v)
-   |                  ^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `s`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:50:27
    |
@@ -9759,13 +9150,6 @@ error[DL0301]: unknown name `record`
 55 |       match record(w, s) {
    |             ^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t16` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:55:13
-   |
-55 |       match record(w, s) {
-   |             ^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0301]: unknown name `s`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:55:23
@@ -9809,26 +9193,12 @@ error[DL0301]: unknown name `is_alarm`
    |          ^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
 
-error[DL0404]: value of type `'t20` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:59:10
-   |
-59 |       if is_alarm(v) {
-   |          ^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
-
 error[DL0301]: unknown name `record_alarm`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:60:15
    |
 60 |         match record_alarm(w, text) {
    |               ^^^^^^^^^^^^ not found in this scope
   explain: delulu explain E-DL0301
-
-error[DL0404]: value of type `'t22` is not callable
-  --> tests/corpus/tier4-multimodule/station/src/station.delulu:60:15
-   |
-60 |         match record_alarm(w, text) {
-   |               ^^^^^^^^^^^^ not a function
-  explain: delulu explain E-DL0404
 
 error[DL0401]: cannot match variant `Err` against `'t23`
   --> tests/corpus/tier4-multimodule/station/src/station.delulu:61:11
@@ -9858,7 +9228,7 @@ error[DL0403]: variant `Ok` binds 0 field(s), pattern has 1
    |           ^^^^^ wrong number of fields
   explain: delulu explain E-DL0403
 
-32 error(s)
+24 error(s)
 
 ===== tests/corpus/tier5-security/attenuation.delulu :: check --json =====
 exit 0

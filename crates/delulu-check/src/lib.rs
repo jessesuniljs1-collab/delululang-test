@@ -1638,6 +1638,27 @@ fn want(xs: List[Sample]) -> Int { xs.len() }
         assert!(e.contains(&"DL0301".to_string()), "{e:?}");
     }
 
+    // ----- D-V2-19 (P1-F1): no DL0404 cascade after DL0301, by poison propagation -------
+
+    #[test]
+    fn an_unknown_callee_is_dl0301_alone() {
+        for src in [
+            "module m\nfn main() -> Int {\n  f(1)\n}\n",
+            "module m\nfn main() -> Int {\n  let g = f\n  g(1)\n}\n",
+            "module m\nfn main() -> Int {\n  f(1)(2)\n}\n",
+        ] {
+            assert_eq!(errors(src), vec!["DL0301".to_string()], "{src}");
+        }
+    }
+
+    #[test]
+    fn a_generic_callee_is_still_dl0404() {
+        // The witness that the suppression is not "any inference variable": this program has no
+        // earlier error, and it must stay refused with the same code (D-V2-19 acceptance).
+        let e = errors("module m\nfn apply[F](f: F, x: Int) {\n  f(x)\n}\n");
+        assert_eq!(e, vec!["DL0404".to_string()], "{e:?}");
+    }
+
     // ----- Stage 7 phase 7j: Promise[T] row plumbing (criterion 9, spec §8) -------------
 
     #[test]

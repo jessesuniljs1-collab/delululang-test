@@ -322,8 +322,6 @@ const NO_SUCCESS_SWEEP: &[(&str, &str)] = &[
          the contract, so an envelope on stdout would interleave with program output. Changing \
          that is a machine-surface decision of its own, not a wrapping.",
     ),
-    ("grants", "every verb talks to a running broker daemon (invariant 27: no local fallback)"),
-    ("guard", "same as `grants` — every guard verb is a broker RPC and fails closed without one"),
     ("fleet", "needs a fleet manifest and an artifact to roll out"),
     ("completions", "emits a shell script; it refuses `--json` by design and says so"),
     // Named in NOT_SWEPT above for the same reasons; repeated here so this table is readable on
@@ -700,9 +698,15 @@ fn every_subcommand_is_either_success_swept_or_excused_in_writing() {
         .expect("the success table must be present");
     assert!(table.len() > 500, "the table scan broke, and a gate that reads nothing passes everything");
 
+    // The broker verbs are swept by their own test, which needs a running daemon (P1-F2).
+    let broker_sweep = src
+        .split_once("fn broker_verbs_emit_the_documented_envelope()")
+        .map(|(_, rest)| rest)
+        .expect("the broker success sweep must be present");
     let mut missing: Vec<&str> = Vec::new();
     for sub in SUBCOMMANDS {
-        let swept = table.contains(&format!("vec![\"{sub}\""));
+        let swept = table.contains(&format!("vec![\"{sub}\""))
+            || broker_sweep.contains(&format!("step(&[\"{sub}\""));
         let excused = NO_SUCCESS_SWEEP.iter().any(|(n, _)| n == sub);
         if !swept && !excused {
             missing.push(sub);
@@ -815,4 +819,164 @@ fn no_manifest_shape_makes_a_package_command_panic() {
         "an unreadable manifest must produce a diagnostic — never a panic, never success:\n  {}",
         bad.join("\n  ")
     );
+}
+
+/// Stops the sweep's broker on drop, never panicking (a Drop panic masks the real assertion).
+struct SweepDaemon {
+    state: std::path::PathBuf,
+}
+impl Drop for SweepDaemon {
+    fn drop(&mut self) {
+        let _ = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(std::env::temp_dir())
+            .env("DELULU_STATE_DIR", &self.state)
+            .args(["broker", "stop"])
+            .output();
+    }
+}
+
+/// The verbs a broker command lists in its own unknown-subcommand refusal, e.g.
+/// `(list | tree | … | pubkey)`. Read from the binary, so a verb added to the dispatcher and its
+/// message is a verb this sweep must drive — the list is not kept by hand and cannot fall behind.
+fn advertised_verbs(command: &str) -> Vec<String> {
+    let out = run(&[command, "no-such-verb"]);
+    assert_eq!(out.status.code(), Some(2), "`{command} no-such-verb` must be refused");
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    let list = err
+        .rsplit_once('(')
+        .and_then(|(_, t)| t.split_once(')'))
+        .map(|(l, _)| l.to_string())
+        .unwrap_or_else(|| panic!("the refusal must list the verbs: {err}"));
+    let verbs: Vec<String> = list.split('|').map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect();
+    assert!(verbs.len() >= 5, "the verb list scan broke, and a sweep of nothing passes: {err}");
+    verbs
+}
+
+/// P1-F2: every `grants` and `guard` verb prints its `--json` success inside the standard envelope.
+/// A real broker is started in a temporary state directory (invariant 27: these verbs have no
+/// local fallback), and each verb is driven with `--json`; the offline federation verbs
+/// (`pubkey`, `certify`, `receipt`) run beside it, as they do in the field.
+#[test]
+fn broker_verbs_emit_the_documented_envelope() {
+    // Short names: the broker's socket lives in the state dir, and macOS caps a socket path at 103
+    // bytes (`federation_cli.rs`).
+    let base = std::env::temp_dir().join(format!("dsw_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let cwd = base.join("w");
+    let state = base.join("s");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&state).unwrap();
+    let go = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .current_dir(&cwd)
+            .env("DELULU_STATE_DIR", &state)
+            .env("DELULU_HOME", &state)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .output()
+            .expect("the delulu binary must run")
+    };
+
+    let started = go(&["broker", "start"]);
+    assert!(started.status.success(), "broker start: {}", String::from_utf8_lossy(&started.stderr));
+    let daemon = SweepDaemon { state: state.clone() };
+    let start_text =
+        format!("{}{}", String::from_utf8_lossy(&started.stdout), String::from_utf8_lossy(&started.stderr));
+    let owner = {
+        let i = start_text.find("gow1_").expect("broker start prints the guard owner code");
+        let tail = &start_text[i..];
+        let end = tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len());
+        tail[..end].to_string()
+    };
+
+    let mut bad: Vec<String> = Vec::new();
+    let mut driven: Vec<String> = Vec::new();
+    // Drive one verb with `--json`: it must exit 0 and print exactly one envelope, returned.
+    let mut step = |args: &[&str], want: &str| -> serde_json::Value {
+        let mut argv: Vec<&str> = args.to_vec();
+        argv.push("--json");
+        let out = go(&argv);
+        let so = String::from_utf8_lossy(&out.stdout).to_string();
+        // The owner code is a credential: it never reaches a failure message.
+        let label = argv.join(" ").replace(owner.as_str(), "<owner>");
+        driven.push(format!("{} {}", args[0], args[1]));
+        if out.status.code() != Some(0) {
+            bad.push(format!(
+                "`delulu {label}` exited {:?}:\n{}\n{so}",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stderr)
+            ));
+            return serde_json::Value::Null;
+        }
+        if count_json_values(&so) != 1 {
+            bad.push(format!("`delulu {label}`: stdout is not exactly one JSON value:\n{so}"));
+            return serde_json::Value::Null;
+        }
+        bad.extend(assert_envelope(&label, &so, want));
+        serde_json::from_str(so.trim()).unwrap_or(serde_json::Value::Null)
+    };
+
+    // ----- grants: the local tree -------------------------------------------------------------
+    let d = step(&["grants", "delegate", "--effects", "Declassify", "--declassify", "S", "--owner", &owner], "grants");
+    let node = d["node"].as_str().unwrap_or("g_missing").to_string();
+    assert!(d["token"].is_string(), "the delegate report keeps its keys at the top level: {d}");
+    let l = step(&["grants", "list"], "grants");
+    assert!(l["nodes"].is_array() && l["subcommand"] == "list", "additive: {l}");
+    step(&["grants", "tree"], "grants");
+    step(&["grants", "inspect", &node], "grants");
+
+    // ----- guard ------------------------------------------------------------------------------
+    let s = step(&["guard", "status"], "guard");
+    assert_eq!(s["bypass"], false, "the status report keeps its keys at the top level: {s}");
+    step(&["guard", "policy", "show"], "guard");
+    step(&["guard", "policy", "set", "net:*", "guarded", "--owner", &owner], "guard");
+    step(&["guard", "policy", "unset", "net:*", "--owner", &owner], "guard");
+    step(&["guard", "bypass", "on", "--owner", &owner], "guard");
+    step(&["guard", "bypass", "off", "--owner", &owner], "guard");
+    let r = step(&["guard", "request", &node, "--use", "declassify:*", "--why", "sweep"], "guard");
+    let req = r["id"].as_str().unwrap_or("r_missing").to_string();
+    step(&["guard", "pending"], "guard");
+    let a = step(&["guard", "approve", &req, "--owner", &owner, "--comment", "sweep"], "guard");
+    let permit = a["permit"].as_str().unwrap_or("p_missing").to_string();
+    step(&["guard", "permits"], "guard");
+    step(&["guard", "permits", "revoke", &permit, "--owner", &owner], "guard");
+    let r2 = step(&["guard", "request", &node, "--use", "declassify:*", "--why", "sweep again"], "guard");
+    let req2 = r2["id"].as_str().unwrap_or("r_missing").to_string();
+    step(&["guard", "deny", &req2, "--owner", &owner, "--comment", "sweep"], "guard");
+
+    // ----- grants: federation (ground side offline, vehicle side on this broker) ----------------
+    let gk = cwd.join("ground.key").display().to_string();
+    let vk = cwd.join("vehicle.key").display().to_string();
+    let gp = step(&["grants", "pubkey", "--key", &gk], "grants pubkey");
+    let ground = gp["pubkey"].as_str().unwrap_or("").to_string();
+    let vp = step(&["grants", "pubkey", "--key", &vk], "grants pubkey");
+    let vehicle = vp["pubkey"].as_str().unwrap_or("").to_string();
+    step(
+        &[
+            "grants", "certify", "--subject", &vehicle, "--effects", "Write", "--ttl", "1h", "--uplink-ttl", "1h",
+            "--key", &gk, "--out", "c.dlcert",
+        ],
+        "grants certify",
+    );
+    let ad = step(&["grants", "adopt", "c.dlcert", "--anchor", &ground], "grants adopt");
+    let fp = ad["fingerprint"].as_str().unwrap_or("").to_string();
+    step(&["grants", "receipt", "--for", &fp, "--ttl", "1h", "--key", &gk, "--out", "r.dlrcpt"], "grants receipt");
+    step(&["grants", "renew", "r.dlrcpt", "--anchor", &ground], "grants renew");
+
+    // Last, because it kills the node the steps above used.
+    step(&["grants", "revoke", &node], "grants");
+
+    // Every verb each command advertises was driven.
+    for command in ["grants", "guard"] {
+        for verb in advertised_verbs(command) {
+            let key = format!("{command} {verb}");
+            if !driven.contains(&key) {
+                bad.push(format!("`{key}` is advertised but this sweep never drove it with --json"));
+            }
+        }
+    }
+    drop(daemon);
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(bad.is_empty(), "broker verbs must print the documented envelope:\n  {}", bad.join("\n  "));
 }

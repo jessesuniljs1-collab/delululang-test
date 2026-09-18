@@ -381,12 +381,12 @@ Tests hold **no ambient authority**: each gets exactly its declared row, bounded
 `[test-authority]` ceiling. An absent ceiling means pure. Run them with `delulu test` — inside a
 package that is all you type; outside one, name the file or directory.
 
-> **The second test above needs a PACKAGE, and today that is the only way to run it.** The ceiling
-> comes from `delulu.toml` and from nowhere else, so an effectful test in a standalone file is
-> refused with `DL1703` — *"the package [test-authority] ceiling allows only []"* — no matter how it
-> is invoked. There is no `delulu test --test-authority Write`: granting test authority on a command
-> line would be a new authority source, which is a decision for the project lead and is not built
-> (verification finding NE-13). What to do instead: `delulu new myapp`, put the test in `src/`, and
+> **The second test above needs a ceiling.** In a standalone file there is no `delulu.toml`, so it
+> is refused with `DL1703` — *"the package [test-authority] ceiling allows only []"* — unless you
+> name one on the command line: `delulu test file.delulu --test-authority 'effects = ["Write"]'`
+> takes the manifest's `[test-authority]` syntax, is that file's only ceiling, and inside a package
+> may only narrow the package's own (a wider row is `DL1703` before any test runs). For a project,
+> the reviewable place is still the manifest: `delulu new myapp`, put the test in `src/`, and
 > declare the ceiling.
 >
 > ```toml

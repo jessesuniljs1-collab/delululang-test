@@ -228,6 +228,11 @@ here, this log says so and the archive is not edited.
   `V2_LOG.md`; `V2_EXECUTION_LOG.md` and `V2_AGENT_LOG.md` are frozen at P1 (kept, not deleted);
   decision records are at most three lines. Evidence goes to project storage as raw command output.
 
+## D-V2-23 — Three owner rulings — RULED (owner, 2026-09-18)
+- D-NE-17: build `delulu test --test-authority <row>` (done in P1-F; it may only narrow the enclosing
+  package's ceiling, on every route). P1-11 `[run-authority]`: NOT built, because a manifest would grant itself authority.
+  D-NE-28: special-use addresses need a separate explicit grant spelling (PS-0-09).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
 D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,

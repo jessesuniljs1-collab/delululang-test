@@ -434,6 +434,9 @@ fn main(root: Root) ! {Write, Actuate} {
 /// The grant tree is how the e-stop is aimed, so what it *shows* is part of the mechanism.
 /// `Actuate` appears in the authority of a node granted an actuator, and does not appear in one
 /// granted only a sensor — observation is not command, and the tree must not blur them.
+///
+/// `authority` answers from the PROGRAM, not from grants: these calls used to pass `--grant`
+/// flags it never read (P1-F3 now refuses them), so what is asserted is the program's own answer.
 #[test]
 fn the_grant_tree_shows_actuate_for_an_actuator_and_not_for_a_sensor() {
     let f = setup("authority");
@@ -443,7 +446,7 @@ fn the_grant_tree_shows_actuate_for_an_actuator_and_not_for_a_sensor() {
     let o = delulu_in(
         &f.cwd,
         &f.state,
-        &["authority", "supervisor.delulu", "--grant", "console", "--grant", GRANT, "--json"],
+        &["authority", "supervisor.delulu", "--json"],
     );
     assert!(o.status.success(), "authority: {}", stderr(&o));
     assert!(
@@ -458,7 +461,7 @@ fn the_grant_tree_shows_actuate_for_an_actuator_and_not_for_a_sensor() {
     let o = delulu_in(
         &f.cwd,
         &f.state,
-        &["authority", "quiet.delulu", "--grant", "console", "--grant", "sensor=arm0/angle", "--json"],
+        &["authority", "quiet.delulu", "--json"],
     );
     assert!(o.status.success(), "authority: {}", stderr(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("json");

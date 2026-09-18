@@ -314,7 +314,8 @@ There is **no diagnostic** for the second line: it is a well-typed program that 
 is not there, so you get an ordinary `Err` and a plausible-looking "not found". The same holds for
 `fs_write`. Two subtrees means two capabilities. `delulu explain E-DL0703` repeats the rule, and
 `examples/guide/05_capabilities.delulu` had it wrong until 2026-09-18 — the CI gate now asserts that
-the guide's read *succeeds*, not merely that it runs.
+the guide's read *succeeds*, not merely that it runs. Under `--trace-effects` a filesystem record
+also carries `resolved_path` and `scope_root`, so the trace shows where the path actually pointed.
 
 ## [agents.tests] Running tests
 
@@ -325,12 +326,11 @@ delulu test --json
 Tests hold **no ambient authority** (invariant 41): each gets exactly its declared row, bounded by
 the package's `[test-authority]` ceiling. An absent ceiling means PURE. Exceeding it is `DL1703`.
 
-**An effectful test needs a package, and there is no flag that substitutes for one.** The ceiling
-comes from `delulu.toml`'s `[test-authority]` and from nowhere else, so a `test "…" ! {Write}` in a
-standalone file is `DL1703` however you invoke it — `delulu test --test-authority Write` does not
-exist, and granting test authority from a command line would be a new authority source, which is the
-project lead's decision and is not built (finding NE-13). If you generate tests that perform effects,
-generate a package around them:
+**An effectful test needs a ceiling.** It comes from `delulu.toml`'s `[test-authority]`, or — for a
+standalone file — from `delulu test f.delulu --test-authority 'effects = ["Write"]'` (the manifest's
+syntax, repeatable per line; the file's only ceiling; inside a package it may only narrow the
+package's, and a wider row is `DL1703` before any test runs). If you generate tests that perform
+effects, prefer a package around them, so the ceiling is reviewable in one place:
 
 ```toml
 [test-authority]

@@ -1329,6 +1329,18 @@ impl Interp {
         let involves_secret =
             matches!(recvv, Value::Secret(_)) || argvals.iter().any(|v| matches!(v, Value::Secret(_)));
         let detail = if involves_secret { Some(trace::OPAQUE.to_string()) } else { trace_detail(recvv, kind, &name.name, argvals) };
+        // REMAINING_WORK 6.13: a filesystem record also says where the path pointed — the same
+        // resolution the custody gate authorizes (`fs_scope_arg`) — and the scope it was resolved
+        // in. Never for a secret-involving call (redaction outranks explanation).
+        let (resolved_path, scope_root) = match recvv {
+            Value::Cap(c) if !involves_secret && matches!(c.kind, ResourceKind::FsRead | ResourceKind::FsWrite) => match &c.scope {
+                CapScope::Fs { root, .. } => {
+                    (fs_scope_arg(&c.scope, argvals), Some(root.to_string_lossy().to_string()))
+                }
+                _ => (None, None),
+            },
+            _ => (None, None),
+        };
         sink.push(TraceRecord {
             seq: self.next_trace_seq(),
             effect: effect.to_string(),
@@ -1336,6 +1348,8 @@ impl Interp {
             cap_kind: kind.to_string(),
             detail,
             span: Some((span.file, span.start, span.end)),
+            resolved_path,
+            scope_root,
             ..self.trace_attrib_record()
         });
     }

@@ -536,3 +536,132 @@ fn every_user_facing_error_line_is_prefixed_so_it_can_be_found() {
         unprefixed.join("\n  ")
     );
 }
+
+/// The options a piece of help text names: every `--word` (not inside a word) and `-o`, which is
+/// the short spelling of `--out`.
+fn flags_named_in(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let b = text.as_bytes();
+    for (i, _) in text.match_indices('-') {
+        if i > 0 && (b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'-') {
+            continue;
+        }
+        let tail = &text[i..];
+        let name = if let Some(rest) = tail.strip_prefix("--") {
+            let body: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+            if body.is_empty() || !body.starts_with(|c: char| c.is_ascii_lowercase()) {
+                continue;
+            }
+            format!("--{body}")
+        } else if tail.starts_with("-o") && !tail[2..].starts_with(|c: char| c.is_ascii_alphanumeric()) {
+            "--out".to_string()
+        } else {
+            continue;
+        };
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
+/// P1-F3: a flag the shared option parser knows is refused — exit 2, the unknown-option message —
+/// by every command whose `--help` does not document it. `check x.delulu --grants` and
+/// `check x --diff foo` exited 0 having ignored the flag, because a flag the parser recognised was
+/// never "unknown", and commands with their own parsers never looked at such a flag at all.
+///
+/// Nothing here is a hand-kept list: the shared flags are read from `parse_opts` itself, the
+/// commands from `SUBCOMMANDS`, and what each command accepts from its own `--help`.
+#[test]
+fn every_command_refuses_a_shared_flag_its_help_does_not_document() {
+    let src = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("cli.rs"))
+        .expect("the CLI source is readable");
+    let parser = src
+        .split_once("pub(crate) fn parse_opts(")
+        .and_then(|(_, t)| t.split_once("\npub(crate) fn refuse_extra_positionals"))
+        .map(|(p, _)| p)
+        .expect("parse_opts must be present");
+    // (flag, takes a value)
+    let mut shared: Vec<(String, bool)> = Vec::new();
+    for lit in parser.split('"').skip(1).step_by(2) {
+        let name = if lit == "-o" { "--out".to_string() } else { lit.to_string() };
+        if !(name.starts_with("--") && name.len() > 2 && name[2..].chars().all(|c| c.is_ascii_lowercase() || c == '-')) {
+            continue;
+        }
+        let takes_value = parser.contains(&format!("missing_values.push(\"{name}\""));
+        if !shared.iter().any(|(n, _)| *n == name) {
+            shared.push((name, takes_value));
+        }
+    }
+    assert!(shared.len() >= 35, "the shared-flag scan broke, and a sweep of nothing passes: {shared:?}");
+    let commands: Vec<String> = src
+        .split_once("pub(crate) const SUBCOMMANDS: &[&str] = &[")
+        .and_then(|(_, t)| t.split_once("];"))
+        .map(|(l, _)| l.split('"').skip(1).step_by(2).map(str::to_string).collect())
+        .expect("SUBCOMMANDS must be present");
+    assert!(commands.len() >= 30, "the command scan broke: {commands:?}");
+
+    let home = scratch("f3-sweep");
+    let bad = std::sync::Mutex::new(Vec::<String>::new());
+    let swept = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for cmd in &commands {
+            let (home, shared, bad, swept) = (&home, &shared, &bad, &swept);
+            s.spawn(move || {
+                let help = delulu(home, &[cmd, "--help"]);
+                assert_eq!(help.status.code(), Some(0), "`{cmd} --help` must answer");
+                let documented = flags_named_in(&String::from_utf8_lossy(&help.stdout));
+                for (flag, takes_value) in shared {
+                    if documented.contains(flag) || (cmd == "completions" && flag == "--json") {
+                        continue;
+                    }
+                    let mut argv: Vec<&str> = vec![cmd, flag];
+                    if *takes_value {
+                        argv.push("v");
+                    }
+                    let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+                        .current_dir(home)
+                        .env("DELULU_HOME", home)
+                        .env("DELULU_STATE_DIR", home)
+                        .env("DELULU_NO_FIRST_RUN", "1")
+                        .args(&argv)
+                        .stdin(std::process::Stdio::null())
+                        .output()
+                        .expect("failed to run delulu");
+                    swept.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let err = String::from_utf8_lossy(&o.stderr);
+                    if o.status.code() != Some(2) || !err.contains("does not know") || !err.contains(flag.as_str()) {
+                        bad.lock().unwrap().push(format!(
+                            "`delulu {}` exited {:?} without refusing {flag}: {}",
+                            argv.join(" "),
+                            o.status.code(),
+                            err.lines().next().unwrap_or("")
+                        ));
+                    }
+                }
+            });
+        }
+    });
+    let bad = bad.into_inner().unwrap();
+    let swept = swept.into_inner();
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(swept > 500, "only {swept} refusals were exercised — the sweep lost its reach");
+    assert!(bad.is_empty(), "{} undocumented shared flag(s) were not refused:\n  {}", bad.len(), bad.join("\n  "));
+}
+
+/// The two invocations P1 recorded, with a real file, as the brief names them.
+#[test]
+fn check_refuses_grants_and_diff_but_keeps_its_documented_flags() {
+    let home = scratch("f3-check");
+    for extra in [&["--grants"][..], &["--diff", "foo"][..]] {
+        let mut argv = vec!["check", DEMO];
+        argv.extend_from_slice(extra);
+        let o = delulu(&home, &argv);
+        assert_eq!(o.status.code(), Some(2), "`{}` must be refused: {}", argv.join(" "), text(&o));
+        assert!(text(&o).contains("does not know this option"), "{}", text(&o));
+    }
+    // What `check --help` documents still works.
+    let o = delulu(&home, &["check", DEMO, "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o));
+    let _ = std::fs::remove_dir_all(&home);
+}

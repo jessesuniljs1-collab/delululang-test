@@ -113,7 +113,9 @@ fn several_files_still_emit_exactly_one_json_object() {
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     let v: serde_json::Value = serde_json::from_str(&out).expect("exactly one JSON object");
     assert_eq!(v["command"], "check");
-    assert_eq!(v["summary"]["errors"], 2, "both of the bad file's errors:\n{out}");
+    // One: `unknown name` alone. The second error was the DL0404 cascade on the checker's own
+    // placeholder type, which P1-F1 (D-V2-19) removed.
+    assert_eq!(v["summary"]["errors"], 1, "the bad file's error, and no cascade:\n{out}");
 
     // Each diagnostic still names the file it came from, which is what makes one merged envelope
     // as useful as three separate ones.

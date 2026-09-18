@@ -158,6 +158,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
         cyclic_aliases: std::collections::HashSet::new(),
+        poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
@@ -305,6 +306,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         // no alias in scope here can be cyclic — `check_module` refused any that were. Empty is the
         // correct value, not a shortcut.
         cyclic_aliases: std::collections::HashSet::new(),
+        poisoned: std::collections::HashSet::new(),
         node_types_raw: HashMap::new(),
         node_row_accs: HashMap::new(),
     };
@@ -337,6 +339,12 @@ struct Checker<'a> {
     /// the compiler with a stack overflow (`HARDENING_CAMPAIGN.md` C54). Consulting this set is what
     /// makes that structurally impossible rather than merely diagnosed.
     cyclic_aliases: std::collections::HashSet<String>,
+    /// Inference variables born from an error already reported (D-V2-19, poison propagation): the
+    /// fresh type handed back for an unknown name, and the result of a call already refused. A
+    /// callee whose type resolves to one of these is not reported again as DL0404 — the first
+    /// diagnostic explains it. A variable from a generic or an unannotated binding is never here,
+    /// so `fn apply[F](f: F, x: Int) { f(x) }` is still DL0404.
+    poisoned: std::collections::HashSet<crate::ty::TypeVar>,
     node_types_raw: HashMap<NodeId, Type>,
     node_row_accs: HashMap<NodeId, RowAcc>,
 }
@@ -1203,7 +1211,7 @@ impl<'a> Checker<'a> {
                         Diagnostic::error("DL0301", format!("unknown name `{}`", name.name))
                             .with_span(name.span, "not found in this scope"),
                     );
-                    self.cx.fresh_type()
+                    self.fresh_poisoned()
                 }
             },
             LValue::Field(base, field) => {
@@ -1339,7 +1347,27 @@ impl<'a> Checker<'a> {
             Diagnostic::error("DL0301", format!("unknown name `{}`", path.dotted()))
                 .with_span(span, "not found in this scope"),
         );
-        self.cx.fresh_type()
+        self.fresh_poisoned()
+    }
+
+    /// A fresh inference variable standing for a value whose error has already been reported
+    /// (D-V2-19). See `Checker::poisoned`.
+    fn fresh_poisoned(&mut self) -> Type {
+        let t = self.cx.fresh_type();
+        if let Type::Var(v) = t {
+            self.poisoned.insert(v);
+        }
+        t
+    }
+
+    /// Whether `t` (already resolved) is an inference variable born from a reported error — either
+    /// a poisoned variable itself or one a poisoned variable was unified into.
+    fn is_poisoned(&self, t: &Type) -> bool {
+        let Type::Var(v) = t else { return false };
+        if self.poisoned.contains(v) {
+            return true;
+        }
+        self.poisoned.iter().any(|p| self.cx.apply_type(&Type::Var(*p)) == *t)
     }
 
     fn check_list(&mut self, items: &[Expr], _span: Span, ctx: &mut FnCtx) -> (Type, RowAcc) {
@@ -1441,15 +1469,20 @@ impl<'a> Checker<'a> {
                 (*ret, acc)
             }
             other => {
-                self.diags.push(
-                    Diagnostic::error("DL0404", format!("value of type `{}` is not callable", self.ty(&other)))
-                        .with_span(callee.span(), "not a function"),
-                );
+                // D-V2-19: a callee whose type was born from an error already reported (DL0301 on
+                // an unknown name, or a call already refused) is not reported again; any other
+                // non-function — a generic parameter included — still is.
+                if !self.is_poisoned(&other) {
+                    self.diags.push(
+                        Diagnostic::error("DL0404", format!("value of type `{}` is not callable", self.ty(&other)))
+                            .with_span(callee.span(), "not a function"),
+                    );
+                }
                 for arg in args {
                     let (_, ar) = self.check_expr(arg, ctx);
                     acc.add_row_acc(&ar);
                 }
-                (self.cx.fresh_type(), acc)
+                (self.fresh_poisoned(), acc)
             }
         }
     }

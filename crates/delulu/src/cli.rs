@@ -220,6 +220,10 @@ pub(crate) struct Opts {
     /// dropping an argument the user typed makes the tool report success for work it never did.
     /// See [`refuse_unknown_flags`].
     pub(crate) unknown_flags: Vec<String>,
+    /// Flags the shared parser DID recognise, by name (`--out` for `-o`, `--grant` for `--grant=K`).
+    /// The parser knows every command's options, so knowing a flag is not the same as the command
+    /// owning it: [`refuse_unknown_flags`] refuses one the command's help does not document (P1-F3).
+    pub(crate) seen_flags: Vec<String>,
     pub(crate) json: bool,
     pub(crate) grants: Vec<String>,
     pub(crate) grant_manifest: bool,
@@ -341,6 +345,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         positionals: Vec::new(),
         unknown_flags: Vec::new(),
         missing_values: Vec::new(),
+        seen_flags: Vec::new(),
         json: false,
         grants: Vec::new(),
         grant_manifest: false,
@@ -383,6 +388,8 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
     };
     let mut i = 0;
     while i < rest.len() {
+        let arg = rest[i].clone();
+        let unknown_before = opts.unknown_flags.len();
         match rest[i].as_str() {
             "--json" => opts.json = true,
             "--grant-manifest" => opts.grant_manifest = true,
@@ -675,6 +682,13 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             // vanishing without anyone holding it.
             other => opts.unknown_flags.push(other.to_string()),
         }
+        if arg.starts_with('-') && opts.unknown_flags.len() == unknown_before {
+            let name = arg.split('=').next().unwrap_or(&arg);
+            let name = if name == "-o" { "--out" } else { name };
+            if !opts.seen_flags.iter().any(|f| f == name) {
+                opts.seen_flags.push(name.to_string());
+            }
+        }
         i += 1;
     }
     (file, opts)
@@ -738,6 +752,66 @@ pub(crate) fn refuse_unlisted_flags(cmd: &str, rest: &[String], known: &[&str]) 
     Some(2)
 }
 
+/// The lines of [`usage`] that document `cmd` — a command (`run`) or a command and its verb
+/// (`plugin build`): each `delulu …` invocation line for it, plus every continuation line under it
+/// up to the next invocation or a blank line. `--help` prints these, and [`documented_flags`] reads
+/// the options a command accepts from these, so the two are one source (P1-F3).
+fn usage_lines(cmd: &str) -> Vec<&'static str> {
+    let want: Vec<&str> = cmd.split_whitespace().collect();
+    let mut lines: Vec<&'static str> = Vec::new();
+    let mut in_block = false;
+    for line in usage().lines() {
+        let t = line.trim_start();
+        if t.is_empty() || t.starts_with("global:") || t.starts_with('`') {
+            in_block = false;
+            continue;
+        }
+        if let Some(inv) = t.strip_prefix("delulu ") {
+            let words: Vec<&str> = inv.split_whitespace().collect();
+            in_block = !want.is_empty() && words.len() >= want.len() && words[..want.len()] == want[..];
+        }
+        if in_block {
+            lines.push(line);
+        }
+    }
+    lines
+}
+
+/// The options `delulu <cmd> --help` documents for `cmd`, read from [`usage`] — the text the help
+/// is cut from — so what a command accepts and what its help says cannot drift apart (P1-F3).
+///
+/// `cmd` is a command (`run`) or a command and its verb (`plugin build`). An invocation is its
+/// `delulu …` line plus every continuation line under it, up to the next invocation or a blank
+/// line. `-o` is the short spelling of `--out` and is returned as `--out`.
+pub(crate) fn documented_flags(cmd: &str) -> Vec<String> {
+    let mut flags: Vec<String> = Vec::new();
+    for line in usage_lines(cmd) {
+        let t = line.trim_start();
+        for (i, _) in t.match_indices('-') {
+            let prev = t[..i].chars().next_back();
+            if prev.is_some_and(|c| c.is_ascii_alphanumeric() || c == '-') {
+                continue;
+            }
+            let tail = &t[i..];
+            let name: String = if let Some(rest) = tail.strip_prefix("--") {
+                let body: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+                if body.is_empty() || !body.starts_with(|c: char| c.is_ascii_lowercase()) {
+                    continue;
+                }
+                format!("--{body}")
+            } else if tail.starts_with("-o") && !tail[2..].starts_with(|c: char| c.is_ascii_alphanumeric()) {
+                "--out".to_string()
+            } else {
+                continue;
+            };
+            if !flags.contains(&name) {
+                flags.push(name);
+            }
+        }
+    }
+    flags
+}
+
 pub(crate) fn refuse_unknown_flags(cmd: &str, opts: &Opts) -> Option<i32> {
     // A flag that needs a value and was given none is the same failure in a different position: the
     // setting the caller asked for is discarded and the command proceeds on its default.
@@ -750,17 +824,46 @@ pub(crate) fn refuse_unknown_flags(cmd: &str, opts: &Opts) -> Option<i32> {
         eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
         return Some(2);
     }
-    if opts.unknown_flags.is_empty() {
+    // A flag the shared parser knows is still unknown TO THIS COMMAND unless its help documents it:
+    // `check x.delulu --grants` and `check x --diff foo` exited 0 having ignored both (P1-F3).
+    let documented = documented_flags(cmd);
+    let mut refused: Vec<String> = opts.unknown_flags.clone();
+    refused.extend(opts.seen_flags.iter().filter(|f| !documented.contains(f)).cloned());
+    if refused.is_empty() {
         return None;
     }
+    print_option_refusal(cmd, &refused);
+    Some(2)
+}
+
+/// The dispatcher's half of [`refuse_unknown_flags`] (P1-F3): the shared parser's flags a command's
+/// help does not document, refused for every command, whatever parser it uses afterwards.
+fn refuse_undocumented_shared_flags(cmd: &str, rest: &[String]) -> Option<i32> {
+    let (_, opts) = parse_opts(rest);
+    let documented = documented_flags(cmd);
+    let refused: Vec<String> = opts
+        .seen_flags
+        .iter()
+        .filter(|f| !documented.contains(f))
+        // `completions` refuses `--json` itself, saying why: a shell script has no JSON form.
+        .filter(|f| !(cmd == "completions" && f.as_str() == "--json"))
+        .cloned()
+        .collect();
+    if refused.is_empty() {
+        return None;
+    }
+    print_option_refusal(cmd, &refused);
+    Some(2)
+}
+
+fn print_option_refusal(cmd: &str, refused: &[String]) {
     eprintln!(
         "error: `{cmd}` does not know {}: {}",
-        if opts.unknown_flags.len() == 1 { "this option" } else { "these options" },
-        opts.unknown_flags.join(", ")
+        if refused.len() == 1 { "this option" } else { "these options" },
+        refused.join(", ")
     );
     eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
     eprintln!("note: `delulu {cmd} --help` lists what this command accepts");
-    Some(2)
 }
 
 /// The CLI entry point, and the one place that guarantees the `--json` contract.
@@ -854,6 +957,15 @@ fn run_inner(args: &[String]) -> i32 {
         return 0;
     }
 
+    // P1-F3: a flag the shared option parser knows is refused by a command whose help does not
+    // document it, for every command, before it runs. Commands with their own parsers never looked
+    // at such a flag, so `keygen --grants` minted a key and exited 0 having ignored it.
+    if SUBCOMMANDS.contains(&cmd.as_str()) {
+        if let Some(code) = refuse_undocumented_shared_flags(cmd, rest) {
+            return code;
+        }
+    }
+
     match cmd.as_str() {
         "new" => crate::new::cmd_new(rest),
         "check" => cmd_check(rest),
@@ -945,20 +1057,7 @@ fn run_inner(args: &[String]) -> i32 {
 /// unknown. Derived from `usage()` rather than duplicated, so a subcommand's help cannot drift
 /// from its documented invocation.
 fn subcommand_help(cmd: &str) -> String {
-    let needle = format!("delulu {cmd} ");
-    let mut lines: Vec<&str> = Vec::new();
-    let mut capturing = false;
-    for line in usage().lines() {
-        if line.contains(&needle) {
-            capturing = true;
-            lines.push(line);
-        } else if capturing && line.trim_start().starts_with('[') {
-            // A continuation line of the same invocation (wrapped option list).
-            lines.push(line);
-        } else {
-            capturing = false;
-        }
-    }
+    let lines = usage_lines(cmd);
     if lines.is_empty() {
         return usage().to_string();
     }
@@ -1037,9 +1136,9 @@ fn usage() -> &'static str {
      USAGE:\n\
      \x20 delulu new       <name> [--lib] [--json]   (a package that already checks, tests and runs;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 its declared ceiling is exactly what its code does — one effect for a bin, none for a lib)\n\
-     \x20 delulu check     <file.delulu>... | <package-dir> [--json]   (several files in ONE process:\n\
+     \x20 delulu check     <file.delulu>... | <package-dir> [--locked] [--json]   (several files in ONE process:\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the per-invocation floor dominates a small check — see measurements/agent-loop/RECORD.md)\n\
-     \x20 delulu build     <package-dir> [--locked] [--json]   (resolve deps + verify pins/authority)\n\
+     \x20 delulu build     <package-dir> [--locked] [--deny-advisories] [--advisory-feed F] [--json]   (resolve deps + verify pins/authority)\n\
      \x20 delulu build     <file.delulu> --target wasm [-o out.dwx]  (emit an authority-carrying .dwx)\n\
      \x20 delulu lock      [package-dir] [--accept-authority <pkg>]... [--json]\n\
      \x20 delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
@@ -1051,6 +1150,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 hw needs the sign-off record of the artifact simulation approved — DL1905;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 --sim-step MS makes sim lease timing deterministic per interaction, independent of build speed — D20;\n\
@@ -1060,10 +1160,11 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 names the interpreter in --adapter-cmd, not the driver), and --adapter-signer HEX pins\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the key: unpinned, a `.sig` beside the driver proves only that SOMEBODY signed it — D53)\n\
      \x20 delulu authority <file.delulu | package-dir> [--grants] [--json]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--foreign-isolation inproc|process] [--isolation none|process|microvm]  (labels on the report)\n\
      \x20 delulu authority --diff <old.lock> <new.lock-or-package-dir> [--json]\n\
      \x20 delulu why       <Effect> <file.delulu | package-dir> [--json]\n\
-     \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]
-\n                        (mermaid is a MODULE-LEVEL overview — no functions/effects; dot|json|tree show the whole graph)\n\
+     \x20 delulu atlas     <file.delulu | package-dir> [--format tree|digest|json|dot|mermaid|html]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (mermaid is a MODULE-LEVEL overview — no functions/effects; dot|json|tree show the whole graph)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
      \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
      \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\
@@ -1073,43 +1174,51 @@ fn usage() -> &'static str {
      \x20 delulu repl      [--grant K[=V]]...\n\
      \x20 delulu audit     tail [N] | query [--node g_ID] [--action A] [--effect E] | verify\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dir DIR] [--json]  (default DIR: $DELULU_STATE_DIR/audit, else ~/.delulu/audit)\n\
+     \x20 delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]\n\
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
-     \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]\n\
+     \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--multi] [--owner CODE]  (prints a lease token)\n\
      \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
+     \x20 delulu grants    receipt --for FINGERPRINT --ttl 1h [--key F] [--out F] | renew <receipt> [--anchor HEX]..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every grants verb)\n\
      \x20 delulu guard     status | policy [show | set <class:pattern> <tier> | unset <class:pattern>] | bypass on|off  [--owner CODE]\n\
      \x20 delulu guard     request <g_ID> --use <class:pattern>.. --why \"..\" | pending | permits [revoke <id> --owner CODE]\n\
      \x20 delulu guard     approve <req-id> --owner CODE [--ttl D] [--uses N] [--comment \"..\"] | deny <req-id> --owner CODE --comment \"..\"\n\
-     \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR]  (broker-resident secrets)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]  (every guard verb)\n\
+     \x20 delulu secrets   set NAME VALUE | list [--state-dir DIR] [--json]  (broker-resident secrets)\n\
      \x20 delulu fix       <file.delulu> [--dry-run] [--json] [--accept-widening <repair-id>]...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (applies the checker's own typed repairs; a repair that would WIDEN what the program\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 may do is never applied unless you name it, and there is no accept-all flag)\n\
      \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
      \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--test-authority 'effects = [\"Write\"]']..  (a ceiling in the manifest's [test-authority] syntax:\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 inside a package it may only narrow the package's; for a file outside one it is the only ceiling)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
-     \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list   (catalog plugins: verified-class, ZERO authority, prose only)\n\
-     \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical)\n\
+     \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list [--json]   (catalog plugins: verified-class, ZERO authority, prose only)\n\
+     \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical) [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\
-     \x20 delulu keygen    [--name N]                          (mint an ed25519 signing key in ~/.delulu/keys)\n\
-     \x20 delulu sign      <artifact> [--hybrid] [--unstable]\n\
-     \x20 delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable]\n\
+     \x20 delulu keygen    [--name N] [--json]                 (mint an ed25519 signing key in ~/.delulu/keys)\n\
+     \x20 delulu sign      <artifact> [--hybrid] [--unstable] [--json]\n\
+     \x20 delulu verify-sig <artifact> [--key HEX] [--require-hybrid] [--unstable] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (detached .sig over .dwx/.dpx/tarballs; --hybrid/--require-hybrid touch post-quantum\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ML-DSA-65 and need --unstable — unaudited, pre-KAT, refused as DL1910 without it)\n\
-     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR]   (validate manifest + semver-authority + signature; no upload)\n\
+     \x20 delulu publish   --dry-run <pkg-dir> [--index DIR] [--json]   (validate manifest + semver-authority + signature; no upload)\n\
      \x20 delulu add       <pkg> --index DIR                   (resolve + show authority from the index line, no download)\n\
      \x20 delulu add       --path <dir> [--accept-authority] [--json]   (declare a dependency on the package\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 beside yours; the pin is COMPUTED from it, and a dependency that needs an effect is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 shown and refused until you accept it — granting authority stays a person's decision)\n\
-     \x20 delulu login     --registry URL --token VALUE        (store a scoped publish token; never echoed)\n\
-     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
+     \x20 delulu login     --registry URL --token VALUE [--json] (store a scoped publish token; never echoed)\n\
+     \x20 delulu deploy    plan --service NAME=PKG_DIR --env ENVFILE.toml [--json]   (check each service against the environment's EFFECT ceiling; DL1909 when it exceeds.\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 Effects only: capability scopes and foreign holes are NOT compared — the verdict says so too)\n\
      \x20 delulu fleet     <verb>                              (fleet-level device/lease operations — see `delulu fleet` for the verb list)\n\
-     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR>\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 update <artifact> --members N --approved F --previous H [--fail-health-at I] [--json]\n\
+     \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR> [--json]\n\
      \x20 delulu doctor    [--check] [--json]  (is this machine healthy? inside the source tree, is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the repository map current and sound? regenerates it when behind; --check never writes)\n\
      \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\
@@ -1427,13 +1536,37 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
 /// The `[test-authority]` package ceiling (spec §5.1): effects + fs.read scopes every
 /// test's declared row must fit inside (DL1703 otherwise). Absent table = PURE — the
 /// couldn't-tell default grants nothing (invariant 41).
+#[derive(Clone)]
 struct TestCeiling {
     effects: Vec<String>,
     fs_read: Vec<String>,
+    /// Given with `--test-authority` (D-NE-17) rather than read from a manifest: a refusal names
+    /// the ceiling that actually applied.
+    from_flag: bool,
+}
+
+/// Why `row` is wider than `ceiling`, or `None` when it fits (D-NE-17). An effect must be one the
+/// ceiling names; an `fs.read` scope must lie inside one of the ceiling's, decided on the
+/// CANONICAL paths — a lexical comparison would let `./fixtures/../..` or a link walk out of it.
+/// A scope that does not exist cannot be shown to lie inside anything, so it is refused.
+fn test_ceiling_excess(row: &TestCeiling, ceiling: &TestCeiling) -> Option<String> {
+    if let Some(e) = row.effects.iter().find(|e| !ceiling.effects.contains(e)) {
+        return Some(format!("effect `{e}` is not in {:?}", ceiling.effects));
+    }
+    let roots: Vec<std::path::PathBuf> = ceiling.fs_read.iter().filter_map(|r| std::fs::canonicalize(r).ok()).collect();
+    for p in &row.fs_read {
+        let Ok(cp) = std::fs::canonicalize(p) else {
+            return Some(format!("fs.read `{p}` does not exist, so it cannot be shown to lie inside {:?}", ceiling.fs_read));
+        };
+        if !roots.iter().any(|r| cp.starts_with(r)) {
+            return Some(format!("fs.read `{p}` is not inside {:?}", ceiling.fs_read));
+        }
+    }
+    None
 }
 
 fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
-    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new() };
+    let mut ceiling = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
     let Ok(text) = std::fs::read_to_string(dir.join("delulu.toml")) else { return ceiling };
     let mut in_section = false;
     for raw in text.lines() {
@@ -1445,25 +1578,236 @@ fn test_ceiling(dir: &std::path::Path) -> TestCeiling {
         if !in_section {
             continue;
         }
-        let Some((k, v)) = line.split_once('=') else { continue };
-        let items: Vec<String> = v
-            .trim()
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .split(',')
-            .filter_map(|s| {
-                let s = s.trim().trim_matches('"').to_string();
-                (!s.is_empty()).then_some(s)
-            })
-            .collect();
-        match k.trim() {
-            "effects" => ceiling.effects = items,
-            "fs.read" => ceiling.fs_read = items,
-            _ => {}
-        }
+        let _ = test_authority_line(line, &mut ceiling);
     }
     ceiling
 }
+
+/// One `[test-authority]` line — `effects = ["Write"]` or `fs.read = ["./fixtures"]` — applied to
+/// `ceiling`. The manifest and `delulu test --test-authority` (D-NE-17) both read rows through this
+/// one function, so the flag's syntax is the manifest's by construction. `Err` names what was not
+/// understood; the manifest keeps ignoring such lines as it always has, the flag refuses them.
+fn test_authority_line(line: &str, ceiling: &mut TestCeiling) -> Result<(), String> {
+    let Some((k, v)) = line.split_once('=') else {
+        return Err(format!("`{line}` is not `effects = [..]` or `fs.read = [..]`"));
+    };
+    let items: Vec<String> = v
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .split(',')
+        .filter_map(|s| {
+            let s = s.trim().trim_matches('"').to_string();
+            (!s.is_empty()).then_some(s)
+        })
+        .collect();
+    match k.trim() {
+        "effects" => ceiling.effects = items,
+        "fs.read" => ceiling.fs_read = items,
+        other => return Err(format!("`{other}` is not a [test-authority] key (effects, fs.read)")),
+    }
+    Ok(())
+}
+
+/// The `[test-authority]` ceiling of a package reached by path (P1-F4): its `fs.read` entries are
+/// relative to the PACKAGE, as they are when `delulu test` runs inside it, not to wherever the
+/// command was typed.
+fn package_test_ceiling(dir: &std::path::Path) -> TestCeiling {
+    let mut c = test_ceiling(dir);
+    if dir != std::path::Path::new(".") {
+        c.fs_read = c
+            .fs_read
+            .iter()
+            .map(|p| if std::path::Path::new(p).is_absolute() { p.clone() } else { dir.join(p).display().to_string() })
+            .collect();
+    }
+    c
+}
+
+/// The package whose `[test-authority]` ceiling governs `path`: the nearest directory at or above it
+/// holding a `delulu.toml`, found on the RESOLVED path — the same `canonicalize` the containment
+/// code trusts, so a link, a `..` spelling or another letter case cannot reach a file by a route
+/// that skips its package. Each governing package enters `ceilings` once; the index is returned,
+/// or `None` when no package encloses the file (then it is pure unless `--test-authority` says).
+fn enclosing_test_ceiling(
+    path: &std::path::Path,
+    ceilings: &mut Vec<(std::path::PathBuf, TestCeiling)>,
+) -> Option<usize> {
+    let resolved = std::fs::canonicalize(path).ok()?;
+    let dir = resolved.ancestors().skip(1).find(|d| d.join("delulu.toml").is_file())?;
+    let is_here = std::env::current_dir().ok().and_then(|d| std::fs::canonicalize(d).ok()).is_some_and(|h| h == dir);
+    // `canonicalize` spells a Windows path `\\?\D:\…`; the ceiling's scopes are joined onto it and
+    // handed to the runtime, which expects the ordinary spelling of the same directory.
+    let text = dir.to_string_lossy();
+    let dir = match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+        _ => dir.to_path_buf(),
+    };
+    if let Some(i) = ceilings.iter().position(|(d, _)| *d == dir) {
+        return Some(i);
+    }
+    // The package the command runs inside keeps its scopes exactly as written (`./fixtures`), as
+    // before: the broker session is issued with those spellings, and a per-file child must match.
+    let c = if is_here { package_test_ceiling(std::path::Path::new(".")) } else { package_test_ceiling(&dir) };
+    ceilings.push((dir.clone(), c));
+    Some(ceilings.len() - 1)
+}
+
+/// Where a test is written: its file label, its `FileId` in the run's source map, its name span.
+type TestLocation = (String, delulu_diag::FileId, delulu_diag::Span);
+
+/// What one `delulu test` invocation accumulates across the programs it runs.
+struct TestRunState {
+    json: bool,
+    patterns: Vec<String>,
+    seed_base: u64,
+    reports: Vec<Json>,
+    diags_json: Vec<Json>,
+    failed: usize,
+    passed: usize,
+}
+
+/// Run the `test` items of one checked program. `locate` answers where each test is written (the
+/// file label, its `FileId` in `map`, and its name span), or `None` to skip it. A loose file
+/// locates to itself; a package (P1-F4) runs flattened and locates each test to its own module.
+fn run_module_tests(
+    st: &mut TestRunState,
+    map: &SourceMap,
+    module: &delulu_syntax::ast::Module,
+    ceiling: &TestCeiling,
+    locate: &dyn Fn(&delulu_syntax::ast::TestDecl) -> Option<TestLocation>,
+) {
+    for item in &module.items {
+        let delulu_syntax::ast::Item::Test(t) = item else { continue };
+        if !st.patterns.is_empty() && !st.patterns.iter().any(|p| t.name.contains(p.as_str())) {
+            continue;
+        }
+        // Where the test is WRITTEN — its own file and span, even when it runs inside a flattened
+        // package — or `None` for a test that is not this run's to run (a dependency's).
+        let Some((file, id, name_span)) = locate(t) else { continue };
+        let declared: Vec<String> = t
+            .row
+            .iter()
+            .flat_map(|r| r.effects.iter())
+            .filter_map(|p| p.segs.last().map(|s| s.name.clone()))
+            .collect();
+
+        // DL1703: the test's declared row must fit the package ceiling.
+        if let Some(excess) =
+            declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e))
+        {
+            let d = Diagnostic::error(
+                "DL1703",
+                format!(
+                    "test \"{}\" declares effect `{excess}` but {} allows only {:?}",
+                    t.name,
+                    if ceiling.from_flag { "the --test-authority ceiling" } else { "the package [test-authority] ceiling" },
+                    ceiling.effects
+                ),
+            )
+            .with_span(delulu_diag::Span::new(id, name_span.start, name_span.end), "narrow the row, or widen delulu.toml's [test-authority] — a real review decision");
+            if st.json {
+                st.diags_json.extend(diagnostics_json(std::slice::from_ref(&d), map));
+            } else {
+                print_diagnostics("test", std::slice::from_ref(&d), map, None, false);
+            }
+            st.reports.push(json!({
+                "name": t.name, "file": file.clone(),
+                "status": "fail",
+                "failure": {
+                    "code": "DL1703",
+                    "message": format!("DL1703: effect `{excess}` exceeds the test ceiling"),
+                },
+                "effects_traced": [],
+            }));
+            st.failed += 1;
+            continue;
+        }
+        // Actor tests are post-v0.8 (build-order §5): refuse clearly, never half-run.
+        if declared.iter().any(|e| e == "Async") {
+            st.reports.push(json!({
+                "name": t.name, "file": file.clone(), "status": "fail",
+                "failure": { "message": "actor (Async) tests are not supported by the v0.8 runner — build-order §5" },
+                "effects_traced": [],
+            }));
+            st.failed += 1;
+            continue;
+        }
+
+        // Deterministic by default: fixed clock; rand seeded by (--seed ⊕ name hash).
+        let name_hash: u64 =
+            t.name.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        delulu_runtime::set_fixed_clock_ms(Some(0));
+        delulu_runtime::set_rand_seed(st.seed_base ^ name_hash);
+
+        // Grants derive from the DECLARED row bounded by the ceiling — a pure test
+        // holds nothing at all (invariant 41).
+        let mut g = Grants {
+            console: declared.iter().any(|e| e == "Write"),
+            clock: declared.iter().any(|e| e == "Clock"),
+            rand: declared.iter().any(|e| e == "Rand"),
+            ..Grants::default()
+        };
+        if declared.iter().any(|e| e == "Read") {
+            g.fs_read.extend(ceiling.fs_read.iter().cloned());
+        }
+
+        let sink = delulu_runtime::TraceSink::new();
+        let interp = Interp::new(module).with_trace(sink.clone());
+        delulu_runtime::set_capture(true);
+        let t0 = std::time::Instant::now();
+        let outcome = interp.run_test(&t.name, Value::Root(std::rc::Rc::new(g.build_root())));
+        let ms = t0.elapsed().as_millis() as u64;
+        let output = delulu_runtime::take_capture().unwrap_or_default();
+
+        let mut traced: Vec<String> =
+            sink.records().iter().map(|r| r.effect.clone()).collect();
+        traced.sort();
+        traced.dedup();
+
+        let (start_l, start_c) = map.position(id, name_span.start);
+        let mut entry = json!({
+            "name": t.name, "file": file.clone(),
+            "span": { "line": start_l, "col": start_c },
+            "ms": ms, "effects_traced": traced,
+        });
+        match outcome {
+            Ok(_) => {
+                entry["status"] = json!("pass");
+                st.passed += 1;
+                if !st.json {
+                    ok_line!("ok: test \"{}\" ({} ms)", t.name, ms);
+                }
+            }
+            Err(fault) => {
+                let status = if fault.code == "DL1707" { "fail" } else { "panic" };
+                entry["status"] = json!(status);
+                // deviation 5: assert_eq's symmetric `a` != `b` maps to actual/expected.
+                let mut failure = json!({ "code": fault.code, "message": fault.message });
+                let ticks: Vec<&str> = fault
+                    .message
+                    .split('`')
+                    .skip(1)
+                    .step_by(2)
+                    .collect();
+                if fault.code == "DL1707" && ticks.len() == 2 {
+                    failure["actual"] = json!(ticks[0]);
+                    failure["expected"] = json!(ticks[1]);
+                }
+                entry["failure"] = failure;
+                st.failed += 1;
+                if !st.json {
+                    eprintln!("FAIL: test \"{}\" — {} ({} ms)", t.name, fault.message, ms);
+                    if !output.is_empty() {
+                        eprintln!("  captured output:\n{output}");
+                    }
+                }
+            }
+        }
+        st.reports.push(entry);
+    }
+}
+
 
 /// `delulu test [paths|patterns] [--json] [--seed N]` — the authority-isolated test
 /// runner (Stage 8, phase 8g; spec §5). Deterministic by default (fixed clock, per-name
@@ -1476,10 +1820,22 @@ fn cmd_test(rest: &[String]) -> i32 {
     let mut seed_flag: Option<u64> = None;
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
     let mut patterns: Vec<String> = Vec::new();
+    // D-NE-17: `--test-authority <row>`, repeatable, one manifest `[test-authority]` line each.
+    let mut authority_rows: Vec<String> = Vec::new();
     let mut i = 0;
     while i < rest.len() {
         match rest[i].as_str() {
             "--json" => json = true,
+            "--test-authority" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: `test` was given an option with no value: --test-authority");
+                    eprintln!("  nothing was done — running on the default instead would silently ignore what you asked for");
+                    return 2;
+                };
+                authority_rows.push(v.clone());
+            }
+            s if s.starts_with("--test-authority=") => authority_rows.push(s["--test-authority=".len()..].to_string()),
             "--seed" => {
                 i += 1;
                 seed_flag = rest.get(i).and_then(|v| v.parse().ok());
@@ -1530,14 +1886,88 @@ fn cmd_test(rest: &[String]) -> i32 {
             return 2;
         }
     }
-    let mut files = Vec::new();
+    // P1-F4: a package directory is tested as the PACKAGE — every module resolved and checked as
+    // one program, then run flattened, exactly as `run <package-dir>` executes it. It used to be
+    // walked as a folder of loose files, so a module calling a name another module exports was
+    // `check-failed` (`delulu test examples/greeter`). Any other `.delulu` file under it (a
+    // `tests/` folder) is still tested on its own, as before, under the package's ceiling.
+    // Every test file is governed by its NEAREST ENCLOSING package's `[test-authority]` ceiling,
+    // however it was reached — by the package folder, from inside, by its own path, or by a `..`
+    // spelling (head-chef verification of P1-F: a file reached by its own path from outside escaped
+    // its package's ceiling). `ceilings` holds each governing package once, by resolved directory;
+    // a file or package names it by index, and `None` means no package encloses it (pure).
+    let mut ceilings: Vec<(std::path::PathBuf, TestCeiling)> = Vec::new();
+    let mut files: Vec<(std::path::PathBuf, Option<usize>)> = Vec::new();
+    let mut packages: Vec<(std::path::PathBuf, delulu_check::deps::Workspace, Option<usize>)> = Vec::new();
     for p in &paths {
-        if let Err(e) = collect_delulu_files(p, &mut files) {
+        let mut found = Vec::new();
+        if let Err(e) = collect_delulu_files(p, &mut found) {
             eprintln!("error: cannot read {}: {e}", p.display());
             return 2;
         }
+        let mut modules: Vec<std::path::PathBuf> = Vec::new();
+        if p.is_dir() && p.join("delulu.toml").is_file() {
+            let ws = delulu_check::deps::resolve_workspace(p);
+            modules = ws.modules.iter().filter_map(|m| std::fs::canonicalize(&m.unit.path).ok()).collect();
+            let governs = enclosing_test_ceiling(&p.join("delulu.toml"), &mut ceilings);
+            packages.push((p.clone(), ws, governs));
+        }
+        for f in found {
+            if std::fs::canonicalize(&f).is_ok_and(|c| modules.contains(&c)) {
+                continue;
+            }
+            let governs = enclosing_test_ceiling(&f, &mut ceilings);
+            files.push((f, governs));
+        }
     }
     let ceiling = test_ceiling(std::path::Path::new("."));
+    let pure = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: false };
+
+    // D-NE-17 (the owner, 2026-09-18): `--test-authority <row>` is a test ceiling given on the
+    // command line, in the manifest's own `[test-authority]` syntax. Inside a package it may only
+    // NARROW that package's ceiling — a wider row is refused, with DL1703, before any test runs.
+    // For a file outside any package it is the only ceiling there is. Either way a test still holds
+    // exactly its declared row, bounded by the ceiling (invariant 41): the flag is a ceiling, never
+    // a grant.
+    let flag_ceiling = if authority_rows.is_empty() {
+        None
+    } else {
+        let mut c = TestCeiling { effects: Vec::new(), fs_read: Vec::new(), from_flag: true };
+        for row in &authority_rows {
+            if let Err(e) = test_authority_line(row, &mut c) {
+                eprintln!("error: bad --test-authority: {e}");
+                eprintln!("note: it takes a [test-authority] line, e.g. --test-authority 'effects = [\"Write\"]'");
+                return 2;
+            }
+        }
+        Some(c)
+    };
+    if let Some(fc) = &flag_ceiling {
+        for (dir, pc) in &ceilings {
+            if let Some(why) = test_ceiling_excess(fc, pc) {
+                let d = Diagnostic::error(
+                    "DL1703",
+                    format!(
+                        "--test-authority is wider than the [test-authority] ceiling of the package `{}`: {why} \
+                         — on the command line a package's test ceiling may be narrowed, never widened",
+                        dir.display()
+                    ),
+                );
+                print_diagnostics("test", std::slice::from_ref(&d), &SourceMap::new(), None, json);
+                return 1;
+            }
+        }
+    }
+    let ceiling = flag_ceiling.clone().unwrap_or(ceiling);
+    // The ceiling that bounds a unit: the flag's when given (checked above to narrow every package
+    // it applies to), else the enclosing package's, else none at all.
+    let governing = |ix: Option<usize>| -> TestCeiling {
+        match (&flag_ceiling, ix) {
+            (Some(fc), _) => fc.clone(),
+            (None, Some(i)) => ceilings[i].1.clone(),
+            (None, None) => pure.clone(),
+        }
+    };
 
     // The broker session lane: reachable daemon ⇒ the whole run lives under a freshly
     // ISSUED `test-session` principal node (the broker tree starts empty; a test run is
@@ -1556,187 +1986,132 @@ fn cmd_test(rest: &[String]) -> i32 {
             _ => None,
         }
     });
+    // A per-unit broker child carrying exactly that unit's needs (session lane only).
+    let attenuate = |c: &TestCeiling, desc: String| {
+        session.as_ref().zip(state_dir.as_ref()).and_then(|(sess, sd)| {
+            let spec = crate::broker_ipc::AuthoritySpec {
+                effects: c.effects.clone(),
+                fs_read: c.fs_read.clone(),
+                holder_kind: "process".into(),
+                holder_desc: desc,
+                ..Default::default()
+            };
+            match crate::brokerd::request(
+                sd,
+                crate::broker_ipc::ReqBody::Attenuate { parent: sess.clone(), authority: spec, owner: None },
+            ) {
+                Ok(crate::broker_ipc::Response::Issued { node }) => Some(node),
+                _ => None,
+            }
+        })
+    };
 
-    let seed_base = seed_flag.unwrap_or(0xDE1);
-    let mut reports: Vec<Json> = Vec::new();
     // NE-08: the envelope said `{"file": …, "status": "check-failed"}` and the DL render went to
     // **stderr**, so the machine channel named a failure and withheld its cause; a ceiling failure
     // carried a message string with the code spliced into prose and no span, code field or repair.
     // The diagnostics belong where the contract says diagnostics live, and under `--json` nothing
     // human-rendered goes to stderr at all.
-    let mut diags_json: Vec<Json> = Vec::new();
-    let mut failed = 0usize;
-    let mut passed = 0usize;
+    let mut st = TestRunState {
+        json,
+        patterns,
+        seed_base: seed_flag.unwrap_or(0xDE1),
+        reports: Vec::new(),
+        diags_json: Vec::new(),
+        failed: 0,
+        passed: 0,
+    };
     let t_all = std::time::Instant::now();
 
-    for f in &files {
+    for (dir, ws, governs) in packages {
+        let unit_ceiling = governing(governs);
+        let label = dir.display().to_string();
+        let mut diags: Vec<Diagnostic> = ws.diagnostics.clone();
+        if !ws.modules.is_empty() {
+            diags.extend(delulu_check::deps::check_workspace(&ws).diagnostics);
+        }
+        if errors(&diags) > 0 {
+            if st.json {
+                st.diags_json.extend(diagnostics_json(&diags, &ws.source_map));
+            } else {
+                print_diagnostics("test", &diags, &ws.source_map, None, false);
+            }
+            st.reports.push(json!({ "file": label, "status": "check-failed", "errors": errors(&diags) }));
+            st.failed += 1;
+            continue;
+        }
+        let Some(first) = ws.modules.iter().find(|m| m.pkg == ws.root) else { continue };
+        let entry = first.unit.name.clone();
+        // Where each of the ROOT package's tests is written. A dependency's tests are not this
+        // run's: they locate to nothing and are skipped.
+        let written: Vec<(String, String, delulu_diag::FileId, delulu_diag::Span)> = ws
+            .modules
+            .iter()
+            .filter(|m| m.pkg == ws.root)
+            .flat_map(|m| {
+                m.unit.module.items.iter().filter_map(move |it| match it {
+                    delulu_syntax::ast::Item::Test(t) => {
+                        Some((t.name.clone(), m.unit.path.display().to_string(), m.unit.file, t.name_span))
+                    }
+                    _ => None,
+                })
+            })
+            .collect();
+        let texts: Vec<&str> = ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
+        let flat_src = delulu_check::flatten_sources(&entry, &texts);
+        let module_count = ws.modules.len();
+        let mut map = ws.source_map;
+        let fid = map.add_file(format!("{label} (flattened for testing)"), flat_src.clone());
+        let flat = check_source(fid, &flat_src);
+        if errors(&flat.diagnostics) > 0 {
+            // The workspace accepted the program; flattening collided (the D61 limit `run` states).
+            if st.json {
+                st.diags_json.extend(diagnostics_json(&flat.diagnostics, &map));
+            } else {
+                print_diagnostics("test", &flat.diagnostics, &map, None, false);
+                eprintln!(
+                    "note: `{label}` checks clean as a {module_count}-module program, but two of its \
+                     modules declare the same top-level name, and testing it flattens them into one \
+                     scope (ruling D61) — rename one"
+                );
+            }
+            st.reports.push(json!({ "file": label, "status": "check-failed", "errors": errors(&flat.diagnostics) }));
+            st.failed += 1;
+            continue;
+        }
+        let _package_node = attenuate(&unit_ceiling, format!("test-package {label}"));
+        run_module_tests(&mut st, &map, &flat.module, &unit_ceiling, &|t| {
+            written
+                .iter()
+                .find(|(n, ..)| *n == t.name)
+                .map(|(_, file, id, span)| (file.clone(), *id, *span))
+        });
+    }
+
+    for (f, pkg) in &files {
         let (map, id, src) = match load(&f.display().to_string()) {
             Ok(x) => x,
             Err(c) => return c,
         };
         let checked = check_source(id, &src);
         if errors(&checked.diagnostics) > 0 {
-            if json {
-                diags_json.extend(diagnostics_json(&checked.diagnostics, &map));
+            if st.json {
+                st.diags_json.extend(diagnostics_json(&checked.diagnostics, &map));
             } else {
                 print_diagnostics("test", &checked.diagnostics, &map, None, false);
             }
-            reports.push(json!({
+            st.reports.push(json!({
                 "file": f.display().to_string(), "status": "check-failed",
                 "errors": errors(&checked.diagnostics),
             }));
-            failed += 1;
+            st.failed += 1;
             continue;
         }
-        // A per-file broker child carrying exactly this file's needs (session lane only).
-        let file_node = session.as_ref().zip(state_dir.as_ref()).and_then(|(sess, sd)| {
-            let spec = crate::broker_ipc::AuthoritySpec {
-                effects: ceiling.effects.clone(),
-                fs_read: ceiling.fs_read.clone(),
-                holder_kind: "process".into(),
-                holder_desc: format!("test-file {}", f.display()),
-                ..Default::default()
-            };
-            match crate::brokerd::request(
-                sd,
-                crate::broker_ipc::ReqBody::Attenuate {
-                    parent: sess.clone(),
-                    authority: spec,
-                    owner: None,
-                },
-            ) {
-                Ok(crate::broker_ipc::Response::Issued { node }) => Some(node),
-                _ => None,
-            }
-        });
-        let _ = &file_node;
-
-        let interp_module = &checked.module;
-        for item in &interp_module.items {
-            let delulu_syntax::ast::Item::Test(t) = item else { continue };
-            if !patterns.is_empty() && !patterns.iter().any(|p| t.name.contains(p.as_str())) {
-                continue;
-            }
-            let declared: Vec<String> = t
-                .row
-                .iter()
-                .flat_map(|r| r.effects.iter())
-                .filter_map(|p| p.segs.last().map(|s| s.name.clone()))
-                .collect();
-
-            // DL1703: the test's declared row must fit the package ceiling.
-            if let Some(excess) =
-                declared.iter().find(|e| !ceiling.effects.iter().any(|c| c == *e))
-            {
-                let d = Diagnostic::error(
-                    "DL1703",
-                    format!(
-                        "test \"{}\" declares effect `{excess}` but the package [test-authority] ceiling allows only {:?}",
-                        t.name, ceiling.effects
-                    ),
-                )
-                .with_span(delulu_diag::Span::new(id, t.name_span.start, t.name_span.end), "narrow the row, or widen delulu.toml's [test-authority] — a real review decision");
-                if json {
-                    diags_json.extend(diagnostics_json(std::slice::from_ref(&d), &map));
-                } else {
-                    print_diagnostics("test", std::slice::from_ref(&d), &map, None, false);
-                }
-                reports.push(json!({
-                    "name": t.name, "file": f.display().to_string(),
-                    "status": "fail",
-                    "failure": {
-                        "code": "DL1703",
-                        "message": format!("DL1703: effect `{excess}` exceeds the test ceiling"),
-                    },
-                    "effects_traced": [],
-                }));
-                failed += 1;
-                continue;
-            }
-            // Actor tests are post-v0.8 (build-order §5): refuse clearly, never half-run.
-            if declared.iter().any(|e| e == "Async") {
-                reports.push(json!({
-                    "name": t.name, "file": f.display().to_string(), "status": "fail",
-                    "failure": { "message": "actor (Async) tests are not supported by the v0.8 runner — build-order §5" },
-                    "effects_traced": [],
-                }));
-                failed += 1;
-                continue;
-            }
-
-            // Deterministic by default: fixed clock; rand seeded by (--seed ⊕ name hash).
-            let name_hash: u64 =
-                t.name.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
-            delulu_runtime::set_fixed_clock_ms(Some(0));
-            delulu_runtime::set_rand_seed(seed_base ^ name_hash);
-
-            // Grants derive from the DECLARED row bounded by the ceiling — a pure test
-            // holds nothing at all (invariant 41).
-            let mut g = Grants {
-                console: declared.iter().any(|e| e == "Write"),
-                clock: declared.iter().any(|e| e == "Clock"),
-                rand: declared.iter().any(|e| e == "Rand"),
-                ..Grants::default()
-            };
-            if declared.iter().any(|e| e == "Read") {
-                g.fs_read.extend(ceiling.fs_read.iter().cloned());
-            }
-
-            let sink = delulu_runtime::TraceSink::new();
-            let interp = Interp::new(interp_module).with_trace(sink.clone());
-            delulu_runtime::set_capture(true);
-            let t0 = std::time::Instant::now();
-            let outcome = interp.run_test(&t.name, Value::Root(std::rc::Rc::new(g.build_root())));
-            let ms = t0.elapsed().as_millis() as u64;
-            let output = delulu_runtime::take_capture().unwrap_or_default();
-
-            let mut traced: Vec<String> =
-                sink.records().iter().map(|r| r.effect.clone()).collect();
-            traced.sort();
-            traced.dedup();
-
-            let (start_l, start_c) = map.position(id, t.name_span.start);
-            let mut entry = json!({
-                "name": t.name, "file": f.display().to_string(),
-                "span": { "line": start_l, "col": start_c },
-                "ms": ms, "effects_traced": traced,
-            });
-            match outcome {
-                Ok(_) => {
-                    entry["status"] = json!("pass");
-                    passed += 1;
-                    if !json {
-                        ok_line!("ok: test \"{}\" ({} ms)", t.name, ms);
-                    }
-                }
-                Err(fault) => {
-                    let status = if fault.code == "DL1707" { "fail" } else { "panic" };
-                    entry["status"] = json!(status);
-                    // deviation 5: assert_eq's symmetric `a` != `b` maps to actual/expected.
-                    let mut failure = json!({ "code": fault.code, "message": fault.message });
-                    let ticks: Vec<&str> = fault
-                        .message
-                        .split('`')
-                        .skip(1)
-                        .step_by(2)
-                        .collect();
-                    if fault.code == "DL1707" && ticks.len() == 2 {
-                        failure["actual"] = json!(ticks[0]);
-                        failure["expected"] = json!(ticks[1]);
-                    }
-                    entry["failure"] = failure;
-                    failed += 1;
-                    if !json {
-                        eprintln!("FAIL: test \"{}\" — {} ({} ms)", t.name, fault.message, ms);
-                        if !output.is_empty() {
-                            eprintln!("  captured output:\n{output}");
-                        }
-                    }
-                }
-            }
-            reports.push(entry);
-        }
+        let file_ceiling = governing(*pkg);
+        let _file_node = attenuate(&file_ceiling, format!("test-file {}", f.display()));
+        let label = f.display().to_string();
+        run_module_tests(&mut st, &map, &checked.module, &file_ceiling, &|t| Some((label.clone(), id, t.name_span)));
     }
+    let TestRunState { reports, diags_json, failed, passed, .. } = st;
 
     // Session end: transitive revocation — nothing a test leaked survives the run.
     let custody = match (&session, &state_dir) {
@@ -5564,11 +5939,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
             };
             if json {
                 let arr: Vec<Json> = nodes.iter().map(|n| serde_json::to_value(n).expect("node serializes")).collect();
-                note_json_emitted();
-                println!(
-                    "{}",
-                    json!({ "command": "grants", "subcommand": "list", "count": nodes.len(), "nodes": arr })
-                );
+                print_success_envelope("grants", json!({ "subcommand": "list", "count": nodes.len(), "nodes": arr }));
             } else if nodes.is_empty() {
                 println!("(no grants — the tree is empty)");
             } else {
@@ -5589,8 +5960,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "grants", "subcommand": "tree", "tree": text }));
+                print_success_envelope("grants", json!({ "subcommand": "tree", "tree": text }));
             } else if text.is_empty() {
                 println!("(no grants — the tree is empty)");
             } else {
@@ -5612,11 +5982,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
-                note_json_emitted();
-                println!(
-                    "{}",
-                    json!({ "command": "grants", "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") })
-                );
+                print_success_envelope("grants", json!({ "subcommand": "inspect", "node": serde_json::to_value(&n).expect("node serializes") }));
             } else {
                 println!("id:        {}", n.id);
                 println!("parent:    {}", n.parent.as_deref().unwrap_or("(root)"));
@@ -5656,14 +6022,13 @@ fn cmd_grants(rest: &[String]) -> i32 {
                 return 2;
             };
             if json {
-                note_json_emitted();
-                println!(
-                    "{}",
+                print_success_envelope(
+                    "grants",
                     json!({
-                        "command": "grants", "subcommand": "revoke",
+                        "subcommand": "revoke",
                         "by_seq": by_seq, "epoch": epoch, "newly_revoked": newly_revoked,
                         "revocation_takes_effect": delulu_diag::REVOCATION_BOUND,
-                    })
+                    }),
                 );
             } else {
                 if newly_revoked.is_empty() {
@@ -5758,9 +6123,7 @@ fn cmd_grants_pubkey(args: &[String], json: bool) -> i32 {
     };
     let hex = crate::cert_crypto::public_key_hex(&seed);
     if json {
-        let report = serde_json::json!({ "command": "grants pubkey", "schema": 1, "pubkey": hex });
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_success_envelope("grants pubkey", serde_json::json!({ "pubkey": hex }));
     } else {
         println!("{hex}");
     }
@@ -5988,8 +6351,7 @@ fn cmd_grants_certify(args: &[String], json: bool) -> i32 {
             "not_after": c.not_after,
             "certificate": wire,
         });
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_success_envelope("grants certify", report);
     } else if out.is_some() {
         eprintln!("wrote {} ({} bytes)", out.as_deref().unwrap_or(""), wire.len());
         eprintln!("fingerprint: {}", c.fingerprint());
@@ -6073,8 +6435,7 @@ fn cmd_grants_receipt(args: &[String], json: bool) -> i32 {
             "issuer": r.issuer, "certificate": r.certificate,
             "not_after": r.not_after, "receipt": wire,
         });
-        note_json_emitted();
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_success_envelope("grants receipt", report);
     } else if out.is_some() {
         eprintln!("wrote {} — next contact due by {}", out.as_deref().unwrap_or(""), delulu_broker::render_ts_utc(r.not_after));
     } else {
@@ -6144,8 +6505,7 @@ fn cmd_grants_renew(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 let report = serde_json::json!({
                     "command": "grants renew", "schema": 1, "node": node, "ttl_millis": ttl_millis,
                 });
-                note_json_emitted();
-                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                print_success_envelope("grants renew", report);
             } else {
                 println!("{node}");
                 eprintln!("uplink lease now runs to {}", delulu_broker::render_ts_utc(ttl_millis));
@@ -6235,8 +6595,7 @@ fn cmd_grants_adopt(args: &[String], state_dir: &std::path::Path, json: bool) ->
                     "fingerprint": fingerprint,
                     "ttl_millis": ttl_millis,
                 });
-                note_json_emitted();
-                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                print_success_envelope("grants adopt", report);
             } else {
                 println!("{node}");
                 eprintln!("adopted:  {fingerprint}");
@@ -6436,14 +6795,13 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     match grants_rpc(state_dir, ReqBody::Delegate { parent: parent.clone(), authority: child_spec, multi, owner }, json) {
         Ok(Response::Delegated { node, token }) => {
             if json {
-                note_json_emitted();
-                println!(
-                    "{}",
+                print_success_envelope(
+                    "grants",
                     json!({
-                        "command": "grants", "subcommand": "delegate",
+                        "subcommand": "delegate",
                         "parent": parent, "node": node, "token": token,
                         "multi": multi, "ttl_millis": ttl_millis,
-                    })
+                    }),
                 );
             } else {
                 ok_line!(
@@ -6584,8 +6942,7 @@ fn cmd_guard_bypass(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 );
             }
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "guard", "subcommand": "bypass", "bypass": on }));
+                print_success_envelope("guard", json!({ "subcommand": "bypass", "bypass": on }));
             } else if on {
                 ok_line!("ok: guard bypass ENABLED");
             } else {
@@ -6674,8 +7031,7 @@ fn cmd_guard_request(args: &[String], state_dir: &std::path::Path, json: bool) -
     match guard_rpc(state_dir, ReqBody::GuardRequest { node, uses, why }, json) {
         Ok(Response::GuardRequested { id, deduped }) => {
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "guard", "subcommand": "request", "id": id, "deduped": deduped }));
+                print_success_envelope("guard", json!({ "subcommand": "request", "id": id, "deduped": deduped }));
             } else {
                 if deduped {
                     ok_line!("ok: a matching request was already pending — id {id}");
@@ -6711,8 +7067,7 @@ fn cmd_guard_pending(state_dir: &std::path::Path, json: bool) -> i32 {
             .iter()
             .map(|r| json!({ "id": r.id, "node": r.node, "uses": r.uses, "why": r.why, "created_millis": r.created_millis, "status": r.status }))
             .collect();
-        note_json_emitted();
-        println!("{}", json!({ "command": "guard", "subcommand": "pending", "count": requests.len(), "requests": arr }));
+        print_success_envelope("guard", json!({ "subcommand": "pending", "count": requests.len(), "requests": arr }));
     } else if requests.is_empty() {
         println!("(no guard requests)");
     } else {
@@ -6756,8 +7111,7 @@ fn cmd_guard_approve(args: &[String], state_dir: &std::path::Path, json: bool) -
     match guard_rpc(state_dir, ReqBody::GuardApprove { owner, id: id.clone(), ttl_millis, uses: uses_n, comment }, json) {
         Ok(Response::GuardApproved { permit_id }) => {
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "guard", "subcommand": "approve", "request": id, "permit": permit_id }));
+                print_success_envelope("guard", json!({ "subcommand": "approve", "request": id, "permit": permit_id }));
             } else {
                 ok_line!("ok: approved request {id} — minted permit {permit_id}");
                 println!("{permit_id}");
@@ -6789,8 +7143,7 @@ fn cmd_guard_deny(args: &[String], state_dir: &std::path::Path, json: bool) -> i
     match guard_rpc(state_dir, ReqBody::GuardDeny { owner, id: id.clone(), comment }, json) {
         Ok(_) => {
             if json {
-                note_json_emitted();
-                println!("{}", json!({ "command": "guard", "subcommand": "deny", "request": id }));
+                print_success_envelope("guard", json!({ "subcommand": "deny", "request": id }));
             } else {
                 ok_line!("ok: denied request {id} (the agent's retry will carry your comment)");
             }
@@ -6815,8 +7168,7 @@ fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -
         return match guard_rpc(state_dir, ReqBody::GuardPermitRevoke { owner, id: id.clone() }, json) {
             Ok(_) => {
                 if json {
-                    note_json_emitted();
-                    println!("{}", json!({ "command": "guard", "subcommand": "permits revoke", "permit": id }));
+                    print_success_envelope("guard", json!({ "subcommand": "permits revoke", "permit": id }));
                 } else {
                     ok_line!("ok: revoked permit {id}");
                 }
@@ -6838,8 +7190,7 @@ fn cmd_guard_permits(args: &[String], state_dir: &std::path::Path, json: bool) -
             .iter()
             .map(|p| json!({ "id": p.id, "node": p.node, "uses": p.uses, "remaining_uses": p.remaining_uses, "expires_millis": p.expires_millis }))
             .collect();
-        note_json_emitted();
-        println!("{}", json!({ "command": "guard", "subcommand": "permits", "count": permits.len(), "permits": arr }));
+        print_success_envelope("guard", json!({ "subcommand": "permits", "count": permits.len(), "permits": arr }));
     } else if permits.is_empty() {
         println!("(no permits)");
     } else {
@@ -6862,15 +7213,14 @@ fn print_guard_status(resp: &crate::broker_ipc::Response, subcommand: &str, json
             .iter()
             .map(|r| json!({ "class": r.class, "pattern": r.pattern, "tier": r.tier }))
             .collect();
-        note_json_emitted();
-        println!(
-            "{}",
+        print_success_envelope(
+            "guard",
             json!({
-                "command": "guard", "subcommand": subcommand,
+                "subcommand": subcommand,
                 "mode": if *bypass { "bypassed" } else { "on" },
                 "bypass": bypass, "poisoned": poisoned,
                 "rules": rules_json, "pending": pending, "permits": permits,
-            })
+            }),
         );
     } else {
         let mode = if *bypass {
@@ -6940,8 +7290,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             ) {
                 Ok(_) => {
                     if json {
-                        note_json_emitted();
-                        println!("{}", json!({ "command": "guard", "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                        print_success_envelope("guard", json!({ "subcommand": "policy set", "rule": format!("{class}:{pattern}"), "tier": tier, "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
                         ok_line!("ok: guard policy set `{class}:{pattern}` \u{2192} {tier}");
                         // The honest bound, stated at the point of a policy edit (criterion 11).
@@ -6969,8 +7318,7 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
             ) {
                 Ok(_) => {
                     if json {
-                        note_json_emitted();
-                        println!("{}", json!({ "command": "guard", "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
+                        print_success_envelope("guard", json!({ "subcommand": "policy unset", "rule": format!("{class}:{pattern}"), "takes_effect": delulu_diag::GUARD_POLICY_BOUND }));
                     } else {
                         ok_line!("ok: guard policy unset `{class}:{pattern}`");
                         eprintln!("{}", delulu_diag::GUARD_POLICY_BOUND);
@@ -8456,6 +8804,10 @@ fn cmd_explain(rest: &[String]) -> i32 {
 
 fn repl_cmd(rest: &[String]) -> i32 {
     let (_file, opts) = parse_opts(rest);
+    // `repl --grants` opened the REPL having ignored the flag (P1-F3); it takes `--grant` only.
+    if let Some(code) = refuse_unknown_flags("repl", &opts) {
+        return code;
+    }
     let mut grants = Grants::default();
     for g in &opts.grants {
         let _ = grants.add(g);

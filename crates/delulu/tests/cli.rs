@@ -1288,3 +1288,46 @@ fn every_grant_kind_the_runtime_parses_is_derivable_from_the_report() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// REMAINING_WORK 6.13: under `--trace-effects` a filesystem record carries the path it RESOLVED
+/// to and the capability's scope root, so a miss (a path spelled relative to the working directory
+/// instead of to the capability) is explainable from the trace alone. Additive: a record that is
+/// not a filesystem effect keeps exactly its old keys. Both engines say the same.
+#[test]
+fn a_filesystem_trace_record_names_the_resolved_path_and_the_scope_root() {
+    let dir = std::env::temp_dir().join(format!("delulu_cli_rw613_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::write(dir.join("data").join("in.txt"), "hi").unwrap();
+    std::fs::write(
+        dir.join("m.delulu"),
+        "module m\n\nfn main(root: Root) ! {Read, Write} {\n    let out = root.console()\n    \
+         let fr = root.fs_read(\"./data\")\n    match fr.read_text(\"data/in.txt\") {\n        \
+         Ok(v) => out.println(v),\n        Err(_) => out.println(\"miss\"),\n    }\n}\n",
+    )
+    .unwrap();
+    for engine in ["interp", "wasm"] {
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&dir)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args(["run", "m.delulu", "--grant", "console", "--grant", "fs.read=./data", "--trace-effects", "--engine", engine])
+            .output()
+            .expect("run delulu");
+        assert!(o.status.success(), "{engine}: {}", stderr(&o));
+        assert_eq!(stdout(&o).trim(), "miss", "{engine}: the path was spelled relative to the working directory");
+        let records: Vec<Value> = stderr(&o)
+            .lines()
+            .filter(|l| l.starts_with('{'))
+            .map(|l| serde_json::from_str(l).expect("one JSON record per line"))
+            .collect();
+        let read = records.iter().find(|r| r["op"] == "read_text").unwrap_or_else(|| panic!("{engine}: no read record"));
+        let root = read["scope_root"].as_str().unwrap_or_else(|| panic!("{engine}: no scope_root: {read}"));
+        let resolved = read["resolved_path"].as_str().unwrap_or_else(|| panic!("{engine}: no resolved_path: {read}"));
+        assert_eq!(read["detail"], "data/in.txt", "{engine}: detail keeps the path as written");
+        assert!(Path::new(root).ends_with("data"), "{engine}: {read}");
+        assert_eq!(Path::new(resolved), Path::new(root).join("data").join("in.txt"), "{engine}: {read}");
+        let write = records.iter().find(|r| r["op"] == "println").expect("a println record");
+        assert!(write.get("resolved_path").is_none() && write.get("scope_root").is_none(), "{engine}: {write}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

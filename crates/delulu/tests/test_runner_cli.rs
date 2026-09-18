@@ -233,3 +233,170 @@ fn criterion5_broker_session_is_revoked_at_end() {
         "the per-file child was transitively revoked too: {tree_out}"
     );
 }
+
+/// P1-F4: `delulu test <package directory>` resolves the PACKAGE — every module, as `run` and bare
+/// `delulu test` inside it do — instead of walking it as loose files, where a test calling a name
+/// another module exports was `check-failed`. Reached from outside the package, by path.
+#[test]
+fn a_package_reached_by_path_is_tested_with_all_its_modules() {
+    let dir = tmp("pkgpath");
+    let pkg = dir.join("pk2");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pk2\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n",
+    )
+    .unwrap();
+    std::fs::write(pkg.join("src").join("util.delulu"), "module pk2.util\n\npub fn double(x: Int) -> Int {\n    x * 2\n}\n")
+        .unwrap();
+    std::fs::write(
+        pkg.join("src").join("main.delulu"),
+        "module pk2\n\nimport pk2.util\n\nfn quad(x: Int) -> Int {\n    double(double(x))\n}\n\n\
+         test \"quad uses the other module\" {\n    assert_eq(str(quad(3)), \"12\")\n}\n",
+    )
+    .unwrap();
+
+    let o = delulu(&dir, &["test", "pk2", "--json"], None);
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert_eq!(o.status.code(), Some(0), "the package's test must pass:\n{out}\n{}", String::from_utf8_lossy(&o.stderr));
+    let v: Value = serde_json::from_str(&out).expect("one envelope");
+    assert_eq!(v["summary"]["passed"], 1, "{out}");
+    let t = &v["tests"][0];
+    assert_eq!(t["status"], "pass", "{out}");
+    // Reported where it is WRITTEN, not where the flattened copy put it.
+    assert!(t["file"].as_str().unwrap_or("").ends_with("main.delulu"), "{out}");
+    assert_eq!(t["span"]["line"], 9, "{out}");
+
+    // The shipped two-module example, by path from the repository root.
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+    let o = delulu(&repo, &["test", "examples/greeter"], Some(&dir.join("no-broker")));
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// D-NE-17 (the owner, 2026-09-18): `delulu test --test-authority <row>`, in the manifest's own
+/// `[test-authority]` syntax. For a file outside any package it is the only ceiling; inside a
+/// package it may only narrow the package's ceiling, and a wider row is DL1703 before any test
+/// runs. Either way a test holds exactly its declared row (invariant 41) — the flag is a ceiling.
+#[test]
+fn test_authority_flag_is_a_ceiling_that_can_only_narrow_a_package() {
+    let dir = tmp("testauth");
+    let loose = dir.join("loose");
+    std::fs::create_dir_all(&loose).unwrap();
+    std::fs::write(
+        loose.join("w.delulu"),
+        "module w\n\ntest \"writes\" ! {Write} {\n    let out = test_root.console()\n    out.println(\"hi\")\n}\n\n\
+         test \"pure\" {\n    assert_eq(str(1 + 1), \"2\")\n}\n",
+    )
+    .unwrap();
+    let run = |cwd: &Path, args: &[&str]| -> (Option<i32>, Value, String) {
+        let o = delulu(cwd, args, None);
+        let out = String::from_utf8_lossy(&o.stdout).to_string();
+        (o.status.code(), serde_json::from_str(&out).unwrap_or(Value::Null), out)
+    };
+
+    // Outside a package: no flag, no ceiling — the effectful test is DL1703, as before.
+    let (code, _, out) = run(&loose, &["test", "w.delulu", "--json"]);
+    assert_eq!(code, Some(1), "{out}");
+    // The flag is the only ceiling: the test runs, holding exactly its declared row.
+    let (code, v, out) = run(&loose, &["test", "w.delulu", "--test-authority", "effects = [\"Write\", \"Clock\"]", "--json"]);
+    assert_eq!(code, Some(0), "{out}");
+    let writes = v["tests"].as_array().unwrap().iter().find(|t| t["name"] == "writes").cloned().unwrap();
+    assert_eq!(writes["effects_traced"], serde_json::json!(["Write"]), "only the declared row: {out}");
+    let pure = v["tests"].as_array().unwrap().iter().find(|t| t["name"] == "pure").cloned().unwrap();
+    assert_eq!(pure["effects_traced"], serde_json::json!([]), "a pure test holds nothing: {out}");
+    // A row the flag does not cover is refused, and the refusal names the flag's ceiling.
+    let (code, v, out) = run(&loose, &["test", "w.delulu", "--test-authority", "effects = [\"Clock\"]", "--json"]);
+    assert_eq!(code, Some(1), "{out}");
+    assert!(v["diagnostics"].to_string().contains("--test-authority ceiling"), "{out}");
+    // Not the manifest syntax: refused as usage, never ignored.
+    let (code, _, out) = run(&loose, &["test", "w.delulu", "--test-authority", "Write"]);
+    assert_eq!(code, Some(2), "{out}");
+
+    // Inside a package whose ceiling is {Write} with one fs.read scope.
+    let pkg = dir.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::create_dir_all(pkg.join("fixtures").join("sub")).unwrap();
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n\n\
+         [test-authority]\neffects = [\"Write\"]\nfs.read = [\"./fixtures\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("main.delulu"),
+        "module pkg\n\ntest \"writes\" ! {Write} {\n    let out = test_root.console()\n    out.println(\"ran\")\n}\n",
+    )
+    .unwrap();
+    // Equal, and narrower-in-scope: accepted.
+    let (code, _, out) = run(&pkg, &["test", "--test-authority", "effects = [\"Write\"]", "--json"]);
+    assert_eq!(code, Some(0), "{out}");
+    let (code, _, out) =
+        run(&pkg, &["test", "--test-authority", "effects = [\"Write\"]", "--test-authority", "fs.read = [\"./fixtures/sub\"]", "--json"]);
+    assert_eq!(code, Some(0), "{out}");
+    // Wider — by an effect, or by a scope outside the package's (spelled with `..` too) — is DL1703
+    // BEFORE any test runs: no `tests` array at all.
+    for row in [
+        vec!["--test-authority", "effects = [\"Write\", \"Net\"]"],
+        vec!["--test-authority", "fs.read = [\"../other\"]"],
+        vec!["--test-authority", "fs.read = [\"./fixtures/../../other\"]"],
+    ] {
+        let mut args = vec!["test"];
+        args.extend(row.iter().copied());
+        args.push("--json");
+        let (code, v, out) = run(&pkg, &args);
+        assert_eq!(code, Some(1), "{row:?}: {out}");
+        assert_eq!(v["diagnostics"][0]["code"], "DL1703", "{row:?}: {out}");
+        assert!(v.get("tests").is_none(), "{row:?}: refused before any test ran: {out}");
+    }
+    // And the same from outside, reaching the package by path.
+    let (code, v, out) = run(&dir, &["test", "pkg", "--test-authority", "effects = [\"Net\"]", "--json"]);
+    assert_eq!(code, Some(1), "{out}");
+    assert_eq!(v["diagnostics"][0]["code"], "DL1703", "{out}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Head-chef verification of P1-F: a test file is governed by its NEAREST ENCLOSING package's
+/// ceiling however it is reached. A file reached by its own path from outside used to escape it —
+/// `delulu test pk/tests/t.delulu --test-authority 'effects = ["Write"]'` ran a Write test in a
+/// package whose ceiling is pure. Four routes, one answer, with and without the flag.
+#[test]
+fn every_route_to_a_test_file_meets_its_packages_ceiling() {
+    let dir = tmp("routes");
+    let pk = dir.join("pk");
+    std::fs::create_dir_all(pk.join("tests")).unwrap();
+    std::fs::create_dir_all(pk.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    std::fs::write(
+        pk.join("delulu.toml"),
+        "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n\n[authority]\neffects = []\n\n[test-authority]\neffects = []\n",
+    )
+    .unwrap();
+    std::fs::write(pk.join("src").join("main.delulu"), "module pk\n\nfn one() -> Int {\n    1\n}\n").unwrap();
+    std::fs::write(
+        pk.join("tests").join("t.delulu"),
+        "module t\n\ntest \"writes\" ! {Write} {\n    let out = test_root.console()\n    out.println(\"hi\")\n}\n",
+    )
+    .unwrap();
+    let routes: [(&Path, &str); 4] = [
+        (&dir, "pk"),
+        (&pk, "tests/t.delulu"),
+        (&dir, "pk/tests/t.delulu"),
+        (&dir, "other/../pk/tests/t.delulu"),
+    ];
+    for flag in [true, false] {
+        for (cwd, target) in routes {
+            let mut args = vec!["test", target];
+            if flag {
+                args.extend(["--test-authority", "effects = [\"Write\"]"]);
+            }
+            let o = delulu(cwd, &args, None);
+            let err = String::from_utf8_lossy(&o.stderr).to_string();
+            assert_eq!(o.status.code(), Some(1), "flag={flag} `{}` must be refused:\n{err}", args.join(" "));
+            assert!(err.contains("DL1703"), "flag={flag} `{}`:\n{err}", args.join(" "));
+            assert!(!String::from_utf8_lossy(&o.stdout).contains("hi"), "the Write test must not run");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
