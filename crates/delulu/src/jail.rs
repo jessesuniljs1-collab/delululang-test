@@ -178,11 +178,17 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     // Each of these is a capability a guest never legitimately needs: starting another program,
     // attaching a debugger to one, rearranging namespaces or mounts, loading kernel code, or reading
     // and writing another process's memory.
-    let denied: &[libc::c_long] = &[
+    // 64-bit ARM has no `fork` or `vfork` syscall at all — everything goes through `clone` there —
+    // so naming them unconditionally does not compile for that architecture (the arm64 job caught
+    // it). Denying what does not exist is not a boundary anyway.
+    #[cfg(target_arch = "x86_64")]
+    const ARCH_DENIED: &[libc::c_long] = &[libc::SYS_fork, libc::SYS_vfork];
+    #[cfg(not(target_arch = "x86_64"))]
+    const ARCH_DENIED: &[libc::c_long] = &[];
+
+    let denied: Vec<libc::c_long> = [
         libc::SYS_execve,
         libc::SYS_execveat,
-        libc::SYS_fork,
-        libc::SYS_vfork,
         libc::SYS_ptrace,
         libc::SYS_unshare,
         libc::SYS_setns,
@@ -199,7 +205,10 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
         libc::SYS_process_vm_readv,
         libc::SYS_process_vm_writev,
         libc::SYS_open_by_handle_at,
-    ];
+    ]
+    .into_iter()
+    .chain(ARCH_DENIED.iter().copied())
+    .collect();
     let rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
         denied.iter().map(|s| (*s as i64, Vec::new())).collect();
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
