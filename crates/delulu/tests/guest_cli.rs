@@ -104,6 +104,13 @@ fn the_run_reports_what_the_jail_enforced() {
     if cfg!(target_os = "linux") {
         assert!(err.contains("no privilege escalation"), "{err}");
         assert!(err.contains("killed with the host"), "{err}");
+        // PS-A2's Landlock layer, reported either way and never silently: a kernel that has it says
+        // what was narrowed, and one that lacks it says THAT, so an absent boundary can never read
+        // like an applied one.
+        assert!(
+            err.contains("no file writes") || err.contains("this kernel has no Landlock"),
+            "the run said nothing at all about the guest's view of the filesystem: {err}"
+        );
     }
     if cfg!(windows) || cfg!(target_os = "linux") {
         assert!(err.contains("memory ceiling"), "{err}");

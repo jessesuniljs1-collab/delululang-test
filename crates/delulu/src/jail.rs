@@ -157,6 +157,90 @@ pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static 
     Vec::new()
 }
 
+/// PS-A2: the guest narrows its own VIEW OF THE FILESYSTEM, with Landlock, before the program runs.
+///
+/// seccomp says which syscalls a guest may make; Landlock says which files those syscalls may
+/// reach. They answer different questions, and the filesystem one is the one that matters most
+/// here: the guest performs no effects, so it needs to open no file of the operator's at all. Every
+/// read and every write the program asks for is performed by the HOST, inside the scope the
+/// operator granted, and arrives back over the channel.
+///
+/// So the ruleset is: nothing writable anywhere, reads only from the system paths a process needs in
+/// order to keep running, and no TCP. A guest that escapes the interpreter entirely still cannot
+/// open the operator's home directory, cannot truncate a file it can no longer open, and cannot
+/// carry what it read out over a socket of its own.
+///
+/// Two things are deliberately NOT claimed. Landlock mediates TCP only (ABI v4), so UDP and raw
+/// sockets are outside it and the guarantee says `TCP` rather than `network`. And what the kernel
+/// actually supports is read back from the syscall — never from a version string — so an older
+/// kernel yields a shorter list rather than the same list with less behind it (PS-0-04's rule).
+///
+/// The channel socket is already connected by the time this runs, and an open file descriptor is
+/// not re-checked, so the guest keeps talking to its host with nothing writable beneath it.
+///
+/// Returns what was applied, and `None` only when this kernel has no Landlock at all — in which
+/// case the caller SAYS so, because "the sandbox quietly did not apply" is the failure this phase
+/// exists to prevent. It is not fatal: seccomp, the rlimits and the channel are unaffected.
+#[cfg(target_os = "linux")]
+pub fn confine_filesystem(channel_dir: &std::path::Path) -> Option<Vec<&'static str>> {
+    use landlock::{
+        path_beneath_rules, Access, AccessFs, AccessNet, LandlockStatus, Ruleset, RulesetAttr,
+        RulesetCreatedAttr, ABI,
+    };
+
+    // Read-only, and only what a running process needs: its loader and libraries, the system
+    // configuration a libc call may consult, `/proc` and `/sys` for the process's own facts, and
+    // `/dev` for the random and null devices. Nothing under `/home`, `/root`, `/tmp` or a
+    // workspace — that is the operator's data, and the guest has no business reading any of it.
+    // Paths that do not exist on this host are skipped by `path_beneath_rules`, which is why
+    // `/lib64` may be named on an architecture that has no such directory.
+    const SYSTEM_READ: &[&str] =
+        &["/usr", "/lib", "/lib64", "/lib32", "/bin", "/sbin", "/etc", "/proc", "/sys", "/dev"];
+
+    // The rights are requested at ABI v3 for the filesystem, because v3 is where `truncate` became
+    // mediated: without it a guest could still empty a file it can no longer open, and "no file
+    // writes" would be a claim this code does not make. Network rights arrive at v4. Both are
+    // requested best-effort — the default — so an older kernel drops what it lacks, and the
+    // guarantees below are chosen from what it actually reported.
+    let fs_abi = ABI::V3;
+    let net_abi = ABI::V4;
+    let ruleset = Ruleset::default()
+        .handle_access(AccessFs::from_all(fs_abi))
+        .and_then(|r| r.handle_access(AccessNet::from_all(net_abi)))
+        .and_then(|r| r.create())
+        // No writable rule at all: the whole point is that this list is empty.
+        .and_then(|r| r.add_rules(path_beneath_rules(SYSTEM_READ, AccessFs::from_read(fs_abi))))
+        // The channel directory, read-only, so a guest can still stat the socket it is already
+        // talking through. It is named rather than assumed, as the Seatbelt profile names it.
+        .and_then(|r| r.add_rules(path_beneath_rules([channel_dir], AccessFs::from_read(fs_abi))))
+        // No TCP port is ever added, so every bind and every connect is refused.
+        .and_then(|r| r.restrict_self());
+    let status = match ruleset {
+        Ok(s) => s,
+        // A ruleset that could not be built or installed confines nothing. Say nothing, claim
+        // nothing: the caller reports the absence.
+        Err(_) => return None,
+    };
+    let effective = match status.landlock {
+        LandlockStatus::Available { effective_abi, .. } => effective_abi,
+        // The kernel has no Landlock, or it is not enabled in `CONFIG_LSM`.
+        LandlockStatus::NotEnabled | LandlockStatus::NotImplemented => return None,
+    };
+    if effective < ABI::V1 {
+        return None;
+    }
+    let mut applied = vec![
+        // True from v1 up: no rule grants any write right, so nothing anywhere can be created,
+        // opened for writing, renamed, linked or removed.
+        if effective >= ABI::V3 { "no file writes" } else { "no file writes but truncation" },
+        "reads only from the system paths",
+    ];
+    if effective >= ABI::V4 {
+        applied.push("no TCP bind or connect");
+    }
+    Some(applied)
+}
+
 /// The guest locks ITSELF down once it has connected and been told what to run (PS-A-04).
 ///
 /// This is the moment the filter can be strictest: the guest has its channel, and from here it needs
@@ -466,5 +550,92 @@ mod other {
 
     pub fn confine(_child: &std::process::Child, _limits: super::Limits) -> (Jail, super::Enforced) {
         (Jail, super::Enforced::default())
+    }
+}
+
+/// PS-A2: the Landlock ruleset, measured rather than asserted.
+///
+/// `restrict_self` cannot be undone, so the measurement runs in a CHILD process — this same test
+/// binary, re-entered with one environment variable — and every run is done twice: once WITHOUT the
+/// ruleset and once with it. The unconfined half is the falsification: if it cannot write the file
+/// either, the confined half's refusal proves nothing about Landlock, and the test says so instead
+/// of passing.
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    const MODE: &str = "DELULU_JAIL_TEST_MODE";
+    const CHAN: &str = "DELULU_JAIL_TEST_CHAN";
+    const SECRET: &str = "DELULU_JAIL_TEST_SECRET";
+
+    /// The child half. Without the environment variable this is not a test of anything and returns
+    /// at once; the parent below is what drives it.
+    #[test]
+    fn jail_probe_child() {
+        let Ok(mode) = std::env::var(MODE) else { return };
+        let chan = std::path::PathBuf::from(std::env::var(CHAN).expect("the channel directory"));
+        let secret = std::path::PathBuf::from(std::env::var(SECRET).expect("the secret directory"));
+        if mode == "confined" {
+            match super::confine_filesystem(&chan) {
+                Some(applied) => println!("APPLIED={}", applied.join(",")),
+                None => println!("APPLIED=none"),
+            }
+        } else {
+            println!("APPLIED=skipped");
+        }
+        // Exactly the same four attempts in both halves, so the only difference is the ruleset.
+        println!("WRITE={}", std::fs::write(chan.join("escaped.txt"), b"x").is_ok());
+        println!("SECRET={}", std::fs::read(secret.join("data")).is_ok());
+        println!("SYSTEM={}", std::fs::read("/proc/self/status").is_ok());
+        println!("BIND={}", std::net::TcpListener::bind("127.0.0.1:0").is_ok());
+    }
+
+    /// Run the child half in `mode` and return everything it printed.
+    fn probe(mode: &str, chan: &std::path::Path, secret: &std::path::Path) -> String {
+        let out = std::process::Command::new(std::env::current_exe().expect("this test binary"))
+            .args(["--exact", "jail::linux_tests::jail_probe_child", "--nocapture"])
+            .env(MODE, mode)
+            .env(CHAN, chan)
+            .env(SECRET, secret)
+            .output()
+            .expect("the child test process runs");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    #[test]
+    fn landlock_leaves_the_guest_nothing_writable_and_nothing_of_the_operator_to_read() {
+        let base = std::env::temp_dir().join(format!("delulu-jail-{}", std::process::id()));
+        let (chan, secret) = (base.join("chan"), base.join("secret"));
+        std::fs::create_dir_all(&chan).expect("a channel directory");
+        std::fs::create_dir_all(&secret).expect("a secret directory");
+        std::fs::write(secret.join("data"), b"the operator's").expect("a secret to read");
+
+        // The control. Without it, every assertion below could be passing for the wrong reason —
+        // a path that does not exist, a read-only mount, a container that forbids binding.
+        let free = probe("free", &chan, &secret);
+        for expected in ["WRITE=true", "SECRET=true", "SYSTEM=true", "BIND=true"] {
+            assert!(free.contains(expected), "the unconfined control could not `{expected}`, so this test proves nothing:
+{free}");
+        }
+
+        let confined = probe("confined", &chan, &secret);
+        if confined.contains("APPLIED=none") {
+            // Honest, and visible: this host measured nothing, and the run said so rather than
+            // reporting a boundary it does not have.
+            eprintln!("this kernel has no Landlock, so there was nothing to measure:
+{confined}");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        }
+        assert!(confined.contains("WRITE=false"), "the guest could still write:
+{confined}");
+        assert!(confined.contains("SECRET=false"), "the guest could still read the operator's file:
+{confined}");
+        assert!(confined.contains("SYSTEM=true"), "the guest could not read `/proc`, so it cannot run at all:
+{confined}");
+        if confined.contains("no TCP bind or connect") {
+            assert!(confined.contains("BIND=false"), "`no TCP bind or connect` was claimed and the guest bound anyway:
+{confined}");
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

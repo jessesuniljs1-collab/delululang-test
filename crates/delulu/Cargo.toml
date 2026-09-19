@@ -103,3 +103,10 @@ libc = "0.2"
 # debugger, no namespace or kernel-module tricks. Apache-2.0 or BSD-3-Clause, both on deny.toml's
 # allowlist, and approved by the owner in D-V2-25 (D-NE-26).
 seccompiler = "0.5"
+# PS-A2: the guest narrows its own view of the filesystem and of TCP before the program runs —
+# nothing writable anywhere, reads only from the system paths, no TCP bind or connect. Landlock is
+# the kernel's own unprivileged sandbox (Linux 5.13+), so this needs no root and no namespace.
+# MIT OR Apache-2.0, both on deny.toml's allowlist; the crate was approved by the owner in D-V2-25.
+# It brings one new transitive crate, `enumflags2` (MIT OR Apache-2.0); `thiserror` and `libc` were
+# already in the tree.
+landlock = "0.4"

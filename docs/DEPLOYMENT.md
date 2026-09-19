@@ -101,12 +101,19 @@ enforces what it actually has:
 | Platform | What the guest is held to |
 |---|---|
 | Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction |
-| Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump, and a seccomp filter the guest installs on itself: no new programs, no debugger, no namespace, mount or kernel-module calls |
+| Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
 | macOS | a Seatbelt profile: no file writes, and no network but the guest's own channel |
 
 Read the run report (`--report-out F`) rather than the program's output: it names the level, the
 backend, the limits, the mode, the guarantees the host **actually applied**, and a `policy_hash`.
 The program can write to its own output but not to that file.
+
+Two of those rows are the guest restricting ITSELF, which is why the run report does not carry them:
+the report states what the **host** applied, and a host cannot verify a claim its guest makes about
+itself. The guest says what it applied on standard error, and on a kernel with no Landlock it says
+that instead — an absent boundary never reads like an applied one. `delulu sandbox probe` asks the
+running kernel for its Landlock ABI directly; a kernel below ABI 3 does not mediate `truncate` and a
+kernel below ABI 4 does not mediate TCP, and the guest's report says which of the two it got.
 
 **What this is not.** It is not a substitute for Tier 2. The guest runs as the same OS user, so it is
 a second wall under the account boundary, not instead of it. And it does not carry every program yet:

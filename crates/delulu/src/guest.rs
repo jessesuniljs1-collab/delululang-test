@@ -106,6 +106,18 @@ pub fn run_guest(args: &[String]) -> i32 {
     delulu_runtime::prim::set_fixed_clock_ms(hello.fixed_clock_ms);
 
     // The last thing before the program runs: the guest narrows itself to what interpreting needs.
+    // The filesystem first, because it is the one a guest needs none of — every read and write the
+    // program asks for is performed by the HOST — and because the syscall filter below says nothing
+    // about WHICH files a permitted syscall may reach.
+    #[cfg(target_os = "linux")]
+    match crate::jail::confine_filesystem(&dir) {
+        Some(applied) => eprintln!("sandbox: the guest narrowed its own view — {}", applied.join("; ")),
+        // Never silence this: a host whose kernel has no Landlock must not read as one that applied
+        // it. The run continues — the channel, the rlimits and the syscall filter are untouched —
+        // but nothing here is claimed.
+        None => eprintln!("sandbox: this kernel has no Landlock — the guest's view of the filesystem was NOT narrowed"),
+    }
+
     // Fail closed — a guest that cannot be locked down does not run the program.
     match crate::jail::lock_down_self() {
         Ok(applied) if !applied.is_empty() => eprintln!("sandbox: the guest locked itself down — {}", applied.join("; ")),

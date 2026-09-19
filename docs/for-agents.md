@@ -355,8 +355,13 @@ delulu run app.delulu --sandbox --sandbox-profile hostile-agent --grant console 
 
 `--sandbox` runs the program as a **guest that holds no authority of its own**. Its capabilities are
 opaque handles; the host performs every effect, under the same checks a normal run makes, and the
-operating system confines the guest as well: a Job Object on Windows, resource limits, no-new-privs
-and a seccomp filter on Linux, a Seatbelt profile on macOS.
+operating system confines the guest as well: a Job Object on Windows, a Seatbelt profile on macOS,
+and on Linux resource limits, no-new-privs, a Landlock ruleset (nothing writable anywhere, reads only
+from the system paths, no TCP) and a seccomp filter.
+
+The guest prints what it applied to itself, and on a host that cannot apply it prints that instead —
+so read those lines rather than assuming the list above. They are not in the report, deliberately:
+the report says what the HOST applied, and a host cannot verify its guest's claim about itself.
 
 Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
 performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may
