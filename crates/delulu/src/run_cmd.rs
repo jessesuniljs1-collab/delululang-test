@@ -323,7 +323,20 @@ fn run_report(opts: &Opts, exit: i32) -> Json {
 
 pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     RUN_STATE.with(|s| s.set((false, false)));
-    let (_, opts) = parse_opts(rest);
+    let (file, opts) = parse_opts(rest);
+    // PS-A-07: `--sandbox` runs the program as a jailed guest holding no authority of its own.
+    // `--sandbox=off` is the explicit opposite, and saying it is the point: a run that is not
+    // confined should be a sentence someone wrote. Anything else is refused rather than guessed.
+    if let Some(choice) = opts.sandbox.as_deref() {
+        match choice {
+            "off" => {}
+            "on" => return crate::guest::cmd_run_sandboxed(file.as_deref(), &opts, rest),
+            other => {
+                eprintln!("error: `--sandbox={other}` is not a value this command knows (use `--sandbox` or `--sandbox=off`)");
+                return 2;
+            }
+        }
+    }
     // The grants named on the command line are refused here, before anything else; a lease's or a
     // manifest's are refused again once known (`cmd_run_inner`).
     if opts.report_out.is_some() || opts.trace_out.is_some() {

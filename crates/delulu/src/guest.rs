@@ -126,6 +126,174 @@ pub fn run_guest(args: &[String]) -> i32 {
 /// it with the flag, the profiles and the run report the owner ruled on (D-V2-25).
 pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
 
+/// Effects the channel carries today. A guest may use exactly these; anything else is REFUSED rather
+/// than run unconfined, because "the sandbox quietly did not apply" is the failure this whole phase
+/// exists to prevent (D-V2-25: refuse, never silently downgrade).
+///
+/// Actors, foreign C, Python, plugins, devices and secrets are not here yet: each needs its own
+/// request kind on `delulu-sandbox-channel/1`, and a handle cannot stand in for a thread or a
+/// library. They arrive with the rest of PS-A.
+const CARRIED: &[delulu_check::ResourceKind] = &[
+    delulu_check::ResourceKind::Console,
+    delulu_check::ResourceKind::FsRead,
+    delulu_check::ResourceKind::FsWrite,
+    delulu_check::ResourceKind::Clock,
+    delulu_check::ResourceKind::Rand,
+];
+
+/// What this program needs that a guest cannot be given yet, in the words a caller can act on.
+pub fn unsupported_surface(program: &str) -> Option<String> {
+    let checked = delulu_check::check_source(0, program);
+    let mut missing: Vec<&'static str> = Vec::new();
+    for facts in checked.result.facts.values() {
+        for kind in &facts.cap_kinds {
+            if !CARRIED.contains(kind) && !missing.contains(&kind.name()) {
+                missing.push(kind.name());
+            }
+        }
+    }
+    // Capability kinds are not the whole surface: an actor is a language feature, not a capability,
+    // and the channel has no request kind for a mailbox or a turn. Checking only the kinds let an
+    // actor program through to a guest that then failed halfway, which is precisely the
+    // "quietly not applied" shape this gate exists to prevent.
+    for item in &checked.module.items {
+        match item {
+            delulu_syntax::ast::Item::Actor(_) if !missing.contains(&"actors") => missing.push("actors"),
+            delulu_syntax::ast::Item::Foreign(_) if !missing.contains(&"foreign code") => {
+                missing.push("foreign code")
+            }
+            _ => {}
+        }
+    }
+    missing.sort_unstable();
+    if missing.is_empty() {
+        None
+    } else {
+        Some(missing.join(", "))
+    }
+}
+
+/// `delulu run <file> --sandbox …` (PS-A-07): run the program as a jailed guest.
+///
+/// Refusals come first and are explicit, because the one thing a sandbox flag must never do is
+/// quietly not apply: an unknown profile, limits that cannot be read, a surface the channel does not
+/// carry, or a host with no jail at all are each refused with a reason and a way forward.
+pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[String]) -> i32 {
+    let Some(file) = file else {
+        eprintln!("error: `run --sandbox` needs a file");
+        return 2;
+    };
+    let program = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read `{file}`: {e}");
+            return 2;
+        }
+    };
+    let profile = match opts.sandbox_profile.as_deref() {
+        None => crate::policy::Profile::Contained,
+        Some(name) => match crate::policy::Profile::parse(name) {
+            Some(p) => p,
+            None => {
+                eprintln!("error: `{name}` is not a sandbox profile (dev, contained, hostile-agent)");
+                return 2;
+            }
+        },
+    };
+    let limits = match parse_limits(opts.limits.as_deref(), profile) {
+        Ok(l) => l,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 2;
+        }
+    };
+    // PS-A-10, the AUDIT half: a dry run performs NOTHING. It reports the policy that would be in
+    // force and the authority the program would need, which is what an agent wants before it lets
+    // unfamiliar code run at all. Nothing is spawned, so nothing can slip through.
+    let mode = match opts.sandbox_mode.as_deref() {
+        None | Some("strict") => crate::policy::Mode::Strict,
+        Some("audit") => crate::policy::Mode::Audit,
+        Some(other) => {
+            eprintln!("error: `--mode {other}` is not a mode this command knows (strict, audit)");
+            return 2;
+        }
+    };
+    if mode == crate::policy::Mode::Audit {
+        let policy = crate::policy::SandboxPolicy::derive(1, profile, Some(limits), mode);
+        let checked = delulu_check::check_source(0, &program);
+        let required = crate::cli::required_grants_of(file, &checked);
+        let carried = unsupported_surface(&program);
+        let report = serde_json::json!({
+            "command": "run",
+            "schema": 1,
+            "delulu_version": env!("CARGO_PKG_VERSION"),
+            "diagnostics": [],
+            "summary": { "errors": 0, "warnings": 0 },
+            "sandbox": policy.to_json("none", &[]),
+            "audit": {
+                "required_grants": required,
+                "unsupported_surface": carried,
+            },
+            "outcome": { "ran": false, "exit": 0 },
+        });
+        let text = serde_json::to_string_pretty(&report).expect("the audit report serializes");
+        match opts.report_out.as_deref() {
+            Some(path) => {
+                if let Err(e) = std::fs::write(path, format!("{text}\n")) {
+                    eprintln!("error: cannot write the audit report to `{path}`: {e}");
+                    return 2;
+                }
+            }
+            // With no report file the audit still has to reach its reader; nothing ran, so standard
+            // output belongs to no program here.
+            None => println!("{text}"),
+        }
+        return 0;
+    }
+    if let Some(missing) = unsupported_surface(&program) {
+        eprintln!(
+            "error: `--sandbox` cannot carry this program yet: it uses {missing}. \
+             Nothing ran. Run it with `--sandbox=off` if you accept no confinement, or wait for the \
+             channel to carry that surface — the sandbox will not quietly not apply."
+        );
+        return 2;
+    }
+    let mut grants = delulu_runtime::broker::Grants::default();
+    for g in &opts.grants {
+        if let Err(e) = grants.add(g) {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    }
+    let root = Rc::new(crate::cli::build_root(&grants));
+    match spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref()) {
+        Ok(exit) => exit,
+        Err(e) => {
+            eprintln!("error: the sandboxed run failed: {e}");
+            1
+        }
+    }
+}
+
+/// `--limits mem=N,cpu=S`: narrow the profile. A flag may ask for LESS than the profile allows and
+/// never for more, so choosing a tight profile cannot be undone by a flag on the same line.
+fn parse_limits(spec: Option<&str>, profile: crate::policy::Profile) -> Result<crate::jail::Limits, String> {
+    let mut limits = profile.limits();
+    let Some(spec) = spec else { return Ok(limits) };
+    for part in spec.split(',').filter(|p| !p.is_empty()) {
+        let (key, value) = part
+            .split_once('=')
+            .ok_or_else(|| format!("`--limits {part}` needs the form mem=BYTES or cpu=SECONDS"))?;
+        let n: u64 = value.parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}`"))?;
+        match key.trim() {
+            "mem" => limits.memory_bytes = n.min(limits.memory_bytes),
+            "cpu" => limits.cpu_seconds = n.min(limits.cpu_seconds),
+            other => return Err(format!("`--limits {other}=…` is not a limit this command knows (mem, cpu)")),
+        }
+    }
+    Ok(limits)
+}
+
 /// `__sandbox_run <file.delulu> [--grant …]`: run a program in a guest, serving it from here.
 pub fn run_sandboxed_cli(args: &[String]) -> i32 {
     let (file, opts) = crate::cli::parse_opts(args);
@@ -167,10 +335,23 @@ pub fn spawn_and_serve(
     seed: u64,
     fixed_clock_ms: Option<i64>,
 ) -> io::Result<i32> {
+    spawn_and_serve_with(program, root, seed, fixed_clock_ms, crate::jail::Limits::default(), crate::policy::Profile::Contained, None)
+}
+
+/// The host half with the policy the operator chose, and the report it asked for.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_and_serve_with(
+    program: &str,
+    root: Rc<RootVal>,
+    seed: u64,
+    fixed_clock_ms: Option<i64>,
+    limits: crate::jail::Limits,
+    profile: crate::policy::Profile,
+    report_out: Option<&str>,
+) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
-    let limits = crate::jail::Limits::default();
     let (mut cmd, launched) = guest_command(&exe, &dir);
     // Where the platform allows it, the limits are in force from the guest's first instruction.
     let mut before_exec = crate::jail::harden(&mut cmd, limits);
@@ -202,6 +383,32 @@ pub fn spawn_and_serve(
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
+    // The run report (D-V2-21): written by the RUNTIME to the file the operator named, never on the
+    // program's own output, which the program could forge. `granted` and `host_guarantees` carry
+    // what this host actually applied, so a report never claims a boundary that was not there.
+    if let Some(path) = report_out {
+        let policy = crate::policy::SandboxPolicy::derive(
+            if applied.is_empty() { 0 } else { 1 },
+            profile,
+            Some(limits),
+            crate::policy::Mode::Strict,
+        );
+        let backend = if applied.is_empty() { "inproc" } else { "process" };
+        let exit = served.as_ref().copied().unwrap_or(1);
+        let report = serde_json::json!({
+            "command": "run",
+            "schema": 1,
+            "delulu_version": env!("CARGO_PKG_VERSION"),
+            "diagnostics": [],
+            "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
+            "sandbox": policy.to_json(backend, &applied),
+            "outcome": { "ran": true, "exit": exit },
+        });
+        let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
+        if let Err(e) = std::fs::write(path, format!("{text}\n")) {
+            eprintln!("error: cannot write the run report to `{path}`: {e}");
+        }
+    }
     let status = status?;
     match served {
         Ok(exit) => Ok(exit),

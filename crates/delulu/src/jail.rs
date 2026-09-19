@@ -10,7 +10,7 @@
 //! from a version string (PS-0-04).
 
 /// What a guest may consume. Never unlimited: a default that cannot be exceeded is the point.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     pub memory_bytes: u64,
     pub cpu_seconds: u64,

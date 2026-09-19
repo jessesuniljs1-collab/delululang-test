@@ -246,6 +246,16 @@ pub(crate) struct Opts {
     /// `--report-out <file>` (D-V2-21, PS-0-02): the runtime writes the run report there — the
     /// `sandbox` object and the outcome — never on the program's own stdout, which it could forge.
     pub(crate) report_out: Option<String>,
+    /// `--sandbox` / `--sandbox=off` (PS-A-07): run the program as a jailed guest that holds no
+    /// authority of its own, or say plainly that you are not. `None` is "not asked for".
+    pub(crate) sandbox: Option<String>,
+    /// `--sandbox-profile <dev|contained|hostile-agent>` (D-V2-25, the owner's names).
+    pub(crate) sandbox_profile: Option<String>,
+    /// `--limits mem=<bytes>,cpu=<seconds>`: narrow the profile's limits. Never widens past a
+    /// profile that is already tighter — a flag may only ask for less.
+    pub(crate) limits: Option<String>,
+    /// `--mode strict|audit` (PS-A-10): AUDIT performs nothing and reports what a run would need.
+    pub(crate) sandbox_mode: Option<String>,
     /// `--assert-trace`: verify trace ⊆ the checker's row of main; violations are DL1101, exit 3.
     pub(crate) assert_trace: bool,
     /// `--actors-threads N` (Stage 7): scheduler worker count; default = available parallelism.
@@ -360,6 +370,10 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         trace_effects: false,
         trace_out: None,
         report_out: None,
+        sandbox: None,
+        sandbox_profile: None,
+        limits: None,
+        sandbox_mode: None,
         assert_trace: false,
         actors_threads: None,
         on_quiesce_report: false,
@@ -430,6 +444,40 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                     opts.missing_values.push("--trace-out".to_string());
                 }
             }
+            // PS-A-07. `--sandbox` on its own means on; the value form is how you say off, and
+            // saying it explicitly is the point — a run that is not confined should be a sentence
+            // someone wrote, not a default nobody noticed.
+            "--sandbox" => opts.sandbox = Some("on".to_string()),
+            s if s.starts_with("--sandbox=") => opts.sandbox = Some(s["--sandbox=".len()..].to_string()),
+            "--sandbox-profile" => {
+                if i + 1 < rest.len() {
+                    opts.sandbox_profile = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--sandbox-profile".to_string());
+                }
+            }
+            s if s.starts_with("--sandbox-profile=") => {
+                opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string())
+            }
+            "--limits" => {
+                if i + 1 < rest.len() {
+                    opts.limits = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--limits".to_string());
+                }
+            }
+            s if s.starts_with("--limits=") => opts.limits = Some(s["--limits=".len()..].to_string()),
+            "--mode" => {
+                if i + 1 < rest.len() {
+                    opts.sandbox_mode = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--mode".to_string());
+                }
+            }
+            s if s.starts_with("--mode=") => opts.sandbox_mode = Some(s["--mode=".len()..].to_string()),
             "--report-out" => {
                 if i + 1 < rest.len() {
                     opts.report_out = Some(rest[i + 1].clone());
@@ -1165,6 +1213,12 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 for execution; two modules declaring the same top-level name are refused, not guessed — D61)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox | --sandbox=off] [--sandbox-profile dev|contained|hostile-agent] [--limits mem=N,cpu=S]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--mode strict|audit]  (audit performs NOTHING: it reports the policy that would hold and the\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 grants the program would need — the dry run to read before letting unfamiliar code run)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (--sandbox runs the program as a jailed guest holding no authority of its own: the host\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 performs every effect under the same checks. A surface the channel does not carry yet is\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 REFUSED, never quietly run unconfined; --limits may narrow a profile, never widen it)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--report-out F]  (the runtime writes the run report there — sandbox level, mode, outcome —\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 in every outcome; never on stdout, which the program could forge; refused inside a writable grant)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\
@@ -3423,6 +3477,21 @@ fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> 
 
 /// Stamp `requested_scopes` (per capability and as a top-level map) and `required_grants` onto an
 /// authority report. Strictly additive: no existing field changes type or meaning (NE-10, NE-14).
+/// The `--grant` flags a program needs, for a caller that has only the source (PS-A-10's audit).
+///
+/// The same pipeline `authority` uses, not a second derivation of it: a dry run that disagreed with
+/// `delulu authority` about what a program needs would be worse than no dry run.
+pub(crate) fn required_grants_of(file: &str, checked: &delulu_check::Checked) -> Vec<String> {
+    let scopes = manifest_scopes(file);
+    let program = checked.module.name.dotted();
+    let mut report = authority_report(&program, &checked.result, &scopes);
+    stamp_grants(&mut report, &[&checked.module]);
+    report["required_grants"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|g| g.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
 fn stamp_grants(report: &mut Json, modules: &[&delulu_syntax::ast::Module]) {
     let requested = requested_scopes(modules);
     if let Some(caps) = report["capabilities"].as_array_mut() {
