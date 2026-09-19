@@ -157,6 +157,73 @@ pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static 
     Vec::new()
 }
 
+/// The guest locks ITSELF down once it has connected and been told what to run (PS-A-04).
+///
+/// This is the moment the filter can be strictest: the guest has its channel, and from here it needs
+/// no new program, no debugger and no namespace of its own — it interprets, and asks the host for
+/// every effect. Applying it earlier is impossible, because the syscalls denied here are exactly the
+/// ones a process needs in order to become the guest at all.
+///
+/// A denylist rather than an allowlist, deliberately: an allowlist of everything a Rust program may
+/// call is long, host-dependent, and fails closed in the worst way — by killing ordinary runs on a
+/// libc version nobody tested. What is denied here is what a guest has no business doing at all.
+///
+/// Fails closed: a host that cannot install the filter refuses the run and says so, because
+/// "the sandbox quietly did not apply" is the failure this phase exists to prevent.
+#[cfg(target_os = "linux")]
+pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
+    use seccompiler::{SeccompAction, SeccompFilter};
+    use std::collections::BTreeMap;
+
+    // Each of these is a capability a guest never legitimately needs: starting another program,
+    // attaching a debugger to one, rearranging namespaces or mounts, loading kernel code, or reading
+    // and writing another process's memory.
+    let denied: &[libc::c_long] = &[
+        libc::SYS_execve,
+        libc::SYS_execveat,
+        libc::SYS_fork,
+        libc::SYS_vfork,
+        libc::SYS_ptrace,
+        libc::SYS_unshare,
+        libc::SYS_setns,
+        libc::SYS_mount,
+        libc::SYS_umount2,
+        libc::SYS_pivot_root,
+        libc::SYS_chroot,
+        libc::SYS_init_module,
+        libc::SYS_finit_module,
+        libc::SYS_delete_module,
+        libc::SYS_kexec_load,
+        libc::SYS_bpf,
+        libc::SYS_perf_event_open,
+        libc::SYS_process_vm_readv,
+        libc::SYS_process_vm_writev,
+        libc::SYS_open_by_handle_at,
+    ];
+    let rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
+        denied.iter().map(|s| (*s as i64, Vec::new())).collect();
+    // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
+    // guest reports a refusal instead of vanishing and leaving the host to guess.
+    let filter = SeccompFilter::new(
+        rules,
+        SeccompAction::Allow,
+        SeccompAction::Errno(libc::EPERM as u32),
+        std::env::consts::ARCH.try_into().map_err(|e| format!("this architecture has no seccomp backend: {e:?}"))?,
+    )
+    .map_err(|e| format!("the syscall filter could not be built: {e}"))?;
+    let program: seccompiler::BpfProgram =
+        filter.try_into().map_err(|e| format!("the syscall filter could not be compiled: {e}"))?;
+    seccompiler::apply_filter(&program).map_err(|e| format!("the syscall filter could not be installed: {e}"))?;
+    Ok(vec!["no new programs", "no debugger", "no namespace or module tricks"])
+}
+
+/// Elsewhere the guest's confinement is entirely the host's doing (the Job Object, the Seatbelt
+/// profile), so there is nothing for it to apply to itself.
+#[cfg(not(target_os = "linux"))]
+pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
+    Ok(Vec::new())
+}
+
 /// Start a guest that [`harden`] created suspended. On platforms that do not suspend, this is a
 /// no-op and the guest has been running since `spawn`.
 ///

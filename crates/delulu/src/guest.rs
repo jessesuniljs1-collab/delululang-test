@@ -105,6 +105,17 @@ pub fn run_guest(args: &[String]) -> i32 {
     delulu_runtime::prim::set_rand_seed(hello.seed);
     delulu_runtime::prim::set_fixed_clock_ms(hello.fixed_clock_ms);
 
+    // The last thing before the program runs: the guest narrows itself to what interpreting needs.
+    // Fail closed — a guest that cannot be locked down does not run the program.
+    match crate::jail::lock_down_self() {
+        Ok(applied) if !applied.is_empty() => eprintln!("sandbox: the guest locked itself down — {}", applied.join("; ")),
+        Ok(_) => {}
+        Err(why) => {
+            eprintln!("error: the sandbox guest could not lock itself down ({why}) — nothing ran");
+            return 2;
+        }
+    }
+
     let sink = Rc::new(ChannelSink::new(conn));
     let interp = Interp::new(&checked.module).with_effect_sink(sink.clone());
     // The guest's root grants NOTHING. Every capability the program obtains is minted by the host,
