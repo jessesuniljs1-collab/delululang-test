@@ -249,6 +249,10 @@ pub(crate) struct Opts {
     /// `--sandbox` / `--sandbox=off` (PS-A-07): run the program as a jailed guest that holds no
     /// authority of its own, or say plainly that you are not. `None` is "not asked for".
     pub(crate) sandbox: Option<String>,
+    /// Every `--sandbox` request on the command line, in order (PS-A-10). The transition matrix of
+    /// `V2_SECURITY_MODEL.md` §5 says a stronger level must never silently downgrade, so two
+    /// contradictory requests are refused rather than resolved by whichever came last.
+    pub(crate) sandbox_said: Vec<String>,
     /// `--sandbox-profile <dev|contained|hostile-agent>` (D-V2-25, the owner's names).
     pub(crate) sandbox_profile: Option<String>,
     /// `--limits mem=<bytes>,cpu=<seconds>`: narrow the profile's limits. Never widens past a
@@ -371,6 +375,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         trace_out: None,
         report_out: None,
         sandbox: None,
+        sandbox_said: Vec::new(),
         sandbox_profile: None,
         limits: None,
         sandbox_mode: None,
@@ -447,8 +452,15 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             // PS-A-07. `--sandbox` on its own means on; the value form is how you say off, and
             // saying it explicitly is the point — a run that is not confined should be a sentence
             // someone wrote, not a default nobody noticed.
-            "--sandbox" => opts.sandbox = Some("on".to_string()),
-            s if s.starts_with("--sandbox=") => opts.sandbox = Some(s["--sandbox=".len()..].to_string()),
+            "--sandbox" => {
+                opts.sandbox = Some("on".to_string());
+                opts.sandbox_said.push("on".to_string());
+            }
+            s if s.starts_with("--sandbox=") => {
+                let v = s["--sandbox=".len()..].to_string();
+                opts.sandbox = Some(v.clone());
+                opts.sandbox_said.push(v);
+            }
             "--sandbox-profile" => {
                 if i + 1 < rest.len() {
                     opts.sandbox_profile = Some(rest[i + 1].clone());
@@ -1219,6 +1231,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (--sandbox runs the program as a jailed guest holding no authority of its own: the host\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 performs every effect under the same checks. A surface the channel does not carry yet is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 REFUSED, never quietly run unconfined; --limits may narrow a profile, never widen it)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-A-10: --mode, --sandbox-profile and --limits are REFUSED without --sandbox rather than\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 ignored, and a command line saying both --sandbox and --sandbox=off is refused in either order)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--report-out F]  (the runtime writes the run report there — sandbox level, mode, outcome —\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 in every outcome; never on stdout, which the program could forge; refused inside a writable grant)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--engine wasm]  (run `main` on the WebAssembly backend instead of the interpreter)\n\

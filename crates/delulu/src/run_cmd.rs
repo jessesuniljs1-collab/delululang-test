@@ -327,6 +327,44 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     // PS-A-07: `--sandbox` runs the program as a jailed guest holding no authority of its own.
     // `--sandbox=off` is the explicit opposite, and saying it is the point: a run that is not
     // confined should be a sentence someone wrote. Anything else is refused rather than guessed.
+    // PS-A-10, the transition matrix of `V2_SECURITY_MODEL.md` §5. Two of its rules are decided
+    // right here, before a line of the program is read.
+    //
+    // ON -> OFF must never happen QUIETLY. Two contradictory `--sandbox` requests on one command
+    // line used to be resolved by whichever came last, which means `--sandbox --sandbox=off` — a
+    // wrapper script's default followed by an argument a caller appended, or the other way round —
+    // silently decided the boundary. A downgrade must be a sentence someone wrote, so a command
+    // line that asks for both is refused and neither wins.
+    {
+        let mut distinct: Vec<&str> = opts.sandbox_said.iter().map(String::as_str).collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        if distinct.len() > 1 {
+            eprintln!(
+                "error: this command line asks for `--sandbox` {} times with different answers ({}).                  Nothing ran: a sandbox that goes on or off by argument order is not a decision                  anyone made. Say it once.",
+                opts.sandbox_said.len(),
+                distinct.join(", ")
+            );
+            return 2;
+        }
+    }
+    // A sandbox flag that is not read is worse than one that refuses: it reads as applied. `--mode`,
+    // `--sandbox-profile` and `--limits` describe a sandboxed run and nothing else, so asking for
+    // them without `--sandbox` is refused rather than dropped on the floor.
+    if opts.sandbox.as_deref() != Some("on") {
+        for (flag, asked) in [
+            ("--mode", opts.sandbox_mode.is_some()),
+            ("--sandbox-profile", opts.sandbox_profile.is_some()),
+            ("--limits", opts.limits.is_some()),
+        ] {
+            if asked {
+                eprintln!(
+                    "error: `{flag}` describes a sandboxed run, and this run is not one. Nothing ran,                      because a flag that is silently ignored reads exactly like a flag that was                      applied. Add `--sandbox`, or drop `{flag}`."
+                );
+                return 2;
+            }
+        }
+    }
     if let Some(choice) = opts.sandbox.as_deref() {
         match choice {
             "off" => {}
