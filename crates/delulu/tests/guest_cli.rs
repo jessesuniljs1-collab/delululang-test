@@ -11,6 +11,9 @@ fn delulu(args: &[&str]) -> Output {
         .args(args)
         .env("DELULU_NO_FIRST_RUN", "1")
         .env("DELULU_NO_COLOR", "1")
+        // Never the real one: a test must not write into the developer own audit chain, which is
+        // exactly how these records first reached `~/.delulu` and broke `doctor`.
+        .env("DELULU_STATE_DIR", isolated_state())
         .output()
         .expect("the delulu binary runs")
 }
@@ -144,4 +147,18 @@ fn a_guest_that_is_never_told_what_to_run_does_nothing() {
     let o = child.wait_with_output().expect("it exits");
     assert!(!o.status.success(), "a guest with no hello must not succeed");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A state directory of this test binary's own, so a run never touches the developer's real one.
+/// The audit chain is single-writer: parallel test processes sharing `~/.delulu` corrupted it, which
+/// is how the append lock in `guest.rs` came to exist.
+fn isolated_state() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("delulu-teststate-{}-{t}", std::process::id()));
+        let _ = std::fs::create_dir_all(d.join("audit"));
+        d
+    })
+    .clone()
 }

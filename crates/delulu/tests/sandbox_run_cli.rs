@@ -11,6 +11,9 @@ fn delulu(args: &[&str]) -> Output {
         .args(args)
         .env("DELULU_NO_FIRST_RUN", "1")
         .env("DELULU_NO_COLOR", "1")
+        // Never the real one: a test must not write into the developer own audit chain, which is
+        // exactly how these records first reached `~/.delulu` and broke `doctor`.
+        .env("DELULU_STATE_DIR", isolated_state())
         .output()
         .expect("the delulu binary runs")
 }
@@ -282,6 +285,74 @@ fn sandbox_policy_previews_exactly_what_a_run_would_use() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-A-08: a sandboxed run leaves evidence in the project's OWN audit chain — same file, same
+/// hashes, verified by the same command. A sandbox with a private log would be evidence nobody
+/// checks, and a chain the sandbox broke would be worse than no record at all.
+#[test]
+fn a_sandboxed_run_is_recorded_in_the_audit_chain_and_the_chain_still_verifies() {
+    let dir = tmp("audit-chain");
+    let state = dir.join("state");
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let (src, scope) = writer(&dir);
+
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .env("DELULU_STATE_DIR", &state)
+            .output()
+            .expect("the delulu binary runs")
+    };
+
+    let o = run(&["run", src.to_str().unwrap(), "--sandbox", "--grant", &format!("fs.write={scope}")]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+
+    let o = run(&["audit", "query", "--json"]);
+    let text = String::from_utf8_lossy(&o.stdout);
+    assert!(text.contains("sandbox-launch"), "the launch is recorded: {text}");
+    assert!(text.contains("sandbox-death"), "and so is the end of the guest: {text}");
+    assert!(text.contains("policy_hash"), "the record names the policy that was in force: {text}");
+
+    // The chain must still verify: these records are part of it, not beside it.
+    let o = run(&["audit", "verify"]);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "the chain must still verify:\n{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    );
+
+    // And the records are numbered, each one after the last. `audit verify` checks the HASH chain
+    // and not the numbering, so verifying alone would pass even if every record claimed seq 1 —
+    // found by falsifying exactly that. Without this assertion the numbering had no gate at all.
+    let seqs: Vec<u64> = text
+        .lines()
+        .filter(|l| l.contains("sandbox-"))
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter_map(|v| v["seq"].as_u64())
+        .collect();
+    let seqs = if seqs.is_empty() {
+        // The query may answer as one document rather than one record per line.
+        serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| v["records"].as_array().cloned())
+            .map(|rs| {
+                rs.iter()
+                    .filter(|r| r["action"].as_str().is_some_and(|a| a.starts_with("sandbox-")))
+                    .filter_map(|r| r["seq"].as_u64())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    } else {
+        seqs
+    };
+    assert!(seqs.len() >= 2, "both sandbox records carry a sequence number: {text}");
+    assert!(seqs.windows(2).all(|w| w[1] > w[0]), "each record is numbered after the last: {seqs:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--sandbox=off` is the explicit opposite, and it still runs the program the ordinary way.
 #[test]
 fn sandbox_off_runs_the_program_unconfined_and_says_nothing_false() {
@@ -296,4 +367,18 @@ fn sandbox_off_runs_the_program_unconfined_and_says_nothing_false() {
         String::from_utf8_lossy(&o.stderr)
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A state directory of this test binary's own, so a run never touches the developer's real one.
+/// The audit chain is single-writer: parallel test processes sharing `~/.delulu` corrupted it, which
+/// is how the append lock in `guest.rs` came to exist.
+fn isolated_state() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("delulu-teststate-{}-{t}", std::process::id()));
+        let _ = std::fs::create_dir_all(d.join("audit"));
+        d
+    })
+    .clone()
 }

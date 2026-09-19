@@ -390,6 +390,22 @@ pub fn spawn_and_serve_with(
         let _ = std::fs::remove_dir_all(&dir);
         return Err(io::Error::other("the sandbox guest could not be started under its jail"));
     }
+    // PS-A-08: the launch is recorded before the guest is told what to run, so the evidence exists
+    // even if everything after it fails.
+    let policy = crate::policy::SandboxPolicy::derive(
+        if applied.is_empty() { 0 } else { 1 },
+        profile,
+        Some(limits),
+        crate::policy::Mode::Strict,
+    );
+    let backend = if applied.is_empty() { "inproc" } else { "process" };
+    audit_sandbox(
+        "sandbox-launch",
+        "allow",
+        Some(blake3::hash(program.as_bytes()).to_hex().to_string()),
+        Some(policy.to_json(backend, &applied)),
+    );
+
     let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms);
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
@@ -397,14 +413,18 @@ pub fn spawn_and_serve_with(
     // The run report (D-V2-21): written by the RUNTIME to the file the operator named, never on the
     // program's own output, which the program could forge. `granted` and `host_guarantees` carry
     // what this host actually applied, so a report never claims a boundary that was not there.
+    // And the end of the guest's life, with the reason it ended: an exit, or a channel that failed.
+    audit_sandbox(
+        "sandbox-death",
+        if matches!(&served, Ok(0)) { "allow" } else { "deny" },
+        Some(match &served {
+            Ok(code) => format!("exit {code}"),
+            Err(e) => format!("channel failed: {e}"),
+        }),
+        None,
+    );
+
     if let Some(path) = report_out {
-        let policy = crate::policy::SandboxPolicy::derive(
-            if applied.is_empty() { 0 } else { 1 },
-            profile,
-            Some(limits),
-            crate::policy::Mode::Strict,
-        );
-        let backend = if applied.is_empty() { "inproc" } else { "process" };
         let exit = served.as_ref().copied().unwrap_or(1);
         let report = serde_json::json!({
             "command": "run",
@@ -525,6 +545,84 @@ fn converse(
     host.serve(&mut conn)
 }
 
+
+/// PS-A-08: record a sandbox lifecycle event in the audit chain, when this machine has one.
+///
+/// The chain is the project's existing one — the same file, the same hashes, verified by the same
+/// `audit verify` — because a sandbox with its own private log would be evidence nobody checks. Best
+/// effort by design: a run must not fail because the machine has no broker state directory, and the
+/// record carries only what was applied, never what was intended.
+fn audit_sandbox(action: &str, decision: &str, target: Option<String>, authority: Option<serde_json::Value>) {
+    use delulu_broker::audit::{AuditEntry, AuditLog, AuditSink};
+    let Some(state) = crate::brokerd::resolve_state_dir(None) else { return };
+    let dir = state.join("audit");
+    if !dir.exists() {
+        return;
+    }
+    // ONE writer at a time. The chain is single-writer by design — the broker daemon owns it — and
+    // making every sandboxed run a writer broke that immediately: two runs in parallel each read the
+    // same head, and their records landed on ONE line, `}{` in the middle, which `audit verify` then
+    // reported as malformed. Found locally, by `doctor` refusing its own machine.
+    //
+    // The lock is an atomic create: whoever makes the file owns the append, and the head is read
+    // AFTER it is held, so no writer chains onto a head that another has already moved.
+    let Some(_lock) = AppendLock::take(&dir) else { return };
+    let Ok(mut log) = AuditLog::open(&dir) else { return };
+    // Continue the chain's numbering: the last record's seq plus one, or 1 for an empty log.
+    let seq = delulu_broker::audit::tail(&dir, 1).ok().and_then(|r| r.last().map(|x| x.seq + 1)).unwrap_or(1);
+    let entry = AuditEntry {
+        seq,
+        ts: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or_default(),
+        actor_node: None,
+        action: action.to_string(),
+        target,
+        authority,
+        span: None,
+        decision: decision.to_string(),
+    };
+    let _ = log.append(entry);
+}
+
+/// Exclusive access to an audit directory for the length of one append.
+///
+/// `create_new` is the whole mechanism: it succeeds for exactly one process. A stale lock from a
+/// killed run is taken over after a short wait rather than blocking for ever, because an audit record
+/// is evidence and must not be able to hang a run.
+struct AppendLock(std::path::PathBuf);
+
+impl AppendLock {
+    fn take(dir: &std::path::Path) -> Option<AppendLock> {
+        let path = dir.join("append.lock");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(_) => return Some(AppendLock(path)),
+                Err(_) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                // A lock nobody released: take it over rather than lose the record entirely.
+                Err(_) => {
+                    let _ = std::fs::remove_file(&path);
+                    return std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&path)
+                        .ok()
+                        .map(|_| AppendLock(path));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for AppendLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
 
 /// A per-call channel name: the clock alone collides when runs start together.
 fn channel_tag() -> String {
