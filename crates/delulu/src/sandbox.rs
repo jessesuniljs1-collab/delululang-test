@@ -249,10 +249,47 @@ pub fn to_json(levels: &[Level]) -> Json {
 }
 
 /// `delulu sandbox probe [--json]`.
+/// `--sandbox-profile <name>` for the `policy` verb; `Err(name)` when the name is not one of the
+/// three (D-V2-25). Refused, never defaulted: a typo must not silently report a different policy
+/// from the one a run would use.
+fn profile_flag(rest: &[String]) -> Result<crate::policy::Profile, String> {
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        let name = if a == "--sandbox-profile" {
+            it.next().cloned()
+        } else {
+            a.strip_prefix("--sandbox-profile=").map(str::to_string)
+        };
+        if let Some(name) = name {
+            return crate::policy::Profile::parse(&name).ok_or(name);
+        }
+    }
+    Ok(crate::policy::Profile::Contained)
+}
+
 pub fn cmd_sandbox(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
-    let verbs: Vec<&str> = rest.iter().map(String::as_str).filter(|a| !a.starts_with('-')).collect();
-    if let Some(bad) = rest.iter().find(|a| a.starts_with('-') && *a != "--json") {
+    // A flag's VALUE is not a verb: `policy f.delulu --sandbox-profile dev` has one verb and one
+    // file, and counting `dev` as a third made the whole command fall through to the usage line.
+    let mut verbs: Vec<&str> = Vec::new();
+    let mut skip_next = false;
+    for a in rest.iter().map(String::as_str) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if a == "--sandbox-profile" {
+            skip_next = true;
+            continue;
+        }
+        if !a.starts_with('-') {
+            verbs.push(a);
+        }
+    }
+    if let Some(bad) = rest
+        .iter()
+        .find(|a| a.starts_with('-') && *a != "--json" && *a != "--sandbox-profile" && !a.starts_with("--sandbox-profile="))
+    {
         eprintln!("error: `sandbox` does not know this option: {bad}");
         eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
         return 2;
@@ -273,8 +310,49 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
             }
             0
         }
+        // PS-A-06: what policy WOULD hold for this program, without running it. The derivation is
+        // pure, so this answers with the same policy a real run would use, hash and all — which is
+        // what makes it worth reading before letting unfamiliar code run.
+        ["policy", file] => {
+            let profile = match profile_flag(rest) {
+                Ok(p) => p,
+                Err(name) => {
+                    eprintln!("error: `{name}` is not a sandbox profile (dev, contained, hostile-agent)");
+                    return 2;
+                }
+            };
+            let program = match std::fs::read_to_string(file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: cannot read `{file}`: {e}");
+                    return 2;
+                }
+            };
+            let policy = crate::policy::SandboxPolicy::derive(1, profile, None, crate::policy::Mode::Strict);
+            let carried = crate::guest::unsupported_surface(&program);
+            if json {
+                let mut obj = policy.to_json("process", &[]);
+                obj["unsupported_surface"] = match &carried {
+                    Some(s) => serde_json::json!(s),
+                    None => serde_json::Value::Null,
+                };
+                crate::cli::print_success_envelope("sandbox", serde_json::json!({ "policy": obj }));
+            } else {
+                println!("policy for `{file}` under `{}`:", profile.name());
+                println!("  level      1 (a jailed guest process)");
+                println!("  memory     {} bytes", policy.limits.memory_bytes);
+                println!("  processor  {} seconds", policy.limits.cpu_seconds);
+                println!("  mode       {}", policy.mode.name());
+                println!("  hash       {}", policy.hash());
+                match &carried {
+                    None => println!("  this program's surface is carried by the sandbox channel"),
+                    Some(s) => println!("  NOT carried yet: {s} — `--sandbox` would refuse this program"),
+                }
+            }
+            0
+        }
         _ => {
-            eprintln!("error: `sandbox` needs a verb: probe [--json]");
+            eprintln!("error: `sandbox` needs a verb: probe [--json] | policy <file.delulu> [--sandbox-profile P] [--json]");
             2
         }
     }

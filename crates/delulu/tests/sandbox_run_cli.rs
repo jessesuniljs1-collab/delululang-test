@@ -232,6 +232,56 @@ fn an_audit_run_performs_nothing_and_reports_what_a_run_would_need() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-A-06: `sandbox policy` answers what a run WOULD be confined by, without running it. The
+/// derivation is pure, so it must agree with the policy a real run reports, hash and all — a preview
+/// that disagreed with the thing it previews would be worse than none.
+#[test]
+fn sandbox_policy_previews_exactly_what_a_run_would_use() {
+    let dir = tmp("policy");
+    let (src, scope) = writer(&dir);
+    let file = src.to_str().unwrap();
+
+    let o = delulu(&["sandbox", "policy", file, "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("one envelope");
+    let previewed = v["policy"].clone();
+    assert_eq!(previewed["requested"], "contained");
+    assert_eq!(previewed["unsupported_surface"], serde_json::Value::Null);
+
+    // The real run's report must carry the SAME policy hash.
+    let report = dir.join("rep.json");
+    let o = delulu(&[
+        "run",
+        file,
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        report.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let run: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(
+        run["sandbox"]["policy_hash"], previewed["policy_hash"],
+        "the preview and the run must name the same policy"
+    );
+
+    // A program the channel cannot carry is named as such, and a bad profile is refused rather than
+    // quietly previewing a different policy from the one a run would use.
+    let act = dir.join("a.delulu");
+    std::fs::write(&act, "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) {\n    let c = C()\n    c.tick()\n}\n").unwrap();
+    let o = delulu(&["sandbox", "policy", act.to_str().unwrap(), "--sandbox-profile", "hostile-agent", "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).unwrap();
+    assert_eq!(v["policy"]["requested"], "hostile-agent");
+    assert_eq!(v["policy"]["unsupported_surface"], "actors");
+
+    let o = delulu(&["sandbox", "policy", file, "--sandbox-profile", "bogus"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("is not a sandbox profile"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--sandbox=off` is the explicit opposite, and it still runs the program the ordinary way.
 #[test]
 fn sandbox_off_runs_the_program_unconfined_and_says_nothing_false() {
