@@ -209,8 +209,10 @@ pub fn lock_down_self() -> Result<Vec<&'static str>, String> {
     .into_iter()
     .chain(ARCH_DENIED.iter().copied())
     .collect();
+    // `c_long` IS `i64` on every Linux target this builds for, so a cast here is not just redundant,
+    // it is a lint error under `-D warnings`.
     let rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> =
-        denied.iter().map(|s| (*s as i64, Vec::new())).collect();
+        denied.iter().map(|s| (*s, Vec::new())).collect();
     // Everything else runs; a denied call fails with EPERM rather than killing the process, so the
     // guest reports a refusal instead of vanishing and leaving the host to guess.
     let filter = SeccompFilter::new(
