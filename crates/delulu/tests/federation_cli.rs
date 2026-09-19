@@ -438,14 +438,24 @@ fn the_ground_side_mints_credentials_with_no_broker_running() {
 fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
     let f = setup("uplink");
 
-    // A one-hour grant that may only run 800 ms without hearing from the ground.
+    // A one-hour grant that may only run a few seconds without hearing from the ground.
+    //
+    // The uplink term used to be 800 ms, and that measured the RUNNER rather than the rule: between
+    // the credential being written and the delegation that uses it, this test starts three separate
+    // `delulu` processes, which on a loaded CI machine can take longer than the lease itself. It
+    // failed that way on both Windows and Linux (runs 35390738394 and 35416116437).
+    //
+    // The property under test is not a duration: it is that a child holding NO deadline of its own
+    // dies when its root's uplink lease does. So the fixture is given room for process spawns while
+    // the sleep below still passes the deadline comfortably, and the test can still fail — if
+    // expiry did not happen, the antenna would move after the sleep, which is asserted.
     let o = f.certify(&[
         "--subject", &f.vehicle_pub, "--effects", "Actuate,Write", "--device", HGA,
-        "--ttl", "1h", "--uplink-ttl", "800ms", "--key", &f.gk(), "--out", "m.dlcert",
+        "--ttl", "1h", "--uplink-ttl", "5s", "--key", &f.gk(), "--out", "m.dlcert",
     ]);
     assert!(o.status.success(), "certify: {}", stderr(&o));
     let text = std::fs::read_to_string(f.cwd.join("m.dlcert")).unwrap();
-    assert!(text.contains("uplink_ttl_ms: 800"), "the uplink term rides in the credential:\n{text}");
+    assert!(text.contains("uplink_ttl_ms: 5000"), "the uplink term rides in the credential:\n{text}");
 
     let o = f.vehicle(&["broker", "start"]);
     assert!(o.status.success(), "{}", stderr(&o));
@@ -482,7 +492,7 @@ fn silence_kills_the_actuator_and_a_contact_receipt_brings_it_back() {
     assert!(stdout(&o).contains("point COMMANDED"), "in contact, it points:\n{}", stdout(&o));
 
     // ----- loss of signal: nothing is sent, nobody is told, time simply passes ------------------
-    std::thread::sleep(std::time::Duration::from_millis(2500));
+    std::thread::sleep(std::time::Duration::from_millis(6500));
 
     let o = f.vehicle(&["run", "sat.delulu", "--lease", &token, "--broker-profile", "sim", "--no-prompt"]);
     let combined = format!("{}{}", stdout(&o), stderr(&o));
