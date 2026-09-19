@@ -319,3 +319,141 @@ jobs:
           rm -f "$S"
           sandbox-exec -f "$RUNNER_TEMP/p.sb" "$RUNNER_TEMP/server" "$S" >/dev/null 2>&1
           if [ $? -eq 0 ]; then echo "RESULT bind-no-network-denial: PASS"; else echo "RESULT bind-no-network-denial: FAIL"; fi
+
+  # ---- PS-A2 experiment (2026-09-20): can the macOS guest profile be DENY-DEFAULT?
+  #
+  # The profile the jail ships today is allow-default with targeted denies, because a deny-default
+  # profile killed even a plain C program before it reached its socket (run 35391102215, exit 134 =
+  # SIGABRT, i.e. dyld or libSystem was refused something it needs). That is a measured fact, not a
+  # verdict on deny-default: it says the allow list was too short, and says nothing about WHICH
+  # clause was missing. So this is a LADDER. Each rung adds one allowance and reports whether the
+  # process reached its socket, with the stderr head when it did not, so the answer is read off the
+  # runner rather than guessed from documentation.
+  #
+  # Two probes, because they fail for different reasons: a tiny C binary (dyld plus libSystem only)
+  # and the real `delulu` guest (CPython, wasmtime, threads). A profile that carries the first and
+  # not the second is not a profile this project can ship.
+  macos-seatbelt-deny-default-ladder:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: the smallest deny-default profile a Mach-O binary can still start under
+        continue-on-error: true
+        run: |
+          set +e
+          cat > "$RUNNER_TEMP/server.c" <<'CEOF'
+          #include <stdio.h>
+          #include <string.h>
+          #include <sys/socket.h>
+          #include <sys/un.h>
+          #include <unistd.h>
+          int main(int argc, char **argv) {
+            unlink(argv[1]);
+            int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+            if (fd < 0) { perror("socket"); return 11; }
+            struct sockaddr_un a; memset(&a, 0, sizeof a); a.sun_family = AF_UNIX;
+            strncpy(a.sun_path, argv[1], sizeof a.sun_path - 1);
+            if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0) { perror("bind"); return 12; }
+            if (listen(fd, 1) < 0) { perror("listen"); return 13; }
+            printf("BOUND\n");
+            return 0;
+          }
+          CEOF
+          cc -o "$RUNNER_TEMP/server" "$RUNNER_TEMP/server.c" || echo "RESULT ladder-build: FAIL"
+          EXE="$RUNNER_TEMP/server"
+          D="$RUNNER_TEMP/chan"; mkdir -p "$D"
+          # Seatbelt matches the RESOLVED path: /var/folders resolves to /private/var/folders, and a
+          # profile naming only the unresolved spelling matches nothing (run 35394515395). Both are
+          # named here for the same reason the shipped profile names both.
+          RD=$(cd "$D" && pwd -P)
+          S="$D/s.sock"; RS="$RD/s.sock"
+          echo "== paths =="; echo "exe=$EXE dir=$D resolved=$RD"
+          # Rung 0 is the shape that is known to abort, kept as the CONTROL: without it a later PASS
+          # says nothing about which clause earned it.
+          R0='(allow process-exec (literal "'"$EXE"'"))'
+          R0="$R0
+          (allow network-bind network-outbound (literal \"$S\") (literal \"$RS\"))
+          (allow file-read* file-write* (literal \"$S\") (literal \"$RS\"))"
+          # Each rung is the previous one plus one clause, named after the clause it adds.
+          RUNG_read='(allow file-read*)'
+          RUNG_map='(allow file-map-executable)'
+          RUNG_mach='(allow mach-lookup)'
+          RUNG_sysctl='(allow sysctl-read)'
+          RUNG_self='(allow signal (target self)) (allow process-info* (target self)) (allow ipc-posix-shm)'
+          RUNG_meta='(allow file-read-metadata)'
+          try() {
+            name="$1"; rules="$2"; exe="$3"; shift 3
+            printf '(version 1)\n(deny default)\n%s\n%s\n' "$R0" "$rules" > "$RUNNER_TEMP/p.sb"
+            rm -f "$S"
+            timeout 20 sandbox-exec -f "$RUNNER_TEMP/p.sb" "$exe" "$@" > "$RUNNER_TEMP/o.txt" 2> "$RUNNER_TEMP/e.txt"
+            rc=$?
+            if [ -S "$S" ]; then
+              echo "RESULT $name: PASS rc=$rc"
+            else
+              echo "RESULT $name: FAIL rc=$rc err=$(tr '\n' '|' < "$RUNNER_TEMP/e.txt" | head -c 200)"
+            fi
+          }
+          A=""
+          for step in read map mach sysctl self meta; do
+            eval "clause=\$RUNG_$step"
+            A="$A
+          $clause"
+            try "c-ladder-$step" "$A" "$EXE" "$S"
+          done
+          echo "== the accumulated profile that was reached =="
+          cat "$RUNNER_TEMP/p.sb"
+          # And the narrowed form: the same allowances, but reads confined to the system paths rather
+          # than to everything. This is the one worth shipping if it holds.
+          NARROW="(allow file-read* (subpath \"/usr\") (subpath \"/System\") (subpath \"/Library\") (subpath \"/private/etc\") (subpath \"/dev\") (literal \"$EXE\") (subpath \"$RD\"))
+          $RUNG_map
+          $RUNG_mach
+          $RUNG_sysctl
+          $RUNG_self
+          $RUNG_meta"
+          try "c-narrowed-reads" "$NARROW" "$EXE" "$S"
+
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: does the REAL guest start under the same profile?
+        continue-on-error: true
+        run: |
+          set +e
+          cargo build -p delulu --bin delulu 2>&1 | tail -5
+          EXE="$PWD/target/debug/delulu"
+          ls -la "$EXE" || { echo "RESULT real-build: FAIL"; exit 0; }
+          D="$RUNNER_TEMP/rchan"; rm -rf "$D"; mkdir -p "$D"
+          RD=$(cd "$D" && pwd -P)
+          S="$D/broker.sock"; RS="$RD/broker.sock"
+          RE=$(cd "$(dirname "$EXE")" && pwd -P)/delulu
+          base="(allow process-exec (literal \"$EXE\") (literal \"$RE\"))
+          (allow network-bind network-outbound (literal \"$S\") (literal \"$RS\"))
+          (allow file-read* file-write* (literal \"$S\") (literal \"$RS\") (subpath \"$D\") (subpath \"$RD\"))
+          (allow file-map-executable)
+          (allow mach-lookup)
+          (allow sysctl-read)
+          (allow signal (target self))
+          (allow process-info* (target self))
+          (allow ipc-posix-shm)
+          (allow file-read-metadata)"
+          real_try() {
+            name="$1"; reads="$2"
+            printf '(version 1)\n(deny default)\n%s\n%s\n' "$base" "$reads" > "$RUNNER_TEMP/r.sb"
+            rm -f "$S"
+            # The guest binds its channel and then waits for a hello it will never get, so the SOCKET
+            # is the evidence: if it exists, the binary loaded, ran and bound under this profile.
+            DELULU_NO_FIRST_RUN=1 timeout 20 sandbox-exec -f "$RUNNER_TEMP/r.sb" "$EXE" __guest "$D" > "$RUNNER_TEMP/ro.txt" 2> "$RUNNER_TEMP/re.txt"
+            rc=$?
+            if [ -S "$S" ]; then
+              echo "RESULT $name: PASS rc=$rc"
+            else
+              echo "RESULT $name: FAIL rc=$rc err=$(tr '\n' '|' < "$RUNNER_TEMP/re.txt" | head -c 300)"
+            fi
+          }
+          real_try "real-reads-everything" '(allow file-read*)'
+          real_try "real-reads-system-only" "(allow file-read* (subpath \"/usr\") (subpath \"/System\") (subpath \"/Library\") (subpath \"/private/etc\") (subpath \"/dev\") (literal \"$EXE\") (subpath \"$(dirname "$EXE")\") (subpath \"$RE\"))"
+          # The CONTROL, without which a PASS above proves nothing about the profile: the same guest,
+          # no profile at all, must bind.
+          rm -f "$S"
+          DELULU_NO_FIRST_RUN=1 timeout 20 "$EXE" __guest "$D" > /dev/null 2>&1
+          if [ -S "$S" ]; then echo "RESULT real-unconfined-control: PASS"; else echo "RESULT real-unconfined-control: FAIL — the probe itself is wrong"; fi
