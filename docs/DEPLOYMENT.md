@@ -91,6 +91,28 @@ actually enforces permissions. On 9p / DrvFs / NFS / SMB / exFAT a `chmod` can b
 second account read a `0600` file and the broker key straight off such a mount (finding P21-F1). The
 broker now refuses to write a secret onto such a filesystem, and `delulu doctor` reports it.
 
+### The sandbox — a second boundary, under the account, not instead of it
+
+`delulu run app.delulu --sandbox` runs the program as a guest process that holds **no authority of
+its own**: its capabilities are opaque handles, and the host performs every effect under the same
+checks a normal run makes. The operating system confines the guest as well, and each platform
+enforces what it actually has:
+
+| Platform | What the guest is held to |
+|---|---|
+| Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction |
+| Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump, and a seccomp filter the guest installs on itself: no new programs, no debugger, no namespace, mount or kernel-module calls |
+| macOS | a Seatbelt profile: no file writes, and no network but the guest's own channel |
+
+Read the run report (`--report-out F`) rather than the program's output: it names the level, the
+backend, the limits, the mode, the guarantees the host **actually applied**, and a `policy_hash`.
+The program can write to its own output but not to that file.
+
+**What this is not.** It is not a substitute for Tier 2. The guest runs as the same OS user, so it is
+a second wall under the account boundary, not instead of it. And it does not carry every program yet:
+actors, foreign C, Python, plugins, devices and secrets are **refused** rather than run unconfined,
+which `delulu sandbox policy <file> --json` reports in advance.
+
 ---
 
 ## 3. Verify it — do not assume it

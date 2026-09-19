@@ -345,6 +345,36 @@ fs_read = ["./fixtures"]
 Inside a package, bare `delulu test` targets the package; outside one it refuses rather than guess a
 directory.
 
+## [agents.sandbox] Running code you did not write
+
+```
+delulu sandbox policy app.delulu --json     # what confinement a run would have — nothing runs
+delulu run app.delulu --sandbox --mode audit   # what the run would NEED — still nothing runs
+delulu run app.delulu --sandbox --sandbox-profile hostile-agent --grant console --report-out r.json
+```
+
+`--sandbox` runs the program as a **guest that holds no authority of its own**. Its capabilities are
+opaque handles; the host performs every effect, under the same checks a normal run makes, and the
+operating system confines the guest as well: a Job Object on Windows, resource limits, no-new-privs
+and a seccomp filter on Linux, a Seatbelt profile on macOS.
+
+Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
+performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may
+**narrow** a profile and never widen it.
+
+Read the report, not the program's output. Under `--report-out F` the runtime writes the run report
+to `F`: the `sandbox` object with the level, backend, limits, mode, the guarantees the host actually
+applied, and a `policy_hash` naming the policy. It is never written to standard output, because the
+program writes there too and could forge it (D-V2-21).
+
+**What it refuses, rather than quietly not applying:** an unknown profile, an unreadable limit, and
+any program whose surface the channel cannot carry yet — today that means actors, foreign C, Python,
+plugins, devices and secrets. A refusal names the surface and exits 2, having run nothing.
+`sandbox policy --json` reports the same thing in advance, in `unsupported_surface`.
+
+`--sandbox=off` is the explicit opposite. Say it deliberately: an unconfined run should be a sentence
+someone wrote, not a default nobody noticed.
+
 ## [agents.registry] Registry
 
 ```

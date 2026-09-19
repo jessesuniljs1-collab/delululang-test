@@ -70,3 +70,15 @@ are frozen at P1.
   those runs read as an unexplained timeout.
 - Open: Landlock and seccomp (the approved crates), a deny-default macOS profile, the cargo-fuzz
   target, and the guest-mode fuzz run (trace ⊆ row).
+
+## PS-A3 and PS-A4 (partial) — 2026-09-19 — the sandbox is a feature you can use
+- `run --sandbox`, `--sandbox=off`, `--sandbox-profile dev|contained|hostile-agent`, `--limits` (narrows
+  only), `--mode audit` (performs nothing; reports the policy and the grants a run would need), and
+  `sandbox policy <file> --json` (the same policy, hash included, without running). `SandboxPolicy` is
+  pure, JSON-stable and hashed.
+- Refusals rather than a sandbox that quietly did not apply: unknown profile, unreadable limit, unknown
+  value, and any surface the channel cannot carry (actors, foreign, Python, plugins, devices, secrets).
+- Documented where it will be read: `docs/for-agents.md` [agents.sandbox] and `DEPLOYMENT.md` Tier 2,
+  including what the sandbox is NOT — a second wall under the account boundary, not instead of it.
+- Green on all three systems. Open in PS-A: Landlock file rules, a deny-default macOS profile, audit
+  lifecycle records (PS-A-08), the mode transition matrix (PS-A-10), and the cargo-fuzz target.
