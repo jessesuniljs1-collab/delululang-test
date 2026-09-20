@@ -30,3 +30,5 @@ path = "src/main.rs"
 [dependencies]
 delulu-check = { path = "../delulu-check" }
 delulu-runtime = { path = "../delulu-runtime" }
+# PS-A-01: the guest-mode half of the campaign implements `EffectSink`, whose methods take a span.
+delulu-diag = { path = "../delulu-diag" }

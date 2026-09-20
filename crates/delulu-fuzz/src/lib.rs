@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use delulu_check::check_source;
-use delulu_runtime::{assert_trace, set_fixed_clock_ms, set_rand_seed, Grants, Interp, TraceSink, Value};
+use delulu_runtime::{assert_trace, set_fixed_clock_ms, set_rand_seed, Grants, Interp, TraceRecord, TraceSink, Value};
 
 /// The danger-zone families (P17-D): generics, closures, higher-order builtins, row variables and
 /// the `Secret` composition — every shape that has actually broken this language, none of which
@@ -256,12 +256,143 @@ fn run_and_check_trace(checked: &delulu_check::Checked) -> Option<String> {
         Err(f) => return Some(format!("runtime fault {}: {} (a well-typed program should not fault here)", f.code, f.message)),
     }
 
-    let violations = assert_trace(&allowed, &sink.records());
-    if violations.is_empty() {
-        None
-    } else {
-        Some(format!("TRACE ESCAPED THE ROW (allowed={allowed:?}): {}", violations.join("; ")))
+    let records = sink.records();
+    let violations = assert_trace(&allowed, &records);
+    if !violations.is_empty() {
+        return Some(format!("TRACE ESCAPED THE ROW (allowed={allowed:?}): {}", violations.join("; ")));
     }
+    // PS-A-01: and again as a guest, against the same program and the same grant.
+    run_and_check_trace_in_guest_mode(checked, &records)
+}
+
+/// A sink that records what the HOST was asked to perform, then performs it exactly as
+/// [`LocalSink`] would.
+///
+/// Without this the guest-mode comparison has a hole worth naming: the trace is written by the
+/// GUEST's interpreter at the dispatch point, before the frame is sent. So comparing guest trace to
+/// local trace proves the guest ATTEMPTED the same effects — and would say nothing if the host
+/// quietly performed none of them. A sandbox whose host silently dropped every write would pass
+/// that comparison with a full trace and an empty disk.
+///
+/// This closes it: every capability operation the host performs is recorded on the host's side, and
+/// the campaign asserts the two sequences agree.
+struct RecordingSink {
+    inner: delulu_runtime::sink::LocalSink,
+    performed: Rc<std::cell::RefCell<Vec<String>>>,
+}
+
+impl delulu_runtime::sink::EffectSink for RecordingSink {
+    fn cap_method(
+        &self,
+        cap: &delulu_runtime::CapVal,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, delulu_runtime::Fault> {
+        self.performed.borrow_mut().push(format!("{}/{}", cap.kind.name(), method));
+        self.inner.cap_method(cap, method, args, span)
+    }
+
+    fn root_method(
+        &self,
+        root: &delulu_runtime::RootVal,
+        method: &str,
+        args: &[Value],
+        span: delulu_diag::Span,
+    ) -> Result<Value, delulu_runtime::Fault> {
+        // Minting is not an effect and is not traced, so it is not recorded here either.
+        self.inner.root_method(root, method, args, span)
+    }
+
+    fn backend(&self) -> &'static str {
+        "recording"
+    }
+}
+
+/// PS-A-01: the same program, run again as a SANDBOX GUEST, and the two traces compared.
+///
+/// `run_and_check_trace` above proves the local path is sound. This proves the guest path is the
+/// same path. The guest holds a root that grants nothing; every capability it obtains is an opaque
+/// handle the host minted, and every effect is a frame the host performs with the primitive table it
+/// always uses. If routing an effect through canonical CBOR and a handle table changed WHICH effects
+/// happen — dropped one, doubled one, reordered two, performed one the row did not allow — this is
+/// where it shows, over the whole generated corpus rather than the handful of programs a test
+/// author thought to write.
+///
+/// Two claims, and the second is the stronger one:
+///
+///   1. the guest's trace is still a subset of `row(main)` — the channel is not a way out of the
+///      effect type;
+///   2. the guest's trace EQUALS the local one — the channel is not a way to a different program.
+///
+/// The host is driven in-process through [`Loopback`], not through a child. A second process per
+/// program would make a 50,000-program campaign unaffordable, and a gate nobody can afford to run is
+/// not a gate. What a child adds over this is the OS jail, which `guest_cli`/`sandbox_run_cli` test
+/// against the real binary; what this adds is volume.
+///
+/// Returns `Some(msg)` on a violation.
+fn run_and_check_trace_in_guest_mode(checked: &delulu_check::Checked, local: &[TraceRecord]) -> Option<String> {
+    use delulu_runtime::channel::{ChannelSink, HostChannel, Loopback};
+    use delulu_runtime::sink::LocalSink;
+
+    let allowed: BTreeSet<String> = checked
+        .result
+        .main_row
+        .clone()
+        .unwrap_or_default()
+        .iter()
+        .map(|e| e.name().to_string())
+        .collect();
+
+    // The host holds the real root. The guest is given one that grants nothing — exactly what
+    // `delulu run --sandbox` hands it — so anything it reaches, it reached by asking.
+    let grants = Grants { console: true, clock: true, rand: true, ..Default::default() };
+    let performed: Rc<std::cell::RefCell<Vec<String>>> = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let recorder = RecordingSink { inner: LocalSink, performed: performed.clone() };
+    let host = HostChannel::new(recorder).with_root(Rc::new(grants.build_root()));
+    let sink = Rc::new(ChannelSink::new(Loopback::new(host)));
+
+    let trace = TraceSink::new();
+    let interp = Interp::new(&checked.module).with_trace(trace.clone()).with_effect_sink(sink);
+    let empty_root = Value::Root(Rc::new(delulu_runtime::RootVal::default()));
+    if let Err(f) = interp.run_main(empty_root) {
+        return Some(format!(
+            "the guest faulted where the local run did not — {}: {} (a program that runs locally must \
+             run as a guest, or the sandbox is not the same language)",
+            f.code, f.message
+        ));
+    }
+
+    let records = trace.records();
+    let violations = assert_trace(&allowed, &records);
+    if !violations.is_empty() {
+        return Some(format!("GUEST TRACE ESCAPED THE ROW (allowed={allowed:?}): {}", violations.join("; ")));
+    }
+    // The differential claim. Compared on (effect, cap kind, method) rather than on whole records,
+    // because a record also carries a span and an actor attribution, and the question here is which
+    // effects were performed, not how they were annotated.
+    let shape = |r: &[TraceRecord]| -> Vec<String> {
+        r.iter().map(|x| format!("{}/{}/{}", x.effect, x.cap_kind, x.op)).collect()
+    };
+    let (a, b) = (shape(local), shape(&records));
+    if a != b {
+        return Some(format!(
+            "the guest performed a DIFFERENT sequence of effects from the local run\n  local: {a:?}\n  guest: {b:?}"
+        ));
+    }
+    // And what the HOST actually did, which the trace above cannot see: the trace is written by the
+    // guest's interpreter BEFORE the frame is sent, so a host that quietly performed nothing would
+    // pass every check so far with a full trace and an empty disk.
+    let host_did = performed.borrow().clone();
+    let guest_asked: Vec<String> = records.iter().map(|x| format!("{}/{}", x.cap_kind, x.op)).collect();
+    if host_did != guest_asked {
+        return Some(format!(
+            "the host did not perform exactly what the guest asked for
+  guest asked: {guest_asked:?}
+  host did:    {host_did:?}"
+        ));
+    }
+    None
 }
 
 #[cfg(test)]

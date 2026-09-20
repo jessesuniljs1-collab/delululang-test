@@ -556,6 +556,7 @@ name = "delulu-fuzz"
 version = "1.0.0"
 dependencies = [
  "delulu-check",
+ "delulu-diag",
  "delulu-runtime",
 ]
 

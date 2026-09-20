@@ -516,6 +516,56 @@ impl<T: Read + Write> crate::sink::EffectSink for ChannelSink<T> {
     }
 }
 
+/// The whole arrangement in one process: whatever the guest writes is answered by a real
+/// [`HostChannel`], over the real frames, with no socket and no child.
+///
+/// Public because it is not only a test fixture. It is how the guest path can be exercised at fuzz
+/// volume — every accepted program run twice, once locally and once as a guest — which is the only
+/// way to state the property that matters: routing an effect through the channel does not change
+/// WHICH effects happen. A second process per program would make that campaign unaffordable, and an
+/// unaffordable gate is one that does not run.
+pub struct Loopback<S: crate::sink::EffectSink> {
+    host: HostChannel<S>,
+    inbox: Vec<u8>,
+    replies: std::collections::VecDeque<u8>,
+}
+
+impl<S: crate::sink::EffectSink> Loopback<S> {
+    pub fn new(host: HostChannel<S>) -> Self {
+        Loopback { host, inbox: Vec::new(), replies: std::collections::VecDeque::new() }
+    }
+}
+
+impl<S: crate::sink::EffectSink> Write for Loopback<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inbox.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        // A whole frame has arrived: answer it exactly as the host would on a socket.
+        let taken = std::mem::take(&mut self.inbox);
+        if taken.is_empty() {
+            return Ok(());
+        }
+        let req: Request = read_frame(&mut &taken[..])?;
+        let resp = self.host.answer(&req);
+        let mut out = Vec::new();
+        write_frame(&mut out, &resp)?;
+        self.replies.extend(out);
+        Ok(())
+    }
+}
+
+impl<S: crate::sink::EffectSink> Read for Loopback<S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = buf.len().min(self.replies.len());
+        for slot in buf.iter_mut().take(n) {
+            *slot = self.replies.pop_front().expect("checked length");
+        }
+        Ok(n)
+    }
+}
+
 /// PS-A-02's fuzz property, in ONE place: the `cargo-fuzz` target and the in-suite corpus replay
 /// both call this function, so there is no second copy to go stale. (A test holding its own copy of
 /// a rule has already gone stale twice in this phase — once for the loader's environment allowlist,
@@ -673,45 +723,6 @@ mod tests {
         assert_eq!(back.version, CHANNEL_VERSION);
     }
 
-    /// An in-process loopback: whatever the guest writes is answered by a real [`HostChannel`], so
-    /// the test exercises both sides and the frames between them, not a mock.
-    struct Loopback {
-        host: HostChannel<crate::sink::LocalSink>,
-        inbox: Vec<u8>,
-        replies: std::collections::VecDeque<u8>,
-    }
-
-    impl Write for Loopback {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.inbox.extend_from_slice(buf);
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            // A whole frame has arrived: answer it exactly as the host would on a socket.
-            let taken = std::mem::take(&mut self.inbox);
-            if taken.is_empty() {
-                return Ok(());
-            }
-            let req: Request = read_frame(&mut &taken[..])?;
-            let resp = self.host.answer(&req);
-            let mut out = Vec::new();
-            write_frame(&mut out, &resp)?;
-            self.replies.extend(out);
-            Ok(())
-        }
-    }
-
-    impl Read for Loopback {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let n = buf.len().min(self.replies.len());
-            for (i, slot) in buf.iter_mut().enumerate().take(n) {
-                *slot = self.replies.pop_front().expect("checked length");
-                let _ = i;
-            }
-            Ok(n)
-        }
-    }
-
     /// The whole round trip: a guest holding nothing but a handle asks for the clock, and the host
     /// performs it with the primitive table it always uses.
     #[test]
@@ -724,7 +735,7 @@ mod tests {
             scope: crate::value::CapScope::Clock,
         }));
         let guest_cap = CapVal { kind: delulu_check::ResourceKind::Clock, scope: crate::value::CapScope::Handle(handle) };
-        let sink = ChannelSink::new(Loopback { host, inbox: Vec::new(), replies: Default::default() });
+        let sink = ChannelSink::new(Loopback::new(host));
 
         let got = sink
             .cap_method(&guest_cap, "now_ms", &[], delulu_diag::Span::new(0, 0, 1))
@@ -741,7 +752,7 @@ mod tests {
         use crate::sink::EffectSink;
         let root = crate::value::RootVal { console: true, ..Default::default() };
         let host = HostChannel::new(crate::sink::LocalSink).with_root(std::rc::Rc::new(root));
-        let sink = ChannelSink::new(Loopback { host, inbox: Vec::new(), replies: Default::default() });
+        let sink = ChannelSink::new(Loopback::new(host));
         // The guest's own root value is empty — it grants nothing and is never consulted.
         let empty_root = crate::value::RootVal::default();
         let span = delulu_diag::Span::new(0, 0, 1);

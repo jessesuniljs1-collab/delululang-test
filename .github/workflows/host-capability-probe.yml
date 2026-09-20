@@ -461,3 +461,93 @@ jobs:
           rm -f "$S"
           DELULU_NO_FIRST_RUN=1 perl -e 'alarm shift; exec @ARGV or exit 127' 20 "$EXE" __guest "$D" > /dev/null 2>&1
           if [ -S "$S" ]; then echo "RESULT real-unconfined-control: PASS"; else echo "RESULT real-unconfined-control: FAIL — the probe itself is wrong"; fi
+
+  # ---- PS-A2 experiment, round two (2026-09-20). Round one answered the big question:
+  #
+  #   RESULT real-reads-everything: PASS rc=142
+  #
+  # The REAL guest — CPython, wasmtime, threads and all — starts and binds its channel under a
+  # DENY-DEFAULT Seatbelt profile, and rc 142 is this probe's own alarm killing it while it waited for
+  # a hello that never comes, which is exactly the shape of success. So the belief that deny-default
+  # aborts a Mach-O binary was wrong; the missing clause was `(allow file-read*)`, and the earlier
+  # exit 134 was measuring an allow list that was too short, not a limit of Seatbelt.
+  #
+  # Round one also found the boundary: narrowing reads to /usr, /System, /Library, /private/etc and
+  # /dev aborts (rc 134) for BOTH the C probe and the real guest, so something outside those is read
+  # during startup. This round finds what, and trims every other allowance to the ones actually
+  # required — because a profile with a clause nobody needs is a profile nobody can reason about.
+  macos-seatbelt-deny-default-narrowing:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: which reads does startup need, and which allowances are load-bearing?
+        continue-on-error: true
+        run: |
+          set +e
+          cargo build -p delulu --bin delulu 2>&1 | tail -3
+          EXE="$PWD/target/debug/delulu"
+          ls -la "$EXE" || { echo "RESULT round2-build: FAIL"; exit 0; }
+          RE=$(cd "$(dirname "$EXE")" && pwd -P)/delulu
+          D="$RUNNER_TEMP/n"; rm -rf "$D"; mkdir -p "$D"
+          RD=$(cd "$D" && pwd -P)
+          S="$D/broker.sock"; RS="$RD/broker.sock"
+          echo "== paths =="; echo "exe=$EXE resolved=$RE dir=$D resolved=$RD"
+
+          # One clause per line, so a rung can drop exactly one of them.
+          C_exec="(allow process-exec (literal \"$EXE\") (literal \"$RE\"))"
+          C_net="(allow network-bind network-outbound (literal \"$S\") (literal \"$RS\"))"
+          C_sockdir="(allow file-read* file-write* (literal \"$S\") (literal \"$RS\") (subpath \"$D\") (subpath \"$RD\"))"
+          C_sockonly="(allow file-read* file-write* (literal \"$S\") (literal \"$RS\"))"
+          C_map="(allow file-map-executable)"
+          C_mach="(allow mach-lookup)"
+          C_sysctl="(allow sysctl-read)"
+          C_self="(allow signal (target self)) (allow process-info* (target self)) (allow ipc-posix-shm)"
+          C_meta="(allow file-read-metadata)"
+          READ_ALL="(allow file-read*)"
+          READ_SYS="(allow file-read* (subpath \"/usr\") (subpath \"/System\") (subpath \"/Library\") (subpath \"/private/etc\") (subpath \"/dev\") (literal \"$EXE\") (literal \"$RE\") (subpath \"$(dirname "$EXE")\"))"
+
+          try() {
+            name="$1"; shift
+            : > "$RUNNER_TEMP/p.sb"
+            printf '(version 1)\n(deny default)\n' >> "$RUNNER_TEMP/p.sb"
+            for c in "$@"; do printf '%s\n' "$c" >> "$RUNNER_TEMP/p.sb"; done
+            rm -f "$S"
+            # The socket file is the evidence: it exists only if the binary loaded, ran and bound.
+            # macOS has no GNU `timeout`; perl's alarm survives the exec, so the sandboxed process is
+            # the one that receives the signal.
+            DELULU_NO_FIRST_RUN=1 perl -e 'alarm shift; exec @ARGV or exit 127' 15 \
+              sandbox-exec -f "$RUNNER_TEMP/p.sb" "$EXE" __guest "$D" > /dev/null 2> "$RUNNER_TEMP/e.txt"
+            rc=$?
+            if [ -S "$S" ]; then echo "RESULT $name: PASS rc=$rc"; else echo "RESULT $name: FAIL rc=$rc err=$(tr '\n' '|' < "$RUNNER_TEMP/e.txt" | head -c 200)"; fi
+          }
+
+          # The profile round one proved works, as the baseline every rung below is compared against.
+          WORKS="$C_exec|$C_net|$C_sockdir|$C_map|$C_mach|$C_sysctl|$C_self|$C_meta|$READ_ALL"
+          try "baseline-known-good" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+
+          # 1. Do writes need the channel DIRECTORY, or only the socket file?
+          try "writes-socket-only" "$C_exec" "$C_net" "$C_sockonly" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+
+          # 2. Which extra read roots make the narrowed form work?
+          try "reads-system-only" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_SYS"
+          try "reads-plus-var-db" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_SYS" '(allow file-read* (subpath "/private/var/db"))'
+          try "reads-plus-var-db-and-folders" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_SYS" '(allow file-read* (subpath "/private/var/db") (subpath "/private/var/folders"))'
+          try "reads-plus-var-and-opt-and-cores" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_SYS" '(allow file-read* (subpath "/private/var") (subpath "/opt") (subpath "/Applications/Xcode.app") (subpath "/private/tmp"))'
+
+          # 3. Trim: drop ONE allowance from the known-good profile at a time. A rung that still
+          #    PASSES names a clause the profile does not need and should not carry.
+          try "trim-no-map" "$C_exec" "$C_net" "$C_sockdir" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+          try "trim-no-mach" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+          try "trim-no-sysctl" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_self" "$C_meta" "$READ_ALL"
+          try "trim-no-self" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_meta" "$READ_ALL"
+          try "trim-no-meta" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$READ_ALL"
+          try "trim-no-exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+
+          # 4. The negative controls, without which every PASS above could be the profile doing
+          #    nothing at all: a profile that denies the socket must FAIL, and one that denies reads
+          #    must FAIL. If either passes, `sandbox-exec` is not applying this profile.
+          try "control-no-socket-rules" "$C_exec" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
+          try "control-no-reads" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta"
+          echo "== the last profile written =="; cat "$RUNNER_TEMP/p.sb"

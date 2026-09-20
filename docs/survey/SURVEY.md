@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 238 |
-| Rust lines | 120083 |
+| Rust lines | 120225 |
 | Rust files outside `src/` (test/bench targets) | 101 |
 | Markdown documents | 186 |
 | Markdown lines | 52229 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1172 / 10775 |
+| Nodes / edges in this map | 1172 / 10788 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -64,6 +64,7 @@ graph TD
   delulu_conform["delulu-conform"] --> delulu_diag["delulu-diag"]
   delulu_conform["delulu-conform"] --> delulu_syntax["delulu-syntax"]
   delulu_fuzz["delulu-fuzz"] --> delulu_check["delulu-check"]
+  delulu_fuzz["delulu-fuzz"] --> delulu_diag["delulu-diag"]
   delulu_fuzz["delulu-fuzz"] --> delulu_runtime["delulu-runtime"]
   delulu_fuzz_targets["delulu-fuzz-targets"] --> delulu_runtime["delulu-runtime"]
   delulu_registry["delulu-registry"] --> delulu_runtime["delulu-runtime"]
@@ -208,7 +209,7 @@ The DeluluLang conformance coverage law (invariant 42): delulu-conform --coverag
 DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed repairs, human renderer
 
 - **Depends on:** —
-- **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
+- **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
 - **Modules:** 9 files, 3722 lines
 
 | Module | Lines | What it is |
@@ -227,14 +228,14 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 DeluluLang differential fuzz harness: generate programs, check them, and assert the runtime trace is a subset of the statically computed row (the Effect-Soundness theorem, fuzzed)
 
-- **Depends on:** `delulu-check`, `delulu-runtime`
+- **Depends on:** `delulu-check`, `delulu-diag`, `delulu-runtime`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 3 files, 624 lines
+- **Modules:** 3 files, 755 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/danger.rs` | 276 | The danger-zone generator (campaign P17-D). |
-| `src/lib.rs` | 301 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
+| `src/lib.rs` | 432 | The DeluluLang differential fuzz harness (Stage 2, §7.2). |
 | `src/main.rs` | 47 | `delulu-fuzz [iterations] [seed]` — run a differential fuzz campaign (spec §7.2). Default is |
 
 ### `delulu-measure`
@@ -275,14 +276,14 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14495 lines
+- **Modules:** 19 files, 14506 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1159 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 427 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 912 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
+| `src/channel.rs` | 923 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 255 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |

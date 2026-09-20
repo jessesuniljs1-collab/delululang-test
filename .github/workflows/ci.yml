@@ -120,7 +120,7 @@ jobs:
       # P17-D: generated programs, not examples. The grammar now contains the shapes that
       # historically broke the language (generics reaching higher-order builtins, closures
       # carrying rows, the Secret.map+verify oracle) — see crates/delulu-fuzz/src/danger.rs.
-      - name: Effect-soundness fuzz campaign (trace ⊆ row)
+      - name: Effect-soundness fuzz campaign (trace ⊆ row, locally AND as a sandbox guest)
         run: cargo run -q -p delulu-fuzz -- 50000 20260804
 
   # ---- ARM64 -------------------------------------------------------------------------------
