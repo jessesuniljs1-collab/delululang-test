@@ -1576,6 +1576,10 @@ impl Interp {
         let mut custody = self.custody.borrow_mut();
         match crate::plugin::load_verified(&art, &grant, &mut **custody) {
             Ok(crate::plugin::LoadedPlugin::Verified { grant_id, authority, verified, signer }) => {
+                // Drop the custody borrow before tracing: `trace_load` takes `&self`, and holding a
+                // `RefCell` borrow across an unrelated call is how a re-entrant path panics later.
+                drop(custody);
+                self.trace_load(&name, grant_id.as_str(), span);
                 Ok(Value::ok(Value::Plugin(Rc::new(LoadedHandle {
                     grant_id,
                     authority,
@@ -1730,6 +1734,30 @@ impl Interp {
             op: method.to_string(),
             cap_kind: lib.to_string(),
             detail: Some(format!("{lib}.{method}")),
+            span: Some((span.file, span.start, span.end)),
+            ..self.trace_attrib_record()
+        });
+    }
+
+    /// P2-07: the `Load` trace record — code arrived after compile time, and the trace says so.
+    ///
+    /// `Load` is deliberately absent from `trace::effect_for`, which maps (capability kind, method)
+    /// pairs: a load is not a method on a capability, it is a free call handled in the interpreter, so
+    /// it appends its own record exactly as `ForeignCall` does. The `detail` carries the loaded NODE
+    /// ID, because that is what a reader needs in order to follow the plugin through the audit chain
+    /// and to revoke it — a record saying only "a plugin loaded" answers nothing.
+    ///
+    /// Appended AFTER the sequence succeeds, and only then: a refused load performed nothing, and a
+    /// trace record for it would say code arrived when none did. The refusal is already a value the
+    /// program can see and a `channel-violation`-style fact the audit chain carries.
+    fn trace_load(&self, plugin: &str, node: &str, span: delulu_diag::Span) {
+        let Some(sink) = &self.trace else { return };
+        sink.push(TraceRecord {
+            seq: self.next_trace_seq(),
+            effect: "Load".to_string(),
+            op: "load".to_string(),
+            cap_kind: "PluginHost".to_string(),
+            detail: Some(format!("{plugin} @ {node}")),
             span: Some((span.file, span.start, span.end)),
             ..self.trace_attrib_record()
         });

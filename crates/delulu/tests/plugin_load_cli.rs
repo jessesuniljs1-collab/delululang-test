@@ -336,8 +336,17 @@ fn the_load_appears_in_the_effect_trace() {
     assert_eq!(o.status.code(), Some(0), "{}", out(&o));
     let trace = std::fs::read_to_string(dir.join("t.json")).expect("the trace is written");
     assert!(trace.contains("Write"), "the console write is traced: {trace}");
-    // The program is `!{Write, Load, Read}` and `--assert-trace` would catch a traced effect outside
-    // that row; what this asserts is that the trace exists and carries the run's effects at all.
+    // The LOAD itself, which is the point of this test and which it did not check when it was first
+    // written: `Load` is absent from `trace::effect_for` (that table maps capability METHODS, and a
+    // load is a free call), so the record is appended by the interpreter or it does not exist. The
+    // test name said "the load appears in the trace" while asserting only that the console write did.
+    assert!(
+        trace.contains("\"effect\":\"Load\"") || trace.contains("\"Load\""),
+        "the load must appear in the trace — code arriving after compile time is the one effect an          auditor most needs to see: {trace}"
+    );
+    // And the loaded NODE ID with it, because a record saying only "a plugin loaded" cannot be
+    // followed into the audit chain or revoked.
+    assert!(trace.contains("g_"), "the record must carry the loaded grant node id: {trace}");
     let asserted = delulu_in(
         &dir,
         &["run", "host.delulu", "--grant", "console", "--grant", "plugin=.", "--trace-effects", "--assert-trace"],

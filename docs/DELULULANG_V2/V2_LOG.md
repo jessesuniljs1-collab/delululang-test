@@ -230,3 +230,90 @@ commits, each with its CI run read to green before the next started.
 job — Windows, Linux, macOS, arm64, clippy, `cargo deny`, the editor artifact, the formal models, Miri
 on atlas/diag/FFI, and the new coverage-guided `fuzz` job. Phase 3 is complete; phase 4 is P2, real
 plugin loading, which asks D-NE-10 at its start.
+
+## P2 — 2026-09-20 — a running program loads a plugin (NE-01 closed)
+
+`prim.rs` said *"plugin hosting is not available in the Stage-1 runtime"* and that one line was the
+whole of NE-01. Everything around the load existed — the `.dpx`, two classes, signing, the DIR replay,
+`plugin verify` giving real verdicts — and nothing could load one. `examples/plugin_shout/README.md`
+said so out loud: "there is no host program in this directory to run."
+
+    $ cd examples/plugin_shout && delulu plugin build . && \
+      delulu run host.delulu --grant console --grant plugin=.
+    hello!
+
+**The grant, both spellings (D-V2-27).** `--grant plugin=<path-or-dir>` is the operator's half;
+`[plugins] allow = ["blake3:…"]` in `delulu.toml` is the package's, and it is a CEILING — it says which
+artifacts may load, never what they may do. `accept_manifest` does not touch it, so `--grant-manifest`
+cannot confer loading (the `exec.native` argument: a package cannot grant itself the right to load
+code), and it applies whether or not `--grant-manifest` was passed, because a restriction an operator
+can drop by accident is not a restriction.
+
+**Where, then which, then the sequence.** The path resolves inside the granted roots through the same
+containment `fs.*` uses, so `..`, a symlink spelling or a case difference cannot reach an artifact the
+operator did not permit. Then the blake3 of the bytes IN HAND must be on the pinned list — on the bytes,
+because a path is not a name for bytes and a `.dpx` swapped between `verify` and `load` is the TOCTOU
+case. Then `load_verified` steps 1–6, the same functions `plugin verify` calls, so the two cannot
+disagree. Every refusal is a `PluginErr` VALUE a host can decide about.
+
+**A Verified plugin executes its DIR**, and the container format settles that rather than a preference:
+§3.2 calls `delulu:wasm` a compilation cache, "recompiled from DIR when invalid — never an error". The
+DIR is the canonical, content-bound form `step5_verified` has just replayed the whole Stage-1 judgment
+over, so running it needs no second lowering to trust, and the plugin's effects go through the same
+primitive table and the same trace as the host's. The export runs in its own interpreter over the
+plugin's module, because injecting its functions into the host's table would make a bare name inside the
+plugin resolve against the HOST's functions.
+
+**Revocation kills a callable the host already holds** (R-6c), checked per call rather than per `get`.
+The reference binds the load-time GrantId, so a reload mints a fresh node and an old callable stays dead.
+
+**The load is evidence.** A `Load` trace record carries the loaded node id, so a reader can follow the
+plugin into the audit chain and revoke it. `Load` is absent from `trace::effect_for` on purpose — that
+table maps capability METHODS and a load is a free call — so the record is appended by the interpreter.
+The test that asserts this had a name that over-claimed for one commit: it said the load appears in the
+trace while checking only that the console write did. Both are checked now, and the record is falsified
+by mutant.
+
+### Refused rather than ignored, each with its reason in the refusal
+
+- **Non-zero `Grant.limits`.** Fuel, memory and wall clock are the WASM engine's instruments; a Verified
+  plugin runs on the interpreter, which has no fuel meter and no preemption. A limit nothing enforces is
+  worse than no limit, because it reads as one. Zeros mean "none requested" and still load.
+- **`Declassify` or `ForeignCall` in a plugin grant.** Their enforcement lives in custody, and a
+  plugin's export runs in its own interpreter which cannot share the host's. A fresh embedded custody
+  always allows, so letting these through would move a broker decision into one.
+- **The `Contained` class on Windows**, unchanged.
+
+### The defect P2 surfaced, which was older than P2
+
+`deps.rs` built the prelude's name→id index BY HAND with two of the seven entries — `IoErr` and
+`NetErr` — directly beneath its own comment: *"all three refuse identically — a rule that holds on two
+paths out of three holds nowhere."* So on the dependency-graph path `PyErr`, `ForeignErr`, `Limits`,
+`Grant` and `PluginErr` were absent from every module's table, and the moment a program had reason to
+write `Grant`, the checker PANICKED on `delulu check <package>`. Both halves fixed: the index is derived
+from what `push_prelude` pushed, in all three paths, so the class of defect is gone rather than the
+instance — and the indexing is gone too, because a missing prelude type is a checker defect and a defect
+must be a diagnostic.
+
+### The Survey found what grep could not
+
+`grep` for "runtime stub" found five files. `rdeps` found two more that described the same gap in their
+own words: `REMAINING_WORK.md` row 4.11 — the row that OWNS it — and `STAGE6_PLUGINS_GUIDE.md`'s opening
+box. Row 4.11 is closed with what is still refused kept IN the row rather than deleted with it.
+
+### Evidence
+
+Windows suite 1,763/0; the plugin and example gates green on Linux too; sweep 38/38; doctor 28/28;
+Survey 1174 nodes, 10814 edges, 0 errors. `plugin_load_cli.rs` has 11 cases, each paired with the
+control that shows the same program succeeding once the refusal's cause is removed, and six gates
+falsified by mutant (path containment, the hash ceiling, per-call liveness, the custody dimensions, the
+limits refusal, the trace record). The core-invariance snapshot gained **five NEW cases, zero CHANGED,
+zero GONE** — the checker change altered no recorded answer (D-NE-3's reviewed diff).
+
+### Open, and deliberately
+
+- The **daemon** holder-check path shares `step4_holder` with embedded and is exercised by the same
+  code, but has no daemon-mode test of its own (P2-04's "`guard_e2e`-style" half). It needs a running
+  broker, which is PS-B's territory.
+- **`Contained`-class execution** — an opaque module on the WASM engine, with fuel — is where
+  `Grant.limits` belong and where `kill_on_limit` already waits. Not P2.
