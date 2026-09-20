@@ -225,3 +225,8 @@ Windows suite 1,748/0; the sandbox test binaries green on Linux too; sweep 38/38
 Survey 1172 nodes, 10796 edges, 0 errors, 2 known warnings; the 50,000-program fuzz campaign SOUND with
 every accepted program run twice, locally and as a guest; the `fuzz` CI job green on every push. Eleven
 commits, each with its CI run read to green before the next started.
+
+**PS-A's verification gate passed.** Closing commit `31643fe`, CI run `35492572666`: success on every
+job — Windows, Linux, macOS, arm64, clippy, `cargo deny`, the editor artifact, the formal models, Miri
+on atlas/diag/FFI, and the new coverage-guided `fuzz` job. Phase 3 is complete; phase 4 is P2, real
+plugin loading, which asks D-NE-10 at its start.
