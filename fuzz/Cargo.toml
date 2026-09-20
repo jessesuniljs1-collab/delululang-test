@@ -1,0 +1,42 @@
+# PS-A-02's `cargo-fuzz` targets.
+#
+# A separate workspace on purpose (`[workspace]` below): `cargo fuzz` builds with a sanitizer and a
+# nightly-only flag set, and the repository's toolchain is pinned to a stable release. Making this a
+# member of the main workspace would drag that configuration into every ordinary build.
+#
+# What is fuzzed here is the CHANNEL, because it is the one decoder that reads bytes from a peer the
+# host has deliberately assumed is compromised. The property itself lives in
+# `delulu-runtime::channel::fuzz_one_frame`, not here, so the in-suite corpus replay and this target
+# can never drift apart — a rule with two copies has gone stale twice in this phase already.
+#
+# Run it (needs a nightly toolchain and `cargo install cargo-fuzz`):
+#
+#     cd fuzz && cargo +nightly fuzz run channel_frame -- -max_total_time=60
+#
+# A crash is written to `fuzz/artifacts/`; replay it with `cargo +nightly fuzz run channel_frame
+# artifacts/channel_frame/<file>`.
+[package]
+name = "delulu-fuzz-targets"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# `default-features = false` for the same reason the `delulu` binary asks for it: the default feature
+# set pulls in the embedded interpreter's optional halves, and the channel needs none of them.
+delulu-runtime = { path = "../crates/delulu-runtime", default-features = false }
+
+[[bin]]
+name = "channel_frame"
+path = "fuzz_targets/channel_frame.rs"
+test = false
+doc = false
+bench = false
+
+# Its own workspace, so the pinned stable toolchain and the sanitizer build stay apart.
+[workspace]
+members = ["."]

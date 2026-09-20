@@ -516,6 +516,81 @@ impl<T: Read + Write> crate::sink::EffectSink for ChannelSink<T> {
     }
 }
 
+/// PS-A-02's fuzz property, in ONE place: the `cargo-fuzz` target and the in-suite corpus replay
+/// both call this function, so there is no second copy to go stale. (A test holding its own copy of
+/// a rule has already gone stale twice in this phase — once for the loader's environment allowlist,
+/// once for a per-platform jail report.)
+///
+/// These bytes are the most hostile input in the whole system. They arrive from a guest the host has
+/// deliberately assumed is compromised, and the host reads them before it knows anything about them.
+/// Three claims are checked on every input:
+///
+/// 1. **No panic and no unbounded allocation.** Every byte string is a refusal or a value. A panic
+///    in the host's reader would be a guest crashing its host, which is a denial of service the
+///    guest is not supposed to be able to cause.
+/// 2. **Re-encoding is byte-stable.** Whatever decodes must encode back to bytes that decode to the
+///    same thing and encode again identically. A frame the host acts on must mean exactly one thing:
+///    two spellings of one request is the shape that produced GUARD-SPELL-1 and the `net.special`
+///    finding, one layer down. (Byte equality rather than value equality, deliberately: `WireValue`
+///    carries an `f64`, and a NaN is not equal to itself, so value equality would be a weaker claim
+///    dressed as a stronger one.)
+/// 3. **An empty host grants nothing.** The decoded request is answered by a [`HostChannel`] that
+///    holds no root and has minted no handle, and the answer must never be `Ok` — except for `Done`,
+///    which performs nothing. This is the arrangement's central claim, checked against arbitrary
+///    frames rather than the ones the tests thought to write: whatever a guest sends, it cannot make
+///    a host that holds nothing perform something.
+pub fn fuzz_one_frame(data: &[u8]) {
+    // The framing rule first, on the raw bytes, exactly as the wire delivers them. A length beyond
+    // the bound must be refused before the body is touched.
+    let _ = read_frame::<Request>(&mut &data[..]);
+
+    // Then the BODY decoder, given a correct prefix, because that is the decoder a guest actually
+    // reaches once it has framed its frame. Fuzzing the prefix alone would spend every iteration in
+    // the length check and never reach the CBOR.
+    if data.len() > u32::MAX as usize {
+        return;
+    }
+    let mut framed = Vec::with_capacity(4 + data.len());
+    framed.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    framed.extend_from_slice(data);
+
+    // Every type that crosses this channel, in both directions.
+    if let Ok(v) = read_frame::<WireValue>(&mut &framed[..]) {
+        stable(&v);
+    }
+    if let Ok(h) = read_frame::<Hello>(&mut &framed[..]) {
+        stable(&h);
+    }
+    if let Ok(r) = read_frame::<Response>(&mut &framed[..]) {
+        stable(&r);
+    }
+    if let Ok(req) = read_frame::<Request>(&mut &framed[..]) {
+        stable(&req);
+        let performs_nothing = matches!(req.body, ReqBody::Done { .. });
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        match host.answer(&req) {
+            Response::Ok(_) => assert!(
+                performs_nothing,
+                "a host holding no root and no handle answered `Ok` to {req:?} — a guest that sends \
+                 the right bytes must still not be able to make an empty host do anything"
+            ),
+            Response::Fault { .. } | Response::Error { .. } => {}
+        }
+    }
+}
+
+/// Encoding is idempotent: encode, decode, encode again, same bytes.
+fn stable<T: Serialize + for<'de> Deserialize<'de>>(v: &T) {
+    let mut once = Vec::new();
+    // A value that decoded from a frame is within the bound by construction, so a write failure here
+    // is a real inconsistency and not a case to skip.
+    write_frame(&mut once, v).expect("a value that decoded must re-encode");
+    let again: T = read_frame(&mut &once[..]).expect("a re-encoded value must decode");
+    let mut twice = Vec::new();
+    write_frame(&mut twice, &again).expect("and re-encode again");
+    assert_eq!(once, twice, "this frame has two spellings, so it does not mean exactly one thing");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,17 +826,73 @@ mod tests {
             state ^= state << 17;
             state
         };
-        for _ in 0..10_000 {
-            let len = (next() % 64) as usize;
-            let mut bytes: Vec<u8> = (0..len).map(|_| (next() & 0xff) as u8).collect();
-            // Half the cases get a plausible length prefix, so the body is what is under test.
-            if next() % 2 == 0 && bytes.len() >= 4 {
-                let body = (bytes.len() - 4) as u32;
-                bytes[..4].copy_from_slice(&body.to_le_bytes());
-            }
-            // The contract: a value or an error, never a panic and never an unbounded allocation.
-            let _ = read_frame::<Request>(&mut &bytes[..]);
-            let _ = read_frame::<WireValue>(&mut &bytes[..]);
+        for i in 0..20_000u32 {
+            // A third of the corpus is noise, a third is a VALID frame, and a third is a valid frame
+            // with one byte corrupted. Noise alone almost never decodes, so a property about what
+            // the host does with a frame it accepted would never be reached — which is how a fuzz
+            // test comes to exercise only its own length check. The valid third is generated from
+            // the types themselves, so it follows them when they change.
+            let body = match i % 3 {
+                0 => (0..(next() % 64) as usize).map(|_| (next() & 0xff) as u8).collect::<Vec<u8>>(),
+                _ => {
+                    let mut buf = Vec::new();
+                    let req = Request {
+                        version: if next().is_multiple_of(8) { "wrong/1".into() } else { CHANNEL_VERSION.into() },
+                        seq: next(),
+                        body: match next() % 3 {
+                            0 => ReqBody::Done { exit: (next() % 8) as i32 },
+                            1 => ReqBody::RootMethod {
+                                method: ["console", "fs_read", "fs_write", "clock", "nope"][(next() % 5) as usize].into(),
+                                args: vec![random_wire(&mut next, 2)],
+                                file: 0,
+                                start: 0,
+                                end: 1,
+                            },
+                            _ => ReqBody::CapMethod {
+                                // Handles the host never minted, 0 among them: every one must be refused.
+                                cap: next() % 5,
+                                method: ["print", "read_text", "write_text", "now_ms"][(next() % 4) as usize].into(),
+                                args: vec![random_wire(&mut next, 2)],
+                                file: 0,
+                                start: 0,
+                                end: 1,
+                            },
+                        },
+                    };
+                    write_frame(&mut buf, &req).expect("the generated request encodes");
+                    // Drop the length prefix: `fuzz_one_frame` adds its own, and the body is the part
+                    // worth mutating.
+                    let mut b = buf[4..].to_vec();
+                    if i % 3 == 2 && !b.is_empty() {
+                        let at = (next() as usize) % b.len();
+                        b[at] ^= (next() & 0xff) as u8;
+                    }
+                    b
+                }
+            };
+            // The same property the `cargo-fuzz` target runs, so the two can never disagree.
+            crate::channel::fuzz_one_frame(&body);
+        }
+    }
+
+    /// A small arbitrary `WireValue`, bounded in depth so the generator cannot run away.
+    fn random_wire(next: &mut impl FnMut() -> u64, depth: u32) -> WireValue {
+        match next() % if depth == 0 { 6 } else { 9 } {
+            0 => WireValue::Unit,
+            1 => WireValue::Bool(next().is_multiple_of(2)),
+            2 => WireValue::Int(next() as i64),
+            3 => WireValue::Float(f64::from_bits(next())),
+            4 => WireValue::Str("s".repeat((next() % 4) as usize)),
+            5 => WireValue::Cap { handle: next() % 5, kind: "Console".into() },
+            6 => WireValue::List((0..next() % 3).map(|_| random_wire(next, depth - 1)).collect()),
+            7 => WireValue::Record {
+                name: "R".into(),
+                fields: (0..next() % 3).map(|_| ("f".to_string(), random_wire(next, depth - 1))).collect(),
+            },
+            _ => WireValue::Variant {
+                name: "V".into(),
+                fields: (0..next() % 3).map(|_| random_wire(next, depth - 1)).collect(),
+            },
         }
     }
 

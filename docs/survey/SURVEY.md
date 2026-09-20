@@ -20,19 +20,20 @@ files, so it still opens when the tree does not build.
 | | |
 |---|---:|
 | Workspace members | 13 |
+| … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 237 |
-| Rust lines | 119888 |
-| Rust files outside `src/` (test/bench targets) | 100 |
+| Rust files | 238 |
+| Rust lines | 120083 |
+| Rust files outside `src/` (test/bench targets) | 101 |
 | Markdown documents | 186 |
-| Markdown lines | 52223 |
+| Markdown lines | 52229 |
 | DeluluLang programs | 154 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1167 / 10772 |
-| Open discrepancies | 27 |
+| Nodes / edges in this map | 1172 / 10775 |
+| Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -64,6 +65,7 @@ graph TD
   delulu_conform["delulu-conform"] --> delulu_syntax["delulu-syntax"]
   delulu_fuzz["delulu-fuzz"] --> delulu_check["delulu-check"]
   delulu_fuzz["delulu-fuzz"] --> delulu_runtime["delulu-runtime"]
+  delulu_fuzz_targets["delulu-fuzz-targets"] --> delulu_runtime["delulu-runtime"]
   delulu_registry["delulu-registry"] --> delulu_runtime["delulu-runtime"]
   delulu_runtime["delulu-runtime"] --> delulu_broker["delulu-broker"]
   delulu_runtime["delulu-runtime"] --> delulu_check["delulu-check"]
@@ -272,15 +274,15 @@ The DeluluLang package registry (Stage 9): sparse index, publish API, server-sid
 DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking interpreter
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
-- **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 19 files, 14364 lines
+- **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
+- **Modules:** 19 files, 14495 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1159 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 427 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 781 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
+| `src/channel.rs` | 912 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 255 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |
@@ -303,20 +305,20 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 4404 lines
+- **Modules:** 11 files, 4457 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 652 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/lib.rs` | 659 | The Survey — a measured map of the DeluluLang **repository**. |
 | `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
-| `src/manifest.rs` | 242 | Cargo manifests — the ground truth for "which crate depends on which". |
+| `src/manifest.rs` | 274 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 541 | Reading Markdown. |
 | `src/paths.rs` | 345 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |
-| `src/render.rs` | 279 | The three channels the Survey publishes on. |
+| `src/render.rs` | 292 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 485 | Reading Rust source as text. |
-| `src/scan.rs` | 214 | Walking the tree and deciding what each file *is*. |
+| `src/scan.rs` | 215 | Walking the tree and deciding what each file *is*. |
 | `src/verify.rs` | 632 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`

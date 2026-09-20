@@ -318,6 +318,39 @@ jobs:
           MIRIFLAGS: -Zmiri-disable-isolation
         run: cargo +nightly miri test --lib -p delulu-runtime -- foreign::tests
 
+
+  # ---- Coverage-guided fuzzing of the channel -----------------------------------------------
+  # `MATHEMATICS.md` category 6 said "fuzz verified: partial — cargo-fuzz targets are installed but
+  # not yet written". This is the first one written, and it is aimed at the decoder that reads bytes
+  # from a peer the host has deliberately assumed is compromised: the sandbox channel.
+  #
+  # The property is NOT in the target. It lives in `delulu-runtime::channel::fuzz_one_frame`, which
+  # the ordinary workspace suite also calls over a seeded structure-aware corpus on every commit. So
+  # this job is coverage-guided depth on top of a gate that already runs per push, rather than the
+  # only place the rule exists — the arrangement that kept two stale copies of a rule out of PS-A.
+  #
+  # Bounded on purpose: a minute of fuzzing per push finds shallow regressions quickly, and the
+  # nightly can be pointed at it for longer when there is something to look for.
+  fuzz:
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "fuzz" }
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: The channel frame target — one minute, coverage-guided
+        working-directory: fuzz
+        # `+nightly` explicitly: rust-toolchain.toml pins stable and OUTRANKS the toolchain the
+        # action installed, which is how the very first Miri job on this repository went red.
+        run: cargo +nightly fuzz run channel_frame -- -max_total_time=60 -rss_limit_mb=4096
+      - name: Any crash the run found, for reading
+        if: failure()
+        run: ls -la artifacts/channel_frame 2>/dev/null && for f in artifacts/channel_frame/*; do echo "== $f =="; xxd "$f" | head -20; done
+
   # ---- Editor surface ----------------------------------------------------------------------
   # The VS Code extension shipped for the life of the project with a command-injection hole (the
   # run lens interpolated the open file's path into a shell command STRING), a code lens the client

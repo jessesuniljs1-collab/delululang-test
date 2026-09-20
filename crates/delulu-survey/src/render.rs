@@ -70,6 +70,19 @@ pub fn markdown(s: &Survey) -> String {
     // --- facts ---------------------------------------------------------------------------------
     o.push_str("## Measured facts\n\n| | |\n|---|---:|\n");
     let _ = writeln!(o, "| Workspace members | {} |", f.crates);
+    // Named, not hidden: a crate in this repository that is its own workspace is still a crate
+    // here, and a map that silently dropped it would be the kind of omission the provenance law
+    // above exists to prevent.
+    let separate: Vec<&str> =
+        s.nodes.iter().filter(|n| n.kind == NodeKind::SeparateWorkspaceCrate).map(|n| crate_name(&n.id)).collect();
+    if !separate.is_empty() {
+        let _ = writeln!(
+            o,
+            "| … plus crates that are their OWN workspace (not members) | {} — {} |",
+            separate.len(),
+            separate.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ")
+        );
+    }
     let _ = writeln!(o, "| … shipped language crates | {} |", f.crates_shipped);
     let _ = writeln!(o, "| … repository tooling (`publish = false`) | {} |", f.crates - f.crates_shipped);
     let _ = writeln!(o, "| Rust files | {} |", f.rust_files);

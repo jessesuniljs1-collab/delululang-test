@@ -385,7 +385,11 @@ jobs:
             name="$1"; rules="$2"; exe="$3"; shift 3
             printf '(version 1)\n(deny default)\n%s\n%s\n' "$R0" "$rules" > "$RUNNER_TEMP/p.sb"
             rm -f "$S"
-            timeout 20 sandbox-exec -f "$RUNNER_TEMP/p.sb" "$exe" "$@" > "$RUNNER_TEMP/o.txt" 2> "$RUNNER_TEMP/e.txt"
+            # macOS ships no GNU `timeout`; perl's alarm survives the exec, so the SANDBOXED
+            # process is the one that receives the signal. (The first run of this experiment
+            # reported every rung FAIL rc=127 — `timeout: command not found`. The control line said
+            # "the probe itself is wrong", which is what a control is for.)
+            perl -e 'alarm shift; exec @ARGV or exit 127' 20 sandbox-exec -f "$RUNNER_TEMP/p.sb" "$exe" "$@" > "$RUNNER_TEMP/o.txt" 2> "$RUNNER_TEMP/e.txt"
             rc=$?
             if [ -S "$S" ]; then
               echo "RESULT $name: PASS rc=$rc"
@@ -442,7 +446,7 @@ jobs:
             rm -f "$S"
             # The guest binds its channel and then waits for a hello it will never get, so the SOCKET
             # is the evidence: if it exists, the binary loaded, ran and bound under this profile.
-            DELULU_NO_FIRST_RUN=1 timeout 20 sandbox-exec -f "$RUNNER_TEMP/r.sb" "$EXE" __guest "$D" > "$RUNNER_TEMP/ro.txt" 2> "$RUNNER_TEMP/re.txt"
+            DELULU_NO_FIRST_RUN=1 perl -e 'alarm shift; exec @ARGV or exit 127' 20 sandbox-exec -f "$RUNNER_TEMP/r.sb" "$EXE" __guest "$D" > "$RUNNER_TEMP/ro.txt" 2> "$RUNNER_TEMP/re.txt"
             rc=$?
             if [ -S "$S" ]; then
               echo "RESULT $name: PASS rc=$rc"
@@ -455,5 +459,5 @@ jobs:
           # The CONTROL, without which a PASS above proves nothing about the profile: the same guest,
           # no profile at all, must bind.
           rm -f "$S"
-          DELULU_NO_FIRST_RUN=1 timeout 20 "$EXE" __guest "$D" > /dev/null 2>&1
+          DELULU_NO_FIRST_RUN=1 perl -e 'alarm shift; exec @ARGV or exit 127' 20 "$EXE" __guest "$D" > /dev/null 2>&1
           if [ -S "$S" ]; then echo "RESULT real-unconfined-control: PASS"; else echo "RESULT real-unconfined-control: FAIL — the probe itself is wrong"; fi

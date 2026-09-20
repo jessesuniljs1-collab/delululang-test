@@ -117,6 +117,13 @@ pub const ARCHIVE_ROOT: &str = "docs/archive/v1";
 pub enum NodeKind {
     /// A Rust workspace member.
     Crate,
+    /// A crate that lives in this repository but is its OWN Cargo workspace, so it is not a member
+    /// of the root one (`fuzz/`, whose sanitizer build must not reach an ordinary `cargo build`).
+    /// It gets its own kind rather than being counted as a member, because every "N workspace
+    /// members" sentence in the documentation would otherwise become wrong the moment such a crate
+    /// is added — which is exactly what happened when `fuzz/` landed and the stale-count gate said
+    /// the tree held fourteen.
+    SeparateWorkspaceCrate,
     /// A third-party crate this workspace depends on.
     ExternalCrate,
     /// A Rust source file inside a crate's `src/`.

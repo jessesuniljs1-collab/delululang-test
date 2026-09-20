@@ -101,7 +101,17 @@ pub fn extract(f: &ScannedFile, b: &mut Builder) {
         depth += bracket_delta(t);
     }
 
-    let n = b.node(&crate_id, NodeKind::Crate, &name);
+    // A manifest with its own `[workspace]` table is a separate workspace, not a member of the root
+    // one. `fuzz/` is one: `cargo fuzz` builds nightly-only with a sanitizer, and dragging that
+    // configuration into the pinned-stable workspace is exactly what the separate table prevents.
+    // Counting it as a member would have made every "13 workspace members" sentence in the
+    // documentation wrong, which is how this was noticed at all — the stale-count gate fired.
+    let kind = if f.text.lines().any(|l| l.trim() == "[workspace]") {
+        NodeKind::SeparateWorkspaceCrate
+    } else {
+        NodeKind::Crate
+    };
+    let n = b.node(&crate_id, kind, &name);
     n.path = Some(crate_dir.to_string());
     if !description.is_empty() {
         n.summary = Some(description);
@@ -198,6 +208,28 @@ mod tests {
             crate_name: None,
             text: text.to_string(),
         }
+    }
+
+    /// A crate with its own `[workspace]` table is NOT a member of the root one, and must not be
+    /// counted as one. `fuzz/` is the case: the sanitizer build it needs is the reason it has its own
+    /// table, and counting it made the stale-count gate report fourteen workspace members where the
+    /// root manifest lists thirteen — every "13 crates" sentence in the documentation would have
+    /// become wrong because a fuzz target was added.
+    ///
+    /// The control is the second half: an ordinary manifest must still be a member, or this rule
+    /// would be excluding everything and passing for it.
+    #[test]
+    fn a_crate_with_its_own_workspace_table_is_not_a_member() {
+        let at = |rel: &str, text: &str| {
+            let mut f = manifest(text);
+            f.rel = rel.to_string();
+            f
+        };
+        let mut b = Builder::default();
+        extract(&at("fuzz/Cargo.toml", "[package]\nname = \"f\"\n\n[workspace]\nmembers = [\".\"]\n"), &mut b);
+        extract(&at("crates/delulu-diag/Cargo.toml", "[package]\nname = \"delulu-diag\"\n"), &mut b);
+        assert_eq!(b.nodes["crate:f"].kind, NodeKind::SeparateWorkspaceCrate, "a separate workspace was counted as a member");
+        assert_eq!(b.nodes["crate:delulu-diag"].kind, NodeKind::Crate, "an ordinary crate stopped being a member");
     }
 
     /// The self-inflicted one: a `#` comment inside `members` was read as three more crates, and

@@ -272,6 +272,12 @@ DeluluLang/
 │                                   #   exit code. It was performed by hand every pass before
 │                                   #   this, which is the drift design rule 1 warns about. The
 │                                   #   script COUNTS its own cases — read the tail, not this line.
+├── fuzz/                           # [PS-A-02] the cargo-fuzz targets. Its OWN workspace, because
+│                                   #   `cargo fuzz` builds nightly-only with a sanitizer and the
+│                                   #   repository's toolchain is pinned to stable. The PROPERTY is
+│                                   #   not here — it is `delulu-runtime::channel::fuzz_one_frame`,
+│                                   #   which the ordinary suite also replays over a seeded corpus,
+│                                   #   so there is no second copy of the rule to go stale.
 ├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook

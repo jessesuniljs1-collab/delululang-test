@@ -62,6 +62,7 @@ impl ScannedFile {
 pub fn id_prefix(k: NodeKind) -> &'static str {
     match k {
         NodeKind::Crate => "crate",
+        NodeKind::SeparateWorkspaceCrate => "sepcrate",
         NodeKind::ExternalCrate => "ext",
         NodeKind::RustModule => "mod",
         NodeKind::TestSuite => "test",
