@@ -426,6 +426,45 @@ pub fn spawn_and_serve_with(
     // The run report (D-V2-21): written by the RUNTIME to the file the operator named, never on the
     // program's own output, which the program could forge. `granted` and `host_guarantees` carry
     // what this host actually applied, so a report never claims a boundary that was not there.
+    // PS-A-08: the refusals as their own record, not only as a count on the death record. A run
+    // report can be deleted; this is the copy an operator cannot quietly lose, and a guest that was
+    // refused fifty things is the single most interesting fact about a program nobody wrote. It is
+    // written only when there WAS a refusal, so an ordinary run does not grow the chain.
+    if denied.1 > 0 {
+        audit_sandbox(
+            "channel-violation",
+            "deny",
+            Some(format!("{} refusal(s) on the channel", denied.1)),
+            Some(serde_json::json!({
+                "denied_total": denied.1,
+                // The same bound the report keeps, for the same reason: a guest refused in a loop must
+                // not be able to make the host write without limit.
+                "denied": denied.0,
+                "policy_hash": policy.hash(),
+            })),
+        );
+    }
+    // A ceiling that FIRED is a different fact from a program that failed, and only the OS knows which
+    // happened. What can be said honestly is what the exit status says: on Unix a guest killed by a
+    // signal names it (SIGXCPU is the processor-time ceiling, SIGKILL is the usual memory or
+    // pdeathsig kill); on Windows the job's limits terminate the process and the code is what the OS
+    // set. Nothing is inferred beyond that — the record says which status was observed, and does not
+    // claim WHICH limit fired when the status cannot tell.
+    if let Ok(st) = &status {
+        if !st.success() {
+            if let Some(why) = limit_kill_reason(st) {
+                audit_sandbox(
+                    "sandbox-limit",
+                    "deny",
+                    Some(why),
+                    Some(serde_json::json!({
+                        "limits": { "memory_bytes": limits.memory_bytes, "cpu_seconds": limits.cpu_seconds },
+                        "policy_hash": policy.hash(),
+                    })),
+                );
+            }
+        }
+    }
     // And the end of the guest's life, with the reason it ended: an exit, or a channel that failed.
     audit_sandbox(
         "sandbox-death",
@@ -651,6 +690,41 @@ pub fn attempt_launch() -> Result<String, String> {
             return finish(Err(how), Some(&mut child));
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// Did the OS kill this guest for exceeding a ceiling, and can we say WHICH?
+///
+/// Only what the exit status actually carries. On Unix a signal names itself, and `SIGXCPU` is
+/// unambiguous — it exists for exactly this. `SIGKILL` is not: it is what the processor-time hard
+/// limit escalates to, what `PR_SET_PDEATHSIG` sends when the host dies, and what an operator's
+/// `kill -9` sends, so the record says that rather than picking one. Elsewhere `None`, because a
+/// record that guesses which limit fired is worse than no record — it would be read as measurement.
+fn limit_kill_reason(status: &std::process::ExitStatus) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt as _;
+        if let Some(sig) = status.signal() {
+            return Some(match sig {
+                libc::SIGXCPU => "killed by SIGXCPU — the processor-time ceiling fired".to_string(),
+                libc::SIGKILL => {
+                    "killed by SIGKILL — a hard ceiling, the host's death signal, or an operator; the \
+                     status cannot tell which"
+                        .to_string()
+                }
+                other => format!("killed by signal {other}"),
+            });
+        }
+        None
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows: the Job Object terminates the process when a limit is exceeded, and the code it
+        // leaves is the OS's, not the program's. There is no status bit that says "a limit did this",
+        // so nothing is claimed — the death record already carries the code, and `denied_total` and
+        // the guarantees say what was in force.
+        let _ = status;
+        None
     }
 }
 

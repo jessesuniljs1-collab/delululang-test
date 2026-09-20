@@ -595,3 +595,62 @@ fn an_unknown_sandbox_verb_is_refused_rather_than_guessed_at() {
         assert_eq!(ok.status.code(), Some(0), "`sandbox {verb}` should work: {}", out(&ok));
     }
 }
+
+/// PS-A-08: a refusal on the channel gets its OWN audit record, and a clean run does not.
+///
+/// The pair is the test. A `channel-violation` record on every run would be noise nobody reads; one
+/// only when the host actually said no is the single most interesting fact about a program nobody
+/// wrote. And the chain must still verify afterwards, because these records are part of it rather than
+/// beside it.
+#[test]
+fn a_refusal_on_the_channel_is_its_own_audit_record_and_a_clean_run_writes_none() {
+    let dir = tmp("violation");
+    let state = dir.join("state");
+    std::fs::create_dir_all(state.join("audit")).unwrap();
+    let scope = dir.join("out").display().to_string().replace('\\', "/");
+    let sibling = dir.join("elsewhere").display().to_string().replace('\\', "/");
+    std::fs::create_dir_all(dir.join("elsewhere")).unwrap();
+
+    let run = |args: &[&str]| -> Output {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .env("DELULU_STATE_DIR", &state)
+            .output()
+            .expect("the delulu binary runs")
+    };
+
+    // A clean run first, so the absence below is measured on a chain that already has records in it.
+    let (good, _) = writer(&dir);
+    let o = run(&["run", good.to_str().unwrap(), "--sandbox", "--grant", &format!("fs.write={scope}")]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let after_clean = String::from_utf8_lossy(&run(&["audit", "query", "--json"]).stdout).into_owned();
+    assert!(after_clean.contains("sandbox-launch"), "{after_clean}");
+    assert!(
+        !after_clean.contains("channel-violation"),
+        "a run that was refused nothing must write no violation record: {after_clean}"
+    );
+
+    // Then a run that reaches outside the scope it was granted.
+    let bad = dir.join("bad.delulu");
+    std::fs::write(
+        &bad,
+        format!(
+            "module g\n\nfn main(root: Root) ! {{Write}} {{\n    \
+             let w = root.fs_write(\"{sibling}\")\n    \
+             let _ = w.write_text(\"no.txt\", \"x\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let o = run(&["run", bad.to_str().unwrap(), "--sandbox", "--grant", &format!("fs.write={scope}")]);
+    assert_ne!(o.status.code(), Some(0), "{}", out(&o));
+    let text = String::from_utf8_lossy(&run(&["audit", "query", "--json"]).stdout).into_owned();
+    assert!(text.contains("channel-violation"), "the refusal must be recorded: {text}");
+    assert!(text.contains("refusal(s) on the channel"), "the record must say what happened: {text}");
+
+    // The chain still verifies with the new record kind in it.
+    let v = run(&["audit", "verify"]);
+    assert_eq!(v.status.code(), Some(0), "the chain must still verify:\n{}", out(&v));
+    let _ = std::fs::remove_dir_all(&dir);
+}

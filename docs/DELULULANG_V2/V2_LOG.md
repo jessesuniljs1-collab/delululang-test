@@ -167,3 +167,61 @@ was the probe.
 and guest id (the chain carries launch and death only, and nothing per effect — not built, not
 claimed); `explain E-SANDBOX` and the new DL codes with both witnesses; `--isolation process`
 strengthened and announced; the Book Ch. 15 and `MATHEMATICS.md` §12's sandbox claims.
+
+## PS-A closed — 2026-09-20 — what it built, and what it deliberately did not
+
+**The arrangement.** `run --sandbox` runs the program as a guest process whose `root` grants nothing.
+Every capability it holds is an opaque handle the host minted; every effect is one canonical-CBOR frame
+the HOST performs, under exactly the checks an ordinary run makes. Under that, an OS jail per platform,
+and each run reports the guarantees it actually got — never the ones it hoped for.
+
+**The last increment (PS-A-08 completed).** A refusal on the channel now gets its own
+`channel-violation` audit record, written only when the host actually said no, so an ordinary run does
+not grow the chain and a guest that was refused fifty things is visible as one record an operator cannot
+delete along with the report. A ceiling that fired gets `sandbox-limit`, and only what the exit status
+actually carries: `SIGXCPU` names the processor-time ceiling unambiguously, `SIGKILL` does NOT — it is
+what a hard ceiling escalates to, what `PDEATHSIG` sends, and what `kill -9` sends — so the record says
+that instead of picking one. On Windows nothing is claimed, because no status bit says "a limit did
+this". Falsified: with the violation record suppressed, the test fails on a refused run.
+
+**Owner rulings taken in this phase:** D-V2-25 (profiles, crates, budgets, default-on as the
+destination) and D-V2-26 (no new DL codes; D-V2-24(a) resolved the same way; opt-in until PS-B/PS-C
+widen the channel). No entrenched file was touched.
+
+### Deliberately NOT built, each with its reason
+
+- **`sandbox kill`.** A guest cannot outlive its host on Windows (kill-on-close) or Linux
+  (`PDEATHSIG`), and on macOS the remaining case — a guest computing while its host is gone — is bounded
+  by the processor-time ceiling measured in run 35480762820. A safe `kill` needs a pid-to-executable
+  check on three platforms, because a dead host's pid gets reused and killing by pid alone eventually
+  kills an innocent process. Shipping it without that measurement would be a verb that looks careful
+  and is not. The refusal says so where an operator will find it.
+- **`sandbox-kill` as a separate record.** `sandbox-death` already carries the end of the guest's life
+  WITH its reason, on every path including a channel that failed. A second record for the same moment
+  would be evidence that says nothing new.
+- **A guest id on every brokered effect.** The chain carries launch, violation, limit and death, and
+  nothing per effect. Adding per-effect records would make every sandboxed effect a writer to a
+  single-writer chain — the exact defect this phase already fixed once, when parallel runs put two
+  records on one line and `doctor` refused its own machine. It needs the broker to own the chain, which
+  is PS-B.
+- **`external:<name>` profiles.** They name an operator-supplied launcher, and there is none to name
+  until PS-D.
+- **`[sandbox]` in `delulu.toml`.** A manifest section bounded by `[authority]` is a real surface and a
+  real risk: a manifest that could widen its own confinement is the shape D-V2-25 forbids. It belongs
+  with PS-B's limits-as-authority work, where the bounding rule is being built anyway.
+- **"limits and remaining" in the report.** "Remaining" needs live resource accounting, and the only
+  platform that offers it cheaply is Windows (`JOBOBJECT_BASIC_ACCOUNTING_INFORMATION`). A field that is
+  a real number on one system and absent on two would be read as a measurement everywhere.
+- **AppContainer and a user cgroup as probe attempts.** Both would be honest additions to `probe`;
+  neither is load-bearing for L1 as built, and AppContainer needs new FFI. PS-B.
+- **The P21 identity-separation vectors from inside the guest.** Vacuous here: the guest runs as the
+  same OS user, so there is no identity boundary to attack. That absence is the `identity_separation`
+  limitation the report prints on every run.
+- **New DL codes**, by the owner's ruling (D-V2-26).
+
+### The phase's numbers
+
+Windows suite 1,748/0; the sandbox test binaries green on Linux too; sweep 38/38 on both; doctor 28/28;
+Survey 1172 nodes, 10796 edges, 0 errors, 2 known warnings; the 50,000-program fuzz campaign SOUND with
+every accepted program run twice, locally and as a guest; the `fuzz` CI job green on every push. Eleven
+commits, each with its CI run read to green before the next started.
