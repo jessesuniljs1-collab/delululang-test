@@ -540,14 +540,43 @@ fn status_agrees_with_what_a_real_sandboxed_run_does() {
         out(&run)
     );
     // And the read-only promise: status must not have appended to the chain it reports on.
-    let before = delulu(&["sandbox", "status", "--json"]);
-    let after = delulu(&["sandbox", "status", "--json"]);
-    let count = |o: &Output| -> serde_json::Value {
+    //
+    // In a state directory of its OWN, and that is the point rather than tidiness. The first version
+    // of this shared the test binary's state directory with every other test here, and those tests
+    // run in parallel and DO append sandbox records — so the count moved between the two calls and the
+    // test blamed `status`. A read-only claim can only be measured where nothing else writes.
+    let solo = dir.join("state");
+    std::fs::create_dir_all(solo.join("audit")).unwrap();
+    let status_in = |d: &std::path::Path| -> serde_json::Value {
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(["sandbox", "status", "--json"])
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .env("DELULU_STATE_DIR", d)
+            .output()
+            .expect("the delulu binary runs");
         serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&o.stdout))
             .map(|v| v["status"]["chain"].clone())
             .unwrap_or(serde_json::Value::Null)
     };
-    assert_eq!(count(&before), count(&after), "`sandbox status` changed the chain it was reading");
+    let quiet = status_in(&solo);
+    assert_eq!(quiet, status_in(&solo), "`sandbox status` changed the chain it was reading");
+    // Falsification: something that DOES write must move that number, or the equality above would be
+    // satisfied by a `status` that never looked at the chain at all.
+    let wrote = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(["run", src.to_str().unwrap(), "--sandbox"])
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .env("DELULU_STATE_DIR", &solo)
+        .output()
+        .expect("the delulu binary runs");
+    if wrote.status.code() == Some(0) {
+        assert_ne!(
+            quiet,
+            status_in(&solo),
+            "a sandboxed run left the chain unchanged, so this test cannot tell a writer from a reader"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

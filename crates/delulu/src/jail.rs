@@ -209,12 +209,18 @@ pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static 
 /// on Windows the Job Object's kill-on-close does. On macOS there is no `PDEATHSIG`, so the
 /// processor-time ceiling IS the bound on a spinning orphan — and without it the bound was "for ever".
 ///
-/// Only the processor-time ceiling and the absent core dump are CLAIMED. A memory ceiling is
-/// deliberately not: macOS does not meaningfully enforce `RLIMIT_DATA` or `RLIMIT_AS` against mapped
-/// memory, and the Linux half of this file already carries the scar of claiming a limit that measured
-/// something other than what it said — `RLIMIT_AS` capped the wasm engine's RESERVATIONS and killed
-/// the guest before `main` (CI run 35391962354). The limit is requested anyway, because one that
-/// happens to bite costs nothing; it is simply not reported.
+/// Both claims are measured, and the one that is not claimed is measured too (experiment run
+/// 35480762820, `macos-rlimit-enforcement`):
+///
+/// - `RLIMIT_CPU` **is** enforced: a spinning C program with a one-second limit was killed by SIGXCPU
+///   after one second, against a control that ran unlimited for sixteen. So the processor-time ceiling
+///   is a real bound on a spinning orphan, which is what it is here for.
+/// - `RLIMIT_DATA` is **refused**: `setrlimit` returns EINVAL on macOS. So there is no memory ceiling
+///   to claim, and no call left in the code pretending to ask for one — a call the OS rejects is worse
+///   than an absent call, because the next reader assumes it worked.
+///
+/// The Linux half of this file carries the matching scar: `RLIMIT_AS` capped the wasm engine's
+/// RESERVATIONS rather than its use and killed the guest before `main` (CI run 35391962354).
 #[cfg(target_os = "macos")]
 pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static str> {
     use std::os::unix::process::CommandExt as _;
@@ -228,7 +234,10 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
             };
             set(libc::RLIMIT_CPU, limits.cpu_seconds as libc::rlim_t);
             set(libc::RLIMIT_CORE, 0);
-            set(libc::RLIMIT_DATA, limits.memory_bytes as libc::rlim_t);
+            // No `RLIMIT_DATA`. It is not "set and not claimed" — it is REFUSED: on macOS the call
+            // returns EINVAL (`setrlimit data: Invalid argument`, experiment run 35480762820), so it
+            // was a line that looked like a memory ceiling and was not one. A call the OS rejects is
+            // worse than an absent call, because the next reader assumes it worked.
             Ok(())
         });
     }
