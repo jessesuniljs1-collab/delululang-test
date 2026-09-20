@@ -507,7 +507,8 @@ four holds nowhere.
 
 `List` 4 → 15, `Str` 6 → 10, `Map[K, V]` new with 8. **23 new conformance anchors, each with a positive
 AND a negative witness** — `tests/conformance/accept/{29_stdlib_p3,30_map_p3}.delulu` plus 23 reject
-files — taking anchor coverage to **353/353, 100%**, `prim` 82/82, with the ratchet raised 307 → 353.
+files — taking anchor coverage to **353/353, 100%**, `prim` 82/82. The ratchet `COVERED_FLOOR` still reads
+307 and is NOT raised here — see the section below; that file is entrenched.
 `crates/delulu/tests/stdlib_p3.rs` holds the 19 claims a conformance program cannot state, including
 `only_the_mutating_methods_demand_a_writable_receiver`, asserted in BOTH directions so a registry that
 wrongly listed `keys` as a mutator would fail. `PRIM_TABLE_VERSION` 4 → 5 by the constant's own rule
@@ -542,3 +543,10 @@ language has neither a literal nor a static-method form to hang `Map.new()` on. 
 any collection method, which needs a heap layout, a key canonicalization and an ordering in the guest:
 three designs, each a place for a security decision on an unnormalized representation, and none of them
 P3's business.
+
+### The run, read
+
+Commit `3ab0cc9`, CI run `35522886721`: **success** — 12 jobs green, 2 skipped (`heavy-gates` and
+`miri-slow`, both manual). Green on `ubuntu-latest`, `windows-latest`, `macos-latest` and arm64, with the
+coverage-law report, the reference-in-sync gate, the CLI sweep and the fuzz campaign all passing on each.
+The phase is complete by §0's gate: the commit is pushed and its run has been read.
