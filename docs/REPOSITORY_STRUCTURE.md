@@ -278,6 +278,10 @@ DeluluLang/
 │                                   #   not here — it is `delulu-runtime::channel::fuzz_one_frame`,
 │                                   #   which the ordinary suite also replays over a seeded corpus,
 │                                   #   so there is no second copy of the rule to go stale.
+├── skills/                         # [P4a] the Agent Skill, in the format harnesses load.
+│   └── delulu/SKILL.md             #   `name:` must equal the folder. `delulu skill` prints the
+│                                   #   same bytes (embedded), and a test asserts the two agree —
+│                                   #   two copies of agent instructions is two things to go stale.
 ├── rfcs/                           # [Stage 10] the RFC process: language/authority changes
 ├── release-artifacts/              # [Stage 9] built release outputs
 ├── SECURITY.md                     # reporting policy + rehearsed patch runbook
@@ -620,6 +624,21 @@ the rule they all follow — what counts as a measurement here, and what disqual
 dropped. `rfcs/0001-broker-federation.md` is the federation RFC: **sponsored, and partly built during
 its own comment period**, which is recorded as a governance deviation and must never be restated as
 compliance.
+
+### 5.9a `skills/` — the Agent Skill
+
+`skills/delulu/SKILL.md` is the Agent Skill, in the format harnesses load: YAML frontmatter whose
+`name:` must equal the folder, a description carrying the triggers, and a body under 500 lines. It
+teaches the loop, the rules that trip agents (effect rows, capability-relative paths, `val`/`ref`, the
+grant grammar, batching, the widening rule), the exit codes, the sandbox profiles and what the run
+report's `limitations` field means — and it points at `docs/for-agents.md` rather than restating it,
+which is what keeps the two from disagreeing.
+
+`delulu skill` prints the same bytes, embedded at build time so it reads outside a checkout, and
+`crates/delulu/tests/skill.rs` asserts the two are byte-identical. It also asserts the thing an
+external format validator could not: that every `delulu <verb>` the skill teaches exists in the
+binary's own `--help`, and that every `[agents.*]` anchor it cites exists in the reference. A skill
+naming a command the tool lacks sends an agent into a loop it cannot escape.
 
 ### 5.10 `docs/archive/v1/` — the V1 historical archive
 

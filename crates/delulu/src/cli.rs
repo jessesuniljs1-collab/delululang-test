@@ -1077,6 +1077,11 @@ fn run_inner(args: &[String]) -> i32 {
         "morph" => cmd_morph(rest),
         "explain" => cmd_explain(rest),
         "doctor" => crate::doctor::cmd_doctor(rest),
+        // P4a (D-V2-28): print the Agent Skill. `skills/delulu/SKILL.md` is the file a harness
+        // installs; this prints the same bytes so an agent that has the binary but not the checkout
+        // can still read it. Embedded at compile time rather than read from disk: a skill that is
+        // only correct when you happen to be standing in the repository is not shipped.
+        "skill" => cmd_skill(rest),
         // PS-A-03: the sandbox guest, spawned by the host with a hello frame on standard input and
         // never typed by a caller. Dispatched by constant through a guard arm, the shape the foreign
         // worker already uses for an internal subcommand: out of `--help`, out of completions, and
@@ -1207,7 +1212,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions",
+    "doctor", "completions", "skill",
 ];
 
 fn usage() -> &'static str {
@@ -1322,6 +1327,8 @@ fn usage() -> &'static str {
      \x20 delulu explain   <DLxxxx | E-REVOKE | E-GUARD | E-ATLAS | E-PALETTE | E-PLUGIN | E-ACTOR | E-SANDBOX> [--json]\n\
      \x20 delulu doctor    [--check] [--json]  (is this machine healthy? inside the source tree, is\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the repository map current and sound? regenerates it when behind; --check never writes)\n\
+     \x20 delulu skill     [--json]   (the Agent Skill for this tool — the same bytes as\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 skills/delulu/SKILL.md, embedded, so it reads outside the checkout too)\n\
      \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 list it carries is generated from this help, so the two cannot disagree)\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
@@ -8855,6 +8862,67 @@ fn colorize_atlas_tree(text: &str, palette: &Palette) -> String {
 /// genuinely different answers and a caller must not have to guess from the prose which it got.
 /// `body` and `disposition` are **always present**, `null` where they do not apply: a missing field
 /// cannot be told apart from "this tool did not answer" (`docs/for-agents.md` [agents.survey]).
+/// `delulu skill [--json]` — print the Agent Skill (P4a, ruling D-V2-28).
+///
+/// The bytes are `skills/delulu/SKILL.md`, embedded at build time. A harness that vendors the skill
+/// reads the file; an agent that has only the binary reads this. Both are the same text by
+/// construction, which is the point — a second copy of agent instructions is a second thing to go
+/// stale, and this project has watched that happen twice.
+fn cmd_skill(rest: &[String]) -> i32 {
+    if let Some(bad) = rest.iter().find(|a| a.starts_with('-') && a.as_str() != "--json") {
+        eprintln!("error: `skill` does not know the option `{bad}`");
+        eprintln!("  nothing was done — an option nobody understood is refused, never ignored");
+        return 2;
+    }
+    if let Some(extra) = rest.iter().find(|a| !a.starts_with('-')) {
+        eprintln!("error: `skill` takes no arguments (got `{extra}`)");
+        return 2;
+    }
+    let body = SKILL_MD;
+    if rest.iter().any(|a| a == "--json") {
+        // The frontmatter split is the format's own: `---` on the first line, the next `---` ends it.
+        let (front, md) = split_frontmatter(body);
+        print_success_envelope(
+            "skill",
+            json!({ "skill": {
+                "name": front_field(front, "name"),
+                "description": front_field(front, "description"),
+                "body": md,
+                "lines": body.lines().count(),
+            } }),
+        );
+    } else {
+        print!("{body}");
+    }
+    0
+}
+
+/// The skill's own text, embedded so `delulu skill` works outside the checkout.
+pub(crate) const SKILL_MD: &str = include_str!("../../../skills/delulu/SKILL.md");
+
+/// Split an Agent-Skills document into its YAML frontmatter and its body. Returns `("", whole)` when
+/// there is no frontmatter, because a caller must be able to tell "absent" from "empty".
+pub(crate) fn split_frontmatter(doc: &str) -> (&str, &str) {
+    let Some(rest) = doc.strip_prefix("---\n") else { return ("", doc) };
+    match rest.find("\n---\n") {
+        // The body is trimmed of the blank line the format puts after the closing marker: a
+        // consumer rendering this wants the content, not that blank line.
+        Some(i) => (&rest[..i], rest[i + 5..].trim_start_matches('\n')),
+        None => ("", doc),
+    }
+}
+
+/// One frontmatter field's value. Deliberately line-based rather than a YAML parser: the format's
+/// required fields are single-line scalars, and pulling in a YAML dependency to read two of them
+/// would be supply-chain surface for nothing.
+pub(crate) fn front_field<'a>(front: &'a str, key: &str) -> &'a str {
+    front
+        .lines()
+        .find_map(|l| l.strip_prefix(&format!("{key}:")))
+        .map(str::trim)
+        .unwrap_or("")
+}
+
 fn cmd_explain(rest: &[String]) -> i32 {
     // `explain` takes no options at all besides `--json`, so anything else flag-shaped is a mistake
     // worth naming rather than skipping past to the first bare word.

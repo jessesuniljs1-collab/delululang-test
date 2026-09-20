@@ -317,3 +317,68 @@ zero GONE** — the checker change altered no recorded answer (D-NE-3's reviewed
   broker, which is PS-B's territory.
 - **`Contained`-class execution** — an opaque module on the WASM engine, with fuel — is where
   `Grant.limits` belong and where `kill_on_limit` already waits. Not P2.
+
+## P4a — 2026-09-20 — the Agent Skill, and the gate that keeps it honest
+
+The roadmap asked for `skills/delulu/SKILL.md` in the Agent Skills format, so a harness can install one
+file and an agent knows how to drive this toolchain without a human translating. It is written, it is
+145 lines, and `delulu skill [--json]` prints the same bytes from the binary — embedded with
+`include_str!`, because a skill that is only correct when you happen to be standing in the checkout is
+not shipped.
+
+**What the skill actually teaches**, chosen by what has cost someone time: `--no-prompt` everywhere or a
+command may wait for a human; read the exit code, not the verdict string (one bug on record where they
+disagreed); batch `check` and nothing else (twenty files, 711 ms in twenty processes against 48 in one);
+use `delulu lsp` in a long loop because it is the same compiler so its answers cannot drift; and never
+apply a repair whose `authority_widening` is true. Then the four things that trip agents specifically —
+effect rows are part of the signature, capability-relative paths, `val`/`ref` as a second axis,
+and grants being the operator's to confer, not the program's.
+
+**The honesty section is not decoration.** An agent says what it was told: that foreign C and Python
+are *holes in that guarantee*, enumerated not eliminated; that the sandbox is a second wall **under**
+the OS account boundary because a guest runs as the same user; that certification is NONE; that `List`
+has four methods and there is no `Map`. A test asserts each of those sentences survives, because the
+first thing to go when a document is edited for length is the paragraph that admits something.
+
+### The gate the roadmap wanted, and the two gates it did not ask for
+
+**Every `delulu <verb>` the skill teaches must exist in the binary's `--help`.** Derived from `--help`
+at test time rather than from a second list, so the two cannot drift. A skill naming a command the tool
+does not have sends an agent into a loop it cannot escape — the instructions it was handed are the
+authority, so it will try, fail and try again. Falsified with a `reformat` mutant.
+
+Two more, because a reference that rots is worse than one that is missing: **every `[agents.*]` anchor
+the skill cites must exist in `docs/for-agents.md`** (a dead anchor is a dead end an agent cannot
+diagnose), and **`delulu skill` must print the committed file byte for byte** — two copies of agent
+instructions is two things to go stale, and this project has watched that happen twice.
+
+Validated in-tree rather than by the reference Node validator, ruling **D-V2-28**: an npm dependency in
+CI to check four single-line fields is supply-chain surface for no gain, and the four rules are cheaper
+to state than to import.
+
+### My own three test bugs, each of which passed on a correct skill
+
+Worth recording because all three were the *test* being wrong while the artifact was right — the shape
+that reads like a product defect.
+
+1. The command extractor read the prose "Use when you see .delulu files" and reported the verb `files`.
+   Fixed by scanning only command contexts: a fenced line beginning `delulu `, or an inline
+   `` `delulu …` ``. An extractor that cannot tell an instruction from a sentence reports the sentence.
+2. The `--json` body began with a stray `\n`, because the frontmatter split kept the newline that ends
+   the closing `---`. The body must start at `# DeluluLang`, and now does.
+3. The caveat search failed on *wrapped* prose — it looked for "holes in that guarantee" against a
+   document where those words span two lines. Whitespace-collapse before searching.
+
+### Evidence
+
+Suite **1,768 passed / 0 failed**; clippy clean; sweep **41/41** (three new cases: `skill`,
+`skill --json`, and the bad-option refusal); doctor 28/28; Survey 1176 nodes, 10823 edges, 0 errors.
+`crates/delulu/tests/skill.rs` has 5 cases. `json_contract.rs` gained `skill` to its subcommand list and
+a success-envelope case, so the new verb is held to the same envelope contract as every other.
+`scripts/package-toolchain.sh` ships `skills/`, and `REPOSITORY_STRUCTURE.md` gained the tree entry and
+§5.9a — a top-level directory nobody documented is a directory that gets deleted by the next cleanup.
+
+### Open, and deliberately
+
+The skill is one file for one audience. The *other* agent surfaces — MCP server, checked edits, the
+Atlas/Survey tooling, the usability benchmark — are P4b–e, which is phase 8 and unstarted.

@@ -21,7 +21,7 @@ use std::process::{Command, Output};
 const SUBCOMMANDS: &[&str] = &[
     "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "explain",
     "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
-    "plugin", "publish", "run", "sandbox", "secrets", "sign", "test", "verify-sig", "why",
+    "plugin", "publish", "run", "sandbox", "secrets", "sign", "skill", "test", "verify-sig", "why",
 ];
 
 /// Every run-once subcommand the dispatcher accepts must appear in [`SUBCOMMANDS`] AND in `--help`.
@@ -464,6 +464,8 @@ effects = [\"Write\"]
         ("explain", vec!["explain", "DL0501", "--json"], Cwd::Pkg, "explain"),
         ("explain-topic", vec!["explain", "E-PLUGIN", "--json"], Cwd::Pkg, "explain"),
         ("explain-unallocated", vec!["explain", "DL0503", "--json"], Cwd::Pkg, "explain"),
+        // P4a: the Agent Skill. It takes no path and no argument, so any working directory serves.
+        ("skill", vec!["skill", "--json"], Cwd::Pkg, "skill"),
         ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),
         ("locale", vec!["locale", "list", "--json"], Cwd::Pkg, "locale"),

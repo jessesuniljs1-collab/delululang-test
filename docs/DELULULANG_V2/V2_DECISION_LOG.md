@@ -335,8 +335,24 @@ decision, and the existing refusal codes. P2-08 red-teams the path — path spel
 artifact, a grant wider than the ceiling, `Contained` on Windows, a plugin loading a plugin — with each
 test witnessed failing on the unpatched code, not merely passing on the patched one.
 
+## D-V2-28 — D-NE-5, the Agent Skill — TAKEN (head chef, 2026-09-20, under the owner's delegation)
+- The owner delegated the remaining phase-start decisions on 2026-09-20: *"don't need to ask me
+  questions. u can take better decisions."* Entrenched files, the final public repository and licensing
+  stay his regardless.
+- **Folder `skills/delulu/`, `name: delulu`.** The format requires folder == `name:`, and `delulu` is
+  what an agent types.
+- **Validated by an IN-TREE test, not the reference Node validator.** The format's required fields are
+  four single-line scalars; importing an npm package into CI to read them is supply-chain surface for
+  nothing. And the in-tree gate can check what an external validator cannot: that every `delulu <verb>`
+  the skill teaches is a verb the binary's own `--help` documents, and that every `[agents.*]` anchor it
+  cites exists in `for-agents.md`. A skill naming a command the tool lacks sends an agent into a loop it
+  cannot escape, because the instructions it was given are its authority.
+- **`delulu skill` prints the committed file**, embedded with `include_str!`, so it reads outside a
+  checkout — and a test asserts the two are byte-identical. Two copies of agent instructions is two
+  things to go stale, and this project has watched that happen twice.
+
 ## Owner decisions carried from V1, still open
-D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
+D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,
 D-NE-33 (narrowed by D-V2-13); the Constitution §5.15 wording (RW 7.10a); rustfmt and a code of
 conduct; the four pre-public-repository items. Each is asked at the start of the phase that needs it

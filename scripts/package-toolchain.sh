@@ -64,6 +64,11 @@ cp examples/*.delulu "$STAGE/examples/" 2>/dev/null || true
 for d in examples/*/; do
   test -f "$d/delulu.toml" && cp -r "$d" "$STAGE/examples/" 2>/dev/null || true
 done
+# P4a (D-V2-28): the Agent Skill, in the layout a harness expects (`skills/<name>/SKILL.md`). Most
+# recipients of this archive are not people — and the binary can print the same bytes with
+# `delulu skill`, so a harness with only the binary is not stuck either.
+mkdir -p "$STAGE/skills/delulu"
+cp skills/delulu/SKILL.md "$STAGE/skills/delulu/" 2>/dev/null || true
 
 cat > "$STAGE/INSTALL.txt" <<TXT
 DeluluLang $VERSION — $HOST
