@@ -117,8 +117,15 @@ fn the_run_reports_what_the_jail_enforced() {
         assert!(err.contains("processor-time ceiling"), "{err}");
     }
     if cfg!(target_os = "macos") {
+        // The profile is DENY-DEFAULT since PS-A2 round two (experiment 35479148216): everything is
+        // refused but reads, the guest's own exec, `sysctl-read` and the channel socket. Each of
+        // those four was measured load-bearing by removing it, and each claim below is a thing the
+        // profile refuses rather than a thing it intends to.
+        assert!(err.contains("deny by default"), "{err}");
         assert!(err.contains("no file writes"), "{err}");
         assert!(err.contains("no network but the channel"), "{err}");
+        assert!(err.contains("no new programs"), "{err}");
+        assert!(err.contains("no Mach services"), "{err}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

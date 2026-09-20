@@ -97,14 +97,45 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
     ]
 }
 
-/// The macOS jail: the guest runs under a Seatbelt profile that denies file writes and the network,
-/// and allows exactly one path — the channel socket it talks to the host on.
+/// The macOS jail: the guest runs under a DENY-DEFAULT Seatbelt profile. Everything is refused
+/// except the four things a guest provably needs, and each of those four was measured on a runner
+/// rather than reasoned about.
 ///
-/// The shape is the measured one. A deny-by-default profile aborted even a plain C program before it
-/// reached its socket (experiment run 35391102215, exit 134), while allow-default with targeted
-/// denies connected and still refused writes. So this is what macOS enforces today, and the report
-/// says exactly that rather than implying a deny-default jail. Tightening it to deny-default, with
-/// the loader and Mach allowances a Mach-O binary needs, stays open work.
+/// This replaces an allow-default profile with targeted denies. That earlier shape existed because a
+/// deny-default one aborted even a plain C program before it reached its socket (experiment run
+/// 35391102215, exit 134 = SIGABRT). That was a real measurement of an allow list that was too
+/// SHORT, not a limit of Seatbelt, and the missing clause turned out to be `(allow file-read*)`:
+/// with it, the real guest — CPython, wasmtime, threads and all — starts and binds its channel under
+/// `(deny default)` (run 35478590757, `RESULT real-reads-everything: PASS rc=142`, where 142 is
+/// 128+SIGALRM, the probe's own deadline firing while the guest waited for a hello it would never
+/// get; it was alive and listening).
+///
+/// Then every other clause was TRIMMED, one at a time, and only the ones whose removal broke the
+/// guest are here (run 35479148216):
+///
+/// | clause | verdict |
+/// |---|---|
+/// | `process-exec` on itself | load-bearing — without it `execvp` is refused (rc 71) |
+/// | the socket literal, read and write | load-bearing — without it the guest cannot open its channel |
+/// | `sysctl-read` | load-bearing — Rust's stack-overflow guard page needs it, and without it the guest panics with "failed to allocate a guard page" |
+/// | `file-read*` | load-bearing — without it, abort |
+/// | `file-map-executable` | NOT needed — dropped |
+/// | `mach-lookup` | NOT needed — dropped, so the guest reaches no Mach service at all |
+/// | `signal`, `process-info*`, `ipc-posix-shm` on self | NOT needed — dropped |
+/// | `file-read-metadata` | NOT needed — dropped |
+/// | write access to the channel DIRECTORY | NOT needed — the socket literal alone is enough |
+///
+/// What is NOT narrowed, and is said rather than implied: **reads**. Confining them by subpath aborts
+/// the guest, and it aborts with every additional root the experiment tried — `/private/var/db`,
+/// `/private/var/folders`, all of `/private/var`, `/opt`, `/private/tmp`. So on macOS the guest can
+/// still READ the filesystem, and only the other layers stop it doing anything with what it read: it
+/// cannot write, cannot reach the network, and cannot start a program to carry anything out. Linux is
+/// tighter here, because Landlock does confine reads (see [`confine_filesystem`]).
+///
+/// **This profile is fail-closed on purpose.** It was measured on macOS 26.6.2 (arm64). If a future
+/// release needs an allowance that is not here, the guest will fail to start and the run will REFUSE,
+/// which is the direction D-V2-25 requires — never a quiet fall back to a weaker profile. The fix is
+/// one more clause, added with the run that proved it necessary.
 ///
 /// Returns the command to spawn instead, or `None` when this host cannot apply a profile at all.
 #[cfg(target_os = "macos")]
@@ -119,27 +150,44 @@ pub fn seatbelt_launcher(
     // Seatbelt matches the RESOLVED path, and macOS hands out temp directories at `/var/folders/…`
     // which resolve to `/private/var/folders/…`. A profile naming the unresolved spelling matches
     // nothing, so the guest's own bind came back EPERM (CI run 35394515395) even though the rule
-    // itself is right: `(allow network-bind (literal …))` passes when the path matches (run
-    // 35395762998). This is the campaign's recurring shape — a security decision made on an
-    // unnormalized representation — so both spellings are named.
-    let raw = dir.join("broker.sock");
-    let resolved = std::fs::canonicalize(dir).map(|d| d.join("broker.sock")).unwrap_or_else(|_| raw.clone());
-    let (raw, resolved) = (raw.display().to_string(), resolved.display().to_string());
-    // Writes and the network are denied everywhere but the channel socket: a guest performs no
-    // effects, so it writes nothing and reaches nothing of its own. The host performs both.
+    // itself is right. This is the campaign's recurring shape — a security decision made on an
+    // unnormalized representation — so both spellings of both paths are named.
+    let raw_sock = dir.join("broker.sock");
+    let resolved_sock =
+        std::fs::canonicalize(dir).map(|d| d.join("broker.sock")).unwrap_or_else(|_| raw_sock.clone());
+    let raw_exe = exe.to_path_buf();
+    let resolved_exe = std::fs::canonicalize(exe).unwrap_or_else(|_| raw_exe.clone());
+    let p = |x: &std::path::Path| x.display().to_string();
     let profile = format!(
         "(version 1)\n\
-         (allow default)\n\
-         (deny file-write*)\n\
-         (deny network*)\n\
-         (allow file-read* file-write* (literal \"{raw}\") (literal \"{resolved}\"))\n\
-         (allow network-bind network-outbound (literal \"{raw}\") (literal \"{resolved}\"))\n"
+         (deny default)\n\
+         (allow process-exec (literal \"{}\") (literal \"{}\"))\n\
+         (allow network-bind network-outbound (literal \"{}\") (literal \"{}\"))\n\
+         (allow file-read* file-write* (literal \"{}\") (literal \"{}\"))\n\
+         (allow sysctl-read)\n\
+         (allow file-read*)\n",
+        p(&raw_exe),
+        p(&resolved_exe),
+        p(&raw_sock),
+        p(&resolved_sock),
+        p(&raw_sock),
+        p(&resolved_sock),
     );
     let path = dir.join("guest.sb");
     std::fs::write(&path, profile).ok()?;
     let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
     cmd.arg("-f").arg(&path).arg(exe).args(args);
-    Some((cmd, vec!["no file writes", "no network but the channel"]))
+    Some((
+        cmd,
+        vec![
+            "deny by default",
+            "no file writes",
+            "no network but the channel",
+            "no new programs",
+            "no Mach services",
+            "no signals or process info beyond itself",
+        ],
+    ))
 }
 
 /// Other platforms harden after the spawn, or not yet at all.
