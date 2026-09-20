@@ -61,11 +61,11 @@ pub fn probe() -> Vec<Level> {
     };
 
     let mut l1 = os_primitive_attempts();
-    l1.push(Attempt {
-        what: "the L1 guest launcher",
-        ok: false,
-        detail: "not in this build — `--isolation process` isolates foreign code only (PS-A builds the jail)".into(),
-    });
+    // An ATTEMPT, not a sentence. This line was a hard-coded `false` saying "not in this build", and
+    // it kept saying it after PS-A built the launcher — so `probe` and `doctor` both reported L1
+    // ABSENT on a host where `run --sandbox` confines. A hard-coded verdict is not an attempt, and
+    // the probe's whole claim is that every line is one.
+    l1.push(attempt("the L1 guest launcher", crate::guest::attempt_launch()));
 
     let l2 = vec![
         attempt("KVM", attempt_open_kvm()),
@@ -267,6 +267,110 @@ fn profile_flag(rest: &[String]) -> Result<crate::policy::Profile, String> {
     Ok(crate::policy::Profile::Contained)
 }
 
+/// `delulu sandbox status [--json]` (PS-A-07): what confinement this host can actually give a guest,
+/// and what it has given — read from the audit chain, not from a claim.
+///
+/// The two halves answer different questions and neither substitutes for the other. The FIRST is
+/// capability: the best level this host can reach today, and, when that is not the level the sandbox
+/// wants, the first prerequisite that is missing. The SECOND is history: the `sandbox-launch` and
+/// `sandbox-death` records in this machine's audit chain, newest first, each with the policy hash that
+/// was in force. A host that reported only its capability would be telling an operator what COULD have
+/// happened; the chain is what did.
+///
+/// Read-only, always. `status` opens the chain, verifies nothing and writes nothing — not even to fix
+/// a chain it finds damaged — because a diagnostic that repairs what it is diagnosing destroys the
+/// evidence it was called to show. (`audit verify` is the command that judges the chain.)
+fn cmd_status(json: bool) -> i32 {
+    let levels = probe();
+    let best = levels.iter().filter(|l| l.available()).map(|l| l.level).max().unwrap_or(0);
+    // What the sandbox wants is L1. If this host cannot reach it, the FIRST missing prerequisite is
+    // the useful sentence, not a list.
+    let l1 = levels.iter().find(|l| l.level == 1);
+    let l1_missing = l1.and_then(|l| l.first_missing()).map(|a| (a.what, a.detail.clone()));
+
+    // The chain, when this machine has one. No state directory is not an error: a machine that has
+    // never run a broker has no chain to read, and saying so is the honest answer.
+    let mut history: Vec<Json> = Vec::new();
+    let mut chain_note = "no audit chain on this machine".to_string();
+    if let Some(state) = crate::brokerd::resolve_state_dir(None) {
+        let dir = state.join("audit");
+        if dir.exists() {
+            let mut found: Vec<delulu_broker::audit::AuditRecord> = Vec::new();
+            for action in ["sandbox-launch", "sandbox-death"] {
+                let filter =
+                    delulu_broker::audit::QueryFilter { node: None, action: Some(action.to_string()), effect: None };
+                match delulu_broker::audit::query(&dir, &filter) {
+                    Ok(rs) => found.extend(rs),
+                    // A chain that cannot be read is reported as itself, never as "no sandbox has run
+                    // here" — the two look identical in a report and mean opposite things.
+                    Err(e) => {
+                        chain_note = format!("the audit chain could not be read: {e}");
+                        found.clear();
+                        break;
+                    }
+                }
+            }
+            if !found.is_empty() || chain_note.starts_with("no audit") {
+                found.sort_by_key(|r| std::cmp::Reverse(r.seq));
+                chain_note = format!("{} sandbox lifecycle record(s) in {}", found.len(), dir.display());
+                history = found
+                    .iter()
+                    .take(10)
+                    .map(|r| {
+                        json!({
+                            "seq": r.seq,
+                            "when": delulu_broker::audit::render_ts_utc(r.ts),
+                            "action": r.action,
+                            "decision": r.decision,
+                            "detail": r.target,
+                            "policy_hash": r.authority.as_ref().and_then(|a| a.get("policy_hash").cloned()),
+                        })
+                    })
+                    .collect();
+            }
+        }
+    }
+
+    if json {
+        crate::cli::print_success_envelope(
+            "sandbox",
+            json!({
+                "status": {
+                    "best_level_available": best,
+                    "level_the_sandbox_uses": 1,
+                    "l1_available": l1.is_some_and(Level::available),
+                    "l1_first_missing": l1_missing.as_ref().map(|(w, d)| json!({ "what": w, "detail": d })),
+                    "chain": chain_note,
+                    "recent": history,
+                }
+            }),
+        );
+        return 0;
+    }
+    println!("sandbox status on this host ({} {}):", std::env::consts::OS, std::env::consts::ARCH);
+    println!("  best level available   L{best}");
+    match (&l1_missing, l1.is_some_and(Level::available)) {
+        (_, true) => println!("  L1 (jailed guest)      available — `run --sandbox` confines here"),
+        (Some((what, detail)), _) => println!("  L1 (jailed guest)      ABSENT — first missing: {what}: {detail}"),
+        (None, _) => println!("  L1 (jailed guest)      ABSENT — no prerequisite was attempted"),
+    }
+    println!("  {chain_note}");
+    for h in &history {
+        println!(
+            "    #{} {} {} {} {}",
+            h["seq"],
+            h["when"].as_str().unwrap_or("?"),
+            h["action"].as_str().unwrap_or("?"),
+            h["decision"].as_str().unwrap_or("?"),
+            h["detail"].as_str().unwrap_or("")
+        );
+    }
+    if history.is_empty() {
+        println!("    (no sandbox has been launched on this machine, or its chain is elsewhere)");
+    }
+    0
+}
+
 pub fn cmd_sandbox(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
     // A flag's VALUE is not a verb: `policy f.delulu --sandbox-profile dev` has one verb and one
@@ -295,6 +399,15 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
         return 2;
     }
     match verbs.as_slice() {
+        ["status"] => cmd_status(json),
+        // `kill` is NOT here, and that is a decision rather than an omission. A guest cannot outlive
+        // its host on Windows (the Job Object's kill-on-close) or on Linux (`PR_SET_PDEATHSIG`), and
+        // on macOS the remaining case — a guest computing rather than asking, whose host has died —
+        // is bounded by the processor-time ceiling added in PS-A2 round three. What a `kill` verb
+        // would need in order to be SAFE is a pid-to-executable check on three platforms, because a
+        // dead host's pid can be reused and killing by pid alone would eventually kill an innocent
+        // process. That is the wrong thing to add without the measurement to back it, so it is
+        // recorded as open work instead of shipped as a verb that looks careful and is not.
         ["probe"] => {
             let levels = probe();
             if json {

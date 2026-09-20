@@ -24,7 +24,7 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 238 |
-| Rust lines | 120662 |
+| Rust lines | 120964 |
 | Rust files outside `src/` (test/bench targets) | 101 |
 | Markdown documents | 186 |
 | Markdown lines | 52331 |
@@ -32,7 +32,7 @@ files, so it still opens when the tree does not build.
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1172 / 10790 |
+| Nodes / edges in this map | 1172 / 10794 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -87,7 +87,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 26 files, 23684 lines
+- **Modules:** 26 files, 23907 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -97,14 +97,14 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/broker_transport.rs` | 568 | Phase 5f — the local IPC transport (spec §2): Windows named pipe / Unix domain socket, one |
 | `src/brokerd.rs` | 2174 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 9354 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 9356 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
-| `src/doctor.rs` | 694 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
+| `src/doctor.rs` | 721 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 685 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/guest.rs` | 766 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
 | `src/jail.rs` | 726 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1947 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
@@ -115,7 +115,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/policy.rs` | 337 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 153 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1375 | `delulu run` — the command that actually executes a program. |
-| `src/sandbox.rs` | 359 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
+| `src/sandbox.rs` | 472 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
 | `src/signing.rs` | 912 | Signing + the registry client groundwork (Stage 8, phase 8h; spec §7). |
 
 ### `delulu-atlas`

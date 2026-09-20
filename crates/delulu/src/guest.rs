@@ -573,6 +573,87 @@ fn converse(
 }
 
 
+/// PS-A-07: ATTEMPT the L1 launcher, so `sandbox probe` and `sandbox status` answer from a launch
+/// rather than from a sentence in the source.
+///
+/// The probe's rule is that every line is an attempt. This line was the exception: it said "the L1
+/// guest launcher: not in this build" as a hard-coded `false`, and it went on saying it after PS-A
+/// built the launcher — so `probe` reported L1 ABSENT on a host where `run --sandbox` works, and
+/// `doctor` printed the same. A hard-coded verdict is not an attempt, and it was wrong in the safe
+/// direction only by luck.
+///
+/// What is attempted is the launcher and nothing else: the jail is applied, a guest is spawned under
+/// it, and the channel it opens is waited for. It deliberately does NOT run a program, because a run
+/// writes `sandbox-launch` and `sandbox-death` records, and a diagnostic that appends to a
+/// single-writer audit chain is the defect this phase already fixed once — `doctor` refused its own
+/// machine after every sandboxed run became a writer.
+///
+/// The guest is killed and its channel directory removed on every path out.
+pub fn attempt_launch() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("this executable cannot be located: {e}"))?;
+    let dir = std::env::temp_dir().join(format!("delulu-probe-{}-{}", std::process::id(), channel_tag()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("no channel directory: {e}"))?;
+    let finish = |r: Result<String, String>, child: Option<&mut std::process::Child>| {
+        if let Some(c) = child {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        r
+    };
+
+    let (mut cmd, launched) = guest_command(&exe, &dir);
+    // The probe's guest is killed on purpose, and a killed guest says so on its standard error. That
+    // belongs in this function's answer, not on the operator's terminal, where "error: the sandbox
+    // guest was started without a hello frame" from a successful PROBE reads as a broken host.
+    cmd.stderr(std::process::Stdio::piped());
+    let mut applied = crate::jail::harden(&mut cmd, crate::jail::Limits::default());
+    applied.extend(launched);
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => return finish(Err(format!("the guest could not be spawned: {e}")), None),
+    };
+    let (jail, enforced) = crate::jail::confine(&child, crate::jail::Limits::default());
+    applied.extend(enforced.guarantees.iter().copied());
+    if !crate::jail::resume(&child) {
+        return finish(Err("the guest could not be resumed under its jail".into()), Some(&mut child));
+    }
+    // A short deadline: this is a probe, and an unreachable guest is an answer, not something to wait
+    // ten seconds for.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        if crate::broker_transport::connect(&dir).is_ok() {
+            let _ = &jail;
+            let how = if applied.is_empty() {
+                "a guest started and opened its channel; this host applied no OS boundary to it".to_string()
+            } else {
+                format!("a guest started under its jail and opened its channel ({})", applied.join("; "))
+            };
+            return finish(Ok(how), Some(&mut child));
+        }
+        if std::time::Instant::now() >= deadline {
+            // Say WHY, as `converse` learned to: a guest killed by its own jail otherwise reads as an
+            // unexplained timeout.
+            let mut how = match child.try_wait().ok().flatten() {
+                Some(status) => format!("the guest exited before opening its channel ({status})"),
+                None => "the guest is running but never opened its channel".to_string(),
+            };
+            // Whatever the guest managed to say, since it is the only witness to its own death.
+            if let Some(mut err) = child.stderr.take() {
+                use std::io::Read as _;
+                let mut s = String::new();
+                let _ = err.read_to_string(&mut s);
+                let s = s.trim();
+                if !s.is_empty() {
+                    how = format!("{how}: {}", s.lines().next().unwrap_or(s));
+                }
+            }
+            return finish(Err(how), Some(&mut child));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
 /// PS-A-08: record a sandbox lifecycle event in the audit chain, when this machine has one.
 ///
 /// The chain is the project's existing one — the same file, the same hashes, verified by the same

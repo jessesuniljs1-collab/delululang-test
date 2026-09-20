@@ -40,8 +40,23 @@ fn every_level_is_a_verdict_on_attempts() {
             assert!(!d.contains("version "), "a version string is not an attempt: {a}");
         }
     }
-    // Nothing beyond L0 exists in this build; the probe must not claim it.
-    assert_eq!(v["highest_available"], 0, "{v}");
+    // `highest_available` must be the highest level whose attempts ALL succeeded, computed here from
+    // the same list rather than compared against a fixed number. It used to assert 0, which was true
+    // when PS-0 wrote it and false the moment PS-A built the L1 launcher — a test pinning a number is
+    // a test that has to be edited every time the product improves, and the thing worth pinning is
+    // the RELATION between the verdict and the attempts.
+    let highest = levels
+        .iter()
+        .filter(|l| l["attempts"].as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|x| x["ok"] == true)))
+        .filter_map(|l| l["level"].as_u64())
+        .max()
+        .unwrap_or(0);
+    assert_eq!(v["highest_available"].as_u64(), Some(highest), "{v}");
+    // And the levels no build can reach yet must still be absent, or the assertion above would be
+    // satisfied by a probe that simply claimed everything.
+    for lvl in [2usize, 3, 4] {
+        assert_eq!(levels[lvl]["available"], false, "L{lvl} has no launcher in this build: {}", levels[lvl]);
+    }
 }
 
 /// The mutant test: the probe's KVM verdict must equal this test's own attempt to open `/dev/kvm`
@@ -73,8 +88,16 @@ fn doctor_has_a_sandbox_section_that_agrees_with_the_probe() {
     let kvm = sandbox.iter().find(|c| c["name"] == "KVM").unwrap();
     let mine = std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").is_ok();
     assert_eq!(kvm["detail"].as_str().unwrap().starts_with("available"), mine, "{kvm}");
+    // Agreement with the probe, not a fixed level: `doctor` must name whatever the probe found, and
+    // this line asserted `L0` until PS-A built the L1 launcher and made that wrong on every host.
     let level = sandbox.iter().find(|c| c["name"] == "level available").unwrap();
-    assert!(level["detail"].as_str().unwrap().starts_with("L0"), "{level}");
+    let p = probe();
+    let want = format!("L{}", p["highest_available"].as_u64().unwrap_or(0));
+    assert!(
+        level["detail"].as_str().unwrap().starts_with(&want),
+        "doctor says `{}` and the probe says `{want}`: {level}",
+        level["detail"]
+    );
     // Decision lines, not failures: the section never fails the run.
     assert!(sandbox.iter().all(|c| c["status"] != "problem"), "{sandbox:?}");
 }

@@ -1268,6 +1268,8 @@ fn usage() -> &'static str {
      \x20 delulu audit     bundle [--out F] | reconcile <bundle> [--expect-start HASH]  [--dir DIR] [--json]\n\
      \x20 delulu broker    start [--foreground] [--dangerously-bypass-guard] [--guard-policy F] [--require-anchored-roots ANCHOR] | status | stop | rotate-key\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--json]\n\
+     \x20 delulu sandbox   status [--json]   (what this host can actually confine a guest with, from a real launch, and the\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 sandbox lifecycle records in this machine's audit chain — read-only, and it writes nothing)\n\
      \x20 delulu sandbox   probe [--json]   (which isolation levels this host can give a program, L0-L4, and for each\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 absent one the first missing prerequisite — every line an attempt, never a version string)\n\
      \x20 delulu sandbox   policy <file.delulu> [--sandbox-profile dev|contained|hostile-agent] [--json]\n\

@@ -228,7 +228,17 @@ fn sandbox_section(r: &mut Report) {
     let levels = crate::sandbox::probe();
     let top = levels.iter().filter(|l| l.available()).map(|l| l.level).max().unwrap_or(0);
     let s = "sandbox";
-    r.push(s, "backend", Status::Note, "inproc — the language and custody in one process; no OS boundary around the program");
+    // What THIS process is, and what `run --sandbox` would be — kept apart, because a reader of
+    // `doctor` is deciding about the second and this line used to describe only the first.
+    r.push(
+        s,
+        "backend",
+        Status::Note,
+        "inproc for an ordinary `run` — the language and custody in one process, no OS boundary; `run --sandbox` \
+         launches a jailed guest instead and the host performs every effect. The sandbox is NOT yet the default \
+         (D-V2-25 says it should be), because the channel cannot carry actors, foreign code, Python, plugins, \
+         devices or secrets and those runs would be refused",
+    );
     let next = levels.iter().find(|l| !l.available()).and_then(|l| l.first_missing().map(|a| (l.level, a)));
     r.push(
         s,
@@ -256,7 +266,24 @@ fn sandbox_section(r: &mut Report) {
         .filter(|a| a.what != "the L1 guest launcher")
         .map(|a| format!("{}: {}", a.what, if a.ok { "works" } else { "refused" }))
         .collect();
-    r.push(s, "OS primitives", Status::Note, format!("{} (attempted now; the L1 jail that would use them is not built — PS-A)", prims.join(", ")));
+    // Each one attempted just now. The parenthesis used to say the L1 jail "is not built", which was
+    // true when PS-0 wrote it and false from PS-A onwards; the launcher line above is now an attempt,
+    // so this one says what that attempt found rather than a fixed sentence about the build.
+    let launcher = levels[1].attempts.iter().find(|a| a.what == "the L1 guest launcher");
+    r.push(
+        s,
+        "OS primitives",
+        Status::Note,
+        format!(
+            "{} (attempted now; the L1 jail {})",
+            prims.join(", "),
+            match launcher {
+                Some(a) if a.ok => "uses them: a guest started under it and opened its channel",
+                Some(a) => &a.detail,
+                None => "was not attempted",
+            }
+        ),
+    );
     r.push(
         s,
         "network enforcement",

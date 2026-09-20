@@ -165,6 +165,29 @@ else
 fi
 
 echo
+echo "-- the sandbox --"
+# A state directory of the sweep's own. `run --sandbox` APPENDS sandbox-launch and sandbox-death
+# records to the audit chain, and a sweep must not write into the developer's own chain — that is
+# exactly how those records first reached `~/.delulu` and made `doctor` refuse its own machine.
+DELULU_STATE_DIR="$WORK/state"
+mkdir -p "$DELULU_STATE_DIR/audit"
+export DELULU_STATE_DIR
+# `probe` and `status` ATTEMPT things: they launch a guest under a jail and kill it. They must exit 0
+# on every platform, because "this host cannot confine" is an answer rather than a failure.
+run 0 "sandbox probe"                     "$DL" sandbox probe
+run 0 "sandbox probe --json"               "$DL" sandbox probe --json
+run 0 "sandbox status"                    "$DL" sandbox status
+run 0 "sandbox status --json"              "$DL" sandbox status --json
+# A verb `sandbox` does not have is refused, not guessed at as `probe`. `kill` is the one an operator
+# will actually type, because PS-A-07 lists it and it is deliberately not built.
+run 2 "sandbox kill (not a verb here)"     "$DL" sandbox kill
+run 0 "sandbox policy"                    "$DL" sandbox policy hello.delulu
+run 0 "sandbox policy --json"              "$DL" sandbox policy --json hello.delulu
+run 0 "run --sandbox"                     "$DL" run hello.delulu --sandbox --grant console
+run 2 "run --mode without --sandbox"       "$DL" run hello.delulu --mode audit --grant console
+unset DELULU_STATE_DIR
+
+echo
 echo "-- repository tooling --"
 # `doctor` inspects the checkout it is run FROM and takes no path argument.
 ( cd "$ROOT" && "$DL" doctor --check ) >out.txt 2>err.txt

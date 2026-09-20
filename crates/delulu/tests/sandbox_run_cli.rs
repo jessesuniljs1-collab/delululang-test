@@ -510,3 +510,59 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `sandbox status` must agree with reality, and this test is the cross-check: whatever the probe says
+/// about the L1 launcher, a real `run --sandbox` must behave that way.
+///
+/// The line it guards used to be a hard-coded `false` reading "the L1 guest launcher: not in this
+/// build". It kept saying that after PS-A built the launcher, so `probe`, `status` and `doctor` all
+/// reported L1 ABSENT on a host where `run --sandbox` confines. A verdict nothing attempts is not an
+/// attempt, and nothing could have caught it — this test is what would have.
+#[test]
+fn status_agrees_with_what_a_real_sandboxed_run_does() {
+    let o = delulu(&["sandbox", "status", "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("one JSON envelope");
+    assert_eq!(v["command"], "sandbox", "{v}");
+    let st = &v["status"];
+    let claims_l1 = st["l1_available"].as_bool().expect("l1_available is a bool");
+
+    let dir = tmp("status");
+    let src = dir.join("p.delulu");
+    std::fs::write(&src, "module g\n\nfn main(root: Root) {\n}\n").unwrap();
+    let run = delulu(&["run", src.to_str().unwrap(), "--sandbox"]);
+    let ran = run.status.code() == Some(0);
+    assert_eq!(
+        claims_l1, ran,
+        "`sandbox status` says l1_available={claims_l1} and a real `run --sandbox` {}. \
+         A probe that disagrees with the thing it probes is worse than no probe.\nstatus: {st}\nrun: {}",
+        if ran { "succeeded" } else { "failed" },
+        out(&run)
+    );
+    // And the read-only promise: status must not have appended to the chain it reports on.
+    let before = delulu(&["sandbox", "status", "--json"]);
+    let after = delulu(&["sandbox", "status", "--json"]);
+    let count = |o: &Output| -> serde_json::Value {
+        serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&o.stdout))
+            .map(|v| v["status"]["chain"].clone())
+            .unwrap_or(serde_json::Value::Null)
+    };
+    assert_eq!(count(&before), count(&after), "`sandbox status` changed the chain it was reading");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A verb `sandbox` does not have is refused with a reason, not silently treated as `probe`. `kill` is
+/// the case that matters: PS-A-07 lists it, so an operator will type it, and it is deliberately not
+/// built — a guest cannot outlive its host on Windows or Linux, and killing by pid alone would
+/// eventually kill an innocent process after pid reuse.
+#[test]
+fn an_unknown_sandbox_verb_is_refused_rather_than_guessed_at() {
+    let o = delulu(&["sandbox", "kill"]);
+    assert_ne!(o.status.code(), Some(0), "`sandbox kill` must not silently succeed: {}", out(&o));
+    // Falsification: the verbs that DO exist succeed, so the refusal above is about `kill` and not
+    // about `sandbox` refusing everything.
+    for verb in ["probe", "status"] {
+        let ok = delulu(&["sandbox", verb, "--json"]);
+        assert_eq!(ok.status.code(), Some(0), "`sandbox {verb}` should work: {}", out(&ok));
+    }
+}
