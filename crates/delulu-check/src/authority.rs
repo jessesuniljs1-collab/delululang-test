@@ -62,12 +62,16 @@ pub fn authority_report(program: &str, result: &CheckResult, scopes: &ScopeInfo)
     // `ForeignLoad`/`Python` are disclosed under the "outside the proof" separator (`foreign_calls`),
     // not as ordinary capability lines — the foreign section is the single place the proof's holes
     // are enumerated (spec §6).
+    //
+    // `PluginHost` used to be skipped here too, and that was right while it could not be granted: a
+    // capability line for a flag that did not exist would have sent an operator looking for one. P2
+    // (D-V2-27) gives it `--grant plugin=PATH`, so it is an ordinary capability line now, and
+    // `required_grants` can name the flag. The sentence `INSTALL.txt` makes — "run `delulu authority`
+    // and the required grants are the list it prints" — is only true if every grantable capability
+    // appears here.
     let mut capabilities = Vec::new();
     for k in &cap_kinds {
-        if matches!(
-            k,
-            ResourceKind::Declassify | ResourceKind::PluginHost | ResourceKind::ForeignLoad | ResourceKind::Python
-        ) {
+        if matches!(k, ResourceKind::Declassify | ResourceKind::ForeignLoad | ResourceKind::Python) {
             continue;
         }
         capabilities.push(json!({

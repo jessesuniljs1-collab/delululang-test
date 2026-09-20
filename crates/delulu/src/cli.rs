@@ -1224,6 +1224,9 @@ fn usage() -> &'static str {
      \x20 delulu run       <file.delulu | package-dir | file.dwx> [--json] [--grant K[=V]]... [--grant-manifest] [--no-prompt]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (a package-dir runs a MULTI-PACKAGE program: the graph is checked, then flattened\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 for execution; two modules declaring the same top-level name are refused, not guessed — D61)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--grant plugin=PATH]  (P2/D-V2-27: where a program may LOAD a plugin artifact from. Paths go\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 through the containment resolver, so `..`, a symlink or a case difference cannot widen it; a\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 package may narrow it further with `[plugins] allow = [\"<blake3>\"]` in delulu.toml)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox | --sandbox=off] [--sandbox-profile dev|contained|hostile-agent] [--limits mem=N,cpu=S]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--mode strict|audit]  (audit performs NOTHING: it reports the policy that would hold and the\n\
@@ -3435,6 +3438,10 @@ fn required_grants(report: &Json, requested: &BTreeMap<String, Vec<String>>) -> 
                     push(&mut out, format!("compute={s}:memory_bytes=N"));
                 }
             }
+            // P2 (D-V2-27): a program that reaches for `root.plugin_host()` needs somewhere to load
+            // from. The placeholder is a PATH because the source cannot say which artifact an
+            // operator will permit — that is the operator's half of the decision.
+            "PluginHost" => push(&mut out, "plugin=PATH".into()),
             _ => {}
         }
     }
@@ -5788,6 +5795,11 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         clock: has("Clock"),
         rand: has("Rand"),
         declassify: has("Declassify"),
+        // P2 (D-V2-27): a LEASE never confers plugin loading. A lease is a delegated slice, and
+        // `Load` is a red-tier capability whose artifact path is grant data a human supplies at the
+        // prompt — the same argument that keeps `exec.native` out of `--grant-manifest`. A leased run
+        // that reaches for `root.plugin_host()` is refused with DL0703 naming the flag.
+        plugins: Vec::new(),
         // Daemon mode strips local secret VALUES and keeps only broker-handle names (invariant 23);
         // the names come from the lease's `secrets` scope.
         secrets: info.secrets.iter().map(|n| (n.clone(), String::new())).collect(),

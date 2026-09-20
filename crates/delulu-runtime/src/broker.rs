@@ -37,6 +37,15 @@ pub struct Manifest {
     /// Stage 10 (10c): `[actors] overflow = "block" | "drop-new"` — the overflow policy for
     /// bounded mailboxes (`block` when absent, the spec default).
     pub actors_overflow: Option<String>,
+    /// P2 (D-V2-27): `[plugins] allow = ["<blake3-hex>", ...]` — the artifacts this package may load
+    /// at run time, named by the hash of their bytes.
+    ///
+    /// A CEILING, not a source of authority. It says which artifacts may load; it never says what they
+    /// may do, which stays the artifact's own declared ceiling intersected with the operator's grant.
+    /// The same division `foreign.c` already uses: the manifest names *what*, the operator supplies
+    /// *which*. Empty means the package pins nothing, and then only the operator's `--grant plugin=`
+    /// decides — pinning is the honest form and is not therefore mandatory.
+    pub plugins_allow: Vec<String>,
 }
 
 /// Parse the tiny subset of TOML the Stage-1 manifest uses: `[section]` headers and
@@ -74,6 +83,12 @@ pub fn parse_manifest(src: &str) -> Manifest {
             // `(mailbox = N)` on the declaration wins over this; nothing = unbounded (1.0).
             ("actors", "mailbox") => m.actors_mailbox = val.parse::<u64>().ok(),
             ("actors", "overflow") => m.actors_overflow = values.into_iter().next(),
+            // P2 (D-V2-27): the hash ceiling. Lower-cased on the way in, because a hash is compared
+            // to decide whether code may load, and two spellings of one hash deciding differently is
+            // the campaign's recurring shape (a security decision on an unnormalized representation).
+            ("plugins", "allow") => {
+                m.plugins_allow = values.into_iter().map(|h| h.trim().to_ascii_lowercase()).collect()
+            }
             _ => {}
         }
     }
@@ -147,6 +162,16 @@ pub struct Grants {
     pub sensors: Vec<String>,
     /// Stage 10 (10h, Track F): granted compute devices — the envelope IS the scope (spec §7.1).
     pub computes: Vec<crate::value::ComputeEnvelope>,
+    /// P2 (D-V2-27): `--grant plugin=<path-or-dir>` — where a program may load a plugin artifact
+    /// FROM. The operator's half of the loading decision; the manifest's `[plugins] allow` hash list
+    /// is the other half, and a load needs both when the package pins any.
+    ///
+    /// Stored as the operator wrote it, refused here if the spelling itself could widen (`..`, a bare
+    /// drive letter, the hostile forms `hostile_path` already knows) and resolved against the working
+    /// directory at load time by the same containment the primitive table uses for `fs.*`. A grant is
+    /// a path spelling too — that is C-11/D-NE-29, and it applies to this dimension for the same
+    /// reason it applies to `fs.read`.
+    pub plugins: Vec<String>,
 }
 
 impl Grants {
@@ -234,6 +259,24 @@ impl Grants {
                     self.computes.push(env);
                 }
                 // Stage 10 (10e): `sensor=DEVICE` — reads are `Read` under this device scope.
+                // P2 (D-V2-27): `plugin=<path-or-dir>`. Refused empty for the reason the five
+                // scope keys are: joining "" onto the working directory yields the working directory,
+                // so `--grant plugin=$PLUGIN_DIR` with the variable unset would grant the whole tree
+                // the command ran in — silently, in every shell (campaign finding C87).
+                "plugin" => {
+                    let val = v.trim();
+                    if val.is_empty() {
+                        return Err(format!(
+                            "bad grant `{spec}` — the value is empty (use plugin=PATH); an empty path \
+                             would grant the whole working directory to load code from, so it is \
+                             refused rather than guessed"
+                        ));
+                    }
+                    if let Some(why) = crate::prim::hostile_path(val, true) {
+                        return Err(format!("bad grant `{spec}` — {why}; refused rather than guessed"));
+                    }
+                    self.plugins.push(val.to_string());
+                }
                 "sensor" => {
                     let d = v.trim();
                     if d.is_empty() {
@@ -304,6 +347,13 @@ impl Grants {
             actuators: self.actuators.clone(),
             sensors: self.sensors.clone(),
             computes: self.computes.clone(),
+            // P2 (D-V2-27): resolved the same way every other path grant is, through
+            // `granted_root`, so `..` and `.` are gone before the value is ever compared against a
+            // program's path. The hash ceiling comes from the manifest and is attached by the caller
+            // that read it (`run_cmd`), because `Grants` is the operator's half and the manifest is
+            // the package's.
+            plugins: self.plugins.iter().map(|p| granted_root(p)).collect(),
+            plugins_allow: Vec::new(),
         }
     }
 
@@ -329,7 +379,10 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
             ResourceKind::Clock => !grants.clock,
             ResourceKind::Rand => !grants.rand,
             ResourceKind::Declassify => !grants.declassify,
-            ResourceKind::PluginHost => true,
+            // P2 (D-V2-27): covered once the operator names somewhere to load from. It used to be
+            // unconditionally `true` — "never covered" — which was correct while no load path
+            // existed and would now refuse every legitimate host program before it ran.
+            ResourceKind::PluginHost => grants.plugins.is_empty(),
             // `Cap[ForeignLoad]` is covered once any `foreign.c` lib OR `foreign.python` pattern is
             // granted (spec §4.1/§5.1); the per-lib/per-import gate is enforced later.
             ResourceKind::ForeignLoad => grants.foreign_c.is_empty() && grants.foreign_python.is_empty(),
@@ -349,6 +402,79 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P2 (D-V2-27): the loading grant. A grant is a path spelling too, so every hostile form the
+    /// primitive table refuses from a PROGRAM is refused from an OPERATOR here as well — that is
+    /// C-11/D-NE-29, and this dimension is the one where getting it wrong means loading code.
+    #[test]
+    fn the_plugin_grant_refuses_every_spelling_that_could_widen_it() {
+        // The empty value first. `--grant plugin=$DIR` with `DIR` unset is silent in every shell, and
+        // joining "" onto the working directory yields the working directory — which here would mean
+        // "load code from anywhere under where I happened to run this" (campaign finding C87).
+        let mut g = Grants::default();
+        let e = g.add("plugin=").expect_err("an empty plugin grant must be refused");
+        assert!(e.contains("the value is empty"), "{e}");
+        assert!(e.contains("load code from"), "the refusal must say what the empty path would mean: {e}");
+
+        // A bare drive letter means "the current directory of that drive", silently (C-11).
+        if cfg!(windows) {
+            let mut g = Grants::default();
+            assert!(g.add("plugin=C:").is_err(), "a bare drive letter must be refused");
+        }
+
+        // And the control: an ordinary relative path is accepted, or the assertions above would be
+        // passing for a dimension that refuses everything.
+        let mut g = Grants::default();
+        g.add("plugin=./plugins").expect("an ordinary path is a grant");
+        assert_eq!(g.plugins, vec!["./plugins".to_string()]);
+        // Repeating the flag adds, as every other scope dimension does.
+        g.add("plugin=./more").expect("a second path");
+        assert_eq!(g.plugins.len(), 2, "{:?}", g.plugins);
+    }
+
+    /// The capability exists only when the operator named somewhere to load from, and `plugin_host`
+    /// is no longer the unconditional refusal it was before P2 (NE-01).
+    #[test]
+    fn plugin_host_is_minted_only_when_loading_was_granted() {
+        let mut g = Grants::default();
+        let root = g.build_root();
+        assert!(root.plugins.is_empty(), "nothing is granted by default");
+        assert!(
+            crate::broker::missing_kinds(&[ResourceKind::PluginHost].into_iter().collect(), &g)
+                .contains(&ResourceKind::PluginHost),
+            "an ungranted plugin host must be reported missing at the pre-flight"
+        );
+
+        g.add("plugin=./plugins").unwrap();
+        let root = g.build_root();
+        assert_eq!(root.plugins.len(), 1, "the grant reached the root");
+        assert!(root.plugins[0].is_absolute(), "resolved against the working directory: {:?}", root.plugins[0]);
+        assert!(
+            crate::broker::missing_kinds(&[ResourceKind::PluginHost].into_iter().collect(), &g).is_empty(),
+            "a granted plugin host must not be reported missing"
+        );
+    }
+
+    /// The manifest's `[plugins] allow` is a hash CEILING, and `--grant-manifest` must not turn it
+    /// into a grant: accepting a manifest's authority is a different act from obeying its
+    /// restrictions, and only one of them is the operator's to opt into.
+    #[test]
+    fn the_manifest_pins_artifacts_by_hash_and_never_grants_loading() {
+        let m = crate::parse_manifest(
+            "[package]\nname = \"p\"\n\n[authority]\neffects = [\"Write\"]\n\n[plugins]\nallow = [\"AB12\", \"cd34\"]\n",
+        );
+        // Lower-cased on the way in: a hash decides whether code may load, and two spellings of one
+        // hash deciding differently is the shape this campaign keeps finding.
+        assert_eq!(m.plugins_allow, vec!["ab12".to_string(), "cd34".to_string()]);
+
+        let mut g = Grants::default();
+        g.accept_manifest(&m);
+        assert!(
+            g.plugins.is_empty(),
+            "`--grant-manifest` must not confer plugin loading — a package cannot grant itself the \
+             right to load code, any more than it can grant itself `exec.native`"
+        );
+    }
 
     // ----- Stage 4 foreign grants (spec §4.1) -------------------------------
 

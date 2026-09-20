@@ -604,6 +604,15 @@ pub enum CapScope {
     /// Gates embedded CPython (`Cap[Python]`, spec §5). Carries the granted import allowlist patterns
     /// (`foreign.python`); `py.import` is checked against them at runtime (DL1305).
     Python { allowlist: Vec<String> },
+    /// P2 (D-V2-27): gates loading a plugin artifact at run time (`Cap[PluginHost]`).
+    ///
+    /// The scope IS the two halves of the loading decision, and both are the OPERATOR's: `roots` are
+    /// the resolved directories or files `--grant plugin=` named, and `allow_hashes` is the package
+    /// manifest's `[plugins] allow` list. A program holding this capability can name a path; it cannot
+    /// name a root it was not given, and it cannot add a hash to the list. Empty `allow_hashes` means
+    /// the package pinned nothing, and then the roots alone decide — pinning is the honest form, not a
+    /// mandatory one.
+    PluginHost { roots: Vec<PathBuf>, allow_hashes: Vec<String> },
     /// PS-A-02: a capability the HOST holds; this process has only the number the host minted for
     /// it. A guest's capabilities are all of this shape, which is what "the guest performs no
     /// effects" means concretely: there is no path, host or socket here to act on.
@@ -750,6 +759,12 @@ pub struct RootVal {
     pub sensors: Vec<String>,
     /// Stage 10 (10h): granted compute devices; `root.compute(device)` mints the matching cap.
     pub computes: Vec<ComputeEnvelope>,
+    /// P2 (D-V2-27): resolved roots a plugin artifact may be loaded from (`--grant plugin=`).
+    /// `root.plugin_host()` mints `Cap[PluginHost]` iff this is non-empty.
+    pub plugins: Vec<PathBuf>,
+    /// P2 (D-V2-27): the package manifest's `[plugins] allow` hash ceiling, carried into the
+    /// capability. A ceiling, never a source of authority.
+    pub plugins_allow: Vec<String>,
 }
 
 // ----- environments --------------------------------------------------------

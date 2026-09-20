@@ -984,6 +984,14 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     };
 
     let mut root_val = build_root(&grants);
+    // P2 (D-V2-27): the manifest's `[plugins] allow` hash list is attached whether or not
+    // `--grant-manifest` was passed, and that is deliberate. `--grant-manifest` accepts the
+    // manifest's declared AUTHORITY; this list is a CEILING — it can only narrow which artifacts may
+    // load. A restriction that applied only when the operator opted into accepting grants would be a
+    // restriction an operator could drop by accident.
+    if let Some(m) = &manifest {
+        root_val.plugins_allow = m.plugins_allow.clone();
+    }
     if daemon_mode {
         // Phase 5g: in daemon mode the program gets opaque broker-secret HANDLES — the byte values
         // live in the broker's store, never in this process pre-`expose` (invariant 23). The grant

@@ -261,9 +261,83 @@ here, this log says so and the archive is not edited.
 - **Standing instruction:** these three are not to be asked again unless new evidence shows the
   architecture has materially changed.
 
+## D-V2-27 — D-NE-10, the run-time loading grant — RULED (owner, 2026-09-20)
+- **Both spellings** (the archive's option (c)): `--grant plugin=<path-or-dir>` for the five-minute
+  case, AND a `[plugins]` section in `delulu.toml` naming permitted artifacts **by hash**. Every path
+  in either form goes through the containment resolver, so `..`, a symlink or a case difference cannot
+  widen the grant — the P22 shape.
+- **Why:** hash-pinning in a manifest is the supply-chain-honest form and matches the lockfile's habit;
+  the flag is what an operator types while developing, and a single-file `delulu run x.delulu` has no
+  manifest to edit. Path-only pinning would leave an artifact swap at that path invisible until it ran.
+- Opens P2. `DL0703` must name the flag when a program needs `Load` and was not granted it.
+
+## P2 build order — the run-time load path (P2-01, head chef, 2026-09-20)
+
+Reviewed before code, as the roadmap requires. What follows is the shape P2 builds, and — as much as
+the shape — the places where it must refuse.
+
+**What already exists.** Stage 6 built nearly all of the load SEQUENCE and none of its entry point.
+`delulu-runtime/src/plugin.rs` holds `step1_container_api`, `step2_class`, `step3_ceiling`,
+`step4_holder`, `load_prepare`, `step5_verified`, the `PluginEngine` trait (`read_artifact`,
+`validate_imports`), `cap_slice`, `r_get_verified`, `r_get_contained`, `HandleTable`,
+`kill_on_limit`, `unload`, and the refusal vocabulary. `delulu-wasm` implements the engine.
+`delulu plugin verify` drives it from the CLI.
+
+**What does not exist**, and is NE-01: nothing calls any of it from a running program.
+`prim.rs:453` is the whole of it —
+
+    "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
+
+— so `root.plugin_host()` type-checks (it is in `prim_table.rs`) and then refuses at run time. The
+checker, the authority report and the Atlas all already model plugins; the runtime does not load one.
+
+### The path P2 builds
+
+1. **The grant** (P2-02, D-V2-27). Two spellings, both ruled: `--grant plugin=<path-or-dir>` and a
+   `[plugins]` section in `delulu.toml` naming artifacts **by hash**. Every path goes through the
+   containment resolver before it is stored, because a grant is a path spelling too, and `..`, a
+   symlink or a case difference must not widen it — the shape that produced SYMLINK-DANGLE-1 and
+   GUARD-SPELL-1 one layer out. `DL0703` names the flag when a program needs `Load` without it.
+2. **`root.plugin_host()`** (P2-03) mints a `Cap[PluginHost]` whose scope carries the granted roots and
+   the hash ceiling — never the program's own idea of either.
+3. **`load(host, path, grant)`** runs steps 1–7 through the `delulu-wasm` engine. The path is resolved
+   against the host capability's scope by the same primitive-table containment every `fs.*` operation
+   uses; a path outside it is refused before a byte is read.
+4. **The holder check** (P2-04) creates a child grant node under the program's node, in embedded and
+   daemon custody alike. `unload` and `grants revoke` kill it; a revoked export faults with
+   `PluginErr::Revoked` on its next call.
+5. **Limits** (P2-05) come from `Grant.limits` on the live engine. The Windows `Contained` refusal is
+   retained exactly as it is: it is a real limitation, and softening it here would be the silent
+   downgrade this project keeps refusing.
+6. **Evidence** (P2-07): the loaded node id in the audit record and in `--trace-effects`.
+
+### The rules this path must not break
+
+- **`verify ≡ load`.** `plugin verify` and a real load must reach the same verdict on the same bytes,
+  or `verify` is advice rather than a check. The sequence functions are shared, not reimplemented.
+- **The hash is checked on the bytes that were OPENED**, not on the path. A `.dpx` swapped between
+  `verify` and `load` is the TOCTOU case, and the artifact already carries its blake3 content binding
+  — so the check is on the buffer in hand. (P2-08 witnesses it.)
+- **A grant can never exceed the artifact's ceiling** (`step3_ceiling`), and the manifest's `[plugins]`
+  hash list is a CEILING, not a source of authority: it says which artifacts may load, never what they
+  may do. This mirrors `foreign.c`, where the manifest names *what* and the operator supplies *which*.
+- **A plugin cannot load a plugin** (R-7). The child's grant derives no `Load`.
+- **For a sandboxed program the load runs HOST-side.** A guest cannot load code: the channel carries no
+  plugin request kind, and `unsupported_surface` already refuses such a program with exit 2. That
+  refusal stays until the channel carries it, which is not P2.
+- **Windows `Contained` stays refused**, and the run says so.
+
+### Where this could go wrong, and what will catch it
+
+The highest-risk item in the whole plan is a new code-loading path, and the mitigations are reuse
+rather than novelty: the containment resolver for paths, the existing sequence functions for the
+decision, and the existing refusal codes. P2-08 red-teams the path — path spelling, the swapped
+artifact, a grant wider than the ceiling, `Contained` on Windows, a plugin loading a plugin — with each
+test witnessed failing on the unpatched code, not merely passing on the patched one.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,
-D-NE-6, D-NE-7, D-NE-8, D-NE-10, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,
+D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,
 D-NE-33 (narrowed by D-V2-13); the Constitution §5.15 wording (RW 7.10a); rustfmt and a code of
 conduct; the four pre-public-repository items. Each is asked at the start of the phase that needs it
 (`V2_MASTER_PLAN.md` §7).

@@ -125,6 +125,11 @@ fn full_root(grants: &Grants) -> RootVal {
         // The REPL grants no compute devices (10h): an interactive session is not where a human
         // decides what may reach an accelerator.
         computes: Vec::new(),
+        // P2 (D-V2-27): nor plugin loading, for the same reason and more so — the REPL is a prompt,
+        // and "load this code and run it" at a prompt is a decision that belongs in a command someone
+        // wrote with a path in it.
+        plugins: Vec::new(),
+        plugins_allow: Vec::new(),
         console: true,
         fs_read: vec![std::env::current_dir().unwrap_or_default()],
         fs_write: vec![std::env::current_dir().unwrap_or_default()],

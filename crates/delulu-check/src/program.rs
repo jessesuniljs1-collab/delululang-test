@@ -271,11 +271,9 @@ pub fn program_authority(program: &Program, program_name: &str, scopes: &ScopeIn
     let mut capabilities = Vec::new();
     for k in &cap_kinds {
         // `ForeignLoad`/`Python` are disclosed under the "outside the proof" separator, not as
-        // ordinary capability lines (spec §6, mirrors `authority_report`).
-        if matches!(
-            k,
-            ResourceKind::Declassify | ResourceKind::PluginHost | ResourceKind::ForeignLoad | ResourceKind::Python
-        ) {
+        // ordinary capability lines (spec §6, mirrors `authority_report`). `PluginHost` is an ordinary
+        // line since P2 gave it a grant spelling — see the longer note in `authority.rs`.
+        if matches!(k, ResourceKind::Declassify | ResourceKind::ForeignLoad | ResourceKind::Python) {
             continue;
         }
         capabilities.push(json!({ "kind": k.name(), "scopes": scopes.for_kind(*k) }));

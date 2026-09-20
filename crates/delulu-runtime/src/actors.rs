@@ -109,6 +109,18 @@ pub struct RootMsg {
     /// 10h, not a safety position — the old comment here even justified withholding as "fail closed,
     /// like the actuator list", next to the line where the actuator list crosses.
     pub computes: Vec<crate::value::ComputeEnvelope>,
+    /// P2 (D-V2-27): the plugin-loading grant, carried for the same reason `foreign_load` beside it
+    /// is. Loading foreign C already crosses this boundary, and a `.dpx` plugin is the strictly more
+    /// confined of the two — it runs on the WASM engine under a grant-derived import slice, where a
+    /// foreign library runs as native code in a worker. Withholding the more contained dimension
+    /// while the less contained one crosses would be an omission dressed as a safety position, which
+    /// is exactly the mistake the `computes` comment above records.
+    ///
+    /// Plain data, `Send` by construction, and it BOUNDS its holder: these are the roots the operator
+    /// named and the hashes the package pinned. An actor can name a path inside them; it cannot add
+    /// one, and every load still runs the whole sequence including the holder check.
+    pub plugins: Vec<std::path::PathBuf>,
+    pub plugins_allow: Vec<String>,
 }
 
 enum Job {
@@ -771,6 +783,8 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             broker_secrets: r.broker_secrets.clone(),
             actuators: r.actuators.clone(),
             sensors: r.sensors.clone(),
+            plugins: r.plugins.clone(),
+            plugins_allow: r.plugins_allow.clone(),
             computes: r.computes.clone(),
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
@@ -868,6 +882,8 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
                 broker_secrets: r.broker_secrets,
                 actuators: r.actuators,
                 sensors: r.sensors,
+                plugins: r.plugins,
+                plugins_allow: r.plugins_allow,
             };
             Value::Root(Rc::new(root))
         }

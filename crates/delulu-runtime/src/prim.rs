@@ -450,7 +450,22 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 None => Err(Fault::at("DL0703", format!("compute device `{d}` was not granted — pass `--grant \"compute={d}:memory_bytes=N,...\"`"), span)),
             }
         }
-        "plugin_host" => Err(Fault::at("DL0703", "plugin hosting is not available in the Stage-1 runtime", span)),
+        // P2 (D-V2-27): `root.plugin_host()` mints the capability that gates loading. Before P2 this
+        // arm refused unconditionally with "not available in the Stage-1 runtime" — true then, and the
+        // whole of NE-01.
+        "plugin_host" => {
+            if root.plugins.is_empty() {
+                Err(refused("plugin loading", "plugin=PATH"))
+            } else {
+                Ok(cap(
+                    ResourceKind::PluginHost,
+                    CapScope::PluginHost {
+                        roots: root.plugins.clone(),
+                        allow_hashes: root.plugins_allow.clone(),
+                    },
+                ))
+            }
+        }
         _ => Err(Fault::at("DL0907", format!("unknown Root method `{method}` (checker bug)"), span)),
     }
 }

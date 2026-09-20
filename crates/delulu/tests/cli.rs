@@ -1241,6 +1241,18 @@ fn every_grant_kind_the_runtime_parses_is_derivable_from_the_report() {
              \x20   }\n}\n",
         ),
         (
+            // P2 (D-V2-27): the loading capability. It was absent from this corpus because it had no
+            // grant spelling to derive — and the moment it got one, this gate failed with
+            // `["plugin"]`, which is exactly the job it was written for.
+            "plugin_host.delulu",
+            "module pluginhost
+
+fn main(root: Root) ! {Load} {
+    let h = root.plugin_host()
+}
+",
+        ),
+        (
             "jit.delulu",
             "module jituse\n\n@jit\nfn hot(x: Int) -> Int {\n    x * 2\n}\n\n\
              fn main(root: Root) ! {Write} {\n    let c = root.console()\n    c.println(str(hot(21)))\n}\n",
