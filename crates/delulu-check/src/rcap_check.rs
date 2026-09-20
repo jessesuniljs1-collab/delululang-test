@@ -1091,6 +1091,19 @@ impl<'a> Pass<'a> {
                                 }
                                 return K::Known(Rcap::Val);
                             }
+                            // `Map()` is a CONSTRUCTOR, so it evaluates to a fresh, unaliased
+                            // composite — exactly like a list or record literal (D62). Without this
+                            // it fell to `default_k`, which reports the TYPE's default rcap: `val`
+                            // for a map of val-defaulting components. The result was that
+                            // `let m = Map()` followed by `m.insert(k, v)` was DL1604 — a map you
+                            // could create and never fill, which is the four-spellings-of-one-program
+                            // shape D62 was written about.
+                            "Map" => {
+                                for a in args {
+                                    self.walk_expr(a);
+                                }
+                                return fresh_composite(&[], &[]);
+                            }
                             "str" | "len" | "int" | "float" | "parse_int" | "parse_float" | "range" => {
                                 for a in args {
                                     self.walk_expr(a);
@@ -1167,11 +1180,27 @@ impl<'a> Pass<'a> {
                         k
                     })
                     .collect();
-                // Mutating builtins require a writable receiver (the write rule applied to
-                // the one mutating method the stdlib has).
+                // Mutating methods require a writable receiver (the write rule). The set lives in
+                // `MUTATING_LIST_METHODS` rather than in this condition, because a mutator that
+                // forgot to register would be a SILENT hole in `val` — the write allowed through a
+                // deeply-immutable reference with nothing saying so. P3 added `pop`, which is how
+                // this stopped being "the one mutating method the stdlib has".
                 let recv_ty = self.node_types.get(&recv.id());
-                if name.name == "push" && matches!(recv_ty, Some(Type::List(_))) {
-                    self.require_writable_receiver(rk, *span, "list element (push)");
+                if crate::prim_table::MUTATING_LIST_METHODS.contains(&name.name.as_str())
+                    && matches!(recv_ty, Some(Type::List(_)))
+                {
+                    let what = format!("list element ({})", name.name);
+                    self.require_writable_receiver(rk, *span, &what);
+                }
+                // The same rule for a `Map`. Stated as its own condition rather than folded into the
+                // one above because the receiver TYPE is part of the rule: `insert` on a record field
+                // named `insert` is not a map write, and a condition that only looked at the method
+                // name would say it was.
+                if crate::prim_table::MUTATING_MAP_METHODS.contains(&name.name.as_str())
+                    && matches!(recv_ty, Some(Type::Map(_, _)))
+                {
+                    let what = format!("map entry ({})", name.name);
+                    self.require_writable_receiver(rk, *span, &what);
                 }
                 // T-Send argument sendability (7f, spec §4): everything crossing an actor
                 // boundary must ARRIVE at the parameter's rcap, and an unconsumed iso gets

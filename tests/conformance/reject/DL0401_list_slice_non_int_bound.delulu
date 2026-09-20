@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.slice
+module conf
+
+fn f(xs: List[Int]) -> List[Int] {
+    xs.slice("0", 2)
+}

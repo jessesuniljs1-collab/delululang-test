@@ -281,6 +281,11 @@ pub enum Type {
     Str,
     Unit,
     List(Box<Type>),
+    /// `Map[K, V]` (P3, ruling D-V2-29). `K` is `Str`, `Int` or `Bool` in 1.x — refused otherwise at
+    /// the call site that pins it, because `Float` has no total order and a structural key's
+    /// canonical form is a design rather than a detail. Iteration is ascending by key, so `keys()`
+    /// and `values()` agree with each other and across runs.
+    Map(Box<Type>, Box<Type>),
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
     Record(TypeDefId, Vec<Type>),
@@ -417,6 +422,7 @@ impl fmt::Display for Shown<'_> {
             Type::Str => f.write_str("Str"),
             Type::Unit => f.write_str("Unit"),
             Type::List(t) => write!(f, "List[{}]", t.show(n)),
+            Type::Map(k, v) => write!(f, "Map[{}, {}]", k.show(n), v.show(n)),
             Type::Option(t) => write!(f, "Option[{}]", t.show(n)),
             Type::Result(o, e) => write!(f, "Result[{}, {}]", o.show(n), e.show(n)),
             Type::Record(id, args) | Type::Sum(id, args) => {

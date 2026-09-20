@@ -467,6 +467,30 @@ overstate it downstream:
   needs `--grant net.special=HOST`, never plain `net=`; `delulu sandbox probe --json` says which
   isolation level this host can give (today L0 only — `--isolation process` contains foreign code only).
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
+- **The collection surface, and what it refuses.** As of 2026-09-20 (V2 phase P3) `List` has fifteen
+  methods (`len`, `is_empty`, `get`, `push`, `pop`, `map`, `filter`, `find`, `fold`, `sort`,
+  `reverse`, `concat`, `slice`, `contains`, `join`), `Str` has ten, and `Map[K, V]` exists
+  (`Map()` constructs one; `len`, `is_empty`, `get`, `contains_key`, `insert`, `remove`, `keys`,
+  `values`). There is no `Set`. Four things a generator needs to know:
+  - **`fold`'s callback is argument 1** — `xs.fold(init, fn(acc, x) { … })`. Every higher-order one
+    carries its callback's row into the caller (R-4), so a printing predicate makes the enclosing
+    function `!{Write}`; `delulu authority` will say so.
+  - **`Map` iteration is ascending by key, and `keys()`/`values()` share that order**, so they can be
+    paired position by position. Map output is reproducible across runs, platforms and allocators —
+    safe to compare in a test. Keys are `Str`, `Int` or `Bool`; anything else is refused.
+  - **Three deliberate refusals**, each naming its reason in the diagnostic: `sort` on `List[Float]`
+    (`Float` has no total order — NaN compares false against itself, so a comparison sort places it by
+    accident of the algorithm); `contains` on an opaque element type (`DL0605`, the same code `==`
+    gives — use `Secret.verify`, which is constant-time and carries `Declassify`); a `Map` key that is
+    not one of the three scalars. Do not work around these by reaching for a flag; there is none, and
+    the refusal is the answer.
+  - **`to_upper`/`to_lower` are full Unicode and are not a security normalization.** They do not
+    round-trip (`ß` uppercases to `SS`). **Never case-fold to compare a path, a host name, or
+    anything that decides an authority question** — four defects in this project's own P22 campaign
+    were security decisions taken on a differently-spelled string.
+  - **None of them compile to WebAssembly.** `--target wasm` answers `DL1201` for any program using
+    one; run it on the interpreter. This is not new to P3 — the backend has never had a `List` in its
+    type lattice — but it is now written down.
 - **Soundness is design-level plus audit-rule plus test-enforced.** The Delulu Core mechanization is
   open work.
 - **Not everything is covered yet.** `docs/reference/coverage.md` reports per-item conformance

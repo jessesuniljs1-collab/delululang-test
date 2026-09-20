@@ -71,6 +71,7 @@ impl InferCtx {
         match self.resolve_type_shallow(t) {
             Type::List(inner) => Type::List(Box::new(self.apply_type(&inner))),
             Type::Option(inner) => Type::Option(Box::new(self.apply_type(&inner))),
+            Type::Map(k, v) => Type::Map(Box::new(self.apply_type(&k)), Box::new(self.apply_type(&v))),
             Type::Result(o, e) => {
                 Type::Result(Box::new(self.apply_type(&o)), Box::new(self.apply_type(&e)))
             }
@@ -157,6 +158,10 @@ impl InferCtx {
             | (Type::Root, Type::Root) => Ok(()),
             (Type::List(x), Type::List(y)) => self.unify_type(x, y),
             (Type::Option(x), Type::Option(y)) => self.unify_type(x, y),
+            (Type::Map(k1, v1), Type::Map(k2, v2)) => {
+                self.unify_type(k1, k2)?;
+                self.unify_type(v1, v2)
+            }
             (Type::Result(x1, x2), Type::Result(y1, y2)) => {
                 self.unify_type(x1, y1)?;
                 self.unify_type(x2, y2)
@@ -260,7 +265,7 @@ impl InferCtx {
             Type::List(inner) | Type::Option(inner) | Type::Secret(inner) | Type::Plugin(inner) => {
                 self.occurs_type(v, &inner)
             }
-            Type::Result(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),
+            Type::Result(a, b) | Type::Map(a, b) => self.occurs_type(v, &a) || self.occurs_type(v, &b),
             Type::Record(_, args) | Type::Sum(_, args) | Type::Actor(_, args) => {
                 args.iter().any(|a| self.occurs_type(v, a))
             }

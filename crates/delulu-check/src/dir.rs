@@ -46,7 +46,14 @@ pub const DIR_VERSION: u32 = 1;
 /// whose `match` on `ActuateErr` was checked exhaustive against two variants is not exhaustive
 /// against three, and a version that only watched the table would have let that through silently.
 /// 10h is the case that widening was for: it adds BOTH table entries and a prelude type.
-pub const PRIM_TABLE_VERSION: u32 = 4;
+/// 5 = V2 phase **P3** (ruling D-V2-29): 15 new `Str`/`List` methods, the `Map[K, V]` type and its 8
+/// methods, and `Map` as a prelude type and builtin name. Purely additive — every v4 primitive still
+/// exists and still means the same thing — so a v4 DIR would re-check identically. It is bumped
+/// anyway, because this constant's rule is "bump whenever either half changes" and a constant that
+/// is only bumped when someone judges the change important is a constant nobody can trust. The cost
+/// is the honest one the earlier bumps paid: an existing `.dpx` carrying a v4 DIR is refused with
+/// DL1503, a clean version mismatch, and is rebuilt.
+pub const PRIM_TABLE_VERSION: u32 = 5;
 
 /// Why a DIR payload was refused. Everything that is not a clean version mismatch maps to DL1504
 /// (the Verified re-check failed) — a corrupt or dishonest DIR is *unverifiable*, and per invariant

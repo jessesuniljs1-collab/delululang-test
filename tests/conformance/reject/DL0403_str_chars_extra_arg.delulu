@@ -1,0 +1,6 @@
+// anchors: ref.prim.str.chars
+module conf
+
+fn f(s: Str) -> List[Str] {
+    s.chars(1)
+}

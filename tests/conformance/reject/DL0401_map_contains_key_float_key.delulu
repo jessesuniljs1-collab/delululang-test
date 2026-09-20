@@ -1,0 +1,9 @@
+// anchors: ref.prim.map.contains_key
+module conf
+
+// The key rule holds on every method that takes a key, not only on `insert` — a rule that holds on
+// three paths out of four holds nowhere.
+fn f() -> Bool {
+    let m = Map()
+    m.contains_key(1.5)
+}

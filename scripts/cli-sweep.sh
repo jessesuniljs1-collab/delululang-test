@@ -74,6 +74,66 @@ fn main(root: Root) {
 }
 EOF
 
+# P3 stdlib: several new List methods, run through the real binary rather than just checked.
+cat > list_p3.delulu <<'EOF'
+module listrun
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let xs = [3, 1, 2]
+    let was_empty = xs.is_empty()
+    let popped = xs.pop()
+    let reversed = xs.reverse()
+    let grown = reversed.concat([9, 8])
+    let mid = grown.slice(1, 3)
+    let has_nine = mid.contains(9)
+    let sorted = mid.sort()
+    let evens = mid.filter(fn(x: Int) -> Bool { x > 1 })
+    let found = mid.find(fn(x: Int) -> Bool { x == 9 })
+    let total = mid.fold(0, fn(acc: Int, x: Int) -> Int { acc + x })
+    let names = ["a", "b", "c"]
+    let joined = names.join(", ")
+    out.println(joined)
+    out.println(str(total))
+}
+EOF
+
+# P3 stdlib: `Map`, iterated in ascending-by-key order (keys() returns Str keys sorted).
+cat > map_p3.delulu <<'EOF'
+module maprun
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let m = Map()
+    m.insert("pear", 2)
+    m.insert("apple", 1)
+    m.insert("cherry", 3)
+    let ks = m.keys()
+    for k in ks {
+        out.println(k)
+    }
+}
+EOF
+
+# P3 stdlib: `sort` on a `List[Float]` has no total order to sort by — refused (DL0401).
+cat > sort_float.delulu <<'EOF'
+module sortfloat
+
+fn f(xs: List[Float]) -> List[Float] {
+    xs.sort()
+}
+EOF
+
+# P3 stdlib: a `Float` `Map` key has no total order either — refused (DL0401).
+cat > map_float_key.delulu <<'EOF'
+module mapfloatkey
+
+fn f() -> Option[Str] {
+    let m = Map()
+    m.get(1.5)
+}
+EOF
+
 echo "CLI + compiler sweep"
 echo "  binary: $DL"
 echo "  workdir: $WORK"
@@ -92,6 +152,26 @@ echo "-- compiler: run --"
 run 0 "run (granted)"                    "$DL" run hello.delulu --grant console
 run 1 "run (NOT granted -> DL0703)"      "$DL" run hello.delulu
 run 0 "run --assert-trace"               "$DL" run hello.delulu --grant console --assert-trace
+
+echo
+echo "-- stdlib P3: List + Map --"
+run 0 "run (List: is_empty/pop/reverse/concat/slice/contains/sort/filter/find/fold/join)" \
+                                          "$DL" run list_p3.delulu --grant console
+
+# Ascending-by-key order is the whole point of this case, so the exit code alone cannot cover it —
+# check the actual printed order (`apple`, `cherry`, `pear`), not just that the run succeeded.
+printf 'apple\ncherry\npear\n' > want.txt
+"$DL" run map_p3.delulu --grant console >out.txt 2>err.txt
+got=$?
+if [ "$got" = 0 ] && diff -q want.txt out.txt >/dev/null 2>&1; then
+    PASS=$((PASS + 1)); printf '  ok    %-46s exit %s\n' "run (Map: ascending-by-key order)" "$got"
+else
+    FAIL=$((FAIL + 1)); printf '  FAIL  %-46s exit %s (wanted 0, apple/cherry/pear)\n' "run (Map: ascending-by-key order)" "$got"
+    sed 's/^/          /' out.txt err.txt | head -8
+fi
+
+run 1 "check (sort List[Float] -> DL0401 refused)"    "$DL" check sort_float.delulu
+run 1 "check (Map Float key -> DL0401 refused)"        "$DL" check map_float_key.delulu
 
 echo
 echo "-- formatting --"

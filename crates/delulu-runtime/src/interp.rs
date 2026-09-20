@@ -1148,6 +1148,81 @@ impl Interp {
     fn eval_method(&self, recv: &Expr, name: &Ident, args: &[Expr], span: delulu_diag::Span, node_id: NodeId, env: &Env) -> R<Value> {
         let recvv = self.eval_expr(recv, env)?;
 
+        // P3 (D-V2-29): the other closure-taking List methods. They are here, beside `map`, for the
+        // same reason `map` is — they call back into evaluation, so they cannot live in `prim.rs`
+        // beside the first-order methods.
+        //
+        // Each one SNAPSHOTS the list before iterating, exactly as `map` does. A callback that
+        // pushes onto the list it is filtering would otherwise be iterating a `RefCell` it is also
+        // mutating: either a panic on the borrow, or a loop whose length changes underneath it.
+        // Snapshotting makes the answer "the list as it was when the call began", which is a
+        // definition a reader can rely on, and it is the same definition `map` already has.
+        if matches!(name.name.as_str(), "filter" | "find" | "fold") {
+            if let Value::List(items) = &recvv {
+                let cb_at = if name.name == "fold" { 1 } else { 0 };
+                let f = self.eval_expr(&args[cb_at], env)?;
+                let Value::Closure(clo) = f else {
+                    return Err(Escape::Fault(Fault::at(
+                        "DL0907",
+                        format!("List.{} expects a function (checker bug)", name.name),
+                        span,
+                    )));
+                };
+                let snapshot: Vec<Value> = items.borrow().clone();
+                match name.name.as_str() {
+                    "filter" => {
+                        let mut out = Vec::new();
+                        for it in snapshot {
+                            match self.call_closure(&clo, vec![it.clone()])? {
+                                Value::Bool(true) => out.push(it),
+                                Value::Bool(false) => {}
+                                other => {
+                                    return Err(Escape::Fault(Fault::at(
+                                        "DL0907",
+                                        format!("List.filter needs a Bool, got `{}` (checker bug)", other.display()),
+                                        span,
+                                    )))
+                                }
+                            }
+                        }
+                        let v = Value::List(Rc::new(std::cell::RefCell::new(out)));
+                        self.note_alloc(&v);
+                        return Ok(v);
+                    }
+                    // Short-circuits on the first match, which is observable through the callback's
+                    // effects: `find` over a printing predicate prints once per element examined and
+                    // then stops. That is the point of `find` over `filter`, so it is a promise the
+                    // reference makes rather than an implementation detail.
+                    "find" => {
+                        for it in snapshot {
+                            match self.call_closure(&clo, vec![it.clone()])? {
+                                Value::Bool(true) => return Ok(Value::variant("Some", vec![it])),
+                                Value::Bool(false) => {}
+                                other => {
+                                    return Err(Escape::Fault(Fault::at(
+                                        "DL0907",
+                                        format!("List.find needs a Bool, got `{}` (checker bug)", other.display()),
+                                        span,
+                                    )))
+                                }
+                            }
+                        }
+                        return Ok(Value::variant("None", vec![]));
+                    }
+                    // `fold(init, f)` — left fold, `f(acc, x)`. The argument order is the reason
+                    // `higher_order_callback_arg` returns a POSITION: the callback is argument 1.
+                    _ => {
+                        let mut acc = self.eval_expr(&args[0], env)?;
+                        for it in snapshot {
+                            acc = self.call_closure(&clo, vec![acc, it])?;
+                        }
+                        self.note_alloc(&acc);
+                        return Ok(acc);
+                    }
+                }
+            }
+        }
+
         // Closure-taking methods are handled here (they call back into evaluation).
         if name.name == "map" {
             match &recvv {
@@ -1349,6 +1424,7 @@ impl Interp {
             Value::Secret(s) => prim::call_secret_method(s, &name.name, &argvals, span),
             Value::Str(s) => prim::call_str_method(s, &name.name, &argvals, span),
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
+            Value::Map(m) => prim::call_map_method(m, &name.name, &argvals, span),
             other => Err(Fault::at("DL0907", format!("type has no method `{}` on `{}`", name.name, other.display()), span)),
         };
         // 10d: a primitive may mint a fresh mutable cell (`split`, `slice`, …) — register its

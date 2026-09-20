@@ -175,7 +175,9 @@ fn default_rcap_inner(
                 _ => Rcap::Ref,
             }
         }
-        Type::Result(o, e) => {
+        // A `Map` is a composite of its key and value types, exactly like `Result` — and, like a
+        // `List`, it has a write surface (`insert`/`remove`), so a `val` Map refuses them.
+        Type::Result(o, e) | Type::Map(o, e) => {
             let a = default_rcap_inner(o, components_of, visiting)?;
             let b = default_rcap_inner(e, components_of, visiting)?;
             if a == Rcap::Val && b == Rcap::Val { Rcap::Val } else { Rcap::Ref }

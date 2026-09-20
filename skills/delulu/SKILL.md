@@ -131,7 +131,14 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
 - The sandbox is a second wall **under** the OS account boundary, not instead of it. A guest runs as
   the same user.
 - Certification is NONE: no safety standard, no external audit, in any regime.
-- The standard library is small. `List` has four methods; there is no `Map` type yet.
+- The standard library is modest but no longer tiny: `List` has fifteen methods, `Str` ten, and
+  `Map[K, V]` exists (keys `Str`/`Int`/`Bool`, iteration ascending by key). There is no `Set`.
+- Three refusals are deliberate and each says why: `sort` on `List[Float]` (no total order — NaN),
+  `contains` on secrets or capabilities (`DL0605`, same as `==` — use `Secret.verify`), and a `Map`
+  key that is not `Str`/`Int`/`Bool`. **`to_upper`/`to_lower` are not a security normalization** —
+  never case-fold to compare a path, a host name or a capability.
+- None of the collection methods compile to WebAssembly. `--target wasm` answers `DL1201`; run those
+  programs on the interpreter.
 
 ## References
 

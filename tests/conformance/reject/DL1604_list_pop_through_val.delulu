@@ -1,0 +1,10 @@
+// anchors: ref.prim.list.pop
+module conf
+
+// `pop` MUTATES its receiver (like `push`), so it needs a writable receiver — `iso`, `trn`, or
+// `ref`. An UNANNOTATED `List[Int]` parameter also defaults to `val`, so this parameter is
+// annotated explicitly: the point of this file is the `val` rule itself, and the program should
+// say so rather than rely on a default a reader might miss.
+fn f(xs: val List[Int]) -> Option[Int] {
+    xs.pop()
+}

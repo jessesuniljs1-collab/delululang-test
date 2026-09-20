@@ -1,0 +1,59 @@
+// anchors: ref.prim.map.len ref.prim.map.is_empty ref.prim.map.get ref.prim.map.contains_key ref.prim.map.insert ref.prim.map.remove ref.prim.map.keys ref.prim.map.values
+// P3 (D-V2-29): positive witnesses for `Map[K, V]` — all eight methods, and the three key types
+// 1.x admits. Iteration is ascending by key, and `keys()`/`values()` are in THAT SAME order, so a
+// caller may pair them position by position; `keys_and_values_are_in_the_same_order` is the test
+// that holds the runtime to it.
+module conf
+
+// `insert` and `remove` MUTATE, so the receiver must be writable. A map from the `Map()`
+// constructor is fresh and unaliased, which is enough — no annotation needed here, unlike the two
+// DL1604 reject cases where the parameter is `val`.
+fn str_keys() -> Int {
+    let m = Map()
+    let empty_before = m.is_empty()
+    m.insert("pear", 2)
+    m.insert("apple", 1)
+    let n = m.len()
+    let found = m.get("apple")
+    let missing = m.get("durian")
+    let has = m.contains_key("pear")
+    let gone = m.remove("pear")
+    let ks = m.keys()
+    let vs = m.values()
+    let a = if empty_before { 1 } else { 0 }
+    let b = if has { 1 } else { 0 }
+    let c = match found {
+        Some(v) => v
+        None => 0
+    }
+    let d = match missing {
+        Some(v) => v
+        None => 0
+    }
+    let e = match gone {
+        Some(v) => v
+        None => 0
+    }
+    n + a + b + c + d + e + ks.len() + vs.len()
+}
+
+// An `Int` key. Ascending order is the integer order, not insertion order.
+fn int_keys() -> Int {
+    let m = Map()
+    m.insert(2, "two")
+    m.insert(1, "one")
+    m.keys().len()
+}
+
+// A `Bool` key — the third and last admitted key type in 1.x. `false` sorts before `true`.
+fn bool_keys() -> Int {
+    let m = Map()
+    m.insert(true, 1)
+    m.insert(false, 0)
+    m.values().len()
+}
+
+// A `Map` is an ordinary value: it can be a parameter, and reading it needs no write access.
+fn total(m: Map[Str, Int]) -> Int {
+    m.values().fold(0, fn(a: Int, x: Int) -> Int { a + x })
+}

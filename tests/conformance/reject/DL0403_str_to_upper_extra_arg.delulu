@@ -1,0 +1,6 @@
+// anchors: ref.prim.str.to_upper
+module conf
+
+fn f(s: Str) -> Str {
+    s.to_upper("x")
+}

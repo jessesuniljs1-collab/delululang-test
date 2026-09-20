@@ -382,3 +382,163 @@ a success-envelope case, so the new verb is held to the same envelope contract a
 
 The skill is one file for one audience. The *other* agent surfaces — MCP server, checked edits, the
 Atlas/Survey tooling, the usability benchmark — are P4b–e, which is phase 8 and unstarted.
+
+## P3 — 2026-09-20 — the standard library, and the two defects that were older than the phase
+
+`REMAINING_WORK.md` 2.1 called the standard library "the largest gap between what DeluluLang *is* and
+what someone arriving from another language expects": `List` had four methods, `Str` six, and there was
+no map at all. `List` now has fifteen, `Str` ten, and `Map[K, V]` exists with eight. All additive, so
+minor-version work rather than an RFC — and the core-invariance snapshot agrees: **56 NEW cases, 0
+CHANGED, 0 GONE**, 382 → 438, with zero cases removed.
+
+The interesting part of this phase is not the fifteen methods. It is the four places the honest answer
+was "no", and the two defects found while looking for them.
+
+### Refused, each with its reason in the diagnostic (ruling D-V2-29)
+
+- **`sort` on `List[Float]`.** `Float` has no total order — NaN compares false against every value
+  including itself — so every comparison sort places it by accident of the algorithm. That is a
+  decision taken on a representation that does not admit the decision, which is this project's own
+  recurring search key. `Int`, `Str` and `Bool` sort, stably, so equal elements keep their input order
+  and the answer is reproducible across runs and platforms.
+- **`contains` on an opaque element type**, with the **same code `==` already emits** (DL0605) and the
+  same "use `Secret.verify`" hint. `contains` is `==` in a loop, so if the two disagreed one of them
+  would be wrong; sharing the code is what keeps them from disagreeing. And look at what the
+  alternative was: `Value::eq` answers `false` for two `Secret`s, so an admitted `xs.contains(k)` over
+  secrets would have returned a confident, WRONG `false` — an equality answer derived from secret data,
+  the shape of finding IF-1. No new code, per D-V2-26.
+- **A `Map` key that is not `Str`, `Int` or `Bool`.** `Float` for the reason above plus `-0.0 == 0.0`
+  making two distinct keys collide; a structural key because its canonical form is a design nobody has
+  made. Iteration is ascending by key and `keys()`/`values()` share that order, so they can be paired
+  position by position — a `BTreeMap`, not a hash map, deliberately: the hash-order nondeterminism that
+  makes other languages' map output untestable does not exist here, which is what lets a test compare it.
+- **WASM: none of the twenty-three lower**, and that is not a regression. The backend has no `List` in
+  its `Ty` at all, so `xs.len()` has always answered `DL1201` — measured, not assumed:
+
+      $ delulu build listwasm.delulu --target wasm
+      error[DL1201]: WASM codegen does not support this expression form
+
+  for a program whose only method call is `xs.len()`. So **2.1's sentence "Each method needs … a WASM
+  lowering" is corrected rather than satisfied**: it stated a rule the four pre-existing methods
+  already broke, and a rule the code does not follow is not a rule.
+
+`join` lives on `List[Str]`, not on `Str` — a deliberate deviation from the roadmap's P3-03 line
+(Python's `sep.join(xs)` wart), recorded rather than quietly implemented. `chars()` is *defined* as
+`split("")`, with a test holding the two together. `replace("", to)` returns the receiver unchanged,
+because unlike `split("")` an empty replacement pattern has no natural reading and inserting between
+every character is a surprise, not a semantic. `to_upper`/`to_lower` are full Unicode and the reference
+says in so many words that they are **not a security normalization**, which a test asserts — four of
+P22's defects were security decisions taken on a differently-spelled string, and the paragraph
+admitting something is the first one cut when a document is edited for length.
+
+### The soundness change the phase forced
+
+`fold`'s callback is argument **1**. The R-4 gate — the builtin-callback law, the C88 fix, the thing
+that keeps an effectful lambda from escaping a "pure" function — read `arg_tys.first()`. Left alone,
+`xs.fold(0, effectful_fn)` would have had the law decided about the *accumulator*. So
+`is_higher_order_method` became `higher_order_callback_arg`, returning the callback's POSITION, and the
+fail-closed branch moved with it. `every_higher_order_builtin_surfaces_its_callbacks_row` asserts the
+law for all four by position rather than by luck at zero.
+
+### MAP-PARAM-1 — a type error that escaped the checker into the interpreter
+
+Found while writing the *design*, not the code:
+
+    $ delulu check mapty.delulu
+    ok: mapty.delulu checked clean                # [1,2,3].map(fn(s: Str) -> Int { s.len() })
+    $ delulu run mapty.delulu
+    error[DL0907]: ... runtime fault here
+
+`List.map`'s arm read its callback's **return** type and never its **parameter** type. R-4's row half
+was written with great care, twice, with a long comment about the worst defect of the C88 campaign —
+and the argument half was never written at all. `Secret.map` had the identical hole, where it matters
+more: the closure is handed the PLAINTEXT under a parameter type its author declared and nobody
+verified. A rule that holds on one path out of two holds nowhere, so both are fixed in one edit, each
+with its witness and its control.
+
+While fixing it: a non-function callback used to produce **two** DL0401s, one from the R-4 gate and one
+from `method_sig`. The gate's message is the better one — it says why the row must be known — so the
+second is gone, and `exactly_one_diagnostic_for_a_non_function_callback` pins one-per-mistake for all
+four methods. Two diagnostics for one mistake is how a reader learns to stop reading them.
+
+### ARITY-LABEL-1 — the normative gate that three device receivers never had
+
+`PRIM_TABLE`'s own documentation says the arity column is **NORMATIVE** and that "the checker's
+too-many-arguments gate (DL0403) reads it at the method-call site". Witnessed against the pre-fix
+binary:
+
+    let s = root.sensor("arm/joint")
+    let v = s.read(1, 2, 3, 4, 5)        # table says arity 0 -> checked CLEAN
+    let a = root.actuator("arm/gripper")
+    let r = a.command("open", 1, 2, 3)   # table says arity 1 -> checked CLEAN
+
+while the control, `console.println("a","b","c")`, correctly gave DL0403. `prim_receiver_label` — the
+function the gate calls to find a receiver's table label — is a **second list**, and `actuator`,
+`sensor` and `compute` were never added to it when Stage 10 added them to the first. So for the three
+AUTHORITY-BEARING DEVICE receivers the gate did not read the normative column and never had. That is
+verbatim the fail-open skip branch the gate exists for — `root.console(1,2,3,4,5)` minting a cap and
+ignoring the noise — reopened through a receiver added later.
+
+**Why no test caught it, which is the part worth keeping.** `prim_table.rs` has tests that claim to
+prove the arity column "in both directions … for every constructible receiver". Their
+`receiver_binding` helper ends in `_ => return None`, and the three device receivers fell into it — so
+the guards SKIPPED exactly the receivers that had the hole, and reported the easy ones passing. A test
+that excuses its hardest cases is not a weaker test; it is a test of something else.
+
+Closed as a class, not as three instances: `every_table_receiver_is_covered_or_explicitly_excused`
+requires each table receiver to be either bound or named in an explicit `UNBOUND_RECEIVERS` list with a
+reason, and `every_table_receiver_is_labelled_for_the_arity_gate` calls every primitive with arity+1
+arguments and requires DL0403. The second fails on a mutant that removes one label, and passes when it
+is restored.
+
+Note what the snapshot's **0 CHANGED** means here: no recorded case ever passed a surplus argument to a
+device receiver. That is the same blind spot from the other side.
+
+### My own defect, caught by probing instead of reading
+
+The first `Map` key check ran **before** `expect_arg`, so at `let m = Map()` it saw an unresolved
+inference variable, correctly declined to rule — and then `expect_arg` bound `K := Float` with nobody
+looking again. `m.insert(1.5, "x")` checked clean and the interpreter faulted with a DL0907 that said
+"(checker bug)". It was right; it was that one. Moving the check after unification fixed it, and the
+gate is now asserted on all four key-taking methods, because a rule that holds on three paths out of
+four holds nowhere.
+
+### Evidence
+
+`List` 4 → 15, `Str` 6 → 10, `Map[K, V]` new with 8. **23 new conformance anchors, each with a positive
+AND a negative witness** — `tests/conformance/accept/{29_stdlib_p3,30_map_p3}.delulu` plus 23 reject
+files — taking anchor coverage to **353/353, 100%**, `prim` 82/82, with the ratchet raised 307 → 353.
+`crates/delulu/tests/stdlib_p3.rs` holds the 19 claims a conformance program cannot state, including
+`only_the_mutating_methods_demand_a_writable_receiver`, asserted in BOTH directions so a registry that
+wrongly listed `keys` as a mutator would fail. `PRIM_TABLE_VERSION` 4 → 5 by the constant's own rule
+("bump whenever either half changes"), the honest cost being that an existing `.dpx` carrying a v4 DIR
+is refused with DL1503 and rebuilt. The fuzz generator now emits all four higher-order shapes rather
+than only `map`, because a shape the generator cannot write is a shape the corpus never attacks.
+
+### One edit P3 wants and did NOT make: the coverage ratchet (owner-reserved)
+
+`crates/delulu-conform/src/tests.rs` holds `COVERED_FLOOR`, the ratchet the coverage law ratchets on,
+and its own comment says "Raise it when you add witnesses." P3 added 23 witnesses, so the honest value
+is **353** and it still reads **307**. It was raised, then reverted before the commit, because
+`/crates/delulu-conform/` is ENTRENCHED in `CODEOWNERS` and entrenched files are the owner's regardless
+of the phase delegation.
+
+Nothing is green only because of that: the assertion is `covered() >= COVERED_FLOOR`, so 353 ≥ 307
+passes, and `release_requires_full_coverage` demands **100%** — strictly stronger than any floor, and it
+passes at 353/353. The floor is redundant while 100% holds. What is lost is only the ratchet's warning
+value: a future change could drop up to 46 witnesses and still clear 307, and the 100% gate would be the
+one to catch it rather than this one.
+
+Awaiting the owner's word. It is a one-line change, `307` → `353`, and it STRENGTHENS the gate —
+CODEOWNERS' stated reason for entrenching this path is that "weakening a gate is easier to hide in a
+diff than breaking a rule outright", and a raised floor is the opposite of that. The witnesses
+themselves needed no entrenched edit at all: conformance PROGRAMS in `tests/conformance/{accept,reject}`
+carry their own `// anchors:` headers, so `witnesses.toml` — the entrenched file — was never touched.
+
+### Open, and deliberately
+
+No `Set`. No `Map` literal syntax — `Map()` follows the `Ok`/`Err`/`Some`/`None` precedent because the
+language has neither a literal nor a static-method form to hang `Map.new()` on. No WASM lowering for
+any collection method, which needs a heap layout, a key canonicalization and an ordering in the guest:
+three designs, each a place for a security decision on an unnormalized representation, and none of them
+P3's business.

@@ -331,6 +331,7 @@ pub fn render_type(t: &Type, table: &DeclTable) -> String {
         Type::PyObj => "PyObj".into(),
         Type::List(x) => format!("List[{}]", render_type(x, table)),
         Type::Option(x) => format!("Option[{}]", render_type(x, table)),
+        Type::Map(k, v) => format!("Map[{}, {}]", render_type(k, table), render_type(v, table)),
         Type::Result(a, b) => format!("Result[{}, {}]", render_type(a, table), render_type(b, table)),
         Type::Secret(x) => format!("Secret[{}]", render_type(x, table)),
         Type::Cap(k) => format!("Cap[{}]", k.name()),

@@ -1371,10 +1371,37 @@ binary and then refuses with `DL1408` **even when both are present**. You never 
 than you asked for — you also do not get that layer, and Chapter 15 now says so where it describes
 the profiles.
 
-**One more entry belongs on this list and was missing until 2026-08-23: the standard library.**
-`list` has four methods — `len`, `get`, `push`, `map` — and there is no `Map`/`Dict`/`Set` type
-among the sixteen prelude types. That is not a deferral anyone ruled on; it is how far the prelude
-got. Anyone planning real programs should learn it here rather than at their first `filter`.
+**One more entry belonged on this list from 2026-08-23 until 2026-09-20: the standard library.**
+`list` had four methods — `len`, `get`, `push`, `map` — and there was no `Map`/`Dict`/`Set` type
+among the sixteen prelude types. That was not a deferral anyone ruled on; it was how far the prelude
+got, and anyone planning real programs met it at their first `filter`.
+
+V2 phase **P3** closed it (ruling D-V2-29): `List` has fifteen methods, `Str` has ten, and
+`Map[K, V]` exists with eight. The additions are worth reading for what they *refuse*, because each
+refusal is a place where the honest answer was "no" rather than a default. `sort` is refused on
+`List[Float]` — NaN compares false against itself, so there is no total order to sort by, and a
+comparison sort would place it by accident of the algorithm. `contains` is refused on secrets and
+capabilities with the same code `==` uses, because `contains` is `==` in a loop and the alternative
+was worse than a refusal: the runtime's structural equality answers `false` for two secrets, so an
+admitted `contains` would have returned a confident wrong answer derived from secret data. And a
+`Map` key must be `Str`, `Int` or `Bool`, because `Float` keys collide (`-0.0 == 0.0`) and a
+structural key's canonical form is a design nobody has made.
+
+Map iteration is ascending by key, and `keys()` and `values()` agree with it, which makes map output
+reproducible across runs, platforms and allocators — the property that lets a test compare it at
+all. None of the fifteen lower to WebAssembly: the backend has no `List` in its type lattice and
+never did, so `xs.len()` has always answered `DL1201` there, and P3 changed nothing about that
+except to write it down.
+
+The phase also found two defects older than itself, both of the same shape — a rule stated in a
+comment and enforced on fewer paths than the comment claimed. `List.map` checked its callback's
+*return* type and never its *parameter* type, so `[1,2,3].map(fn(s: Str) -> Int {…})` checked clean
+and faulted at run time; `Secret.map` had the identical hole, where the closure is handed the
+plaintext. And three device receivers — `actuator`, `sensor`, `compute` — had never been subject to
+the too-many-arguments gate that the primitive table's own documentation calls normative, because
+the function mapping a receiver type to its table label was a second list nobody kept in step with
+the first. `s.read(1,2,3,4,5)` checked clean. Both are fixed, both are witnessed against the
+pre-fix binary, and in both cases the *class* was closed rather than the instance.
 
 ### What actually remains
 

@@ -1,0 +1,8 @@
+// anchors: ref.prim.map.is_empty
+module conf
+
+// A surplus argument is refused, never ignored: ignoring one is how `root.console(1,2,3,4,5)`
+// minted a capability and swallowed the noise.
+fn f(m: Map[Str, Int]) -> Bool {
+    m.is_empty(1)
+}

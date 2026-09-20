@@ -148,18 +148,34 @@ The list is fixed when the loop starts, so mutating it inside the body cannot ch
 the loop runs. `break`/`continue` outside a loop are a compile error (`DL0412`), and `for` over
 anything that is not a list is `DL0411`.
 
-> **The list surface is small, and it is better to learn that here than at your first `filter`.**
-> `List` has exactly four methods — `len`, `get`, `push`, `map` — and `Str` has six (`len`, `trim`,
-> `contains`, `starts_with`, `split`, `slice`). There is **no `filter`, `fold`, `sort`, `find`,
-> `reverse`, `concat` or `join`**, and **no `Map`/`Dict`/`Set` type** in the prelude. Write those as
-> a `for` loop over an accumulator, which is what the examples above do.
+> **The collection surface, and the three places it deliberately refuses.** As of 2026-09-20
+> (V2 phase P3) `List` has fifteen methods — `len`, `is_empty`, `get`, `push`, `pop`, `map`,
+> `filter`, `find`, `fold`, `sort`, `reverse`, `concat`, `slice`, `contains`, `join` — `Str` has ten,
+> and `Map[K, V]` exists. Until then `List` had four and there was no map at all, which is worth
+> knowing if you read an older document.
 >
-> This is not a deferral anyone ruled on — it is how far the prelude got, and it is the largest gap
-> between what DeluluLang *is* and what someone arriving from another language expects. It is
-> recorded in [`REMAINING_WORK.md`](REMAINING_WORK.md) §2.1 rather than left for you to discover.
-> Nothing about it touches the authority guarantee: growing the prelude is additive work, and a
-> higher-order addition like `filter` would carry its callback's effect row exactly as `map` already
-> does (audit rule R-4).
+> The higher-order ones carry their callback's effect row into yours (audit rule **R-4**), so a
+> `filter` whose predicate prints makes *your* function `!{Write}` too. That is the design, not a
+> restriction: it is what stops an effect hiding inside a lambda.
+>
+> Three refusals will find you eventually, and each says why:
+>
+> - **`xs.sort()` on a `List[Float]`** is refused. `Float` has no total order — NaN compares false
+>   against every value including itself — so a comparison sort places it by accident of the
+>   algorithm. Decide what NaN means for your data and write that comparison yourself.
+> - **`xs.contains(x)` on secrets or capabilities** is refused with the same code `==` gives
+>   (`DL0605`). Use `Secret.verify`, which is constant-time and carries `Declassify`.
+> - **A `Map` key must be `Str`, `Int` or `Bool`** in 1.x. A `Float` key is refused for the reason
+>   above plus `-0.0 == 0.0`; a structural key would need a canonical form this version does not
+>   define.
+>
+> `Map` iteration is **ascending by key**, and `keys()` and `values()` come back in that same order,
+> so you can pair them position by position. That is a promise, not an implementation detail: map
+> output is reproducible across runs and platforms, which is why a test can compare it.
+>
+> `to_upper`/`to_lower` are full Unicode and are **not a security normalization** — never case-fold
+> to compare a path, a host name or a capability. `str(x)` still exists, and a `for` loop over an
+> accumulator is still the right answer when no method fits.
 
 ## 4. Errors
 

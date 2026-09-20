@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.reverse
+module conf
+
+fn f(xs: List[Int]) -> List[Int] {
+    xs.reverse(1)
+}

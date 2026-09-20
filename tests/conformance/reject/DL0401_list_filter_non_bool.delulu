@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.filter
+module conf
+
+fn f(xs: List[Int]) -> List[Int] {
+    xs.filter(fn(x: Int) -> Int { x })
+}

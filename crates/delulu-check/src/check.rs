@@ -27,7 +27,7 @@ use crate::unify::{InferCtx, UnifyError};
 /// naming a type the author never wrote. `resolve.rs` refuses the redefinition (DL0302) so the
 /// collision is reported where it is caused. See `HARDENING_CAMPAIGN.md` C11.
 pub const PRELUDE_BUILTINS: &[&str] =
-    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "parse_float", "range", "push"];
+    &["Ok", "Err", "Some", "None", "load", "assert", "assert_eq", "str", "len", "int", "float", "parse_int", "parse_float", "range", "push", "Map"];
 
 /// The builtin TYPE names [`Checker::lower_type`] intercepts before it ever consults user scope.
 ///
@@ -45,7 +45,7 @@ pub const PRELUDE_BUILTINS: &[&str] =
 /// lands squarely on the authority-bearing types.
 pub const PRELUDE_TYPES: &[&str] = &[
     "Int", "Float", "Bool", "Str", "Unit", "Root", "List", "Option", "Result", "Secret", "Cap",
-    "ForeignPtr", "PyObj", "Plugin", "Verified", "Contained",
+    "ForeignPtr", "PyObj", "Plugin", "Verified", "Contained", "Map",
 ];
 
 /// The core effect names [`Checker::lower_row`] intercepts before it consults `user_effects` —
@@ -1630,6 +1630,24 @@ impl<'a> Checker<'a> {
                 check_args(self, ctx, &mut acc);
                 Some((Type::List(Box::new(Type::Int)), acc))
             }
+            // `Map()` — the empty map (P3, D-V2-29). A free builtin rather than a literal or a
+            // static method, because the language has neither: `Ok`, `Err`, `Some` and `None` set
+            // that precedent and this follows it. Both parameters come back as fresh inference
+            // variables, so `let m = Map()` is usable and the KEY is judged at the first call that
+            // pins it — `m.insert(1.5, "x")` is refused there, at the site that chose the key.
+            "Map" => {
+                let ts = check_args(self, ctx, &mut acc);
+                if let Some((_, aspan)) = args.first().map(|a| ((), a.span())) {
+                    let _ = ts;
+                    self.diags.push(
+                        Diagnostic::error("DL0403", "`Map()` takes no arguments — insert into it instead")
+                            .with_span(aspan, "unexpected argument"),
+                    );
+                }
+                let k = self.cx.fresh_type();
+                let v = self.cx.fresh_type();
+                Some((Type::Map(Box::new(k), Box::new(v)), acc))
+            }
             "push" => {
                 let ts = check_args(self, ctx, &mut acc);
                 // Unify the element into the list, then yield Unit (push mutates in place).
@@ -1664,8 +1682,8 @@ impl<'a> Checker<'a> {
         // R-4 (builtin-callback law, audit F-4): a method that invokes a function argument must
         // surface that argument's effect row into the caller. Without this, an effectful lambda
         // passed to `map` inside a "pure" function would escape the row entirely.
-        if is_higher_order_method(&rt, &name.name) {
-            match arg_tys.first() {
+        if let Some(cb) = higher_order_callback_arg(&rt, &name.name) {
+            match arg_tys.get(cb) {
                 Some((Type::Fn { row, .. }, _)) => {
                     let r = self.cx.apply_row(row);
                     acc.add_row(&r);
@@ -2116,7 +2134,12 @@ impl<'a> Checker<'a> {
             Type::Secret(inner) => match method {
                 // Secret.map requires a PURE function (DL0603); result stays tainted (R-5).
                 "map" => match args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) {
-                    Some((Type::Fn { row, ret, .. }, aspan)) => {
+                    Some((Type::Fn { row, ret, params }, aspan)) => {
+                        // MAP-PARAM-1, the second path: `root.secret("K").map(fn(x: Int) -> Str {…})`
+                        // checked clean too. Here it matters more — the closure is handed the
+                        // PLAINTEXT under a parameter type its author declared and nobody verified.
+                        // A rule that holds on one path out of two holds nowhere.
+                        self.expect_callback_params("Secret.map", &[(**inner).clone()], &params, aspan);
                         let r = self.cx.apply_row(&row);
                         if !r.is_pure() {
                             self.diags.push(
@@ -2197,30 +2220,205 @@ impl<'a> Checker<'a> {
                 "contains" | "starts_with" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::Bool, None, None)) }
                 "split" => { self.expect_arg(args, 0, &Type::Str, span); Some((Type::List(Box::new(Type::Str)), None, None)) }
                 "slice" => { self.expect_arg(args, 0, &Type::Int, span); self.expect_arg(args, 1, &Type::Int, span); Some((Type::Str, None, None)) }
+                // P3 (D-V2-29). Full-Unicode case mapping, and NOT a security normalization: see the
+                // warning in the reference. `ss` in German uppercases to two letters, so these do not
+                // round-trip, and four of P22's defects were security decisions taken on a
+                // differently-spelled string.
+                "to_upper" | "to_lower" => Some((Type::Str, None, None)),
+                "replace" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_arg(args, 1, &Type::Str, span);
+                    Some((Type::Str, None, None))
+                }
+                // `chars()` is DEFINED as `split("")` (D-V2-29), and
+                // `chars_agrees_with_split_on_the_empty_separator` holds the two together so the
+                // second spelling cannot drift from the first.
+                "chars" => Some((Type::List(Box::new(Type::Str)), None, None)),
                 _ => None,
             },
+            Type::Map(kt, vt) => {
+                // The key discipline (D-V2-29 decision 4), checked **after** the argument has
+                // unified `K` with something concrete.
+                //
+                // The first version of this checked the key BEFORE `expect_arg`, and it was wrong in
+                // the way that matters: at `let m = Map()` the key is a fresh inference variable, so
+                // the check saw `Var`, correctly declined to rule, and then `expect_arg` bound
+                // `K := Float` with nobody looking again. `m.insert(1.5, "x")` checked CLEAN and the
+                // interpreter faulted with a DL0907 that said "(checker bug)" — and it was right; it
+                // was this one. Found by probing the skip branch rather than by reading the code,
+                // which is the whole argument for writing the "what if the checker could not tell
+                // yet" case every time.
+                let check_key = |me: &mut Self, args: &[(Type, Span)]| {
+                    me.expect_arg(args, 0, kt, span);
+                    let at = args.first().map(|(_, s)| *s).unwrap_or(span);
+                    match me.cx.apply_type(kt) {
+                        // Still a variable AFTER unification means no key was supplied at all (the
+                        // missing-argument case `expect_arg` has just reported), so there is nothing
+                        // to rule on and nothing silently admitted.
+                        Type::Str | Type::Int | Type::Bool | Type::Var(_) => {}
+                        Type::Float => me.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                "a `Float` cannot be a Map key: it has no total order (NaN compares false against itself), and `-0.0` and `0.0` compare equal while being different values",
+                            )
+                            .with_span(at, "use Str, Int or Bool as the key in 1.x"),
+                        ),
+                        other => me.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("a Map key must be `Str`, `Int` or `Bool` in 1.x, found `{}`", me.ty(&other)),
+                            )
+                            .with_span(at, "a structural key would need a canonical form this version does not define"),
+                        ),
+                    }
+                };
+                match method {
+                    "len" => Some((Type::Int, None, None)),
+                    "is_empty" => Some((Type::Bool, None, None)),
+                    // Mutating — registered in `MUTATING_MAP_METHODS` so the rcap pass refuses them
+                    // through a `val` reference, the same rule `push`/`pop` answer to.
+                    "insert" => {
+                        check_key(self, args);
+                        self.expect_arg(args, 1, vt, span);
+                        Some((Type::Unit, None, None))
+                    }
+                    // `remove` hands back what it removed rather than `Unit`: a caller that cannot
+                    // see the old value would have to `get` first, and that pair is not atomic.
+                    "remove" => {
+                        check_key(self, args);
+                        Some((Type::Option(vt.clone()), None, None))
+                    }
+                    "get" => {
+                        check_key(self, args);
+                        Some((Type::Option(vt.clone()), None, None))
+                    }
+                    "contains_key" => {
+                        check_key(self, args);
+                        Some((Type::Bool, None, None))
+                    }
+                    // Ascending by key, and `keys()`/`values()` are the SAME order — so a caller may
+                    // zip them. That is a promise, not an implementation detail.
+                    "keys" => Some((Type::List(kt.clone()), None, None)),
+                    "values" => Some((Type::List(vt.clone()), None, None)),
+                    _ => None,
+                }
+            }
             Type::List(elem) => match method {
                 "len" => Some((Type::Int, None, None)),
+                "is_empty" => Some((Type::Bool, None, None)),
                 "get" => { self.expect_arg(args, 0, &Type::Int, span); Some((Type::Option(elem.clone()), None, None)) }
                 "push" => { self.expect_arg(args, 0, elem, span); Some((Type::Unit, None, None)) }
+                // Mutating, like `push` — and registered in `MUTATING_METHODS` so the rcap pass
+                // refuses it through a `val` reference. `pop` returns what it removed rather than
+                // `Unit`, because a caller that cannot see the element would have to `get` before
+                // popping, and that pair is not atomic.
+                "pop" => Some((Type::Option(elem.clone()), None, None)),
+                "reverse" => Some((Type::List(elem.clone()), None, None)),
+                "concat" => {
+                    self.expect_arg(args, 0, &Type::List(elem.clone()), span);
+                    Some((Type::List(elem.clone()), None, None))
+                }
+                "slice" => {
+                    self.expect_arg(args, 0, &Type::Int, span);
+                    self.expect_arg(args, 1, &Type::Int, span);
+                    Some((Type::List(elem.clone()), None, None))
+                }
+                // `contains` is `==` in a loop, so it answers to the SAME rule and the SAME code
+                // (DL0605). If it did not, one of the two would be wrong: `Value::eq` returns
+                // `false` for two `Secret`s, so an admitted `xs.contains(k)` over secrets would hand
+                // back a confident, wrong `false` — an equality answer derived from secret data,
+                // which is the shape of finding IF-1. D-V2-29 decision 3; no new code (D-V2-26).
+                "contains" => {
+                    if self.is_opaque(elem, &mut HashSet::new()) {
+                        self.diags.push(
+                            Diagnostic::error("DL0605", "opaque types (Secret/Cap/Root) have no structural equality")
+                                .with_span(span, "use `Secret.verify` for secrets"),
+                        );
+                    } else {
+                        self.expect_arg(args, 0, elem, span);
+                    }
+                    Some((Type::Bool, None, None))
+                }
+                // `join` is on the COLLECTION, not on the separator (D-V2-29 decision 1, a
+                // deliberate deviation from the roadmap's `Str: join` line).
+                "join" => {
+                    self.expect_arg(args, 0, &Type::Str, span);
+                    self.expect_type(&Type::Str, elem, span, "`List.join` is defined on List[Str]");
+                    Some((Type::Str, None, None))
+                }
+                // `sort` needs a TOTAL order, and only three of our types have one. `Float` is
+                // refused BY NAME because NaN compares false against everything, including itself:
+                // every comparison sort then places it by accident of the algorithm, which is a
+                // decision taken on a representation that does not admit the decision (D-V2-29
+                // decision 2). The sort is stable, so equal elements keep their input order and the
+                // answer is reproducible across runs and platforms.
+                "sort" => {
+                    match self.cx.apply_type(elem) {
+                        Type::Int | Type::Str | Type::Bool | Type::Var(_) => {}
+                        Type::Float => self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                "`List[Float].sort` is refused: Float has no total order (NaN compares false against every value, including itself), so a comparison sort would place it by accident of the algorithm",
+                            )
+                            .with_span(span, "sort Int, Str or Bool; for floats, decide what NaN means and write that comparison yourself"),
+                        ),
+                        other => self.diags.push(
+                            Diagnostic::error(
+                                "DL0401",
+                                format!("`List.sort` needs an ordered element type (Int, Str or Bool), found `{}`", self.ty(&other)),
+                            )
+                            .with_span(span, "no ordering is defined for this element type"),
+                        ),
+                    }
+                    Some((Type::List(elem.clone()), None, None))
+                }
+                // Higher-order, so R-4 applies at the call site (`higher_order_callback_arg` carries
+                // each one's callback POSITION) and the callback's PARAMETERS are checked here.
+                "filter" => {
+                    self.check_callback(method, 0, &[(**elem).clone()], Some(Type::Bool), args, span);
+                    Some((Type::List(elem.clone()), None, None))
+                }
+                "find" => {
+                    self.check_callback(method, 0, &[(**elem).clone()], Some(Type::Bool), args, span);
+                    Some((Type::Option(elem.clone()), None, None))
+                }
+                // `fold(init, f)` — the callback is argument ONE. That is the whole reason
+                // `higher_order_callback_arg` returns a position instead of a bool.
+                "fold" => {
+                    let acc_ty = match args.first() {
+                        Some((t, _)) => self.cx.apply_type(t),
+                        None => {
+                            self.diags.push(
+                                Diagnostic::error("DL0403", "missing argument 1 (expected the initial accumulator)")
+                                    .with_span(span, "too few arguments"),
+                            );
+                            self.cx.fresh_type()
+                        }
+                    };
+                    self.check_callback(method, 1, &[acc_ty.clone(), (**elem).clone()], Some(acc_ty.clone()), args, span);
+                    Some((acc_ty, None, None))
+                }
                 "map" => {
                     // Row-polymorphic builtin (R-4): the callback's row joins the caller's
                     // (already accounted for via the argument's own check upstream).
                     match args.first().map(|(t, s)| (self.cx.apply_type(t), *s)) {
-                        Some((Type::Fn { ret, .. }, _)) => Some((Type::List(ret), None, None)),
+                        Some((Type::Fn { ret, params, .. }, aspan)) => {
+                            // MAP-PARAM-1 (found while designing P3): this arm read only `ret`, so
+                            // `[1,2,3].map(fn(s: Str) -> Int { s.len() })` checked CLEAN and faulted
+                            // at run time with DL0907. A type error escaping the checker into the
+                            // interpreter is not a small thing: the ROW half of R-4 was written with
+                            // great care and the ARGUMENT half was never written at all.
+                            self.expect_callback_params(method, &[(**elem).clone()], &params, aspan);
+                            Some((Type::List(ret), None, None))
+                        }
                         // Unresolved inference variable: cannot rule at this site (see Secret.map).
                         Some((Type::Var(_), _)) => Some((Type::List(elem.clone()), None, None)),
-                        // A concrete non-function was the fail-open skip branch (`xs.map(42)`).
-                        Some((other, aspan)) => {
-                            self.diags.push(
-                                Diagnostic::error(
-                                    "DL0401",
-                                    format!("argument type mismatch: List.map expects a function, found `{}`", self.ty(&other)),
-                                )
-                                .with_span(aspan, "type mismatch here"),
-                            );
-                            Some((Type::List(elem.clone()), None, None))
-                        }
+                        // A concrete non-function was the fail-open skip branch (`xs.map(42)`). It is
+                        // still refused — by the R-4 gate in `check_method`, which reaches it first
+                        // and explains why the row must be known. This arm used to emit a second
+                        // DL0401 saying less; P3 removed it, because two diagnostics for one mistake
+                        // is how a reader learns to stop reading them.
+                        Some((_, _)) => Some((Type::List(elem.clone()), None, None)),
                         None => {
                             self.diags.push(
                                 Diagnostic::error("DL0403", "missing argument 1 (expected a function)")
@@ -2274,6 +2472,63 @@ impl<'a> Checker<'a> {
     fn expect_named_arg(&mut self, args: &[Type], i: usize, expected: &Type, span: Span, what: &str) {
         if let Some(t) = args.get(i) {
             self.expect_type(expected, t, span, &format!("`{what}` argument {} type mismatch", i + 1));
+        }
+    }
+
+    /// R-4's other half: a higher-order builtin must agree with its callback's PARAMETERS, not only
+    /// with its row and its result. Finding **MAP-PARAM-1** — see `List.map` in `method_sig`.
+    fn expect_callback_params(&mut self, what: &str, expected: &[Type], params: &[Type], aspan: Span) {
+        if params.len() != expected.len() {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL0403",
+                    format!(
+                        "`{what}` calls its function argument with {} argument(s); this function takes {}",
+                        expected.len(),
+                        params.len()
+                    ),
+                )
+                .with_span(aspan, "wrong number of parameters for this callback"),
+            );
+            return;
+        }
+        for (i, (e, a)) in expected.iter().zip(params).enumerate() {
+            let msg = format!("`{what}` calls this function with argument {} of type", i + 1);
+            self.expect_type(e, a, aspan, &msg);
+        }
+    }
+
+    /// Check a higher-order builtin's callback in ONE place: it must BE a function, its parameters
+    /// must be what the builtin will pass it, and its result must be what the builtin will do with
+    /// the answer. Every disagreement is a diagnostic and the caller still yields a type, so one
+    /// mistake does not cascade.
+    fn check_callback(
+        &mut self,
+        what: &str,
+        at: usize,
+        params: &[Type],
+        ret: Option<Type>,
+        args: &[(Type, Span)],
+        call_span: Span,
+    ) {
+        match args.get(at).map(|(t, s)| (self.cx.apply_type(t), *s)) {
+            Some((Type::Fn { params: got, ret: got_ret, .. }, aspan)) => {
+                self.expect_callback_params(what, params, &got, aspan);
+                if let Some(want) = ret {
+                    self.expect_type(&want, &got_ret, aspan, &format!("`{what}` requires its function to return"));
+                }
+            }
+            // NOT reported here — by either branch. The R-4 gate in `check_method` has already
+            // refused a non-function argument, whether it was an inference variable (campaign
+            // finding C88) or a concrete `Int`, and its message is the better one because it says
+            // WHY the row must be known. Reporting again would give two diagnostics for one mistake,
+            // which `exactly_one_diagnostic_for_a_non_function_callback` now pins for all four
+            // higher-order List methods — generalizing the Secret.map case that was pinned alone.
+            Some(_) => {}
+            None => self.diags.push(
+                Diagnostic::error("DL0403", format!("missing argument {} (expected a function)", at + 1))
+                    .with_span(call_span, "too few arguments"),
+            ),
         }
     }
 
@@ -2743,6 +2998,15 @@ impl<'a> Checker<'a> {
                             let (a, b) = self.lower_two_args(args, genv, facts, *span);
                             return Type::Result(Box::new(a), Box::new(b));
                         }
+                        // `Map[K, V]` (P3, D-V2-29). The KEY restriction is not enforced here: at a
+                        // type annotation `K` may still be an inference variable, and refusing a
+                        // variable would refuse `fn f[K](m: Map[K, Int])` outright. It is enforced at
+                        // the call sites that pin `K` to something concrete — `get`, `insert`,
+                        // `remove`, `contains_key` — which is where a bad key can first exist.
+                        "Map" => {
+                            let (a, b) = self.lower_two_args(args, genv, facts, *span);
+                            return Type::Map(Box::new(a), Box::new(b));
+                        }
                         "Secret" => return Type::Secret(Box::new(self.lower_one_arg(args, genv, facts, *span))),
                         "Cap" => return self.lower_cap(args, *span, facts),
                         "ForeignPtr" => return Type::ForeignPtr,
@@ -2949,7 +3213,13 @@ impl<'a> Checker<'a> {
             // serialized. Identity comparison is a post-1.0 question, not an accident.
             Type::Actor(_, _) => true,
             Type::List(inner) | Type::Option(inner) => self.is_opaque(&inner, visiting),
-            Type::Result(a, b) => self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting),
+            // A `Map` is opaque if EITHER side is. Added by pattern, not by instance: a new
+            // composite type that forgets this arm falls into the `_` below, where opaque becomes
+            // `false` and `Map[Str, Secret[Str]] == m` is silently admitted. That is the shape of
+            // the skip-branch rule — write the case where the checker could not tell.
+            Type::Result(a, b) | Type::Map(a, b) => {
+                self.is_opaque(&a, visiting) || self.is_opaque(&b, visiting)
+            }
             Type::Record(id, args) | Type::Sum(id, args) => {
                 if args.iter().any(|a| self.is_opaque(a, visiting)) {
                     return true;
@@ -3315,7 +3585,29 @@ fn prim_receiver_label(recv: &Type) -> Option<&'static str> {
         Type::Secret(_) => "secret",
         Type::Str => "str",
         Type::List(_) => "list",
+        Type::Map(_, _) => "map",
         Type::Plugin(_) => "plugin",
+        // Finding **ARITY-LABEL-1**, found while adding `Map` and older than `Map`. These three were
+        // in `PRIM_TABLE` — whose own documentation calls the arity column NORMATIVE and says "the
+        // checker's too-many-arguments gate (DL0403) reads it at the method-call site" — and were
+        // absent from this function, so for the three AUTHORITY-BEARING DEVICE receivers the gate did
+        // not read it and never had. Witnessed against the pre-fix binary:
+        //
+        //     let s = root.sensor("arm/joint")
+        //     let v = s.read(1, 2, 3, 4, 5)     // table says arity 0 → checked CLEAN
+        //     let a = root.actuator("arm/gripper")
+        //     let r = a.command("open", 1, 2, 3) // table says arity 1 → checked CLEAN
+        //
+        // while the control `console.println("a","b","c")` correctly gave DL0403. That is verbatim
+        // the fail-open skip branch the gate above was written for — `root.console(1,2,3,4,5)`
+        // minting a cap and ignoring the noise — reopened through a receiver added later, because
+        // this function is a second list nobody kept in lockstep with the first.
+        //
+        // `every_table_receiver_is_labelled_for_the_arity_gate` now pins the correspondence, so the
+        // class is closed rather than these three instances.
+        Type::Cap(ResourceKind::Actuator) => "actuator",
+        Type::Cap(ResourceKind::Sensor) => "sensor",
+        Type::Cap(ResourceKind::Compute) => "compute",
         _ => return None,
     })
 }
@@ -3335,12 +3627,25 @@ impl RowAcc {
     }
 }
 
-/// Methods that invoke a function argument (so its row must surface — R-4).
-fn is_higher_order_method(recv: &Type, method: &str) -> bool {
-    matches!(
-        (recv, method),
-        (Type::List(_), "map") | (Type::List(_), "filter") | (Type::Secret(_), "map")
-    )
+/// Methods that invoke a function argument, and **which argument** they invoke (R-4).
+///
+/// The position is the whole point. Until P3 this was a `bool` and the R-4 gate read
+/// `arg_tys.first()`, which is right for `map`, `filter` and `find` — and wrong for `fold`, whose
+/// callback is argument 1 (`xs.fold(0, fn(acc, x) { … })`). A `bool` here would have let
+/// `xs.fold(0, effectful)` past the gate reading the *accumulator's* type, finding a non-function,
+/// and — before C88 — dropping the row; after C88 it would have reported a confusing DL0401 about
+/// the accumulator. Either way the law would have been decided about the wrong argument.
+///
+/// `every_higher_order_callback_position_is_where_method_sig_expects_a_function` pins each entry
+/// against `method_sig`, so a method added here with the wrong index fails rather than silently
+/// checking the wrong slot.
+fn higher_order_callback_arg(recv: &Type, method: &str) -> Option<usize> {
+    match (recv, method) {
+        (Type::List(_), "map") | (Type::List(_), "filter") | (Type::List(_), "find") => Some(0),
+        (Type::List(_), "fold") => Some(1),
+        (Type::Secret(_), "map") => Some(0),
+        _ => None,
+    }
 }
 
 /// Every type name mentioned anywhere in a type expression, head or argument, in source order.

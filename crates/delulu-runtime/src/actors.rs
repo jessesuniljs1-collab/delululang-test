@@ -66,6 +66,10 @@ pub enum MsgValue {
     Str(String),
     Unit,
     List(Vec<MsgValue>),
+    /// A `Map` crossing the boundary (P3). Carried as an ORDERED vector of pairs rather than a map,
+    /// because the wire form should not depend on the receiver rebuilding the same ordering — it
+    /// arrives in the order the sender iterated, which is ascending by key.
+    Map(Vec<(crate::value::MapKey, MsgValue)>),
     Record { name: String, fields: Vec<(String, MsgValue)> },
     Variant { name: String, fields: Vec<MsgValue> },
     /// A sendable (`val`-inferred) closure: body AST plus the converted capture scopes,
@@ -748,6 +752,22 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             );
             MsgValue::List(items.borrow().iter().map(|x| value_to_msg(x, self_state)).collect::<Result<_, _>>()?)
         }
+        // A `Map` is sendable exactly when its values are, which is the `List` rule; the keys are
+        // `Str`/`Int`/`Bool` by construction, so they always are. The same debug-lane aliasing check
+        // applies for the same reason.
+        Value::Map(m) => {
+            debug_assert!(
+                Rc::strong_count(m) <= 2,
+                "actor-boundary map with {} strong refs — the static uniqueness proof failed",
+                Rc::strong_count(m)
+            );
+            MsgValue::Map(
+                m.borrow()
+                    .iter()
+                    .map(|(k, v)| Ok((k.clone(), value_to_msg(v, self_state)?)))
+                    .collect::<Result<_, Fault>>()?,
+            )
+        }
         Value::Record { name, fields } => MsgValue::Record {
             name: name.to_string(),
             fields: fields
@@ -850,6 +870,9 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
         MsgValue::Bool(b) => Value::Bool(b),
         MsgValue::Str(s) => Value::str(s),
         MsgValue::Unit => Value::Unit,
+        MsgValue::Map(pairs) => Value::Map(Rc::new(std::cell::RefCell::new(
+            pairs.into_iter().map(|(k, v)| (k, msg_to_value(v, globals))).collect(),
+        ))),
         MsgValue::List(items) => Value::List(Rc::new(std::cell::RefCell::new(
             items.into_iter().map(|x| msg_to_value(x, globals)).collect(),
         ))),

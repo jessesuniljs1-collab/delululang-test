@@ -8,7 +8,7 @@ Every primitive operation, by receiver. **Arity is normative**: the checker refu
 
 Capability operations are the only source of primitive effects (T-CapOp), which is why this table is the checker's single source of truth rather than prose.
 
-> **Coverage (invariant 42):** 59 of 59 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
+> **Coverage (invariant 42):** 82 of 82 anchors in this chapter have both an accepting and a rejecting conformance witness (100.0%). Items marked otherwise are **not stable** until witnessed — see `STAGE9_BUILD_ORDER.md` D10.
 
 
 ## `root`
@@ -150,6 +150,10 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `starts_with` | 1 | `ref.prim.str.starts_with` | covered |
 | `split` | 1 | `ref.prim.str.split` | covered |
 | `slice` | 2 | `ref.prim.str.slice` | covered |
+| `to_upper` | 0 | `ref.prim.str.to_upper` | covered |
+| `to_lower` | 0 | `ref.prim.str.to_lower` | covered |
+| `replace` | 2 | `ref.prim.str.replace` | covered |
+| `chars` | 0 | `ref.prim.str.chars` | covered |
 
 ## `list`
 
@@ -159,3 +163,27 @@ Capability operations are the only source of primitive effects (T-CapOp), which 
 | `get` | 1 | `ref.prim.list.get` | covered |
 | `push` | 1 | `ref.prim.list.push` | covered |
 | `map` | 1 | `ref.prim.list.map` | covered |
+| `is_empty` | 0 | `ref.prim.list.is_empty` | covered |
+| `pop` | 0 | `ref.prim.list.pop` | covered |
+| `reverse` | 0 | `ref.prim.list.reverse` | covered |
+| `concat` | 1 | `ref.prim.list.concat` | covered |
+| `slice` | 2 | `ref.prim.list.slice` | covered |
+| `contains` | 1 | `ref.prim.list.contains` | covered |
+| `join` | 1 | `ref.prim.list.join` | covered |
+| `sort` | 0 | `ref.prim.list.sort` | covered |
+| `filter` | 1 | `ref.prim.list.filter` | covered |
+| `find` | 1 | `ref.prim.list.find` | covered |
+| `fold` | 2 | `ref.prim.list.fold` | covered |
+
+## `map`
+
+| Method | Arity | Anchor | Coverage |
+|---|---|---|---|
+| `len` | 0 | `ref.prim.map.len` | covered |
+| `is_empty` | 0 | `ref.prim.map.is_empty` | covered |
+| `get` | 1 | `ref.prim.map.get` | covered |
+| `contains_key` | 1 | `ref.prim.map.contains_key` | covered |
+| `insert` | 2 | `ref.prim.map.insert` | covered |
+| `remove` | 1 | `ref.prim.map.remove` | covered |
+| `keys` | 0 | `ref.prim.map.keys` | covered |
+| `values` | 0 | `ref.prim.map.values` | covered |

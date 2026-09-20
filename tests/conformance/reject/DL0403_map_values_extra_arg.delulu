@@ -1,0 +1,6 @@
+// anchors: ref.prim.map.values
+module conf
+
+fn f(m: Map[Str, Int]) -> List[Int] {
+    m.values(1)
+}

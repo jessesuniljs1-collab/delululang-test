@@ -1,0 +1,9 @@
+// anchors: ref.prim.map.len
+module conf
+
+// `map.len` takes no arguments. The arity column in `PRIM_TABLE` is NORMATIVE and the DL0403 gate
+// reads it — and for three device receivers it silently did not, which is finding ARITY-LABEL-1.
+// This file is one of the eight that keep `map` from joining them.
+fn f(m: Map[Str, Int]) -> Int {
+    m.len(1)
+}

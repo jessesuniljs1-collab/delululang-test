@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.concat
+module conf
+
+fn f(xs: List[Int], ys: List[Str]) -> List[Int] {
+    xs.concat(ys)
+}

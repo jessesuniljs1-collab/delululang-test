@@ -40,6 +40,14 @@ pub enum Value {
     Str(Rc<str>),
     Unit,
     List(Rc<RefCell<Vec<Value>>>),
+    /// A `Map[K, V]` (P3, ruling D-V2-29), stored as a `BTreeMap` keyed by [`MapKey`].
+    ///
+    /// A `BTreeMap` rather than a hash map, and that is the whole design: iteration is ascending by
+    /// key, so `keys()` and `values()` are in the same order as each other and the same order on
+    /// every run, on every platform, under every allocator. The hash-order nondeterminism that makes
+    /// other languages' map output untestable simply does not exist here — which matters for a
+    /// language whose tests compare printed output and whose plugin DIR must be byte-reproducible.
+    Map(Rc<RefCell<std::collections::BTreeMap<MapKey, Value>>>),
     Record { name: Rc<str>, fields: Rc<RefCell<Vec<(String, Value)>>> },
     /// A sum-type value: builtin (`Ok`/`Err`/`Some`/`None`) or a user variant, by name.
     ///
@@ -74,6 +82,45 @@ pub enum Value {
     /// P2: one export of a loaded plugin, as a callable. Minted only by `p.get(name)`, and opaque for
     /// the same reason: it is a function value over code that arrived after compile time.
     PluginFn(Rc<crate::plugin::PluginFn>),
+}
+
+/// A `Map` key: `Str`, `Int` or `Bool`, and nothing else (ruling D-V2-29 decision 4).
+///
+/// A closed enum rather than an `Ord` impl on [`Value`], for the same reason `List.sort` uses its own
+/// key type: deriving `Ord` on `Value` would define an order for every variant at once — including
+/// `Float`, whose NaN breaks the total-order law a `BTreeMap` depends on, and including the opaque
+/// handles, whose identity must never be comparable. The checker refuses every other key type at the
+/// call site that supplies it, so [`MapKey::of`] returning `None` is a checker bug and says so.
+///
+/// `Bool` sorts false-before-true. The variant ORDER here is the key order: booleans, then integers,
+/// then strings. It is arbitrary but fixed, and a map has one key type anyway, so the cross-type
+/// ordering is unobservable from a well-typed program.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MapKey {
+    Bool(bool),
+    Int(i64),
+    Str(String),
+}
+
+impl MapKey {
+    /// The key a value denotes, or `None` when it cannot be one.
+    pub fn of(v: &Value) -> Option<MapKey> {
+        match v {
+            Value::Bool(b) => Some(MapKey::Bool(*b)),
+            Value::Int(i) => Some(MapKey::Int(*i)),
+            Value::Str(s) => Some(MapKey::Str(s.to_string())),
+            _ => None,
+        }
+    }
+
+    /// The key back as a value, for `keys()`.
+    pub fn to_value(&self) -> Value {
+        match self {
+            MapKey::Bool(b) => Value::Bool(*b),
+            MapKey::Int(i) => Value::Int(*i),
+            MapKey::Str(s) => Value::str(s.clone()),
+        }
+    }
 }
 
 /// The payload of a [`Value::Variant`] — an `Rc<Vec<Value>>` that tears itself down **iteratively**.
@@ -155,6 +202,15 @@ impl Drop for VariantFields {
                         work.extend(std::mem::take(cell.get_mut()).into_iter().map(|(_, v)| v));
                     }
                 }
+                // A `Map` owns its values, so it joins the iterative walk for the same reason a
+                // `List` does — INTERP-DROP-1 was a stack overflow in `Drop`, and a map of maps is
+                // the same shape as a list of lists.
+                Value::Map(m) => {
+                    let mut rc = m;
+                    if let Some(cell) = Rc::get_mut(&mut rc) {
+                        work.extend(std::mem::take(cell.get_mut()).into_values());
+                    }
+                }
                 // Every other variant owns no `Value` children, so dropping it is O(1).
                 _ => {}
             }
@@ -190,6 +246,13 @@ impl Value {
             Value::Bool(b) => b.to_string(),
             Value::Str(s) => s.to_string(),
             Value::Unit => "()".to_string(),
+            // Ascending by key, which is the same order `keys()` and `values()` give — so what a
+            // test compares and what a program iterates cannot disagree.
+            Value::Map(m) => {
+                let inner: Vec<String> =
+                    m.borrow().iter().map(|(k, v)| format!("{}: {}", k.to_value().display(), v.display())).collect();
+                format!("{{{}}}", inner.join(", "))
+            }
             Value::List(items) => {
                 let inner: Vec<String> = items.borrow().iter().map(|v| v.display()).collect();
                 format!("[{}]", inner.join(", "))

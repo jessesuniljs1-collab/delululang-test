@@ -619,8 +619,34 @@ pub fn call_str_method(s: &str, method: &str, args: &[Value], span: Span) -> Res
             let hi = hi.min(chars.len()).max(lo);
             Ok(Value::str(chars[lo..hi].iter().collect::<String>()))
         }
+        // P3 (D-V2-29). Full Unicode, locale-independent — and NOT a normalization a security
+        // decision may rest on: these do not round-trip (German sharp s uppercases to two letters),
+        // and four of the P22 campaign's defects were comparisons made on a different spelling of
+        // the same string. The reference says so where a reader will see it.
+        "to_upper" => Ok(Value::str(s.to_uppercase())),
+        "to_lower" => Ok(Value::str(s.to_lowercase())),
+        // An EMPTY pattern returns the receiver unchanged (D-V2-29 decision 6). Rust's `replace`
+        // would insert `to` between every character, which is a surprise rather than a semantic;
+        // unlike `split("")`, an empty replacement pattern has no natural reading.
+        "replace" => {
+            let from = str_arg(args, 0, span)?;
+            let to = str_arg(args, 1, span)?;
+            Ok(Value::str(if from.is_empty() { s.to_string() } else { s.replace(&from, &to) }))
+        }
+        // DEFINED as `split("")`, and `chars_agrees_with_split_on_the_empty_separator` pins it, so
+        // the second spelling of one operation cannot drift from the first.
+        "chars" => call_str_method(s, "split", &[Value::str(String::new())], span),
         _ => Err(Fault::at("DL0907", format!("unknown Str method `{method}`"), span)),
     }
+}
+
+/// The ordered projection `List.sort` compares by. Deliberately NOT an `Ord` on `Value`: that would
+/// define an order for every variant at once, including the opaque handles and `Float`, which is the
+/// blanket answer D-V2-29 refused. `Bool` sorts false-before-true.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum SortKey {
+    Int(i64),
+    Str(String),
 }
 
 pub fn call_list_method(list: &Rc<std::cell::RefCell<Vec<Value>>>, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
@@ -639,13 +665,145 @@ pub fn call_list_method(list: &Rc<std::cell::RefCell<Vec<Value>>>, method: &str,
             }
             Ok(Value::Unit)
         }
+        // P3 (D-V2-29). `pop` MUTATES, like `push`, and is registered in `MUTATING_METHODS` so the
+        // rcap pass refuses it through a `val` reference.
+        "pop" => Ok(match list.borrow_mut().pop() {
+            Some(v) => Value::variant("Some", vec![v]),
+            None => Value::variant("None", vec![]),
+        }),
+        "is_empty" => Ok(Value::Bool(list.borrow().is_empty())),
+        "reverse" => {
+            let mut out = list.borrow().clone();
+            out.reverse();
+            Ok(Value::List(Rc::new(std::cell::RefCell::new(out))))
+        }
+        "concat" => {
+            let mut out = list.borrow().clone();
+            match args.first() {
+                Some(Value::List(other)) => out.extend(other.borrow().iter().cloned()),
+                _ => return Err(Fault::at("DL0907", "List.concat expects a List argument", span)),
+            }
+            Ok(Value::List(Rc::new(std::cell::RefCell::new(out))))
+        }
+        // The same clamping `Str.slice` uses, so the two agree: out-of-range is an empty slice, not
+        // a fault, and `hi < lo` is empty rather than reversed.
+        "slice" => {
+            let lo = int_arg(args, 0, span)?.max(0) as usize;
+            let hi = int_arg(args, 1, span)?.max(0) as usize;
+            let items = list.borrow();
+            let lo = lo.min(items.len());
+            let hi = hi.min(items.len()).max(lo);
+            Ok(Value::List(Rc::new(std::cell::RefCell::new(items[lo..hi].to_vec()))))
+        }
+        // `Value::eq`, the same comparison `==` performs. The checker has already refused an opaque
+        // element type with DL0605, which is what keeps `contains` and `==` from disagreeing.
+        "contains" => {
+            let needle = args.first().ok_or_else(|| Fault::at("DL0907", "List.contains expects an argument", span))?;
+            Ok(Value::Bool(list.borrow().iter().any(|v| v.eq(needle))))
+        }
+        "join" => {
+            let sep = str_arg(args, 0, span)?;
+            let items = list.borrow();
+            let mut parts: Vec<String> = Vec::with_capacity(items.len());
+            for v in items.iter() {
+                match v {
+                    Value::Str(s) => parts.push(s.to_string()),
+                    other => {
+                        return Err(Fault::at(
+                            "DL0907",
+                            format!("List.join is defined on List[Str] (found `{}`) — checker bug", other.display()),
+                            span,
+                        ))
+                    }
+                }
+            }
+            Ok(Value::str(parts.join(&sep)))
+        }
+        // STABLE, and only over the three element types that have a total order — the checker has
+        // refused the rest, `Float` by name (NaN). A stable sort means equal elements keep their
+        // input order, so the answer is reproducible across runs and platforms; an unstable one
+        // would make two green runs disagree for no visible reason.
+        "sort" => {
+            let mut out = list.borrow().clone();
+            let key = |v: &Value| -> Option<SortKey> {
+                match v {
+                    Value::Int(i) => Some(SortKey::Int(*i)),
+                    Value::Bool(b) => Some(SortKey::Int(i64::from(*b))),
+                    Value::Str(s) => Some(SortKey::Str(s.to_string())),
+                    _ => None,
+                }
+            };
+            if let Some(bad) = out.iter().find(|v| key(v).is_none()) {
+                return Err(Fault::at(
+                    "DL0907",
+                    format!("List.sort has no ordering for `{}` (checker bug)", bad.display()),
+                    span,
+                ));
+            }
+            // `sort_by_key` is Rust's STABLE sort, which is the property D-V2-29 promises: equal
+            // elements keep their input order, so the answer is reproducible across runs.
+            out.sort_by_key(&key);
+            Ok(Value::List(Rc::new(std::cell::RefCell::new(out))))
+        }
         _ => Err(Fault::at("DL0907", format!("unknown List method `{method}`"), span)),
+    }
+}
+
+/// `Map[K, V]` (P3, D-V2-29). Every key arrives through [`MapKey::of`]; a `None` from it means the
+/// checker admitted a key type it should have refused, which is why that path is a named checker-bug
+/// fault rather than a silent skip. Iteration is the `BTreeMap`'s, which is ascending by key.
+pub fn call_map_method(
+    map: &Rc<std::cell::RefCell<std::collections::BTreeMap<crate::value::MapKey, Value>>>,
+    method: &str,
+    args: &[Value],
+    span: Span,
+) -> Result<Value, Fault> {
+    use crate::value::MapKey;
+    // The key argument, for the four methods that take one.
+    let key = |args: &[Value]| -> Result<MapKey, Fault> {
+        let v = args.first().ok_or_else(|| Fault::at("DL0907", format!("Map.{method} expects a key"), span))?;
+        MapKey::of(v).ok_or_else(|| {
+            Fault::at(
+                "DL0907",
+                format!("`{}` cannot be a Map key — only Str, Int and Bool can (checker bug)", v.display()),
+                span,
+            )
+        })
+    };
+    match method {
+        "len" => Ok(Value::Int(map.borrow().len() as i64)),
+        "is_empty" => Ok(Value::Bool(map.borrow().is_empty())),
+        "get" => Ok(match map.borrow().get(&key(args)?) {
+            Some(v) => Value::variant("Some", vec![v.clone()]),
+            None => Value::variant("None", vec![]),
+        }),
+        "contains_key" => Ok(Value::Bool(map.borrow().contains_key(&key(args)?))),
+        // MUTATING — registered in `MUTATING_MAP_METHODS`, so a `val` receiver refuses it.
+        "insert" => {
+            let k = key(args)?;
+            let v = args.get(1).cloned().unwrap_or(Value::Unit);
+            map.borrow_mut().insert(k, v);
+            Ok(Value::Unit)
+        }
+        "remove" => Ok(match map.borrow_mut().remove(&key(args)?) {
+            Some(v) => Value::variant("Some", vec![v]),
+            None => Value::variant("None", vec![]),
+        }),
+        // `keys` and `values` iterate the SAME map in the SAME order, so a caller may zip them. That
+        // is a promise the reference makes, and `keys_and_values_are_in_the_same_order` pins it.
+        "keys" => Ok(Value::List(Rc::new(std::cell::RefCell::new(
+            map.borrow().keys().map(MapKey::to_value).collect(),
+        )))),
+        "values" => Ok(Value::List(Rc::new(std::cell::RefCell::new(map.borrow().values().cloned().collect())))),
+        _ => Err(Fault::at("DL0907", format!("unknown Map method `{method}`"), span)),
     }
 }
 
 /// Free builtins (§11). Returns None when `name` is not a builtin.
 pub fn call_builtin(name: &str, args: &[Value], span: Span) -> Option<Result<Value, Fault>> {
     Some(match name {
+        // `Map()` — the empty map. A free builtin for the same reason `Some`/`None` are.
+        "Map" => Ok(Value::Map(Rc::new(std::cell::RefCell::new(std::collections::BTreeMap::new())))),
         "Ok" => Ok(Value::ok(args.first().cloned().unwrap_or(Value::Unit))),
         "Err" => Ok(Value::err(args.first().cloned().unwrap_or(Value::Unit))),
         "Some" => Ok(Value::variant("Some", vec![args.first().cloned().unwrap_or(Value::Unit)])),

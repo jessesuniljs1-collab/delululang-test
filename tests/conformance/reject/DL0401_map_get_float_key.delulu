@@ -1,0 +1,13 @@
+// anchors: ref.prim.map.get
+module conf
+
+// A `Float` cannot be a Map key (D-V2-29 decision 4): it has no total order — NaN compares false
+// against itself — and `-0.0` and `0.0` compare equal while being different values, so two distinct
+// keys would collide. The check runs AFTER the argument has unified `K`, which is the half the first
+// implementation got wrong: it ran before, saw an unresolved variable, correctly declined to rule,
+// and then nobody looked again — so this program checked clean and faulted at run time with a
+// DL0907 that blamed a checker bug, correctly.
+fn f() -> Option[Str] {
+    let m = Map()
+    m.get(1.5)
+}

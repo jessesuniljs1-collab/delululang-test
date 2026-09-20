@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.is_empty
+module conf
+
+fn f(xs: List[Int]) -> Bool {
+    xs.is_empty(1)
+}

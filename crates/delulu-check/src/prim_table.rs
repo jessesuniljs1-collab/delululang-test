@@ -21,7 +21,7 @@ pub struct PrimEntry {
     /// A stable receiver label used in the anchor id. Matches the receiver `Type` in `method_sig`:
     /// `root` = `Root`; `console`/`fs_read`/`fs_write`/`http`/`clock`/`rand` = the matching
     /// `Cap[_]`; `python` = `Cap[Python]`; `pyobj` = `PyObj`; `secret` = `Secret[_]`;
-    /// `str`/`list` = the builtin `Str`/`List`; `plugin` = `Plugin[_]`.
+    /// `str`/`list`/`map` = the builtin `Str`/`List`/`Map`; `plugin` = `Plugin[_]`.
     pub receiver: &'static str,
     /// The method name, exactly as `method_sig` matches it.
     pub method: &'static str,
@@ -29,6 +29,20 @@ pub struct PrimEntry {
     /// arguments than this as DL0403.
     pub arity: u8,
 }
+
+/// The `List` methods that MUTATE their receiver in place.
+///
+/// One list, read by the reference-capability pass, because "which methods mutate" is a fact two
+/// passes need and a fact stated twice is a fact that will disagree with itself. A mutator missing
+/// from here would be a silent hole in `val`: the write would simply be allowed through a
+/// deeply-immutable reference and nothing would say so. `every_mutating_list_method_is_in_the_table`
+/// pins each entry against [`PRIM_TABLE`] so a typo cannot quietly disable the rule.
+pub const MUTATING_LIST_METHODS: &[&str] = &["push", "pop"];
+
+/// The `Map` methods that MUTATE their receiver in place, for the same reason and read by the same
+/// pass as [`MUTATING_LIST_METHODS`]. `insert` and `remove` are writes; `get`, `keys` and `values`
+/// are not.
+pub const MUTATING_MAP_METHODS: &[&str] = &["insert", "remove"];
 
 impl PrimEntry {
     /// The stable conformance anchor id, e.g. `ref.prim.console.println`.
@@ -111,11 +125,40 @@ pub const PRIM_TABLE: &[PrimEntry] = &[
     PrimEntry { receiver: "str", method: "starts_with", arity: 1 },
     PrimEntry { receiver: "str", method: "split", arity: 1 },
     PrimEntry { receiver: "str", method: "slice", arity: 2 },
+    // P3 (D-V2-29). `chars` is defined as `split("")`; `to_upper`/`to_lower` are full-Unicode case
+    // mapping and NOT a security normalization.
+    PrimEntry { receiver: "str", method: "to_upper", arity: 0 },
+    PrimEntry { receiver: "str", method: "to_lower", arity: 0 },
+    PrimEntry { receiver: "str", method: "replace", arity: 2 },
+    PrimEntry { receiver: "str", method: "chars", arity: 0 },
     // List (builtin).
     PrimEntry { receiver: "list", method: "len", arity: 0 },
     PrimEntry { receiver: "list", method: "get", arity: 1 },
     PrimEntry { receiver: "list", method: "push", arity: 1 },
     PrimEntry { receiver: "list", method: "map", arity: 1 },
+    // P3 (D-V2-29). `fold`'s callback is argument ONE — `higher_order_callback_arg` carries that
+    // position, and `sort`/`contains`/`join` each refuse the element types they cannot serve.
+    PrimEntry { receiver: "list", method: "is_empty", arity: 0 },
+    PrimEntry { receiver: "list", method: "pop", arity: 0 },
+    PrimEntry { receiver: "list", method: "reverse", arity: 0 },
+    PrimEntry { receiver: "list", method: "concat", arity: 1 },
+    PrimEntry { receiver: "list", method: "slice", arity: 2 },
+    PrimEntry { receiver: "list", method: "contains", arity: 1 },
+    PrimEntry { receiver: "list", method: "join", arity: 1 },
+    PrimEntry { receiver: "list", method: "sort", arity: 0 },
+    PrimEntry { receiver: "list", method: "filter", arity: 1 },
+    PrimEntry { receiver: "list", method: "find", arity: 1 },
+    PrimEntry { receiver: "list", method: "fold", arity: 2 },
+    // Map[K, V] (P3, D-V2-29). Keys are Str/Int/Bool in 1.x; iteration is ascending by key, and
+    // `keys`/`values` are in that same order so a caller may zip them.
+    PrimEntry { receiver: "map", method: "len", arity: 0 },
+    PrimEntry { receiver: "map", method: "is_empty", arity: 0 },
+    PrimEntry { receiver: "map", method: "get", arity: 1 },
+    PrimEntry { receiver: "map", method: "contains_key", arity: 1 },
+    PrimEntry { receiver: "map", method: "insert", arity: 2 },
+    PrimEntry { receiver: "map", method: "remove", arity: 1 },
+    PrimEntry { receiver: "map", method: "keys", arity: 0 },
+    PrimEntry { receiver: "map", method: "values", arity: 0 },
 ];
 
 #[cfg(test)]
@@ -141,7 +184,7 @@ mod tests {
     fn count_is_pinned() {
         assert_eq!(
             PRIM_TABLE.len(),
-            59,
+            82,
             "the primitive table index changed — update this count and add/remove the matching \
              `method_sig` arm (Stage 9 coverage law)"
         );
@@ -150,7 +193,7 @@ mod tests {
     /// A `main` header with a broad row so every capability op is in-row; the drift guard only
     /// gates on DL0405 (unknown method), so unrelated arg/type errors are irrelevant.
     const HEADER: &str =
-        "module m\nfn main(root: Root) ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall} {\n";
+        "module m\nfn main(root: Root) ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall, Actuate} {\n";
 
     /// Wrap a receiver-binding + call body in a checkable program.
     fn program(body: &str) -> String {
@@ -172,10 +215,80 @@ mod tests {
             "secret" => "let recv = root.secret(\"K\");",
             "str" => "let recv = \"x\";",
             "list" => "let recv = [1];",
+            "map" => "let recv = Map();",
+            // The three device receivers. They were NOT here until P3, and that omission is finding
+            // ARITY-LABEL-1: `receiver_binding` fell through to `_ => return None`, so both the
+            // resolve guard and the arity gate's own test SKIPPED them — and the arity gate turned
+            // out to be missing for all three. A test that excuses its hardest cases reports the
+            // easy ones passing, which is the same thing as not testing.
+            "actuator" => "let recv = root.actuator(\"arm/gripper\");",
+            "sensor" => "let recv = root.sensor(\"arm/joint\");",
+            "compute" => "let recv = root.compute(\"gpu0\");",
             // Python / PyObj bindings live inside a match arm; handled specially below.
             "python" | "pyobj" | "plugin" => return None,
             _ => return None,
         })
+    }
+
+    /// Receivers deliberately NOT bound above, each for a stated reason. An EXPLICIT list, because
+    /// the thing that went wrong in ARITY-LABEL-1 was a silent `_ => return None`: a receiver added
+    /// to the table simply stopped being covered, and nothing anywhere said so.
+    const UNBOUND_RECEIVERS: &[&str] = &[
+        // Constructed inside the `Ok` arm of `root.python(...)`; covered by
+        // `python_and_pyobj_primitives_resolve`.
+        "python", "pyobj",
+        // A `Plugin[_]` needs a real `.dpx` on disk, so it is covered by the structural + count
+        // tripwires and by `plugin_load_cli.rs`.
+        "plugin",
+    ];
+
+    /// **The class-closing test.** Every receiver in the table is either bound for the guards above
+    /// or named in `UNBOUND_RECEIVERS` with a reason. Adding a receiver and forgetting both now
+    /// FAILS, instead of quietly leaving that receiver unguarded the way `actuator`, `sensor` and
+    /// `compute` were left unguarded for two stages.
+    #[test]
+    fn every_table_receiver_is_covered_or_explicitly_excused() {
+        let mut unexplained: Vec<&str> = Vec::new();
+        for e in PRIM_TABLE {
+            if receiver_binding(e.receiver).is_none() && !UNBOUND_RECEIVERS.contains(&e.receiver) {
+                unexplained.push(e.receiver);
+            }
+        }
+        unexplained.sort_unstable();
+        unexplained.dedup();
+        assert!(
+            unexplained.is_empty(),
+            "these table receivers are neither bound nor excused, so every guard below silently \
+             skips them: {unexplained:?}"
+        );
+    }
+
+    /// The other half: every receiver the table names must be one the checker can LABEL, or the
+    /// arity gate cannot look it up. This is the direct pin for finding ARITY-LABEL-1 — the gate
+    /// reads `prim_receiver_label`, and a receiver missing from there is a receiver whose normative
+    /// arity column is enforced by nothing.
+    #[test]
+    fn every_table_receiver_is_labelled_for_the_arity_gate() {
+        let mut missing: Vec<&str> = Vec::new();
+        for e in PRIM_TABLE {
+            let Some(binding) = receiver_binding(e.receiver) else { continue };
+            // Call the method with one argument MORE than the table declares. If the gate can label
+            // this receiver, that is DL0403; if it cannot, the surplus argument is ignored.
+            let recv = if binding.is_empty() { "root" } else { "recv" };
+            let args = vec!["1"; e.arity as usize + 1].join(", ");
+            let body = format!("{binding}\nlet _z = {recv}.{}({args});", e.method);
+            let ds = check_source(0, &program(&body));
+            if !ds.diagnostics.iter().any(|d| d.code == "DL0403") {
+                missing.push(e.receiver);
+            }
+        }
+        missing.sort_unstable();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "the arity gate does not fire for these receivers — `prim_receiver_label` cannot label \
+             them, so their NORMATIVE arity column is enforced by nothing: {missing:?}"
+        );
     }
 
     fn dl0405_present(src: &str) -> bool {

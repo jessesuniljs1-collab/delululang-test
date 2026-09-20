@@ -1,0 +1,6 @@
+// anchors: ref.prim.list.fold
+module conf
+
+fn f(xs: List[Int]) -> Int {
+    xs.fold(0, fn(x: Int) -> Int { x })
+}

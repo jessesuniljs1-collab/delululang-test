@@ -351,6 +351,105 @@ test witnessed failing on the unpatched code, not merely passing on the patched 
   checkout — and a test asserts the two are byte-identical. Two copies of agent instructions is two
   things to go stale, and this project has watched that happen twice.
 
+## D-V2-29 — P3-01, the standard-library method set — TAKEN (head chef, 2026-09-20, under the owner's delegation)
+
+The roadmap's P3-01 asks for a ruling *before* code: the method set, `Map`'s key discipline, and the
+WASM policy per method. Additive work, so minor-version, not an RFC (`REMAINING_WORK.md` 2.1).
+
+### The measured starting point
+
+`List` has four methods (`len`, `get`, `push`, `map`), `Str` has six, and there is no `Map`. **And none
+of the ten lower to WASM** — the backend has no `List` in its `Ty` at all:
+
+    $ delulu build listwasm.delulu --target wasm
+    error[DL1201]: WASM codegen does not support this expression form
+
+for a program whose only method call is `xs.len()`. So the WASM question is not "which new methods
+lower" but "does this phase change a backend that already refuses all ten".
+
+### The ruling
+
+**WASM: none of them lower, and that is not a regression.** `Str`, `List` and `Map` methods stay
+interpreter-only in 1.x. `Map` has no `Ty` representation and would need a heap layout, a key
+canonicalization and an ordering in the guest — three designs, each a place for a security decision on
+an unnormalized representation. The backend's existing `DL1201` already says exactly the right thing
+("run it on the interpreter"). **`REMAINING_WORK.md` 2.1's sentence "Each method needs … a WASM
+lowering" is corrected by this ruling**: it stated a rule the four existing methods already break, and a
+rule that the code does not follow is not a rule.
+
+**`List[T]` gains eleven.** `filter(fn(T) -> Bool) -> List[T]`, `fold(A, fn(A, T) -> A) -> A`,
+`find(fn(T) -> Bool) -> Option[T]`, `contains(T) -> Bool`, `sort() -> List[T]`, `reverse() -> List[T]`,
+`concat(List[T]) -> List[T]`, `is_empty() -> Bool`, `pop() -> Option[T]`, `slice(Int, Int) -> List[T]`,
+`join(Str) -> Str` (on `List[Str]` only).
+
+**`Str` gains four**: `to_upper()`, `to_lower()`, `replace(Str, Str)`, `chars() -> List[Str]`.
+
+**`Map[K, V]` is new**: `Map()` (a free prelude builtin, following the `Ok`/`Err`/`Some`/`None`
+precedent — there is no literal syntax and no static-method syntax to hang `Map.new()` on),
+`get(K) -> Option[V]`, `insert(K, V) -> Unit`, `remove(K) -> Option[V]`, `len() -> Int`,
+`keys() -> List[K]`, `values() -> List[V]`, `is_empty() -> Bool`, `contains_key(K) -> Bool`.
+
+### The six decisions inside that list, each with the reason it went this way
+
+1. **`join` lives on `List[Str]`, not on `Str`.** The roadmap's P3-03 line lists `join` under `Str`
+   (Python's `sep.join(xs)`). Deviating deliberately: the receiver is the collection being folded, and
+   two spellings of one operation is exactly the drift this project keeps finding. Recorded here rather
+   than quietly implemented.
+
+2. **`sort()` is refused on `List[Float]`.** There is no total order on `Float`: NaN compares false
+   against everything, so every comparison sort places it by accident of the algorithm. A sort that
+   silently puts NaN somewhere is a decision made on a representation that does not admit the decision.
+   `Int`, `Str` and `Bool` sort; `Float` is refused with the reason named in the diagnostic; any other
+   element type is refused because it has no order at all. Stable sort, so equal elements keep their
+   input order and the answer is reproducible.
+
+3. **`contains` on an opaque element type is `DL0605`** — the SAME code `==` already emits for
+   Secret/Cap/Root, with the same "use `Secret.verify` for secrets" hint. `contains` is `==` in a loop,
+   so if the two disagreed one of them would be wrong; sharing the code is what keeps them from
+   disagreeing. Note what the alternative would have been: `Value::eq` answers `false` for two
+   `Secret`s, so an admitted `xs.contains(k)` over secrets would have returned a confident, wrong
+   `false` — an equality answer derived from secret data, which is the shape of finding IF-1. No new
+   code, per D-V2-26.
+
+4. **`Map` keys are `Str`, `Int` or `Bool` in 1.x, iteration is ascending by key.** `Float` keys are
+   refused for the reason in (2) plus `-0.0 == 0.0`; structural keys (lists, records) are refused
+   because their canonical form is a design, not a detail. Deterministic iteration is ascending key
+   order, so `keys()`, `values()` and any future `for` agree with each other and across runs — the
+   hash-order nondeterminism that makes other languages' map output untestable never exists here.
+   `is_opaque` gains its `Map` arm in the same commit: without it, `Map[Str, Secret[Str]]` would compare
+   structurally, which is the recursion `List`/`Option`/`Result` already have and the reason to add it
+   by pattern rather than by instance.
+
+5. **`pop` and `insert`/`remove` mutate, so they take `push`'s reference-capability path.** `push` is
+   already special-cased in `rcap_check` so a write through a `val` (deeply immutable) reference is
+   refused. Every new mutating method joins that list *in the same edit*, and a test asserts the list
+   and the mutating set are the same set — a mutator that forgot to register would be a silent hole in
+   `val`.
+
+6. **`to_upper`/`to_lower` are full Unicode and are documented as NOT a security normalization.** They
+   are `str::to_uppercase`/`to_lowercase`, so they are locale-independent and round-tripping is not
+   guaranteed (`ß` → `SS`). The reference says plainly: never case-fold to compare a path, a host name
+   or a capability — this project's own P22 campaign found four defects of exactly that shape. And
+   `replace("", to)` returns the receiver unchanged: unlike `split("")`, which has a natural reading
+   (the characters), an empty replacement pattern has none, and inserting between every character is a
+   surprise, not a semantic.
+
+### The one soundness change this phase forces
+
+`fold`'s callback is argument **1**, not argument 0. The R-4 gate (the builtin-callback law, the C88
+fix) reads `arg_tys.first()`. Left alone, `xs.fold(0, effectful_fn)` would have dropped the callback's
+row — the exact escape F-3/F-4 calls a total soundness failure, reopened by a method with a different
+argument order. So `is_higher_order_method` becomes `higher_order_callback_arg`, returning the
+callback's POSITION, and the fail-closed branch moves with it. A test pins that every higher-order
+entry's recorded position is the position `method_sig` type-checks as a function, so a future method
+cannot register with the wrong index.
+
+### `chars()` and `split("")`
+
+`split("")` already returns the characters. `chars()` is the named spelling and is *defined* as equal to
+it; a test asserts the two agree on the same input, including on multi-byte characters, so the second
+path cannot drift from the first.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,

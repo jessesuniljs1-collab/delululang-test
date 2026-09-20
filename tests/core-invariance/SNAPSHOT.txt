@@ -2842,6 +2842,149 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/28_discard_binding.delulu`
 
+===== tests/conformance/accept/29_stdlib_p3.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/29_stdlib_p3.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/29_stdlib_p3.delulu checked clean
+
+===== tests/conformance/accept/29_stdlib_p3.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "list_higher_order",
+      "list_join_demo",
+      "list_mutation",
+      "list_sort_demo",
+      "str_ops"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/29_stdlib_p3.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     list_higher_order, list_join_demo, list_mutation, list_sort_demo, str_ops
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/29_stdlib_p3.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/29_stdlib_p3.delulu`
+
+===== tests/conformance/accept/30_map_p3.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/30_map_p3.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: tests/conformance/accept/30_map_p3.delulu checked clean
+
+===== tests/conformance/accept/30_map_p3.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "program": "conf",
+    "pure_functions": [
+      "bool_keys",
+      "int_keys",
+      "str_keys",
+      "total"
+    ],
+    "requested_scopes": {},
+    "required_grants": [],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/accept/30_map_p3.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `conf` — what this program can do to your system:
+  effects:      (none — provably pure)
+  capabilities: (none)
+  secrets:      (none)
+  pure fns:     bool_keys, int_keys, str_keys, total
+  foreign:      (none — no code outside the guarantee)
+--- stderr ---
+
+===== tests/conformance/accept/30_map_p3.delulu :: why Write =====
+exit 2
+--- stdout ---
+--- stderr ---
+error: `why` needs an executable entry point (`fn main`); none was found in `tests/conformance/accept/30_map_p3.delulu`
+
 ===== tests/conformance/accept/for_loop_iteration.delulu :: check --json =====
 exit 0
 --- stdout ---
@@ -4843,6 +4986,474 @@ error[DL0307]: `Bogus` is not a capability resource kind
 
 1 error(s)
 
+===== tests/conformance/reject/DL0401_list_concat_element_mismatch.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `List[Int]`, found `List[Str]`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 112,
+            "col": 17,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_concat_element_mismatch.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 110,
+            "col": 15,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_concat_element_mismatch.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `List[Int]`, found `List[Str]`
+  --> tests/conformance/reject/DL0401_list_concat_element_mismatch.delulu:5:15
+   |
+ 5 |     xs.concat(ys)
+   |               ^^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_list_filter_non_bool.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`filter` requires its function to return: expected `Bool`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 118,
+            "col": 38,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_filter_non_bool.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 95,
+            "col": 15,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_filter_non_bool.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `filter` requires its function to return: expected `Bool`, found `Int`
+  --> tests/conformance/reject/DL0401_list_filter_non_bool.delulu:5:15
+   |
+ 5 |     xs.filter(fn(x: Int) -> Int { x })
+   |               ^^^^^^^^^^^^^^^^^^^^^^^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_list_find_not_a_function.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: `find` invokes its function argument, so that argument's effect row must be known here — found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 95,
+            "col": 15,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_find_not_a_function.delulu",
+          "label": "give this a function type with an explicit row; a bare type parameter hides the row, and an unknown row cannot be assumed empty",
+          "start": {
+            "byte": 93,
+            "col": 13,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_find_not_a_function.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: `find` invokes its function argument, so that argument's effect row must be known here — found `Int`
+  --> tests/conformance/reject/DL0401_list_find_not_a_function.delulu:5:13
+   |
+ 5 |     xs.find(42)
+   |             ^^ give this a function type with an explicit row; a bare type parameter hides the row, and an unknown row cannot be assumed empty
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_list_join_non_str.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`List.join` is defined on List[Str]: expected `Str`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 90,
+            "col": 18,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_join_non_str.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 77,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_join_non_str.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `List.join` is defined on List[Str]: expected `Str`, found `Int`
+  --> tests/conformance/reject/DL0401_list_join_non_str.delulu:5:5
+   |
+ 5 |     xs.join(", ")
+   |     ^^^^^^^^^^^^^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_list_slice_non_int_bound.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Int`, found `Str`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 96,
+            "col": 17,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_slice_non_int_bound.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 93,
+            "col": 14,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_slice_non_int_bound.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `Int`, found `Str`
+  --> tests/conformance/reject/DL0401_list_slice_non_int_bound.delulu:5:14
+   |
+ 5 |     xs.slice("0", 2)
+   |              ^^^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_list_sort_float.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "`List[Float].sort` is refused: Float has no total order (NaN compares false against every value, including itself), so a comparison sort would place it by accident of the algorithm",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 96,
+            "col": 14,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_list_sort_float.delulu",
+          "label": "sort Int, Str or Bool; for floats, decide what NaN means and write that comparison yourself",
+          "start": {
+            "byte": 87,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_list_sort_float.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: `List[Float].sort` is refused: Float has no total order (NaN compares false against every value, including itself), so a comparison sort would place it by accident of the algorithm
+  --> tests/conformance/reject/DL0401_list_sort_float.delulu:5:5
+   |
+ 5 |     xs.sort()
+   |     ^^^^^^^^^ sort Int, Str or Bool; for floats, decide what NaN means and write that comparison yourself
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_map_contains_key_float_key.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "a `Float` cannot be a Map key: it has no total order (NaN compares false against itself), and `-0.0` and `0.0` compare equal while being different values",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 252,
+            "col": 23,
+            "line": 8
+          },
+          "file": "tests/conformance/reject/DL0401_map_contains_key_float_key.delulu",
+          "label": "use Str, Int or Bool as the key in 1.x",
+          "start": {
+            "byte": 249,
+            "col": 20,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_map_contains_key_float_key.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: a `Float` cannot be a Map key: it has no total order (NaN compares false against itself), and `-0.0` and `0.0` compare equal while being different values
+  --> tests/conformance/reject/DL0401_map_contains_key_float_key.delulu:8:20
+   |
+ 8 |     m.contains_key(1.5)
+   |                    ^^^ use Str, Int or Bool as the key in 1.x
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_map_get_float_key.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "a `Float` cannot be a Map key: it has no total order (NaN compares false against itself), and `-0.0` and `0.0` compare equal while being different values",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 647,
+            "col": 14,
+            "line": 12
+          },
+          "file": "tests/conformance/reject/DL0401_map_get_float_key.delulu",
+          "label": "use Str, Int or Bool as the key in 1.x",
+          "start": {
+            "byte": 644,
+            "col": 11,
+            "line": 12
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_map_get_float_key.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: a `Float` cannot be a Map key: it has no total order (NaN compares false against itself), and `-0.0` and `0.0` compare equal while being different values
+  --> tests/conformance/reject/DL0401_map_get_float_key.delulu:12:11
+   |
+12 |     m.get(1.5)
+   |           ^^^ use Str, Int or Bool as the key in 1.x
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
+===== tests/conformance/reject/DL0401_str_replace_non_str.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0401",
+      "explanation_id": "E-DL0401",
+      "message": "argument type mismatch: expected `Str`, found `Int`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 83,
+            "col": 16,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0401_str_replace_non_str.delulu",
+          "label": "type mismatch here",
+          "start": {
+            "byte": 82,
+            "col": 15,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0401_str_replace_non_str.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0401]: argument type mismatch: expected `Str`, found `Int`
+  --> tests/conformance/reject/DL0401_str_replace_non_str.delulu:5:15
+   |
+ 5 |     s.replace(1, "b")
+   |               ^ type mismatch here
+  explain: delulu explain E-DL0401
+
+1 error(s)
+
 ===== tests/conformance/reject/DL0401_type_mismatch.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -4995,6 +5606,526 @@ error[DL0403]: expected 2 argument(s), found 1
    |
  9 |   g(1)
    |   ^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_list_fold_callback_arity.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`fold` calls its function argument with 2 argument(s); this function takes 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 111,
+            "col": 39,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_list_fold_callback_arity.delulu",
+          "label": "wrong number of parameters for this callback",
+          "start": {
+            "byte": 88,
+            "col": 16,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_list_fold_callback_arity.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `fold` calls its function argument with 2 argument(s); this function takes 1
+  --> tests/conformance/reject/DL0403_list_fold_callback_arity.delulu:5:16
+   |
+ 5 |     xs.fold(0, fn(x: Int) -> Int { x })
+   |                ^^^^^^^^^^^^^^^^^^^^^^^ wrong number of parameters for this callback
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_list_is_empty_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`list.is_empty` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 96,
+            "col": 19,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_list_is_empty_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 82,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_list_is_empty_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `list.is_empty` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_list_is_empty_extra_arg.delulu:5:5
+   |
+ 5 |     xs.is_empty(1)
+   |     ^^^^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_list_reverse_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`list.reverse` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 99,
+            "col": 18,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_list_reverse_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 86,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_list_reverse_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `list.reverse` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_list_reverse_extra_arg.delulu:5:5
+   |
+ 5 |     xs.reverse(1)
+   |     ^^^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_map_is_empty_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`map.is_empty` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 240,
+            "col": 18,
+            "line": 7
+          },
+          "file": "tests/conformance/reject/DL0403_map_is_empty_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 227,
+            "col": 5,
+            "line": 7
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_map_is_empty_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `map.is_empty` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_map_is_empty_extra_arg.delulu:7:5
+   |
+ 7 |     m.is_empty(1)
+   |     ^^^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_map_keys_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`map.keys` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 94,
+            "col": 14,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_map_keys_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 85,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_map_keys_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `map.keys` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_map_keys_extra_arg.delulu:5:5
+   |
+ 5 |     m.keys(1)
+   |     ^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_map_len_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`map.len` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 353,
+            "col": 13,
+            "line": 8
+          },
+          "file": "tests/conformance/reject/DL0403_map_len_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 345,
+            "col": 5,
+            "line": 8
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_map_len_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `map.len` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_map_len_extra_arg.delulu:8:5
+   |
+ 8 |     m.len(1)
+   |     ^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_map_values_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`map.values` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 98,
+            "col": 16,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_map_values_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 87,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_map_values_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `map.values` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_map_values_extra_arg.delulu:5:5
+   |
+ 5 |     m.values(1)
+   |     ^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_str_chars_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`str.chars` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 86,
+            "col": 15,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_str_chars_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 76,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_str_chars_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `str.chars` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_str_chars_extra_arg.delulu:5:5
+   |
+ 5 |     s.chars(1)
+   |     ^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_str_to_lower_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`str.to_lower` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 88,
+            "col": 20,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_str_to_lower_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 73,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_str_to_lower_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `str.to_lower` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_str_to_lower_extra_arg.delulu:5:5
+   |
+ 5 |     s.to_lower("x")
+   |     ^^^^^^^^^^^^^^^ wrong number of arguments
+  explain: delulu explain E-DL0403
+
+1 error(s)
+
+===== tests/conformance/reject/DL0403_str_to_upper_extra_arg.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0403",
+      "explanation_id": "E-DL0403",
+      "message": "`str.to_upper` expects 0 argument(s), found 1",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 88,
+            "col": 20,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0403_str_to_upper_extra_arg.delulu",
+          "label": "wrong number of arguments",
+          "start": {
+            "byte": 73,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0403_str_to_upper_extra_arg.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0403]: `str.to_upper` expects 0 argument(s), found 1
+  --> tests/conformance/reject/DL0403_str_to_upper_extra_arg.delulu:5:5
+   |
+ 5 |     s.to_upper("x")
+   |     ^^^^^^^^^^^^^^^ wrong number of arguments
   explain: delulu explain E-DL0403
 
 1 error(s)
@@ -6083,6 +7214,58 @@ error[DL0605]: opaque types (Secret/Cap/Root) have no structural equality
 
 1 error(s)
 
+===== tests/conformance/reject/DL0605_list_contains_secret.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL0605",
+      "explanation_id": "E-DL0605",
+      "message": "opaque types (Secret/Cap/Root) have no structural equality",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 120,
+            "col": 19,
+            "line": 5
+          },
+          "file": "tests/conformance/reject/DL0605_list_contains_secret.delulu",
+          "label": "use `Secret.verify` for secrets",
+          "start": {
+            "byte": 106,
+            "col": 5,
+            "line": 5
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL0605_list_contains_secret.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL0605]: opaque types (Secret/Cap/Root) have no structural equality
+  --> tests/conformance/reject/DL0605_list_contains_secret.delulu:5:5
+   |
+ 5 |     xs.contains(k)
+   |     ^^^^^^^^^^^^^^ use `Secret.verify` for secrets
+  explain: delulu explain E-DL0605
+
+1 error(s)
+
 ===== tests/conformance/reject/DL1601_ref_list_send.delulu :: check --json =====
 exit 1
 --- stdout ---
@@ -6203,6 +7386,162 @@ error[DL1602]: use of `xs` after `consume` — the binding is dead
 14 |   s.take(consume xs)
    |          ---------- consumed here
   explain: delulu explain E-DL1602
+
+1 error(s)
+
+===== tests/conformance/reject/DL1604_list_pop_through_val.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a list element (pop) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 444,
+            "col": 13,
+            "line": 9
+          },
+          "file": "tests/conformance/reject/DL1604_list_pop_through_val.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 436,
+            "col": 5,
+            "line": 9
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL1604_list_pop_through_val.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL1604]: cannot write a list element (pop) through a `val` receiver — writes require `iso`, `trn`, or `ref`
+  --> tests/conformance/reject/DL1604_list_pop_through_val.delulu:9:5
+   |
+ 9 |     xs.pop()
+   |     ^^^^^^^^ write refused
+  explain: delulu explain E-DL1604
+
+1 error(s)
+
+===== tests/conformance/reject/DL1604_map_insert_through_val.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a map entry (insert) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 548,
+            "col": 21,
+            "line": 10
+          },
+          "file": "tests/conformance/reject/DL1604_map_insert_through_val.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 532,
+            "col": 5,
+            "line": 10
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL1604_map_insert_through_val.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL1604]: cannot write a map entry (insert) through a `val` receiver — writes require `iso`, `trn`, or `ref`
+  --> tests/conformance/reject/DL1604_map_insert_through_val.delulu:10:5
+   |
+10 |     m.insert("a", 1)
+   |     ^^^^^^^^^^^^^^^^ write refused
+  explain: delulu explain E-DL1604
+
+1 error(s)
+
+===== tests/conformance/reject/DL1604_map_remove_through_val.delulu :: check --json =====
+exit 1
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [
+    {
+      "code": "DL1604",
+      "explanation_id": "E-DL1604",
+      "message": "cannot write a map entry (remove) through a `val` receiver — writes require `iso`, `trn`, or `ref`",
+      "repairs": [],
+      "severity": "error",
+      "spans": [
+        {
+          "end": {
+            "byte": 203,
+            "col": 18,
+            "line": 6
+          },
+          "file": "tests/conformance/reject/DL1604_map_remove_through_val.delulu",
+          "label": "write refused",
+          "start": {
+            "byte": 190,
+            "col": 5,
+            "line": 6
+          }
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== tests/conformance/reject/DL1604_map_remove_through_val.delulu :: check =====
+exit 1
+--- stdout ---
+--- stderr ---
+error[DL1604]: cannot write a map entry (remove) through a `val` receiver — writes require `iso`, `trn`, or `ref`
+  --> tests/conformance/reject/DL1604_map_remove_through_val.delulu:6:5
+   |
+ 6 |     m.remove("a")
+   |     ^^^^^^^^^^^^^ write refused
+  explain: delulu explain E-DL1604
 
 1 error(s)
 

@@ -73,17 +73,43 @@ fn drop_one(rng: &mut Rng, full: &[usize]) -> Vec<usize> {
     full.iter().enumerate().filter(|(i, _)| *i != victim).map(|(_, &k)| k).collect()
 }
 
+/// The higher-order `List` builtins, as `(method, the call written around a closure)`.
+///
+/// **Every one of them must appear here**, and that is the C88 lesson rather than tidiness: the row
+/// law is enforced per method, so a method the generator cannot write is a method the corpus never
+/// attacks. Until P3 this file only ever wrote `xs.map`, which was the entire higher-order surface.
+///
+/// `fold` is the one that earns its place twice. Its callback is argument **1**, and the R-4 gate
+/// reads a POSITION that P3 had to introduce for exactly this — so `fold` is the shape that would
+/// have silently escaped if the gate had kept reading argument 0, and a generator that never wrote
+/// `fold` would never have noticed.
+const HIGHER_ORDER: &[(&str, &str)] = &[
+    ("map", "xs.map(fn(x: Int) -> Int ! {ROW} { {OPS}; x })"),
+    ("filter", "xs.filter(fn(x: Int) -> Bool ! {ROW} { {OPS}; x > 1 })"),
+    ("find", "xs.find(fn(x: Int) -> Bool ! {ROW} { {OPS}; x > 1 })"),
+    ("fold", "xs.fold(0, fn(a: Int, x: Int) -> Int ! {ROW} { {OPS}; a + x })"),
+];
+
+/// Fill one [`HIGHER_ORDER`] template. Textual rather than a formatter — built with `.replace()`,
+/// not `format!()`, so the braces written above are literal DeluluLang braces, not `format!`'s
+/// `{{`/`}}` escape (a `format!`-shaped template fed through `.replace()` would double every brace
+/// and lose the ones around the row, which is exactly the bug this shape once had). `row` must
+/// already carry its own `{ }`, e.g. `row_of(&ops)`'s `"{Write, Clock}"`.
+fn higher_order_call(shape: &(&str, &str), row: &str, ops: &str) -> String {
+    shape.1.replace("{ROW}", row).replace("{OPS}", ops)
+}
+
 /// A closure argument to a higher-order builtin. The row must surface into the caller (R-4).
 /// Under-declaring `main` is DL0501.
 fn higher_order_closure(rng: &mut Rng) -> Program {
     let ops = pick_ops(rng);
     let honest = rng.chance(2, 3);
     let declared = if honest { ops.clone() } else { drop_one(rng, &ops) };
+    let shape = &HIGHER_ORDER[rng.below(HIGHER_ORDER.len() as u64) as usize];
     let src = format!(
-        "module fuzz\n\nfn main(root: Root) ! {} {{\n{PRELUDE}  let xs = [1, 2, 3]\n  let ys = xs.map(fn(x: Int) -> Int ! {} {{ {}; x }})\n}}\n",
+        "module fuzz\n\nfn main(root: Root) ! {} {{\n{PRELUDE}  let xs = [1, 2, 3]\n  let ys = {}\n}}\n",
         row_of(&declared),
-        row_of(&ops),
-        stmts(&ops),
+        higher_order_call(shape, &row_of(&ops), &stmts(&ops)),
     );
     Program { src, expect: if honest { Expect::Accept } else { Expect::Reject("DL0501") } }
 }
@@ -98,8 +124,20 @@ fn bare_type_param(rng: &mut Rng) -> Program {
     // `Declassify` anywhere. Both go through the same "argument is not syntactically `Type::Fn`"
     // branch, so both belong in the corpus.
     if rng.chance(1, 2) {
+        // P3: the bare type parameter reaches a randomly chosen higher-order builtin, not always
+        // `map`. The refusal must not depend on WHICH builtin will invoke the value — an undetermined
+        // row is not an empty row at any of the four call sites, and `fold`'s displaced callback is
+        // the site where that was newly possible to get wrong.
+        let (method, call) = match rng.below(4) {
+            0 => ("map", "xs.map(f)"),
+            1 => ("filter", "xs.filter(f)"),
+            2 => ("find", "xs.find(f)"),
+            _ => ("fold", "xs.fold(0, f)"),
+        };
+        let _ = method;
         let src = format!(
-            "module fuzz\n\nfn go[T](xs: List[Int], f: T) -> Int {{\n  let ys = xs.map(f)\n  1\n}}\n\nfn main(root: Root) ! {} {{\n{PRELUDE}  let n = go([1, 2], fn(x: Int) -> Int ! {} {{ {}; x }})\n}}\n",
+            "module fuzz\n\nfn go[T](xs: List[Int], f: T) -> Int {{\n  let ys = {}\n  1\n}}\n\nfn main(root: Root) ! {} {{\n{PRELUDE}  let n = go([1, 2], fn(x: Int) -> Int ! {} {{ {}; x }})\n}}\n",
+            call,
             row_of(&ops),
             row_of(&ops),
             stmts(&ops),
@@ -206,6 +244,28 @@ pub fn generate(rng: &mut Rng) -> Program {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A generator that silently stopped emitting one of the four [`HIGHER_ORDER`] shapes would
+    /// leave that shape untested forever, and nothing would say so — the campaign would just look
+    /// like it always does, quietly narrowed back to `.map` alone (the exact blind spot P3 closed).
+    /// This pins that every method name is actually reachable from the generator's public entry
+    /// point, not merely present in the template table.
+    #[test]
+    fn the_higher_order_generator_emits_every_shape() {
+        let mut rng = Rng::new(0x5EED);
+        let mut corpus = String::new();
+        for _ in 0..2000 {
+            corpus.push_str(&higher_order_closure(&mut rng).src);
+        }
+        for needle in ["\\.map(", "\\.filter(", "\\.find(", "\\.fold("] {
+            let plain = needle.replace('\\', "");
+            assert!(
+                corpus.contains(&plain),
+                "the higher-order generator never emitted `{plain}` across 2000 programs from \
+                 higher_order_closure — a shape silently stopped being generated"
+            );
+        }
+    }
 
     /// A generator that has silently stopped generating looks exactly like a generator that finds
     /// nothing. This pins that every family is actually emitted, and that the two shapes matching

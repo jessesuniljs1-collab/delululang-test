@@ -1,0 +1,11 @@
+// anchors: ref.prim.map.insert
+module conf
+
+// `insert` MUTATES, so it needs a writable receiver — `iso`, `trn` or `ref`. The parameter is
+// annotated `val` explicitly: an unannotated `Map[Str, Int]` also defaults to `val`, and the point
+// of this file is the rule itself, so the program should say so rather than lean on a default a
+// reader might miss. `MUTATING_MAP_METHODS` is the one list the rcap pass reads, because a mutator
+// missing from it would be a silent hole in `val`.
+fn f(m: val Map[Str, Int]) -> Unit {
+    m.insert("a", 1)
+}

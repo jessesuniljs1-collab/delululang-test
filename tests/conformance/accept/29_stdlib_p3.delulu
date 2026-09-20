@@ -1,0 +1,49 @@
+// anchors: ref.prim.str.to_upper ref.prim.str.to_lower ref.prim.str.replace ref.prim.str.chars ref.prim.list.is_empty ref.prim.list.pop ref.prim.list.reverse ref.prim.list.concat ref.prim.list.slice ref.prim.list.contains ref.prim.list.join ref.prim.list.sort ref.prim.list.filter ref.prim.list.find ref.prim.list.fold
+// P3 (D-V2-29): positive witnesses for the 15 stdlib primitives added this phase — every one
+// used at least once here.
+module conf
+
+fn str_ops(s: Str) -> Str {
+    let up = s.to_upper()
+    let low = s.to_lower()
+    let swapped = s.replace("a", "b")
+    let letters = s.chars()
+    up + low + swapped + str(letters.len())
+}
+
+// `pop` mutates, so the receiver needs to be writable. A freshly built list literal is `ref` by
+// default (spec §3 fresh-lift), which is enough — no annotation needed here, unlike the DL1604
+// reject case where the parameter is `val`.
+fn list_mutation() -> Int {
+    let xs = [3, 1, 2]
+    let was_empty = xs.is_empty()
+    let popped = xs.pop()
+    let reversed = xs.reverse()
+    let grown = reversed.concat([9, 8])
+    let mid = grown.slice(1, 3)
+    let has_nine = mid.contains(9)
+    let extra = if was_empty { 0 } else { 1 }
+    let bonus = if has_nine { 1 } else { 0 }
+    match popped {
+        Some(v) => v + mid.len() + extra + bonus
+        None => mid.len() + extra + bonus
+    }
+}
+
+fn list_join_demo(names: List[Str]) -> Str {
+    names.join(", ")
+}
+
+fn list_sort_demo(xs: List[Int]) -> List[Int] {
+    xs.sort()
+}
+
+fn list_higher_order(xs: List[Int]) -> Int {
+    let evens = xs.filter(fn(x: Int) -> Bool { x > 1 })
+    let found = xs.find(fn(x: Int) -> Bool { x == 2 })
+    let total = xs.fold(0, fn(acc: Int, x: Int) -> Int { acc + x })
+    match found {
+        Some(v) => total + evens.len() + v
+        None => total + evens.len()
+    }
+}

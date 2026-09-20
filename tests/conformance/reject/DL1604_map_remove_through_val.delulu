@@ -1,0 +1,7 @@
+// anchors: ref.prim.map.remove
+module conf
+
+// The other half of the pair: `remove` is a write too, so `val` refuses it for the same reason.
+fn f(m: val Map[Str, Int]) -> Option[Int] {
+    m.remove("a")
+}
