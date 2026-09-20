@@ -415,10 +415,11 @@ pub fn spawn_and_serve_with(
         "sandbox-launch",
         "allow",
         Some(blake3::hash(program.as_bytes()).to_hex().to_string()),
-        Some(policy.to_json(backend, &applied)),
+        Some(policy.to_json_with(backend, &applied, &[], 0)),
     );
 
-    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms);
+    let mut denied: (Vec<String>, u64) = (Vec::new(), 0);
+    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, &mut denied);
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
@@ -433,7 +434,9 @@ pub fn spawn_and_serve_with(
             Ok(code) => format!("exit {code}"),
             Err(e) => format!("channel failed: {e}"),
         }),
-        None,
+        // How many times the host said no, in the chain as well as the report: a run report can be
+        // discarded, and the audit chain is the copy an operator cannot quietly lose.
+        Some(serde_json::json!({ "denied_total": denied.1 })),
     );
 
     if let Some(path) = report_out {
@@ -444,7 +447,7 @@ pub fn spawn_and_serve_with(
             "delulu_version": env!("CARGO_PKG_VERSION"),
             "diagnostics": [],
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
-            "sandbox": policy.to_json(backend, &applied),
+            "sandbox": policy.to_json_with(backend, &applied, &denied.0, denied.1),
             "outcome": { "ran": true, "exit": exit },
         });
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
@@ -521,6 +524,9 @@ fn converse(
     root: Rc<RootVal>,
     seed: u64,
     fixed_clock_ms: Option<i64>,
+    // Filled in on EVERY path, including the failing ones: this phase has already lost a diagnosis
+    // three CI runs in a row to a value that was only reported in the success branch.
+    denied: &mut (Vec<String>, u64),
 ) -> io::Result<i32> {
     let deadline = std::time::Instant::now() + CONNECT_DEADLINE;
     let mut conn = loop {
@@ -554,7 +560,16 @@ fn converse(
     };
     write_frame(&mut conn, &hello)?;
     let mut host = HostChannel::new(LocalSink).with_root(root);
-    host.serve(&mut conn)
+    // The refusals come back with the exit code, because a report that lists only what was allowed
+    // says nothing about what the program TRIED — which is the interesting half when the program is
+    // one nobody wrote. They are read after `serve` returns, on both paths, so a guest that died
+    // mid-conversation still reports what it had been refused up to then.
+    let served = host.serve(&mut conn);
+    // Read on both paths, before the result is returned: a guest that died mid-conversation still
+    // reports what it had been refused up to then.
+    let (list, total) = host.denied();
+    *denied = (list.to_vec(), total);
+    served
 }
 
 

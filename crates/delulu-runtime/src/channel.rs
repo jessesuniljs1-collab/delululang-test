@@ -238,11 +238,41 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// The REAL root, held only here. A guest asks; the host mints. Absent means the run granted
     /// nothing, and every mint is refused rather than defaulted.
     root: Option<std::rc::Rc<crate::value::RootVal>>,
+    /// PS-A-07's `denied[]`: every refusal this host gave the guest, in order.
+    ///
+    /// A run report that lists only what was allowed tells an operator nothing about what the program
+    /// TRIED. These are the attempts that were refused — an ungranted scope, an unknown handle, a
+    /// value the channel will not carry, a version mismatch — and they are the most interesting line
+    /// in the report when the program is one nobody wrote.
+    ///
+    /// Bounded: a guest could otherwise make the host allocate without limit simply by being refused
+    /// in a loop, which would be a denial of service through the evidence channel. The count keeps
+    /// going after the list stops, so a truncated report still says how many there were.
+    denied: Vec<String>,
+    denied_total: u64,
 }
+
+/// How many refusals a report keeps. Past this the count still rises but nothing more is stored.
+pub const MAX_DENIED_RECORDED: usize = 64;
 
 impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn new(sink: S) -> Self {
-        HostChannel { sink, caps: Vec::new(), root: None }
+        HostChannel { sink, caps: Vec::new(), root: None, denied: Vec::new(), denied_total: 0 }
+    }
+
+    /// Every refusal this host gave, oldest first, and how many there were in total — which is larger
+    /// than the list when a guest was refused more than [`MAX_DENIED_RECORDED`] times.
+    pub fn denied(&self) -> (&[String], u64) {
+        (&self.denied, self.denied_total)
+    }
+
+    /// Record one refusal. Called on the way out, so no refusal path can forget: a rule that has to
+    /// be remembered at every `return` is a rule that dies in one branch (the skip-branch lesson).
+    fn note_denied(&mut self, what: &str) {
+        self.denied_total += 1;
+        if self.denied.len() < MAX_DENIED_RECORDED {
+            self.denied.push(what.to_string());
+        }
     }
 
     /// Give the host the root this run was granted, so the guest can mint from it by asking.
@@ -264,6 +294,25 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// Answer one request. Every refusal is an answer: the guest is never left waiting, and the
     /// host never guesses at a frame it does not understand.
     pub fn answer(&mut self, req: &Request) -> Response {
+        let resp = self.decide(req);
+        // ONE place, on the way out. Recording at each refusal site would mean a new refusal added
+        // later is silently absent from the report — which is exactly the shape of defect this
+        // project keeps finding in `else { continue }` branches.
+        match &resp {
+            Response::Ok(_) => {}
+            Response::Fault { code, message } | Response::Error { code, message } => {
+                let what = match &req.body {
+                    ReqBody::CapMethod { method, .. } => format!("{code} on a capability method `{method}`: {message}"),
+                    ReqBody::RootMethod { method, .. } => format!("{code} on `root.{method}`: {message}"),
+                    ReqBody::Done { .. } => format!("{code} on goodbye: {message}"),
+                };
+                self.note_denied(&what);
+            }
+        }
+        resp
+    }
+
+    fn decide(&mut self, req: &Request) -> Response {
         if req.version != CHANNEL_VERSION {
             return Response::Error {
                 code: "DL1401".into(),

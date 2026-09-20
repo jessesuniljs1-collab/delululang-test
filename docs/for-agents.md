@@ -369,9 +369,22 @@ performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limi
 **narrow** a profile and never widen it.
 
 Read the report, not the program's output. Under `--report-out F` the runtime writes the run report
-to `F`: the `sandbox` object with the level, backend, limits, mode, the guarantees the host actually
-applied, and a `policy_hash` naming the policy. It is never written to standard output, because the
-program writes there too and could forge it (D-V2-21).
+to `F`: the `sandbox` object with `requested_level` and the actual `level`, the backend, the limits,
+the mode, `host_guarantees` (what was actually applied), a `policy_hash`, and three fields worth more
+than the rest —
+
+- `posture`: the questions you actually have, answered from what was applied — filesystem writes,
+  filesystem reads, network, new programs, memory, processor time, privilege escalation, identity;
+- `limitations`: every one of those questions that **nothing is enforcing** on this host.
+  `identity_separation` is always there, because the guest runs as the same OS user (RW 4.4), and
+  `fully_enforced` is true only when it is the only one;
+- `denied`: what the program TRIED and was refused, each entry naming its code, with `denied_total`
+  in case there were more than the report keeps. On an unfamiliar program this is the first field to
+  read.
+
+A preview (`sandbox policy`, or `--mode audit`) carries none of those three: they are measurements of
+a run, and a run that did not happen has nothing to measure. The report is never written to standard
+output, because the program writes there too and could forge it (D-V2-21).
 
 **What it refuses, rather than quietly not applying:** an unknown profile, an unreadable limit, and
 any program whose surface the channel cannot carry yet — today that means actors, foreign C, Python,

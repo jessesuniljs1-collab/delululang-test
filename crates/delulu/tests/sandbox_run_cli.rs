@@ -18,6 +18,11 @@ fn delulu(args: &[&str]) -> Output {
         .expect("the delulu binary runs")
 }
 
+/// Everything the command said, on either stream, for a failure message that is worth reading.
+fn out(o: &Output) -> String {
+    format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))
+}
+
 fn tmp(name: &str) -> std::path::PathBuf {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -381,4 +386,116 @@ fn isolated_state() -> std::path::PathBuf {
         d
     })
     .clone()
+}
+
+/// PS-A-07's `denied[]`: the report says what the program TRIED and was refused, not only what it was
+/// allowed. The pair is the whole test — a run that was refused something must list it, and a run that
+/// was refused nothing must list nothing, or the field would be noise rather than evidence.
+#[test]
+fn the_report_lists_what_the_host_refused_and_stays_empty_when_it_refused_nothing() {
+    let dir = tmp("denied");
+    let scope = dir.join("out").display().to_string().replace('\\', "/");
+    let sibling = dir.join("elsewhere").display().to_string().replace('\\', "/");
+    std::fs::create_dir_all(dir.join("elsewhere")).unwrap();
+
+    // Refused: the program reaches for a directory the operator never granted.
+    let bad = dir.join("bad.delulu");
+    std::fs::write(
+        &bad,
+        format!(
+            "module g\n\nfn main(root: Root) ! {{Write}} {{\n    \
+             let w = root.fs_write(\"{sibling}\")\n    \
+             let _ = w.write_text(\"no.txt\", \"x\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let rep = dir.join("bad.json");
+    let o = delulu(&[
+        "run",
+        bad.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        rep.to_str().unwrap(),
+    ]);
+    assert_ne!(o.status.code(), Some(0), "{}", out(&o));
+    let r: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
+    let denied = r["sandbox"]["denied"].as_array().expect("denied is an array");
+    assert!(!denied.is_empty(), "a refused run listed no refusal: {r}");
+    assert!(
+        r["sandbox"]["denied_total"].as_u64().unwrap_or(0) >= denied.len() as u64,
+        "the total must never be smaller than the list it summarises: {r}"
+    );
+    assert!(
+        denied.iter().any(|d| d.as_str().is_some_and(|s| s.contains("DL"))),
+        "a refusal must name its code, or a reader cannot look it up: {denied:?}"
+    );
+
+    // Refused nothing: the same shape of program, inside the scope it was granted.
+    let good = dir.join("good.delulu");
+    std::fs::write(
+        &good,
+        format!(
+            "module g\n\nfn main(root: Root) ! {{Write}} {{\n    \
+             let w = root.fs_write(\"{scope}\")\n    \
+             let _ = w.write_text(\"yes.txt\", \"x\")\n}}\n"
+        ),
+    )
+    .unwrap();
+    let rep2 = dir.join("good.json");
+    let o = delulu(&[
+        "run",
+        good.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        rep2.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let r2: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&rep2).expect("the run report")).unwrap();
+    assert_eq!(
+        r2["sandbox"]["denied_total"].as_u64(),
+        Some(0),
+        "a run that was refused nothing must say nothing was refused: {r2}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The posture object answers the questions a reader has, and `limitations` names every question
+/// nothing is enforcing. Identity separation is always among them, because no platform gives it today
+/// (RW 4.4) — and a report that omitted it would let a long list of real guarantees imply it.
+#[test]
+fn the_report_names_what_is_not_confined_as_well_as_what_is() {
+    let dir = tmp("posture");
+    let (src, scope) = writer(&dir);
+    let rep = dir.join("r.json");
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        rep.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let r: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&rep).expect("the run report")).unwrap();
+    let sb = &r["sandbox"];
+    assert_eq!(sb["requested_level"], 1, "{r}");
+    assert_eq!(sb["level"], 1, "{r}");
+    assert_eq!(sb["posture"]["identity"], "same OS user", "{r}");
+    let lim: Vec<&str> = sb["limitations"].as_array().expect("limitations").iter().filter_map(|v| v.as_str()).collect();
+    assert!(lim.contains(&"identity_separation"), "identity separation must always be named: {r}");
+    // Every platform this ships on caps memory and processor time, so those must NOT be limitations —
+    // without this half the test would pass for a report that called everything a limitation.
+    for enforced in ["memory", "processor_time"] {
+        assert!(!lim.contains(&enforced), "`{enforced}` is enforced here but was listed as a limitation: {r}");
+        assert_ne!(sb["posture"][enforced], "not confined", "{r}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

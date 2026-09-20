@@ -104,9 +104,12 @@ enforces what it actually has:
 | Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
 | macOS | a **deny-default** Seatbelt profile: nothing is permitted but reads, `sysctl-read`, the guest's own `exec`, and its channel socket — so no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. Each of those four allowances was measured load-bearing by removing it (run `35479148216`); reads are NOT narrowed, because every attempt to confine them by subpath aborts the guest, so on macOS a guest can still read the filesystem and only the other layers stop it acting on what it read. Measured on macOS 26.6.2 arm64: a future release needing another allowance makes the run REFUSE rather than fall back to a weaker profile |
 
-Read the run report (`--report-out F`) rather than the program's output: it names the level, the
-backend, the limits, the mode, the guarantees the host **actually applied**, and a `policy_hash`.
-The program can write to its own output but not to that file.
+Read the run report (`--report-out F`) rather than the program's output: it names the requested and
+actual level, the backend, the limits, the mode, the guarantees the host **actually applied**, and a
+`policy_hash`. It also names what is **not** enforced — `limitations`, with `fully_enforced` true only
+when the sole entry is `identity_separation` — and `denied`, every attempt the host refused, with its
+code. A run report that listed only guarantees would read as though the rest were covered. The program
+can write to its own output but not to that file.
 
 Two of those rows are the guest restricting ITSELF, which is why the run report does not carry them:
 the report states what the **host** applied, and a host cannot verify a claim its guest makes about
