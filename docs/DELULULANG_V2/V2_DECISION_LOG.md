@@ -450,9 +450,80 @@ cannot register with the wrong index.
 it; a test asserts the two agree on the same input, including on multi-byte characters, so the second
 path cannot drift from the first.
 
+## D-V2-30 — PS-B-02, the TLS dependency — **RULED BY THE OWNER** (Jesse, 2026-09-20), resolving D-NE-28
+
+**The question, and why it was the owner's.** PS-B-02 builds the first network client this project has
+ever had: `http.get` has answered `NetErr::Refused` unconditionally since Stage 1 (finding NE-17). The
+DESIGN was never in doubt and was not asked — one host-side implementation serving L0 and sandboxed
+guests alike, hostname allowlist, resolve once and pin, special-use ranges refused unless granted by
+their own spelling, SNI/Host agreement, redirects re-checked, bounded response, no resolver in the
+guest. What was the owner's was the DEPENDENCY, and D-NE-28 said so in as many words: "the TLS
+dependency is the largest this project would take and needs the owner and a `cargo deny` pass."
+
+**The ruling.** `reqwest` over `rustls`, with a minimal explicitly-named feature set; the full HTTP
+client with real HTTPS. Not HTTP-only, and TLS is never implemented here — house rule 5 ("cryptography
+is NEVER hand-rolled") already forbade the second option and the owner closed the first.
+
+**The feature set, and what each refusal costs.** `default-features = false`, then exactly:
+
+| Feature | Why |
+|---|---|
+| `blocking` | the interpreter is synchronous; DeluluLang has no async |
+| `rustls-tls-native-roots` | the PLATFORM trust store, not a compiled-in CA bundle |
+
+The trust-store choice is the one worth arguing. A compiled-in Mozilla bundle (`webpki-roots`) gives
+the same anchors on every platform, which this project normally prefers for reproducibility. It was
+rejected anyway: an operator who distrusts a CA does it in the OS store, and a language whose whole
+claim is that authority is explicit and operator-controlled must not ignore the operator's own trust
+decisions. The cost is honest and must be REPORTED rather than worked around — a host with an empty
+store cannot make an HTTPS request, and PS-B-02 owes a `doctor` line carrying the root count so that
+failure is legible instead of mysterious. Falling back to a bundled bundle when the store is empty
+would be exactly the silent widening this project refuses everywhere else.
+
+Refused, each for a reason rather than for size:
+
+- **`gzip`/`brotli`/`zstd`/`deflate`** — a decompressor **defeats the response size bound**. A bounded
+  number of bytes on the wire is an unbounded number of bytes in the program, so the only way to keep
+  the bound is to never negotiate an encoding we would have to expand. Same shape as ADAPTER-LINE-1.
+- **`cookies`** — a cookie jar is cross-request state the program never granted: ambient authority
+  with a specification.
+- **`http2`** — HTTP/1.1 is enough for `http.get`, and a second protocol is a second parser.
+- **`charset`** — `http.get` answers `Result[Str, NetErr]` and a `Str` is UTF-8. Transcoding from a
+  server-declared charset is a conversion decided by the far end, which is the wrong party to decide it.
+- **`json`** — the program parses its own bodies.
+- **reqwest's own redirect following** is turned off in code (`Policy::none()`), not configured, because
+  every hop must go back through the FULL check — allowlist, special-use, re-resolve, re-pin — and a
+  policy that only counts hops does none of that.
+
+**The measured cost (the `cargo deny` pass the ruling required).** Taken before and after the manifest
+change, on the same lockfile, recorded in full at `measurements/dependency-egress/RECORD.md`:
+
+| | before | after | delta |
+|---|---|---|---|
+| distinct crates in the graph | 222 | **303** | **+81 (+36%)** |
+| distinct licenses | 14 | 15 | +1 (`BSL-1.0`, from `ryu`'s dual `Apache-2.0 OR BSL-1.0`) |
+| unlicensed crates | 0 | 0 | 0 |
+| `cargo deny check` | advisories ok, bans ok, licenses ok, sources ok | **the same four ok** | none |
+
+Nothing was removed. The +81 is honestly reported rather than minimized: it is the largest single
+dependency increase in the project's history, the owner took it knowingly, and three parts of it
+deserve naming. `ring` carries assembly and C and is the cryptographic core under `rustls-webpki`.
+`wasm-bindgen`, `js-sys` and `web-sys` arrive because reqwest supports `wasm32` targets; they are
+target-gated and compile on no platform this project builds, but they ARE in the graph and the
+lockfile, and a dependency in the lockfile is a dependency. The ICU stack (`icu_*`, `zerovec`, `yoke`,
+`tinystr` — nineteen of the eighty-one) arrives through `idna` for URL parsing, which is the part of this tree that does
+IDNA normalization; **that is a normalization on a string used to make a security decision**, so
+PS-B-02 owes it the treatment this project's own recurring search key demands and must not assume the
+host it checks is the host `reqwest` connects to. Pinning the resolved address is what makes that
+answerable rather than a matter of trust.
+
+**Feature accounting is a gate, not a comment.** The manifest names every feature and why every other
+one is absent; PS-B-02 owes a test that reads the manifest and fails if a refused feature is ever
+enabled, because a comment explaining that decompression is off does not keep decompression off.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
-D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-28, D-NE-31,
+D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-31,
 D-NE-33 (narrowed by D-V2-13); the Constitution §5.15 wording (RW 7.10a); rustfmt and a code of
 conduct; the four pre-public-repository items. Each is asked at the start of the phase that needs it
 (`V2_MASTER_PLAN.md` §7).

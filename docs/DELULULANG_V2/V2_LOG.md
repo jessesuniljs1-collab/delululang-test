@@ -550,3 +550,135 @@ Commit `3ab0cc9`, CI run `35522886721`: **success** — 12 jobs green, 2 skipped
 `miri-slow`, both manual). Green on `ubuntu-latest`, `windows-latest`, `macos-latest` and arm64, with the
 coverage-law report, the reference-in-sync gate, the CLI sweep and the fuzz campaign all passing on each.
 The phase is complete by §0's gate: the commit is pushed and its run has been read.
+
+## PS-B — 2026-09-20 — started: the dependency, measured before anything used it
+
+PS-B is the phase that turns resource limits into **authority** rather than launcher knobs, and builds
+the network client this project has never had. It is six tasks and the roadmap budgets 6–8 sessions.
+This entry covers the opening step and is written to be **resumed from cold**.
+
+### What the phase asked the owner, and what he ruled
+
+PS-B-02 opens with the one decision the phase delegation does not cover: D-NE-28's TLS dependency, which
+that entry itself reserved — "the largest this project would take and needs the owner and a `cargo deny`
+pass." The owner ruled on 2026-09-20: **`reqwest` over `rustls`**, minimal explicitly-named features,
+real HTTPS, TLS never implemented here, and HTTP-only egress explicitly refused as a production
+implementation. Recorded as **D-V2-30**, which closes D-NE-28. D-NE-31 (resource-limit *defaults*,
+PS-B-01) is still open and still the owner's.
+
+### What landed in this commit, and why only this
+
+`crates/delulu-runtime/Cargo.toml` gains `reqwest`, behind a new **default-on `net` feature** that
+mirrors the existing `python` precedent: `--no-default-features` builds a network-less delulu where
+`http.get` answers `NetErr::Refused`, which is what every build has answered since Stage 1 (NE-17), so
+the off position is today's behaviour rather than a new one. The egress **policy** is deliberately NOT
+behind the flag — a security rule tested in one build configuration is a security rule tested in one
+build configuration.
+
+Nothing uses the dependency yet, and that is the point of stopping here. The `cargo deny` pass the
+ruling demanded had to be taken against a tree where **nothing else had changed**, or the number would
+have been an estimate dressed as a measurement. It is in
+`measurements/dependency-egress/RECORD.md` with the 81 new crates listed one per line:
+
+| | before | after |
+|---|---|---|
+| distinct crates | 222 | **303 (+81, +36.5%)** |
+| distinct licenses | 14 | 15 (`BSL-1.0`, from `ryu`'s `Apache-2.0 OR BSL-1.0`) |
+| `cargo deny check` | advisories/bans/licenses/sources **ok** | **the same four ok** |
+
+`cargo check --workspace --all-targets` passes. Nothing was removed.
+
+**The finding worth carrying forward** is in that record and is not about size. Nineteen of the 81 are
+the ICU stack, reached through `idna` because `url` does internationalized domain names. IDNA is a
+**normalization performed on a host name**, and a host name is a string this project compares to make a
+security decision — the exact shape of four P22 defects. The normalizer runs *inside the HTTP client*,
+**after** the allowlist check has been made on the string the program wrote. So the client must never be
+handed a name to re-derive: resolve host-side, classify, and **pin the address**
+(`ClientBuilder::resolve`), so the host that was checked is the host that is connected to by
+construction rather than by trust.
+
+### PS-B-02, the rest of it — the design, settled, for whoever picks this up
+
+The architectural fact that makes this tractable was established by reading, and should not be
+re-derived: **`prim::call_cap_method` is the single host-side place an effect happens.** `sink.rs`'s
+`EffectSink` is the one seam, `LocalSink` calls the primitive table in-process for L0, and
+`channel.rs`'s `HostChannel::decide` dispatches a sandboxed guest's `CapMethod` to `sink.cap_method` —
+**host-side**. So implementing egress in the `(ResourceKind::Http, "get")` arm of `prim.rs` gives L0 and
+guests one implementation *by construction*, which is exactly what PS-B-02 requires, with no second code
+path to keep in step. The guest has no resolver for the same reason: it never reaches this code.
+
+`netclass.rs` (PS-0-09) already does special-use classification on a normalized host, including every
+`inet_aton` spelling, and its own doc comment ends by naming this task: "Whether a public-looking NAME
+resolves to such an address is decided at connect time, by the PS-B egress proxy (REMAINING_WORK 4.16)."
+`host_allowed`/`host_of` in `prim.rs` already implement the allowlist with the C85 dot-boundary rule.
+
+The shape to build, as a NEW `egress` module under `crates/delulu-runtime/src/` (it does not exist
+yet — the Survey flagged an earlier draft of this paragraph for naming a path that is nowhere in the
+tree, which was fair: a handoff describing a file to write reads exactly like a citation to a file that
+exists, and the reader cannot tell which from the sentence):
+
+- `Resolver` and `Transport` traits, so the whole policy is testable **offline** with fakes. The real
+  `Transport` (reqwest) is the only thing behind `#[cfg(feature = "net")]`.
+- `EgressPolicy { allow, allow_special, max_body, max_redirects, deadline }`, and one entry point
+  `get(url) -> Outcome`.
+- A machine-readable `Reason` enum — scheme, userinfo, not-allowlisted, special-use(class),
+  no-address, too-many-redirects, body-too-large, tls, timeout.
+- Per request: refuse a non-`https` scheme; refuse an authority carrying **userinfo** outright rather
+  than parsing it; check the host against the allowlist; resolve; classify **every** candidate address
+  with `netclass` and refuse unless `net.special=` granted; pin the chosen address; `Policy::none()` and
+  follow redirects in our own loop so each hop re-runs the **whole** check; bound the body on what the
+  program receives.
+
+**One design point to decide deliberately, with an argument already worked out:** the program-visible
+`NetErr` has exactly three variants (`Refused | Timeout | Other(Str)`) and adding a fourth would break
+every exhaustive `match` in user code. Keep the three, and keep `Refused` **opaque to the program**:
+telling a guest *why* — "that name resolved into a special-use range" — hands it DNS results it has no
+resolver for, which is a resolver oracle rebuilt out of error messages. The machine-readable `Reason`
+belongs in the **host-side audit record and the `--json` envelope**, where PS-B-05 and PS-B-06 already
+need it. That satisfies "machine-readable refusal information" without opening a channel.
+
+**Testing note, which is the awkward part.** Loopback is special-use, so an integration test against a
+local server needs an explicit `net.special=127.0.0.1` grant — which is precisely what that spelling
+exists for. HTTPS on loopback additionally needs a self-signed certificate and a way to trust it; a
+test-only root must be `#[cfg]`-gated and never a release path, and an env-var trust injection would be
+a hole, not a seam. Most of the policy should not need any of this: the fakes cover it.
+
+**Owed gates, named so they are not forgotten:** a test that reads the manifest and fails if a refused
+feature (`gzip`, `brotli`, `zstd`, `deflate`, `cookies`, `charset`) is ever enabled — a comment
+explaining that decompression is off does not keep decompression off; a `doctor` line carrying the
+**native trust-root count**, because a host with an empty store cannot make an HTTPS request and that
+must be legible rather than mysterious; the network conformance family with C-03/C-04 flipping; and a
+conformance case asserting the checked host equals the connected host.
+
+### The other five tasks, untouched
+
+PS-B-01 (budgets on every engine; **defaults are D-NE-31, the owner's**), PS-B-03 (identity separation —
+AppContainer per run on Windows, uid mapping where namespaces allow, a documented macOS recipe, reported
+in `host_guarantees`; today a guest runs as the same OS user and `identity_separation` is always in
+`limitations`), PS-B-04 (channel batching, gated on PS-A's measurement saying it pays), PS-B-05
+(resource authority in the derived policy, the envelope, the authority report, the audit record; the
+dimensions admitting a containment order join the Z3 model and `MATHEMATICS.md`), PS-B-06 (BREAK-GLASS
+as an operator-held credential outside the guest, never activatable by program code).
+
+PS-B-01 and PS-B-05 are the two that need no ruling to start and touch code PS-B-02 does not.
+
+### One gap found by using the tools on this commit
+
+The Survey has a `dependency-never-used-in-source` class, whose whole purpose is to notice a declared
+dependency that no source file names. This commit declares `reqwest` and **no source file names it** —
+and the class did not fire; it still reports only its one pre-existing `delulu-fuzz-targets` row. So the
+check sees `path` dependencies and not registry ones, which means it would not have noticed any of the
+eighty-one crates arriving unused either. Recorded here rather than fixed, because the next commit makes
+`reqwest` used and the gap becomes invisible at exactly the moment it stops being demonstrable. It is
+the same shape as ARITY-LABEL-1 from P3: a check that reports the easy cases passing while skipping the
+category that would have failed.
+
+The Survey did earn its keep on this commit twice over, though, both times on prose: it caught this
+entry naming an `egress` module that does not exist yet, and caught D-V2-30 counting the ICU subtree in
+bare digits followed by the word crates — which its `stale-count` class reads as a claim about the
+workspace's own crate count, of which the tree has nine shipped. Both were genuinely ambiguous and both
+are reworded above; neither was suppressed. (The second one fired a third time on the sentence you are
+reading, when it quoted the offending phrase verbatim to explain it. A check that cannot tell a claim
+from a quotation of a claim is a limitation worth knowing about, and spelling the number out is a
+cheaper answer than teaching it the difference.) `doctor` is 28/28, and its network line still says
+“there is no network client” — which is the honest reading of a commit where nothing uses the client yet.

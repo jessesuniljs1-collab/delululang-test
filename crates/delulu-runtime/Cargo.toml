@@ -27,8 +27,19 @@ surface = "language"
 # includes Python; `--no-default-features` builds a Python-less runtime where `root.python(...)`
 # returns `ForeignErr::Unavailable` (DL1307), the same user-visible behaviour as no interpreter.
 # All PyO3 code is isolated behind `#[cfg(feature = "python")]` in `src/python.rs`.
-default = ["python"]
+default = ["python", "net"]
 python = ["dep:pyo3"]
+# PS-B-02: the host-side egress client (owner ruling D-V2-30). ENABLED BY DEFAULT.
+# `--no-default-features` builds a network-less delulu where `http.get` answers `NetErr::Refused` --
+# exactly what every build answered before this phase, so the off position is today's behaviour
+# rather than a new one.
+#
+# What is deliberately NOT behind the flag: the egress POLICY. `egress.rs`'s allowlist matching,
+# special-use classification, redirect re-checking and size bound compile and are tested in EVERY
+# configuration, because a security rule that is only tested in one build configuration is a
+# security rule tested in one build configuration. Only the transport -- the code that actually
+# opens a socket -- is optional.
+net = ["dep:reqwest"]
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
@@ -72,6 +83,43 @@ libffi = "3"
 # lazily on the first grant-checked `root.python(...)` call). Isolated behind `src/python.rs` and the
 # `python` feature. Optional so `--no-default-features` builds a Python-less delulu.
 pyo3 = { version = "0.25", optional = true }
+# PS-B-02, the first network client (owner ruling D-V2-30, resolving D-NE-28). This is the largest
+# dependency this project takes, and the owner took it deliberately: the alternative was writing TLS,
+# which house rule 5 forbids outright, or shipping HTTP-only egress, which for a language whose pitch
+# is authority you can read would be indefensible. `reqwest` over `rustls` -- no OpenSSL, no C
+# toolchain, one memory-safe TLS implementation on all three platforms.
+#
+# EVERY feature is named here and `default-features` is off, because the default set carries things
+# this client must NOT have:
+#
+#   - `blocking`                  the interpreter is synchronous; there is no async in DeluluLang.
+#   - `rustls-tls-native-roots`   the PLATFORM trust store, not a compiled-in CA bundle. An operator
+#                                 who distrusts a CA does it in the OS store, and a language that
+#                                 makes authority explicit must not ignore the operator's own trust
+#                                 decisions. The cost is honest and reported: a host with an empty
+#                                 store cannot make an HTTPS request, `doctor` says so with the root
+#                                 count, and the refusal is legible instead of a silent fallback.
+#
+# REFUSED, each for a reason, not for size:
+#
+#   - `gzip`/`brotli`/`zstd`/`deflate`  a decompressor DEFEATS THE RESPONSE SIZE BOUND: a bounded
+#                                 number of bytes on the wire is an unbounded number of bytes in the
+#                                 program. The bound has to hold on what the program receives, so the
+#                                 only way to keep it is to never negotiate an encoding we would have
+#                                 to expand. This is the same shape as ADAPTER-LINE-1.
+#   - `cookies`                   a cookie jar is cross-request state the program never granted:
+#                                 ambient authority with a specification.
+#   - `http2`                     HTTP/1.1 is enough for `http.get`, and a second protocol is a
+#                                 second parser.
+#   - `charset`                   `http.get` answers `Result[Str, NetErr]` and a `Str` is UTF-8.
+#                                 Transcoding from a server-declared charset is a conversion decided
+#                                 by the far end, which is the wrong party to decide it.
+#   - `json`                      the program parses its own bodies.
+#   - reqwest's own redirect following is turned OFF in code (`Policy::none()`) rather than
+#                                 configured, because every hop must go back through the FULL check
+#                                 -- allowlist, special-use, re-resolve, re-pin -- and a policy that
+#                                 only counts hops does none of that.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"], optional = true }
 
 # macOS links the SYSTEM libffi instead of compiling the copy `libffi-sys` vendors (libffi 3.4.4),
 # whose aarch64 assembly current Apple clang rejects — "invalid CFI advance_loc expression" in
