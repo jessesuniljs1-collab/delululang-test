@@ -82,3 +82,88 @@ are frozen at P1.
   including what the sandbox is NOT — a second wall under the account boundary, not instead of it.
 - Green on all three systems. Open in PS-A: Landlock file rules, a deny-default macOS profile, audit
   lifecycle records (PS-A-08), the mode transition matrix (PS-A-10), and the cargo-fuzz target.
+
+## PS-A, the night of 2026-09-19/20 — Landlock, the transition matrix, and two fuzz campaigns
+
+Four commits, each green on all three systems and on arm64 before the next one started.
+
+**`a8889dd` — Landlock (PS-A2).** The guest now narrows its own view of the filesystem before the
+program runs: no write right anywhere, reads only from the system paths a process needs to keep
+running (`/usr`, `/lib`, `/bin`, `/etc`, `/proc`, `/sys`, `/dev`, plus its own channel directory), and
+no TCP port rule at all, so every bind and connect is refused. seccomp says which syscalls may be
+made; Landlock says which files they may reach, and a guest needs to open none of the operator's — the
+host performs every read and write.
+
+What is deliberately not claimed: Landlock mediates TCP only, so the guarantee says `TCP`, not
+`network`. Rights are requested at ABI v3 because v3 is where `truncate` became mediated; a kernel
+below that gets the shorter sentence `no file writes but truncation` rather than the same sentence
+with less behind it. What the kernel supports is read back from the syscall, never from a version
+string, and a kernel with no Landlock makes the run SAY so — an absent boundary must never read like
+an applied one, and `guest_cli` now requires one of the two sentences to be present.
+
+The guest's self-restrictions stay OUT of the run report on purpose: the report says what the HOST
+applied, and a host cannot verify a claim its guest makes about itself.
+
+Measured, not asserted. `restrict_self` cannot be undone, so the gate runs in a child process — the
+test binary re-entered with one environment variable — twice, once without the ruleset and once with
+it. The unconfined half is the falsification. On WSL (kernel 6.6, effective ABI 3): control
+`WRITE=true SECRET=true SYSTEM=true`, confined `WRITE=false SECRET=false SYSTEM=true`. Mutated to grant
+the channel directory write access, the test FAILS.
+
+**`d059da4` — the transition matrix (PS-A-10), and two silent transitions it found.**
+1. `--mode audit` without `--sandbox` PERFORMED THE RUN. The mode was read inside the sandboxed path
+   and nowhere else, so a caller asking for a dry run got a real one: the effect on disk, exit 0, and
+   nothing saying the flag had been ignored. `--sandbox-profile` and `--limits` were the same shape.
+   All three now refuse outside a sandbox, and refuse with `--sandbox=off` too.
+2. `--sandbox --sandbox=off` was resolved by argument order — a wrapper's default and a caller's
+   appended argument decided the boundary between them. Contradictory requests are now refused in
+   either order; repeating the same answer is still fine, and a test says so, or the rule would only
+   be "do not repeat the flag".
+   `sandbox_modes_cli.rs`, 7 cases, each with its falsification. Against the pre-fix binary both new
+   gates FAIL, which is how the two defects were confirmed rather than assumed. Break-glass has no row
+   (PS-B); "a child inheriting a weaker policy" has none because it is vacuous — a guest can start no
+   child at all, and every surface that could ask for one is refused before the run.
+
+**`ad66c9e` — the channel's `cargo-fuzz` target (PS-A-02).** `fuzz/channel_frame`, aimed at the one
+decoder that reads bytes from a peer the host has deliberately assumed is compromised. Three claims:
+no panic and no unbounded allocation; re-encoding is byte-stable (byte equality, not value equality,
+because an `f64` NaN is not equal to itself); and an empty host — no root, no minted handle — never
+answers `Ok` except to `Done`. The property lives in `delulu-runtime::channel::fuzz_one_frame`, not in
+the target, and the ordinary suite replays it over a seeded structure-aware corpus (a third noise, a
+third valid frames generated from the types, a third valid frames with one byte flipped) on every
+commit. One rule, one copy. CI gained a `fuzz` job: one minute, coverage-guided, every push.
+`fuzz/` is its own Cargo workspace; the Survey counted it as a fourteenth member and the stale-count
+gate fired, correctly, so the Survey now knows what a separate workspace is and names it beside the
+member count rather than hiding it.
+
+**`9615a4d` — the guest-mode fuzz campaign (PS-A-01), and the hole in the obvious version.** Every
+accepted program in the 50,000-program campaign now runs twice: locally, and as a guest over the real
+channel through `channel::Loopback`. The guest's trace is still ⊆ row(main), and it EQUALS the local
+trace. But the trace is written by the GUEST's interpreter before the frame is sent, so that pair
+proves only what the guest ASKED for: a host that silently performed nothing would pass with a full
+trace and an empty disk. So the host's sink is wrapped and every operation it performs is recorded on
+the host's side, and the campaign asserts the two sequences agree — 30,198 executed programs, exact
+agreement, six seconds. Falsified twice: silence the recorder (179 violations), or make the host
+answer `Ok` to `println` without performing it (198 violations, naming what was asked and what was
+done). The first mutant was aimed at a method called `print`, which does not exist, and changed
+nothing — a mutant that changes nothing proves nothing about the gate either.
+
+**macOS deny-default: the answer is yes, with evidence.** Experiment `35478590757` reported
+`RESULT real-reads-everything: PASS rc=142` — the real guest, CPython and wasmtime and all, starts and
+binds its channel under a DENY-DEFAULT Seatbelt profile (rc 142 is the probe's own alarm firing while
+it waits for a hello). The belief that deny-default aborts a Mach-O binary was WRONG: the missing
+clause was `(allow file-read*)`, and the earlier exit 134 was measuring an allow list that was too
+short. The boundary found: narrowing reads to `/usr`, `/System`, `/Library`, `/private/etc`, `/dev`
+aborts. Round two (`macos-seatbelt-deny-default-narrowing`) looks for the missing read root, asks
+whether writes need the channel directory or only the socket file, trims each allowance to find which
+are load-bearing, and carries two negative controls.
+Round one's first attempt was a PROBE FAULT, not a result: every rung came back `FAIL rc=127 —
+timeout: command not found`, because macOS ships no GNU `timeout`. The control line said "the probe
+itself is wrong", which is what a control is for — the third time in this campaign that a "failure"
+was the probe.
+
+**Still open in PS-A:** the deny-default macOS profile itself (round two's evidence lands first);
+`sandbox status`/`sandbox kill` and the `denied[]` half of PS-A-07; PS-A-08's per-effect audit records
+and guest id (the chain carries launch and death only, and nothing per effect — not built, not
+claimed); `explain E-SANDBOX` and the new DL codes with both witnesses; `--isolation process`
+strengthened and announced; the Book Ch. 15 and `MATHEMATICS.md` §12's sandbox claims.
