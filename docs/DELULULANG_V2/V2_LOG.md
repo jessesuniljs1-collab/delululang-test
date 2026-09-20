@@ -662,6 +662,17 @@ as an operator-held credential outside the guest, never activatable by program c
 
 PS-B-01 and PS-B-05 are the two that need no ruling to start and touch code PS-B-02 does not.
 
+### The opening run, read
+
+Commit `d0ae0f9`, CI run `35524134404`: **success** — 12 jobs green, 2 skipped (`heavy-gates`,
+`miri-slow`, both manual). The two that mattered here: **`supply-chain` is green**, which is
+`cargo deny` running on a RUNNER rather than on this disk — the clean-checkout lesson of 2026-09-14
+says a gate verified only on this machine is a gate verified on this machine — and **`arm64` and
+`test (macos-latest)` are green**, so the eighty-one new crates, `ring`'s assembly among them, build on
+every platform this project ships to. That was the real risk in taking this dependency, and it is now
+measured rather than assumed. The preceding commit `853664f` (P3's run recorded) is green too, as run
+`35523603074`.
+
 ### One gap found by using the tools on this commit
 
 The Survey has a `dependency-never-used-in-source` class, whose whole purpose is to notice a declared
