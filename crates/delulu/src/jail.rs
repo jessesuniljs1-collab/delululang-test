@@ -190,18 +190,55 @@ pub fn seatbelt_launcher(
     ))
 }
 
-/// Other platforms harden after the spawn, or not yet at all.
-#[cfg(not(target_os = "linux"))]
+/// Windows hardens at the spawn: the child is created SUSPENDED so its Job Object is in place before
+/// its first instruction rather than a moment after it. `resume` starts it once `confine` has applied
+/// the job, and the guarantees are reported from there.
+#[cfg(windows)]
 pub fn harden(cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static str> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt as _;
-        // Created SUSPENDED so the jail is applied before the guest's first instruction rather than
-        // a moment after it. `resume` below starts it once the Job Object is in place.
-        const CREATE_SUSPENDED: u32 = 0x0000_0004;
-        cmd.creation_flags(CREATE_SUSPENDED);
+    use std::os::windows::process::CommandExt as _;
+    const CREATE_SUSPENDED: u32 = 0x0000_0004;
+    cmd.creation_flags(CREATE_SUSPENDED);
+    Vec::new()
+}
+
+/// macOS had NO time bound at all, and that was a real gap rather than a cosmetic one.
+///
+/// A guest normally dies with its host because the channel closes under it — the next read fails and
+/// it exits. But a guest that is COMPUTING and asking for nothing never notices the host is gone, and
+/// the channel it would fail on is idle. On Linux `PR_SET_PDEATHSIG` and `RLIMIT_CPU` both cover that;
+/// on Windows the Job Object's kill-on-close does. On macOS there is no `PDEATHSIG`, so the
+/// processor-time ceiling IS the bound on a spinning orphan — and without it the bound was "for ever".
+///
+/// Only the processor-time ceiling and the absent core dump are CLAIMED. A memory ceiling is
+/// deliberately not: macOS does not meaningfully enforce `RLIMIT_DATA` or `RLIMIT_AS` against mapped
+/// memory, and the Linux half of this file already carries the scar of claiming a limit that measured
+/// something other than what it said — `RLIMIT_AS` capped the wasm engine's RESERVATIONS and killed
+/// the guest before `main` (CI run 35391962354). The limit is requested anyway, because one that
+/// happens to bite costs nothing; it is simply not reported.
+#[cfg(target_os = "macos")]
+pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static str> {
+    use std::os::unix::process::CommandExt as _;
+    // SAFETY: `pre_exec` runs in the forked child before `exec` and calls only `setrlimit`, which is
+    // async-signal-safe. A failure leaves the guest less confined, never more.
+    unsafe {
+        cmd.pre_exec(move || {
+            let set = |res, value: libc::rlim_t| {
+                let lim = libc::rlimit { rlim_cur: value, rlim_max: value };
+                libc::setrlimit(res, &lim);
+            };
+            set(libc::RLIMIT_CPU, limits.cpu_seconds as libc::rlim_t);
+            set(libc::RLIMIT_CORE, 0);
+            set(libc::RLIMIT_DATA, limits.memory_bytes as libc::rlim_t);
+            Ok(())
+        });
     }
-    let _ = cmd;
+    vec!["processor-time ceiling", "no core dump"]
+}
+
+/// Anywhere else the guest is confined only by the channel, and the run says so rather than implying
+/// a boundary this build does not have.
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+pub fn harden(_cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static str> {
     Vec::new()
 }
 

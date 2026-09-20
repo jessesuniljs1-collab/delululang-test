@@ -551,3 +551,90 @@ jobs:
           try "control-no-socket-rules" "$C_exec" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta" "$READ_ALL"
           try "control-no-reads" "$C_exec" "$C_net" "$C_sockdir" "$C_map" "$C_mach" "$C_sysctl" "$C_self" "$C_meta"
           echo "== the last profile written =="; cat "$RUNNER_TEMP/p.sb"
+
+  # ---- PS-A2 experiment, round three (2026-09-20): does macOS actually enforce these rlimits?
+  #
+  # The macOS guest now gets `RLIMIT_CPU` and `RLIMIT_CORE` before `exec`, and the run REPORTS a
+  # processor-time ceiling. A report may only claim what was measured (PS-0-04), and the claim here is
+  # load-bearing in a way it is not elsewhere: macOS has no `PR_SET_PDEATHSIG`, so a guest that is
+  # computing and asking for nothing would not notice its host had died, and this ceiling is the only
+  # bound on that orphan. If macOS does not enforce it, the claim comes back out of the report.
+  #
+  # `RLIMIT_DATA` is requested by the jail but deliberately NOT claimed. This measures it too, so the
+  # decision not to claim it is a measured one rather than a cautious guess.
+  macos-rlimit-enforcement:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: does macOS kill a spinning child on RLIMIT_CPU, and does RLIMIT_DATA bite?
+        continue-on-error: true
+        run: |
+          set +e
+          cat > "$RUNNER_TEMP/spin.c" <<'CEOF'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <sys/resource.h>
+          #include <sys/time.h>
+          #include <unistd.h>
+          // argv[1] = "cpu" | "data" | "none"
+          int main(int argc, char **argv) {
+            const char *mode = argc > 1 ? argv[1] : "none";
+            if (strcmp(mode, "cpu") == 0) {
+              struct rlimit r; r.rlim_cur = 1; r.rlim_max = 1;
+              if (setrlimit(RLIMIT_CPU, &r) != 0) { perror("setrlimit cpu"); return 20; }
+            }
+            if (strcmp(mode, "data") == 0) {
+              struct rlimit r; r.rlim_cur = 8u * 1024 * 1024; r.rlim_max = 8u * 1024 * 1024;
+              if (setrlimit(RLIMIT_DATA, &r) != 0) { perror("setrlimit data"); return 21; }
+              // Ask for far more than the limit, in chunks, TOUCHING each one so a lazy mapping is
+              // not mistaken for an enforced one.
+              for (int i = 0; i < 64; i++) {
+                char *p = (char *)malloc(8u * 1024 * 1024);
+                if (!p) { printf("MALLOC_REFUSED_AT %d\n", i); return 0; }
+                memset(p, i & 0xff, 8u * 1024 * 1024);
+              }
+              printf("ALLOCATED_512MB_UNDER_8MB_LIMIT\n");
+              return 0;
+            }
+            // Spin for what would be about four seconds of processor time.
+            volatile double x = 1.0;
+            for (long i = 0; i < 4000000000L; i++) { x = x * 1.0000001 + 1.0; if (x > 1e300) x = 1.0; }
+            printf("SPUN_TO_COMPLETION %f\n", (double)x);
+            return 0;
+          }
+          CEOF
+          cc -O1 -o "$RUNNER_TEMP/spin" "$RUNNER_TEMP/spin.c" || echo "RESULT rlimit-probe-build: FAIL"
+
+          # The CONTROL first: without a limit the spinner must run for several seconds and finish (or
+          # at least not be killed by a signal). Without this line, "killed" below could mean the
+          # program simply crashes on this runner.
+          start=$(date +%s)
+          "$RUNNER_TEMP/spin" none > "$RUNNER_TEMP/o.txt" 2>&1
+          rc=$?; elapsed=$(( $(date +%s) - start ))
+          echo "control: rc=$rc elapsed=${elapsed}s out=$(head -c 80 "$RUNNER_TEMP/o.txt")"
+          if [ $rc -eq 0 ]; then echo "RESULT rlimit-control-runs-unlimited: PASS ${elapsed}s"; else echo "RESULT rlimit-control-runs-unlimited: FAIL rc=$rc"; fi
+
+          # RLIMIT_CPU = 1 second against the same spinner. Killed by SIGXCPU is rc 152 (128+24);
+          # some systems deliver SIGKILL (137) once the hard limit is reached.
+          start=$(date +%s)
+          "$RUNNER_TEMP/spin" cpu > "$RUNNER_TEMP/o2.txt" 2>&1
+          rc=$?; elapsed=$(( $(date +%s) - start ))
+          echo "cpu: rc=$rc elapsed=${elapsed}s out=$(head -c 80 "$RUNNER_TEMP/o2.txt")"
+          if [ $rc -ge 128 ] && [ $elapsed -le 5 ]; then
+            echo "RESULT macos-rlimit-cpu-kills-a-spinner: PASS rc=$rc after ${elapsed}s"
+          else
+            echo "RESULT macos-rlimit-cpu-kills-a-spinner: FAIL rc=$rc after ${elapsed}s — the run report must stop claiming a processor-time ceiling on macOS"
+          fi
+
+          # RLIMIT_DATA = 8 MiB against 512 MiB of touched allocations. A PASS here would mean the
+          # jail could honestly claim a memory ceiling on macOS too; the expectation is that it does
+          # not bite, which is exactly why the claim is currently withheld.
+          "$RUNNER_TEMP/spin" data > "$RUNNER_TEMP/o3.txt" 2>&1
+          rc=$?
+          echo "data: rc=$rc out=$(head -c 120 "$RUNNER_TEMP/o3.txt")"
+          if grep -q MALLOC_REFUSED_AT "$RUNNER_TEMP/o3.txt"; then
+            echo "RESULT macos-rlimit-data-bites: PASS — a memory ceiling COULD be claimed on macOS"
+          else
+            echo "RESULT macos-rlimit-data-bites: FAIL — not enforced, so withholding the memory-ceiling claim is correct"
+          fi

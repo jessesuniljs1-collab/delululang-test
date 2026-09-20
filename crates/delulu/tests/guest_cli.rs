@@ -114,7 +114,14 @@ fn the_run_reports_what_the_jail_enforced() {
     }
     if cfg!(windows) || cfg!(target_os = "linux") {
         assert!(err.contains("memory ceiling"), "{err}");
-        assert!(err.contains("processor-time ceiling"), "{err}");
+    }
+    // A processor-time ceiling on every platform, macOS included since PS-A2 round three. It matters
+    // most there: macOS has no `PDEATHSIG`, so a guest that is computing and asking for nothing would
+    // not notice its host had died, and this is the only bound on that. A MEMORY ceiling is still not
+    // claimed on macOS, because macOS does not meaningfully enforce the rlimit that would give one.
+    assert!(err.contains("processor-time ceiling"), "{err}");
+    if cfg!(target_os = "macos") {
+        assert!(!err.contains("memory ceiling"), "macOS must not claim a ceiling it does not enforce: {err}");
     }
     if cfg!(target_os = "macos") {
         // The profile is DENY-DEFAULT since PS-A2 round two (experiment 35479148216): everything is

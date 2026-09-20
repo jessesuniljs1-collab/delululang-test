@@ -110,3 +110,12 @@ seccompiler = "0.5"
 # It brings one new transitive crate, `enumflags2` (MIT OR Apache-2.0); `thiserror` and `libc` were
 # already in the tree.
 landlock = "0.4"
+
+# PS-A2 round three: the macOS guest gets a processor-time ceiling and no core dump, applied in
+# `pre_exec` with `setrlimit`. macOS has no `PR_SET_PDEATHSIG`, so a guest that is COMPUTING and asking
+# for nothing would not notice its host had died — the channel it would otherwise fail on is idle. The
+# processor-time ceiling is that bound, and without it the bound was "for ever". `libc` is declared
+# again for this target rather than moved to `cfg(unix)`, because the Linux block above uses
+# Linux-only names (`prctl`, `PR_SET_PDEATHSIG`) that do not exist on Apple platforms.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
