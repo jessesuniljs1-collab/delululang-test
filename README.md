@@ -3,10 +3,14 @@
 > **Authority and effects are part of the type of every program — total, verifiable, and
 > enforced across all code, all dependencies, and every plugin.**
 >
-> One honesty note on that sentence, because it is the first thing anyone reads: a plugin's
-> authority is enforced when it is built, verified and inspected, and a *running program* cannot
-> load one yet — `root.plugin_host()` is a runtime stub that faults with `DL0703`
-> ([`REMAINING_WORK.md`](docs/REMAINING_WORK.md) row 4.11, being built in V2 phase P2).
+> One note on that sentence, because it is the first thing anyone reads. Until 2026-09-20 a
+> *running program* could not load a plugin at all: `root.plugin_host()` was a stub that faulted with
+> `DL0703`. **V2 phase P2 built it.** A program now loads a `.dpx` under an operator's
+> `--grant plugin=<path>`, optionally pinned by hash in the package's `[plugins] allow`, and calls its
+> exports — with the whole Stage-6 load sequence between the two, and every refusal catchable as a
+> `PluginErr`. What is still refused, and says so: a grant carrying `Declassify` or `ForeignCall` (their
+> enforcement lives in custody, which a plugin's own interpreter cannot share), and the `Contained`
+> class on Windows. See `delulu explain E-PLUGIN`.
 
 DeluluLang (`.delulu`) is a programming language where every function, module, and plugin
 carries its **authority and effects in its type**, so the compiler can answer — mechanically —

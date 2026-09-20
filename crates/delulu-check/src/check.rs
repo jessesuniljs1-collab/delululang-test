@@ -1522,7 +1522,23 @@ impl<'a> Checker<'a> {
                 let ts = check_args(self, ctx, &mut acc);
                 self.expect_named_arg(&ts, 0, &Type::Cap(ResourceKind::PluginHost), span, "load");
                 self.expect_named_arg(&ts, 1, &Type::Str, span, "load");
-                let grant_ty = Type::Record(self.table.type_ix["Grant"], vec![]);
+                // Never index: a prelude type missing from THIS path's table is a checker defect,
+                // and a defect must be a diagnostic rather than a panic — `main.rs` states that a
+                // runtime fault is a diagnostic, and a compile-time one has no excuse to be worse.
+                // This line WAS an index, and it panicked on the dependency-graph path, whose prelude
+                // index named two of the seven types (fixed in `program::prelude_index`).
+                let Some(grant_id) = self.table.type_ix.get("Grant").copied() else {
+                    self.diags.push(
+                        Diagnostic::error(
+                            "DL0907",
+                            "the prelude type `Grant` is missing from this program's type table \
+                             (a checker defect, not a mistake in this program)",
+                        )
+                        .with_span(span, "`load` needs the prelude's `Grant` type here"),
+                    );
+                    return Some((Type::Unit, acc));
+                };
+                let grant_ty = Type::Record(grant_id, vec![]);
                 self.expect_named_arg(&ts, 2, &grant_ty, span, "load");
                 if ts.len() != 3 {
                     self.diags.push(

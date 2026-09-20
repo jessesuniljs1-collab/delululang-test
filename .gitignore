@@ -21,3 +21,9 @@ editors/vscode/*.vsix
 # two byte-identical copies drift the first time one is edited, and a stale copy in a published
 # extension ships the wrong terms (found by the Survey's `duplicated-file` rule).
 editors/vscode/LICENSE
+
+# Built plugin artifacts. `delulu plugin build examples/plugin_shout` writes `shout.dpx` beside the
+# package, which is what the example's README tells a reader to do — build output, like `target/`, and
+# a .dpx in the tree would become a node in the Survey's map of a CLEAN checkout (the 2026-09-14
+# lesson: the packaged .vsix was mapped until a fresh clone counted one node fewer).
+*.dpx

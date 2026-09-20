@@ -628,18 +628,19 @@ included.
 
 ## Chapter 10 — Plugins: Code That Arrives at Runtime and Still Can't Overreach
 
-> **Read this box before the chapter. The in-language LOAD surface is a runtime stub today.**
-> `root.plugin_host()` faults with `DL0703` — *"plugin hosting is not available in the Stage-1
-> runtime"* (`crates/delulu-runtime/src/prim.rs:366`), and no `--grant` spelling enables it. So the
-> program below **checks**, its authority **is reported** (plugin and load site included), and it
-> does **not run**. What is built and witnessed is everything around the load: building, verifying
-> and inspecting a `.dpx`; the class rules; re-checking a Verified plugin's DIR; the resource limits
-> on the live engine; and `delulu plugin verify` giving verdicts identical to a real load. What is
-> not built is a *running program* reaching for a plugin. The gap is
-> [`REMAINING_WORK.md`](../REMAINING_WORK.md) row 4.11 and is V2 phase **P2**
-> (`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`). Everything else in this chapter describes
-> mechanisms that exist; this sentence exists because the chapter used to read as though the demo
-> ran, and it did not.
+> **Read this box before the chapter — it used to say the opposite.** Until 2026-09-20 the
+> in-language LOAD surface was a runtime stub: `root.plugin_host()` faulted with `DL0703`, no `--grant`
+> spelling enabled it, and the program below checked and reported its authority without ever running.
+> **V2 phase P2 built it.** A program loads a `.dpx` under `--grant plugin=<path-or-dir>`, optionally
+> pinned by hash in the package's `[plugins] allow`, calls its exports, and can unload it — with the
+> whole Stage-6 sequence in between and every refusal catchable as a `PluginErr`.
+>
+> Three limits are real and are stated where you will meet them rather than at the end. A plugin grant
+> may not carry `Declassify` or `ForeignCall`: those two are enforced by custody, and a plugin's export
+> runs in its own interpreter which cannot share the host's — the load refuses and says so. The
+> `Contained` class is still refused on Windows. And a Verified plugin executes its **DIR**, not the
+> `delulu:wasm` section, because the container format calls that section a compilation cache and the
+> DIR the canonical form — so what runs is exactly what the load re-proved.
 
 Here is the demo that will sell the language, and the shape it already has at the command line. A
 running program loads a plugin it has never seen — downloaded moments ago, written by a stranger or

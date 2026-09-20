@@ -67,6 +67,13 @@ pub enum Value {
     /// access (the checker enforces all three). Carries the process-wide address; the id is
     /// never reused, so a reference to a dead/unloaded actor stays dead forever.
     ActorRef { id: crate::actors::ActorId, actor: Rc<str> },
+    /// P2: a loaded plugin, minted only by `load(host, path, grant)` (Stage 6, spec §3.1). Opaque
+    /// (R-5) exactly as `Foreign` is — the checker's `Type::Plugin` refuses `str`, `==` and
+    /// serialization, so a well-typed program never displays or compares one.
+    Plugin(Rc<crate::plugin::LoadedHandle>),
+    /// P2: one export of a loaded plugin, as a callable. Minted only by `p.get(name)`, and opaque for
+    /// the same reason: it is a function value over code that arrived after compile time.
+    PluginFn(Rc<crate::plugin::PluginFn>),
 }
 
 /// The payload of a [`Value::Variant`] — an `Rc<Vec<Value>>` that tears itself down **iteratively**.
@@ -212,6 +219,10 @@ impl Value {
             Value::PyObj(_) => "<py obj>".to_string(),
             // Opaque (tag): identity never renders — the checker rejects `str`/`==` anyway.
             Value::ActorRef { actor, .. } => format!("<actor {actor}>"),
+            // Opaque (R-5), like `Foreign` above: a plugin is code that arrived after compile time,
+            // and neither its identity nor its exports reveal anything through `str`.
+            Value::Plugin(p) => format!("<plugin {}>", p.name),
+            Value::PluginFn(f) => format!("<plugin fn {}>", f.reference.export),
         }
     }
 

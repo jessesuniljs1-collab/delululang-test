@@ -526,7 +526,18 @@ warning, 7 = the Windows `EnforcementUnsupported` caveat plain, 8 = DL1510/DL151
 DL1510/DL1511 are registered in the code registry. `plugin build --sign <keyfile>` (raw 32-byte seed
 or 64 hex chars) signs; `plugin inspect` shows the real signature identity. Deviation-1 condition (b) is
 met: `verify_is_comfortably_fast_for_per_load_use` measures re-verification at ~0.75 ms per load. The
-in-language load surface (`root.plugin_host()` → an executable `load`) remains a runtime stub in v0.6
+in-language load surface (`root.plugin_host()` → an executable `load`) remained a runtime stub in v0.6
 (the checker types `load`/`p.get`/`Plugin[C]`, so `authority`/`why` analyze real programs; the
 interpreter mechanics are witnessed by the 6e.5 library tests) — a full `delulu run` load integration
-is future work, honestly out of v0.6 scope.
+was future work, honestly out of v0.6 scope.
+
+**Built 2026-09-20, V2 phase P2** (ruling D-V2-27). `delulu run` now drives the whole sequence from a
+program: `--grant plugin=<path-or-dir>` and a `[plugins] allow` hash ceiling as the two halves of the
+operator's decision, path containment through the same resolver `fs.*` uses, the hash checked on the
+bytes in hand rather than on the path, `load_verified` steps 1–6 unchanged, `p.get`, `p.unload`, and a
+per-call liveness re-check so revocation kills a retained callable (R-6c). A **Verified** plugin
+executes its DIR — §3.2 already calls `delulu:wasm` a cache that is recompiled from DIR when invalid,
+so the DIR is the canonical form and running it needs no second lowering to trust. Two dimensions are
+refused in a plugin grant with their reason: `Declassify` and `ForeignCall`, whose enforcement lives in
+custody, which a plugin's own interpreter cannot share. The `Contained` class is unchanged, including
+its Windows refusal.

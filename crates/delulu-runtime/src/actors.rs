@@ -788,6 +788,19 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             computes: r.computes.clone(),
         }),
         Value::ActorRef { id, actor } => MsgValue::Actor { id: *id, actor: actor.to_string() },
+        // P2: a plugin handle does NOT cross an actor boundary. The grant that loaded it does
+        // (see `MsgRoot::plugins`), so an actor may load its OWN plugin and get its own custody
+        // node — but a loaded handle carries an `Rc` to a replayed module and a `GrantId` whose
+        // liveness is re-checked per call against the custody this side holds. Sending it would
+        // hand a second thread a reference whose revocation it cannot see, which is precisely the
+        // authority-swap R-6c exists to prevent. The checker's `Type::Plugin` is opaque and not
+        // sendable, so a well-typed program never reaches here.
+        Value::Plugin(_) | Value::PluginFn(_) => {
+            return Err(Fault::new(
+                "DL0907",
+                "a plugin handle reached an actor boundary (checker bug if ever seen in a checked                  program) — load a plugin inside the actor that uses it",
+            ))
+        }
         // Foreign machinery is actor-pinned or v0.7-fenced at check time; reaching here
         // means the static fence has a hole — say so.
         Value::Foreign(_) | Value::ForeignPtr(_) => {

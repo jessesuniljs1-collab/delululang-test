@@ -1,0 +1,51 @@
+module host
+
+// The host half of the flagship plugin example. `shout` is a THIRD-PARTY text transform whose
+// authority ceiling is empty: its type is a pure `fn(Str) -> Str`, it takes no capability, and the
+// type system — re-checked at load — forbids it from reading a file, telling the time, or reaching
+// the network. There is nothing to trust here; the guarantee is by construction.
+//
+// Run it (from this directory, after `delulu plugin build .`):
+//
+//     delulu run host.delulu --grant console --grant plugin=.
+//     hello!
+//
+// Two things worth trying, because they are the arrangement rather than footnotes to it. Drop the
+// `--grant plugin=.` and the program cannot even obtain the capability: DL0703, naming the flag. Point
+// the path outside the granted directory and the load is refused before a byte is read — a grant is a
+// path spelling too.
+
+// The load lives in its own `Result`-returning function so `?` can carry each refusal out. Every one
+// of them is a VALUE the host can decide about, never a crash: that is the point of a load sequence.
+fn shouted(h: Cap[PluginHost]) -> Result[Str, PluginErr] ! {Load, Read} {
+    // A `Grant` is an ordinary record: it DESCRIBES authority and confers none. Conferral happens at
+    // `load`, where it is intersected with the artifact's own ceiling — so asking for more than the
+    // plugin declares is refused rather than granted. This one asks for nothing, which is all a pure
+    // text transform can ever need.
+    let g = Grant {
+        effects: [],
+        fs_read: [],
+        fs_write: [],
+        net: [],
+        secrets: [],
+        declassify: [],
+        limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+        require_signed: false,
+    }
+    let p = load(h, "shout.dpx", g)?
+    // The annotation form. The spec writes `p.get[F]`; that bracket notation does not parse, and the
+    // annotation is what pins `F` — see `delulu explain E-PLUGIN`.
+    let f: fn(Str) -> Str ! {} = p.get("shout")?
+    // Calling a pure export adds nothing to this function's row, which is why `shouted` is
+    // `!{Load, Read}` and not more: the plugin's type is the whole of what it may do.
+    Ok(f("hello"))
+}
+
+fn main(root: Root) ! {Load, Read, Write} {
+    let out = root.console()
+    let h = root.plugin_host()
+    match shouted(h) {
+        Ok(s) => out.println(s)
+        Err(e) => match e { NotGranted(m) => out.println("not granted: " + m), VerifyFailed(m) => out.println("verification failed: " + m), BadArtifact(m) => out.println("bad artifact: " + m), Revoked(n) => out.println("this plugin's authority was revoked"), LimitExceeded(m) => out.println("a resource limit fired: " + m), ApiMismatch(m) => out.println("plugin ABI mismatch: " + m) }
+    }
+}

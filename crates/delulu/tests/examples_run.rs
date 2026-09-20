@@ -195,3 +195,60 @@ fn a_path_that_repeats_the_capability_scope_finds_nothing() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// P2-06: the flagship plugin example RUNS now — build the `.dpx`, load it from `host.delulu`, and
+/// assert the plugin's own output.
+///
+/// This gate is the one the example's README was missing. Until 2026-09-20 that README said "there is
+/// no host program in this directory to run", because `root.plugin_host()` was a stub. A README that
+/// describes a shape nothing executes is how documentation drifts from a product, so the shape is now a
+/// program and the program is now a test.
+///
+/// Hermetic on purpose: the artifact is built into a temp directory rather than beside the package, so
+/// running the suite never leaves a `.dpx` in the checkout. The Survey maps a clean checkout, and build
+/// output in the tree is the 2026-09-14 lesson (a packaged `.vsix` was a node in the map until a fresh
+/// clone counted one node fewer).
+#[test]
+fn the_plugin_example_builds_loads_and_prints_what_the_plugin_returns() {
+    let work = std::env::temp_dir().join(format!("delulu-ex-plugin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).expect("a temp directory");
+    let dpx = work.join("shout.dpx");
+
+    let build = delulu(&["plugin", "build", "examples/plugin_shout", "-o", dpx.to_str().unwrap()]);
+    assert!(build.status.success(), "the example plugin must build:
+{}", text(&build));
+    assert!(dpx.exists(), "the artifact must be written:
+{}", text(&build));
+
+    std::fs::copy(root().join("examples/plugin_shout/host.delulu"), work.join("host.delulu")).unwrap();
+    let run = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&work)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "host.delulu", "--grant", "console", "--grant", "plugin=."])
+        .output()
+        .expect("run delulu");
+    let got = text(&run);
+    assert!(run.status.success(), "the host program must run:
+{got}");
+    // The PLUGIN's output, not the host's. `shout` appends "!", so this string can only come from code
+    // that arrived at run time and was re-verified on the way in.
+    assert!(got.contains("hello!"), "the plugin's own answer must appear:
+{got}");
+
+    // And the refusal the README tells a reader to try, so the example's two claims are both gated.
+    let ungranted = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&work)
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .env("DELULU_NO_COLOR", "1")
+        .args(["run", "host.delulu", "--grant", "console", "--no-prompt"])
+        .output()
+        .expect("run delulu");
+    let refused = text(&ungranted);
+    assert!(!ungranted.status.success(), "without the grant it must not run:
+{refused}");
+    assert!(refused.contains("DL0703"), "and the refusal names the not-granted code:
+{refused}");
+    let _ = std::fs::remove_dir_all(&work);
+}

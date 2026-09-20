@@ -1120,6 +1120,113 @@ exit 2
 --- stderr ---
 error: `why` needs an executable entry point (`fn main`); none was found in `examples/plugin_shout`
 
+===== examples/plugin_shout/host.delulu :: check --json =====
+exit 0
+--- stdout ---
+{
+  "command": "check",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/plugin_shout/host.delulu :: check =====
+exit 0
+--- stdout ---
+--- stderr ---
+ok: examples/plugin_shout/host.delulu checked clean
+
+===== examples/plugin_shout/host.delulu :: authority --json =====
+exit 0
+--- stdout ---
+{
+  "authority": {
+    "capabilities": [
+      {
+        "kind": "Console",
+        "requested_scopes": [],
+        "scopes": [
+          "stdio"
+        ]
+      },
+      {
+        "kind": "PluginHost",
+        "requested_scopes": [],
+        "scopes": []
+      }
+    ],
+    "contained_plugins": [],
+    "custody": "embedded",
+    "effects": [
+      "Load",
+      "Read",
+      "Write"
+    ],
+    "foreign_calls": [],
+    "foreign_isolation": "inproc",
+    "plugins": [
+      {
+        "class": null,
+        "grant": {
+          "effects": []
+        },
+        "loaded_at": [
+          {
+            "file": "examples/plugin_shout/host.delulu",
+            "line": 35
+          }
+        ],
+        "name": null,
+        "path": "shout.dpx",
+        "signed_by": null
+      }
+    ],
+    "program": "host",
+    "pure_functions": [],
+    "requested_scopes": {},
+    "required_grants": [
+      "console",
+      "plugin=PATH"
+    ],
+    "secrets": []
+  },
+  "command": "authority",
+  "delulu_version": "<version>",
+  "diagnostics": [],
+  "schema": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  }
+}
+--- stderr ---
+
+===== examples/plugin_shout/host.delulu :: authority =====
+exit 0
+--- stdout ---
+Authority of `host` — what this program can do to your system:
+  effects:      Load, Read, Write
+  capabilities:
+    - Console  stdio
+    - PluginHost (scope granted at runtime)
+  secrets:      (none)
+  pure fns:     (none)
+  foreign:      (none — no code outside the guarantee)
+  plugins:
+    - shout.dpx [?]  grant.effects: [(none)]  loaded at examples/plugin_shout/host.delulu:35
+--- stderr ---
+
+===== examples/plugin_shout/host.delulu :: why Write =====
+exit 0
+--- stdout ---
+main (examples/plugin_shout/host.delulu:44) — Write
+--- stderr ---
+
 ===== examples/plugin_shout/rigged :: check --json =====
 exit 1
 --- stdout ---

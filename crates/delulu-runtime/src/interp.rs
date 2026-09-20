@@ -279,6 +279,11 @@ pub struct Interp {
     /// binder via [`Interp::with_foreign_binder`], running each granted C lib in an isolated
     /// subprocess. `Rc` so the binder is shared cheaply (bind may happen at several call sites).
     foreign_binder: Rc<dyn ForeignBinder>,
+    /// P2: the plugin container reader, injected for the same reason the foreign binder is —
+    /// `delulu-wasm` implements the `PluginEngine` trait this crate DEFINES, so this crate cannot
+    /// reach it. `None` means nothing wired it, which is a wiring bug rather than a policy: the CLI
+    /// always supplies one, and `load` says so rather than refusing as though the artifact were bad.
+    plugin_engine: Option<Rc<dyn crate::plugin::PluginEngine>>,
     /// Where authority lives (Stage 5 phase 5f). Default: [`EmbeddedCustody`] — a pass-through, so a
     /// program built with `Interp::new` behaves EXACTLY as in Stages 1–4 (criterion 11). `--broker
     /// daemon` swaps in a `BrokerClientCustody` (IPC) via [`Interp::with_custody`]. Interior
@@ -370,6 +375,7 @@ impl Interp {
             foreign_grants: HashMap::new(),
             foreign_max_ret: foreign::DEFAULT_MAX_RET,
             foreign_binder: Rc::new(InProcBinder),
+            plugin_engine: None,
             custody: RefCell::new(Box::new(EmbeddedCustody::new())),
             budget: None,
             actors,
@@ -577,6 +583,12 @@ impl Interp {
     /// Builder style; additive.
     pub fn with_foreign_binder(mut self, binder: Rc<dyn ForeignBinder>) -> Interp {
         self.foreign_binder = binder;
+        self
+    }
+
+    /// P2: give this run the plugin container reader (`delulu-wasm`'s `WasmPluginEngine`).
+    pub fn with_plugin_engine(mut self, engine: Rc<dyn crate::plugin::PluginEngine>) -> Interp {
+        self.plugin_engine = Some(engine);
         self
     }
 
@@ -1096,6 +1108,14 @@ impl Interp {
                 if let Some(Value::Closure(clo)) = env.get(name) {
                     return self.call_closure(&clo, argvals);
                 }
+                // P2 — `load(host, path, grant)` is handled HERE rather than in `prim`, for the
+                // reason `root.foreign` is: it mints a custody node and reads a container through the
+                // injected engine, and `prim` has neither.
+                if name == "load" && env.get(name).is_none() && !self.funcs.contains_key(name) {
+                    let v = self.load_plugin(&argvals, span).map_err(Escape::Fault)?;
+                    self.note_alloc(&v);
+                    return Ok(v);
+                }
                 // Prelude builtins/constructors.
                 if let Some(res) = prim::call_builtin(name, &argvals, span) {
                     if let Ok(v) = &res {
@@ -1117,6 +1137,10 @@ impl Interp {
         // Otherwise the callee must evaluate to a closure.
         match self.eval_expr(callee, env)? {
             Value::Closure(clo) => self.call_closure(&clo, argvals),
+            // P2: calling a plugin export. The liveness re-check happens on every call (R-6c) rather
+            // than once at `get`, which is the whole point: an `unload` or a `grants revoke` kills
+            // every retained callable without the holder having to notice.
+            Value::PluginFn(f) => self.call_plugin_export(&f, argvals, span),
             other => Err(Escape::Fault(Fault::at("DL0907", format!("value `{}` is not callable", other.display()), span))),
         }
     }
@@ -1315,6 +1339,13 @@ impl Interp {
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
             #[cfg(feature = "python")]
             Value::PyObj(o) => self.call_pyobj(o, &name.name, &argvals, span),
+            // P2: the loaded plugin's two methods (spec §3.3). Here rather than in `prim` because
+            // both touch custody: `get` re-checks the node's liveness, `unload` revokes it.
+            Value::Plugin(p) => match name.name.as_str() {
+                "get" => self.plugin_get(p, &argvals, span),
+                "unload" => self.plugin_unload(p),
+                other => Err(Fault::at("DL0907", format!("a plugin has no method `{other}`"), span)),
+            },
             Value::Secret(s) => prim::call_secret_method(s, &name.name, &argvals, span),
             Value::Str(s) => prim::call_str_method(s, &name.name, &argvals, span),
             Value::List(l) => prim::call_list_method(l, &name.name, &argvals, span),
@@ -1399,6 +1430,238 @@ impl Interp {
             Ok(exec) => Ok(Value::ok(Value::Foreign(Rc::new(ForeignHandle { name: lib_name, exec })))),
             Err(e) => Ok(Value::err(foreign_err_value(&e))),
         }
+    }
+
+    /// P2 — `load(host, path, grant)`: the Stage-6 load sequence, driven from a running program.
+    ///
+    /// Handled here rather than in `prim` for the reason `bind_foreign` is: it needs custody (step 4
+    /// mints a child node) and the engine, and `prim` has neither.
+    ///
+    /// The order is the normative one, and the two checks that come BEFORE any of it are the ones this
+    /// phase adds:
+    ///
+    /// 1. **Where.** The path is resolved inside the capability's granted roots by the same lexical
+    ///    containment `fs.*` uses. A path outside them is refused before a byte is read — so `..`, a
+    ///    symlink spelling or a case difference cannot reach an artifact the operator did not permit.
+    /// 2. **Which.** When the package pinned hashes (`[plugins] allow`), the blake3 of the bytes IN
+    ///    HAND must be on the list. On the bytes, not on the path: an artifact swapped between
+    ///    `plugin verify` and this load is the TOCTOU case, and a path is not a name for bytes.
+    ///
+    /// Then `load_verified` runs steps 1–6 exactly as `plugin verify` does, with the same functions,
+    /// so `verify` and `load` cannot reach different verdicts on the same artifact.
+    ///
+    /// Every refusal reaches the program as a `PluginErr` VALUE, never a fault: the point of the load
+    /// sequence is that a host can decide what to do when a plugin will not load.
+    fn load_plugin(&self, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        use crate::plugin::{LoadedHandle, PluginErr};
+
+        let Some(Value::Cap(host)) = args.first() else {
+            return Err(Fault::at("DL0907", "`load` expects a Cap[PluginHost] as its first argument", span));
+        };
+        let crate::value::CapScope::PluginHost { roots, allow_hashes } = &host.scope else {
+            // A host-held handle (a sandbox guest) or any other scope: the channel carries no plugin
+            // request kind, and a guest loading code is exactly what the sandbox refuses.
+            return Err(Fault::at(
+                "DL1401",
+                "this `Cap[PluginHost]` carries no granted roots — a sandboxed guest cannot load code, \
+                 and the run is refused before it starts rather than reaching here",
+                span,
+            ));
+        };
+        let Some(Value::Str(path)) = args.get(1) else {
+            return Err(Fault::at("DL0907", "`load` expects a Str path as its second argument", span));
+        };
+        let grant = match args.get(2) {
+            Some(v) => grant_from_value(v),
+            None => return Err(Fault::at("DL0907", "`load` expects a Grant as its third argument", span)),
+        };
+
+        // ----- 1. where ---------------------------------------------------------------------------
+        // The same rule a `Cap[FsRead]` operation obeys: resolve inside the granted root, lexically,
+        // and refuse anything that escapes. `hostile_path` first, because a spelling the primitive
+        // table refuses from a program is refused here too (D-NE-29) — this is the path that decides
+        // which code runs.
+        if let Some(why) = crate::prim::hostile_path(path, false) {
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                "the path `{path}` is refused: {why}"
+            )))));
+        }
+        let mut found: Option<std::path::PathBuf> = None;
+        for root in roots {
+            let candidate = crate::prim::resolve_norm(root, path);
+            // Inside the root, or the root itself when the grant named a single file.
+            if candidate.starts_with(root) || &candidate == root {
+                found = Some(candidate);
+                break;
+            }
+        }
+        let Some(file) = found else {
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                "`{path}` is outside every granted plugin root ({}) — pass `--grant plugin=<dir>` for \
+                 the directory the artifact is in",
+                roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>().join(", ")
+            )))));
+        };
+        let bytes = match std::fs::read(&file) {
+            Ok(b) => b,
+            Err(e) => {
+                return Ok(Value::err(plugin_err_value(&PluginErr::BadArtifact(format!(
+                    "cannot read `{}`: {e}",
+                    file.display()
+                )))))
+            }
+        };
+
+        // ----- 2. which ---------------------------------------------------------------------------
+        // The hash of the bytes in hand. A path names a location; only a hash names bytes, and the
+        // bytes are what will run.
+        if !allow_hashes.is_empty() {
+            // The same hashing function the audit chain and the compute artifact registry use, so a
+            // hash an operator copies out of one place matches in the other.
+            let digest = delulu_broker::content_hash(&bytes);
+            if !allow_hashes.iter().any(|h| h == &digest) {
+                return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                    "the artifact at `{path}` hashes to {digest}, which this package's `[plugins] allow` \
+                     does not list — the manifest pins artifacts by their bytes, so a swapped file is \
+                     refused even at a permitted path"
+                )))));
+            }
+        }
+
+        // ----- the sequence -----------------------------------------------------------------------
+        let Some(engine) = self.plugin_engine.clone() else {
+            return Err(Fault::at(
+                "DL0907",
+                "no plugin engine is wired into this run (a wiring bug, not a refusal — the CLI always                  supplies one, and saying `bad artifact` here would blame the artifact for the host)",
+                span,
+            ));
+        };
+        let art = match engine.read_artifact(&bytes) {
+            Ok(a) => a,
+            Err(r) => return Ok(Value::err(plugin_err_value(&r.to_plugin_err()))),
+        };
+        let exports = art.exports();
+        let name = art.name().to_string();
+        // The two dimensions whose enforcement lives in CUSTODY rather than in the primitive table.
+        // A plugin export runs in its own interpreter (see `call_plugin_export`), and custody cannot
+        // be shared between two of them — so a grant carrying either of these would have its broker
+        // decision made by a fresh embedded custody that always allows. Refused here, before the node
+        // is minted, with the reason: this is a limitation of the plugin execution model, not of the
+        // artifact, and pretending otherwise would be the silent downgrade this project refuses.
+        for dim in ["Declassify", "ForeignCall"] {
+            if grant.effects.iter().any(|e| e == dim) {
+                return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                    "a plugin grant cannot carry `{dim}` in this build: its enforcement lives in                      custody, and a plugin export runs in its own interpreter which cannot share the                      host's. Remove it from the grant, or keep that work in the host."
+                )))));
+            }
+        }
+        let mut custody = self.custody.borrow_mut();
+        match crate::plugin::load_verified(&art, &grant, &mut **custody) {
+            Ok(crate::plugin::LoadedPlugin::Verified { grant_id, authority, verified, signer }) => {
+                Ok(Value::ok(Value::Plugin(Rc::new(LoadedHandle {
+                    grant_id,
+                    authority,
+                    verified: Rc::from(*verified),
+                    exports,
+                    name,
+                    signer,
+                }))))
+            }
+            Err(r) => Ok(Value::err(plugin_err_value(&r.to_plugin_err()))),
+        }
+    }
+
+    /// `p.get(name)` — one export as a callable, or a `PluginErr`.
+    ///
+    /// The liveness re-check is here as well as at the call (R-6c): a `get` on an already-unloaded
+    /// plugin must not hand back a callable that looks usable.
+    fn plugin_get(&self, p: &Rc<crate::plugin::LoadedHandle>, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        use crate::plugin::{PluginErr, PluginFn, PluginRef};
+        let Some(Value::Str(export)) = args.first() else {
+            return Err(Fault::at("DL0907", "`get` expects a Str export name", span));
+        };
+        let reference = PluginRef::new(p.grant_id.clone(), export.to_string());
+        if let Err(e) = reference.check_call(&**self.custody.borrow()) {
+            return Ok(Value::err(plugin_err_value(&e)));
+        }
+        if !p.exports.contains_key(export.as_ref()) {
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                "plugin `{}` exports no `{export}` (it exports: {})",
+                p.name,
+                p.exports.keys().cloned().collect::<Vec<_>>().join(", ")
+            )))));
+        }
+        Ok(Value::ok(Value::PluginFn(Rc::new(PluginFn { reference, plugin: p.clone() }))))
+    }
+
+    /// P2 — call one export of a loaded plugin.
+    ///
+    /// **Per call, not per `get`.** The liveness re-check is here (R-6c), so an `unload` or a
+    /// `grants revoke` kills every retained callable without the holder having to notice. A reference
+    /// binds the load-time `GrantId`, so a reload mints a fresh node and an old callable stays dead
+    /// for ever rather than being silently re-bound to different authority.
+    ///
+    /// **Why a nested interpreter over the plugin's own module.** The plugin's functions must resolve
+    /// against the PLUGIN's items — its own helpers, its own consts. Injecting them into the host's
+    /// function table would make a bare name inside the plugin resolve against the HOST's functions,
+    /// which is a plugin calling code it was never given. So the plugin's module gets its own
+    /// interpreter, and what crosses is only what should: the host's trace sink, so the plugin's
+    /// effects appear in the host's trace and `--assert-trace` sees them; the host's effect sink, so a
+    /// sandboxed run still performs them host-side; and the host's depth bound.
+    ///
+    /// What does NOT cross is custody, because `Box<dyn Custody>` cannot be shared between two
+    /// interpreters — and that is exactly why `load` refuses any grant carrying `Declassify` or
+    /// `ForeignCall`. Those are the two dimensions whose enforcement lives in custody rather than in
+    /// the primitive table; letting them through here would move a broker decision into a fresh
+    /// embedded custody that always allows. Every other dimension is enforced by the capability the
+    /// HOST hands in as an argument, checked by the same primitive table on the same resolved paths.
+    fn call_plugin_export(
+        &self,
+        f: &Rc<crate::plugin::PluginFn>,
+        args: Vec<Value>,
+        span: delulu_diag::Span,
+    ) -> R<Value> {
+        if let Err(e) = f.reference.check_call(&**self.custody.borrow()) {
+            let code = crate::plugin::plugin_err_code(&e);
+            return Err(Escape::Fault(Fault::at(
+                code,
+                format!(
+                    "the plugin export `{}` is no longer callable: {e:?} — a reference binds the \
+                     load-time grant node, so it stays dead after an unload or a revoke",
+                    f.reference.export
+                ),
+                span,
+            )));
+        }
+        let module = &f.plugin.verified.dir.module;
+        let mut sub = Interp::new(module).with_max_depth(self.max_depth);
+        if let Some(t) = &self.trace {
+            sub = sub.with_trace(t.clone());
+        }
+        sub = sub.with_effect_sink(self.effects.clone());
+        sub.call_exported(&f.reference.export, args, span)
+    }
+
+    /// Call a `pub fn` by name from THIS interpreter's module — the entry point a plugin export is
+    /// reached through. Separate from `call_fn` because it is the only place an outside caller names a
+    /// function, and the refusal for a missing one must say that rather than "unknown function".
+    fn call_exported(&self, name: &str, args: Vec<Value>, span: delulu_diag::Span) -> R<Value> {
+        if !self.funcs.contains_key(name) {
+            return Err(Escape::Fault(Fault::at(
+                "DL1508",
+                format!("this plugin's module has no function `{name}` (the manifest and the code disagree)"),
+                span,
+            )));
+        }
+        self.call_fn(name, args)
+    }
+
+    /// `p.unload()` — revoke the plugin's custody node. Every retained callable dies with it, because
+    /// each one re-checks the node's liveness on every call rather than trusting the handle it holds.
+    fn plugin_unload(&self, p: &Rc<crate::plugin::LoadedHandle>) -> Result<Value, Fault> {
+        let mut custody = self.custody.borrow_mut();
+        let _ = crate::plugin::unload(&mut **custody, &p.grant_id);
+        Ok(Value::Unit)
     }
 
     /// `m.method(args)` on a bound lib handle — marshal per spec §4.2, call via `libffi`, validate the
@@ -2039,6 +2302,78 @@ fn fval_to_value(fv: FVal) -> Value {
 }
 
 /// Map a [`foreign::ForeignErr`] to its `std.foreign.ForeignErr` sum value (spec §8).
+/// P2: a `PluginErr` as the in-language sum a program catches (spec §4).
+///
+/// Every load refusal reaches the program as one of these, and the DL code the CLI renders comes
+/// from `plugin::plugin_err_code` on the same value — one mapping, so the code a human reads and the
+/// variant a program matches on cannot disagree.
+fn plugin_err_value(e: &crate::plugin::PluginErr) -> Value {
+    use crate::plugin::PluginErr::*;
+    match e {
+        NotGranted(s) => Value::variant("NotGranted", vec![Value::str(s.clone())]),
+        VerifyFailed(s) => Value::variant("VerifyFailed", vec![Value::str(s.clone())]),
+        BadArtifact(s) => Value::variant("BadArtifact", vec![Value::str(s.clone())]),
+        Revoked(seq) => Value::variant("Revoked", vec![Value::Int(*seq)]),
+        LimitExceeded(s) => Value::variant("LimitExceeded", vec![Value::str(s.clone())]),
+        ApiMismatch(s) => Value::variant("ApiMismatch", vec![Value::str(s.clone())]),
+    }
+}
+
+/// P2: read a program's `Grant` record into the runtime's `Grant`.
+///
+/// A `Grant` is an ORDINARY RECORD (spec §4): it *describes* authority and confers none. Conferral is
+/// step 3's ceiling intersection and step 4's holder check, both at `load`. So this function is a
+/// plain projection with no checking in it — a missing or mistyped field reads as its empty value
+/// rather than erroring, because the checker already typed the record and a runtime disagreement here
+/// would be a checker bug, not a program's mistake. What the projection must never do is invent
+/// authority: every field that is absent must project to *less*, never more.
+fn grant_from_value(v: &Value) -> crate::plugin::Grant {
+    use crate::plugin::{Grant, Limits};
+    let field = |name: &str| -> Option<Value> {
+        if let Value::Record { fields, .. } = v {
+            fields.borrow().iter().find(|(n, _)| n == name).map(|(_, val)| val.clone())
+        } else {
+            None
+        }
+    };
+    let strings = |name: &str| -> Vec<String> {
+        match field(name) {
+            Some(Value::List(items)) => items.borrow().iter().map(|x| x.display()).collect(),
+            _ => Vec::new(),
+        }
+    };
+    let int_in = |rec: &Option<Value>, name: &str| -> i64 {
+        match rec {
+            Some(Value::Record { fields, .. }) => fields
+                .borrow()
+                .iter()
+                .find(|(n, _)| n == name)
+                .and_then(|(_, v)| if let Value::Int(i) = v { Some(*i) } else { None })
+                .unwrap_or(0),
+            _ => 0,
+        }
+    };
+    let limits_rec = field("limits");
+    Grant {
+        effects: strings("effects"),
+        fs_read: strings("fs_read"),
+        fs_write: strings("fs_write"),
+        net: strings("net"),
+        secrets: strings("secrets"),
+        declassify: strings("declassify"),
+        limits: Limits {
+            fuel: int_in(&limits_rec, "fuel"),
+            mem_mb: int_in(&limits_rec, "mem_mb"),
+            wall_ms: int_in(&limits_rec, "wall_ms"),
+        },
+        // Absent reads as `false`, which is the LESS demanding value — so a malformed record can
+        // never accidentally turn the signature requirement on and make a good artifact refuse. The
+        // opposite default would be the safer-sounding one and the wrong one: a grant that demands a
+        // signature nobody asked for is a refusal the operator did not write.
+        require_signed: matches!(field("require_signed"), Some(Value::Bool(true))),
+    }
+}
+
 fn foreign_err_value(e: &foreign::ForeignErr) -> Value {
     use foreign::ForeignErr::*;
     match e {

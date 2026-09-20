@@ -170,7 +170,7 @@ has been in continuous adversarial review rather than feature work.
 | 3 | The WASM backend (a *fragment*, not the whole language) under an embedded deny-by-default Wasmtime host |
 | 4 | Foreign function interface, embedded Python, cross-engine parity |
 | 5 | **Custody**: the broker, the `⊑` attenuation lattice, the grant tree, revocation epochs, the hash-chained audit log, lease tokens — and **the Guard** |
-| 6 | **Plugins** (`.dpx`), two classes, signing, verification — the artifact and its checks. The **in-language load surface is a runtime stub** (`prim.rs:366`, `DL0703`): a running program cannot load a plugin. `REMAINING_WORK.md` 4.11; V2 phase P2 |
+| 6 | **Plugins** (`.dpx`), two classes, signing, verification — the artifact and its checks. The in-language load surface WAS a runtime stub (`prim.rs`, `DL0703`); **V2 phase P2 built it on 2026-09-20**: `root.plugin_host()` under `--grant plugin=<path>`, `load` running the whole Stage-6 sequence, `p.get`/`p.unload`, a `[plugins] allow` hash ceiling in the manifest, and revocation killing a retained callable per call (R-6c). A Verified plugin executes its **DIR**, which the container format itself calls canonical (the `delulu:wasm` section is a cache). Still refused: `Declassify`/`ForeignCall` in a plugin grant, and `Contained` on Windows |
 | 7 | **Actors** — message passing, per-sender-pair FIFO, bounded mailboxes, quiescence |
 | 8 | **The language server** (`delulu lsp`, LSP 3.17) and the editor surface |
 | 9 | The registry, publishing, deployment planning, the measurement program |

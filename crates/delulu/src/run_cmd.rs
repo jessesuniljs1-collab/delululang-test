@@ -1003,11 +1003,13 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     }
     let root = Value::Root(Rc::new(root_val));
     let max_ret = opts.foreign_max_ret.unwrap_or(delulu_runtime::foreign::DEFAULT_MAX_RET);
-    let mut interp = Interp::new(&checked.module).with_foreign(
-        checked.result.foreign_binds.clone(),
-        grants.foreign_c.clone(),
-        max_ret,
-    );
+    let mut interp = Interp::new(&checked.module)
+        .with_foreign(checked.result.foreign_binds.clone(), grants.foreign_c.clone(), max_ret)
+        // P2: the plugin container reader. `delulu-wasm` implements the trait `delulu-runtime`
+        // DEFINES, so the runtime cannot reach it and the binary wires it — the same arrangement the
+        // foreign binder uses. Unconditional: a program that loads no plugin never touches it, and a
+        // program that does must not depend on a flag to have found its reader.
+        .with_plugin_engine(Rc::new(delulu_wasm::WasmPluginEngine::new()));
     if foreign_process {
         // Stage 5 phase 5h: run each granted C library in an isolated worker subprocess. Additive —
         // a program with no foreign binds never spawns a worker (the binder is only consulted by
@@ -1051,6 +1053,18 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     if let Some(c) = daemon_custody.take() {
         // Stage 5 phase 5f: route every effectful op through the broker daemon.
         interp = interp.with_custody(Box::new(c));
+    } else if !grants.plugins.is_empty() {
+        // P2: a run that MAY load a plugin needs a grant tree for the load's step-4 holder check, and
+        // in embedded mode there is none by default. The root is the RUN's own authority, derived from
+        // what the operator granted — so a plugin's grant attenuates under it and the broker's `⊑`
+        // enforces the property that matters: a plugin can never hold more than its host.
+        //
+        // Only when plugin loading was granted. `EmbeddedCustody::new()` stays the default for every
+        // other run, byte-identical to Stage 1–5, because minting a tree for runs that will never use
+        // one changes behaviour nobody asked to change.
+        let spec = crate::cli::authority_spec_from_grants(&grants, &checked.module.name.dotted());
+        let authority = crate::brokerd::spec_to_authority(&spec);
+        interp = interp.with_custody(Box::new(delulu_runtime::EmbeddedCustody::with_root(authority)));
     }
     if let Some(s) = &sink {
         interp = interp.with_trace(s.clone());

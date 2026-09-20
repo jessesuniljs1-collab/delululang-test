@@ -273,8 +273,11 @@ pub fn check_workspace(ws: &Workspace) -> Program {
     // 1. Global type registry.
     let mut gtypes: Vec<TypeDef> = Vec::new();
     push_prelude(&mut gtypes);
-    let prelude_ix: HashMap<String, TypeDefId> =
-        [("IoErr", TypeDefId(0)), ("NetErr", TypeDefId(1))].into_iter().map(|(s, i)| (s.to_string(), i)).collect();
+    // Derived from `push_prelude` rather than listed. This line used to name TWO of the seven
+    // prelude types, so on this path `PyErr`, `ForeignErr`, `Limits`, `Grant` and `PluginErr` were
+    // absent from every module's table — and `Grant` turned that into a checker panic as soon as P2
+    // gave a program a reason to write one. See `program::prelude_index`.
+    let prelude_ix: HashMap<String, TypeDefId> = crate::program::prelude_index(&gtypes);
 
     let mut owned_types: Vec<Vec<(String, TypeDefId, bool)>> = vec![Vec::new(); n];
     for (owned, module) in owned_types.iter_mut().zip(&ws.modules) {

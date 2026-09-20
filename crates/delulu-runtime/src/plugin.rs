@@ -796,6 +796,47 @@ pub fn unload(custody: &mut dyn Custody, grant_id: &GrantId) -> Result<u64, Plug
     custody.revoke_node(grant_id).map_err(|d| PluginErr::BadArtifact(d.message))
 }
 
+// ===== P2 — the loaded plugin, as a runtime value ==============================================
+
+/// A loaded plugin, as the program holds it (`Value::Plugin`).
+///
+/// **The DIR is what runs, not the WASM.** For a Verified plugin the artifact's `delulu:wasm` section
+/// is a compilation CACHE — the container format says so itself: "an invalid cache is ignored and
+/// recompiled from DIR (spec §3.2) — never an error". The DIR is the canonical, content-bound,
+/// hash-verified form, and `step5_verified` has just replayed the whole Stage-1 judgment over it. So
+/// an export is invoked by interpreting the module that was proved, rather than by instantiating a
+/// second lowering of it: there is no second artifact to trust, the plugin's effects go through the
+/// same primitive table and the same custody checks as the host's, and they appear in the same trace.
+///
+/// The Contained class is the one that needs the WASM sandbox, because its module is opaque and
+/// nothing about it has been proved. It stays refused, and the refusal says why.
+#[derive(Debug)]
+pub struct LoadedHandle {
+    /// The custody node minted at step 4. Every call re-checks it (R-6c), so a revoke kills the
+    /// plugin without the holder having to notice.
+    pub grant_id: GrantId,
+    /// The authority the grant derived, intersected against the artifact's ceiling at step 3.
+    pub authority: Authority,
+    /// The replayed, re-proved module. This is the code.
+    pub verified: std::rc::Rc<VerifiedPlugin>,
+    /// export name → its manifest signature, from the artifact.
+    pub exports: BTreeMap<String, String>,
+    pub name: String,
+    /// The signer identity when the artifact carried a valid signature (spec §3.1 step 6).
+    pub signer: Option<String>,
+}
+
+/// One export of a loaded plugin, as a callable value (`Value::PluginFn`).
+///
+/// It carries the load-time [`PluginRef`], which binds the GrantId rather than the plugin's name or
+/// path — so an unload/reload can never silently re-bind this callable to a plugin with different
+/// authority (R-6c). A reference to an unloaded plugin stays dead for ever.
+#[derive(Debug)]
+pub struct PluginFn {
+    pub reference: PluginRef,
+    pub plugin: std::rc::Rc<LoadedHandle>,
+}
+
 /// A retained reference to a plugin export. **It binds the load-time `GrantId`** (R-6c) — not the
 /// plugin's name, not its path — which is what makes an unload/reload authority swap impossible: a
 /// reload mints a *fresh* node, so an old reference can never be silently re-bound to a plugin with

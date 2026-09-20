@@ -47,19 +47,8 @@ pub fn check_program(pkg: &Package) -> Program {
     // ----- 1. global type registry (prelude + every module's types) -------------------------
     let mut gtypes: Vec<TypeDef> = Vec::new();
     push_prelude(&mut gtypes);
-    let prelude_ix: HashMap<String, TypeDefId> = [
-        ("IoErr", TypeDefId(0)),
-        ("NetErr", TypeDefId(1)),
-        ("ForeignErr", TypeDefId(2)),
-        ("PyErr", TypeDefId(3)),
-        // Stage-6 `std.plugin` (spec §4), in `push_prelude` order.
-        ("Limits", TypeDefId(4)),
-        ("Grant", TypeDefId(5)),
-        ("PluginErr", TypeDefId(6)),
-    ]
-    .into_iter()
-    .map(|(n, i)| (n.to_string(), i))
-    .collect();
+    // Derived, never listed. See `prelude_index`.
+    let prelude_ix: HashMap<String, TypeDefId> = prelude_index(&gtypes);
 
     // module name -> its own type declarations (name, global id, is_pub)
     let mut owned_types: HashMap<String, Vec<(String, TypeDefId, bool)>> = HashMap::new();
@@ -349,6 +338,21 @@ pub(crate) fn build_kind(kind: &TypeDeclKind) -> TypeDefKind {
         }
         TypeDeclKind::Alias(t) => TypeDefKind::Alias(t.clone()),
     }
+}
+
+/// The prelude's name → id map, derived from what [`push_prelude`] actually pushed.
+///
+/// Every construction path used to write this list by hand, and the dependency-graph path in
+/// `deps.rs` had **two of the seven entries** — `IoErr` and `NetErr` — right next to its own comment
+/// saying "all three refuse identically; a rule that holds on two paths out of three holds nowhere".
+/// So a package-based program naming `PyErr`, `ForeignErr`, `Limits`, `Grant` or `PluginErr` resolved
+/// against a table that did not contain it. The Stage-6 `Grant` case surfaced it as a PANIC in the
+/// checker (`type_ix["Grant"]`) the moment P2 gave programs a reason to write one.
+///
+/// Deriving it removes the class of defect rather than the instance: a type added to `push_prelude`
+/// is in the index of all three paths, with no list to remember.
+pub(crate) fn prelude_index(gtypes: &[TypeDef]) -> HashMap<String, TypeDefId> {
+    gtypes.iter().enumerate().map(|(i, t)| (t.name.clone(), TypeDefId(i as u32))).collect()
 }
 
 pub(crate) fn push_prelude(gtypes: &mut Vec<TypeDef>) {
