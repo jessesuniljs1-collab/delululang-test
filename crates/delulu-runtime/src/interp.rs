@@ -1542,6 +1542,24 @@ impl Interp {
         };
         let exports = art.exports();
         let name = art.name().to_string();
+        // P2-05: resource limits are REFUSED rather than ignored.
+        //
+        // `Grant.limits` (fuel, memory, wall clock) are the WASM engine's instruments, and a Verified
+        // plugin does not run on the WASM engine — it runs its DIR on the interpreter, which has no
+        // fuel meter and no preemption. A grant asking for a 100 ms wall limit that nothing enforces is
+        // a promise nobody keeps, and the one outcome this project refuses is a boundary that quietly
+        // did not apply. So a non-zero limit refuses, and says which instrument is missing.
+        //
+        // Zero means "no limit requested", which is what the flagship example passes, so an ordinary
+        // load is unaffected. The Contained class is where these limits belong and where
+        // `kill_on_limit` already lives; it arrives with the WASM execution path.
+        let l = &grant.limits;
+        if l.fuel != 0 || l.mem_mb != 0 || l.wall_ms != 0 {
+            return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                "this grant asks for resource limits (fuel {}, memory {} MiB, wall {} ms) and this build                  cannot enforce them: a Verified plugin executes its DIR on the interpreter, which has                  no fuel meter and no preemption. They are refused rather than ignored — a limit nothing                  enforces is worse than no limit, because it reads as one. Pass zeros, or keep the work                  in the host.",
+                l.fuel, l.mem_mb, l.wall_ms
+            )))));
+        }
         // The two dimensions whose enforcement lives in CUSTODY rather than in the primitive table.
         // A plugin export runs in its own interpreter (see `call_plugin_export`), and custody cannot
         // be shared between two of them — so a grant carrying either of these would have its broker

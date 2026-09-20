@@ -350,3 +350,126 @@ fn the_load_appears_in_the_effect_trace() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// P2-05: a resource limit this build cannot enforce is REFUSED, not ignored.
+///
+/// `Grant.limits` are the WASM engine's instruments, and a Verified plugin runs its DIR on the
+/// interpreter — no fuel meter, no preemption. A grant asking for a 100 ms wall limit that nothing
+/// enforces is a promise nobody keeps, and the refusal says which instrument is missing. Zero means
+/// "no limit requested", which is the ordinary case and must still load: that is the control.
+#[test]
+fn a_resource_limit_this_build_cannot_enforce_is_refused_rather_than_ignored() {
+    let dir = tmp("limits");
+    let dpx = build_shout(&dir);
+    std::fs::copy(&dpx, dir.join("shout.dpx")).unwrap();
+
+    for (field, value) in [("fuel", "1000000"), ("mem_mb", "16"), ("wall_ms", "100")] {
+        let src = host_program("shout.dpx")
+            .replace(&format!("{field}: 0"), &format!("{field}: {value}"));
+        assert!(src.contains(&format!("{field}: {value}")), "the fixture must actually set {field}");
+        std::fs::write(dir.join("host.delulu"), src).unwrap();
+        let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
+        let text = out(&o);
+        assert!(text.contains("NotGranted"), "a non-zero `{field}` must be refused: {text}");
+        assert!(text.contains("cannot enforce them"), "and must say what is missing: {text}");
+        assert!(!text.contains("hello!"), "nothing may have run: {text}");
+    }
+
+    // The control: zeros mean no limit was asked for, and the same program loads.
+    std::fs::write(dir.join("host.delulu"), host_program("shout.dpx")).unwrap();
+    let ok = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
+    assert!(out(&ok).contains("hello!"), "zero limits must still load: {}", out(&ok));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// P2-08 (R-7): a plugin cannot load a plugin. Two independent reasons, and this asserts the one that
+/// holds even if the first were bypassed: the plugin's own interpreter has no engine wired into it, so
+/// there is nothing for a nested `load` to read a container with. The first reason is the checker's —
+/// the artifact's ceiling carries no `Load`, so an export that called `load` would not verify.
+#[test]
+fn a_plugin_cannot_load_a_plugin() {
+    let dir = tmp("nested");
+    let pkg = dir.join("plug");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("delulu.toml"),
+        "[package]
+name = \"loader\"
+version = \"0.1.0\"
+kind = \"plugin\"
+
+         [plugin]
+api = 1
+class = \"verified\"
+
+         [plugin.authority]
+effects  = [\"Load\", \"Read\"]
+requires = [\"Cap[PluginHost]\"]
+
+         [plugin.exports]
+chain = \"fn(Cap[PluginHost], Str) -> Str ! {Load, Read}\"
+",
+    )
+    .unwrap();
+    // An export that tries to load another plugin. Whether this even builds is itself the answer.
+    std::fs::write(
+        pkg.join("src").join("lib.delulu"),
+        "module loader
+
+         pub fn chain(h: Cap[PluginHost], p: Str) -> Str ! {Load, Read} {
+             let g = Grant {
+                 effects: [], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+                 limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+                 require_signed: false,
+             }
+             match load(h, p, g) {
+                 Ok(q) => \"loaded another plugin\"
+                 Err(e) => \"refused\"
+             }
+         }
+",
+    )
+    .unwrap();
+    let build = delulu(&["plugin", "build", pkg.to_str().unwrap()]);
+    // Either the artifact refuses to build, or it builds and the nested load refuses at run time.
+    // Both are acceptable; what is NOT is a plugin that successfully loads a plugin.
+    if !build.status.success() {
+        let text = out(&build);
+        assert!(!text.contains("loaded another plugin"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    std::fs::copy(pkg.join("loader.dpx"), dir.join("loader.dpx")).unwrap();
+    let shout = build_shout(&dir);
+    std::fs::copy(&shout, dir.join("shout.dpx")).unwrap();
+    let host = "module host
+
+        fn chained(h: Cap[PluginHost]) -> Result[Str, PluginErr] ! {Load, Read} {
+            let g = Grant {
+                effects: [\"Load\", \"Read\"], fs_read: [], fs_write: [], net: [], secrets: [], declassify: [],
+                limits: Limits { fuel: 0, mem_mb: 0, wall_ms: 0 },
+                require_signed: false,
+            }
+            let p = load(h, \"loader.dpx\", g)?
+            let f: fn(Cap[PluginHost], Str) -> Str ! {Load, Read} = p.get(\"chain\")?
+            Ok(f(h, \"shout.dpx\"))
+        }
+
+        fn main(root: Root) ! {Write, Load, Read} {
+            let out = root.console()
+            let h = root.plugin_host()
+            match chained(h) {
+                Ok(s) => out.println(\"result: \" + s)
+                Err(e) => out.println(\"the chain was refused\")
+            }
+        }
+";
+    std::fs::write(dir.join("host.delulu"), host).unwrap();
+    let o = delulu_in(&dir, &["run", "host.delulu", "--grant", "console", "--grant", "plugin=."]);
+    let text = out(&o);
+    assert!(
+        !text.contains("loaded another plugin"),
+        "a plugin loaded a plugin — R-7 composition is not bounded: {text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

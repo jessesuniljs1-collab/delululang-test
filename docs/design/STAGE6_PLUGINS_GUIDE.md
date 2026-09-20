@@ -4,17 +4,20 @@ Runtime plugins are **code that arrives after compile time and cannot exceed its
 guide is the user-facing companion to `STAGE6_SPECIFICATION.md`; for the same material inside the
 tool, run `delulu explain E-PLUGIN`. The flagship artifact lives in `examples/plugin_shout/`.
 
-> **Scope of "runtime", stated before anything else.** The `.dpx` artifact, its two classes, its
-> signing, its DIR re-check and its resource limits all exist and are witnessed. **Loading one from
-> inside a running DeluluLang program does not:** `root.plugin_host()` faults with `DL0703` —
-> *"plugin hosting is not available in the Stage-1 runtime"* (`crates/delulu-runtime/src/prim.rs:366`)
-> — and no `--grant` spelling enables it. A host program **checks clean** and `delulu authority`
-> **reports the plugin and its load site**, so only `delulu run` tells you. `STAGE6_SPECIFICATION.md`'s
-> status log has recorded this since v0.6; this guide did not, and now does.
-> `docs/REMAINING_WORK.md` row 4.11 owns the gap; it is V2 phase **P2**
-> (`docs/DELULULANG_V2/V2_IMPLEMENTATION_ROADMAP.md`). Everything below that is reachable today is
-> reachable through `delulu plugin build | verify | inspect` and the Stage-6e library tests, whose
-> verify verdicts are identical to a real load.
+> **Scope of "runtime", stated before anything else — and it changed on 2026-09-20.** The `.dpx`
+> artifact, its two classes, its signing and its DIR re-check all existed and were witnessed. Loading
+> one from inside a running DeluluLang program did NOT: `root.plugin_host()` faulted with `DL0703` and
+> no `--grant` spelling enabled it. **V2 phase P2 built it** (ruling D-V2-27):
+> `--grant plugin=<path-or-dir>` is the operator's half, `[plugins] allow = ["blake3:…"]` in
+> `delulu.toml` pins artifacts by their bytes, and `load`/`p.get`/`p.unload` run the whole sequence from
+> a program. `examples/plugin_shout/host.delulu` is a working host, gated by `examples_run.rs`.
+>
+> Three limits are real, and each refuses rather than being ignored. **Resource limits**
+> (`Grant.limits`) are the WASM engine's instruments; a Verified plugin runs its DIR on the
+> interpreter, which has no fuel meter, so a non-zero limit is REFUSED — a limit nothing enforces reads
+> as one. A grant carrying **`Declassify` or `ForeignCall`** is refused, because those two are enforced
+> by custody and a plugin's export runs in its own interpreter which cannot share the host's. And the
+> **`Contained` class on Windows** is refused as before.
 
 ## The two classes (a trust statement, not a quality ranking)
 
