@@ -23,5 +23,7 @@ are named in its `V2_EXECUTION_LOG.md` entry, never dropped.
 | 13 | PS-D external launchers + attestation seam | not started | — | — | — | — | |
 | 14 | P8 safe autonomy (signed adapter) | not started | — | — | — | — | owner-gated |
 
-**Pending owner decisions with no phase yet blocked:** none. Decisions are asked at the start of the
+**Pending owner decisions with no phase yet blocked:** none. D-V2-24(a) was the last one open and
+was resolved by D-V2-26 (owner, 2026-09-20), which also settled the sandbox DL codes and kept the
+sandbox opt-in until PS-B/PS-C widen the enforcement channel. Decisions are asked at the start of the
 phase that needs them (`V2_MASTER_PLAN.md` §7).

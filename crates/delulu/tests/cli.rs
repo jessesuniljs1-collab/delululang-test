@@ -537,6 +537,45 @@ fn explain_e_revoke_states_the_4_2_bound_verbatim() {
     assert!(out.contains("\"immediate\" is never claimed"), "the §10 caveat word-for-word: {out}");
 }
 
+/// PS-A-07: `delulu explain E-SANDBOX` explains the SEMANTICS of the sandbox, and carries its
+/// honesty caveats — the ones whose absence would let a reader assume the opposite. The topic exists
+/// because the shape of this feature invites exactly that: "sandboxed" is heard as "contained", and
+/// the guest runs as the same OS user.
+#[test]
+fn explain_e_sandbox_carries_the_caveats_that_stop_the_wrong_assumption() {
+    let o = delulu(&["explain", "E-SANDBOX"]);
+    assert!(o.status.success(), "explain E-SANDBOX failed: {}", stderr(&o));
+    let out = stdout(&o);
+    for must in [
+        // The arrangement itself.
+        "holds no authority of its own",
+        "opaque handle the host minted",
+        // The caveat that matters most: it is not the account boundary.
+        "NOT a substitute for the separate OS account",
+        "SAME OS user",
+        "identity_separation",
+        // What it refuses rather than running unconfined, and why that means it is not the default.
+        "REFUSED rather than run unconfined",
+        "not yet the default",
+        // Where each platform actually stops short.
+        "Reads are confined on Linux only",
+        "mediates TCP, not UDP or raw sockets",
+        // And where to look instead of the guarantee list.
+        "`limitations` is the field to read, not `host_guarantees`",
+    ] {
+        assert!(out.contains(must), "E-SANDBOX must say `{must}` — without it a reader assumes more than is true:\n{out}");
+    }
+    // A topic, not a code: the envelope says so, and the exit is success.
+    let j = delulu(&["explain", "E-SANDBOX", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&j.stdout).expect("one envelope");
+    assert_eq!(v["explain"]["kind"], "topic", "{v}");
+    assert_eq!(v["explain"]["code"], "E-SANDBOX", "{v}");
+    // Falsification: a topic that does not exist must NOT come back as one, or the assertions above
+    // would pass for any spelling at all.
+    let nope = delulu(&["explain", "E-SANDBOXX"]);
+    assert!(!nope.status.success(), "an unknown topic must be refused: {}", stdout(&nope));
+}
+
 /// The DL14xx custody codes explain themselves with the spec §10 caveats word-for-word
 /// (playbook 5j: "Copy spec §10 caveats into docs and explain-text word-for-word").
 #[test]
@@ -574,14 +613,30 @@ fn run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback() {
     let msg = v["diagnostics"][0]["message"].as_str().unwrap();
     assert!(msg.contains("--isolation process"), "the documented fallback command: {msg}");
     assert!(msg.contains("weaker"), "the fallback is labeled explicitly weaker: {msg}");
+    // PS-A-07: `--sandbox` is a real boundary between `process` and `microvm`, and it is available on
+    // all three systems. A refusal that named only the WEAKEST fallback left an operator who wanted
+    // containment with the one option that does not confine the program, so the stronger one is named
+    // and named FIRST.
+    assert!(msg.contains("--sandbox"), "the stronger fallback must be named: {msg}");
+    assert!(
+        msg.find("--sandbox").unwrap() < msg.find("--isolation process").unwrap(),
+        "the stronger fallback must be named first, or the weaker one is what gets read: {msg}"
+    );
     // PS-0-03 (NE-16c): the repair STAGE5 §8 promised — a human decision, no edit, and the
     // fallback command ready to run.
     let r = &v["diagnostics"][0]["repairs"][0];
     assert_eq!(r["requires_human"], true, "{v}");
     assert_eq!(r["edits"], serde_json::json!([]), "{v}");
     assert!(r["reason"].as_str().is_some_and(|s| s.contains("--isolation process")), "{v}");
-    let exact = format!("delulu run {} --isolation process", file.to_str().unwrap());
-    assert!(msg.contains(&exact), "the exact fallback command: {msg}");
+    assert!(r["reason"].as_str().is_some_and(|s| s.contains("--sandbox")), "{v}");
+    // Both exact commands, ready to run: a refusal that describes a fallback without spelling it is
+    // a refusal the reader has to guess at.
+    for exact in [
+        format!("delulu run {} --sandbox", file.to_str().unwrap()),
+        format!("delulu run {} --isolation process", file.to_str().unwrap()),
+    ] {
+        assert!(msg.contains(&exact), "the exact fallback command `{exact}`: {msg}");
+    }
 }
 
 /// Phase 5i: `--isolation process` runs and labels itself honestly — foreign code in workers, the

@@ -574,6 +574,56 @@ Secrets get a special guarantee here: secret-handling code **does not compile to
 (DL1205), so secret bytes can never enter a guest's linear memory. The strongest hygiene is the byte
 that never arrives.
 
+### The process sandbox: a guest that holds no authority
+
+The WASM floor above is about code you *compile*. This one is about code you *run* — someone else's
+program, an agent's output, a dependency you have read once. `--sandbox` runs it as a separate guest
+process, and the guest holds **no authority of its own**:
+
+```
+$ delulu run untrusted.delulu --sandbox --grant "fs.write=./out" --report-out r.json
+sandbox: the guest is confined — memory ceiling; processor-time ceiling; no privilege escalation; no core dump; killed with the host
+sandbox: the guest narrowed its own view — no file writes; reads only from the system paths
+sandbox: the guest locked itself down — no new programs; no debugger; no namespace or module tricks
+```
+
+Read those three lines carefully, because they are the whole idea. The guest's `root` grants nothing.
+Every capability it obtains is an opaque handle the **host** minted, every effect is one frame on a
+canonical-CBOR channel, and the host performs it under exactly the checks an ordinary run makes. The
+guest never learns a path, never holds a scope, and cannot widen a handle — a handle means whatever the
+host's table says, and nothing anywhere else.
+
+Under that sits the operating system, refusing what the guest was never given, so a guest that escapes
+the interpreter entirely still cannot act. Each platform enforces what it actually has, and the run
+report names which:
+
+| Platform | What the guest is held to |
+|---|---|
+| Windows | a Job Object applied to a **suspended** child, before its first instruction: one process, memory and processor-time ceilings, killed with the host, no desktop, clipboard or global atoms |
+| Linux | no-new-privs, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, applied by the guest to itself, a Landlock ruleset — nothing writable anywhere, reads only from the system paths, no TCP — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
+| macOS | a processor-time ceiling and no core dump, plus a deny-default Seatbelt profile permitting only reads, one `sysctl` class, the guest's own `exec`, and its channel socket |
+
+**Read the report, not the program's output.** The program writes to its own stdout and could forge
+anything there; the runtime writes `r.json`. Its `sandbox` object names the requested and actual level,
+the guarantees the host *actually applied*, and three fields that matter more than the rest:
+`posture` (the same questions answered from those guarantees), `limitations` (every question **nothing**
+is enforcing), and `denied` (what the program tried and was refused, with codes). If you are deciding
+whether to run unfamiliar code, `limitations` is the field to read — a report that listed only
+guarantees would read as though the rest were covered.
+
+**What this is not.** It is not a substitute for a separate OS account. The guest runs as the *same*
+user, so this is a second wall under the account boundary, not instead of it — which is why
+`limitations` says `identity_separation` on every run, on every platform, without exception. Reads are
+confined on Linux only; on Windows and macOS a guest can still read the filesystem, and what stops it
+acting on what it read is the other layers. And it does not carry every program yet: actors, foreign C,
+Python, plugins, devices and secrets are **refused** rather than run unconfined, because a sandbox that
+quietly did not apply is the one failure this design exists to prevent. That is also why `--sandbox` is
+still something you ask for rather than the default it is meant to become.
+
+`delulu sandbox status` says what this host can confine — measured by launching a guest, not by reading
+a version string — and `delulu explain E-SANDBOX` says all of the above in the terminal, caveats
+included.
+
 ---
 
 ## Chapter 10 — Plugins: Code That Arrives at Runtime and Still Can't Overreach

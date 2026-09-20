@@ -233,8 +233,8 @@ here, this log says so and the archive is not edited.
   package's ceiling, on every route). P1-11 `[run-authority]`: NOT built, because a manifest would grant itself authority.
   D-NE-28: special-use addresses need a separate explicit grant spelling (PS-0-09).
 
-## D-V2-24 — PS-0's five questions — TAKEN (head chef; (a) awaits the owner)
-- (a) a DL code for the special-address refusal needs the entrenched `witnesses.toml`: owner's; exit 2 stands.
+## D-V2-24 — PS-0's five questions — TAKEN (head chef; (a) RESOLVED by D-V2-26 on 2026-09-20)
+- (a) a DL code for the special-address refusal needs the entrenched `witnesses.toml`: **the owner ruled no (D-V2-26)** — it keeps sharing the existing network-refusal code; exit 2 stands.
   (b) POSIX name normalization deferred (RW 4.17). (c) 60 s foreign-call deadline, env can only shorten: kept.
   (d) `--report-out` without `--json`: kept. (e) UNC allowed in operator `fs.*` grants only: kept (RW 4.17).
 
@@ -242,6 +242,24 @@ here, this log says so and the archive is not edited.
 - D-NE-24 profiles `dev`, `contained`, `hostile-agent`. D-NE-26 the `landlock` and `seccompiler` crates approved.
   D-NE-31 default budgets 1 GiB memory and 5 min CPU (never unlimited; the operator may change them).
   D-NE-33 **sandbox ON by default everywhere** (supersedes D-NE-33’s off-by-default and D-V2-13). PS-A must say how a host without L1 behaves: refuse, never silently downgrade.
+
+## D-V2-26 — PS-A's three owner rulings — RULED (owner, 2026-09-20)
+- **(a) No new sandbox DL codes in PS-A.** The existing diagnostic contract is sufficient for this
+  phase; sandbox refusals keep reusing DL1401/DL1408 and plain `error:` + exit 2. Dedicated codes are
+  reconsidered once the machine contract is stable. `witnesses.toml` is NOT touched. This also
+  **RESOLVES D-V2-24(a)**: no dedicated code for the special-use-address refusal either — reassess in
+  the mature network-policy phase, and only if a machine consumer has a demonstrated need to
+  distinguish that condition.
+- **(b) The sandbox stays OPT-IN for now**, and D-V2-25's "ON by default everywhere" is a
+  *destination*, not this phase's behaviour. The owner's progression: **PS-A = opt-in while the
+  enforcement channel is incomplete; PS-B/PS-C = expand the channel and enforcement coverage; then
+  default-on, once the actual supported execution surface can be enforced.** An unsupported operation
+  is still never silently downgraded — it refuses.
+- **Why:** flipping the default while the channel cannot carry actors, foreign C, Python, plugins,
+  devices or secrets would refuse most of the examples corpus, and the alternative — running those
+  unconfined with a warning — is the silent-downgrade shape D-V2-25 itself forbids, only louder.
+- **Standing instruction:** these three are not to be asked again unless new evidence shows the
+  architecture has materially changed.
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log), D-NE-5,

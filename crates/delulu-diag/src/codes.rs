@@ -697,6 +697,61 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  grant.",
             ),
         )),
+        "SANDBOX" => Some((
+            "the sandbox: a guest that holds no authority, and an OS jail under it (PS-A)",
+            String::from(
+                "`delulu run app.delulu --sandbox` runs the program as a GUEST PROCESS that holds no \
+                 authority of its own. Its `root` grants nothing; every capability it obtains is an \
+                 opaque handle the host minted, and every effect is one frame on \
+                 `delulu-sandbox-channel/1` that the HOST performs — under exactly the checks an \
+                 ordinary run makes. There is nothing for the guest to widen: a handle means whatever \
+                 the host's table says it means, and it means nothing anywhere else.\n\n\
+                 Under that, the operating system refuses what the guest was never given, so a guest \
+                 that escapes the interpreter — foreign code, a bug, a deliberate exploit — still \
+                 cannot act. Each platform enforces what it actually has, and the run report says \
+                 which:\n\
+                 - Windows: a Job Object applied to a SUSPENDED child, before its first instruction — \
+                 one process, a memory ceiling, a processor-time ceiling, killed with the host, no \
+                 desktop, clipboard or global atoms.\n\
+                 - Linux: no-new-privs, PDEATHSIG, heap and processor-time ceilings, no core dump; \
+                 then, installed by the guest on itself, a Landlock ruleset — nothing writable \
+                 anywhere, reads only from the system paths, no TCP bind or connect — and a seccomp \
+                 filter: no new programs, no debugger, no namespace, mount or kernel-module calls.\n\
+                 - macOS: a processor-time ceiling and no core dump, plus a deny-default Seatbelt \
+                 profile permitting only reads, one sysctl class, the guest's own exec and its channel \
+                 socket.\n\n\
+                 Profiles (`--sandbox-profile dev|contained|hostile-agent`) differ in what a guest may \
+                 CONSUME, never in who performs its effects. `--limits mem=N,cpu=S` may narrow a \
+                 profile and never widen it. `--mode audit` performs nothing and reports the policy \
+                 and the authority a run would need. `sandbox policy <file> --json` reports the same \
+                 without running, and `sandbox status` reports what this host can confine, from a real \
+                 launch, plus the sandbox records in its audit chain.\n\n\
+                 Read the REPORT (`--report-out F`), not the program's output, which the program writes \
+                 to and could forge. Its `sandbox` object names the requested and actual level, the \
+                 guarantees the host ACTUALLY applied, `posture` (the same questions answered from \
+                 those guarantees), `limitations` (every question nothing is enforcing), \
+                 `fully_enforced`, `denied` (what the program tried and was refused, with codes) and a \
+                 `policy_hash`.\n\n\
+                 Honesty and threat-model caveats, carried because the shape of this feature invites \
+                 the opposite assumption:\n\
+                 - It is NOT a substitute for the separate OS account of `DEPLOYMENT.md` Tier 2. The \
+                 guest runs as the SAME OS user, so this is a second wall under the account boundary, \
+                 not instead of it. `limitations` says `identity_separation` on every run for that \
+                 reason.\n\
+                 - It does not carry every program yet. Actors, foreign C, Python, plugins, devices and \
+                 secrets are REFUSED rather than run unconfined, because a sandbox that quietly did not \
+                 apply is the failure this design exists to prevent. That is also why `--sandbox` is \
+                 not yet the default it is meant to become.\n\
+                 - Reads are confined on Linux only. On Windows and macOS a guest can still read the \
+                 filesystem; what stops it acting on what it read is the other layers.\n\
+                 - Landlock mediates TCP, not UDP or raw sockets, so the guarantee says `TCP`.\n\
+                 - A boundary that was not applied is never reported as applied, and a host that cannot \
+                 apply one says so. If you are deciding whether to run unfamiliar code, `limitations` \
+                 is the field to read, not `host_guarantees`.\n\
+                 - `--sandbox=off` is the explicit opposite, and saying it is the point: an unconfined \
+                 run should be a sentence someone wrote, not a default nobody noticed.",
+            ),
+        )),
         _ => None,
     }
 }

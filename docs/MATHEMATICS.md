@@ -552,6 +552,35 @@ question that cost this project its worst soundness hole, and it settles nothing
     about the specification lattice is not a proof about path resolution, and this document should not
     be read as offering one.
 
+### The process sandbox, claim by claim (PS-A, 2026-09-20)
+
+`--sandbox` makes several distinct claims, and they do not all sit in the same category. Listing them
+together, with the evidence each one actually has, is the point: "sandboxed" is a word that invites the
+reader to assume the strongest member of the list applies to all of them.
+
+| Claim | Category | Evidence |
+|---|---|---|
+| A guest holds no authority of its own: every capability it has is a host-minted handle, and every effect is performed by the host under the checks an ordinary run makes. | **4 — property tested, and falsified** | The guest-mode fuzz campaign runs every accepted program twice, locally and as a guest, over the real channel: 30,198 executed programs per 50,000-program run, with the guest's trace ⊆ `row(main)`, the guest's trace EQUAL to the local trace, and the host's own performed sequence equal to what the guest was traced asking for. Falsified in both places — silencing the host-side recorder yields 179 violations, and a host that answers `Ok` to `println` without performing it yields 198. |
+| The channel's decoder cannot be made to panic, to allocate without bound, or to give a frame two meanings; and a host holding no root and no handle answers `Ok` to nothing but `Done`. | **6 — fuzz verified** | `fuzz/fuzz_targets/channel_frame.rs`, coverage-guided on every push, plus the same property replayed over a seeded structure-aware corpus by the ordinary suite. Falsified by mutating `answer`. |
+| Windows: one process, memory and processor-time ceilings, kill-on-close, no desktop/clipboard/global atoms — applied before the guest's first instruction. | **4 — property tested against the OS itself** | The unit test asks the Job Object what it actually carries (`QueryInformationJobObject`) rather than trusting the call that set it, and the one-process limit was measured by the PS-0-08 experiment (run 35378619727) refusing a grandchild with error 1816. |
+| Linux: nothing writable anywhere, reads only from the system paths, no TCP bind or connect. | **4 — measured in a child process, with a control** | Landlock's `restrict_self` cannot be undone, so the gate runs twice in a child: unconfined (`WRITE=true SECRET=true SYSTEM=true`) and confined (`WRITE=false SECRET=false SYSTEM=true`). The unconfined half is the falsification — without it the refusal proves nothing. Mutated to grant the channel directory write access, the gate fails. |
+| Linux: no new programs, no debugger, no namespace, mount or kernel-module calls. | **1/4 — the kernel enforces it; the filter's installation is checked** | A seccomp denylist installed by the guest on itself, and the run refuses if it cannot be installed. What is *not* claimed: that the denylist is complete. It names what a guest has no business doing at all; an allowlist of everything a Rust program may legitimately call would fail closed on an untested libc. |
+| macOS: deny by default — no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. | **4 — every clause measured by removing it** | Experiment runs 35478590757 and 35479148216. The four allowances that remain are the four whose removal broke the guest; `file-map-executable`, `mach-lookup`, self-signals, `file-read-metadata` and write access to the channel directory were all shown unnecessary and dropped. Two negative controls stand behind it: a profile denying the socket fails, and one denying reads fails. |
+| macOS: a processor-time ceiling bounds a guest whose host has died. | **4 — measured, against a control** | `RLIMIT_CPU` at one second killed a spinner with SIGXCPU after one second, against a control that ran unlimited for sixteen (run 35480762820). This matters because macOS has no `PDEATHSIG`: a guest that is computing and asking for nothing would otherwise never notice its host was gone. |
+| A memory ceiling on macOS. | **NOT CLAIMED** | `setrlimit(RLIMIT_DATA)` returns EINVAL there (same run), so there is no such call in the code and no such claim in the report. |
+| Reads are confined on Windows and macOS. | **NOT CLAIMED** | Landlock confines reads; the Job Object and Seatbelt (as configured) do not. The run report says `filesystem_reads: not confined` on those platforms and lists it under `limitations`. |
+| A program cannot relax its own sandbox or mode. | **1 — by construction** | There is no language surface to call. The transition-matrix test asserts the *absence*, with a control that a method which does exist checks clean. |
+| Identity separation between host and guest. | **7 — outside the boundary** | The guest runs as the **same OS user**. This is RW 4.4, it is the same boundary DISC-1 sits behind, and the run report names `identity_separation` as a limitation on every run of every platform. The process sandbox is a second wall *under* the account boundary of `DEPLOYMENT.md` Tier 2, never instead of it. |
+| Confinement of actors, foreign C, Python, plugins, devices, secrets. | **NOT CLAIMED — refused instead** | The channel cannot carry these surfaces, so such a program is refused with exit 2 rather than run unconfined. A sandbox that quietly did not apply is the failure the design exists to prevent; this is also why the sandbox stays opt-in (D-V2-26) rather than becoming the default D-V2-25 intends. |
+| UDP and raw sockets on Linux. | **NOT CLAIMED** | Landlock mediates TCP only, so the guarantee says `TCP`. |
+| Side channels, including timing, between host and guest. | **7 — outside the boundary** | Unchanged from item 10 above. |
+
+The general rule behind the table: **a boundary that was not applied is never reported as applied.**
+Each platform's run reports the guarantees it actually got, `limitations` names every question nothing
+is answering, and `fully_enforced` is true only when `identity_separation` is the sole entry. A host
+with no Landlock says so rather than staying silent, and a kernel below Landlock ABI 3 gets the shorter
+sentence `no file writes but truncation` rather than the same sentence with less behind it.
+
 ---
 
 ## 13. The one-paragraph answer

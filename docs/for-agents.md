@@ -394,6 +394,10 @@ plugins, devices and secrets. A refusal names the surface and exits 2, having ru
 `--sandbox=off` is the explicit opposite. Say it deliberately: an unconfined run should be a sentence
 someone wrote, not a default nobody noticed.
 
+The sandbox is **opt-in**, and that is a ruling rather than an oversight (D-V2-26): it becomes the
+default once the channel can carry the surfaces it currently refuses, in PS-B/PS-C. Until then, asking
+for it is the only way to get it — so ask for it.
+
 ## [agents.registry] Registry
 
 ```

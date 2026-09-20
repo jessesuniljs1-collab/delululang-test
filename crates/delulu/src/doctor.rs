@@ -236,8 +236,9 @@ fn sandbox_section(r: &mut Report) {
         Status::Note,
         "inproc for an ordinary `run` — the language and custody in one process, no OS boundary; `run --sandbox` \
          launches a jailed guest instead and the host performs every effect. The sandbox is NOT yet the default \
-         (D-V2-25 says it should be), because the channel cannot carry actors, foreign code, Python, plugins, \
-         devices or secrets and those runs would be refused",
+         (D-V2-26: opt-in until PS-B/PS-C widen the channel, with D-V2-25's default-on as the \
+         destination), because the channel cannot carry \
+         actors, foreign code, Python, plugins, devices or secrets and those runs would be refused",
     );
     let next = levels.iter().find(|l| !l.available()).and_then(|l| l.first_missing().map(|a| (l.level, a)));
     r.push(

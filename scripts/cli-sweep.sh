@@ -181,6 +181,7 @@ run 0 "sandbox status --json"              "$DL" sandbox status --json
 # A verb `sandbox` does not have is refused, not guessed at as `probe`. `kill` is the one an operator
 # will actually type, because PS-A-07 lists it and it is deliberately not built.
 run 2 "sandbox kill (not a verb here)"     "$DL" sandbox kill
+run 0 "explain E-SANDBOX"                  "$DL" explain E-SANDBOX
 run 0 "sandbox policy"                    "$DL" sandbox policy hello.delulu
 run 0 "sandbox policy --json"              "$DL" sandbox policy --json hello.delulu
 run 0 "run --sandbox"                     "$DL" run hello.delulu --sandbox --grant console

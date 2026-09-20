@@ -429,25 +429,33 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                         "DL1408",
                         format!(
                             "isolation profile `microvm` is unavailable: {detail} — fall back to \
-                             `delulu run {file} --isolation process` (worker-style OS containment of the code \
-                             outside the proof; explicitly weaker: no guest boundary, no \
-                             virtio-fs scope mounts, no default-deny egress) [a human must choose \
-                             the weaker profile; see `delulu explain DL1408` and spec §6.1]"
+                             `delulu run {file} --sandbox` (a jailed guest process holding no authority of \
+                             its own; the host performs every effect. Weaker than microvm: one OS account, \
+                             no guest kernel, no default-deny egress — `delulu explain E-SANDBOX`), or to \
+                             `delulu run {file} --isolation process` (worker-style OS containment of the \
+                             code outside the proof; weaker still: it confines FOREIGN code only and leaves \
+                             the program itself unconfined) [a human must choose the weaker profile; see \
+                             `delulu explain DL1408` and spec §6.1]"
                         ),
                     )
                     // NE-16c / PS-0-03: the repair STAGE5 §8 promised. No edit — choosing a weaker
                     // boundary is a person's decision — and the fallback command, ready to run.
                     .with_repair(delulu_diag::Repair {
-                        id: "fall-back-to-isolation-process",
+                        // Renamed when a second, stronger fallback appeared: an id naming only one
+                        // of two options is a small lie in a machine-readable field.
+                        id: "fall-back-to-a-weaker-profile",
                         confidence: delulu_diag::Confidence::Suggest,
                         authority_widening: false,
                         requires_human: true,
                         edits: Vec::new(),
                         reason: Some(
-                            "the fallback, `--isolation process`, is explicitly weaker (it contains \
-                             foreign code only; no guest boundary, no scope mounts, no default-deny \
-                             egress), so a human must choose it; the message names the exact \
-                             command: `delulu run <file> --isolation process`",
+                            "both fallbacks are explicitly weaker, so a human must choose. `--sandbox` is \
+                             the stronger of the two — a jailed guest process that holds no authority, and \
+                             available on all three systems — so it is named first; it is still one OS \
+                             account with no guest kernel and no default-deny egress. `--isolation process` \
+                             is weaker still: it confines foreign code only and leaves the verified program \
+                             in-process. The message names both exact commands: \
+                             `delulu run <file> --sandbox` and `delulu run <file> --isolation process`",
                         ),
                     });
                     print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
@@ -476,12 +484,22 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     if let Some(iso) = &opts.isolation {
         if !opts.json {
             let label = match iso.as_str() {
+                // PS-A-07: announced, not changed. `--isolation process` still means exactly what it
+                // always meant, because changing a profile under a caller who asked for it by name is
+                // the silent substitution trap 8 forbids. But an operator reaching for it FOR
+                // CONTAINMENT now has a stronger option that did not exist when this label was written,
+                // and not naming it would leave them holding the weaker one with no way to find out.
                 "process" => {
                     "process — isolates FOREIGN CODE ONLY: foreign libraries run in \
                      minimum-privilege worker subprocesses; the verified program itself stays \
-                     in-process and is not sandboxed (weaker than microvm; spec §6.1)"
+                     in-process and is not sandboxed (weaker than microvm; spec §6.1). If you want \
+                     the PROGRAM confined, `--sandbox` runs it as a jailed guest holding no \
+                     authority of its own — `delulu explain E-SANDBOX`"
                 }
-                _ => "none — in-process (language + custody enforcement only)",
+                _ => {
+                    "none — in-process (language + custody enforcement only). `--sandbox` runs the \
+                     program as a jailed guest instead; `delulu explain E-SANDBOX`"
+                }
             };
             eprintln!("isolation: {label}");
         }
