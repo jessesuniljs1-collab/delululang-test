@@ -1,0 +1,35 @@
+# PS-B-04's gate, measured on every CI operating system: what one sandbox-channel round trip costs.
+#
+# Runs ONLY by hand (workflow_dispatch). It builds the release binary and runs
+# `measurements/sandbox-channel/bench.py`, whose decision rule was fixed before any number was seen
+# (see that directory's RECORD.md). The numbers are read with `gh run view --log` and transcribed into
+# the record; an unread run is evidence of nothing.
+name: channel-measure
+on:
+  workflow_dispatch:
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Install Python 3.13 (pinned)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build the release binary
+        run: cargo build --release -p delulu
+      - name: Measure the channel
+        shell: bash
+        run: |
+          exe=target/release/delulu
+          if [ "$RUNNER_OS" = "Windows" ]; then exe=target/release/delulu.exe; fi
+          python measurements/sandbox-channel/bench.py "$exe"

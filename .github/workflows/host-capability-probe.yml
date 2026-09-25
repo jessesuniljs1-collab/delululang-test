@@ -140,6 +140,32 @@ jobs:
           echo "file read: plain exit=$plain boxed exit=$boxed"
           if [ $plain -eq 0 ] && [ $boxed -ne 0 ]; then echo "RESULT seatbelt-denies-read: PASS"; else echo "RESULT seatbelt-denies-read: FAIL"; fi
 
+  # PS-B-03b (RW 4.21): can an unprivileged launcher give a Linux guest a SECOND identity here? A 0600
+  # file owned by the runner is read twice: by a child mapped to the runner's own uid (the control,
+  # which must read it — or nothing below measures separation) and by a child mapped to a SUBORDINATE
+  # uid through newuidmap and /etc/subuid (`unshare --map-auto`), which must be refused.
+  linux-subordinate-uid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: prerequisites, then a mapped read against a control
+        continue-on-error: true
+        run: |
+          set +e
+          me=$(id -un)
+          echo "== util-linux =="; unshare --version
+          echo "== newuidmap / newgidmap =="; ls -la "$(command -v newuidmap)" "$(command -v newgidmap)" 2>&1
+          echo "== subuid / subgid for $me =="; grep "^$me:" /etc/subuid /etc/subgid 2>&1
+          echo "== apparmor restrict unprivileged userns =="; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>&1
+          d=$(mktemp -d); echo operator > "$d/secret"; chmod 600 "$d/secret"; chmod 755 "$d"
+          echo "== control: mapped to the runner's own uid =="
+          unshare --user --map-root-user sh -c "id; cat $d/secret"; c=$?; echo "exit=$c"
+          echo "== experiment: mapped to a subordinate uid =="
+          unshare --user --map-auto --setuid 0 --setgid 0 sh -c "id; cat $d/secret"; e=$?; echo "exit=$e"
+          if [ $c -ne 0 ]; then echo "RESULT subordinate-uid-separates: NOT MEASURED (the control could not run: control=$c)";
+          elif [ $e -ne 0 ]; then echo "RESULT subordinate-uid-separates: PASS (control=$c experiment=$e)";
+          else echo "RESULT subordinate-uid-separates: FAIL (the mapped child read the runner's file)"; fi
+
   windows-restricted-job-child:
     runs-on: windows-latest
     timeout-minutes: 10

@@ -1028,3 +1028,23 @@ ungated, program hash unchecked — each fails the test meant for it.
 Found on the way: writing the `sandbox` usage line through a shell heredoc flattened its `\`
 continuation into runs of spaces mid-sentence, the defect class the message-spacing gate exists for;
 caught on sight and rewritten as `concat!`, the rule the V2 memory already carries.
+
+**PS-B-06's run, read.** CI `36145276674` (`1b9b7e8`): **success on every job**, all three operating
+systems — the three break-glass end-to-end tests ran on Windows, Linux and macOS, and the lints job
+confirms nothing Windows-only leaked into the Linux build.
+
+**PS-B-04 — the measurement it was waiting for.** PS-B-04 ("channel batching for epoch-class effects,
+after PS-A's measurement says it pays") rested on a measurement that had never been taken. It is now a
+committed script with its rule fixed before any number was seen — batching pays only above **50 µs of
+channel cost per effect** — in `measurements/sandbox-channel/` (`bench.py`, `RECORD.md`). On this
+Windows workstation, release build: **47.55 µs** (N = 2,000) and **49.20 µs** (N = 10,000) under
+today's transport, against **71.0 / 57.37 µs** under PS-A's named pipe (forced in a local build, then
+reverted). So PS-B-03's identity made the channel faster, not slower. A number within 2% of its
+threshold on one machine is not a verdict: `.github/workflows/channel-measure.yml` (manual) runs the
+same script on the three CI runners, and the decision waits for those rows.
+
+**PS-B-03b — measured before built.** RW 4.21 (a second identity for the Linux guest) depends on the
+host letting an unprivileged launcher map a subordinate uid. `host-capability-probe.yml` gains
+`linux-subordinate-uid`: a 0600 file read by a child mapped to the runner's own uid (the control, which
+must succeed or nothing is measured) and by one mapped to a subordinate uid through `newuidmap`
+(`unshare --map-auto`), which must be refused.
