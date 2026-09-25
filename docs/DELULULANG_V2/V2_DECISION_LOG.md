@@ -711,7 +711,8 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
    (48.6 → 40.4 → 30.1 µs per effect as each hop was removed in a local build). The host now reads the
    overlapped server end of one duplex pipe directly with a real deadline; the guest reads directly
    and a watchdog ends it if a read outlives the deadline. Deadlines kept on both sides; writes gained
-   one. Workstation: 28.9 µs per effect (from 48.6).
+   one. Workstation: 28.9 µs per effect (from 48.6); the Windows CI runner 43.0 µs (from 66.9, run
+   `36171534543`) — every runner under the line.
 4. **Each frame is one write** on both channels (sandbox and broker): no measurable change here, but it
    cannot cost anything and removes a possible second wake per frame.
 5. **Re-open condition:** if a runner measures above the line again with this transport, the record

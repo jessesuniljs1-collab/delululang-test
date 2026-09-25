@@ -703,7 +703,7 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                 "`delulu run app.delulu --sandbox` runs the program as a GUEST PROCESS that holds no \
                  authority of its own. Its `root` grants nothing; every capability it obtains is an \
                  opaque handle the host minted, and every effect is one frame on \
-                 `delulu-sandbox-channel/1` that the HOST performs — under exactly the checks an \
+                 `delulu-sandbox-channel/2` that the HOST performs — under exactly the checks an \
                  ordinary run makes. There is nothing for the guest to widen: a handle means whatever \
                  the host's table says it means, and it means nothing anywhere else.\n\n\
                  Under that, the operating system refuses what the guest was never given, so a guest \

@@ -588,6 +588,15 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     if cfg!(windows) || cfg!(target_os = "linux") {
         enforced.push("memory");
     }
+    // RW 4.23: a Linux guest's own seccomp filter is mandatory (a guest that cannot install it does
+    // not run), and since the guest reports it the report counts it — before, this row read "not
+    // confined" on every Linux run that confined it.
+    if cfg!(target_os = "linux") {
+        enforced.push("new_programs");
+        let own: Vec<&str> =
+            sb["host_guarantees"].as_array().expect("guarantees").iter().filter_map(|v| v.as_str()).collect();
+        assert!(own.contains(&"no new programs"), "the guest's own filter is in the report: {r}");
+    }
     for q in enforced {
         assert!(!lim.contains(&q), "`{q}` is enforced here but was listed as a limitation: {r}");
         assert_ne!(sb["posture"][q], "not confined", "{r}");

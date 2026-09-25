@@ -1,5 +1,5 @@
-//! `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that
-//! performs its effects.
+//! `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire
+//! between a guest interpreter and the host that performs its effects.
 //!
 //! The framing is the broker's, deliberately: length-prefixed (u32 little-endian) canonical CBOR
 //! with a hard per-frame bound and a version tag in every request (`broker_ipc`, head-chef ruling 2).
@@ -22,7 +22,22 @@ use serde::{Deserialize, Serialize};
 use crate::value::{CapVal, Value, VariantFields};
 
 /// The wire protocol version, present in every request frame.
-pub const CHANNEL_VERSION: &str = "delulu-sandbox-channel/1";
+pub const CHANNEL_VERSION: &str = "delulu-sandbox-channel/2";
+
+/// The only words a guest may report in [`ReqBody::Confined`]: the boundaries a guest applies to
+/// ITSELF (Landlock and seccomp on Linux, `delulu`'s `jail.rs`). A report of anything else is refused,
+/// so a guest cannot put a claim into the run report that the host would not have made — it can only
+/// say which of these known layers took hold on its kernel. `jail.rs` is bound to this list by the
+/// refusal itself: a word it adds without adding it here fails every Linux sandboxed run, loudly.
+pub const SELF_APPLIED: &[&str] = &[
+    "no file writes",
+    "no file writes but truncation",
+    "reads only from the system paths",
+    "no TCP bind or connect",
+    "no new programs",
+    "no debugger",
+    "no namespace or module tricks",
+];
 
 /// Hard ceiling on one frame (16 MiB), as on the broker wire: a corrupt or hostile length prefix
 /// must not make the peer allocate unboundedly.
@@ -192,6 +207,10 @@ pub enum ReqBody {
     RootMethod { method: String, args: Vec<WireValue>, file: u32, start: u32, end: u32 },
     /// The guest has finished; the host stops reading.
     Done { exit: i32 },
+    /// What the guest applied to ITSELF, sent once, as its FIRST request: after it locked itself down
+    /// and before a line of the program ran, while it is still the toolchain's own code (RW 4.23). A
+    /// report at the goodbye would come from a guest the program had already been running in.
+    Confined { applied: Vec<String> },
 }
 
 /// The host's answer. A fault is the program's own error (an `IoErr`, a refusal the checks made);
@@ -257,6 +276,10 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     /// going after the list stops, so a truncated report still says how many there were.
     denied: Vec<String>,
     denied_total: u64,
+    /// Requests answered so far — [`ReqBody::Confined`] is accepted only as the first.
+    answered: u64,
+    /// What the guest reported applying to itself, each word one of [`SELF_APPLIED`].
+    self_applied: Vec<&'static str>,
 }
 
 /// How many refusals a report keeps. Past this the count still rises but nothing more is stored.
@@ -264,7 +287,20 @@ pub const MAX_DENIED_RECORDED: usize = 64;
 
 impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn new(sink: S) -> Self {
-        HostChannel { sink, caps: Vec::new(), root: None, denied: Vec::new(), denied_total: 0 }
+        HostChannel {
+            sink,
+            caps: Vec::new(),
+            root: None,
+            denied: Vec::new(),
+            denied_total: 0,
+            answered: 0,
+            self_applied: Vec::new(),
+        }
+    }
+
+    /// The boundaries the guest reported applying to itself, before its program ran (RW 4.23).
+    pub fn self_applied(&self) -> &[&'static str] {
+        &self.self_applied
     }
 
     /// Every refusal this host gave, oldest first, and how many there were in total — which is larger
@@ -303,6 +339,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     pub fn answer(&mut self, req: &Request) -> Response {
         let egress_mark = crate::egress::mark();
         let resp = self.decide(req);
+        self.answered += 1;
         // ONE place, on the way out. Recording at each refusal site would mean a new refusal added
         // later is silently absent from the report — which is exactly the shape of defect this
         // project keeps finding in `else { continue }` branches.
@@ -313,6 +350,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                     ReqBody::CapMethod { method, .. } => format!("{code} on a capability method `{method}`: {message}"),
                     ReqBody::RootMethod { method, .. } => format!("{code} on `root.{method}`: {message}"),
                     ReqBody::Done { .. } => format!("{code} on goodbye: {message}"),
+                    ReqBody::Confined { .. } => format!("{code} on the guest's own confinement report: {message}"),
                 };
                 self.note_denied(&what);
             }
@@ -345,6 +383,31 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
         }
         match &req.body {
             ReqBody::Done { .. } => Response::Ok(WireValue::Unit),
+            ReqBody::Confined { applied } => {
+                // Once, and first: after anything else, the guest has been running the program, and
+                // what it says about itself is no longer the toolchain speaking.
+                if self.answered > 0 {
+                    return Response::Error {
+                        code: "DL1401".into(),
+                        message: "a confinement report is accepted only as a guest's first request".into(),
+                    };
+                }
+                let mut known: Vec<&'static str> = Vec::with_capacity(applied.len());
+                for word in applied {
+                    match SELF_APPLIED.iter().find(|k| **k == word.as_str()) {
+                        Some(k) if !known.contains(k) => known.push(k),
+                        Some(_) => {}
+                        None => {
+                            return Response::Error {
+                                code: "DL1401".into(),
+                                message: format!("`{word}` is not a boundary a guest applies to itself"),
+                            }
+                        }
+                    }
+                }
+                self.self_applied = known;
+                Response::Ok(WireValue::Unit)
+            }
             ReqBody::RootMethod { method, args, file, start, end } => {
                 let Some(root) = self.root.clone() else {
                     return Response::Error {
@@ -479,6 +542,22 @@ impl<T: Read + Write> ChannelSink<T> {
         write_frame(&mut *io, &req)?;
         let _: Response = read_frame(&mut *io)?;
         Ok(())
+    }
+
+    /// Tell the host what this guest applied to itself. Called once, before the program runs; a host
+    /// that refuses the report is an error, because the guest and host disagree about the protocol.
+    pub fn confined(&self, applied: &[&str]) -> io::Result<()> {
+        let req = Request {
+            version: CHANNEL_VERSION.into(),
+            seq: self.next_seq(),
+            body: ReqBody::Confined { applied: applied.iter().map(|s| s.to_string()).collect() },
+        };
+        let mut io = self.io.borrow_mut();
+        write_frame(&mut *io, &req)?;
+        match read_frame::<Response>(&mut *io)? {
+            Response::Ok(_) => Ok(()),
+            Response::Fault { message, .. } | Response::Error { message, .. } => Err(io::Error::other(message)),
+        }
     }
 
     fn next_seq(&self) -> u64 {
@@ -689,7 +768,8 @@ pub fn fuzz_one_frame(data: &[u8]) {
     }
     if let Ok(req) = read_frame::<Request>(&mut &framed[..]) {
         stable(&req);
-        let performs_nothing = matches!(req.body, ReqBody::Done { .. });
+        // `Done` and a guest's report of its own confinement perform nothing, so they may be `Ok`.
+        let performs_nothing = matches!(req.body, ReqBody::Done { .. } | ReqBody::Confined { .. });
         let mut host = HostChannel::new(crate::sink::LocalSink);
         match host.answer(&req) {
             Response::Ok(_) => assert!(
@@ -717,6 +797,42 @@ fn stable<T: Serialize + for<'de> Deserialize<'de>>(v: &T) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn confined(seq: u64, words: &[&str]) -> Request {
+        Request {
+            version: CHANNEL_VERSION.into(),
+            seq,
+            body: ReqBody::Confined { applied: words.iter().map(|w| w.to_string()).collect() },
+        }
+    }
+
+    /// RW 4.23: a guest's report of its own confinement is taken once, first, and only in known words
+    /// — so the report can gain what the guest really applied and nothing a guest makes up.
+    #[test]
+    fn a_confinement_report_is_accepted_first_once_and_only_in_known_words() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let r = host.answer(&confined(1, &["no file writes", "no new programs", "no file writes"]));
+        assert!(matches!(r, Response::Ok(_)), "{r:?}");
+        assert_eq!(host.self_applied(), ["no file writes", "no new programs"], "known words, each once");
+
+        // Not a second time: by then the program has been running in the guest.
+        let r = host.answer(&confined(2, &["no debugger"]));
+        assert!(matches!(r, Response::Error { .. }), "{r:?}");
+        assert_eq!(host.self_applied(), ["no file writes", "no new programs"], "unchanged by the refused one");
+        assert_eq!(host.denied().1, 1, "and the refusal is on the record");
+
+        // A word nobody applies is refused, whole: nothing of that report is kept.
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let r = host.answer(&confined(1, &["no new programs", "a separate identity: trust me"]));
+        assert!(matches!(r, Response::Error { .. }), "{r:?}");
+        assert!(host.self_applied().is_empty());
+
+        // And not after an ordinary request either.
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let _ = host.answer(&Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 0 } });
+        assert!(matches!(host.answer(&confined(2, &["no new programs"])), Response::Error { .. }));
+        assert!(host.self_applied().is_empty());
+    }
 
     fn no_caps() -> impl FnMut(&std::rc::Rc<CapVal>) -> Handle {
         |_: &std::rc::Rc<CapVal>| 0
@@ -953,8 +1069,13 @@ mod tests {
                     let req = Request {
                         version: if next().is_multiple_of(8) { "wrong/1".into() } else { CHANNEL_VERSION.into() },
                         seq: next(),
-                        body: match next() % 3 {
+                        body: match next() % 4 {
                             0 => ReqBody::Done { exit: (next() % 8) as i32 },
+                            3 => ReqBody::Confined {
+                                applied: (0..next() % 3)
+                                    .map(|_| ["no new programs", "no file writes", "root access", ""][(next() % 4) as usize].into())
+                                    .collect(),
+                            },
                             1 => ReqBody::RootMethod {
                                 method: ["console", "fs_read", "fs_write", "clock", "nope"][(next() % 5) as usize].into(),
                                 args: vec![random_wire(&mut next, 2)],

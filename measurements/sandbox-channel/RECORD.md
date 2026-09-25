@@ -80,5 +80,22 @@ sides; nothing about when an effect happens changed.
 |---|---|---|---|
 | **the new transport** | **31.0 µs** | **29.15 µs** | **28.9 µs** |
 
-Below the 50 µs line with room, on the machine that was just under it. The Windows CI runner's
-figure after the change is recorded below once read.
+Below the 50 µs line with room, on the machine that was just under it.
+
+## After the change — the three CI runners (run `36171534543`, `2fb0895`, read 2026-09-25)
+
+| runner | N = 2,000 | N = 10,000 | slope | before (slope) |
+|---|---|---|---|---|
+| Linux 6.17 (Azure), x86-64 | 15.15 µs | 13.61 µs | **13.2 µs** | 19.5 µs |
+| macOS 26, arm64 | 37.0 µs | 22.23 µs | **18.7 µs** | 19.8 µs |
+| Windows Server 2025, x86-64 | 43.15 µs | 43.23 µs | **43.0 µs** | 66.9 µs |
+
+**Every runner is now under the rule**, Windows included, with the transport change and nothing
+semantic. One result was not predicted: Linux fell by a third. Its guest on this workflow's runner is
+the plain one (the workflow does not lift Ubuntu's user-namespace restriction), whose only change was
+the one-write frame — which measured as nothing on the Windows workstation. A reader woken once per
+frame instead of twice is the likely reason; one run on a shared runner is not proof of it, and it is
+recorded as observed. macOS's N = 2,000 point again carries the fixed cost the slope removes.
+
+**PS-B-04 is closed on this evidence (D-V2-36).** The script and the manual workflow stay: if a runner
+measures above the line again, the question is one button away.

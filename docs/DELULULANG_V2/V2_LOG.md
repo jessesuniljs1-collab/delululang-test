@@ -1098,3 +1098,27 @@ Found on the way (RW 4.23): a Linux run report never counts what the guest appli
 Landlock and seccomp are announced on standard error but not sent to the host, so `posture` lists
 writes, network and new programs as not confined on a run that confined all three. Safe direction;
 recorded, not yet fixed.
+
+**PS-B-03b/04's run, read.** CI `36171523136` (`2fb0895`): **success on every job**. The Ubuntu test job
+lifted the restriction (`kernel.apparmor_restrict_unprivileged_userns = 0`, logged) and ran with
+`DELULU_REQUIRE_SUBORDINATE_UID: 1`, so `identity::linux::tests::t14_a_subordinate_uid_guest_…`,
+`on_linux_a_host_that_allows_it_runs_the_guest_as_a_subordinate_uid_…` and the posture test all
+MEASURED there and passed; arm64 kept Ubuntu's default and passed on the fallback; Windows ran the new
+duplex-pipe transport; lints proved the Linux-only code clean for clippy.
+
+**The Windows CI figure after the change, read.** `channel-measure` `36171534543` (`2fb0895`), by slope:
+Windows Server 2025 **43.0 µs** (was 66.9), Linux 13.2 µs (was 19.5 — its plain guest's only change was
+the one-write frame; recorded as observed, one run), macOS 18.7 µs (was 19.8). Every runner is under the
+50 µs rule; PS-B-04 is closed on that evidence (`measurements/sandbox-channel/RECORD.md`).
+
+**RW 4.23 fixed (same day).** The guest now tells the host what it applied to itself, as its FIRST
+request — `Confined { applied }`, after its lock-down and before the program's first line, so the
+words come from the toolchain and not from a guest the program has been running in. The host takes
+it only first, only once, and only in the words of `channel::SELF_APPLIED`; anything else refuses the
+whole report, and a guest whose report is refused does not run. The protocol is now
+`delulu-sandbox-channel/2`. Witnesses: a unit test (known words kept once each; a second report, a
+report after any other request, and an unknown word all refused and recorded), killed by two mutants
+(any word accepted; accepted at any time); the Linux posture test now requires the guest's seccomp
+filter to be counted. In WSL a run's report now reads `filesystem_reads: confined to the system
+paths`, `filesystem_writes: denied`, `new_programs: denied`, identity the subordinate uid — and only
+`network` under `limitations`, which is right for that kernel (6.6 predates Landlock's TCP rules).

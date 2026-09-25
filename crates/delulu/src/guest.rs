@@ -2,7 +2,7 @@
 //! authority of its own.
 //!
 //! The host sends one [`Hello`] frame — the program, the hash it must match, the seed and the clock
-//! — and then answers the guest's requests on `delulu-sandbox-channel/1` until the guest says it is
+//! — and then answers the guest's requests on `delulu-sandbox-channel/2` until the guest says it is
 //! done. The guest's own root is EMPTY: every capability it uses is a handle the host minted, so
 //! "the guest performs no effects" is true by construction rather than by policy.
 //!
@@ -195,9 +195,14 @@ fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir:
     // The filesystem first, because it is the one a guest needs none of — every read and write the
     // program asks for is performed by the HOST — and because the syscall filter below says nothing
     // about WHICH files a permitted syscall may reach.
+    // What the guest applies to itself, for the host's report (RW 4.23).
+    let mut own: Vec<&'static str> = Vec::new();
     #[cfg(target_os = "linux")]
     match crate::jail::confine_filesystem(dir) {
-        Some(applied) => eprintln!("sandbox: the guest narrowed its own view — {}", applied.join("; ")),
+        Some(applied) => {
+            eprintln!("sandbox: the guest narrowed its own view — {}", applied.join("; "));
+            own.extend(applied);
+        }
         // Never silence this: a host whose kernel has no Landlock must not read as one that applied
         // it. The run continues — the channel, the rlimits and the syscall filter are untouched —
         // but nothing here is claimed. (A guest born holding its socket has no channel directory;
@@ -209,7 +214,10 @@ fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir:
 
     // Fail closed — a guest that cannot be locked down does not run the program.
     match crate::jail::lock_down_self() {
-        Ok(applied) if !applied.is_empty() => eprintln!("sandbox: the guest locked itself down — {}", applied.join("; ")),
+        Ok(applied) if !applied.is_empty() => {
+            eprintln!("sandbox: the guest locked itself down — {}", applied.join("; "));
+            own.extend(applied);
+        }
         Ok(_) => {}
         Err(why) => {
             eprintln!("error: the sandbox guest could not lock itself down ({why}) — nothing ran");
@@ -218,6 +226,12 @@ fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir:
     }
 
     let sink = Rc::new(ChannelSink::new(conn));
+    // Told to the host now — after the lock-down, before the program's first line — so the report
+    // counts what this guest really applied, and the words come from the toolchain, not the program.
+    if let Err(e) = sink.confined(&own) {
+        eprintln!("error: the host would not take this guest's confinement report ({e}) — nothing ran");
+        return 2;
+    }
     let interp = Interp::new(&checked.module).with_effect_sink(sink.clone());
     // The guest's root grants NOTHING. Every capability the program obtains is minted by the host,
     // over the channel, from the root the operator actually granted.
@@ -243,7 +257,7 @@ pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
 /// exists to prevent (D-V2-25: refuse, never silently downgrade).
 ///
 /// Actors, foreign C, Python, plugins, devices and secrets are not here yet: each needs its own
-/// request kind on `delulu-sandbox-channel/1`, and a handle cannot stand in for a thread or a
+/// request kind on `delulu-sandbox-channel/2`, and a handle cannot stand in for a thread or a
 /// library. They arrive with the rest of PS-A.
 ///
 /// `Http` joined at PS-B-02, and needed no new request kind to do it: `get` is an ordinary
@@ -559,8 +573,17 @@ pub fn spawn_and_serve_with(
         Some(policy.to_json_with(backend, &applied, &[], 0)),
     );
 
-    let mut denied: (Vec<String>, u64) = (Vec::new(), 0);
-    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, &mut denied);
+    let mut evidence = Evidence::default();
+    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, &mut evidence);
+    let denied = evidence.denied;
+    // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
+    // chain — they were in force before the program's first line, and the host checked the words.
+    let mut applied = applied;
+    for w in evidence.own {
+        if !applied.contains(&w) {
+            applied.push(w);
+        }
+    }
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
@@ -882,6 +905,15 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
     (cmd, launched)
 }
 
+/// What a conversation leaves for the report, whichever way it ended.
+#[derive(Default)]
+struct Evidence {
+    /// Every refusal the host gave (bounded), and how many there were.
+    denied: (Vec<String>, u64),
+    /// What the guest reported applying to itself before its program ran (RW 4.23).
+    own: Vec<&'static str>,
+}
+
 /// Connect to the guest, tell it what to run, and serve it until it is done.
 fn converse(
     child: &mut Guest,
@@ -892,7 +924,7 @@ fn converse(
     fixed_clock_ms: Option<i64>,
     // Filled in on EVERY path, including the failing ones: this phase has already lost a diagnosis
     // three CI runs in a row to a value that was only reported in the success branch.
-    denied: &mut (Vec<String>, u64),
+    evidence: &mut Evidence,
 ) -> io::Result<i32> {
     let mut conn = open_channel(child, dir, CHANNEL_DEADLINE)?;
     let hello = Hello {
@@ -912,7 +944,8 @@ fn converse(
     // Read on both paths, before the result is returned: a guest that died mid-conversation still
     // reports what it had been refused up to then.
     let (list, total) = host.denied();
-    *denied = (list.to_vec(), total);
+    evidence.denied = (list.to_vec(), total);
+    evidence.own = host.self_applied().to_vec();
     served
 }
 
