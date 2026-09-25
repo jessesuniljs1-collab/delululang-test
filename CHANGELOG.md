@@ -9,6 +9,14 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P4b–e opens: the toolchain describes itself, 2026-09-26
+
+- **PS-B is complete** (CI `36173241488` green on every job).
+- **`delulu toolchain [--json]` (P4-02, D-V2-38)** — every command with the options its help documents, the ten effects, every `--grant` form with an example that parses, the primitive table, budgets and sandbox profiles, the isolation levels, the channel version, every diagnostic code and explanation topic — read from the binary's own tables, so it cannot describe a flag that does not exist.
+- **`delulu schema [<name>] [--json] | validate <name> <file>` (P4-09)** — closed JSON Schemas for the envelope, diagnostics, repairs, the authority report, the Atlas, the sandbox object, the policy preview, the run report and the toolchain description, with a validator in the binary. Every emitter's real output is validated by the suite; an undescribed field fails it.
+- **`delulu examples [--json]` (P4-10)** — the shipped single-file examples, embedded, each with the authority report `delulu authority` prints for it and a run line whose grants the suite proves sufficient by running it.
+- The grant grammar (`GRANT_FORMS`), the explanation topics (`TOPICS`) and the isolation levels (`LEVELS`) are now tables bound to the code that parses or names them.
+
 ## Unreleased — V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
 
 - **PS-B-03b (D-V2-37)** — on Linux, where the host allows user namespaces, a `run --sandbox` guest runs as a per-run subordinate uid in its own user namespace with no supplementary groups or capabilities: none of the files only the operator's account may read, the state directory included (T14, measured with a control, falsified twice). No runtime copy: the binary is executed through a descriptor and the channel is an inherited socket. Where the host forbids it (Ubuntu 23.10+'s AppArmor default) the guest runs as the operator, the run says why, and `doctor` repeats the reason. `DEPLOYMENT.md` gives the one sysctl an operator may choose to lift. REMAINING_WORK 4.21 closed.

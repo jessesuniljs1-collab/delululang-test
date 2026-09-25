@@ -15,6 +15,7 @@ mod cli;
 mod completions;
 mod deploy;
 mod doctor;
+mod examples;
 mod fix;
 mod guest;
 mod identity;
@@ -38,6 +39,8 @@ mod microvm;
 mod repl;
 mod run_cmd;
 mod sandbox;
+mod schema;
+mod toolchain;
 
 use std::process::ExitCode;
 

@@ -147,6 +147,15 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
   `[agents.authority]`, `[agents.effects]`, `[agents.tests]`, `[agents.sandbox]`, `[agents.registry]`,
   `[agents.determinism]`, `[agents.env]`, `[agents.limits]`.
 - `docs/reference/primitives.md` — every primitive with its row, generated from the compiler's table.
+- `delulu toolchain --json` — this toolchain as data, read from the binary's own tables: every
+  command with the options its help documents, the ten effects, every `--grant` form with an example
+  that parses, the primitive table, budgets and sandbox profiles, every diagnostic code and topic.
+  Read it instead of guessing a flag.
+- `delulu schema <name> --json` — the closed JSON Schema of an output (envelope, diagnostic, repair,
+  authority, atlas, sandbox, policy, run-report, toolchain); `delulu schema validate <name> <file>`
+  checks a file against one.
+- `delulu examples --json` — the shipped programs, each known to check, with its authority report
+  and the `run` line its grants spell. Start from one of these rather than from nothing.
 - `delulu explain <CODE>` — any diagnostic, and the named topics `E-SANDBOX`, `E-PLUGIN`, `E-GUARD`,
   `E-ACTOR`, `E-REVOKE`, `E-ATLAS`, `E-PALETTE`.
 - `delulu doctor` — is this checkout healthy, and what does this host actually enforce.

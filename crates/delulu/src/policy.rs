@@ -21,6 +21,9 @@ pub enum Profile {
 }
 
 impl Profile {
+    /// Every profile, in the order `--sandbox-profile`'s help names them.
+    pub const ALL: [Profile; 3] = [Profile::Dev, Profile::Contained, Profile::HostileAgent];
+
     pub fn parse(name: &str) -> Option<Profile> {
         match name {
             "dev" => Some(Profile::Dev),

@@ -181,6 +181,47 @@ pub struct Grants {
     pub plugins: Vec<String>,
 }
 
+/// One spelling `--grant` accepts: the key [`Grants::add`] matches on, the form an operator types, an
+/// example that parses, and what it grants.
+pub struct GrantForm {
+    pub key: &'static str,
+    pub form: &'static str,
+    pub example: &'static str,
+    pub grants: &'static str,
+}
+
+/// Every form [`Grants::add`] accepts — the grant grammar as data, for `delulu toolchain` (P4-02). A
+/// test reads `add`'s own match arms and fails if a key is parsed that is not listed here (or listed
+/// and not parsed), and parses every example, so this cannot drift from the parser.
+pub const GRANT_FORMS: &[GrantForm] = &[
+    GrantForm { key: "console", form: "console", example: "console", grants: "the console: print and read lines" },
+    GrantForm { key: "clock", form: "clock", example: "clock", grants: "the clock" },
+    GrantForm { key: "rand", form: "rand", example: "rand", grants: "randomness" },
+    GrantForm { key: "declassify", form: "declassify", example: "declassify", grants: "declassifying a secret (`Declassify`)" },
+    GrantForm { key: "exec.native", form: "exec.native", example: "exec.native", grants: "emitting and running native code (no native tier ships yet)" },
+    GrantForm { key: "fs.read", form: "fs.read=PATH", example: "fs.read=./data", grants: "reading files under PATH" },
+    GrantForm { key: "fs.write", form: "fs.write=PATH", example: "fs.write=./out", grants: "writing files under PATH" },
+    GrantForm { key: "net", form: "net=HOST", example: "net=example.com", grants: "HTTPS to HOST; never a special-use address" },
+    GrantForm { key: "net.special", form: "net.special=HOST", example: "net.special=127.0.0.1", grants: "HTTPS to a special-use address, named explicitly" },
+    GrantForm { key: "foreign.c", form: "foreign.c=LOGICAL:PATH", example: "foreign.c=mathlib:libm.so.6", grants: "binding the C library LOGICAL to PATH" },
+    GrantForm { key: "foreign.python", form: "foreign.python=PATTERN", example: "foreign.python=numpy", grants: "importing Python modules matching PATTERN" },
+    GrantForm {
+        key: "actuator",
+        form: "actuator=DEVICE:dim=lo..hi[,dim=lo..hi...][,rate_hz=N],heartbeat_ms=N,ttl_ms=N,fail=STATE",
+        example: "actuator=arm1/gripper:width_mm=0..80,heartbeat_ms=60000,ttl_ms=60000,fail=hold",
+        grants: "commanding DEVICE inside the envelope, with a mandatory dead-man",
+    },
+    GrantForm {
+        key: "compute",
+        form: "compute=DEVICE:memory_bytes=N,kernel_ms=lo..hi,queue_depth=N,power_w=lo..hi,adapter=A,format=F,kernel=NAME:PATH[,class=C][,waive-attestation]",
+        example: "compute=gpu0:memory_bytes=1048576,kernel_ms=0..50,queue_depth=4,power_w=0..120,adapter=cpu-reference,format=refkernel-1,kernel=reduce_sum:k.refkernel",
+        grants: "dispatching to DEVICE inside the envelope; every bounding term is mandatory",
+    },
+    GrantForm { key: "sensor", form: "sensor=DEVICE", example: "sensor=arm0/angle", grants: "reading DEVICE (`Read` under its scope)" },
+    GrantForm { key: "plugin", form: "plugin=PATH", example: "plugin=./plugins", grants: "loading a plugin artifact from under PATH" },
+    GrantForm { key: "secret:", form: "secret:NAME=VALUE | secret:NAME=env:VAR", example: "secret:TOKEN=abc", grants: "the secret NAME, held by the runtime" },
+];
+
 impl Grants {
     /// Parse one `--grant` argument. Returns an error string on malformed input.
     pub fn add(&mut self, spec: &str) -> Result<(), String> {
@@ -414,6 +455,48 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// P4-02: [`GRANT_FORMS`] is the grant grammar as data, so it must be exactly what [`Grants::add`]
+    /// parses. The keys are read from `add`'s own match arms — a key parsed but not listed, or listed
+    /// but not parsed, fails — and every example must parse.
+    #[test]
+    fn the_grant_forms_are_exactly_what_the_parser_accepts() {
+        for f in GRANT_FORMS {
+            let mut g = Grants::default();
+            assert!(g.add(f.example).is_ok(), "the example for `{}` does not parse: {:?}", f.key, g.add(f.example));
+            assert!(f.example.starts_with(f.key), "`{}`'s example must use its key", f.key);
+        }
+        let src = include_str!("broker.rs");
+        let start = src.find("    pub fn add(&mut self, spec: &str)").expect("Grants::add is here");
+        let end = start + src[start..].find("\n    }\n").expect("its end");
+        let body = &src[start..end];
+        let mut parsed: Vec<&str> = Vec::new();
+        // Every string literal that opens a match arm (`"key" =>` or `"key" | "key2" =>`).
+        for line in body.lines() {
+            let t = line.trim_start();
+            if !t.starts_with('"') || !t.contains("=>") {
+                continue;
+            }
+            let arm = &t[..t.find("=>").unwrap()];
+            for lit in arm.split('|') {
+                let lit = lit.trim().trim_matches('"');
+                if !lit.is_empty() && !parsed.contains(&lit) {
+                    parsed.push(lit);
+                }
+            }
+        }
+        // `secret:` is a prefix, stripped before the match.
+        assert!(body.contains("strip_prefix(\"secret:\")"));
+        parsed.push("secret:");
+        // The inner `match k.trim()` re-dispatches keys already matched above; they are not new forms.
+        let mut listed: Vec<&str> = GRANT_FORMS.iter().map(|f| f.key).collect();
+        parsed.sort_unstable();
+        parsed.dedup();
+        listed.sort_unstable();
+        assert_eq!(listed, parsed, "GRANT_FORMS and Grants::add disagree");
+        let mut g = Grants::default();
+        assert!(g.add("nosuch=1").is_err() && g.add("nosuch").is_err(), "an unknown grant is refused");
+    }
 
     /// P2 (D-V2-27): the loading grant. A grant is a path spelling too, so every hostile form the
     /// primitive table refuses from a PROGRAM is refused from an OPERATOR here as well — that is

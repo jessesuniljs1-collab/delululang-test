@@ -487,6 +487,10 @@ pub const GUARD_BYPASS_BANNER: &str =
      KNOWLEDGE until you read the audit log. Sealed rules still hold; every bypassed use is still \
      audited. Turn the guard back on with `delulu guard bypass off`.";
 
+/// Every explanation topic [`topic_explain`] answers, as `delulu explain E-<TOPIC>` takes it. One
+/// list, read by `delulu toolchain` (P4-02); a test proves each resolves and that no other does.
+pub const TOPICS: &[&str] = &["ACTOR", "GUARD", "ATLAS", "PALETTE", "REVOKE", "PLUGIN", "SANDBOX"];
+
 /// A named explanation topic (not a diagnostic code): `delulu explain E-REVOKE` / `E-GUARD`. Returns
 /// `(title, body)`. Topics carry normative honesty text the spec mandates verbatim (Stage 5
 /// playbook 5j); unlike codes they explain a *semantics*, not a single failure.
@@ -1791,6 +1795,30 @@ mod unallocated_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`TOPICS`] is exactly the set of arms [`topic_explain`] answers — read from that function's own
+    /// source, so a topic added there without being listed here (and so missing from `delulu
+    /// toolchain`) fails the build.
+    #[test]
+    fn the_topic_list_is_exactly_what_topic_explain_answers() {
+        for t in TOPICS {
+            assert!(topic_explain(t).is_some(), "`{t}` is listed but does not resolve");
+        }
+        let src = include_str!("codes.rs");
+        let start = src.find("pub fn topic_explain(").expect("topic_explain is here");
+        let end = start + src[start..].find("\n}\n").expect("its end");
+        let arms: Vec<&str> = src[start..end]
+            .lines()
+            .filter_map(|l| l.trim_start().strip_prefix('"'))
+            .filter_map(|l| l.split_once("\" => Some((").map(|(name, _)| name))
+            .collect();
+        let mut listed: Vec<&str> = TOPICS.to_vec();
+        let mut found = arms.clone();
+        listed.sort_unstable();
+        found.sort_unstable();
+        assert_eq!(listed, found, "TOPICS and topic_explain's arms disagree");
+        assert!(topic_explain("NOT-A-TOPIC").is_none());
+    }
 
     #[test]
     fn codes_are_unique_and_well_formed() {

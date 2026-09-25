@@ -19,9 +19,10 @@ use std::process::{Command, Output};
 /// Every run-once subcommand. Kept explicit so that adding a subcommand and forgetting the contract
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "explain",
+    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "examples", "explain",
     "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
-    "plugin", "publish", "run", "sandbox", "secrets", "sign", "skill", "test", "verify-sig", "why",
+    "plugin", "publish", "run", "sandbox", "schema", "secrets", "sign", "skill", "test", "toolchain", "verify-sig",
+    "why",
 ];
 
 /// Every run-once subcommand the dispatcher accepts must appear in [`SUBCOMMANDS`] AND in `--help`.
@@ -466,6 +467,13 @@ effects = [\"Write\"]
         ("explain-unallocated", vec!["explain", "DL0503", "--json"], Cwd::Pkg, "explain"),
         // P4a: the Agent Skill. It takes no path and no argument, so any working directory serves.
         ("skill", vec!["skill", "--json"], Cwd::Pkg, "skill"),
+        // P4-02: the toolchain as data. No argument, any working directory.
+        ("toolchain", vec!["toolchain", "--json"], Cwd::Pkg, "toolchain"),
+        // P4-09: the schemas, listed and one printed.
+        ("schema", vec!["schema", "--json"], Cwd::Pkg, "schema"),
+        // P4-10: the shipped examples, each with its authority report.
+        ("examples", vec!["examples", "--json"], Cwd::Pkg, "examples"),
+        ("schema-one", vec!["schema", "diagnostic", "--json"], Cwd::Pkg, "schema"),
         ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),
         ("locale", vec!["locale", "list", "--json"], Cwd::Pkg, "locale"),

@@ -842,7 +842,7 @@ pub(crate) fn refuse_unlisted_flags(cmd: &str, rest: &[String], known: &[&str]) 
 /// (`plugin build`): each `delulu …` invocation line for it, plus every continuation line under it
 /// up to the next invocation or a blank line. `--help` prints these, and [`documented_flags`] reads
 /// the options a command accepts from these, so the two are one source (P1-F3).
-fn usage_lines(cmd: &str) -> Vec<&'static str> {
+pub(crate) fn usage_lines(cmd: &str) -> Vec<&'static str> {
     let want: Vec<&str> = cmd.split_whitespace().collect();
     let mut lines: Vec<&'static str> = Vec::new();
     let mut in_block = false;
@@ -1095,6 +1095,9 @@ fn run_inner(args: &[String]) -> i32 {
         // can still read it. Embedded at compile time rather than read from disk: a skill that is
         // only correct when you happen to be standing in the repository is not shipped.
         "skill" => cmd_skill(rest),
+        "toolchain" => crate::toolchain::cmd_toolchain(rest),
+        "schema" => crate::schema::cmd_schema(rest),
+        "examples" => crate::examples::cmd_examples(rest),
         // PS-A-03: the sandbox guest, spawned by the host with a hello frame on standard input and
         // never typed by a caller. Dispatched by constant through a guard arm, the shape the foreign
         // worker already uses for an internal subcommand: out of `--help`, out of completions, and
@@ -1225,7 +1228,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill",
+    "doctor", "completions", "skill", "toolchain", "schema", "examples",
 ];
 
 fn usage() -> &'static str {
@@ -1353,6 +1356,14 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the repository map current and sound? regenerates it when behind; --check never writes)\n\
      \x20 delulu skill     [--json]   (the Agent Skill for this tool — the same bytes as\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 skills/delulu/SKILL.md, embedded, so it reads outside the checkout too)\n\
+     \x20 delulu toolchain [--json]   (this toolchain as data: every command with the options its help\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 documents, the ten effects, the grant grammar, the primitive table, budgets, sandbox\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 levels and profiles, every diagnostic code — read from the binary's own tables)\n\
+     \x20 delulu schema    [<name>] [--json] | validate <name> <file.json> [--json]   (the JSON Schema of an\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 output — envelope, diagnostic, repair, authority, atlas, sandbox, policy, run-report,\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 toolchain — closed, so every field is named; `validate` checks a file against one)\n\
+     \x20 delulu examples  [--json]   (the shipped example programs — each checks, with the authority report\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `authority` prints for it and the `run` line its grants spell; embedded, so it reads anywhere)\n\
      \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 list it carries is generated from this help, so the two cannot disagree)\n\
      \x20 global:          [--color never|always|auto] [--theme default|bright|mono]  (envs DELULU_COLOR, DELULU_THEME, NO_COLOR)\n\
@@ -3154,20 +3165,7 @@ fn cmd_authority(rest: &[String]) -> i32 {
         print_diagnostics("authority", &checked.diagnostics, &map, None, opts.json);
         return 1;
     }
-    let mut scopes = manifest_scopes(&file);
-    // Foreign blocks the program declares + its embedded-Python use → the `foreign_calls` array under
-    // the "outside the proof" separator (spec §6). A program with no `foreign` blocks and no Python
-    // use yields `[]`, keeping the report byte-identical to Stage 3 (criterion 7).
-    let python_allowlist = manifest_python_allowlist(&file);
-    scopes.foreign_calls = foreign_calls_json(&checked.module, &map, &python_allowlist);
-    let program = checked.module.name.dotted();
-    let mut report = authority_report(&program, &checked.result, &scopes);
-    stamp_custody(&mut report, &opts);
-    stamp_foreign_isolation(&mut report, &opts);
-    stamp_isolation(&mut report, &opts);
-    stamp_plugins(&mut report, &checked.module, &file, &map);
-    stamp_native_emission(&mut report, &checked.module);
-    stamp_grants(&mut report, &[&checked.module]);
+    let report = source_authority_report(&file, &map, &checked, manifest_scopes(&file), &manifest_python_allowlist(&file), &opts);
     if opts.show_grants && !opts.json {
         print!("{}", render_required_grants(&report));
         return 0;
@@ -3179,6 +3177,47 @@ fn cmd_authority(rest: &[String]) -> i32 {
         print!("{}", render_authority(&report));
     }
     0
+}
+
+/// The authority report of one checked source file, stamped in the one order `delulu authority`
+/// stamps it. Shared with `delulu examples` (P4-10), whose programs are embedded in the binary, so
+/// the report an example ships with is the report `authority` would print for it — not a second
+/// derivation that could disagree.
+fn source_authority_report(
+    file: &str,
+    map: &SourceMap,
+    checked: &delulu_check::Checked,
+    mut scopes: delulu_check::ScopeInfo,
+    python_allowlist: &[String],
+    opts: &Opts,
+) -> Json {
+    // Foreign blocks the program declares + its embedded-Python use → the `foreign_calls` array under
+    // the "outside the proof" separator (spec §6). A program with no `foreign` blocks and no Python
+    // use yields `[]`, keeping the report byte-identical to Stage 3 (criterion 7).
+    scopes.foreign_calls = foreign_calls_json(&checked.module, map, python_allowlist);
+    let program = checked.module.name.dotted();
+    let mut report = authority_report(&program, &checked.result, &scopes);
+    stamp_custody(&mut report, opts);
+    stamp_foreign_isolation(&mut report, opts);
+    stamp_isolation(&mut report, opts);
+    stamp_plugins(&mut report, &checked.module, file, map);
+    stamp_native_emission(&mut report, &checked.module);
+    stamp_grants(&mut report, &[&checked.module]);
+    report
+}
+
+/// The authority report of a program held as TEXT (an embedded example): checked as `label`, with no
+/// manifest and default options. `Err` carries the number of errors when it does not check.
+pub(crate) fn authority_of_text(label: &str, src: &str) -> Result<Json, usize> {
+    let mut map = SourceMap::new();
+    let id = map.add_file(label, src);
+    let checked = check_source(id, src);
+    let n = errors(&checked.diagnostics);
+    if n > 0 {
+        return Err(n);
+    }
+    let (_, opts) = parse_opts(&[]);
+    Ok(source_authority_report(label, &map, &checked, delulu_check::ScopeInfo::default(), &[], &opts))
 }
 
 /// `delulu authority <file> --grants`: the exact `--grant` flags, one per line, ready to paste.

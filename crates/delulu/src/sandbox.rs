@@ -49,11 +49,15 @@ pub fn attempt_open_kvm() -> Result<String, String> {
     }
 }
 
+/// The five isolation levels by number and name — one list, read by `probe` and by `delulu toolchain`
+/// (P4-02), so the names an agent reads are the names the probe reports.
+pub const LEVELS: [(u8, &str); 5] = [(0, "none"), (1, "process"), (2, "microvm"), (3, "external"), (4, "attested")];
+
 /// Run every attempt and return the five levels.
 pub fn probe() -> Vec<Level> {
     let l0 = Level {
-        level: 0,
-        name: "none",
+        level: LEVELS[0].0,
+        name: LEVELS[0].1,
         attempts: vec![attempt(
             "the in-process runtime",
             Ok("this probe is running in it: the language and custody, in-process — no OS boundary".into()),
@@ -87,10 +91,10 @@ pub fn probe() -> Vec<Level> {
 
     vec![
         l0,
-        Level { level: 1, name: "process", attempts: l1 },
-        Level { level: 2, name: "microvm", attempts: l2 },
-        Level { level: 3, name: "external", attempts: l3 },
-        Level { level: 4, name: "attested", attempts: l4 },
+        Level { level: LEVELS[1].0, name: LEVELS[1].1, attempts: l1 },
+        Level { level: LEVELS[2].0, name: LEVELS[2].1, attempts: l2 },
+        Level { level: LEVELS[3].0, name: LEVELS[3].1, attempts: l3 },
+        Level { level: LEVELS[4].0, name: LEVELS[4].1, attempts: l4 },
     ]
 }
 

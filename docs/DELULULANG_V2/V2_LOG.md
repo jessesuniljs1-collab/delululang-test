@@ -1122,3 +1122,49 @@ report after any other request, and an unknown word all refused and recorded), k
 filter to be counted. In WSL a run's report now reads `filesystem_reads: confined to the system
 paths`, `filesystem_writes: denied`, `new_programs: denied`, identity the subordinate uid — and only
 `network` under `limitations`, which is right for that kernel (6.6 predates Landlock's TCP rules).
+
+**RW 4.23's run, read — PS-B CLOSED.** CI `36173241488` (`7a94684`): **success on every job**, Windows,
+Linux (the identity required and measured), macOS, arm64 (the fallback), lints, formal, fuzz, Miri,
+supply chain, the editor. PS-B is complete on 2026-09-26: PS-B-01 (every run budgeted), PS-B-02 (the
+network client), PS-B-03 (Windows identity) and PS-B-03b (Linux subordinate uid), PS-B-04 (decided by
+measurement: no batching, the Windows channel rebuilt), PS-B-05 (budget as the tenth `⊑` dimension),
+PS-B-06 (BREAK-GLASS), and the four things found on the way (RW 4.19 recorded for the owner, RW 4.20,
+4.21 and 4.23 closed). Nothing inside the phase was deferred.
+
+## P4b–e — agent surfaces (opened 2026-09-26)
+
+D-NE-6 was the decision this phase asks at its start; under the owner's delegation it is taken as
+proposed (D-V2-38): `delulu mcp` in the CLI, stateless, hand-written JSON-RPC, read-only by
+construction. The phase begins with the three introspection surfaces the zero-shot loop names first.
+
+**P4-02 — `delulu toolchain [--json]`.** This toolchain as data, every field read from the table the
+binary itself uses: the 35 commands with the invocations and options their `--help` documents (the
+same `usage_lines`/`documented_flags` the option parser refuses by), the ten core effects, the 16
+`--grant` forms each with an example that parses, the 82-entry primitive table (v5), the run budget and
+the three sandbox profiles' limits, the five isolation levels, the two modes, the channel version,
+all 154 diagnostic codes and the seven explanation topics. Three facts lived only in code and were
+lifted into tables so they could be read rather than restated: `broker::GRANT_FORMS` (a test reads
+`Grants::add`'s own match arms and fails on a key parsed but not listed, or listed but not parsed — its
+first run caught an actuator example missing the mandatory dead-man), `codes::TOPICS` (bound to
+`topic_explain`'s arms the same way) and `sandbox::LEVELS` (now what the probe itself names).
+
+**P4-09 — `delulu schema [<name>] [--json] | validate <name> <file>`.** Nine JSON Schemas — envelope,
+diagnostic, repair, authority, atlas, sandbox, policy, run-report, toolchain — CLOSED: each object lists
+every field its emitter writes and forbids the rest, except two that say they are open. The validator
+is in the binary (a subset of JSON Schema 2020-12, no dependency), so `schema validate` is the same
+check the tests make. `tests/schema_cli.rs` runs the real emitters over a corpus chosen so that every
+optional shape occurs — a foreign C block, the shipped NumPy example, a compute device, a plugin load, a
+`@jit` hint, a diagnostic with a typed repair, an ordinary, a sandboxed and an audit-mode run, the policy
+preview — and validates each through the binary. Everything validated on the first run, which is what
+a test that cannot fail looks like, so it was falsified: a field added to the sandbox emitter was
+refused ("matches none of the 3 allowed shapes"), and that message then learned to name the nearest
+shape's actual problem.
+
+**P4-10 — `delulu examples [--json]`.** The nine single-file examples embedded (so they read outside a
+checkout), each with its opening comment as a summary, its source, the authority report `delulu
+authority` prints for it — through the same function, `source_authority_report`, extracted from
+`cmd_authority` for this — and a `delulu run … --no-prompt --grant …` line spelled from that report's
+required grants. Bound to the directory by a test; the package examples are named with the command that
+checks them. `examples_run.rs` now runs every listed line exactly as listed and requires that its grants
+are enough (no DL0703), parse, and hit no checker bug (DL0907). One example fetches
+`https://example.com/health`; the test depends on nothing about that answer.

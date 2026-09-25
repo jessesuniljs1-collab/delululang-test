@@ -752,9 +752,35 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
    makes that unlikely, not impossible. The broker, the CLI and unsandboxed runs are still the
    operator (RW 4.4, category 7).
 
+## D-V2-38 — P4b–e opening: D-NE-6 (`delulu mcp`) and the introspection surfaces — TAKEN (head chef, 2026-09-26, under the owner's delegation)
+
+1. **D-NE-6 as proposed:** `delulu mcp` is a CLI subcommand, not a separate binary; stateless; a
+   deterministic `tools/list`; hand-written JSON-RPC over stdio as the LSP is (no SDK dependency);
+   **read-only by construction** — no tool runs a program, grants anything, or loads code, every tool
+   is annotated read-only, and a test holds the tool list against that. Why: the door rule — the
+   server that reads must never be an effector — is what makes it safe to point at a hostile
+   workspace, and the LSP proves the hand-written protocol layer is affordable. It is built in P4-03.
+2. **Introspection is read from the binary's own tables, never restated.** `toolchain --json` (P4-02)
+   reads the command list, the usage text, the grant parser's forms, the primitive table, the budgets,
+   the sandbox levels and the diagnostic registry; two new tables were lifted out of code to make that
+   possible (`broker::GRANT_FORMS`, bound to `Grants::add` by a test that reads its match arms, and
+   `codes::TOPICS`, bound to `topic_explain` the same way), and one out of the probe
+   (`sandbox::LEVELS`). The first run of the grant-form test caught a wrong example (an actuator grant
+   without its mandatory dead-man).
+3. **`delulu schema` publishes CLOSED JSON Schemas** (P4-09): every object lists every field its
+   emitter writes and forbids the rest, except two that say they are open (a command's payload beside
+   the envelope; the Atlas's embedded custody view). The validator is in the binary (`schema
+   validate`), a subset of JSON Schema 2020-12, so an agent checks an output with the same code the
+   tests use and no dependency is added. The payload key is `document`, because the envelope already
+   owns `schema`.
+4. **`delulu examples` embeds the nine single-file examples** (P4-10) and derives each one's authority
+   report through the SAME function `delulu authority` uses (`source_authority_report`, extracted for
+   this) and its run line from that report's required grants. The package examples are named with the
+   command that checks them. A run line is proven sufficient by running it.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
-D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
+D-NE-6 (decided under delegation as D-V2-38), D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
 code of conduct; the four pre-public-repository items. Each is asked at the start of the phase that
 needs it (`V2_MASTER_PLAN.md` §7).
 

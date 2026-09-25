@@ -252,3 +252,51 @@ fn the_plugin_example_builds_loads_and_prints_what_the_plugin_returns() {
 {refused}");
     let _ = std::fs::remove_dir_all(&work);
 }
+
+/// P4-10: every program `delulu examples` lists is run with the line it lists, exactly as given, and
+/// the grants that line names are ENOUGH — the run never stops for a slice it was not granted
+/// (DL0703), never waits for a human (`--no-prompt` is in the line), and never hits a checker bug
+/// (DL0907). A run line whose grants fall short would be a published instruction that does not work.
+/// Placeholders (an UPPERCASE value such as `VALUE`) are the operator's to fill; a line with one is
+/// run as written, because a placeholder must still parse as a grant.
+///
+/// One example (`guide/05_capabilities`) fetches `https://example.com/health` when granted `net`, so
+/// this test makes that one request, to the domain IANA reserves for documentation. Nothing here
+/// depends on its answer: a failed fetch is an `Err` value the example handles, so an offline runner
+/// passes the same way.
+#[test]
+fn every_listed_example_runs_with_the_line_it_is_listed_with() {
+    let o = delulu(&["examples", "--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).expect("examples --json is JSON");
+    let programs = v["examples"]["programs"].as_array().expect("programs");
+    assert_eq!(programs.len(), example_files().len(), "every single-file example is listed");
+    for p in programs {
+        let path = p["path"].as_str().unwrap();
+        assert_eq!(p["checks"], true, "{path} does not check");
+        let line = p["run"].as_str().unwrap();
+        // The line is shell text; split it the way a shell would for these simple forms.
+        let mut args: Vec<String> = Vec::new();
+        let mut cur = String::new();
+        let mut quoted = false;
+        for ch in line.chars() {
+            match ch {
+                '"' => quoted = !quoted,
+                ' ' if !quoted => {
+                    if !cur.is_empty() {
+                        args.push(std::mem::take(&mut cur));
+                    }
+                }
+                c => cur.push(c),
+            }
+        }
+        args.push(cur);
+        assert_eq!(args[0], "delulu");
+        assert!(args.contains(&"--no-prompt".to_string()), "{line}");
+        let argv: Vec<&str> = args[1..].iter().map(String::as_str).collect();
+        let o = delulu(&argv);
+        let out = text(&o);
+        assert!(!out.contains("DL0703"), "{path}: its listed line did not grant enough:\n$ {line}\n{out}");
+        assert!(!out.contains("DL0907"), "{path}: a checker bug at run time:\n{out}");
+        assert!(!out.contains("unknown grant") && !out.contains("bad grant"), "{path}: the line's grants do not parse:\n{out}");
+    }
+}

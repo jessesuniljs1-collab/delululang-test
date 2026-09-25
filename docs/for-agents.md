@@ -14,7 +14,15 @@ delulu authority <file|package> --json # what this program can do
 delulu run <file> --json --no-prompt   # run, never block on a human
 delulu test --json                     # run tests under an authority ceiling
 delulu explain DL0501                  # long-form docs for any code
+delulu toolchain --json                # this toolchain as data: commands, flags, grants, effects, codes
+delulu schema <name> --json            # the closed JSON Schema of an output; `schema validate` checks one
+delulu examples --json                 # the shipped programs, each with its authority and its run line
 ```
+
+`toolchain --json` is read from the binary's own tables — the command list the dispatcher uses, the
+usage text `--help` is cut from, the grant parser's forms (each with an example that parses), the
+primitive table, the budgets, the sandbox levels, the diagnostic registry — so it cannot describe a
+flag that does not exist. Ask it before guessing an option.
 
 Four rules that will save you time:
 
