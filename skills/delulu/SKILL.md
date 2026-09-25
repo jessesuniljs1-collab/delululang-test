@@ -156,6 +156,8 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
   checks a file against one.
 - `delulu examples --json` — the shipped programs, each known to check, with its authority report
   and the `run` line its grants spell. Start from one of these rather than from nothing.
+- `delulu mcp` — the same answers as MCP tools (check, authority, why, explain, atlas, toolchain,
+  schema, examples, the sandbox preview), all read-only; see `[agents.mcp]`.
 - `delulu explain <CODE>` — any diagnostic, and the named topics `E-SANDBOX`, `E-PLUGIN`, `E-GUARD`,
   `E-ACTOR`, `E-REVOKE`, `E-ATLAS`, `E-PALETTE`.
 - `delulu doctor` — is this checkout healthy, and what does this host actually enforce.

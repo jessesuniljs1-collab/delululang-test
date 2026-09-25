@@ -1023,6 +1023,7 @@ mod boundary_authority_tests {
         ("budget.rs", "the budget watchdog: samples the process's memory and processor time"),
         ("run_cmd.rs", "flushes stdout, bounded, while a budget-stopped run exits"),
         ("pipe_channel.rs", "the sandbox guest's channel watchdog: sleeps, and ends a guest whose host fell silent"),
+        ("mcp.rs", "drains a tool subprocess's stdout and stderr, so a large answer cannot stall it"),
         ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),
         ("lib.rs", "the registry's HTTP listener: serves connections, never evaluates a program"),
     ];

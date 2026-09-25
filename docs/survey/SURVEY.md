@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 257 |
-| Rust lines | 133469 |
-| Rust files outside `src/` (test/bench targets) | 110 |
+| Rust files | 260 |
+| Rust lines | 134244 |
+| Rust files outside `src/` (test/bench targets) | 111 |
 | Markdown documents | 189 |
-| Markdown lines | 54761 |
+| Markdown lines | 54820 |
 | DeluluLang programs | 180 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1227 / 11062 |
+| Nodes / edges in this map | 1230 / 11083 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -87,7 +87,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 33 files, 29272 lines
+- **Modules:** 34 files, 29824 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -99,7 +99,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/brokerd.rs` | 2216 | Phase 5f — the broker daemon (`delulu broker start\|status\|stop\|rotate-key`) and its serve loop. |
 | `src/budget.rs` | 400 | PS-B-01: resource budgets on the main program — the owner's ruling D-V2-25, answering D-NE-31: |
 | `src/cert_crypto.rs` | 190 | RFC 0001 phase F2 — the real signature backend for grant certificates. |
-| `src/cli.rs` | 9537 | Command dispatch and the four Stage-1 commands (§9.5). |
+| `src/cli.rs` | 9540 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
 | `src/doctor.rs` | 909 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
@@ -112,7 +112,8 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/jail.rs` | 801 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1947 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
-| `src/main.rs` | 88 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
+| `src/main.rs` | 89 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
+| `src/mcp.rs` | 548 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
@@ -284,11 +285,11 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 21 files, 17646 lines
+- **Modules:** 21 files, 17647 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/actors.rs` | 1223 | The native actor runtime (Stage 7 phase 7g, spec §6). |
+| `src/actors.rs` | 1224 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 648 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
 | `src/channel.rs` | 1147 | `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire |
@@ -316,14 +317,15 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 11 files, 4457 lines
+- **Modules:** 12 files, 4502 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
+| `src/answers.rs` | 139 | The machine answers to the questions asked of the map: `query`/`rdeps` (one hop) and |
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 659 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 540 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 660 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 445 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 274 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 541 | Reading Markdown. |
 | `src/paths.rs` | 345 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |

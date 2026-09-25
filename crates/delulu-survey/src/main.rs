@@ -135,27 +135,7 @@ fn flags(args: &[String]) -> Flags {
 /// before it knows anything else. Mirrors the CLI's contract in `docs/for-agents.md`: **one object,
 /// on stdout, never coloured, never localized.**
 fn envelope(verb: &str, payload: serde_json::Value) -> String {
-    let mut root = serde_json::json!({
-        "tool": "delulu-survey",
-        "verb": verb,
-        "schema": 1,
-        "delulu_version": env!("CARGO_PKG_VERSION"),
-    });
-    if let (Some(o), Some(p)) = (root.as_object_mut(), payload.as_object()) {
-        for (k, v) in p {
-            o.insert(k.clone(), v.clone());
-        }
-    }
-    serde_json::to_string_pretty(&root).unwrap_or_else(|_| "{}".into())
-}
-
-/// An edge or hop, rendered for machines with the citation intact.
-///
-/// The provenance law — *"a relation that cannot be pointed at in the text is not in the map"* —
-/// is not a property of the human rendering. It has to survive into the machine channel, or an
-/// agent reading this map has strictly less ability to check it than a human reading the same map.
-fn via_json(kind: EdgeKind, file: &str, line: u32) -> serde_json::Value {
-    serde_json::json!({ "kind": kind_word(kind), "file": file, "line": line })
+    serde_json::to_string_pretty(&delulu_survey::answers::envelope(verb, payload)).unwrap_or_else(|_| "{}".into())
 }
 
 /// Everything reachable, grouped by distance, every hop cited.
@@ -175,34 +155,9 @@ fn walk(root: &Path, id: &str, reverse: bool, depth: u32, json: bool) {
     let question = if reverse { "what breaks if this changes" } else { "what this rests on" };
 
     if json {
-        // The machine channel is deliberately UNCAPPED, for the same reason `--json` diagnostics are
-        // (campaign finding C32): the human render is truncated because a saturating list stops
-        // informing a reader, but a caller that asked for the whole blast radius gets it and can
-        // page through it itself. Truncating here would make the answer quietly wrong.
-        let hops: Vec<serde_json::Value> = reached
-            .iter()
-            .map(|r| {
-                serde_json::json!({
-                    "id": r.id,
-                    "depth": r.depth,
-                    "from": r.from,
-                    "via": via_json(r.via.kind, &r.via.file, r.via.line),
-                })
-            })
-            .collect();
-        println!(
-            "{}",
-            envelope(
-                if reverse { "impact" } else { "affected-by" },
-                serde_json::json!({
-                    "node": id,
-                    "question": question,
-                    "depth_limit": depth,
-                    "reached": hops.len(),
-                    "hops": hops,
-                })
-            )
-        );
+        // The shared machine answer (`answers::walk_json`), uncapped; `delulu mcp` returns the same.
+        let v = delulu_survey::answers::walk_json(&survey, id, reverse, depth).expect("the node exists: checked above");
+        println!("{}", serde_json::to_string_pretty(&v).unwrap_or_else(|_| "{}".into()));
         return;
     }
 
@@ -423,45 +378,9 @@ fn query(root: &Path, id: &str, rdeps_only: bool, json: bool) {
     };
 
     if json {
-        let edge_json = |edges: &[&delulu_survey::Edge], incoming: bool| -> Vec<serde_json::Value> {
-            edges
-                .iter()
-                .map(|e| {
-                    let other = if incoming { &e.from } else { &e.to };
-                    serde_json::json!({ "node": other, "via": via_json(e.kind, &e.file, e.line) })
-                })
-                .collect()
-        };
-        let incoming = survey.into_(id);
-        let mut payload = serde_json::json!({
-            "node": {
-                "id": node.id,
-                "kind": format!("{:?}", node.kind),
-                "path": node.path,
-                "lines": node.lines,
-                "summary": node.summary,
-                "holds": node.contents,
-            },
-            "pointed_at_by": edge_json(&incoming, true),
-        });
-        if !rdeps_only {
-            let outgoing = survey.out(id);
-            payload["points_at"] = serde_json::json!(edge_json(&outgoing, false));
-        }
-        // Entrenchment is the one field a maintainer must read BEFORE deciding to act, so it is
-        // always present — `null` when the node is ordinary, rather than absent. An agent that keys
-        // on a missing field cannot tell "not entrenched" from "this tool did not tell me".
-        payload["entrenched"] = match &node.entrenched {
-            Some(e) => serde_json::json!({
-                "owner": e.owner,
-                "pattern": e.pattern,
-                "matched_at": { "file": e.file, "line": e.line },
-                "means": "changing this needs that owner specifically, not any maintainer; \
-                          Constitution §10 requires an entrenchment analysis (invariant 44) first",
-            }),
-            None => serde_json::Value::Null,
-        };
-        println!("{}", envelope(if rdeps_only { "rdeps" } else { "query" }, payload));
+        // The shared machine answer (`answers::query_json`); `delulu mcp` returns the same.
+        let v = delulu_survey::answers::query_json(&survey, id, rdeps_only).expect("the node exists: checked above");
+        println!("{}", serde_json::to_string_pretty(&v).unwrap_or_else(|_| "{}".into()));
         return;
     }
 
@@ -516,21 +435,7 @@ fn group(edges: &[&delulu_survey::Edge], incoming: bool) -> Vec<String> {
 }
 
 fn kind_word(k: EdgeKind) -> &'static str {
-    match k {
-        EdgeKind::DependsOn => "depends-on",
-        EdgeKind::DependsOnExternal => "depends-on-ext",
-        EdgeKind::DeclaresModule => "declares",
-        EdgeKind::Uses => "uses",
-        EdgeKind::DefinesCode => "defines-code",
-        EdgeKind::RaisesCode => "raises",
-        EdgeKind::ExpectsCode => "expects",
-        EdgeKind::DocumentsCode => "documents",
-        EdgeKind::Defines => "defines",
-        EdgeKind::Cites => "cites",
-        EdgeKind::LinksTo => "links-to",
-        EdgeKind::References => "references",
-        EdgeKind::TestsCrate => "tests",
-    }
+    delulu_survey::answers::kind_word(k)
 }
 
 fn usage(msg: &str) -> ! {

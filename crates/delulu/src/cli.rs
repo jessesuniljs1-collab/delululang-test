@@ -1061,6 +1061,7 @@ fn run_inner(args: &[String]) -> i32 {
         // Machine-only by construction: the first-run flow is suppressed for `lsp` in
         // locale.rs (a stray prompt on stdout would corrupt the JSON-RPC stream).
         "lsp" => crate::lsp::run_lsp(rest),
+        "mcp" => crate::mcp::run_mcp(rest),
         "keygen" => crate::signing::cmd_keygen(rest),
         "sign" => crate::signing::cmd_sign(rest),
         "verify-sig" => crate::signing::cmd_verify_sig(rest),
@@ -1228,7 +1229,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill", "toolchain", "schema", "examples",
+    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp",
 ];
 
 fn usage() -> &'static str {
@@ -1333,6 +1334,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--test-authority 'effects = [\"Write\"]']..  (a ceiling in the manifest's [test-authority] syntax:\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 inside a package it may only narrow the package's; for a file outside one it is the only ceiling)\n\
      \x20 delulu lsp       (LSP 3.17 over stdio — one server for every editor and agent IDE; analysis only)\n\
+     \x20 delulu mcp       (a Model Context Protocol server over stdio — the compiler, authority, Atlas, sandbox\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 preview and, in the source tree, the Survey, as tools; READ-ONLY: it never runs, grants or loads)\n\
      \x20 delulu locale    add <file.dpx> [--yes] | remove <name> | list [--json]   (catalog plugins: verified-class, ZERO authority, prose only)\n\
      \x20 delulu morph     list | info <id> | check <file.toml> | render <file> (--to <id> | --to-canonical) [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (surface keyword skins: human languages or AI-compact profiles; the program is unchanged)\n\

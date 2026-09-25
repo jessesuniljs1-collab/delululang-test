@@ -28,6 +28,7 @@ mod fleet;
 mod foreign_worker;
 mod locale;
 mod lsp;
+mod mcp;
 mod morph_file;
 mod new;
 mod signing;

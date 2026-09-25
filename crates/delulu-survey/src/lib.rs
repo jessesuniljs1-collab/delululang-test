@@ -34,6 +34,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+pub mod answers;
 pub mod codeowners;
 pub mod health;
 pub mod manifest;

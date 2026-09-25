@@ -407,6 +407,26 @@ The sandbox is **opt-in**, and that is a ruling rather than an oversight (D-V2-2
 default once the channel can carry the surfaces it currently refuses, in PS-B/PS-C. Until then, asking
 for it is the only way to get it — so ask for it.
 
+## [agents.mcp] The MCP server
+
+`delulu mcp` is a Model Context Protocol server on standard input and output (newline-delimited
+JSON-RPC, protocol revisions `2025-06-18`, `2025-03-26` and `2024-11-05`). Point an agent host at it
+from the workspace you want answered:
+
+```json
+{ "mcpServers": { "delulu": { "command": "delulu", "args": ["mcp"] } } }
+```
+
+Its tools are `check`, `authority`, `why`, `explain`, `atlas`, `atlas_query`, `toolchain`, `schema`,
+`examples`, `sandbox_policy` and `sandbox_probe`; inside the DeluluLang source tree also
+`survey_query`, `survey_impact` and `doctor_check`. **Every one is read-only, by construction:** each
+runs this binary's own `--json` subcommand with a fixed argument list, so its `structuredContent` is
+exactly what the CLI prints, and no tool runs a program, grants authority, loads code or writes a
+file. A tool argument that begins with `-` is refused, so nothing can be passed through as an
+option. A command that reports errors (a program that does not check) is a successful call — read
+`summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
+program, use the CLI: granting authority stays a person's decision.
+
 ## [agents.registry] Registry
 
 ```

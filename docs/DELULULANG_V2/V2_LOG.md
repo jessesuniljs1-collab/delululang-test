@@ -1168,3 +1168,39 @@ required grants. Bound to the directory by a test; the package examples are name
 checks them. `examples_run.rs` now runs every listed line exactly as listed and requires that its grants
 are enough (no DL0703), parse, and hit no checker bug (DL0907). One example fetches
 `https://example.com/health`; the test depends on nothing about that answer.
+
+**P4-03 — `delulu mcp`, read-only by construction (D-V2-38).** A Model Context Protocol server on stdio
+(newline-delimited JSON-RPC; revisions 2025-06-18, 2025-03-26, 2024-11-05, the client's answered when
+spoken and the newest otherwise), stateless — `tools/list` and `tools/call` answer with or without
+`initialize` — with a deterministic, name-ordered tool list: `atlas`, `atlas_query`, `authority`,
+`check`, `examples`, `explain`, `sandbox_policy`, `sandbox_probe`, `schema`, `toolchain`, `why`, and
+inside the source tree `survey_query`, `survey_impact`, `doctor_check`.
+
+How "read-only" is made true rather than declared: every CLI-backed tool runs THIS binary's `--json`
+subcommand with an argument vector built from a fixed table (never a shell), so its answer is
+byte-for-byte what the CLI prints — the protocol test compares the `check` tool's `structuredContent`
+with `delulu check --json` directly — and a tool argument that begins with `-` is refused before any
+vector is built, so no flag can be smuggled in. `every_tool_is_read_only` builds every tool's command
+line and holds it against the commands that act (run, test, repl, grants, broker, guard, secrets,
+keygen, sign, publish, login, deploy, fleet, fix, fmt, new, add, lock, build, plugin, locale, lsp,
+mcp), allows `sandbox` only as `probe`/`policy` and `doctor` only with `--check`, and requires every
+tool's `readOnlyHint`. Each call is bounded (120 s). The Survey tools answer in-process through
+`delulu_survey::answers` — `query_json`/`walk_json` moved out of the `delulu-survey` binary into its
+library for this, so the binary and the server print one shape.
+
+Witnesses: `tests/mcp_cli.rs` drives the real binary — handshake and version negotiation, the tool list
+(read-only, no effector, no Survey outside the tree), the CLI-identity check, a hostile argument
+refused, `-32602` for the `run` tool that does not exist, `-32601` for an unknown method, `-32700` for
+a line that is not JSON, no reply to a notification, and inside the repository the Survey tools
+answering in the Survey's own shape (entrenchment always present). Falsified: letting a `-`-argument
+through fails both the unit test (`atlas --grant=net=evil.example --json` smuggled an option) and the
+protocol test.
+
+Found by an existing gate while verifying P4-03: `actors::boundary_authority_tests::every_thread_either_
+sizes_its_stack_or_is_listed_as_never_running_a_program` failed on the full suite, because `mcp.rs`
+spawns two threads (draining a tool subprocess's stdout and stderr) and was not in the list of files
+whose threads never run interpreter code. It is now, with that reason. The gate did exactly its job.
+
+**P4-02/09/10's run, read.** CI `36176470110` (`bc5c01c`): **success on every job**, all three operating
+systems — `toolchain`, `schema` (the emitter corpus validated through the binary on each OS) and
+`examples` (every listed run line run) included.

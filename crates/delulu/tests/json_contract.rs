@@ -33,6 +33,7 @@ const SUBCOMMANDS: &[&str] = &[
 /// nothing sweeps.
 const NOT_SWEPT: &[&str] = &[
     "lsp",    // a JSON-RPC server: blocks on stdin by design
+    "mcp",    // the MCP server (P4-03): JSON-RPC on stdin, like `lsp`; `tests/mcp_cli.rs` drives it
     "repl",   // interactive
     "broker", // can start a daemon; not run-once
     // `doctor` WRITES: without `--check` it regenerates `docs/survey/`. A blind argument sweep would

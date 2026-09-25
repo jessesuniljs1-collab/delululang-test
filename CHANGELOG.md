@@ -16,6 +16,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - **`delulu schema [<name>] [--json] | validate <name> <file>` (P4-09)** — closed JSON Schemas for the envelope, diagnostics, repairs, the authority report, the Atlas, the sandbox object, the policy preview, the run report and the toolchain description, with a validator in the binary. Every emitter's real output is validated by the suite; an undescribed field fails it.
 - **`delulu examples [--json]` (P4-10)** — the shipped single-file examples, embedded, each with the authority report `delulu authority` prints for it and a run line whose grants the suite proves sufficient by running it.
 - The grant grammar (`GRANT_FORMS`), the explanation topics (`TOPICS`) and the isolation levels (`LEVELS`) are now tables bound to the code that parses or names them.
+- **`delulu mcp` (P4-03, D-V2-38)** — a Model Context Protocol server on stdio: check, authority, why, explain, atlas, atlas queries, toolchain, schema, examples and the sandbox preview as tools (and the Survey and `doctor --check` inside the source tree). Read-only by construction: each tool is the CLI's own `--json` answer, an argument cannot become an option, and a test holds the tool table against every command that acts.
 
 ## Unreleased — V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
 
