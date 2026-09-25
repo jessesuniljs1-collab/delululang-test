@@ -939,3 +939,11 @@ rule for the other direction (a sandbox flag without a sandbox); this is its mir
 `doctor`'s resource line names the delegated budget. What PS-B-05 did not do, named: the host process of
 a `--sandbox` run is still not budgeted by the main-program watchdog (its guest is held by the jail),
 and a guest cannot run under a lease at all yet (4.20); a budget for `delulu test` runs does not exist.
+
+**PS-B-05's run, read.** CI `36138186335` (`32a5b96`): Linux, Windows, arm64, lints, formal (with the
+Z3 model's three mutants caught for the first time on a runner), fuzz, Miri, supply-chain and the
+editor green; **macOS 1866 passed, 1 failed**. The failure was the new end-to-end lease test, and the
+product was right: its temp directory's descriptive name put the broker's socket at 113 bytes, macOS
+allows 103, and the broker refused to start with exactly that sentence. The test now uses a short
+directory and asserts, on every platform, that the socket path would fit on a Mac, so the limit is
+checked where it is cheapest rather than discovered where it is smallest.

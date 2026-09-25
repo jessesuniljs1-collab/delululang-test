@@ -233,6 +233,19 @@ impl Drop for StopBroker {
     }
 }
 
+/// A directory whose path leaves the broker room for its socket. macOS allows a socket path of 103
+/// bytes and its temp directory alone is about 50; `tmp`'s descriptive names put the socket at 113,
+/// and on CI run 36138186335 the broker refused to start there — correctly, and saying why.
+fn short_tmp() -> PathBuf {
+    let d = std::env::temp_dir().join(format!("dlb{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("state")).expect("a temp directory");
+    // Checked here, on every platform, rather than discovered on the one with the smallest limit.
+    let sock = d.join("state").join("broker.sock");
+    assert!(sock.as_os_str().len() <= 103, "the broker socket path would not fit on macOS: {}", sock.display());
+    d
+}
+
 fn json_of(r: &Ran) -> serde_json::Value {
     serde_json::from_str(r.stdout.trim()).unwrap_or_else(|e| panic!("one JSON value ({e}): {}{}", r.stdout, r.stderr))
 }
@@ -244,8 +257,7 @@ fn json_of(r: &Ran) -> serde_json::Value {
 /// stopped by the delegated second of processor time, not D-V2-25's five minutes.
 #[test]
 fn a_delegated_budget_is_inherited_never_widened_and_holds_the_lease_run() {
-    let dir = tmp("lease");
-    std::fs::create_dir_all(dir.join("state")).unwrap();
+    let dir = short_tmp();
     program(&dir, "spin.delulu", SPIN);
     program(&dir, "hello.delulu", "");
     let t = Duration::from_secs(60);
