@@ -85,6 +85,9 @@ impl Grant {
                 // A plugin grant confers no device authority: a catalog plugin is not a thing that
                 // may command a machine, and an empty map is the fail-closed reading.
                 device: Default::default(),
+                // PS-B-05: names no budget, so the broker gives the plugin's node its HOST's — the
+                // plugin runs inside the host's process and can consume no more than the host may.
+                budget: None,
             },
         }
     }
@@ -207,6 +210,9 @@ impl PluginArtifact {
                 // A plugin grant confers no device authority: a catalog plugin is not a thing that
                 // may command a machine, and an empty map is the fail-closed reading.
                 device: Default::default(),
+                // PS-B-05: names no budget, so the broker gives the plugin's node its HOST's — the
+                // plugin runs inside the host's process and can consume no more than the host may.
+                budget: None,
             },
         }
     }

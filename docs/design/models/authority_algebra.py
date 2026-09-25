@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The DeluluLang authority order, verified symbolically with Z3 across ALL nine dimensions.
+"""The DeluluLang authority order, verified symbolically with Z3 across ALL ten dimensions.
 
     python docs/design/models/authority_algebra.py          # needs `pip install z3-solver`
 
@@ -11,17 +11,27 @@ the result to the whole conjunction `attenuation_check` actually computes:
                      ∧ fs_read, fs_write   path-descendant cover
                      ∧ net, secrets, declassify, foreign_c, foreign_python   exact-set ⊆
                      ∧ device             per-device interval containment
+                     ∧ budget             componentwise ≤ on (memory, processor time); absent = TOP
 
 Each dimension is modelled from the code, not from the prose:
   * set dimensions  — `authority.rs:151-158`, plain `BTreeSet::is_subset`
   * device          — `device_scope.rs::within` / `::meet`, including the three asymmetries that
                       are easy to get backwards: a SMALLER heartbeat is NARROWER, a SMALLER ttl is
                       NARROWER, and an UNBOUNDED rate under a BOUNDED parent is a WIDENING.
+  * budget          — `budget_scope.rs::within` / `::meet` (PS-B-05, D-V2-08's condition for a
+                      budget joining the order): an ABSENT budget is the top, so an absent child
+                      under a present parent is a WIDENING — the same asymmetry as the rate.
+
+Until PS-B-05 the full conjunction below modelled SEVEN set dimensions while its obligation said
+"all nine dimensions at once"; the code has eight (effects and seven scopes, the two path
+dimensions represented by the set laws). The laws are uniform in that number, so nothing proved was
+false, but the sentence claimed a dimension the model did not carry. It now carries eight.
 
 Where Z3 proves a statement it is proved for every value of the modelled variables, not for a
 sampled corpus. Where the model abstracts (bounded bit-widths, one device, two envelope
 dimensions), that is stated at the end and is a real limit on what the result covers.
 """
+import os
 import sys
 
 # The obligation names contain the mathematical symbols the project uses (⊆, ⊑, ⊓). On Windows a
@@ -41,6 +51,22 @@ except Exception as e:  # pragma: no cover
 
 W = 4          # bit-width: models up to 4 distinct labels per set dimension
 FAIL = []
+
+# TEETH (PS-B-05). A model that passes proves nothing about whether it COULD fail. CI therefore also
+# runs it once per named mutant below and requires each run to end with obligations NOT discharged —
+# the Z3 counterpart of the TLA+ step that requires CustodyC29.cfg to fail. An unknown name is refused
+# outright (exit 2, no "NOT discharged" line), so a typo in CI cannot pass as a caught mutant.
+MUTANTS = {
+    "budget-meet-max": "the budget meet takes the componentwise MAXIMUM (a widening meet)",
+    "budget-absent-child-passes": "an absent budget passes under a present one (the asymmetry backwards)",
+    "budget-dropped": "the budget is left out of the full conjunction",
+}
+MUTANT = os.environ.get("DELULU_Z3_MUTANT", "")
+if MUTANT and MUTANT not in MUTANTS:
+    print(f"unknown DELULU_Z3_MUTANT `{MUTANT}` (known: {', '.join(MUTANTS)})")
+    sys.exit(2)
+if MUTANT:
+    print(f"MUTANT: {MUTANT} — {MUTANTS[MUTANT]}. This run is EXPECTED to fail.")
 
 def prove(name, claim, vs):
     """Prove `claim` for all `vs` by refuting its negation."""
@@ -169,45 +195,127 @@ prove("device meet is GLB  within(z,x) ∧ within(z,y) → within(z, x⊓y)",
 
 print()
 print("=" * 78)
-print("(3) THE FULL CONJUNCTION — attenuation_check, authority.rs:150-165")
+print("(2b) BUDGET DIMENSION — budget_scope.rs::within / ::meet (PS-B-05)")
+print("     Option<(memory, cpu)>, absent = TOP")
 print("=" * 78)
 
-# The product order: ⊑ is the AND of every dimension. Model 7 set dimensions + 1 device dimension.
+def bud(n):
+    """An `Option<BudgetScope>`: presence, and the two fields that mean something when present."""
+    return {"has": Bool(f"{n}_has"), "mem": Int(f"{n}_mem"), "cpu": Int(f"{n}_cpu")}
+
+def bvars(x):
+    return [x["has"], x["mem"], x["cpu"]]
+
+def bwf(x):
+    """What `BudgetScope::parse` guarantees: both dimensions named and above zero."""
+    return Implies(x["has"], And(x["mem"] >= 1, x["cpu"] >= 1))
+
+def bwithin(ch, pa):
+    """budget_scope.rs::within, faithfully: parent absent → anything (the top); parent present and
+    child absent → WIDENING; both present → componentwise ≤."""
+    child_has = True if MUTANT == "budget-absent-child-passes" else ch["has"]
+    return If(Not(pa["has"]), True, And(child_has, ch["mem"] <= pa["mem"], ch["cpu"] <= pa["cpu"]))
+
+def bmeet(x, y, n):
+    """budget_scope.rs::meet: absent is the identity; both present → the componentwise minimum."""
+    m = bud(n)
+    lo = (lambda a, b: If(a > b, a, b)) if MUTANT == "budget-meet-max" else (lambda a, b: If(a < b, a, b))
+    both = And(x["has"], y["has"])
+    cons = [
+        m["has"] == Or(x["has"], y["has"]),
+        m["mem"] == If(both, lo(x["mem"], y["mem"]), If(x["has"], x["mem"], y["mem"])),
+        m["cpu"] == If(both, lo(x["cpu"], y["cpu"]), If(x["has"], x["cpu"], y["cpu"])),
+    ]
+    return m, And(*cons)
+
+def beq(x, y):
+    """Equality of the Rust VALUE: `None == None` whatever the unused fields hold."""
+    return And(x["has"] == y["has"], Implies(x["has"], And(x["mem"] == y["mem"], x["cpu"] == y["cpu"])))
+
+BX, BY, BZ = bud("bx"), bud("by"), bud("bz")
+BM, bmdef = bmeet(BX, BY, "bm")
+BMr, bmrdef = bmeet(BY, BX, "bmr")
+BXX, bxxdef = bmeet(BX, BX, "bxx")
+BL, bldef = bmeet(BX, BY, "bl")          # (x⊓y)
+BL2, bl2def = bmeet(BL, BZ, "bl2")       # (x⊓y)⊓z
+BR, brdef = bmeet(BY, BZ, "br")          # (y⊓z)
+BR2, br2def = bmeet(BX, BR, "br2")       # x⊓(y⊓z)
+b3 = bvars(BX) + bvars(BY) + bvars(BZ)
+
+prove("budget reflexive    within(x, x)", Implies(bwf(BX), bwithin(BX, BX)), bvars(BX))
+prove("budget transitive   within(x,y) ∧ within(y,z) → within(x,z)",
+      Implies(And(bwf(BX), bwf(BY), bwf(BZ), bwithin(BX, BY), bwithin(BY, BZ)), bwithin(BX, BZ)), b3)
+prove("budget antisymmetric within(x,y) ∧ within(y,x) → x = y (the Rust value)",
+      Implies(And(bwf(BX), bwf(BY), bwithin(BX, BY), bwithin(BY, BX)), beq(BX, BY)),
+      bvars(BX) + bvars(BY))
+prove("budget meet ⊑ both  (a lower bound — no widening)",
+      Implies(And(bwf(BX), bwf(BY), bmdef), And(bwithin(BM, BX), bwithin(BM, BY))),
+      bvars(BX) + bvars(BY) + bvars(BM))
+prove("budget meet is GLB  within(z,x) ∧ within(z,y) → within(z, x⊓y)",
+      Implies(And(bwf(BX), bwf(BY), bwf(BZ), bmdef, bwithin(BZ, BX), bwithin(BZ, BY)), bwithin(BZ, BM)),
+      b3 + bvars(BM))
+prove("budget meet idempotent x⊓x = x", Implies(And(bwf(BX), bxxdef), beq(BXX, BX)), bvars(BX) + bvars(BXX))
+prove("budget meet commutes  x⊓y = y⊓x", Implies(And(bmdef, bmrdef), beq(BM, BMr)),
+      bvars(BX) + bvars(BY) + bvars(BM) + bvars(BMr))
+prove("budget meet associates (x⊓y)⊓z = x⊓(y⊓z)",
+      Implies(And(bldef, bl2def, brdef, br2def), beq(BL2, BR2)),
+      b3 + bvars(BL) + bvars(BL2) + bvars(BR) + bvars(BR2))
+
+print()
+print("=" * 78)
+print("(3) THE FULL CONJUNCTION — attenuation_check, authority.rs")
+print("=" * 78)
+
+# The product order: ⊑ is the AND of every dimension. The code's eight set-like dimensions (effects
+# and seven scopes; the two path dimensions represented by the set laws), the device dimension and
+# the budget dimension: ten, as `attenuation_check` computes them.
+NSETS = 8
+
 def au(n):
-    return {"sets": [BitVec(f"{n}_s{i}", W) for i in range(7)], "dev": dev(n + "d")}
+    return {"sets": [BitVec(f"{n}_s{i}", W) for i in range(NSETS)], "dev": dev(n + "d"), "bud": bud(n + "b")}
 
 def avars(x):
-    return x["sets"] + dvars(x["dev"])
+    return x["sets"] + dvars(x["dev"]) + bvars(x["bud"])
 
 def ale(p, q):
-    return And(*[sub(p["sets"][i], q["sets"][i]) for i in range(7)], within(p["dev"], q["dev"]))
+    budget = True if MUTANT == "budget-dropped" else bwithin(p["bud"], q["bud"])
+    return And(*[sub(p["sets"][i], q["sets"][i]) for i in range(NSETS)], within(p["dev"], q["dev"]), budget)
 
 def awf(x):
-    return wf(x["dev"])
+    return And(wf(x["dev"]), bwf(x["bud"]))
 
 A, B, C = au("A"), au("B"), au("C")
-Mset = [A["sets"][i] & B["sets"][i] for i in range(7)]
+Mset = [A["sets"][i] & B["sets"][i] for i in range(NSETS)]
 MD, mddef = dmeet(A["dev"], B["dev"], "AB")
-AM = {"sets": Mset, "dev": MD}
+MB, mbdef = bmeet(A["bud"], B["bud"], "ABb")
+AM = {"sets": Mset, "dev": MD, "bud": MB}
 
 prove("FULL reflexive   a ⊑ a", Implies(awf(A), ale(A, A)), avars(A))
 prove("FULL transitive  a⊑b ∧ b⊑c → a⊑c",
       Implies(And(awf(A), awf(B), awf(C), ale(A, B), ale(B, C)), ale(A, C)),
       avars(A) + avars(B) + avars(C))
-prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all nine dimensions at once",
-      Implies(And(awf(A), awf(B), dmeet_ok(A["dev"], B["dev"]), mddef), And(ale(AM, A), ale(AM, B))),
-      avars(A) + avars(B) + dvars(MD))
+prove("FULL meet ⊑ both — THE NO-WIDENING LAW, all ten dimensions at once",
+      Implies(And(awf(A), awf(B), dmeet_ok(A["dev"], B["dev"]), mddef, mbdef), And(ale(AM, A), ale(AM, B))),
+      avars(A) + avars(B) + dvars(MD) + bvars(MB))
 prove("FULL meet is GLB c⊑a ∧ c⊑b → c ⊑ a⊓b",
-      Implies(And(awf(A), awf(B), awf(C), dmeet_ok(A["dev"], B["dev"]), mddef, ale(C, A), ale(C, B)),
+      Implies(And(awf(A), awf(B), awf(C), dmeet_ok(A["dev"], B["dev"]), mddef, mbdef, ale(C, A), ale(C, B)),
               ale(C, AM)),
-      avars(A) + avars(B) + avars(C) + dvars(MD))
+      avars(A) + avars(B) + avars(C) + dvars(MD) + bvars(MB))
+# The four laws above hold for ANY product of lattices, so they would still be discharged if a
+# dimension were left out of `ale` — measured: deleting the budget from `ale` left every obligation
+# PROVED. This one is what notices. It states the budget's own asymmetry at the level of the whole
+# order, which only holds if the budget is actually IN the conjunction.
+prove("FULL no budget under a budgeted parent is never ⊑ (the asymmetry reaches the product)",
+      Implies(And(Not(A["bud"]["has"]), B["bud"]["has"]), Not(ale(A, B))),
+      avars(A) + avars(B))
 
 print()
 print("=" * 78)
 print("(4) ANTISYMMETRY — finding F1, restated at the level of the whole order")
 print("=" * 78)
 print("  Every dimension modelled ABOVE is antisymmetric on its own representation: bitvector")
-print("  subset is (proved in §1), and so is device containment when the fields are compared.")
+print("  subset is (proved in §1), the budget is (proved in §2b), and so is device containment")
+print("  when the fields are compared.")
 print("  F1 does NOT come from the order's shape — it comes from the PATH dimension's")
 print("  REPRESENTATION: `./data` and `data` are distinct Strings that resolve to one path, so two")
 print("  structurally unequal Authority values are mutually ⊑. That is a property of the encoding,")
@@ -233,6 +341,9 @@ print("    value of those vectors, i.e. for all subsets of a %d-element universe
 print("  * The device dimension carries TWO envelope dimensions, one optional rate, heartbeat, ttl")
 print("    and a fail-state. Real grants may carry more envelope dimensions; the laws are uniform")
 print("    in the number, but that uniformity is an argument, not something Z3 checked here.")
+print("  * The budget dimension is modelled over UNBOUNDED integers: its laws hold for every")
+print("    positive (memory, cpu) pair and for absence, not only the grid the Rust tests enumerate")
+print("    (budget_scope.rs). The Rust fields are u64; the laws use only ≤ and min, which u64 keeps.")
 print("  * The PATH dimensions are represented here by the set laws only. Their real order is")
 print("    path-descendant COVER, whose laws are checked exhaustively over real path strings in")
 print("    crates/delulu-broker/tests/order_laws.rs — including the antisymmetry FAILURE (F1).")

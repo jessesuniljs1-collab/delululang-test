@@ -1251,7 +1251,7 @@ DeluluLang **does not claim**, ever:
   4.32.2, effect soundness for the **higher-order fragment**, with `#print axioms` reporting no
   axioms at all — and the same file mechanizes C88, proving the calculus as written admits a program
   whose trace escapes its row. What is **not** mechanized is everything outside that fragment: the
-  full type system, the nine-dimension authority order (proved separately in Z3, which is a
+  full type system, the ten-dimension authority order (proved separately in Z3, which is a
   different kind of evidence), and the runtime. The soundness argument for the rest remains
   design-level, audit-rule-enforced, and test-enforced.
 - **A compiler that cannot be crashed.** Until 2026-08-04 it could be: a valid module nested 100,000

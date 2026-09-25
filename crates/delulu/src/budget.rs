@@ -89,6 +89,46 @@ impl Budget {
         Ok(b)
     }
 
+    /// PS-B-05: a `--lease` run's budget when its node carries one. The delegated budget is both the
+    /// ceiling and the default. A dimension `--limits` leaves unnamed takes the delegated value, not
+    /// D-V2-25's, because the delegator already decided what this holder's runs may consume. A
+    /// dimension it names may ask for less, never more. Asking for more is refused rather than
+    /// quietly clipped: an operator who typed `mem=8589934592` must learn that it was not what the
+    /// run got. Wall time is not part of the delegated dimension (a wall budget is the launcher's
+    /// own control, `budget_scope.rs`), so `--limits wall=` keeps its ordinary meaning.
+    pub fn under_delegation(spec: Option<&str>, ceiling: &delulu_broker::BudgetScope) -> Result<Budget, String> {
+        let asked = Budget::parse(spec)?;
+        let named = |key: &str| {
+            spec.is_some_and(|s| s.split(',').any(|p| p.split_once('=').is_some_and(|(k, _)| k.trim() == key)))
+        };
+        let pick = |key: &str, asked: u64, ceiling: u64, unit: &dyn Fn(u64) -> String| -> Result<u64, String> {
+            if !named(key) {
+                return Ok(ceiling);
+            }
+            if asked > ceiling {
+                return Err(format!(
+                    "`--limits {key}={asked}` asks for {} but this lease was delegated {} — a lease run may \
+                     be held to less than its delegation, never more",
+                    unit(asked),
+                    unit(ceiling)
+                ));
+            }
+            Ok(asked)
+        };
+        Ok(Budget {
+            memory_bytes: pick("mem", asked.memory_bytes, ceiling.memory_bytes, &human_bytes)?,
+            cpu_seconds: pick("cpu", asked.cpu_seconds, ceiling.cpu_seconds, &|s| format!("{s} s of processor time"))?,
+            wall_seconds: asked.wall_seconds,
+        })
+    }
+
+    /// The part of this budget that is an authority dimension, in the broker's form — what a
+    /// `--broker daemon` run's root node records it was held to, so every delegation below it
+    /// inherits it or narrows it.
+    pub fn to_scope(self) -> delulu_broker::BudgetScope {
+        delulu_broker::BudgetScope { memory_bytes: self.memory_bytes, cpu_seconds: self.cpu_seconds }
+    }
+
     /// The `limits` object of the run report.
     pub fn to_json(self) -> serde_json::Value {
         serde_json::json!({
@@ -299,6 +339,29 @@ mod tests {
         assert_eq!((b.memory_bytes, b.cpu_seconds, b.wall_seconds), (268_435_456, 2, Some(9)));
         // The operator may RAISE a default at L0 — "the operator may change them" (D-V2-25).
         assert_eq!(Budget::parse(Some("mem=4294967296")).unwrap().memory_bytes, 4 << 30);
+    }
+
+    /// PS-B-05: the delegation is the ceiling AND the default; wall time stays the launcher's.
+    #[test]
+    fn a_lease_run_is_held_to_its_delegation_and_may_only_ask_for_less() {
+        let ceiling = delulu_broker::BudgetScope { memory_bytes: 2 << 30, cpu_seconds: 600 };
+        let b = Budget::under_delegation(None, &ceiling).unwrap();
+        assert_eq!((b.memory_bytes, b.cpu_seconds, b.wall_seconds), (2 << 30, 600, None), "unnamed = delegated");
+        let b = Budget::under_delegation(Some("cpu=60,wall=9"), &ceiling).unwrap();
+        assert_eq!((b.memory_bytes, b.cpu_seconds, b.wall_seconds), (2 << 30, 60, Some(9)));
+        let b = Budget::under_delegation(Some("mem=2147483648,cpu=600"), &ceiling).unwrap();
+        assert_eq!((b.memory_bytes, b.cpu_seconds), (2 << 30, 600), "AT the ceiling is within it");
+        for over in ["mem=2147483649", "cpu=601", "cpu=1,mem=4294967296"] {
+            let e = Budget::under_delegation(Some(over), &ceiling).unwrap_err();
+            assert!(e.contains("never more"), "`{over}`: {e}");
+        }
+        // A ceiling BELOW D-V2-25's defaults binds even though nothing was typed: the defaults are the
+        // operator's for an undelegated run, not a floor under a delegation.
+        let tight = delulu_broker::BudgetScope { memory_bytes: 1 << 20, cpu_seconds: 1 };
+        let b = Budget::under_delegation(None, &tight).unwrap();
+        assert_eq!((b.memory_bytes, b.cpu_seconds), (1 << 20, 1));
+        assert!(Budget::under_delegation(Some("mem=0"), &ceiling).is_err(), "the ordinary spelling rules still hold");
+        assert_eq!(b.to_scope(), tight);
     }
 
     #[test]

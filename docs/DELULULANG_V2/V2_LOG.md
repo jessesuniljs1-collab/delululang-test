@@ -881,3 +881,61 @@ never armed, four tests fail at their deadlines, and the two that do not depend 
 What this does not do, named: the host process of a `--sandbox` run is not itself budgeted (its guest
 is held by the jail); `delulu test` runs are not budgeted; budgets are not yet in the derived policy's
 order or the Z3 model (PS-B-05).
+
+**PS-B-01's run, read.** CI `36117814329` failed on `test (windows-latest)` only: two `hw_adapter_cli`
+tests, "adapter did not answer within 2000 ms", each the job's first start of the Python test driver,
+launched together. Re-running the failed job passed, and every other job passed first time. That is
+not a diagnosis, so it was settled by experiment (the 2026-09-14 rule, "starve, don't guess"). CPU
+starvation did NOT reproduce it: 0 of 8 runs failed with a high-priority hog pinned to the test's own
+CPU, 0 of 5 idle. A cold interpreter did: the installed Python's first start took **4251 ms**, its
+next 177 ms, because a plain `python` imports `site` and walks every package installed beside it; an
+interpreter with no site-packages started cold in 470-564 ms and warm in 51-58 ms. The test driver now
+runs `python -I -S` and is started once, untimed, before any test times it. `EXCHANGE_TIMEOUT` is
+untouched, and a mutant driver that sleeps 3 s before answering still fails the same two tests with
+CI's exact message. What the tests exposed about the PRODUCT is recorded, not fixed quietly: a real
+driver's start-up counts against its first exchange (`REMAINING_WORK.md` 4.19, a D23 protocol change,
+the owner's).
+
+**PS-B-05.** A budget is an authority dimension now (D-V2-08's direction; D-V2-33 records how).
+`crates/delulu-broker/src/budget_scope.rs` gives memory and processor time a containment order
+(componentwise `≤`) and a meet (componentwise minimum), with an absent budget as the top: every node
+written before this one keeps its meaning, and an absent budget under a present one is refused as a
+widening. `Scopes.budget` joins `attenuation_check`'s conjunction, which is ten dimensions now. The
+certificate parser reads `"budget"` strictly; an unbudgeted authority serializes exactly as before, so
+no fingerprint or audit hash moved.
+
+Through the CLI: `grants delegate --budget mem=BYTES,cpu=SECONDS` hands one down; a delegation that
+names none inherits its parent's (at the tree's attenuation chokepoint, before `⊑` is asked); one that
+names more is DL0802 with the meet as its repair. A `run --lease` is held to its node's budget, which
+is also its default; `--limits` may ask for less and is refused, before `main`, when it asks for more.
+A `--broker daemon` run's root records the budget the run is held to. The wire maps an unreadable
+budget to the smallest one, never to none.
+
+Proof and tests. The Z3 model gained a budget section (reflexive, transitive, antisymmetric, lower
+bound, GLB, idempotent, commutative, associative, over unbounded integers) and its full conjunction now
+carries all ten dimensions: **26 obligations**. It had modelled seven set dimensions while its
+obligation said "all nine" (the code has eight); nothing proved was false, but the sentence claimed a
+dimension the model did not carry. Extending it showed something worth keeping: deleting the budget
+from the model's conjunction left all four product laws discharged, because they hold for ANY product.
+One more obligation, "no budget under a budgeted parent is never `⊑`", is what fails then. CI now runs
+the model's three mutants (a widening meet, the asymmetry backwards, the budget dropped) and requires
+each to end with obligations NOT discharged. In Rust: exhaustive laws over the top plus a 3×3 grid, a
+lease-module test of inherit/narrow/refuse, the wire's fail-to-smallest test, and one end-to-end test
+through the real daemon in which an endless loop under a lease delegated `cpu=1` is stopped at one
+second, not D-V2-25's five minutes. **Falsified by five mutants**: no inheritance, no `within`, no
+lease cap, unreadable→none, and an unbudgeted daemon root — each fails a test at the assertion meant
+for it.
+
+**Found on the way, fixed: `run --sandbox` dropped most of `run`'s flags in silence** (`REMAINING_WORK.md`
+4.20). Following the Survey's blast radius of the `Scopes` change into `guest.rs` showed the sandboxed
+path reading six of `run`'s options. `--sandbox --lease TOKEN` never redeemed the token: the guest ran
+holding nothing, and the DL0703 that followed told a lease holder to "pass `--grant console`", which is
+how a holder would step outside its delegation. `--broker daemon` got embedded custody. A misspelled
+flag, a flag with no value and a second file were accepted too, because the ordinary path's refusals
+ran after the dispatch. The sandboxed path now calls those same refusals first and accepts only an
+allowlist of the flags it applies; everything else is refused before anything runs. PS-A-10 wrote this
+rule for the other direction (a sandbox flag without a sandbox); this is its mirror.
+
+`doctor`'s resource line names the delegated budget. What PS-B-05 did not do, named: the host process of
+a `--sandbox` run is still not budgeted by the main-program watchdog (its guest is held by the jail),
+and a guest cannot run under a lease at all yet (4.20); a budget for `delulu test` runs does not exist.

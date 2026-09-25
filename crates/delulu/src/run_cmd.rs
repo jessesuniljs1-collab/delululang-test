@@ -220,10 +220,15 @@ pub(crate) fn note_program_started() {
 /// PS-B-01: what the budget watchdog needs to stop a run and still report it, captured before the
 /// program starts — the watchdog runs on its own thread and must not need anything the interpreter
 /// holds.
+#[derive(Clone)]
 struct BudgetRun {
     budget: crate::budget::Budget,
     report_out: Option<String>,
     requested: String,
+    /// Set when the watchdog starts, so a second [`note_program_started`] cannot start a second one.
+    /// The record itself stays, because the run report written after the program reads the budget
+    /// back from it (a lease may have narrowed it after it was first set, PS-B-05).
+    armed: bool,
 }
 
 static BUDGET_RUN: std::sync::Mutex<Option<BudgetRun>> = std::sync::Mutex::new(None);
@@ -232,9 +237,35 @@ static BUDGET_RUN: std::sync::Mutex<Option<BudgetRun>> = std::sync::Mutex::new(N
 /// the WASM engine and a `.dwx` artifact all pass through [`note_program_started`], which is what
 /// makes one budget hold on every engine (PS-B-01's "on every engine" is this one call site).
 fn start_budget_watchdog() {
-    let Some(ctx) = BUDGET_RUN.lock().ok().and_then(|mut g| g.take()) else { return };
+    let Some(ctx) = BUDGET_RUN.lock().ok().and_then(|mut g| {
+        let r = g.as_mut().filter(|r| !r.armed)?;
+        r.armed = true;
+        Some(r.clone())
+    }) else {
+        return;
+    };
     let budget = ctx.budget;
     crate::budget::watch(budget, move |breach| stop_for_budget(&ctx, breach));
+}
+
+/// The budget this run is held to, once decided (before `main`). `None` outside `delulu run`.
+fn run_budget() -> Option<crate::budget::Budget> {
+    BUDGET_RUN.lock().ok().and_then(|g| g.as_ref().map(|r| r.budget))
+}
+
+/// PS-B-05: replace the run's budget before the program starts — the only caller is a `--lease` run
+/// whose node carries a delegated budget. After the watchdog is armed this would change nothing it
+/// enforces, so it refuses to pretend: it is an error to call it then, and it says so.
+fn hold_run_to(b: crate::budget::Budget) -> Result<(), &'static str> {
+    let mut g = BUDGET_RUN.lock().map_err(|_| "the run's budget record is poisoned")?;
+    match g.as_mut() {
+        Some(r) if !r.armed => {
+            r.budget = b;
+            Ok(())
+        }
+        Some(_) => Err("the budget watchdog is already running"),
+        None => Err("no budget was recorded for this run"),
+    }
 }
 
 /// A budget was spent: say which, from the watchdog's own measurement; write the report; end the run
@@ -492,9 +523,12 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             budget,
             report_out: opts.report_out.clone(),
             requested: opts.isolation.clone().unwrap_or_else(|| "none".to_string()),
+            armed: false,
         });
     }
     let code = cmd_run_inner(rest);
+    // A lease may have narrowed the budget inside `cmd_run_inner` (PS-B-05); report what was held.
+    let budget = run_budget().unwrap_or(budget);
     // If the watchdog is already stopping this run, it owns the exit: it has written the report and
     // chosen the code, and a second report here would contradict it.
     if !crate::budget::claim_normal_exit() {
@@ -864,6 +898,30 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             Err(e) => return fail("DL1401", unreachable_msg(&e)),
         };
         let authority = crate::brokerd::spec_to_authority(&info.authority_spec());
+        // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
+        // and, for what `--limits` leaves unnamed, the default. Decided here, before `main`, from the
+        // same converted authority the custody below enforces (so an unreadable budget on the wire is
+        // already the smallest one, never none). A node without one leaves the operator's budget
+        // exactly as it was.
+        if let Some(ceiling) = authority.scopes.budget {
+            let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), &ceiling) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    return 2;
+                }
+            };
+            if let Err(e) = hold_run_to(held) {
+                eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
+                return 2;
+            }
+            if !opts.json {
+                eprintln!(
+                    "lease: held to the delegated budget, mem={} bytes, cpu={} s",
+                    held.memory_bytes, held.cpu_seconds
+                );
+            }
+        }
         grants = grants_from_lease(&info, std::mem::take(&mut grants.foreign_c));
         // The guard awareness line (addendum §2.7, criterion 8): EVERY `run --lease` prints one
         // guard status line before user code output — stderr always (in `--json` mode too: stdout
@@ -924,7 +982,10 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
             eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
             return 2;
         };
-        let spec = authority_spec_from_grants(&grants, &file);
+        let mut spec = authority_spec_from_grants(&grants, &file);
+        // PS-B-05: the root records the budget this run is held to, so anything the program
+        // delegates from it inherits that budget or narrows it, and never outspends its own run.
+        spec.budget = run_budget().map(|b| b.to_scope().to_grant_string());
         match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
             Ok(c) => daemon_custody = Some(c),
             Err(d) => {

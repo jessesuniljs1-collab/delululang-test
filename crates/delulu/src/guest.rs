@@ -204,12 +204,61 @@ pub fn unsupported_surface(program: &str) -> Option<String> {
     }
 }
 
+/// The `run` flags a sandboxed run actually applies. Every other flag `run` knows is refused under
+/// `--sandbox`, before anything runs.
+///
+/// Found during PS-B-05 by following the Survey's blast radius into this file: the sandboxed path
+/// read six of `run`'s options and silently dropped the rest. `--sandbox --lease TOKEN` never redeemed
+/// the token — the guest ran holding nothing, and the resulting DL0703 told a lease holder to "pass
+/// `--grant console`", which is exactly how a holder would step outside its delegation.
+/// `--broker daemon` got embedded custody. `--locked` and `--deny-advisories` stopped gating, so a CI
+/// line that gained `--sandbox` lost its supply-chain checks without a word. It is the rule PS-A-10
+/// wrote for the opposite direction: a flag that is silently ignored reads exactly like a flag that
+/// was applied. An ALLOWLIST rather than a list of refusals, because every flag added to `run` after
+/// a refusal list is written falls through it (the lease-run device grants were lost that way, 10g).
+const APPLIED_UNDER_SANDBOX: &[&str] =
+    &["--sandbox", "--sandbox-profile", "--mode", "--limits", "--grant", "--json", "--report-out", "--no-prompt"];
+
+fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> {
+    // The ordinary path's own two refusals first. They sat in `cmd_run_inner`, AFTER the dispatch to
+    // this function, so under `--sandbox` a misspelled flag (`--totally-bogus`), a flag with no value
+    // and a second file were all accepted in silence while the same command line without
+    // `--sandbox` refused them (P1-F3). Same functions, same words, so the two paths cannot drift.
+    if let Some(code) = crate::cli::refuse_extra_positionals("run", opts) {
+        return Some(code);
+    }
+    if let Some(code) = crate::cli::refuse_unknown_flags("run", opts) {
+        return Some(code);
+    }
+    let dropped: Vec<&str> =
+        opts.seen_flags.iter().map(String::as_str).filter(|f| !APPLIED_UNDER_SANDBOX.contains(f)).collect();
+    if dropped.is_empty() {
+        return None;
+    }
+    eprintln!(
+        "error: a sandboxed run does not apply {} yet. Nothing ran, because a flag that is silently \
+         ignored reads exactly like a flag that was applied. Drop it, or run without `--sandbox`.",
+        dropped.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", ")
+    );
+    if dropped.iter().any(|f| *f == "--lease" || *f == "--broker") {
+        eprintln!(
+            "  `--lease` and `--broker`: a guest's effects are performed by the host in embedded \
+             custody, and the channel does not carry broker custody yet. A lease runs without \
+             `--sandbox`, under exactly its delegated authority and budget."
+        );
+    }
+    Some(2)
+}
+
 /// `delulu run <file> --sandbox …` (PS-A-07): run the program as a jailed guest.
 ///
 /// Refusals come first and are explicit, because the one thing a sandbox flag must never do is
 /// quietly not apply: an unknown profile, limits that cannot be read, a surface the channel does not
 /// carry, or a host with no jail at all are each refused with a reason and a way forward.
 pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[String]) -> i32 {
+    if let Some(code) = refuse_what_the_guest_does_not_apply(opts) {
+        return code;
+    }
     let Some(file) = file else {
         eprintln!("error: `run --sandbox` needs a file");
         return 2;

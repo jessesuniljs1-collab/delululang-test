@@ -225,6 +225,84 @@ fn a_sandbox_flag_without_a_sandbox_is_refused_not_ignored() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The same rule in the other direction, found during PS-B-05: a `run` flag the SANDBOXED path does
+/// not apply was dropped in silence. `--lease` was never redeemed (the guest ran holding nothing and
+/// was told to pass `--grant`), `--broker daemon` got embedded custody, and `--locked` and
+/// `--deny-advisories` stopped gating. Each is refused now, before anything runs.
+#[test]
+fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
+    let dir = tmp("dropped");
+    let (src, scope) = writer(&dir);
+    let grant = format!("fs.write={scope}");
+    let made = dir.join("out").join("made.txt");
+    for flag in [
+        vec!["--lease", "lt_never_redeemed"],
+        vec!["--broker", "daemon"],
+        vec!["--trace-out", "t.jsonl"],
+        vec!["--trace-effects"],
+        vec!["--engine", "wasm"],
+        vec!["--isolation", "microvm"],
+        vec!["--grant-manifest"],
+        vec!["--seed", "7"],
+        vec!["--clock", "5"],
+        vec!["--approved", "signoff.json"],
+        vec!["--broker-profile", "sim"],
+        vec!["--adapter-cmd", "x"],
+        vec!["--actors-threads", "2"],
+    ] {
+        let _ = std::fs::remove_file(&made);
+        let mut args = vec!["run", src.to_str().unwrap(), "--sandbox", "--grant", &grant];
+        args.extend(flag.iter().copied());
+        let o = delulu(&args);
+        let text = out(&o);
+        assert_eq!(o.status.code(), Some(2), "`{flag:?}` was accepted under `--sandbox` and not applied: {text}");
+        assert!(text.contains(&format!("`{}`", flag[0])) && text.contains("Nothing ran"), "{text}");
+        assert!(!made.exists(), "`{flag:?}` was dropped and the run happened anyway: {text}");
+        if flag[0] == "--lease" {
+            assert!(text.contains("runs without `--sandbox`"), "a lease holder is told where a lease runs: {text}");
+            assert!(!text.contains("pass `--grant"), "never the advice that steps outside a delegation: {text}");
+        }
+    }
+    // What the ordinary path already refused was accepted under `--sandbox` too, because those
+    // refusals ran after the dispatch: a misspelled flag, a flag with no value, a second file.
+    for (extra, says) in [
+        (vec!["--totally-bogus"], "does not know this option"),
+        (vec!["--limits"], "with no value"),
+        (vec!["second.delulu"], "second.delulu"),
+    ] {
+        let _ = std::fs::remove_file(&made);
+        let mut args = vec!["run", src.to_str().unwrap(), "--sandbox", "--grant", &grant];
+        args.extend(extra.iter().copied());
+        let o = delulu(&args);
+        let text = out(&o);
+        assert_eq!(o.status.code(), Some(2), "`{extra:?}` was accepted under `--sandbox`: {text}");
+        assert!(text.contains(says), "`{extra:?}`: {text}");
+        assert!(!made.exists(), "`{extra:?}` was ignored and the run happened anyway: {text}");
+    }
+    // Falsification: every flag the guest DOES apply, all at once, still runs and performs the effect,
+    // so the refusals above are about those flags and not about the command line.
+    let rep = dir.join("rep.json");
+    let ok = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--sandbox",
+        "--sandbox-profile",
+        "contained",
+        "--mode",
+        "strict",
+        "--limits",
+        "mem=64000000",
+        "--no-prompt",
+        "--report-out",
+        rep.to_str().unwrap(),
+        "--grant",
+        &grant,
+    ]);
+    assert_eq!(ok.status.code(), Some(0), "{}", out(&ok));
+    assert!(made.exists(), "the allowed flags ran the program: {}", out(&ok));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// PS-B-01: `--limits` without `--sandbox` is applied to the ordinary run, not refused and not
 /// ignored — the report shows the budget the operator named, and the program ran under it.
 #[test]

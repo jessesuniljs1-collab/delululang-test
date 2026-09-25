@@ -607,6 +607,38 @@ no bound at all (NE-22).
    finishing run claims the exit first writes the report and chooses the code; the other writes
    nothing.
 
+## D-V2-33 — PS-B-05, a budget as an authority dimension — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+D-V2-08 is the owner's direction: a budget joins `⊑` only with a containment relation and a meet
+that are proved in the Z3 model, enumerated, and documented. This is how.
+
+1. **Memory and processor time join; wall time does not.** Each of the two is a chain under `≤`,
+   so the pair is a product of chains and its laws are the textbook ones. A wall budget is a launcher
+   control the operator sets per run (PS-B-01): a program waiting on its input consumes nothing a
+   delegator hands down.
+2. **Absent is the top.** Every node written before PS-B-05 has no budget, and must keep meaning what
+   it meant, so "no budget" is the largest element, not the smallest. Consequently an absent budget
+   under a present one is a WIDENING and is refused (the device rate's asymmetry).
+3. **A delegation that names no budget inherits its parent's**, filled in at the tree's one
+   attenuation chokepoint before `⊑` is asked. Without it every "delegate this slice" under a budgeted
+   parent would be refused, since absence is the top. Inheritance cannot widen: it copies the parent.
+4. **The wire fails toward the bottom.** An unreadable budget string becomes `BudgetScope::SMALLEST`
+   (one byte, one second), never "none": dropping it, as the device dimension drops an unreadable
+   envelope, would read it as unbounded.
+5. **A lease run is held to its node's budget, which is also its default.** `--limits` may name less
+   per dimension, never more (refused before `main`, not clipped, so the operator learns what the run
+   got). A node with no budget leaves the operator's budget exactly as PS-B-01 made it.
+6. **A `--broker daemon` run's root records the budget the run is held to**, so everything the
+   program delegates from it inherits or narrows that budget.
+7. **Serialized only when present.** An unbudgeted authority's canonical JSON, wire bytes and
+   `grants --json` output are byte-identical to before, so no certificate fingerprint, audit hash or
+   snapshot moved.
+8. **The model was corrected while extended.** Its full conjunction had carried seven set dimensions
+   while claiming "all nine"; it carries the code's eight now, plus the device and the budget. The
+   four product laws hold for any product, so dropping the budget from the model left them all
+   discharged (measured); one more obligation, the asymmetry at the level of the whole order, is what
+   fails then. Three model mutants run in CI and must each end with obligations NOT discharged.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

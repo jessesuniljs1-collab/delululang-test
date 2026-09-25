@@ -454,10 +454,23 @@ jobs:
 
       - uses: actions/setup-python@v5
         with: { python-version: "3.13" }
-      - name: The nine-dimension authority algebra (Z3, 17 obligations)
+      - name: The ten-dimension authority algebra (Z3, 26 obligations)
         run: |
           python -m pip install z3-solver
           python docs/design/models/authority_algebra.py
+      # PS-B-05: the model's teeth. Each named mutant must end with obligations NOT discharged — not
+      # merely a failing exit, which an unknown mutant name (exit 2) would also produce.
+      - name: The authority algebra has teeth (3 Z3 mutants must each fail)
+        run: |
+          for m in budget-meet-max budget-absent-child-passes budget-dropped; do
+            if DELULU_Z3_MUTANT=$m python docs/design/models/authority_algebra.py > z3-mutant.txt; then
+              echo "::error::Z3 mutant $m was NOT caught — the model has lost its teeth"; exit 1
+            fi
+            if ! grep -q "obligation(s) NOT discharged" z3-mutant.txt; then
+              echo "::error::Z3 mutant $m failed for some other reason"; cat z3-mutant.txt; exit 1
+            fi
+            echo "caught: $m"
+          done
 
       # P17-9: the higher-order fragment, machine checked. Silence means every declaration
       # type-checked; the file's own `#print axioms` block is what proves no `sorry` is hiding.

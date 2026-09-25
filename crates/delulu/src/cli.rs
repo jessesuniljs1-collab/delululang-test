@@ -1289,7 +1289,8 @@ fn usage() -> &'static str {
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--multi] [--owner CODE]  (prints a lease token)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--budget mem=N,cpu=S] [--multi] [--owner CODE]  (prints a lease token; a budget left\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 unnamed is the parent's, and a `run --lease` is held to it)\n\
      \x20 delulu grants    certify --subject HEX --effects E,.. [--fs-read ABS].. [--fs-write ABS].. [--net H]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--device D].. --ttl 20m [--key F] [--parent-cert F] [--out F]\n\
      \x20 delulu grants    adopt <cert>.. [--anchor HEX].. | pubkey [--key F]   (federation: mint offline, adopt locally)\n\
@@ -5782,6 +5783,9 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
         },
         foreign_python: grants.foreign_python.clone(),
         device,
+        // PS-B-05: grants carry no budget. A `--broker daemon` run puts its own on the root it issues
+        // (`run_cmd`), which is the only caller that knows what the run is held to.
+        budget: None,
         holder_kind: "process".to_string(),
         holder_desc: program.to_string(),
         ttl_millis: None,
@@ -6039,7 +6043,7 @@ fn cmd_grants(rest: &[String]) -> i32 {
         eprintln!(
             "error: `grants` needs a subcommand: list | tree | inspect <g_ID> | revoke <g_ID> | \
              certify | adopt | pubkey | \
-             delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--device DEV:..] [--ttl 1h] [--multi]"
+             delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--device DEV:..] [--budget mem=N,cpu=S] [--ttl 1h] [--multi]"
         );
         return 2;
     };
@@ -6783,6 +6787,9 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // RFC 0001 F1 (D12e): the dimension that lets a delegation say "you may fly this corridor only"
     // rather than merely "you may actuate".
     let mut device: Vec<String> = Vec::new();
+    // PS-B-05: the resource budget the holder's runs are held to. Unnamed means "inherit the
+    // parent's", never "unlimited" (the broker fills it in before the `⊑` check).
+    let mut budget: Option<String> = None;
     let mut ttl: Option<String> = None;
     let mut parent: Option<String> = None;
     let mut multi = false;
@@ -6818,6 +6825,11 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
             foreign_python.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--device") {
             device.push(v);
+        } else if let Some(v) = flag_value(args, &mut i, "--budget") {
+            if budget.replace(v).is_some() {
+                eprintln!("error: `--budget` is given twice; a delegation has one budget");
+                return 2;
+            }
         } else if let Some(v) = flag_value(args, &mut i, "--ttl") {
             ttl = Some(v);
         } else if let Some(v) = flag_value(args, &mut i, "--parent") {
@@ -6865,6 +6877,17 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         out.sort();
         out
     };
+    // The budget is parsed here for the same reason as the envelope above: a spelling the broker
+    // could not read would become the smallest budget there is (`spec_to_authority`), which is safe
+    // and baffling. Say so now, and send the canonical form.
+    let budget = match budget.as_deref().map(delulu_broker::BudgetScope::parse) {
+        None => None,
+        Some(Ok(b)) => Some(b.to_grant_string()),
+        Some(Err(e)) => {
+            eprintln!("error: bad --budget: {e}\n  form: mem=BYTES,cpu=SECONDS (both named, both above zero)");
+            return 2;
+        }
+    };
     // fs scope paths are absolutized + lexically normalized against THIS command's cwd — the same
     // frame `--grant fs.*` uses (see `authority_spec_from_grants`: "the SAME absolute, lexically-
     // normalized strings the embedded RootVal carries") — so the broker's path lattice sees exactly
@@ -6910,6 +6933,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
                 foreign_c: foreign_c.clone(),
                 foreign_python: foreign_python.clone(),
                 device: device.clone(),
+                budget: budget.clone(),
                 // Provenance honesty (DISC-1): this root is minted by whatever process invoked the
                 // CLI — the broker cannot verify a human typed it, so it must not be recorded as
                 // `human`. `holder` is DATA (never switched on, KIND_IS_DATA); this only affects what
@@ -6939,6 +6963,7 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         foreign_c,
         foreign_python,
         device,
+        budget,
         holder_kind: "delegate".to_string(),
         holder_desc,
         ttl_millis,

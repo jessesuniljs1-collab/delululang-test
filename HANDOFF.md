@@ -2,7 +2,7 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Current state (2026-09-25):** V2 phases V2-0, P1, PS-0, PS-A, P2, P4a and P3 are complete, each with its CI run read green; **PS-B is in progress** — its TLS dependency landed 2026-09-20 (D-V2-30) and **PS-B-02, the network client, on 2026-09-25**: `http.get` now fetches over verified HTTPS through one host-side client that serves L0 and sandboxed guests alike. PS-B-01 (every run budgeted, D-V2-25) followed the same day. Next: PS-B-05 (resource authority in the policy and the Z3 model), then PS-B-03/04/06. **Resume from `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the newest entry in `docs/DELULULANG_V2/V2_LOG.md`.** §3 has the V2 ledger.
+**Current state (2026-09-25):** V2 phases V2-0, P1, PS-0, PS-A, P2, P4a and P3 are complete, each with its CI run read green; **PS-B is in progress** — its TLS dependency landed 2026-09-20 (D-V2-30) and **PS-B-02, the network client, on 2026-09-25**: `http.get` now fetches over verified HTTPS through one host-side client that serves L0 and sandboxed guests alike. PS-B-01 (every run budgeted, D-V2-25) followed the same day (`936500f`; its Windows failure was a cold Python start in a TEST driver, measured and fixed), and **PS-B-05, a budget as the tenth authority dimension** (`grants delegate --budget`, inherited, never widened, a lease run held to it; Z3 26 obligations with CI-enforced mutants; D-V2-33). PS-B-05 also found and closed `run --sandbox` silently dropping most of `run`'s flags (`--lease` among them). Next: PS-B-03 (identity separation), PS-B-06 (BREAK-GLASS), PS-B-04 only if PS-A's measurement says batching pays. **Resume from `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the newest entry in `docs/DELULULANG_V2/V2_LOG.md`.** §3 has the V2 ledger.
 
 **Last updated:** 2026-09-25 — PS-B-02 (the network client) and a check of every earlier V2 phase, which found five things (V2 log, PS-B-02 entry) — among them that the portable download would have shipped with no network client, and that the resource-limit defaults everyone was waiting on had been ruled a week earlier. Before that, 2026-09-17 — **DeluluLang V2 is executing.** The owner approved the 2026 evolution plan the same evening (`docs/design/DeluluLang_V2_Execution_Master_Prompt.md`); the active source of truth is now `docs/DELULULANG_V2/` (start at `V2_README.md`; phase state in `V2_PHASE_STATUS.md`), and the two planning passes that produced the plan were archived under `docs/archive/v1/NEXT_EVOLUTION_2026/` together with sixteen other historical documents (`docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md`). Earlier that day the owner made the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all three operating systems in one run. Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**
@@ -240,7 +240,7 @@ each phase deliberately did NOT build and why, are in `docs/DELULULANG_V2/V2_LOG
 | P2 real plugin loading | `5f52eb8` | `35505790785` | NE-01 closed: a running program loads a `.dpx` |
 | P4a the Agent Skill | `2ad6e1d` | `35520103322` | `skills/delulu/SKILL.md` and `delulu skill`, derived from `--help` so they cannot drift |
 | P3 the standard library | `3ab0cc9` | `35522886721` | `List` 15, `Str` 10, `Map[K, V]` 8; coverage 353/353 |
-| PS-B (in progress) | `d0ae0f9`, `d59201a`, then PS-B-01 | `35524134404`, `36114298041` | the TLS dependency measured before use; **the network client** — verified HTTPS, host-side, resolve-once-and-pin, special-use refused unless `net.special=`; **every run budgeted** — 1 GiB / 5 min unless `--limits` says otherwise, stopped and reported on breach |
+| PS-B (in progress) | `d0ae0f9`, `d59201a`, `936500f`, then PS-B-05 | `35524134404`, `36114298041`, `36117814329` (Windows re-run green; the first attempt's failure was a cold test-driver start, settled by experiment) | the TLS dependency measured before use; **the network client** — verified HTTPS, host-side, resolve-once-and-pin, special-use refused unless `net.special=`; **every run budgeted** — 1 GiB / 5 min unless `--limits` says otherwise, stopped and reported on breach; **the budget as an authority dimension** — delegated, inherited, never widened, a lease run held to it, proved in Z3 (26 obligations) |
 
 Still to come, in order: the rest of PS-B, P4b–e, PS-C (the Linux/KVM microVM), P6, P5, P7, PS-D, P8.
 
@@ -382,9 +382,9 @@ The whole system, and the thing to be most careful with.
   plus `device`, which is a **map** from device path to envelope rather than a set — one device has
   exactly one envelope per grant, because two would be an ambiguity the enforcement path must resolve,
   and resolving it silently is how a widening gets in.
-- **`child ⊑ parent` is one conjunction over nine dimensions** — the effect set, those seven scopes,
-  and `device`. A conjunction, so a widening in *any single* dimension fails the whole check. Proved
-  in Z3.
+- **`child ⊑ parent` is one conjunction over ten dimensions** — the effect set, those seven scopes,
+  `device`, and (since PS-B-05) `budget`. A conjunction, so a widening in *any single* dimension fails
+  the whole check. Proved in Z3 (26 obligations, with three mutants CI requires to fail).
 - **`⊑` (attenuation)** — "this authority is contained in that one". A child grant may only ever be
   narrower than its parent. **It is a preorder on the representation and a partial order on the
   quotient**, which is why scopes are stored canonically (P18, findings F1–F3). Canonical form is an

@@ -43,6 +43,13 @@ pub struct AuthoritySpec {
     /// which is the fail-closed reading (no device granted), not a permissive one.
     #[serde(default)]
     pub device: Vec<String>,
+    /// PS-B-05: the delegated resource budget in canonical grant form (`mem=BYTES,cpu=SECONDS`,
+    /// `delulu_broker::BudgetScope`), or `None` for a request that names none — which the broker
+    /// reads as "inherit the parent's". `#[serde(default)]` so a peer that predates the field decodes
+    /// as naming none, i.e. inheriting: never wider than the parent. Not written when absent, so a
+    /// request that names no budget is byte-identical to one sent before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<String>,
     pub holder_kind: String,
     pub holder_desc: String,
     /// Absolute epoch-millis TTL deadline, or `None` for no expiry.
@@ -78,6 +85,11 @@ pub struct NodeInfo {
     /// Granted device envelopes in canonical grant form (RFC 0001 F1). See [`AuthoritySpec::device`].
     #[serde(default)]
     pub device: Vec<String>,
+    /// PS-B-05: the node's resource budget in canonical grant form, `None` when the node has none
+    /// (it then runs under the operator's own budget). See [`AuthoritySpec::budget`]. Not written
+    /// when absent: `grants list --json` for an unbudgeted node is what it was before PS-B-05.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<String>,
 }
 
 /// One guard rule on the wire (Stage 5 chunk 6): `class:pattern → tier`. Fixed-field struct →
@@ -125,6 +137,7 @@ impl NodeInfo {
             foreign_c: self.foreign_c.clone(),
             foreign_python: self.foreign_python.clone(),
             device: self.device.clone(),
+            budget: self.budget.clone(),
             holder_kind: String::new(),
             holder_desc: String::new(),
             ttl_millis: None,

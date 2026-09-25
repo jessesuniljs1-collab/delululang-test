@@ -27,8 +27,9 @@ Findings referenced as `F1`–`F4`, `IF-1`, `P17-*` are recorded with witnesses 
 
 ## 1. The authority order — a preorder on spellings, a lattice on canonical forms
 
-**What.** `authority.rs:150-165` defines `child ⊑ parent` as one conjunction over nine dimensions:
-the effect set, seven scope dimensions, and `device`. Each must be narrower-or-equal.
+**What.** `authority.rs` (`attenuation_check`) defines `child ⊑ parent` as one conjunction over ten
+dimensions: the effect set, seven scope dimensions, `device`, and — since PS-B-05 — `budget` (§6b).
+Each must be narrower-or-equal.
 
 **Why this shape.** A *conjunction* means a widening in any single dimension fails the whole check.
 There is no averaging, no scoring, no "mostly narrower". That is the only shape for which "the
@@ -99,7 +100,7 @@ a `./` prefix.
 
 | Claim | Category | Evidence |
 |---|---|---|
-| `⊓` is the GLB; no widening; reflexive; transitive — **all nine dimensions** | **1 + 4** | **Proved in Z3**, 17 obligations (`design/models/authority_algebra.py`), and enumerated exhaustively over real path strings (`delulu-broker/tests/order_laws.rs`) |
+| `⊓` is the GLB; no widening; reflexive; transitive — **all ten dimensions** | **1 + 4** | **Proved in Z3**, 26 obligations (`design/models/authority_algebra.py`), and enumerated exhaustively over real path strings (`delulu-broker/tests/order_laws.rs`). Until PS-B-05 the model's full conjunction carried seven set dimensions while its obligation said "all nine"; the code has eight. Nothing proved was false (the laws are uniform in the number), but the sentence claimed a dimension the model did not carry. It now carries all ten |
 | `⊑` is antisymmetric **on raw spellings** | **7 — FALSE, and permanently so** | F1. Not fixable in the comparison: `⊑` is defined through the non-injective `resolve`. Pinned by `raw_spellings_remain_a_preorder_which_is_why_canonicalization_is_required` |
 | `⊑` is antisymmetric **on canonical representatives** | **4 — TRUE**, with a written proof | `the_order_is_antisymmetric_on_canonical_representatives`, exhaustive over the universe |
 | `⊓` is symmetric | **4 — TRUE** (was FALSE, F2) | The meet emits canonical representatives, so argument order cannot decide the result |
@@ -261,6 +262,50 @@ whitelist rule, written as `else { return false }` and not `else { continue }`.
 **How strong:** category **1**. `within` and `meet` are **proved in Z3** to be reflexive,
 transitive, a lower bound, and a genuine **GLB**, with the model faithful to all three asymmetries
 (`design/models/authority_algebra.py`).
+
+---
+
+## 6b. The budget dimension — a product of two chains, with absence at the top
+
+**What.** PS-B-05 (D-V2-08's condition for a budget joining `⊑`). A grant may carry a budget, a
+ceiling on what its holder's runs consume: `mem=BYTES,cpu=SECONDS` (`budget_scope.rs`). `within`
+is componentwise `≤`; `meet` is the componentwise minimum. An ABSENT budget — every node written
+before PS-B-05, and any grant whose delegator named none — is the **top**, so:
+
+- an absent budget under an absent one, or any budget under an absent one, is `⊑`;
+- an **absent budget under a present one is a WIDENING**, and is refused — the rate asymmetry of §6
+  again, and the one that is easy to write backwards.
+
+**Why this shape.** Memory and processor time are each a chain under `≤`, so the pair is a product
+of chains: a lattice, whose laws are the textbook ones. Adding a top element for "no budget" keeps
+it a lattice. That is why these two joined the order and wall-clock time did not: a wall budget is
+a launcher control the operator sets per run (PS-B-01), not something a delegator hands down.
+
+**Two things that are NOT the order, stated so they are not mistaken for it.**
+
+- **Inheritance is request sugar, applied before the check.** A delegation request that names no
+  budget is given its parent's (`Broker::inherit_budget`, at the tree's one attenuation chokepoint)
+  *before* `⊑` is asked. Without it, "delegate this slice" would be refused under every budgeted
+  parent, since absence is the top. The order itself is unchanged by it; `lease.rs`'s
+  `a_delegation_inherits_narrows_or_is_refused_on_the_budget_dimension` pins all three outcomes.
+- **The wire fails toward the bottom, not the top.** The device dimension drops a grant string it
+  cannot read, which is safe there because an absent device is not granted. Here the same drop
+  would read an unreadable budget as the top — unbounded — so `brokerd::spec_to_authority` maps it to
+  `BudgetScope::SMALLEST` instead (`an_unreadable_budget_on_the_wire_becomes_the_smallest_budget_not_the_largest`).
+
+**How strong:** category **1** for the order, **4** for the implementation. Z3 proves reflexivity,
+transitivity, antisymmetry on the value, meet as a lower bound and as the GLB, idempotence,
+commutativity and associativity — over **unbounded** integers, so for every positive pair and for
+absence (`authority_algebra.py` §2b) — and one further obligation at the level of the whole order:
+*no budget under a budgeted parent is never `⊑`*. That last one exists because the four product
+laws hold for **any** product of lattices: deleting the budget from the model's conjunction left
+every one of them discharged, measured. The asymmetry obligation is what fails then. The Rust
+functions are enumerated exhaustively over the top plus a 3×3 grid (`budget_scope.rs` tests).
+
+**What it does not cover.** The order says who may hand down how much. It says nothing about how
+exactly a run is held to it: the watchdog samples every 25 ms and a run can overshoot by what it
+allocates in one interval (PS-B-01, stated in every run report's `enforced_by`). That is a measured
+engineering bound, category 7's neighbour, not a theorem.
 
 ---
 
@@ -444,7 +489,7 @@ question that cost this project its worst soundness hole, and it settles nothing
 
 | # | Category | Status |
 |---|---|---|
-| 1 | Mathematically proven | **Non-empty.** The nine-dimension order (Z3, 17 obligations); device containment; actor data-race freedom by construction. |
+| 1 | Mathematically proven | **Non-empty.** The ten-dimension order (Z3, 26 obligations); device containment; the budget dimension (PS-B-05); actor data-race freedom by construction. |
 | 2 | **Machine checked** | **NON-EMPTY, for the first time — but narrowly.** Lean 4.32.2 proves Effect Soundness for the **higher-order fragment**, and proves that the calculus as written admits a program whose trace escapes its row (`design/models/lean/DeluluCore.lean`). `#print axioms` reports **"does not depend on any axioms"** for all three theorems — not even `propext` or `Classical.choice`. **The full type system is still NOT mechanized**: no capabilities, no store, no secrets, no attenuation, no Progress/Preservation. |
 | 3 | Model checked | **Non-empty.** 585,771 + 2,421 distinct states, with three teeth tests reconstructing three real bugs. |
 | 4 | Property tested | **Non-empty.** 250,000 generated programs; exhaustive enumeration of the order laws; the Survey's totality properties. |
@@ -590,7 +635,7 @@ preorder on raw spellings whose poset reflection is a meet-semilattice — and s
 only canonical representatives (canonical spellings, reduced to an antichain), the reflection and the
 representation now coincide, so `⊑` is a genuine partial order on everything the system can build.
 Its load-bearing law — *the meet is a greatest lower bound and never widens* — is **proved in Z3
-across all nine dimensions**. The broker's
+across all ten dimensions**. The broker's
 state machine is **model checked**, and the models are demonstrated to have teeth by rediscovering
 three bugs the project actually shipped. Effect soundness is **property- and fuzz-tested over 250,000
 generated programs** whose grammar now contains the shapes that historically broke it. The Survey is

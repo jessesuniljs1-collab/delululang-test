@@ -286,6 +286,19 @@ fn authority_from_json(v: &serde_json::Value) -> Result<Authority, Denial> {
                     scopes.device.insert(d.device.clone(), d);
                 }
             }
+            // PS-B-05: exactly one canonical budget string. Zero, or two, is malformed rather than
+            // "no budget" or "the tighter one": a certificate is refused whole before it is read in
+            // a way its issuer did not write.
+            "budget" => {
+                let specs = list()?;
+                if specs.len() != 1 {
+                    return Err(bad(&format!("scope `budget` must hold exactly one budget, found {}", specs.len())));
+                }
+                let spec = specs.into_iter().next().expect("length checked");
+                scopes.budget = Some(
+                    crate::budget_scope::BudgetScope::parse(&spec).map_err(|e| bad(&e))?,
+                );
+            }
             other => return Err(unknown("the scope dimension", other)),
         }
     }
@@ -1652,6 +1665,25 @@ mod tests {
     /// audit trail that under-reports authority is the C29/C30 defect class: not an escalation, but a
     /// loss of exactly the accountability this system sells.
     ///
+    /// PS-B-05: a budget a verifier cannot read exactly is refused, never read loosely — two of them,
+    /// none, a zero, a dimension this build does not know.
+    #[test]
+    fn a_malformed_budget_refuses_the_whole_authority() {
+        for bad in [
+            serde_json::json!([]),
+            serde_json::json!(["mem=1,cpu=1", "mem=2,cpu=2"]),
+            serde_json::json!(["mem=0,cpu=1"]),
+            serde_json::json!(["mem=1,cpu=1,wall=5"]),
+            serde_json::json!(["mem=1"]),
+            serde_json::json!("mem=1,cpu=1"),
+        ] {
+            let v = serde_json::json!({ "effects": [], "scopes": { "budget": bad } });
+            assert!(authority_from_json(&v).is_err(), "a budget of {bad} must be refused");
+        }
+        let ok = serde_json::json!({ "effects": [], "scopes": { "budget": ["mem=1,cpu=1"] } });
+        assert!(authority_from_json(&ok).is_ok());
+    }
+
     /// The destructuring below is the enforcement. It is not decoration: adding a field to `Scopes`
     /// makes this test fail to COMPILE until someone decides how the new dimension serializes.
     #[test]
@@ -1671,8 +1703,10 @@ mod tests {
             .into_iter()
             .map(|d| (d.device.clone(), d))
             .collect(),
+            budget: Some(crate::budget_scope::BudgetScope { memory_bytes: 268_435_456, cpu_seconds: 60 }),
         };
-        // Exhaustive by construction: a new field breaks this pattern at compile time.
+        // Exhaustive by construction: a new field breaks this pattern at compile time. (It did, for
+        // `budget` at PS-B-05, which is how the dimension got its serialization decided.)
         let Scopes {
             fs_read,
             fs_write,
@@ -1682,6 +1716,7 @@ mod tests {
             foreign_c,
             foreign_python,
             device,
+            budget,
         } = &scopes;
         for (what, empty) in [
             ("fs_read", fs_read.is_empty()),
@@ -1692,6 +1727,7 @@ mod tests {
             ("foreign_c", foreign_c.is_empty()),
             ("foreign_python", foreign_python.is_empty()),
             ("device", device.is_empty()),
+            ("budget", budget.is_none()),
         ] {
             assert!(!empty, "the fixture must populate `{what}`, or the round trip proves nothing");
         }
@@ -1709,7 +1745,7 @@ mod tests {
         // And the rendering a human reads must mention every non-empty dimension, since it is the
         // same hand-written list and feeds DL0802's repair text.
         let compact = original.render_compact();
-        for needle in ["fs.read", "fs.write", "net", "secrets", "declassify", "foreign.c", "foreign.python", "device"] {
+        for needle in ["fs.read", "fs.write", "net", "secrets", "declassify", "foreign.c", "foreign.python", "device", "budget"] {
             assert!(compact.contains(needle), "`render_compact` omits `{needle}`: {compact}");
         }
     }

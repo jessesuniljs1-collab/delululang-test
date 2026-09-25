@@ -97,7 +97,27 @@ fn rig(tag: &str, program: &str) -> Rig {
              \x20       reply = 'ERR unknown request'\n\
              \x20   print(reply, flush=True)\n";
         std::fs::write(dir.join("driver.py"), script).unwrap();
-        Rig { dir, adapter_cmd: "python driver.py".to_string() }
+        // The same timeout again, on a Windows runner, 2026-09-25 (run 36117814329): the job's first
+        // two driver starts, launched together, both missed the 2000 ms. Settled by experiment, not
+        // by guessing. CPU starvation did NOT reproduce it (0 of 8 runs failed with a high-priority
+        // hog pinned to the test's own CPU). A COLD interpreter did: the installed Python's first
+        // start took 4251 ms and its next 177 ms, because a plain `python` imports `site` and walks
+        // every package installed beside it. An interpreter with no site-packages started cold in
+        // 470-564 ms and warm in 51-58 ms. So the driver now runs isolated from whatever is
+        // installed (`-I`, and `-S`: no `site`, since it uses only `re` and `sys`), and it is started
+        // once, untimed, before any test times it, the way an operator's driver has been run before
+        // it drives anything. `EXCHANGE_TIMEOUT` is untouched: what was too slow was this runner's
+        // first launch of an interpreter, which is not the property these tests exist for.
+        let warm = Command::new("python")
+            .args(["-I", "-S", "driver.py"])
+            .current_dir(&dir)
+            .stdin(std::process::Stdio::null())
+            .output();
+        assert!(
+            warm.as_ref().is_ok_and(|o| o.status.success()),
+            "the test driver could not be started by `python` at all: {warm:?}"
+        );
+        Rig { dir, adapter_cmd: "python -I -S driver.py".to_string() }
     }
     #[cfg(not(windows))]
     {

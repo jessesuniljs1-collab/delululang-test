@@ -589,7 +589,7 @@ impl Broker {
         holder: Holder,
         ttl_millis: Option<i64>,
     ) -> Result<GrantId, Denial> {
-        let authority = authority.canonicalized();
+        let authority = self.inherit_budget(parent, authority.canonicalized());
         let auth_json = authority.to_json();
         let (seq, res) = self.attenuate_core(parent, authority, holder, ttl_millis);
         match &res {
@@ -615,6 +615,26 @@ impl Broker {
         res
     }
 
+    /// PS-B-05: a request that names NO budget inherits its parent's.
+    ///
+    /// On the budget dimension `None` is the TOP — "nobody bounded this" — unlike every other
+    /// dimension, where an omitted scope is the bottom and grants nothing. Read literally, a request
+    /// that simply did not mention a budget would therefore ask for MORE than a budgeted parent holds,
+    /// and every ordinary delegation under a budget — a plugin load, a lease — would be refused as a
+    /// widening. What such a request means is "as much as I am allowed", which is exactly the
+    /// parent's budget: the most the child may hold, never more. A request that DOES name a budget is
+    /// left alone and checked, so asking for more than the parent holds is still refused with the
+    /// meet as its repair. Called before a request is logged, so the audit record shows the authority
+    /// that was actually granted rather than the one that was typed.
+    pub(crate) fn inherit_budget(&self, parent: &GrantId, mut authority: Authority) -> Authority {
+        if authority.scopes.budget.is_none() {
+            if let Some(p) = self.nodes.get(parent) {
+                authority.scopes.budget = p.authority.scopes.budget;
+            }
+        }
+        authority
+    }
+
     /// The record-free attenuation core (phase 5b enforcement). Returns the consumed audit seq and
     /// the result. `attenuate` wraps it to emit an `"attenuate"` record; `delegate` (phase 5e) wraps
     /// it to emit a single `"delegate"` record — so a delegation is never double-logged. Consumes
@@ -629,8 +649,9 @@ impl Broker {
         // The real chokepoint: `attenuate` canonicalizes before logging, but `delegate` reaches
         // this core directly. Canonicalizing here too makes "every node in the tree is canonical"
         // hold for both callers rather than for whichever one someone remembered. Idempotent, so
-        // the doubled call on the `attenuate` path costs nothing.
-        let authority = authority.canonicalized();
+        // the doubled call on the `attenuate` path costs nothing. The budget inheritance below is the
+        // same shape for the same reason: idempotent, and made here so no caller can skip it.
+        let authority = self.inherit_budget(parent, authority.canonicalized());
         let now = self.now();
         if !self.nodes.contains_key(parent) {
             let seq = self.take_seq(); // the deny still consumes a seq

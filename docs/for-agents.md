@@ -458,6 +458,14 @@ the watchdog measured. The report's `sandbox.limits` carries the budgets the run
 raising the budget: a budget is the operator's decision about what a program may consume, not a fix
 for the program. Under `--sandbox`, `--limits` may only narrow the profile's own limits.
 
+A budget is also AUTHORITY (PS-B-05). Whoever delegates to you can hand one down with
+`grants delegate --budget mem=BYTES,cpu=SECONDS`, and a delegation made below that one without naming
+a budget inherits it. When you run under `--lease`, the node's budget is what you are held to and your
+default: `--limits` may ask for less and is refused, before `main`, if it asks for more. A delegation
+that asks for a larger budget than its parent holds is DL0802, and its repair is the meet. Under
+`--sandbox`, a flag the sandboxed run does not apply (`--lease` and `--broker` among them) is refused
+rather than ignored; a lease runs without `--sandbox`.
+
 ## [agents.limits] What to tell your users honestly
 
 Repeating what the rest of the project says, because a harness author is the person most likely to

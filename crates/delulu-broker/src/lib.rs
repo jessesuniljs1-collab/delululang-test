@@ -22,6 +22,7 @@ mod path;
 
 pub mod audit;
 pub mod authority;
+pub mod budget_scope;
 pub mod cert;
 pub mod device_scope;
 pub mod diag;
@@ -39,6 +40,7 @@ pub use audit::{
     OBSERVABILITY_PHRASE,
 };
 pub use authority::{attenuation_check, Authority, Scopes};
+pub use budget_scope::BudgetScope;
 pub use device_scope::DeviceScope;
 pub use diag::Denial;
 pub use guard::{

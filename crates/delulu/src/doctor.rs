@@ -353,6 +353,8 @@ fn sandbox_section(r: &mut Report) {
         concat!(
             "every ordinary run is budgeted (PS-B-01, D-V2-25): 1 GiB of memory and 5 minutes of processor ",
             "time unless `--limits` sets others, sampled every 25 ms by a host watchdog on every engine; ",
+            "a budget is also an authority dimension (PS-B-05): `grants delegate --budget` hands one down, a ",
+            "delegation that names none inherits its parent's, and a `run --lease` is held to its node's; ",
             "a sandboxed guest is also held by its OS jail; a foreign call is killed after its deadline (NE-21)"
         ),
     );

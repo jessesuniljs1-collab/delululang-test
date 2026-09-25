@@ -267,6 +267,15 @@ pub(crate) fn spec_to_authority(spec: &AuthoritySpec) -> Authority {
                 .filter_map(|s| delulu_broker::device_scope::parse(s).ok())
                 .map(|d| (d.device.clone(), d))
                 .collect(),
+            // PS-B-05. NOT dropped the way a bad device string is dropped above, because on this
+            // dimension "absent" is the TOP: an unreadable budget read as absent would be read as
+            // UNBOUNDED, the one direction this dimension must never fail in. It becomes the
+            // smallest budget there is instead, so whatever it was meant to allow, it now allows
+            // less. The CLI cannot produce one (it writes these strings from parsed values); pinned
+            // by `an_unreadable_budget_on_the_wire_becomes_the_smallest_budget_not_the_largest`.
+            budget: spec.budget.as_deref().map(|s| {
+                delulu_broker::BudgetScope::parse(s).unwrap_or(delulu_broker::BudgetScope::SMALLEST)
+            }),
         },
     )
 }
@@ -311,6 +320,7 @@ fn node_info(n: &delulu_broker::Node, eff: delulu_broker::EffState) -> NodeInfo 
         foreign_c: names(&n.authority.scopes.foreign_c),
         foreign_python: names(&n.authority.scopes.foreign_python),
         device: n.authority.scopes.device.values().map(|d| d.to_grant_string()).collect(),
+        budget: n.authority.scopes.budget.map(|b| b.to_grant_string()),
     }
 }
 
@@ -1377,6 +1387,38 @@ mod tests {
             holder_desc: "brokerd-test".to_string(),
             ..Default::default()
         }
+    }
+
+    /// PS-B-05. The device dimension drops a string it cannot read, and that is safe there because
+    /// an absent device is not granted. On the budget dimension absent is the TOP, so the same drop
+    /// would turn a budget nobody could read into no budget at all — unbounded. It becomes the
+    /// smallest budget instead, and the consequence is shown, not assumed: a node carrying it cannot
+    /// delegate even a modest budget below it.
+    #[test]
+    fn an_unreadable_budget_on_the_wire_becomes_the_smallest_budget_not_the_largest() {
+        use delulu_broker::BudgetScope;
+        for bad in ["", "lots", "mem=1", "mem=0,cpu=1", "mem=1,cpu=1,wall=5", "mem=99999999999999999999,cpu=1"] {
+            assert!(BudgetScope::parse(bad).is_err(), "`{bad}` must not parse, or this test guards nothing");
+            let a = spec_to_authority(&AuthoritySpec { budget: Some(bad.to_string()), ..spec(&["Write"]) });
+            assert_eq!(a.scopes.budget, Some(BudgetScope::SMALLEST), "`{bad}` became {:?}", a.scopes.budget);
+
+            let mut b = delulu_broker::Broker::new();
+            let root = b
+                .issue_root(delulu_broker::Holder::new("process", "t", "pid:1"), a, None)
+                .expect("a non-strict broker issues a root");
+            let modest = spec_to_authority(&AuthoritySpec { budget: Some("mem=1024,cpu=1".into()), ..spec(&["Write"]) });
+            assert!(
+                b.attenuate(&root, modest, delulu_broker::Holder::new("process", "c", "pid:2"), None).is_err(),
+                "`{bad}`: a node whose budget could not be read must not hand one down"
+            );
+        }
+        // A readable budget arrives exactly, and an absent one stays absent: the top, as before.
+        let a = spec_to_authority(&AuthoritySpec { budget: Some("mem=1024,cpu=2".into()), ..spec(&["Write"]) });
+        assert_eq!(a.scopes.budget, Some(BudgetScope { memory_bytes: 1024, cpu_seconds: 2 }));
+        assert_eq!(spec_to_authority(&spec(&["Write"])).scopes.budget, None);
+        // Absent is not written, so an unbudgeted request is what it was before the field existed.
+        let wire = serde_json::to_value(spec(&["Write"])).unwrap();
+        assert!(wire.get("budget").is_none(), "{wire}");
     }
 
     /// The wire protocol version gate (spec §8): a mismatched version string is answered DL1406 and

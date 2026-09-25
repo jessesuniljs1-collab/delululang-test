@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use delulu_check::Effect;
 
+use crate::budget_scope::{self, BudgetScope};
 use crate::device_scope::{self, DeviceScope};
 use crate::path;
 
@@ -36,6 +37,10 @@ pub struct Scopes {
     /// envelope per grant: two envelopes for the same device would be an ambiguity the enforcement
     /// path would have to resolve, and resolving it silently is how a widening gets in.
     pub device: BTreeMap<String, DeviceScope>,
+    /// PS-B-05 (D-V2-08): the resource budget a holder's runs may consume — memory and processor
+    /// time, ordered componentwise ([`crate::budget_scope`]). `None` is the top of the dimension: a
+    /// grant nobody budgeted, which is every grant written before this field existed.
+    pub budget: Option<BudgetScope>,
 }
 
 /// A grant's authority: an effect set plus per-dimension scopes (spec §3.1 `authority`).
@@ -64,6 +69,7 @@ impl Scopes {
             foreign_c: self.foreign_c.clone(),
             foreign_python: self.foreign_python.clone(),
             device: self.device.clone(),
+            budget: self.budget,
         }
     }
 }
@@ -128,6 +134,16 @@ impl Authority {
             let devices: Vec<String> = s.device.values().map(|d| d.to_grant_string()).collect();
             scopes.as_object_mut().expect("json! built an object").insert("device".into(), serde_json::json!(devices));
         }
+        // PS-B-05: `budget` follows `device`'s rule for the same reason — emitted ONLY when present, so
+        // every authority without one keeps the canonical JSON, the chain hash and the certificate
+        // bytes it had before this dimension existed. A one-element array of the canonical grant
+        // string, so every scope stays an array of strings to a reader that walks them.
+        if let Some(b) = &s.budget {
+            scopes
+                .as_object_mut()
+                .expect("json! built an object")
+                .insert("budget".into(), serde_json::json!([b.to_grant_string()]));
+        }
         serde_json::json!({ "effects": effects, "scopes": scopes })
     }
 
@@ -153,6 +169,9 @@ impl Authority {
             let devices: Vec<String> = s.device.values().map(|d| d.to_grant_string()).collect();
             parts.push(format!("device=[{}]", devices.join(" ")));
         }
+        if let Some(b) = &s.budget {
+            parts.push(format!("budget=[{}]", b.to_grant_string()));
+        }
         parts.join(" ")
     }
 
@@ -174,6 +193,7 @@ impl Authority {
                     &other.scopes.foreign_python,
                 ),
                 device: device_scope::intersect_device_sets(&self.scopes.device, &other.scopes.device),
+                budget: budget_scope::meet(self.scopes.budget.as_ref(), other.scopes.budget.as_ref()),
             },
         }
     }
@@ -206,7 +226,8 @@ pub fn attenuation_check(child: &Authority, parent: &Authority) -> Result<(), Au
         && child.scopes.declassify.is_subset(&parent.scopes.declassify)
         && child.scopes.foreign_c.is_subset(&parent.scopes.foreign_c)
         && child.scopes.foreign_python.is_subset(&parent.scopes.foreign_python)
-        && device_scope::all_within(&child.scopes.device, &parent.scopes.device);
+        && device_scope::all_within(&child.scopes.device, &parent.scopes.device)
+        && budget_scope::within(child.scopes.budget.as_ref(), parent.scopes.budget.as_ref());
     if ok {
         Ok(())
     } else {
@@ -228,6 +249,24 @@ mod tests {
     /// Build an authority quickly: effects, then (dim, values) pairs.
     fn auth(effects: &[&str], scopes: Scopes) -> Authority {
         Authority { effects: eff(effects), scopes }
+    }
+
+    fn budget(mib: u64, cpu_seconds: u64) -> BudgetScope {
+        BudgetScope { memory_bytes: mib * 1024 * 1024, cpu_seconds }
+    }
+
+    /// The compatibility promise PS-B-05 made: an authority WITHOUT a budget serializes exactly as it
+    /// did before the dimension existed, so no hash-chained audit record and no signed certificate
+    /// written earlier changes its bytes.
+    #[test]
+    fn an_unbudgeted_authority_serializes_exactly_as_before_the_budget_existed() {
+        let a = auth(&["Read"], Scopes { fs_read: names(&["./data"]), ..Default::default() });
+        assert_eq!(
+            a.to_json().to_string(),
+            r#"{"effects":["Read"],"scopes":{"declassify":[],"foreign.c":[],"foreign.python":[],"fs.read":["./data"],"fs.write":[],"net":[],"secrets":[]}}"#
+        );
+        let b = auth(&["Read"], Scopes { budget: Some(budget(256, 60)), ..Default::default() });
+        assert!(b.to_json().to_string().contains(r#""budget":["mem=268435456,cpu=60"]"#), "{}", b.to_json());
     }
 
     // A table row: (name, child, parent, expected). expected = None → ok; Some → the intersection.
@@ -357,6 +396,31 @@ mod tests {
                         ..Default::default()
                     },
                 )),
+            },
+            // PS-B-05: the budget dimension, componentwise, with `None` as the top.
+            Row {
+                name: "a smaller budget attenuates",
+                child: auth(&[], Scopes { budget: Some(budget(256, 60)), ..Default::default() }),
+                parent: auth(&[], Scopes { budget: Some(budget(1024, 300)), ..Default::default() }),
+                expected: None,
+            },
+            Row {
+                name: "a budgeted child under an unbudgeted parent attenuates (None is the top)",
+                child: auth(&[], Scopes { budget: Some(budget(1024, 300)), ..Default::default() }),
+                parent: auth(&[], Scopes::default()),
+                expected: None,
+            },
+            Row {
+                name: "more memory than delegated is refused -> the componentwise minimum",
+                child: auth(&[], Scopes { budget: Some(budget(2048, 60)), ..Default::default() }),
+                parent: auth(&[], Scopes { budget: Some(budget(1024, 300)), ..Default::default() }),
+                expected: Some(auth(&[], Scopes { budget: Some(budget(1024, 60)), ..Default::default() })),
+            },
+            Row {
+                name: "an UNbudgeted child under a budgeted parent is a widening -> the parent's budget",
+                child: auth(&[], Scopes::default()),
+                parent: auth(&[], Scopes { budget: Some(budget(1024, 300)), ..Default::default() }),
+                expected: Some(auth(&[], Scopes { budget: Some(budget(1024, 300)), ..Default::default() })),
             },
         ];
 

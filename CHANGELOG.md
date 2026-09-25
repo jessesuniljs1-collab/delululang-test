@@ -9,6 +9,13 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-05: a budget is an authority dimension, 2026-09-25
+
+- **PS-B-05 (D-V2-08 owner direction; D-V2-33)** — memory and processor time join `⊑` as its tenth dimension (`delulu-broker/src/budget_scope.rs`): componentwise `≤`, componentwise-minimum meet, absence as the top. `grants delegate --budget mem=BYTES,cpu=SECONDS`; a delegation that names none inherits its parent's; one that names more is DL0802 with the meet. A `run --lease` is held to its node's budget (also its default; `--limits` may only ask for less). A `--broker daemon` run's root records its budget. An unreadable budget on the wire becomes the smallest, never none. Unbudgeted authorities serialize byte-identically to before.
+- The Z3 model carries all ten dimensions (it modelled seven set dimensions while claiming nine): **26 obligations**, and CI now requires three model mutants to fail.
+- **Fixed:** `run --sandbox` silently dropped most of `run`'s flags — `--lease` was never redeemed, `--broker daemon` got embedded custody, and even a misspelled flag or a second file was accepted. Refused now, before anything runs.
+- **CI:** PS-B-01's Windows failure was a cold Python start inside the adapter's 2000 ms (measured: 4251 ms cold, 177 ms warm; CPU starvation reproduced nothing). The test driver runs `python -I -S`, started once before it is timed; `EXCHANGE_TIMEOUT` unchanged. The product's version of the problem is `REMAINING_WORK.md` 4.19 (owner).
+
 ## Unreleased — V2 PS-B-01: every run has a budget, 2026-09-25
 
 - **PS-B-01 (D-V2-25 owner; D-V2-32)** — an ordinary `run` is held to 1 GiB of memory and 5 minutes of processor time unless `--limits mem=BYTES,cpu=SECONDS,wall=SECONDS` sets others; zero and unknown dimensions are refused before the run. A host watchdog samples the process every 25 ms, on every engine; a run that spends a budget is stopped with exit 1, and the run report's `outcome.stopped_by` names the dimension, the budget and the measurement. The report's `sandbox.limits` is the applied budget (was `null`). `--limits` without `--sandbox` is applied rather than refused. NE-22 and REMAINING_WORK 4.15 closed; C-06 flipped — the flooded actor mailbox is stopped at a 256 MiB budget.

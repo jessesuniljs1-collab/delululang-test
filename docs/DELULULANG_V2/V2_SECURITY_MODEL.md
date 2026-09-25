@@ -83,9 +83,11 @@ authority report where it is static, and in the audit record; a limit kill re-us
 attribution rule and never suggests widening; "never unlimited" is the plugin precedent. **The
 mathematics is not changed without documenting and verifying it**: a dimension that can be given a
 containment order (`child ⊑ parent` as an interval or count comparison, with a meet) joins the
-nine-dimension Z3 model and the exhaustive enumeration; a limit that cannot yet be made a formal
-dimension stays an explicit launcher control and is labelled as such, never smuggled into ⊑.
-[designed; PS-B-01 and PS-B-05]
+Z3 model and the exhaustive enumeration; a limit that cannot yet be made a formal dimension stays an
+explicit launcher control and is labelled as such, never smuggled into ⊑. [BUILT: PS-B-01 the
+launcher control, PS-B-05 the dimension. Memory and processor time joined ⊑ as the tenth dimension
+(`budget_scope.rs`, proved in the Z3 model's §2b, `MATHEMATICS.md` §6b); wall time stayed a launcher
+control, because a program waiting on its input consumes nothing a delegator hands down.]
 
 ## 5. Execution modes and restriction control
 

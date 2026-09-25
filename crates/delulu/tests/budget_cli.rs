@@ -220,3 +220,98 @@ fn a_budget_that_cannot_be_meant_is_refused_before_the_run() {
         assert!(!r.stdout.contains("started"), "`{bad}` must refuse BEFORE the program runs: {}", r.stdout);
     }
 }
+
+/// Stops the broker daemon a test started, whatever the test's outcome.
+struct StopBroker(PathBuf);
+impl Drop for StopBroker {
+    fn drop(&mut self) {
+        let _ = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(std::env::temp_dir())
+            .env("DELULU_STATE_DIR", self.0.join("state"))
+            .args(["broker", "stop"])
+            .output();
+    }
+}
+
+fn json_of(r: &Ran) -> serde_json::Value {
+    serde_json::from_str(r.stdout.trim()).unwrap_or_else(|e| panic!("one JSON value ({e}): {}{}", r.stdout, r.stderr))
+}
+
+/// PS-B-05 end to end, through the real broker daemon: a budget is an authority dimension. A
+/// delegation that names one records it; one below it that names none INHERITS it (never "no
+/// budget", which on this dimension is the top); one that names more is refused like any widening;
+/// and a `--lease` run is held to it without the holder typing anything — here an endless loop is
+/// stopped by the delegated second of processor time, not D-V2-25's five minutes.
+#[test]
+fn a_delegated_budget_is_inherited_never_widened_and_holds_the_lease_run() {
+    let dir = tmp("lease");
+    std::fs::create_dir_all(dir.join("state")).unwrap();
+    program(&dir, "spin.delulu", SPIN);
+    program(&dir, "hello.delulu", "");
+    let t = Duration::from_secs(60);
+    let r = run(&dir, &["broker", "start"], t).expect("broker start returns");
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    let _stop = StopBroker(dir.clone());
+
+    // Delegated: half a gibibyte and one second, typed out of order — the node holds the canonical form.
+    let r = run(&dir, &["grants", "delegate", "--effects", "Write", "--budget", "cpu=1,mem=536870912", "--multi", "--json"], t).unwrap();
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    let v = json_of(&r);
+    let node = v["node"].as_str().expect("the delegated node").to_string();
+    let token = v["token"].as_str().expect("a lease token").to_string();
+    let inspect = |id: &str| {
+        let r = run(&dir, &["grants", "inspect", id, "--json"], t).unwrap();
+        assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+        json_of(&r)["node"]["budget"].clone()
+    };
+    assert_eq!(inspect(&node), "mem=536870912,cpu=1");
+
+    // More processor time below it is a widening: refused, and the refusal carries the meet.
+    let r = run(&dir, &["grants", "delegate", "--parent", &node, "--effects", "Write", "--budget", "mem=536870912,cpu=2"], t).unwrap();
+    assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
+    let said = format!("{}{}", r.stdout, r.stderr);
+    assert!(said.contains("DL0802") && said.contains("mem=536870912,cpu=1"), "{said}");
+
+    // Naming none below it inherits it: never unbounded.
+    let r = run(&dir, &["grants", "delegate", "--parent", &node, "--effects", "Write", "--json"], t).unwrap();
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    let child = json_of(&r)["node"].as_str().expect("the child node").to_string();
+    assert_eq!(inspect(&child), "mem=536870912,cpu=1", "an unnamed budget is the parent's");
+
+    // A bad spelling is refused at the command line, not turned into something on the wire.
+    let r = run(&dir, &["grants", "delegate", "--parent", &node, "--effects", "Write", "--budget", "mem=1"], t).unwrap();
+    assert_eq!(r.code, Some(2), "{}{}", r.stdout, r.stderr);
+
+    // Asking the lease run for more than was delegated is refused before `main`.
+    let r = run(&dir, &["run", "hello.delulu", "--lease", &token, "--limits", "cpu=2"], t).unwrap();
+    assert_eq!(r.code, Some(2), "{}{}", r.stdout, r.stderr);
+    assert!(!r.stdout.contains("started"), "refused BEFORE the program ran: {}", r.stdout);
+    assert!(r.stderr.contains("never more"), "{}", r.stderr);
+
+    // Nothing typed: the delegation is the budget. The endless loop is stopped at one second.
+    let r = run(&dir, &["run", "spin.delulu", "--lease", &token, "--report-out", "rep.json"], Duration::from_secs(40))
+        .expect("an endless loop under a lease delegated `cpu=1` must be STOPPED by that budget");
+    assert_eq!(r.code, Some(1), "{}{}", r.stdout, r.stderr);
+    assert!(r.stdout.contains("started"), "{}", r.stdout);
+    let v = report(&dir);
+    assert_eq!(v["outcome"]["stopped_by"]["dimension"], "cpu", "{v}");
+    assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 1, "{v}");
+    assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 536_870_912u64, "{v}");
+
+    // Asking for less is allowed, and is what the run is held to.
+    let r = run(&dir, &["run", "hello.delulu", "--lease", &token, "--limits", "mem=268435456", "--report-out", "rep2.json"], t).unwrap();
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    let v: serde_json::Value = serde_json::from_str(std::fs::read_to_string(dir.join("rep2.json")).unwrap().trim()).unwrap();
+    assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 268_435_456u64, "{v}");
+    assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 1, "the unnamed dimension is the delegated one: {v}");
+
+    // A `--broker daemon` run's root records the budget the run is held to.
+    let r = run(&dir, &["run", "hello.delulu", "--grant", "console", "--broker", "daemon", "--limits", "mem=268435456,cpu=7"], t).unwrap();
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    let r = run(&dir, &["grants", "list", "--json"], t).unwrap();
+    let nodes = json_of(&r)["nodes"].as_array().expect("nodes").clone();
+    assert!(
+        nodes.iter().any(|n| n["budget"] == "mem=268435456,cpu=7"),
+        "the daemon run's root carries its budget: {nodes:?}"
+    );
+}

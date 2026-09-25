@@ -77,6 +77,10 @@ impl Broker {
         ttl_millis: Option<i64>,
         multi: bool,
     ) -> Result<(GrantId, Token), Denial> {
+        // PS-B-05: inherited BEFORE it is logged, so the record shows what the child actually holds.
+        // (Not canonicalized here: this record has always carried the request as spelled, and the
+        // budget is the only thing this line adds to it.)
+        let authority = self.inherit_budget(parent, authority);
         let auth_json = authority.to_json();
         let (seq, res) = self.attenuate_core(parent, authority, holder, ttl_millis);
         match res {
@@ -415,6 +419,51 @@ mod tests {
         assert!(b.check(&child, Op::FsRead, Some("./data/sub/x")).is_allow());
         // The peer was bound (storage/display only).
         assert_eq!(b.inspect(&child).unwrap().holder.peer, "pid:4711");
+    }
+
+    /// PS-B-05, the three cases under a budgeted parent: a request naming no budget INHERITS the
+    /// parent's (and the audit record says so); a smaller one is kept; a larger one is refused with
+    /// the componentwise meet as its repair.
+    #[test]
+    fn a_delegation_inherits_narrows_or_is_refused_on_the_budget_dimension() {
+        use crate::budget_scope::BudgetScope;
+        let sink = crate::audit::MemSink::new();
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_key([7u8; 32])
+            .with_sink(Box::new(sink.clone()));
+        let parent_budget = BudgetScope { memory_bytes: 1 << 30, cpu_seconds: 300 };
+        let root = b.issue(
+            holder(),
+            Authority::new(eff(&["Read"]), Scopes { budget: Some(parent_budget), ..Default::default() }),
+            None,
+        );
+
+        // Named nothing: inherits the parent's budget.
+        let (inherit, _) = b.delegate(&root, Authority::new(eff(&["Read"]), Scopes::default()), holder(), None, false).unwrap();
+        assert_eq!(b.inspect(&inherit).unwrap().authority.scopes.budget, Some(parent_budget));
+        let records = sink.records();
+        let record = records.last().expect("a delegate record");
+        assert_eq!(record.action, "delegate");
+        assert!(
+            record.authority.as_ref().is_some_and(|a| a.to_string().contains("mem=1073741824,cpu=300")),
+            "the audit record must show the inherited budget, not the request as typed: {record:?}"
+        );
+
+        // Named a smaller one: kept as named.
+        let small = BudgetScope { memory_bytes: 1 << 28, cpu_seconds: 60 };
+        let (narrow, _) = b
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { budget: Some(small), ..Default::default() }), holder(), None, false)
+            .unwrap();
+        assert_eq!(b.inspect(&narrow).unwrap().authority.scopes.budget, Some(small));
+
+        // Named a larger one: refused, and the repair is the meet — never wider than either side.
+        let greedy = BudgetScope { memory_bytes: 1 << 32, cpu_seconds: 60 };
+        let err = b
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { budget: Some(greedy), ..Default::default() }), holder(), None, false)
+            .unwrap_err();
+        assert_eq!(err.code(), "DL0802");
+        let inter = err.intersection().expect("DL0802 carries the intersection");
+        assert_eq!(inter.scopes.budget, Some(BudgetScope { memory_bytes: 1 << 30, cpu_seconds: 60 }));
     }
 
     #[test]
