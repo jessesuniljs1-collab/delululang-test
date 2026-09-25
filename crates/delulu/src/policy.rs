@@ -110,7 +110,13 @@ impl SandboxPolicy {
         // PS-B-03: a guest started as a separate identity (Windows, a per-run AppContainer with no
         // capabilities). Matched on the guarantee's exact words, which `identity.rs` owns, so the
         // report cannot say "separate" unless the launch that applied it said so.
-        let separate = guarantees.contains(&crate::identity::GUARANTEE);
+        let windows_identity = guarantees.contains(&crate::identity::WINDOWS_GUARANTEE);
+        // PS-B-03b: a Linux guest started as a subordinate uid. It answers fewer rows than Windows'
+        // container does: a stranger to the operator's account still reads what EVERY account may,
+        // writes where every account may and opens sockets — so only the reads row moves, and only to
+        // the narrower words.
+        let linux_identity = guarantees.contains(&crate::identity::LINUX_GUARANTEE);
+        let separate = windows_identity || linux_identity;
         let landlock_reads = has("reads only from the system paths");
         // (question, the answer when it IS enforced, the guarantee that enforces it)
         let rows: [(&str, &str, bool); 7] = [
@@ -119,17 +125,23 @@ impl SandboxPolicy {
                 // The container may write its OWN per-run folder, which is deleted with it — so this is
                 // not "denied", and the report does not round it up to that.
                 if has("no file writes") { "denied" } else { "only its own per-run container folder" },
-                has("no file writes") || separate,
+                has("no file writes") || windows_identity,
             ),
             (
                 "filesystem_reads",
-                if landlock_reads { "confined to the system paths" } else { "none of the operator's files" },
+                if landlock_reads {
+                    "confined to the system paths"
+                } else if windows_identity {
+                    "none of the operator's files"
+                } else {
+                    "only what every account on the host may read"
+                },
                 landlock_reads || separate,
             ),
             (
                 "network",
                 "only the channel",
-                has("no TCP bind or connect") || has("no network but the channel") || separate,
+                has("no TCP bind or connect") || has("no network but the channel") || windows_identity,
             ),
             ("new_programs", "denied", has("no new programs") || has("one process only")),
             ("memory", "capped", has("memory ceiling")),
@@ -161,8 +173,13 @@ impl SandboxPolicy {
         // may say so. Everywhere else the guest is the same OS user (REMAINING_WORK 4.4, proof
         // category 7), and saying it stops a reader inferring separation from a long list of things
         // that ARE enforced.
-        if separate {
+        if windows_identity {
             obj.insert("identity".to_string(), serde_json::Value::String("a per-run AppContainer".to_string()));
+        } else if linux_identity {
+            obj.insert(
+                "identity".to_string(),
+                serde_json::Value::String("a subordinate uid in its own user namespace".to_string()),
+            );
         } else {
             obj.insert("identity".to_string(), serde_json::Value::String("same OS user".to_string()));
             limitations.push("identity_separation");
@@ -335,7 +352,7 @@ mod tests {
             "processor-time ceiling",
             "killed with the host",
             "no desktop, clipboard or global atoms",
-            crate::identity::GUARANTEE,
+            crate::identity::WINDOWS_GUARANTEE,
         ];
         let (obj, lim) = SandboxPolicy::posture(&windows_guest);
         assert_eq!(obj["identity"], "a per-run AppContainer");
@@ -350,6 +367,31 @@ mod tests {
         let (obj, lim) = SandboxPolicy::posture(&["a separate identity"]);
         assert_eq!(obj["identity"], "same OS user");
         assert!(lim.contains(&"identity_separation") && lim.contains(&"network"), "{lim:?}");
+    }
+
+    /// PS-B-03b: a Linux subordinate uid moves the identity row and the reads row — and only to the
+    /// words it earns. Without Landlock it neither denies writes nor the network, and the report must
+    /// not borrow those answers from Windows' container.
+    #[test]
+    fn a_subordinate_uid_answers_identity_and_reads_and_claims_nothing_windows_does() {
+        let (obj, lim) = SandboxPolicy::posture(&["memory ceiling", crate::identity::LINUX_GUARANTEE]);
+        assert_eq!(obj["identity"], "a subordinate uid in its own user namespace");
+        assert_eq!(obj["filesystem_reads"], "only what every account on the host may read");
+        assert_eq!(obj["filesystem_writes"], "not confined");
+        assert_eq!(obj["network"], "not confined");
+        assert!(!lim.contains(&"identity_separation") && !lim.contains(&"filesystem_reads"), "{lim:?}");
+        assert!(lim.contains(&"filesystem_writes") && lim.contains(&"network"), "{lim:?}");
+
+        // With Landlock as well, the stronger read answer wins and the rest comes from Landlock.
+        let (obj, _) = SandboxPolicy::posture(&[
+            "no file writes",
+            "reads only from the system paths",
+            "no TCP bind or connect",
+            crate::identity::LINUX_GUARANTEE,
+        ]);
+        assert_eq!(obj["filesystem_reads"], "confined to the system paths");
+        assert_eq!(obj["filesystem_writes"], "denied");
+        assert_eq!(obj["identity"], "a subordinate uid in its own user namespace");
     }
 
     /// The two shapes are kept apart on purpose: a run that did not happen has no posture to report.

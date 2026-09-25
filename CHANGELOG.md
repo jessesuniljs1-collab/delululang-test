@@ -9,6 +9,13 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
+
+- **PS-B-03b (D-V2-37)** — on Linux, where the host allows user namespaces, a `run --sandbox` guest runs as a per-run subordinate uid in its own user namespace with no supplementary groups or capabilities: none of the files only the operator's account may read, the state directory included (T14, measured with a control, falsified twice). No runtime copy: the binary is executed through a descriptor and the channel is an inherited socket. Where the host forbids it (Ubuntu 23.10+'s AppArmor default) the guest runs as the operator, the run says why, and `doctor` repeats the reason. `DEPLOYMENT.md` gives the one sysctl an operator may choose to lift. REMAINING_WORK 4.21 closed.
+- **PS-B-04 (D-V2-36)** — channel batching is NOT built: measured on the three CI runners against a rule fixed first (50 µs per effect), it fails on Linux (19.5 µs) and macOS (19.8 µs) and passes only on Windows (66.9 µs), and batching would change when an effect is observed everywhere. The Windows transport was fixed instead: one overlapped duplex pipe read directly with a real deadline on the host, direct reads and a silence watchdog in the guest. Workstation: 48.6 → 28.9 µs per effect. Writes to a guest are now bounded too. `measurements/sandbox-channel/` holds the script, the record and a manual three-OS workflow.
+- Every channel frame (sandbox and broker) is written in one call instead of two.
+- **Found:** a Linux run report does not count the layers the guest applies to itself (Landlock, seccomp) — REMAINING_WORK 4.23, safe direction.
+
 ## Unreleased — V2 PS-B-06: BREAK-GLASS, 2026-09-25
 
 - **PS-B-06 (D-V2-09 owner principle; D-V2-35)** — `delulu sandbox require --break-glass-key HEX` makes the sandbox mandatory on a host (`run` without `--sandbox`, `test` and `repl` refuse). `delulu sandbox ticket` mints an Ed25519-signed ticket for one program (by the hash of its bytes), at most a day, and `run --break-glass T` spends it: banner, `break_glass` in the run report, a `break-glass` audit record, and no run if the record cannot be written. `sandbox release` needs a `policy-off` ticket. Refused tickets are recorded too. `doctor` and `sandbox status` report the policy, spent tickets, and a pinned key whose private half is still on the host.
@@ -16,7 +23,7 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 ## Unreleased — V2 PS-B-03: a sandbox guest with an identity of its own (Windows), 2026-09-25
 
 - **PS-B-03 (D-V2-34)** — on Windows a `run --sandbox` guest runs as a per-run AppContainer with no capabilities: no network of any kind (the Job Object never took it away) and none of the operator's files, the state directory included. It runs from a runtime copy readable by AppContainers, and its channel moves to inherited pipes. Measured against T14 with a control and falsified by a launch without the container. A host that cannot give the identity says so and runs the guest as before; the report's `posture.identity` and `limitations` follow what was applied.
-- macOS: the guest's Seatbelt profile refuses the state directory (T14), measured with a control. Linux under a subordinate uid is REMAINING_WORK 4.21.
+- macOS: the guest's Seatbelt profile refuses the state directory (T14), measured with a control. Linux under a subordinate uid was REMAINING_WORK 4.21 (built in PS-B-03b, above).
 - `sandbox probe` proves a contained guest by a round trip on its channel; `doctor`'s identity line is read from that attempt. `DEPLOYMENT.md` gains the separate-account recipe per platform.
 
 ## Unreleased — V2 PS-B-05: a budget is an authority dimension, 2026-09-25

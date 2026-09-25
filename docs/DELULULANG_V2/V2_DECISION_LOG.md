@@ -665,7 +665,8 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
 6. **macOS: T14 by the profile, not an identity.** macOS gives an unprivileged launcher no second
    identity. The Seatbelt profile, which must allow reads, now denies the state directory after the
    broad allow. **Linux: deferred to PS-B-03b (RW 4.21)** — a subordinate uid needs a setuid helper
-   and host configuration, and Landlock already holds T14 there where the kernel has it.
+   and host configuration, and Landlock already holds T14 there where the kernel has it. *(Built in
+   PS-B-03b the same day — D-V2-37. Point 3's drain thread was later replaced — D-V2-36.)*
 
 ## D-V2-35 — PS-B-06, BREAK-GLASS — TAKEN (head chef, 2026-09-25, under the owner's delegation; D-V2-09 is the owner's principle)
 
@@ -695,6 +696,60 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
 6. **Named limit (category 7, RW 4.4):** a process running as the operator can delete the policy file.
    The policy binds what `delulu` runs, and a sandboxed guest, which cannot reach the state directory
    (T14); a same-user shell is what a separate OS account is for.
+
+## D-V2-36 — PS-B-04, channel batching: NOT built; the Windows transport fixed instead — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+1. **The rule was fixed before any number** (`measurements/sandbox-channel/RECORD.md`): batching pays
+   only above 50 µs of channel cost per effect. Measured on the three CI runners (run `36167360827`),
+   by slope: Linux 19.5 µs, macOS 19.8 µs, Windows Server 2025 66.9 µs. Batching fails the rule on two
+   platforms and passes it on one.
+2. **Batching is not built.** It would change WHEN an epoch-class effect is observed — a clock read
+   answered from a snapshot is not taken when the program asked — on every platform, to recover a
+   cost one platform has. A semantic change needs a reason on its own; a slow transport is not one.
+3. **The Windows transport is fixed instead**, because the cost was taken apart and found there: each
+   read crossed a drain thread and a queue, so one round trip woke four threads where Linux wakes two
+   (48.6 → 40.4 → 30.1 µs per effect as each hop was removed in a local build). The host now reads the
+   overlapped server end of one duplex pipe directly with a real deadline; the guest reads directly
+   and a watchdog ends it if a read outlives the deadline. Deadlines kept on both sides; writes gained
+   one. Workstation: 28.9 µs per effect (from 48.6).
+4. **Each frame is one write** on both channels (sandbox and broker): no measurable change here, but it
+   cannot cost anything and removes a possible second wake per frame.
+5. **Re-open condition:** if a runner measures above the line again with this transport, the record
+   says so and PS-B-04 is reconsidered on that evidence — the script stays committed and the workflow
+   manual, so the question is one button away.
+
+## D-V2-37 — PS-B-03b, a Linux guest as a subordinate uid — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+1. **Measured before built** (`host-capability-probe`, `linux-subordinate-uid`, runs `36167365278` and
+   `36167600016`): on Ubuntu 24.04's default, AppArmor leaves an unprivileged user namespace without
+   the capabilities to set its ids, so even mapping the runner's own uid failed; on the same runner
+   with that one sysctl lifted, a child mapped to a subordinate uid was refused the operator's `0600`
+   file that the control read. So the mechanism works where the distribution allows it (Debian and
+   Fedora by default), and the build must fall back where it does not.
+2. **The guest is born in a new user namespace as uid 1 / gid 1**, mapped by the setuid helpers
+   `newuidmap`/`newgidmap` (by absolute path, never `PATH`) to one id chosen per run from the ranges
+   `/etc/subuid` and `/etc/subgid` give the operator; a range containing the operator's own uid is
+   refused. Not uid 0 inside: with no mapping for 0 the namespace has no root, and `exec` clears the
+   capabilities. It drops every supplementary group and every capability before the jail's own steps
+   run — the order matters, because changing ids clears the parent-death signal the jail sets.
+3. **No runtime copy.** The binary is executed through an open descriptor (`/proc/self/fd/N`), so the
+   stranger never walks the operator's directories; the channel is an inherited socket pair, so it
+   needs no path either. A guest that cannot LOAD as the stranger (a library under a directory only the
+   operator may walk) is caught by a ready byte it sends before anything else, and the launch falls
+   back rather than failing the run.
+4. **It claims less than Windows' container, and the report says exactly what.** A subordinate uid is
+   refused what only the operator's account may touch; it still reads what every account may, writes
+   where every account may and opens sockets — those are Landlock's and seccomp's to refuse, and they
+   still apply inside the namespace. `posture.identity` = "a subordinate uid in its own user namespace",
+   `filesystem_reads` = "only what every account on the host may read" unless Landlock narrows it.
+5. **Absent is loud.** A host that forbids it runs the guest as the operator, says why on a run's
+   standard error, and `doctor` repeats the launcher's own reason. CI proves both: the x86-64 job lifts
+   the restriction and REQUIRES the identity (`DELULU_REQUIRE_SUBORDINATE_UID`), arm64 keeps Ubuntu's
+   default and exercises the fallback.
+6. **Residual, named:** the ids are the operator's to hand out and other tools (rootless containers)
+   use the same ranges, so a guest could share an id with a container's process; the per-run choice
+   makes that unlikely, not impossible. The broker, the CLI and unsandboxed runs are still the
+   operator (RW 4.4, category 7).
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

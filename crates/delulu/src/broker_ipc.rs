@@ -296,12 +296,15 @@ pub enum Response {
 
 /// Write one length-prefixed CBOR frame: `[u32-le len][CBOR bytes]`.
 pub fn write_frame<W: Write, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
-    let mut buf = Vec::new();
+    // One write, the length filled in at the front after encoding — as the sandbox channel's
+    // `write_frame` does, and for the same reason: two writes can wake the reader twice per frame.
+    let mut buf = vec![0u8; 4];
     ciborium::into_writer(msg, &mut buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-    if buf.len() as u64 > MAX_FRAME as u64 {
+    let len = buf.len() - 4;
+    if len as u64 > MAX_FRAME as u64 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "frame exceeds the maximum size"));
     }
-    w.write_all(&(buf.len() as u32).to_le_bytes())?;
+    buf[..4].copy_from_slice(&(len as u32).to_le_bytes());
     w.write_all(&buf)?;
     w.flush()
 }

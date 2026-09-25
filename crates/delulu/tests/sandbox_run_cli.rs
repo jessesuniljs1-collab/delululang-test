@@ -117,6 +117,44 @@ fn on_windows_the_guest_runs_as_a_separate_identity_and_the_report_says_so() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-B-03b (T14) end to end on Linux, where the host allows it: the guest runs as a subordinate uid,
+/// the granted write still happens — the host performs it — and the report names the identity. The
+/// boundary itself is measured in `identity::linux::tests`. A host that forbids user namespaces
+/// cannot run this, so it is required only where `DELULU_REQUIRE_SUBORDINATE_UID` says the host was
+/// configured for it (the CI job that relaxes Ubuntu's restriction); elsewhere it says it did not run.
+#[cfg(target_os = "linux")]
+#[test]
+fn on_linux_a_host_that_allows_it_runs_the_guest_as_a_subordinate_uid_and_the_report_says_so() {
+    if std::env::var_os("DELULU_REQUIRE_SUBORDINATE_UID").is_none() {
+        eprintln!("NOT MEASURED here: set DELULU_REQUIRE_SUBORDINATE_UID on a host that allows user namespaces");
+        return;
+    }
+    let dir = tmp("subuid");
+    let (src, scope) = writer(&dir);
+    let report = dir.join("rep.json");
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        report.to_str().unwrap(),
+    ]);
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert_eq!(std::fs::read_to_string(dir.join("out").join("made.txt")).unwrap(), "sandboxed", "the host wrote it");
+    assert!(!err.contains("could not be given a separate identity"), "no fallback on this host: {err}");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let guarantees = v["sandbox"]["host_guarantees"].as_array().expect("guarantees are a list");
+    assert!(
+        guarantees.iter().any(|g| g.as_str().is_some_and(|g| g.contains("a subordinate uid"))),
+        "the report names the identity it applied: {guarantees:?}"
+    );
+    assert_eq!(v["sandbox"]["posture"]["identity"], "a subordinate uid in its own user namespace", "{v}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A tighter profile really is tighter, and the report says which one was asked for.
 #[test]
 fn a_profile_chooses_the_limits_and_the_report_names_it() {
@@ -528,9 +566,17 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
         // tests), so the report says so and does not list what it applied as a limitation.
         assert_eq!(sb["posture"]["identity"], "a per-run AppContainer", "{r}");
         assert!(!lim.contains(&"identity_separation"), "an applied identity is not a limitation: {r}");
+    } else if cfg!(target_os = "linux") && sb["posture"]["identity"] == "a subordinate uid in its own user namespace" {
+        // PS-B-03b: a Linux host that allows it gives the guest a subordinate uid. (Anywhere else
+        // that answer falls to the branch below and fails it: only Linux starts a guest that way.)
+        assert!(!lim.contains(&"identity_separation"), "an applied identity is not a limitation: {r}");
     } else {
         assert_eq!(sb["posture"]["identity"], "same OS user", "{r}");
         assert!(lim.contains(&"identity_separation"), "identity separation must be named where it is absent: {r}");
+        assert!(
+            std::env::var_os("DELULU_REQUIRE_SUBORDINATE_UID").is_none(),
+            "this host is configured to give a guest a subordinate uid, and the run did not: {r}"
+        );
     }
     // At least one question must be answered by something that was applied, or the test would pass
     // for a report that called everything a limitation. Which ones is PER PLATFORM, and asserting

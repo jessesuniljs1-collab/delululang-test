@@ -35,12 +35,50 @@ Two findings, both worth more than the verdict:
    **just under** (47.5–49.2 µs). A result within 2% of its threshold, on one machine, is not a
    verdict, which is why the same measurement runs on every CI operating system below.
 
-## Result — the three CI runners
+## Result — the three CI runners (run `36167360827`, `7910497`, read 2026-09-25)
 
 `.github/workflows/channel-measure.yml` (manual) builds the release binary on each runner and runs
-`bench.py`. Transcribed from the run once read — until then this section says so rather than
-guessing: **not yet run.**
+`bench.py`. Transcribed from the run's log:
 
-## Decision
+| runner | N = 2,000 | N = 10,000 | slope between the two sizes |
+|---|---|---|---|
+| Linux 6.17 (Azure), x86-64 | 23.85 µs | 20.30 µs | **19.5 µs** |
+| macOS 26 (Darwin 25.6), arm64 | 70.55 µs | 29.05 µs | **19.8 µs** |
+| Windows Server 2025, x86-64 | 68.20 µs | 67.13 µs | **66.9 µs** |
 
-Recorded in `V2_LOG.md` (PS-B-04) once the CI rows exist.
+Reading it honestly takes the slope as well as the two points. The method assumes every fixed cost
+cancels between the clock program and the baseline; on macOS one did not — about 0.1 s more for the
+clock program at both sizes — so its N = 2,000 figure is inflated and the slope (19.8 µs) is the
+channel. Linux and Windows are linear: their points and slopes agree.
+
+**By the rule fixed first, batching does not pay on Linux or macOS and does pay on Windows.**
+
+## Decision — fix the transport that failed the rule, do not batch (D-V2-36)
+
+Batching would change WHEN an effect is observed, on every platform, to recover a cost only one
+platform has. So the Windows cost was taken apart first. PS-B-03's transport read each pipe through a
+drain thread and a queue (an anonymous pipe has no read deadline), so one round trip woke four
+threads where Linux wakes two. Measured by removing the hops in a local build, one at a time, then
+reverted:
+
+| Windows workstation, release build | per effect (slope) |
+|---|---|
+| PS-B-03's transport (both hops) | 48.6 µs |
+| the guest's hop removed | 40.4 µs |
+| both hops removed | 30.1 µs |
+
+And one thing that was NOT the cost: each frame used to be written in two calls (length, then body).
+Merging them into one changed nothing measurable here; it stays, because it cannot cost anything and
+removes a possible second wake per frame on every platform.
+
+What was built: the host reads the server end of ONE duplex pipe, opened overlapped, directly on its
+own thread with a real deadline (issue, wait at most the deadline, cancel); the guest reads its end
+directly, and a watchdog ends the guest if a read outlives the deadline. Deadlines are kept on both
+sides; nothing about when an effect happens changed.
+
+| Windows workstation, release build | N = 2,000 | N = 10,000 | slope |
+|---|---|---|---|
+| **the new transport** | **31.0 µs** | **29.15 µs** | **28.9 µs** |
+
+Below the 50 µs line with room, on the machine that was just under it. The Windows CI runner's
+figure after the change is recorded below once read.

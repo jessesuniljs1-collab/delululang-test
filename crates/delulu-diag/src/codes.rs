@@ -742,12 +742,15 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  Honesty and threat-model caveats, carried because the shape of this feature invites \
                  the opposite assumption:\n\
                  - It is NOT a substitute for the separate OS account of `DEPLOYMENT.md` Tier 2. On \
-                 Linux and macOS the guest runs as the SAME OS user, so this is a second wall under the \
-                 account boundary, not instead of it, and `limitations` says `identity_separation` there. \
-                 On Windows the guest runs as a per-run AppContainer with no capabilities (PS-B-03): no \
-                 network and none of the operator's files. The broker, the CLI and every run without \
-                 `--sandbox` are still the operator, so the account boundary is still the one that \
-                 covers them.\n\
+                 macOS the guest runs as the SAME OS user, so this is a second wall under the account \
+                 boundary, not instead of it, and `limitations` says `identity_separation` there. On \
+                 Windows the guest runs as a per-run AppContainer with no capabilities (PS-B-03): no \
+                 network and none of the operator's files. On Linux, where the host allows user \
+                 namespaces, it runs as a subordinate uid with no groups or capabilities (PS-B-03b): \
+                 none of the files only the operator's account may read, though what EVERY account may \
+                 read stays readable; where the host forbids them (Ubuntu's default) it is the SAME OS \
+                 user and the report says so. The broker, the CLI and every run without `--sandbox` are \
+                 still the operator, so the account boundary is still the one that covers them.\n\
                  - It does not carry every program yet. Actors, foreign C, Python, plugins, devices and \
                  secrets are REFUSED rather than run unconfined, because a sandbox that quietly did not \
                  apply is the failure this design exists to prevent. That is also why `--sandbox` is \

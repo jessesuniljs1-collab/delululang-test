@@ -1048,3 +1048,53 @@ host letting an unprivileged launcher map a subordinate uid. `host-capability-pr
 `linux-subordinate-uid`: a 0600 file read by a child mapped to the runner's own uid (the control, which
 must succeed or nothing is measured) and by one mapped to a subordinate uid through `newuidmap`
 (`unshare --map-auto`), which must be refused.
+
+**Both runs read.** Probe `36167365278` (`7910497`): on Ubuntu 24.04's default the control itself
+failed — `unshare: write failed /proc/self/uid_map: Operation not permitted` — because AppArmor
+(`kernel.apparmor_restrict_unprivileged_userns = 1`) leaves an unprivileged user namespace without
+capabilities; `newuidmap` is installed setuid and the runner has `165536:65536`, so what was missing
+was the distribution's permission, not the kernel's mechanism. `RESULT: NOT MEASURED`. A second step
+lifting that one sysctl was added (`4cd7680`) and run as `36167600016`: control `uid=0 … operator
+exit=0`, experiment `cat: …/secret: Permission denied exit=1`, a world-readable binary still ran —
+`RESULT subordinate-uid-separates-relaxed: PASS`. Channel `36167360827` (`7910497`), by slope: Linux
+19.5 µs, macOS 19.8 µs (its N = 2,000 point carries a ~0.1 s fixed cost the method assumed cancelled),
+Windows Server 2025 **66.9 µs** — over the line.
+
+**PS-B-04 decided (D-V2-36): no batching; the Windows transport fixed.** Batching would change when an
+effect is observed on every platform to recover a cost one platform has, so the cost was taken apart
+first: PS-B-03's pipes were read through a drain thread and a queue each way, four thread wakes per
+round trip where Linux has two. Removing the hops one at a time in a local build (reverted): 48.6 →
+40.4 → 30.1 µs. Built: the host reads the overlapped server end of ONE duplex pipe (owner-only, one
+instance, no remote clients, random name, the client end opened by the host at once and inherited)
+directly with a real deadline, and writes are now bounded too; the guest reads its end directly and a
+watchdog ends it if a read outlives the deadline. Workstation after: **28.9 µs** per effect. Also:
+every frame is now one write (sandbox and broker channels) — no measurable change, kept because it
+cannot cost anything. Tests: the host pipe's round trip, deadline, recovery after a timeout and end of
+channel; the watchdog fires on a read past the deadline and never on idle time (falsified: a watchdog
+that never fires fails it). The Windows CI runner's figure after the change is read from the next
+`channel-measure` run.
+
+**PS-B-03b — a Linux guest as a subordinate uid (D-V2-37).** Built from the measurement: the guest is
+born in a new user namespace as uid 1 / gid 1, mapped by `newuidmap`/`newgidmap` (absolute paths) to
+one id per run from the operator's `/etc/subuid` and `/etc/subgid` ranges (a range holding the
+operator's own uid is refused), then drops every supplementary group and capability — before the
+jail's own steps, because changing ids clears the parent-death signal. The binary is executed through
+a descriptor (`/proc/self/fd/N`) so no runtime copy is needed; the channel is an inherited socket pair;
+a READY byte lets the host fall back when a guest cannot load as the stranger. Landlock and seccomp
+still apply inside the namespace (measured: a WSL run printed both). Where the host forbids it the run
+falls back loudly and `doctor` gives the launcher's own reason. The posture claims less than Windows':
+identity and reads (`only what every account on the host may read`), never writes or network.
+
+Witnesses: T14 on Linux (`identity::linux::tests`) with the operator's control succeeding at all five
+attempts and the stranger refused four, `PUBLIC=true` for a world-readable file, `UID=1`, `GROUPS=0`;
+an end-to-end run (`sandbox_run_cli`) whose granted write still happens and whose report names the
+identity; the posture unit test for the Linux words. **Falsified twice** in WSL (Ubuntu 20.04, kernel
+6.6, `uidmap` installed there for this): skipping the uid change (`SECRET=true`) and skipping the group
+drop (the `GROUPS=0` assertion) each fail T14. On CI the x86-64 Linux job now lifts the restriction and
+sets `DELULU_REQUIRE_SUBORDINATE_UID`, so the identity tests there must measure; arm64 keeps Ubuntu's
+default and exercises the fallback.
+
+Found on the way (RW 4.23): a Linux run report never counts what the guest applied to ITSELF —
+Landlock and seccomp are announced on standard error but not sent to the host, so `posture` lists
+writes, network and new programs as not confined on a run that confined all three. Safe direction;
+recorded, not yet fixed.

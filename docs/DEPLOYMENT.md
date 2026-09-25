@@ -100,6 +100,11 @@ runs as another, which cannot read `0700` directories it does not own.
   directory or your files, and its own `DELULU_STATE_DIR` must be one it owns.
 - **Linux**: the same with `sudo useradd --system delulu-agent` and `sudo -u delulu-agent …`. Check the
   state directory's filesystem first (below).
+  A `--sandbox` guest already runs as a subordinate uid where the host allows user namespaces (PS-B-03b):
+  it needs `newuidmap`/`newgidmap` (the `uidmap` package), a range for your user in `/etc/subuid` and
+  `/etc/subgid` (`useradd` makes one), and — on Ubuntu 23.10 and later — the AppArmor restriction lifted
+  (`sysctl kernel.apparmor_restrict_unprivileged_userns=0`), a host-wide choice that is yours to make.
+  `delulu doctor`'s `identity separation` line says whether it applied here, and why not if it did not.
 - **Windows**: a second local account (`net user delulu-agent /add`) and `runas /user:delulu-agent`.
   A `--sandbox` guest already runs as a per-run AppContainer (PS-B-03); the account is what covers the
   CLI and an unsandboxed run.
@@ -114,7 +119,7 @@ enforces what it actually has:
 | Platform | What the guest is held to |
 |---|---|
 | Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction; and since PS-B-03 **a separate identity**: a per-run AppContainer with no capabilities, so no network of any kind and none of the operator's files, the state directory included (T14, measured with a control) |
-| Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
+| Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls Where the host allows user namespaces, **a separate identity** as well (PS-B-03b): a per-run subordinate uid in its own user namespace, with no supplementary groups or capabilities, so none of the files only your account may read (T14, measured with a control); the report says `same OS user` where the host forbids it. |
 | macOS | a processor-time ceiling and no core dump (`setrlimit` before `exec`, both measured: a spinning program with a one-second limit was killed by SIGXCPU after one second against a control that ran sixteen, run `35480762820`; **no** memory ceiling is claimed or even requested, because `setrlimit(RLIMIT_DATA)` returns EINVAL on macOS — measured in the same run — and the time ceiling matters most here, since macOS has no `PDEATHSIG` and a guest that is computing rather than asking would not notice its host had died), plus a **deny-default** Seatbelt profile: nothing is permitted but reads, `sysctl-read`, the guest's own `exec`, and its channel socket — so no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. Each of those four allowances was measured load-bearing by removing it (run `35479148216`); reads are NOT narrowed, because every attempt to confine them by subpath aborts the guest, so on macOS a guest can still read the filesystem and only the other layers stop it acting on what it read — except the state directory, which the profile refuses since PS-B-03 (T14). Measured on macOS 26.6.2 arm64: a future release needing another allowance makes the run REFUSE rather than fall back to a weaker profile |
 
 Read the run report (`--report-out F`) rather than the program's output: it names the requested and

@@ -1022,7 +1022,7 @@ mod boundary_authority_tests {
         ("egress.rs", "the resolver thread: one getaddrinfo call, abandoned at the request's deadline"),
         ("budget.rs", "the budget watchdog: samples the process's memory and processor time"),
         ("run_cmd.rs", "flushes stdout, bounded, while a budget-stopped run exits"),
-        ("pipe_channel.rs", "drains the sandbox channel's inherited pipe so a read can have a deadline"),
+        ("pipe_channel.rs", "the sandbox guest's channel watchdog: sleeps, and ends a guest whose host fell silent"),
         ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),
         ("lib.rs", "the registry's HTTP listener: serves connections, never evaluates a program"),
     ];

@@ -299,7 +299,7 @@ pub fn harden(_cmd: &mut std::process::Command, _limits: Limits) -> Vec<&'static
 /// case the caller SAYS so, because "the sandbox quietly did not apply" is the failure this phase
 /// exists to prevent. It is not fatal: seccomp, the rlimits and the channel are unaffected.
 #[cfg(target_os = "linux")]
-pub fn confine_filesystem(channel_dir: &std::path::Path) -> Option<Vec<&'static str>> {
+pub fn confine_filesystem(channel_dir: Option<&std::path::Path>) -> Option<Vec<&'static str>> {
     use landlock::{
         path_beneath_rules, Access, AccessFs, AccessNet, LandlockStatus, Ruleset, RulesetAttr,
         RulesetCreatedAttr, ABI,
@@ -328,8 +328,9 @@ pub fn confine_filesystem(channel_dir: &std::path::Path) -> Option<Vec<&'static 
         // No writable rule at all: the whole point is that this list is empty.
         .and_then(|r| r.add_rules(path_beneath_rules(SYSTEM_READ, AccessFs::from_read(fs_abi))))
         // The channel directory, read-only, so a guest can still stat the socket it is already
-        // talking through. It is named rather than assumed, as the Seatbelt profile names it.
-        .and_then(|r| r.add_rules(path_beneath_rules([channel_dir], AccessFs::from_read(fs_abi))))
+        // talking through. It is named rather than assumed, as the Seatbelt profile names it. A guest
+        // born holding its socket (PS-B-03b) has no directory, and gets no rule.
+        .and_then(|r| r.add_rules(path_beneath_rules(channel_dir, AccessFs::from_read(fs_abi))))
         // No TCP port is ever added, so every bind and every connect is refused.
         .and_then(|r| r.restrict_self());
     let status = match ruleset {
@@ -689,7 +690,7 @@ mod linux_tests {
         let chan = std::path::PathBuf::from(std::env::var(CHAN).expect("the channel directory"));
         let secret = std::path::PathBuf::from(std::env::var(SECRET).expect("the secret directory"));
         if mode == "confined" {
-            match super::confine_filesystem(&chan) {
+            match super::confine_filesystem(Some(&chan)) {
                 Some(applied) => println!("APPLIED={}", applied.join(",")),
                 None => println!("APPLIED=none"),
             }

@@ -66,7 +66,9 @@ broker trust root*, where the deployment model justifies it. The boundary is alw
 identity, authority, grant, sandbox, attestation and audit — never species. [BUILT on Windows,
 PS-B-03: a `--sandbox` guest runs as a per-run AppContainer with no capabilities, measured against
 T14 with a control (D-V2-34). macOS gives no second identity; its guest profile refuses the state
-directory instead. Linux under a subordinate uid is RW 4.21.]
+directory instead. BUILT on Linux, PS-B-03b, where the host allows user namespaces: the guest runs
+as a subordinate uid with no groups or capabilities, T14 measured with a control (D-V2-37); where the
+host forbids them (Ubuntu's default) the report says the guest is the same OS user.]
 
 ## 4. Resource authority
 

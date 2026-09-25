@@ -62,6 +62,17 @@ jobs:
       - name: Install NumPy (criterion-2 demo)
         run: python -m pip install numpy
 
+      # PS-B-03b: let this runner give a sandbox guest a subordinate uid — as Debian and Fedora do by
+      # default, and as an operator of an Ubuntu host would, with this one sysctl. From here the
+      # Linux identity tests are REQUIRED to measure, so they are gates that can fail. The arm64 job
+      # keeps Ubuntu's default, so the fallback (the guest as the same OS user, and the report saying
+      # so) runs there. Measured first: host-capability-probe `linux-subordinate-uid`.
+      - name: Allow unprivileged user namespaces (Linux x86-64)
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          echo "DELULU_REQUIRE_SUBORDINATE_UID=1" >> "$GITHUB_ENV"
+
       # `--no-fail-fast`: without it cargo stops at the first failing test BINARY. On the first run
       # (2026-09-14) that made every x86 job report one failure and hide whatever came after it;
       # arm64, which already said `--no-fail-fast`, was the only job that showed the whole picture.

@@ -348,32 +348,45 @@ fn sandbox_section(r: &mut Report) {
     // PS-B-03. Read from the launcher attempt above rather than stated: the identity is named only
     // when a guest was actually started with one on this host just now.
     let separated = launcher.is_some_and(|a| a.ok && a.detail.contains(crate::identity::GUARANTEE));
-    r.push(
-        s,
-        "identity separation",
-        Status::Note,
-        if separated {
-            concat!(
-                "a `run --sandbox` guest runs as a per-run AppContainer with no capabilities (PS-B-03) — no network, ",
-                "none of the operator's files, not the state directory (attempted now); an ordinary run, the broker ",
-                "and the CLI still run as this OS user (RW 4.4, category 7)"
-            )
-        } else if cfg!(windows) {
-            "none — this host could not start a guest under a separate identity just now, so a sandboxed guest runs as this OS user too (RW 4.4, category 7)"
-        } else if cfg!(target_os = "macos") {
-            concat!(
-                "none — macOS gives an unprivileged launcher no second identity, so a sandboxed guest runs as this OS ",
-                "user; its Seatbelt profile refuses it the state directory, writes and the network (PS-B-03). The ",
-                "boundary for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)"
-            )
-        } else {
-            concat!(
-                "none — a sandboxed guest runs as this OS user: this build does not yet start one under a subordinate ",
-                "uid (RW 4.21); where the kernel has Landlock the guest cannot read the operator's files. The boundary ",
-                "for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)"
-            )
-        },
-    );
+    // Why the attempt fell back, in the launcher's own words, when it did.
+    let refused = if separated { None } else { crate::guest::identity_refusal() };
+    let because = |why: &Option<String>| why.as_ref().map(|w| format!(" ({w})")).unwrap_or_default();
+    let identity_line = if separated && cfg!(windows) {
+        concat!(
+            "a `run --sandbox` guest runs as a per-run AppContainer with no capabilities (PS-B-03) — no network, ",
+            "none of the operator's files, not the state directory (attempted now); an ordinary run, the broker ",
+            "and the CLI still run as this OS user (RW 4.4, category 7)"
+        )
+        .to_string()
+    } else if separated {
+        concat!(
+            "a `run --sandbox` guest runs as a subordinate uid in its own user namespace, with no supplementary ",
+            "groups or capabilities (PS-B-03b) — none of the operator's own files, not the state directory ",
+            "(attempted now); an ordinary run, the broker and the CLI still run as this OS user (RW 4.4, category 7)"
+        )
+        .to_string()
+    } else if cfg!(windows) {
+        format!(
+            "none — this host could not start a guest under a separate identity just now{}, so a sandboxed guest \
+             runs as this OS user too (RW 4.4, category 7)",
+            because(&refused)
+        )
+    } else if cfg!(target_os = "macos") {
+        concat!(
+            "none — macOS gives an unprivileged launcher no second identity, so a sandboxed guest runs as this OS ",
+            "user; its Seatbelt profile refuses it the state directory, writes and the network (PS-B-03). The ",
+            "boundary for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)"
+        )
+        .to_string()
+    } else {
+        format!(
+            "none — this host could not start a guest as a subordinate uid just now{}, so a sandboxed guest runs \
+             as this OS user; where the kernel has Landlock it still cannot read the operator's files. The \
+             boundary for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)",
+            because(&refused)
+        )
+    };
+    r.push(s, "identity separation", Status::Note, identity_line);
     r.push(
         s,
         "resource controls",

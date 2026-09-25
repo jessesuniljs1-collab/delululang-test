@@ -18,27 +18,525 @@
 //!   only extra grant is read-and-execute for `ALL APPLICATION PACKAGES`. That grant exposes code any
 //!   copy of DeluluLang ships, and nothing else: it is on that directory alone, never the state
 //!   directory, the program, or the operator's files.
-//! - The channel moves to two inherited pipes (`pipe_channel.rs`), because an AppContainer's named
-//!   pipes live in its own namespace.
+//! - The channel moves to an inherited pipe (`pipe_channel.rs`), because an AppContainer's named
+//!   pipes live in its own namespace: one duplex pipe whose client end the host opens and hands down.
 //!
 //! The same experiment is the evidence for what the identity buys: the contained child could not
 //! read the operator's file, could not read a key in a state directory, could not list or write the
 //! operator's directory and could not open a connection, while the SAME binary without the container
 //! did all five. T14's witness below repeats it against the runtime copy this module prepares.
 //!
-//! **Where it is absent it says so.** A host that cannot create the profile, copy the runtime or start
-//! the process runs the guest as PS-A did and prints why; the run report's `host_guarantees` names
-//! the identity only when it was applied. Linux and macOS give an unprivileged launcher no second
-//! identity (`V2_LOG.md`, PS-B-03); the documented recipe is a separate OS account (`DEPLOYMENT.md`
-//! Tier 2), which remains the boundary for everything this cannot cover — the broker, the CLI itself,
-//! and any run that is not sandboxed.
+//! **Linux: a subordinate uid in the guest's own user namespace (PS-B-03b).** The guest is born in a
+//! new user namespace where it is uid 1 and gid 1, and those map — through the setuid helpers
+//! `newuidmap`/`newgidmap` and the ranges `/etc/subuid` and `/etc/subgid` give this user — to ids
+//! outside the operator's own. It drops every supplementary group and every capability before it
+//! executes a line, so to the kernel it is a stranger: the operator's `0600` files, a `0700` home and
+//! the state directory are closed to it, and only what EVERY account may read stays readable (which
+//! Landlock then narrows further, where the kernel has it). Its channel is a socket pair it inherits,
+//! and its binary is executed through an open descriptor, so neither needs a path the stranger could
+//! not walk. Measured before it was built (`host-capability-probe`, `linux-subordinate-uid`): on
+//! Ubuntu 24.04's default the distribution forbids it — AppArmor leaves an unprivileged user namespace
+//! without the capabilities to set its ids — and on the same runner with that one restriction lifted,
+//! a child mapped this way was refused the operator's file that the control read.
+//!
+//! **Where it is absent it says so.** A host that cannot create the profile, copy the runtime, map the
+//! ids or start the process runs the guest as PS-A did and prints why; the run report's
+//! `host_guarantees` names the identity only when it was applied. macOS gives an unprivileged
+//! launcher no second identity (`V2_LOG.md`, PS-B-03); the documented recipe is a separate OS account
+//! (`DEPLOYMENT.md` Tier 2), which remains the boundary for everything this cannot cover — the broker,
+//! the CLI itself, and any run that is not sandboxed.
 
-/// The words the run report and `doctor` use for this boundary, so the two cannot drift.
-pub const GUARANTEE: &str =
+/// The words the run report and `doctor` use for the Windows boundary, so the two cannot drift.
+pub const WINDOWS_GUARANTEE: &str =
     "a separate identity: a per-run AppContainer with no capabilities — no network, none of the operator's files";
+
+/// The words for the Linux boundary. They claim less than Windows' on purpose: a subordinate uid is
+/// refused what only the operator's account may touch, but it can still read what every account may,
+/// write where every account may, and open a socket — those are Landlock's and seccomp's to refuse.
+pub const LINUX_GUARANTEE: &str =
+    "a separate identity: a subordinate uid in its own user namespace, with no supplementary groups or capabilities";
+
+/// This platform's words. macOS never applies an identity, so its value is never matched.
+#[cfg(windows)]
+pub const GUARANTEE: &str = WINDOWS_GUARANTEE;
+#[cfg(not(windows))]
+pub const GUARANTEE: &str = LINUX_GUARANTEE;
 
 #[cfg(windows)]
 pub use win::{spawn_contained, ContainedGuest};
+
+#[cfg(target_os = "linux")]
+pub use linux::{spawn_contained, ContainedGuest};
+
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::ffi::OsStr;
+    use std::io::{self, Read as _, Write as _};
+    use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd, RawFd};
+    use std::os::unix::net::UnixStream;
+    use std::os::unix::process::CommandExt as _;
+    use std::path::Path;
+    use std::process::{Child, ChildStderr, Command, ExitStatus, Stdio};
+
+    /// Who the guest is INSIDE its namespace. Not 0: a uid-0 process keeps its capabilities across
+    /// `exec`, and a guest needs none. With no mapping for 0 at all, the namespace has no root.
+    const NS_ID: u32 = 1;
+
+    /// A range of ids this user may map, from `/etc/subuid` or `/etc/subgid`.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) struct Range {
+        pub start: u32,
+        pub count: u32,
+    }
+
+    /// The first range in `text` belonging to this user, named either way the files allow.
+    pub(super) fn range_for(text: &str, name: Option<&str>, uid: u32) -> Option<Range> {
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let mut f = line.split(':');
+            let (Some(who), Some(start), Some(count)) = (f.next(), f.next(), f.next()) else { continue };
+            if Some(who) != name && who.parse::<u32>().ok() != Some(uid) {
+                continue;
+            }
+            let (Ok(start), Ok(count)) = (start.trim().parse::<u32>(), count.trim().parse::<u32>()) else { continue };
+            // A range that would wrap, or that contains the operator's own uid, separates nothing.
+            let Some(last) = start.checked_add(count.saturating_sub(1)) else { continue };
+            if count == 0 || (start..=last).contains(&uid) {
+                continue;
+            }
+            return Some(Range { start, count });
+        }
+        None
+    }
+
+    fn user_name(uid: u32) -> Option<String> {
+        let mut buf = vec![0u8; 16 * 1024];
+        // SAFETY: `pwd` and `buf` outlive the call, which writes only into them; `result` is checked
+        // before `pwd` is read.
+        unsafe {
+            let mut pwd: libc::passwd = std::mem::zeroed();
+            let mut result: *mut libc::passwd = std::ptr::null_mut();
+            let rc = libc::getpwuid_r(uid, &mut pwd, buf.as_mut_ptr() as *mut libc::c_char, buf.len(), &mut result);
+            if rc != 0 || result.is_null() || pwd.pw_name.is_null() {
+                return None;
+            }
+            Some(std::ffi::CStr::from_ptr(pwd.pw_name).to_string_lossy().into_owned())
+        }
+    }
+
+    /// The setuid helper, by absolute path. Never looked up on `PATH`: the environment must not
+    /// choose the program that decides who the guest becomes.
+    fn helper(name: &str) -> Option<&'static str> {
+        let found = match name {
+            "newuidmap" => ["/usr/bin/newuidmap", "/bin/newuidmap"],
+            _ => ["/usr/bin/newgidmap", "/bin/newgidmap"],
+        };
+        found.into_iter().find(|p| Path::new(p).is_file())
+    }
+
+    /// What one launch will map: the ids chosen, and the helpers that will write them.
+    struct Plan {
+        uid: u32,
+        gid: u32,
+        newuidmap: &'static str,
+        newgidmap: &'static str,
+    }
+
+    impl Plan {
+        fn for_this_user() -> Result<Plan, String> {
+            // SAFETY: getuid cannot fail.
+            let uid = unsafe { libc::getuid() };
+            let name = user_name(uid);
+            let (Some(newuidmap), Some(newgidmap)) = (helper("newuidmap"), helper("newgidmap")) else {
+                return Err("`newuidmap`/`newgidmap` are not installed (the `uidmap` package)".into());
+            };
+            let read = |p: &str| std::fs::read_to_string(p).unwrap_or_default();
+            let (Some(us), Some(gs)) =
+                (range_for(&read("/etc/subuid"), name.as_deref(), uid), range_for(&read("/etc/subgid"), name.as_deref(), uid))
+            else {
+                return Err("this user has no subordinate ids in /etc/subuid and /etc/subgid".into());
+            };
+            // A different id per run where the range allows it, so two guests are strangers to each
+            // other too. The randomness is the standard library's per-process hash key: this chooses
+            // among ids that are all equally the operator's to hand out, it guards no secret.
+            use std::hash::{BuildHasher as _, Hasher as _};
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u32(std::process::id());
+            let salt = h.finish();
+            Ok(Plan {
+                uid: us.start + (salt % us.count as u64) as u32,
+                gid: gs.start + ((salt >> 32) % gs.count as u64) as u32,
+                newuidmap,
+                newgidmap,
+            })
+        }
+    }
+
+    /// A guest running as a subordinate uid, holding its channel as an inherited socket.
+    pub struct ContainedGuest {
+        child: Child,
+        /// The host's end of the guest's channel.
+        pub channel: Option<UnixStream>,
+        pub stderr: Option<ChildStderr>,
+        /// The uid the guest runs as, outside its namespace.
+        #[allow(dead_code)]
+        pub uid: u32,
+    }
+
+    impl ContainedGuest {
+        pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+            self.child.try_wait()
+        }
+
+        pub fn wait(&mut self) -> io::Result<ExitStatus> {
+            self.child.wait()
+        }
+
+        pub fn kill(&mut self) -> io::Result<()> {
+            self.child.kill()
+        }
+    }
+
+    // What the child reports to the helper thread: a tag byte, then four bytes (a pid, or an errno).
+    const AT_PID: u8 = 0;
+    const AT_UNSHARE: u8 = 1;
+    const AT_SETGROUPS: u8 = 2;
+    const AT_SETGID: u8 = 3;
+    const AT_SETUID: u8 = 4;
+    const AT_CAPS: u8 = 5;
+
+    fn step(tag: u8) -> &'static str {
+        match tag {
+            AT_UNSHARE => "a user namespace could not be created",
+            AT_SETGROUPS => "the guest could not drop its supplementary groups",
+            AT_SETGID => "the guest could not take its subordinate gid",
+            AT_SETUID => "the guest could not take its subordinate uid",
+            AT_CAPS => "the guest could not drop its capabilities",
+            _ => "the guest failed before it ran",
+        }
+    }
+
+    /// Why a step failed, in terms an operator can act on. The errno alone ("Operation not
+    /// permitted") does not say that the distribution forbids it or how that is changed.
+    fn explain(tag: u8, errno: i32) -> String {
+        let err = io::Error::from_raw_os_error(errno);
+        let restricted = std::fs::read_to_string("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
+            .map(|v| v.trim() == "1")
+            .unwrap_or(false);
+        if restricted && errno == libc::EPERM {
+            format!(
+                "{}: {err} — this host restricts unprivileged user namespaces \
+                 (kernel.apparmor_restrict_unprivileged_userns = 1, Ubuntu's default since 23.10)",
+                step(tag)
+            )
+        } else {
+            format!("{}: {err}", step(tag))
+        }
+    }
+
+    /// The helper thread's half: hear the child's pid, write its maps, tell it to go on, then hear
+    /// whether it got as far as `exec`. Returns why not, if it did not.
+    fn map_ids(mut from_child: std::fs::File, mut to_child: std::fs::File, plan: &Plan) -> Result<(), String> {
+        let mut msg = [0u8; 5];
+        if from_child.read_exact(&mut msg).is_err() {
+            return Err("the guest process could not be started".into());
+        }
+        let value = u32::from_le_bytes([msg[1], msg[2], msg[3], msg[4]]);
+        if msg[0] != AT_PID {
+            return Err(explain(msg[0], value as i32));
+        }
+        let pid = value.to_string();
+        let write_map = |helper: &str, id: u32| -> Result<(), String> {
+            let out = Command::new(helper)
+                .args([pid.as_str(), &NS_ID.to_string(), &id.to_string(), "1"])
+                .env_clear()
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("`{helper}` could not run: {e}"))?;
+            if out.status.success() {
+                Ok(())
+            } else {
+                let said = String::from_utf8_lossy(&out.stderr);
+                Err(format!("`{helper}` refused the mapping: {}", said.trim()))
+            }
+        };
+        let mapped = write_map(plan.newuidmap, plan.uid).and_then(|()| write_map(plan.newgidmap, plan.gid));
+        let _ = to_child.write_all(&[u8::from(mapped.is_ok())]);
+        drop(to_child);
+        mapped?;
+        // End of file here means the child reached `exec` (its copy closed on exec, the host's after
+        // `spawn` returned). Anything else is the step that failed.
+        match from_child.read_exact(&mut msg) {
+            Ok(()) => Err(explain(msg[0], u32::from_le_bytes([msg[1], msg[2], msg[3], msg[4]]) as i32)),
+            Err(_) => Ok(()),
+        }
+    }
+
+    /// The child's half, between `fork` and `exec`. Only raw system calls: this runs in a copy of a
+    /// multithreaded process, where anything that takes a lock may wait for ever.
+    fn become_stranger(to_helper: RawFd, from_helper: RawFd) -> io::Result<()> {
+        // SAFETY: every call is a raw system call on this process's own state or on the two pipe
+        // descriptors `spawn_contained` made and keeps open until `exec`; the buffers outlive them.
+        unsafe { become_stranger_raw(to_helper, from_helper) }
+    }
+
+    unsafe fn become_stranger_raw(to_helper: RawFd, from_helper: RawFd) -> io::Result<()> {
+        let tell = |tag: u8, value: u32| {
+            let v = value.to_le_bytes();
+            let msg = [tag, v[0], v[1], v[2], v[3]];
+            libc::write(to_helper, msg.as_ptr() as *const libc::c_void, msg.len());
+        };
+        let fail = |tag: u8| -> io::Result<()> {
+            let errno = *libc::__errno_location();
+            tell(tag, errno as u32);
+            Err(io::Error::from_raw_os_error(errno))
+        };
+        if libc::unshare(libc::CLONE_NEWUSER) != 0 {
+            return fail(AT_UNSHARE);
+        }
+        tell(AT_PID, libc::getpid() as u32);
+        let mut go = [0u8; 1];
+        if libc::read(from_helper, go.as_mut_ptr() as *mut libc::c_void, 1) != 1 || go[0] != 1 {
+            // The helper could not write the maps and already knows why.
+            return Err(io::Error::from_raw_os_error(libc::EPERM));
+        }
+        // Groups first: once the gid changes, the right to change them may be gone. An empty list,
+        // because a supplementary group is exactly how the operator's files would stay reachable.
+        if libc::syscall(libc::SYS_setgroups, 0usize, std::ptr::null::<libc::gid_t>()) != 0 {
+            return fail(AT_SETGROUPS);
+        }
+        let id = NS_ID as libc::c_long;
+        if libc::syscall(libc::SYS_setresgid, id, id, id) != 0 {
+            return fail(AT_SETGID);
+        }
+        if libc::syscall(libc::SYS_setresuid, id, id, id) != 0 {
+            return fail(AT_SETUID);
+        }
+        // The creator of a user namespace holds every capability inside it. `exec` as a non-root id
+        // would clear them anyway; clearing them here as well means no step after this one — nor the
+        // jail's own `pre_exec`, which runs next — acts with them.
+        #[repr(C)]
+        struct Header {
+            version: u32,
+            pid: i32,
+        }
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct Data {
+            effective: u32,
+            permitted: u32,
+            inheritable: u32,
+        }
+        let header = Header { version: 0x2008_0522, pid: 0 };
+        let none = [Data { effective: 0, permitted: 0, inheritable: 0 }; 2];
+        if libc::syscall(libc::SYS_capset, &header as *const Header, none.as_ptr()) != 0 {
+            return fail(AT_CAPS);
+        }
+        Ok(())
+    }
+
+    fn pipe() -> Result<(std::fs::File, std::fs::File), String> {
+        let mut fds = [0 as RawFd; 2];
+        // SAFETY: `fds` is written by the call; both descriptors are owned immediately after.
+        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+            return Err(format!("no pipe: {}", io::Error::last_os_error()));
+        }
+        Ok(unsafe { (std::fs::File::from_raw_fd(fds[0]), std::fs::File::from_raw_fd(fds[1])) })
+    }
+
+    /// Start `exe args` as a stranger: a subordinate uid in a new user namespace, no groups, no
+    /// capabilities, only `env` in its environment, its standard input the channel and its standard
+    /// output nowhere. Standard error is captured when `capture_stderr` is set, and otherwise shared.
+    /// `harden` adds the jail's own pre-`exec` steps; they run AFTER the identity change, because
+    /// changing ids clears the parent-death signal the jail sets.
+    pub fn spawn_contained(
+        exe: &Path,
+        args: &[&OsStr],
+        env: &[(String, String)],
+        capture_stderr: bool,
+        harden: impl FnOnce(&mut Command),
+    ) -> Result<ContainedGuest, String> {
+        let plan = Plan::for_this_user()?;
+        // Executed through this descriptor rather than by name: the stranger may not be able to walk
+        // the operator's directories down to the binary, but a descriptor needs no walk — only the
+        // file's own execute bit, which a built binary gives every account.
+        let binary = std::fs::File::open(exe).map_err(|e| format!("the guest's binary cannot be opened: {e}"))?;
+        let (host_end, guest_end) = UnixStream::pair().map_err(|e| format!("no channel: {e}"))?;
+        let (from_child, to_helper) = pipe()?;
+        let (from_helper, to_child) = pipe()?;
+        let (to_helper_fd, from_helper_fd) = (to_helper.as_raw_fd(), from_helper.as_raw_fd());
+
+        let mut cmd = Command::new(format!("/proc/self/fd/{}", binary.as_raw_fd()));
+        cmd.arg0(exe).args(args).env_clear();
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        // The operator's working directory may be closed to the stranger; the guest needs none.
+        cmd.current_dir("/");
+        cmd.stdin(Stdio::from(OwnedFd::from(guest_end)));
+        cmd.stdout(Stdio::null());
+        if capture_stderr {
+            cmd.stderr(Stdio::piped());
+        }
+        // SAFETY: the hook runs in the forked child and `become_stranger` makes only raw system calls
+        // on the two descriptors named, which stay open there until `exec` (they are close-on-exec,
+        // so the guest never holds them).
+        unsafe {
+            cmd.pre_exec(move || become_stranger(to_helper_fd, from_helper_fd));
+        }
+        harden(&mut cmd);
+
+        let mapping = std::thread::scope(|s| {
+            let helper = s.spawn(|| map_ids(from_child, to_child, &plan));
+            let spawned = cmd.spawn();
+            // The host's copies go now, so the helper's last read ends when the child's do.
+            drop(to_helper);
+            drop(from_helper);
+            let mapped = helper.join().unwrap_or_else(|_| Err("the id-mapping helper failed".into()));
+            (spawned, mapped)
+        });
+        drop(binary);
+        match mapping {
+            (Ok(mut child), Ok(())) => {
+                let stderr = child.stderr.take();
+                Ok(ContainedGuest { child, channel: Some(host_end), stderr, uid: plan.uid })
+            }
+            (Ok(mut child), Err(why)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                Err(why)
+            }
+            (Err(_), Err(why)) => Err(why),
+            (Err(e), Ok(())) => Err(format!("the guest could not be started as a subordinate uid: {e}")),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_subordinate_range_is_found_by_name_or_uid_and_never_contains_the_operator() {
+            let text = "# comment\nother:100000:65536\nme:165536:65536\n";
+            assert_eq!(range_for(text, Some("me"), 1000), Some(Range { start: 165536, count: 65536 }));
+            assert_eq!(range_for("1000:200000:10\n", Some("me"), 1000), Some(Range { start: 200000, count: 10 }));
+            assert_eq!(range_for(text, Some("nobody-here"), 1000), None);
+            // A range holding the operator's own uid would map the guest back onto the operator.
+            assert_eq!(range_for("me:999:10\n", Some("me"), 1000), None);
+            // Malformed, empty or wrapping ranges are skipped rather than trusted.
+            assert_eq!(range_for("me:abc:10\nme:5:0\nme:4294967295:2\n", Some("me"), 1000), None);
+        }
+
+        const MODE: &str = "DELULU_IDENTITY_TEST_MODE";
+
+        /// The child half of T14 on Linux. Without the variable it tests nothing and returns at once.
+        /// It reports on its standard input — the channel socket, when it is started contained — so
+        /// the host reads the answers the way it reads a guest's.
+        #[test]
+        fn t14_child() {
+            let Ok(targets) = std::env::var(MODE) else { return };
+            let t: Vec<&str> = targets.split('|').collect();
+            let (secret, key, operator_dir, public) = (t[0], t[1], t[2], t[3]);
+            let mut report = String::new();
+            report.push_str(&format!("SECRET={}\n", std::fs::read(secret).is_ok()));
+            report.push_str(&format!("STATE={}\n", std::fs::read(key).is_ok()));
+            report.push_str(&format!("LIST={}\n", std::fs::read_dir(operator_dir).is_ok()));
+            report.push_str(&format!("WRITE={}\n", std::fs::write(Path::new(operator_dir).join("escaped.txt"), b"x").is_ok()));
+            report.push_str(&format!("PUBLIC={}\n", std::fs::read(public).is_ok()));
+            // SAFETY: plain queries of this process's own credentials.
+            let (uid, groups) = unsafe { (libc::getuid(), libc::getgroups(0, std::ptr::null_mut())) };
+            report.push_str(&format!("UID={uid}\nGROUPS={groups}\n"));
+            if std::env::var("DELULU_IDENTITY_TEST_CHANNEL").is_ok() {
+                // SAFETY: descriptor 0 is the channel socket this child was started with.
+                let mut chan = unsafe { UnixStream::from_raw_fd(0) };
+                let _ = chan.write_all(report.as_bytes());
+            } else {
+                print!("{report}");
+            }
+        }
+
+        /// **T14 on Linux**: a guest started as a subordinate uid cannot read the operator's files or
+        /// the state directory. Measured with a control — the same binary, the same attempts, as the
+        /// operator, which must succeed at every one — and a boundary check in the other direction:
+        /// a file every account may read stays readable, because that is all the guarantee claims.
+        ///
+        /// A host that forbids the namespace (Ubuntu's default) cannot run the measurement; the test
+        /// says so and passes, UNLESS `DELULU_REQUIRE_SUBORDINATE_UID` is set — as it is on the CI job
+        /// whose runner is configured to allow it — so on that job this is a gate that can fail.
+        #[test]
+        fn t14_a_subordinate_uid_guest_cannot_read_the_operators_files_or_the_state_directory() {
+            use std::os::unix::fs::PermissionsExt as _;
+            let base = std::env::temp_dir().join(format!("delulu-t14-{}", std::process::id()));
+            let (operator, state, public_dir) = (base.join("operator"), base.join("state"), base.join("public"));
+            for (d, mode) in [(&base, 0o755), (&operator, 0o700), (&state, 0o700), (&public_dir, 0o755)] {
+                std::fs::create_dir_all(d).unwrap();
+                std::fs::set_permissions(d, std::fs::Permissions::from_mode(mode)).unwrap();
+            }
+            for (f, mode) in [
+                (operator.join("secret.txt"), 0o600),
+                (state.join("broker.key"), 0o600),
+                (public_dir.join("readme.txt"), 0o644),
+            ] {
+                std::fs::write(&f, b"x").unwrap();
+                std::fs::set_permissions(&f, std::fs::Permissions::from_mode(mode)).unwrap();
+            }
+            let targets = format!(
+                "{}|{}|{}|{}",
+                operator.join("secret.txt").display(),
+                state.join("broker.key").display(),
+                operator.display(),
+                public_dir.join("readme.txt").display()
+            );
+            let args = ["--exact", "identity::linux::tests::t14_child", "--nocapture", "--test-threads=1"];
+            let exe = std::env::current_exe().unwrap();
+
+            let free = Command::new(&exe).args(args).env(MODE, &targets).output().unwrap();
+            let free = String::from_utf8_lossy(&free.stdout).to_string();
+            for want in ["SECRET=true", "STATE=true", "LIST=true", "WRITE=true", "PUBLIC=true"] {
+                assert!(free.contains(want), "the operator's control could not do `{want}`, so nothing below would be measured:\n{free}");
+            }
+            let _ = std::fs::remove_file(operator.join("escaped.txt"));
+
+            let mut env: Vec<(String, String)> =
+                crate::guest::LOADER_ENV.iter().filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v))).collect();
+            env.push((MODE.to_string(), targets));
+            env.push(("DELULU_IDENTITY_TEST_CHANNEL".to_string(), "1".to_string()));
+            let os: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
+            let mut g = match spawn_contained(&exe, &os, &env, true, |_| {}) {
+                Ok(g) => g,
+                Err(why) => {
+                    assert!(
+                        std::env::var_os("DELULU_REQUIRE_SUBORDINATE_UID").is_none(),
+                        "this host is configured to give a guest a subordinate uid, and it could not: {why}"
+                    );
+                    eprintln!("NOT MEASURED on this host: {why}");
+                    let _ = std::fs::remove_dir_all(&base);
+                    return;
+                }
+            };
+            let mut out = String::new();
+            let _ = g.channel.take().unwrap().read_to_string(&mut out);
+            let mut err = String::new();
+            let _ = g.stderr.take().unwrap().read_to_string(&mut err);
+            let status = g.wait().unwrap();
+            assert!(out.contains("SECRET="), "the contained child ran the probe ({status}):\n{out}\n{err}");
+            for want in ["SECRET=false", "STATE=false", "LIST=false", "WRITE=false"] {
+                assert!(out.contains(want), "T14: the subordinate-uid guest was not refused `{want}`:\n{out}");
+            }
+            assert!(out.contains("PUBLIC=true"), "a file every account may read stays readable — the claim is no wider:\n{out}");
+            // SAFETY: getuid cannot fail.
+            let me = unsafe { libc::getuid() };
+            assert!(out.contains(&format!("UID={NS_ID}\n")), "inside its namespace the guest is uid {NS_ID}:\n{out}");
+            assert!(out.contains("GROUPS=0\n"), "and holds no supplementary group:\n{out}");
+            assert_ne!(g.uid, me, "and outside it, it is not the operator");
+            assert!(!operator.join("escaped.txt").exists(), "and nothing was written");
+            let _ = std::fs::remove_dir_all(&base);
+        }
+    }
+}
 
 #[cfg(windows)]
 mod win {
@@ -376,15 +874,13 @@ mod win {
         out.push(b'"' as u16);
     }
 
-    /// A guest started in its own AppContainer, suspended, with its channel on inherited pipes.
+    /// A guest started in its own AppContainer, suspended, with its channel on an inherited pipe.
     pub struct ContainedGuest {
         process: OwnedHandle,
         thread: OwnedHandle,
         exited: Option<u32>,
-        /// The host's ends of the channel: the guest reads what is written here…
-        pub stdin: Option<std::fs::File>,
-        /// …and writes what is read here.
-        pub stdout: Option<std::fs::File>,
+        /// The host's end of the channel: one duplex pipe, the guest's standard input and output.
+        pub channel: Option<crate::pipe_channel::HostPipe>,
         /// The guest's standard error, when the caller asked to capture it.
         pub stderr: Option<std::fs::File>,
         // Declared last so it is dropped after the process has been waited for in `Drop`.
@@ -454,7 +950,8 @@ mod win {
         }
     }
 
-    /// An inheritable pipe: returns (the end the child inherits, the end the host keeps).
+    /// An inheritable pipe: returns (the end the child inherits, the end the host keeps). Used for a
+    /// captured standard error; the channel itself is `pipe_channel::duplex_pair`.
     fn pipe(child_reads: bool) -> Result<(OwnedHandle, OwnedHandle), String> {
         let sa = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
@@ -480,8 +977,9 @@ mod win {
     pub fn spawn_contained(args: &[&OsStr], env: &[(String, String)], capture_stderr: bool) -> Result<ContainedGuest, String> {
         let exe = runtime_copy()?;
         let container = Container::create()?;
-        let (in_child, in_host) = pipe(true)?;
-        let (out_child, out_host) = pipe(false)?;
+        // One duplex pipe: the guest's standard input and output are two handles on its end, the
+        // host reads its own end directly with a deadline (`pipe_channel.rs`).
+        let (host_end, in_child, out_child) = crate::pipe_channel::duplex_pair()?;
         let (err_child, err_host): (Option<OwnedHandle>, Option<OwnedHandle>) = if capture_stderr {
             let (c, h) = pipe(false)?;
             (Some(c), Some(h))
@@ -589,8 +1087,7 @@ mod win {
                 process: OwnedHandle::from_raw_handle(pi.hProcess as RawHandle),
                 thread: OwnedHandle::from_raw_handle(pi.hThread as RawHandle),
                 exited: None,
-                stdin: Some(std::fs::File::from(in_host)),
-                stdout: Some(std::fs::File::from(out_host)),
+                channel: Some(host_end),
                 stderr: err_host.map(std::fs::File::from),
                 _container: container,
             })
@@ -685,10 +1182,9 @@ mod win {
             let os: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
             let mut g = spawn_contained(&os, &env, true).expect("a contained guest starts on this host");
             assert!(g.resume(), "the contained guest resumes");
-            drop(g.stdin.take());
             let mut out = String::new();
             use std::io::Read as _;
-            let _ = g.stdout.take().unwrap().read_to_string(&mut out);
+            let _ = g.channel.take().unwrap().read_to_string(&mut out);
             let mut err = String::new();
             let _ = g.stderr.take().unwrap().read_to_string(&mut err);
             let status = g.wait().unwrap();

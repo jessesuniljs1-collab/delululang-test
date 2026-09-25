@@ -52,13 +52,21 @@ pub const LOADER_ENV: &[&str] = &["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PA
 pub const LOADER_ENV: &[&str] = &[];
 
 /// The guest argument that means "your channel is your standard input and output" (PS-B-03): a guest
-/// started under a separate identity cannot reach a channel by name, so it is born holding one.
-#[cfg(windows)]
+/// started under a separate identity cannot reach a channel by name, so it is born holding one. On
+/// Linux (PS-B-03b) the channel is one socket, inherited as standard input.
+#[cfg(any(windows, target_os = "linux"))]
 pub const STDIO_FLAG: &str = "--stdio";
+
+/// The first byte a Linux `--stdio` guest writes, before it reads anything. The host waits for it
+/// before committing to the launch: a stranger to the operator's account can fail to LOAD — a library
+/// under a directory only the operator may walk — and without this byte that death would surface as a
+/// run that failed, instead of a launch the host could still make the ordinary way.
+#[cfg(target_os = "linux")]
+pub const STDIO_READY: u8 = 0x06;
 
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if args.first().map(String::as_str) == Some(STDIO_FLAG) {
         let mut conn = match stdio_channel() {
             Ok(c) => c,
@@ -69,6 +77,11 @@ pub fn run_guest(args: &[String]) -> i32 {
         };
         if conn.set_read_timeout(Some(CHANNEL_DEADLINE)).is_err() {
             eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
+            return 2;
+        }
+        #[cfg(target_os = "linux")]
+        if io::Write::write_all(&mut conn, &[STDIO_READY]).is_err() {
+            eprintln!("error: the sandbox guest cannot reach its host over its channel");
             return 2;
         }
         return serve_as_guest(conn, None);
@@ -107,8 +120,11 @@ pub fn run_guest(args: &[String]) -> i32 {
 /// anything else can print: a stray `println!` then lands on the operator's terminal instead of
 /// inside a frame, where it would desynchronize the conversation. (Rust's standard streams look the
 /// handle up on every write, which is what makes redirecting the slot sufficient.)
+///
+/// Both are handles on one end of a duplex pipe, read directly; the deadline is kept by a watchdog
+/// that ends this guest if its host falls silent (`pipe_channel.rs`).
 #[cfg(windows)]
-fn stdio_channel() -> Result<crate::pipe_channel::PipeChannel<std::fs::File>, String> {
+fn stdio_channel() -> Result<crate::pipe_channel::GuestChannel<std::fs::File, std::fs::File>, String> {
     use std::os::windows::io::FromRawHandle as _;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::System::Console::{
@@ -125,8 +141,24 @@ fn stdio_channel() -> Result<crate::pipe_channel::PipeChannel<std::fs::File>, St
         SetStdHandle(STD_INPUT_HANDLE, std::ptr::null_mut());
         let reader = std::fs::File::from_raw_handle(input as _);
         let writer = std::fs::File::from_raw_handle(output as _);
-        crate::pipe_channel::PipeChannel::new(reader, writer).map_err(|e| e.to_string())
+        crate::pipe_channel::GuestChannel::new(reader, writer, || {
+            eprintln!("error: the sandbox guest heard nothing from its host within {CHANNEL_DEADLINE:?} — ending");
+            std::process::exit(2);
+        })
+        .map_err(|e| e.to_string())
     }
+}
+
+/// The channel of a Linux guest started with [`STDIO_FLAG`]: the socket it inherited as standard
+/// input. Standard output was pointed at nothing by the host, so a stray `println!` cannot reach it.
+#[cfg(target_os = "linux")]
+fn stdio_channel() -> Result<std::os::unix::net::UnixStream, String> {
+    use std::os::fd::FromRawFd as _;
+    // SAFETY: descriptor 0 is taken over exactly once, here; nothing else in the guest reads stdin.
+    let conn = unsafe { std::os::unix::net::UnixStream::from_raw_fd(0) };
+    // A socket answers this; the null device a plain launch gives a guest does not.
+    conn.local_addr().map_err(|_| "it was started without the socket a `--stdio` guest is given".to_string())?;
+    Ok(conn)
 }
 
 /// Everything a guest does once it holds a channel, however it came by it.
@@ -164,12 +196,12 @@ fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir:
     // program asks for is performed by the HOST — and because the syscall filter below says nothing
     // about WHICH files a permitted syscall may reach.
     #[cfg(target_os = "linux")]
-    match dir.and_then(crate::jail::confine_filesystem) {
+    match crate::jail::confine_filesystem(dir) {
         Some(applied) => eprintln!("sandbox: the guest narrowed its own view — {}", applied.join("; ")),
         // Never silence this: a host whose kernel has no Landlock must not read as one that applied
         // it. The run continues — the channel, the rlimits and the syscall filter are untouched —
-        // but nothing here is claimed. (A Linux guest always has its channel directory; the `None`
-        // arm covers the kernel, not a missing directory.)
+        // but nothing here is claimed. (A guest born holding its socket has no channel directory;
+        // the `None` arm covers the kernel, not the directory.)
         None => eprintln!("sandbox: this kernel has no Landlock — the guest's view of the filesystem was NOT narrowed"),
     }
     #[cfg(not(target_os = "linux"))]
@@ -626,11 +658,12 @@ pub fn spawn_and_serve_with(
     }
 }
 
-/// A launched guest: PS-A's, reached through a named channel in its directory, or — on Windows,
-/// since PS-B-03 — one started as a separate identity, holding its channel as inherited pipes.
+/// A launched guest: PS-A's, reached through a named channel in its directory, or — on Windows since
+/// PS-B-03 and on Linux since PS-B-03b — one started as a separate identity, holding its channel from
+/// birth.
 enum Guest {
     Plain(std::process::Child),
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     Contained(crate::identity::ContainedGuest),
 }
 
@@ -638,7 +671,7 @@ impl Guest {
     fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
         match self {
             Guest::Plain(c) => c.try_wait(),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.try_wait(),
         }
     }
@@ -646,7 +679,7 @@ impl Guest {
     fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
         match self {
             Guest::Plain(c) => c.wait(),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.wait(),
         }
     }
@@ -654,7 +687,7 @@ impl Guest {
     fn kill(&mut self) -> io::Result<()> {
         match self {
             Guest::Plain(c) => c.kill(),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.kill(),
         }
     }
@@ -663,16 +696,67 @@ impl Guest {
     fn take_stderr(&mut self) -> Option<Box<dyn io::Read>> {
         match self {
             Guest::Plain(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
         }
     }
 }
 
+/// Why the last launch could not give its guest a separate identity, for `doctor` to repeat. Read
+/// from the attempt rather than guessed from the host's configuration.
+static IDENTITY_REFUSAL: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn identity_refusal() -> Option<String> {
+    IDENTITY_REFUSAL.lock().ok().and_then(|r| r.clone())
+}
+
+/// Say why the identity was not applied: always to `doctor`, and to the operator's terminal when this
+/// is a run (a probe's caller reports it in its own words instead of an interleaved line).
+#[cfg(any(windows, target_os = "linux"))]
+fn identity_refused(why: String, quiet: bool) {
+    if !quiet {
+        eprintln!(
+            "sandbox: the guest could not be given a separate identity on this host ({why}); it runs as \
+             this OS user, under the jail below"
+        );
+    }
+    if let Ok(mut r) = IDENTITY_REFUSAL.lock() {
+        *r = Some(why);
+    }
+}
+
+/// Wait for a Linux `--stdio` guest's first byte, which it sends once it has loaded and holds its
+/// channel. A guest that dies first — a library the stranger may not read — is reported with what it
+/// managed to say, so the launch can fall back instead of failing the run.
+#[cfg(target_os = "linux")]
+fn await_ready(g: &mut crate::identity::ContainedGuest) -> Result<(), String> {
+    use std::io::Read as _;
+    let Some(chan) = g.channel.as_mut() else { return Err("its channel was already taken".into()) };
+    chan.set_read_timeout(Some(CONNECT_DEADLINE)).map_err(|e| format!("no deadline on its channel: {e}"))?;
+    let mut first = [0u8; 1];
+    let got = chan.read(&mut first);
+    let _ = chan.set_read_timeout(None);
+    match got {
+        Ok(1) if first[0] == STDIO_READY => Ok(()),
+        Ok(1) => Err("its first byte was not the one a guest sends".into()),
+        Ok(_) => {
+            let status = g.wait().map(|s| s.to_string()).unwrap_or_else(|e| e.to_string());
+            let mut said = String::new();
+            if let Some(mut e) = g.stderr.take() {
+                let _ = e.read_to_string(&mut said);
+            }
+            let said = said.lines().next().map(|l| format!(": {l}")).unwrap_or_default();
+            Err(format!("the guest exited before it was ready ({status}){said}"))
+        }
+        Err(e) => Err(format!("the guest was not ready within {CONNECT_DEADLINE:?}: {e}")),
+    }
+}
+
 /// Start a guest under its jail and return it running, with what was applied.
 ///
-/// On Windows the guest is first tried as a SEPARATE IDENTITY (PS-B-03, `identity.rs`): a per-run
-/// AppContainer with no capabilities, its channel on inherited pipes. A host that cannot give it one
+/// The guest is first tried as a SEPARATE IDENTITY (`identity.rs`): on Windows a per-run AppContainer
+/// with no capabilities, its channel on inherited pipes (PS-B-03); on Linux a subordinate uid in its
+/// own user namespace, its channel an inherited socket (PS-B-03b). A host that cannot give it one
 /// runs it as PS-A did, and says so on standard error — never silently: the identity is named among
 /// the applied guarantees only when it was applied, so the run report cannot claim it either.
 fn launch(
@@ -699,10 +783,35 @@ fn launch(
                 }
                 return Ok((Guest::Contained(g), jail, applied));
             }
-            Err(why) => eprintln!(
-                "sandbox: the guest could not be given a separate identity on this host ({why}); it runs as \
-                 this OS user, under the jail below"
-            ),
+            Err(why) => identity_refused(why, capture_stderr),
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let env: Vec<(String, String)> =
+            LOADER_ENV.iter().filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v))).collect();
+        let args: [&std::ffi::OsStr; 2] = [GUEST_SUBCOMMAND.as_ref(), STDIO_FLAG.as_ref()];
+        let mut hardened: Vec<&'static str> = Vec::new();
+        // The jail's own pre-`exec` steps run after the identity change, inside `spawn_contained`.
+        let spawned = crate::identity::spawn_contained(exe, &args, &env, capture_stderr, |cmd| {
+            hardened = crate::jail::harden(cmd, limits);
+        });
+        match spawned.and_then(|mut g| match await_ready(&mut g) {
+            Ok(()) => Ok(g),
+            Err(why) => {
+                let _ = g.kill();
+                let _ = g.wait();
+                Err(why)
+            }
+        }) {
+            Ok(g) => {
+                let (jail, enforced) = crate::jail::confine(&g, limits);
+                let mut applied = hardened;
+                applied.extend(enforced.guarantees.iter().copied());
+                applied.push(crate::identity::GUARANTEE);
+                return Ok((Guest::Contained(g), jail, applied));
+            }
+            Err(why) => identity_refused(why, capture_stderr),
         }
     }
     let (mut cmd, launched) = guest_command(exe, dir);
@@ -816,10 +925,13 @@ impl<T: io::Read + io::Write> Channel for T {}
 fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::Duration) -> io::Result<Box<dyn Channel>> {
     #[cfg(windows)]
     if let Guest::Contained(g) = child {
-        let (Some(to_guest), Some(from_guest)) = (g.stdin.take(), g.stdout.take()) else {
-            return Err(io::Error::other("the contained guest's channel was already taken"));
-        };
-        let mut conn = crate::pipe_channel::PipeChannel::new(from_guest, to_guest)?;
+        let mut conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
+        conn.set_read_timeout(Some(deadline))?;
+        return Ok(Box::new(conn));
+    }
+    #[cfg(target_os = "linux")]
+    if let Guest::Contained(g) = child {
+        let conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
         conn.set_read_timeout(Some(deadline))?;
         return Ok(Box::new(conn));
     }
@@ -913,7 +1025,7 @@ pub fn attempt_launch() -> Result<String, String> {
     // with its exit. Nothing is performed and nothing is recorded — the probe still writes no audit
     // record — but it proves more than the plain probe does: the guest loaded, ran under its identity,
     // and spoke the protocol both ways.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if matches!(child, Guest::Contained(_)) {
         let answered = (|| -> io::Result<i32> {
             let mut conn = open_channel(&mut child, &dir, std::time::Duration::from_secs(3))?;
@@ -964,7 +1076,7 @@ pub fn attempt_launch() -> Result<String, String> {
 }
 
 /// The program the probe hands a contained guest: it asks for nothing and does nothing.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 const PROBE_PROGRAM: &str = "module probe\n\nfn main(root: Root) {\n}\n";
 
 /// Did the OS kill this guest for exceeding a ceiling, and can we say WHICH?

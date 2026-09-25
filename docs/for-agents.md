@@ -467,9 +467,12 @@ that asks for a larger budget than its parent holds is DL0802, and its repair is
 rather than ignored; a lease runs without `--sandbox`.
 
 On Windows a `--sandbox` guest also runs as a separate identity (PS-B-03): a per-run AppContainer with
-no network and none of the operator's files. Read it from the run report, not from this sentence:
-`sandbox.posture.identity` is `a per-run AppContainer` only when the launch applied one, and otherwise
-`identity_separation` is listed under `limitations`.
+no network and none of the operator's files. On Linux, where the host allows user namespaces, it runs
+as a subordinate uid (PS-B-03b): none of the files only the operator's account may read, though what
+every account may read stays readable. Read it from the run report, not from this sentence:
+`sandbox.posture.identity` is `a per-run AppContainer` or `a subordinate uid in its own user
+namespace` only when the launch applied one, and otherwise `identity_separation` is listed under
+`limitations`.
 
 A host may REQUIRE the sandbox (`delulu sandbox status` says whether). There, `run` without
 `--sandbox`, `test` and `repl` exit 2 with "this host requires the sandbox"; the fix is `--sandbox`,

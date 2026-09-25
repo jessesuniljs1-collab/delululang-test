@@ -126,8 +126,22 @@ mod imp {
     }
 
     /// A held security descriptor (owner-only DACL) plus its `SECURITY_ATTRIBUTES`. Freed on drop.
-    struct OwnerOnlySd {
+    pub(crate) struct OwnerOnlySd {
         sd: *mut core::ffi::c_void,
+    }
+
+    impl OwnerOnlySd {
+        pub(crate) fn as_ptr(&self) -> *mut core::ffi::c_void {
+            self.sd
+        }
+    }
+
+    /// The owner-only descriptor for THIS process's user — what the broker's pipe carries, and what
+    /// the sandbox host's per-guest pipe carries (`pipe_channel.rs`), so no other account may open it.
+    pub(crate) fn owner_only_for_this_user() -> io::Result<OwnerOnlySd> {
+        let sid = unsafe { process_user_sid(GetCurrentProcess())? };
+        let sid_str = unsafe { sid_to_string(sid.as_ptr() as PSID)? };
+        owner_only_sd(&sid_str)
     }
     impl Drop for OwnerOnlySd {
         fn drop(&mut self) {
@@ -548,6 +562,8 @@ mod imp {
 }
 
 pub use imp::{connect, Connection, Listener};
+#[cfg(windows)]
+pub(crate) use imp::owner_only_for_this_user;
 
 /// Refuse, before anything is spawned, a state directory whose transport address this platform
 /// cannot hold.

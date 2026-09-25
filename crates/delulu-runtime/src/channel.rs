@@ -204,13 +204,20 @@ pub enum Response {
 }
 
 /// Write one length-prefixed canonical CBOR frame.
+///
+/// In ONE write: the length is reserved at the front of the buffer and filled in after encoding.
+/// Written as two (the length, then the body), a frame could reach the other side as two arrivals,
+/// and a reader blocked in `read_exact` then woke twice for one message — on Windows, where the pipe
+/// is drained by a thread, twice across threads. PS-B-04's measurement is what showed the channel's
+/// cost was worth reading line by line (`measurements/sandbox-channel/RECORD.md`).
 pub fn write_frame<T: Serialize>(w: &mut impl Write, msg: &T) -> io::Result<()> {
-    let mut buf = Vec::new();
+    let mut buf = vec![0u8; 4];
     ciborium::into_writer(msg, &mut buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-    if buf.len() > MAX_FRAME as usize {
+    let len = buf.len() - 4;
+    if len > MAX_FRAME as usize {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "frame exceeds the channel's bound"));
     }
-    w.write_all(&(buf.len() as u32).to_le_bytes())?;
+    buf[..4].copy_from_slice(&(len as u32).to_le_bytes());
     w.write_all(&buf)?;
     w.flush()
 }
