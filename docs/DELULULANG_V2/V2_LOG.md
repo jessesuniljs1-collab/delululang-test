@@ -847,3 +847,37 @@ before the pattern was recognised. The rule: never write a backslash-newline con
 shell here-document — edit such lines with the file editor, or build the message with `concat!`.
 A stale doc comment was corrected on the way: `guest.rs` still said the guest "has no OS jail yet,
 which PS-A2 adds".
+
+## PS-B-02's run, read — and PS-B-01, the main program's budgets (2026-09-25)
+
+**PS-B-02's run.** Commit `d59201a`, CI run `36114298041`: **success** on all twelve jobs — Windows,
+Linux, macOS and arm64 test suites, clippy, `supply-chain` (`cargo deny` on a runner), fuzz, the formal
+models, Miri on atlas/diag/FFI, the editor; `heavy-gates` and `miri-slow` skipped as manual. So the
+real TLS tests against a loopback server, the proxy test that runs as a child process, and the guest
+egress tests pass on every platform this project ships to, and the network-less build still compiles
+there. The message-spacing commit `525d901` followed it.
+
+**PS-B-01.** Every ordinary run is held to a budget now — 1 GiB of memory and 5 minutes of processor
+time unless `--limits` sets others (D-V2-25; D-V2-32 records how it is enforced). Before this there was
+no bound on either engine, and NE-22's flooded actor mailbox grew past a gigabyte under
+`--grant console` alone.
+
+`crates/delulu/src/budget.rs` is a host watchdog: every 25 ms it samples the process's peak memory and
+processor time, and on the first breach it says which budget, from its own measurement, writes the run
+report with `outcome.stopped_by`, and ends the run with exit 1. It is armed in `note_program_started`,
+the one call every engine passes through, which is what "budgets on every engine" comes down to. The
+report's `sandbox.limits` is the budget the run was held to (it was `null` at L0), with `enforced_by`
+stating the mechanism and its 25 ms resolution. `--limits` without `--sandbox` is APPLIED now rather
+than refused (PS-A-10's rule was right while an ordinary run had nothing to apply it to); zero, and a
+dimension nobody enforces, are refused before the program starts.
+
+**C-06, flipped** (`crates/delulu/tests/budget_cli.rs`): NE-22's own shape — an actor that works slowly
+while `main` floods it — is stopped by a 256 MiB memory budget in under a second; so are an endless
+loop (`cpu=1`), a doubling string (256 MiB), an operator's `wall=1`, and hours of `fib(60)` on the WASM
+engine, which has no `while` and is held by the same watchdog. Every child runs against its own
+deadline, so a missing watchdog makes a test fail instead of hang. **Falsified:** with the watchdog
+never armed, four tests fail at their deadlines, and the two that do not depend on a stop still pass.
+
+What this does not do, named: the host process of a `--sandbox` run is not itself budgeted (its guest
+is held by the jail); `delulu test` runs are not budgeted; budgets are not yet in the derived policy's
+order or the Z3 model (PS-B-05).

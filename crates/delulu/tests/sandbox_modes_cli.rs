@@ -183,11 +183,12 @@ fn a_sandbox_flag_without_a_sandbox_is_refused_not_ignored() {
     let (src, scope) = writer(&dir);
     let grant = format!("fs.write={scope}");
     let made = dir.join("out").join("made.txt");
+    // `--limits` was on this list until PS-B-01. An ordinary run has budgets now (D-V2-25), so the
+    // flag is APPLIED to it, and the test below proves that instead of the refusal.
     for flag in [
         vec!["--mode", "audit"],
         vec!["--mode", "strict"],
         vec!["--sandbox-profile", "hostile-agent"],
-        vec!["--limits", "mem=64000000"],
     ] {
         let _ = std::fs::remove_file(&made);
         let mut args = vec!["run", src.to_str().unwrap(), "--grant", &grant];
@@ -221,6 +222,33 @@ fn a_sandbox_flag_without_a_sandbox_is_refused_not_ignored() {
         &grant,
     ]);
     assert_eq!(ok.status.code(), Some(0), "{}", out(&ok));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// PS-B-01: `--limits` without `--sandbox` is applied to the ordinary run, not refused and not
+/// ignored — the report shows the budget the operator named, and the program ran under it.
+#[test]
+fn limits_without_a_sandbox_budget_the_ordinary_run() {
+    let dir = tmp("l0-limits");
+    let (src, scope) = writer(&dir);
+    let grant = format!("fs.write={scope}");
+    let report = dir.join("rep.json");
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--grant",
+        &grant,
+        "--limits",
+        "mem=536870912,cpu=30",
+        "--report-out",
+        report.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    assert!(dir.join("out").join("made.txt").exists(), "the program ran: {}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(std::fs::read_to_string(&report).unwrap().trim()).unwrap();
+    assert_eq!(v["sandbox"]["level"], 0, "{v}");
+    assert_eq!(v["sandbox"]["limits"]["memory_bytes"], 536_870_912_u64, "{v}");
+    assert_eq!(v["sandbox"]["limits"]["cpu_seconds"], 30, "{v}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

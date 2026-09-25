@@ -9,6 +9,10 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-01: every run has a budget, 2026-09-25
+
+- **PS-B-01 (D-V2-25 owner; D-V2-32)** — an ordinary `run` is held to 1 GiB of memory and 5 minutes of processor time unless `--limits mem=BYTES,cpu=SECONDS,wall=SECONDS` sets others; zero and unknown dimensions are refused before the run. A host watchdog samples the process every 25 ms, on every engine; a run that spends a budget is stopped with exit 1, and the run report's `outcome.stopped_by` names the dimension, the budget and the measurement. The report's `sandbox.limits` is the applied budget (was `null`). `--limits` without `--sandbox` is applied rather than refused. NE-22 and REMAINING_WORK 4.15 closed; C-06 flipped — the flooded actor mailbox is stopped at a 256 MiB budget.
+
 ## Unreleased — thirteen messages that printed a gap mid-sentence, 2026-09-25
 
 - Four `explain` texts (DL1908, DL1910, DL1912, DL1913), two `run` refusals, the broker's and the checker's narrowing repairs, four plugin faults and a test message printed a run of spaces in the middle of a sentence: a line continuation whose newline had been flattened in the source. Restored; the checker's repair `reason` in `check --json` changes accordingly (snapshot re-blessed, two cases, reviewed). A gate decodes every string literal as the compiler does and fails on the shape. The one instance in an entrenched file (`crates/delulu-conform/src/lib.rs:515`) is left for the owner and named by the gate.

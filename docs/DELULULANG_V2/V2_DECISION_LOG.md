@@ -577,6 +577,36 @@ owner's standing instruction of 2026-09-25 ("do whatever good for delululang") d
     a loopback TLS server with a certificate made at test time, so no private key is ever committed —
     measured in `measurements/dependency-egress/RECORD.md`.
 
+## D-V2-32 — PS-B-01, how the main program's budgets are enforced — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+The owner ruled the numbers (D-V2-25, answering D-NE-31: 1 GiB, 5 minutes, never unlimited, the
+operator may change them). This is how they are made true on an ordinary run, where before there was
+no bound at all (NE-22).
+
+1. **A host watchdog that samples, not an OS ceiling.** Every OS ceiling fails somewhere this project
+   ships: `RLIMIT_AS` kills the WASM engine at start-up (Wasmtime reserves address space it never
+   uses — `jail.rs` carries the scar), `RLIMIT_DATA` is refused on macOS (EINVAL, experiment run
+   35480762820), and an allocation refused at a ceiling ends in Rust's allocation-failure abort, which
+   leaves no report. A sampler measures the PROCESS, so it holds the interpreter, the WASM engine and
+   every actor thread with one mechanism, and it stops the run in a way that can still write the
+   report. Its cost is stated, not hidden: 25 ms resolution, so a run can overshoot by what it
+   allocates in one interval (`limits.enforced_by` says so).
+2. **Peak memory, not current.** Peak commit on Windows (the measure a Job Object's memory ceiling
+   uses for sandboxed guests, so the two budgets mean the same thing), peak resident set elsewhere. A
+   spike between two samples is still seen at the next one; a current-usage sampler would miss it.
+3. **No default wall clock.** D-V2-25 ruled memory and processor time; a program waiting on its input
+   uses neither. `wall=` exists for the operator who wants one.
+4. **At L0 the operator may raise a budget as well as lower it** ("may change them"); zero is refused
+   in every dimension, because it would mean either "stop at once" or "unlimited". Under `--sandbox`
+   the profile's rule stands: `--limits` only narrows.
+5. **A stop is exit 1 with `outcome.stopped_by`** — the dimension, the budget, the measurement — and
+   no DL code: every code needs witnesses in the entrenched `witnesses.toml`, and D-V2-26 already
+   settled that sandbox limit kills use plain `error:` plus the exit status. The message never offers
+   raising the budget as a repair (`limits.rs`'s attribution rule).
+6. **The race between a stop and a normal ending has one owner.** Whichever of the watchdog and the
+   finishing run claims the exit first writes the report and chooses the code; the other writes
+   nothing.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

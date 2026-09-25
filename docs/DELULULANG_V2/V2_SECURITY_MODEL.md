@@ -201,8 +201,12 @@ classified; special-use refusal unless `net.special=`; redirects re-checked; the
 certificate verification against the platform store; proxy variables ignored; no resolver reachable
 by the client itself.
 
-Not claimed until its witness is green and its mutant is red: any L1 or L2 containment; any
-resource bound on the main program; content inspection of permitted traffic (a program may send
+A resource bound on the main program is claimed since PS-B-01, with its witnesses and a falsified
+mutant (`crates/delulu/tests/budget_cli.rs`): D-V2-25's 1 GiB and 5 minutes by default, enforced by a
+host watchdog on every engine at a stated 25 ms resolution.
+
+Not claimed until its witness is green and its mutant is red: any L1 or L2 containment; content
+inspection of permitted traffic (a program may send
 anything to a host it was granted — category 7, and the grant is the control);
 identity separation provided by the toolchain; anything about an L3 environment; multi-tenancy on
 one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.

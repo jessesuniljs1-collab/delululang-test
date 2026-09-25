@@ -166,7 +166,8 @@ Every `--json` command emits one object:
   (campaign C2) — and because the first fix made two commands emit *two* objects, which a
   "does it look like JSON?" check would have missed.
 - **`run` is the exception, by design:** under `--json` its stdout is the PROGRAM's, so the run's
-  own envelope — the `sandbox` object (isolation level, mode, limits, break-glass) and the outcome —
+  own envelope — the `sandbox` object (isolation level, mode, limits, break-glass), the outcome and
+  the `egress` record —
   goes to the file named by `--report-out <path>`, written by the runtime in every outcome and
   refused inside any `fs.write` grant; never trust a `sandbox` object read from a program's stdout.
 - **Diagnostic volume is bounded on the human channel and not on yours.** `--json` reports every
@@ -444,6 +445,18 @@ not be another keyword's canonical spelling (DL1711 — `let = "fn"` would make 
 `let`, which is a lie told to whoever reviews the file next, including you), two keywords may not
 share an alias (DL1710), and an alias must lex as exactly one token with no bidi controls (DL1712).
 Scripts and emoji are otherwise unrestricted.
+
+### Every run has a budget
+
+An ordinary `run` — not only a sandboxed one — is held to **1 GiB of memory and 5 minutes of processor
+time** unless `--limits mem=BYTES,cpu=SECONDS,wall=SECONDS` says otherwise (the owner's ruling
+D-V2-25). There is no unlimited: zero is refused before anything runs, as is a dimension nobody
+enforces. A run that spends a budget is stopped, exits 1, and its report says so in
+`outcome.stopped_by` — `{"dimension": "memory" | "cpu" | "wall", ...}` with the budget and the value
+the watchdog measured. The report's `sandbox.limits` carries the budgets the run was held to and
+`enforced_by`, which states the mechanism and its resolution. Nothing in a stop message proposes
+raising the budget: a budget is the operator's decision about what a program may consume, not a fix
+for the program. Under `--sandbox`, `--limits` may only narrow the profile's own limits.
 
 ## [agents.limits] What to tell your users honestly
 

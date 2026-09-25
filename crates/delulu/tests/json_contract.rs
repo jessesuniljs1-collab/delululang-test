@@ -1010,12 +1010,24 @@ fn run_report_is_the_documented_envelope() {
     };
     let expected_sandbox = serde_json::json!({
         "backend": "inproc", "level": 0, "requested": "none", "granted": "none",
-        "host_guarantees": [], "limits": null, "mode": "strict", "break_glass": false,
+        "host_guarantees": [], "mode": "strict", "break_glass": false,
+        // PS-B-01: an ordinary run is budgeted now (D-V2-25), so `limits` is the budget it is held to
+        // rather than `null`. Compared field by field below, not by its prose `enforced_by` line.
+        "limits": { "memory_bytes": 1u64 << 30, "cpu_seconds": 300, "wall_seconds": null },
     });
     let read = |p: &str| -> serde_json::Value {
         let text = std::fs::read_to_string(d.join(p)).unwrap_or_else(|e| panic!("no report at {p}: {e}"));
         assert_eq!(count_json_values(&text), 1, "one envelope: {text}");
         serde_json::from_str(text.trim()).unwrap()
+    };
+    // The report's `sandbox` object with its one prose field checked and set aside: `enforced_by`
+    // must say what enforces the budget, and everything else must match exactly.
+    let sandbox_of = |v: &serde_json::Value| -> serde_json::Value {
+        let mut s = v["sandbox"].clone();
+        let how = s["limits"]["enforced_by"].take();
+        assert!(how.as_str().is_some_and(|h| !h.is_empty()), "the budget says what enforces it: {v}");
+        s["limits"].as_object_mut().expect("limits is an object").remove("enforced_by");
+        s
     };
 
     // It ran: the program's own bytes on stdout, the report in the file.
@@ -1026,14 +1038,14 @@ fn run_report_is_the_documented_envelope() {
     let bad = assert_envelope("run --report-out", &text, "run");
     assert!(bad.is_empty(), "{bad:?}");
     let v = read("rep/ran.json");
-    assert_eq!(v["sandbox"], expected_sandbox, "the counterfeit changed nothing: {v}");
+    assert_eq!(sandbox_of(&v), expected_sandbox, "the counterfeit changed nothing: {v}");
     assert_eq!(v["outcome"], serde_json::json!({ "ran": true, "exit": 0 }), "{v}");
 
     // Refused before it started: the report still exists, and says so.
     let o = go(&["run", "bad.delulu", "--grant", "console", "--json", "--report-out", "rep/refused.json"]);
     assert_eq!(o.status.code(), Some(1));
     let v = read("rep/refused.json");
-    assert_eq!(v["sandbox"], expected_sandbox, "{v}");
+    assert_eq!(sandbox_of(&v), expected_sandbox, "{v}");
     assert_eq!(v["outcome"], serde_json::json!({ "ran": false, "exit": 1 }), "{v}");
     assert_eq!(v["summary"]["errors"], 1, "a failed run never reports zero errors: {v}");
 
@@ -1041,7 +1053,7 @@ fn run_report_is_the_documented_envelope() {
     // PS-0 verification found it refused as "cannot be resolved", because its parent is empty.
     let o = go(&["run", "fake.delulu", "--grant", "console", "--json", "--report-out", "bare.json"]);
     assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
-    assert_eq!(read("bare.json")["sandbox"], expected_sandbox);
+    assert_eq!(sandbox_of(&read("bare.json")), expected_sandbox);
     let o = go(&["run", "fake.delulu", "--grant", "console", "--trace-effects", "--trace-out", "bare-trace.txt"]);
     assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
     assert!(d.join("bare-trace.txt").is_file(), "the bare-named trace was written");

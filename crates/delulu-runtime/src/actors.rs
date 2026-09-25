@@ -1020,6 +1020,8 @@ mod boundary_authority_tests {
         ("adapter.rs", "reads the adapter subprocess's stdout so an exchange can have a deadline"),
         ("device.rs", "the dead-man heartbeat sweeper: sleeps and checks lease state"),
         ("egress.rs", "the resolver thread: one getaddrinfo call, abandoned at the request's deadline"),
+        ("budget.rs", "the budget watchdog: samples the process's memory and processor time"),
+        ("run_cmd.rs", "flushes stdout, bounded, while a budget-stopped run exits"),
         ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),
         ("lib.rs", "the registry's HTTP listener: serves connections, never evaluates a program"),
     ];

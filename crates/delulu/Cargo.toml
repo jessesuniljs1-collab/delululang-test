@@ -101,6 +101,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_IO",
     "Win32_System_JobObjects",
+    # PS-B-01: the budget watchdog reads this process's peak commit (`K32GetProcessMemoryInfo`).
+    "Win32_System_ProcessStatus",
     "Win32_Security",
     "Win32_Security_Authorization",
 ] }

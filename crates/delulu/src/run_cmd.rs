@@ -214,6 +214,75 @@ thread_local! {
 
 pub(crate) fn note_program_started() {
     RUN_STATE.with(|s| s.set((true, s.get().1)));
+    start_budget_watchdog();
+}
+
+/// PS-B-01: what the budget watchdog needs to stop a run and still report it, captured before the
+/// program starts — the watchdog runs on its own thread and must not need anything the interpreter
+/// holds.
+struct BudgetRun {
+    budget: crate::budget::Budget,
+    report_out: Option<String>,
+    requested: String,
+}
+
+static BUDGET_RUN: std::sync::Mutex<Option<BudgetRun>> = std::sync::Mutex::new(None);
+
+/// Arm the watchdog the moment the program starts, on whichever engine runs it — the interpreter,
+/// the WASM engine and a `.dwx` artifact all pass through [`note_program_started`], which is what
+/// makes one budget hold on every engine (PS-B-01's "on every engine" is this one call site).
+fn start_budget_watchdog() {
+    let Some(ctx) = BUDGET_RUN.lock().ok().and_then(|mut g| g.take()) else { return };
+    let budget = ctx.budget;
+    crate::budget::watch(budget, move |breach| stop_for_budget(&ctx, breach));
+}
+
+/// A budget was spent: say which, from the watchdog's own measurement; write the report; end the run
+/// as a failure. Never returns.
+fn stop_for_budget(ctx: &BudgetRun, breach: crate::budget::Breach) -> ! {
+    eprintln!("error: {}", breach.explain());
+    if let Some(path) = &ctx.report_out {
+        let egress = delulu_runtime::egress::snapshot();
+        let mut env = success_envelope(
+            "run",
+            json!({
+                "sandbox": l0_sandbox(&ctx.requested, &ctx.budget),
+                "outcome": { "ran": true, "exit": 1, "stopped_by": breach.to_json() },
+                "egress": egress.to_json(),
+            }),
+        );
+        env["summary"]["errors"] = json!(1);
+        let text = serde_json::to_string_pretty(&env).expect("the run report serializes");
+        if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
+            eprintln!("error: cannot write the run report to `{path}`: {e}");
+        }
+    }
+    // What the program already printed is flushed if it can be — but not waited on forever: a
+    // program blocked writing to a pipe nobody reads holds the lock, and a stop that waited for it
+    // would be a stop that never happened.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _ = std::thread::Builder::new().name("delulu-budget-flush".into()).spawn(move || {
+        use std::io::Write as _;
+        let _ = std::io::stdout().flush();
+        let _ = tx.send(());
+    });
+    let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
+    std::process::exit(1)
+}
+
+/// The `sandbox` object of an L0 run report: the in-process backend, no OS boundary, strict mode, no
+/// break-glass — and, since PS-B-01, the budgets the run is actually held to.
+fn l0_sandbox(requested: &str, budget: &crate::budget::Budget) -> Json {
+    json!({
+        "backend": "inproc",
+        "level": 0,
+        "requested": requested,
+        "granted": "none",
+        "host_guarantees": [],
+        "limits": budget.to_json(),
+        "mode": "strict",
+        "break_glass": false,
+    })
 }
 
 /// Refuse `--report-out` / `--trace-out` inside any filesystem scope the program may write,
@@ -319,25 +388,16 @@ pub(crate) fn print_egress_notes(log: &delulu_runtime::egress::EgressLog) {
 }
 
 /// The run report envelope. At L0 the `sandbox` object is the in-process backend: level 0, no host
-/// guarantees, no limits, strict mode, no break-glass — measured facts, nothing claimed. `egress` is
-/// every network request the program made and what became of it (PS-B-02), always present so a
-/// reader never has to ask whether its absence means "none".
-fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog) -> Json {
+/// guarantees, the budgets the run is held to (PS-B-01), strict mode, no break-glass — measured
+/// facts, nothing claimed. `egress` is every network request the program made and what became of it
+/// (PS-B-02), always present so a reader never has to ask whether its absence means "none".
+fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog, budget: &crate::budget::Budget) -> Json {
     let (ran, _) = RUN_STATE.with(|s| s.get());
     let requested = opts.isolation.clone().unwrap_or_else(|| "none".to_string());
     let mut env = success_envelope(
         "run",
         json!({
-            "sandbox": {
-                "backend": "inproc",
-                "level": 0,
-                "requested": requested,
-                "granted": "none",
-                "host_guarantees": [],
-                "limits": null,
-                "mode": "strict",
-                "break_glass": false,
-            },
+            "sandbox": l0_sandbox(&requested, budget),
             "outcome": { "ran": ran, "exit": exit },
             "egress": egress.to_json(),
         }),
@@ -377,14 +437,14 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             return 2;
         }
     }
-    // A sandbox flag that is not read is worse than one that refuses: it reads as applied. `--mode`,
-    // `--sandbox-profile` and `--limits` describe a sandboxed run and nothing else, so asking for
-    // them without `--sandbox` is refused rather than dropped on the floor.
+    // A sandbox flag that is not read is worse than one that refuses: it reads as applied. `--mode`
+    // and `--sandbox-profile` describe a sandboxed run and nothing else, so asking for them without
+    // `--sandbox` is refused rather than dropped on the floor. `--limits` left this list at PS-B-01:
+    // an ordinary run has budgets now, so the flag is APPLIED to it rather than refused.
     if opts.sandbox.as_deref() != Some("on") {
         for (flag, asked) in [
             ("--mode", opts.sandbox_mode.is_some()),
             ("--sandbox-profile", opts.sandbox_profile.is_some()),
-            ("--limits", opts.limits.is_some()),
         ] {
             if asked {
                 eprintln!(
@@ -417,7 +477,31 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             return code;
         }
     }
+    // PS-B-01 (D-V2-25): the main program's budgets, decided before anything runs — a budget that
+    // cannot be meant (zero, or a dimension nobody enforces) is refused here, not discovered later.
+    // The sandboxed path above keeps its own rule: there `--limits` may only narrow a profile.
+    let budget = match crate::budget::Budget::parse(opts.limits.as_deref()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+    if let Ok(mut g) = BUDGET_RUN.lock() {
+        *g = Some(BudgetRun {
+            budget,
+            report_out: opts.report_out.clone(),
+            requested: opts.isolation.clone().unwrap_or_else(|| "none".to_string()),
+        });
+    }
     let code = cmd_run_inner(rest);
+    // If the watchdog is already stopping this run, it owns the exit: it has written the report and
+    // chosen the code, and a second report here would contradict it.
+    if !crate::budget::claim_normal_exit() {
+        loop {
+            std::thread::park();
+        }
+    }
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         print_egress_notes(&egress);
@@ -425,7 +509,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     if let Some(path) = &opts.report_out {
         let refused = RUN_STATE.with(|s| s.get().1);
         if !refused {
-            let text = serde_json::to_string_pretty(&run_report(&opts, code, &egress)).expect("the run report serializes");
+            let text = serde_json::to_string_pretty(&run_report(&opts, code, &egress, &budget)).expect("the run report serializes");
             if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
                 eprintln!("error: cannot write the run report to `{path}`: {e}");
                 return if code == 0 { 2 } else { code };

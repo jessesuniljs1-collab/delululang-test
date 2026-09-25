@@ -350,7 +350,11 @@ fn sandbox_section(r: &mut Report) {
         s,
         "resource controls",
         Status::Note,
-        "none on the main program (RW 4.15); a foreign call is killed after its deadline (NE-21)",
+        concat!(
+            "every ordinary run is budgeted (PS-B-01, D-V2-25): 1 GiB of memory and 5 minutes of processor ",
+            "time unless `--limits` sets others, sampled every 25 ms by a host watchdog on every engine; ",
+            "a sandboxed guest is also held by its OS jail; a foreign call is killed after its deadline (NE-21)"
+        ),
     );
     // Was "sandbox profiles arrive with PS-A", which stopped being true when PS-A shipped them (found
     // by reading this output during PS-B, as the owner asked). An ordinary run still has no profile.
