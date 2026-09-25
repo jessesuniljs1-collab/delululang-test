@@ -993,3 +993,38 @@ Landlock already refuses the state directory there where the kernel has it.
 Mutants: the launch without the AppContainer attribute (T14 fails: the guest read the operator's
 secret) and a host that never takes the contained path (the report test fails, and its guarantees show
 the report did not claim an identity it lacked).
+
+**PS-B-03's run, read.** CI `36142494033` (`d3355d6`): **success on every job** — Windows (the contained guest, T14 and the report test on a Windows runner), Linux, arm64, lints (which proves the
+Windows-only items are gated for Linux clippy), formal, fuzz, Miri, supply-chain and the editor green,
+and **macOS green with the new Seatbelt test running on the runner**:
+`jail::macos_tests::the_state_directory_is_unreadable_to_a_seatbelted_guest ... ok`, control included.
+That settles the one assumption this machine could not test — that Seatbelt applies the last rule that
+matches, so a deny after `(allow file-read*)` wins — and makes T14 measured on macOS for the state
+directory. The owner's word during the build was "use github for mac os run", and that is what it was.
+
+**PS-B-06 — BREAK-GLASS.** D-V2-09 is the owner's principle: an authorized external principal may
+relax a restriction, a program never its own. D-V2-35 records how. The restriction it breaks ships
+with it: an operator may require the sandbox on a host (`delulu sandbox require --break-glass-key
+HEX`), after which `run` without `--sandbox`, `test` and `repl` refuse before reading a line. The way
+past it is a ticket (`delulu sandbox ticket`, run where the private key is): Ed25519-signed, naming
+one program by the hash of its bytes, alive at most a day, spent on first use by an atomic create,
+announced by a banner, carried in the run report (`break_glass`, `break_glass_ticket`) and recorded
+in the audit chain as `break-glass` — and a use that cannot be recorded does not happen. It relaxes
+the sandbox and nothing else. A `policy-off` ticket is the only way the policy comes off through
+`delulu`.
+
+Tests: six unit tests of the ticket (one use; every wrong shape refused and named, without burning a
+good ticket; the day cap even for a ticket signed to outlive it; no policy / damaged policy; no
+in-place replacement; hex), and three end-to-end through the binary. The main one walks the whole
+matrix: no policy → required → run/test/repl refused while `--sandbox` works → a ticket opens exactly
+one run, with banner, report and audit → the replay refused and recorded → strict again → another
+program, an unpinned key, a tampered ticket all refused and a good ticket unburnt by them → `doctor`
+reading it back, including the key left on the host → released by a `policy-off` ticket → a ticket
+then has nothing to break → the audit chain still verifies. The other two: a use whose record cannot
+be written does not run; a damaged policy keeps the host strict and `doctor` says so. **Six mutants
+falsified**: policy ignored, replay allowed, signature unchecked, audit failure ignored, `test`
+ungated, program hash unchecked — each fails the test meant for it.
+
+Found on the way: writing the `sandbox` usage line through a shell heredoc flattened its `\`
+continuation into runs of spaces mid-sentence, the defect class the message-spacing gate exists for;
+caught on sight and rewritten as `concat!`, the rule the V2 memory already carries.

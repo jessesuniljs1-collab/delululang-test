@@ -8,6 +8,7 @@ mod broker_client;
 mod broker_ipc;
 mod broker_transport;
 mod brokerd;
+mod breakglass;
 mod budget;
 mod cert_crypto;
 mod cli;

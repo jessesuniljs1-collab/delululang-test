@@ -667,6 +667,35 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
    broad allow. **Linux: deferred to PS-B-03b (RW 4.21)** — a subordinate uid needs a setuid helper
    and host configuration, and Landlock already holds T14 there where the kernel has it.
 
+## D-V2-35 — PS-B-06, BREAK-GLASS — TAKEN (head chef, 2026-09-25, under the owner's delegation; D-V2-09 is the owner's principle)
+
+1. **Break-glass needs a restriction to break, so the restriction ships with it.** An operator may
+   REQUIRE the sandbox on a host (`delulu sandbox require`). Opt-in: the default stays what D-V2-26
+   set, and this is D-V2-25's destination offered now to operators who want it. Under the policy
+   `run` without `--sandbox`, `test` and `repl` refuse before reading a line; `run --sandbox` is what
+   the policy asks for and works unchanged. `test` and `repl` have no sandboxed form yet and take no
+   ticket, so they are simply refused there (named in RW 4.22).
+2. **A ticket breaks exactly one thing, once, for one program.** It names the program by the blake3 of
+   its bytes and the relaxation (`sandbox`, or `policy-off` to remove the policy), lives at most a day
+   (refused if signed to live longer), and is SPENT by an atomic create before anything it permits
+   happens. A wrong use (another program, expired, tampered) is refused without spending it.
+   Authority, custody, the Guard, grants and budgets are untouched: a break-glass run is an ordinary
+   strict L0 run with its own grants. Language semantics are never what it changes.
+3. **The credential is an Ed25519 key the operator holds off the host**; only the public half is
+   pinned. The signer is checked, not trusted: a body naming the pinned key but signed by another is
+   refused. `doctor` notes a pinned key whose private half `delulu keygen` left on the host.
+4. **Loud and fully audited.** A banner on standard error (even under `--json`), `break_glass` and
+   `break_glass_ticket` in the run report, a `break-glass` record in the audit chain for every use and
+   every refused ticket, and `doctor` / `sandbox status` lines. A use that cannot be recorded does
+   not happen.
+5. **Fail closed on the policy itself.** A policy file that cannot be read, or that says "not
+   required", is treated as REQUIRED WITH NO KEY. A policy is never replaced in place, because adding a
+   key widens who may break glass; it comes off only by a `policy-off` ticket. A `--no-break-glass`
+   policy has no key and so cannot be undone through `delulu` — said when it is written.
+6. **Named limit (category 7, RW 4.4):** a process running as the operator can delete the policy file.
+   The policy binds what `delulu` runs, and a sandboxed guest, which cannot reach the state directory
+   (T14); a same-user shell is what a separate OS account is for.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

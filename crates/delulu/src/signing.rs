@@ -30,7 +30,7 @@ fn home() -> Option<PathBuf> {
         })
 }
 
-fn keys_dir() -> Option<PathBuf> {
+pub(crate) fn keys_dir() -> Option<PathBuf> {
     Some(home()?.join("keys"))
 }
 

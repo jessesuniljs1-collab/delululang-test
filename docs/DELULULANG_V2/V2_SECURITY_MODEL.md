@@ -135,7 +135,11 @@ escape attempt; whether a child process can inherit a weaker policy; whether a r
 become usable after a transition. **Prefer revocation, kill and restart over hot weakening of a
 running sandbox** where that is the safer semantics. The design must keep three things distinct and
 name which it is changing: *language semantics*, *execution enforcement*, *operator break-glass
-controls*. [designed]
+controls*. [BUILT for the sandbox, PS-B-06 (D-V2-35): an operator may require the sandbox on a host,
+and break-glass is an Ed25519-signed, single-use, one-program ticket, capped at a day, that relaxes
+that requirement and nothing else — banner, run report, audit record (a use that cannot be recorded
+does not happen), `doctor` and `sandbox status`. It is an execution-enforcement control; language
+semantics and the Guard are never what it changes.]
 
 ## 6. Isolation levels — honest labels for boundaries that exist
 

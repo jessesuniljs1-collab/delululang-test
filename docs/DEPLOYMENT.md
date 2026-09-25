@@ -131,6 +131,16 @@ that instead — an absent boundary never reads like an applied one. `delulu san
 running kernel for its Landlock ABI directly; a kernel below ABI 3 does not mediate `truncate` and a
 kernel below ABI 4 does not mediate TCP, and the guest's report says which of the two it got.
 
+**Requiring it (PS-B-06).** `delulu sandbox require --break-glass-key <public key>` makes the sandbox
+mandatory for every program `delulu` runs on this host: `run` without `--sandbox`, `test` and `repl`
+are refused. The way past it is break-glass, and only you hold it: `delulu keygen --name breakglass`,
+move the private key off the host, and in an emergency sign a ticket for one program where the key is
+(`delulu sandbox ticket --key K --program app.delulu --ttl 15m --reason "…" --out T`), then
+`delulu run app.delulu --break-glass T`. The ticket works once, for that program's exact bytes, for at
+most a day; the run says so on standard error, in its report and in the audit chain, and changes
+nothing but the sandbox. `sandbox release` with a `--release` ticket takes the policy off. A process
+running as you can still delete the policy file — Tier 2 is what stops that.
+
 **What this is not.** It is not a substitute for Tier 2. On Linux and macOS the guest runs as the same
 OS user, so it is a second wall under the account boundary, not instead of it. On Windows the guest is
 a separate identity, but the broker, the CLI and every run without `--sandbox` are still you. And it does not carry every program yet:

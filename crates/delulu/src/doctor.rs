@@ -397,7 +397,68 @@ fn sandbox_section(r: &mut Report) {
             "or `dev` / `hostile-agent` with `--sandbox-profile` (D-V2-25)"
         ),
     );
-    r.push(s, "break-glass", Status::Note, "off — no break-glass mechanism exists in this build");
+    // PS-B-06: read from the host policy and the spent tickets, never assumed.
+    match crate::brokerd::resolve_state_dir(None) {
+        None => r.push(s, "break-glass", Status::Note, "no state directory, so no host policy and nothing to break"),
+        Some(state) => {
+            let (spent, last) = crate::breakglass::spent_summary(&state);
+            let used = match (spent, last) {
+                (0, _) => "no ticket has been used".to_string(),
+                (n, Some(t)) => {
+                    let ms = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or_default();
+                    format!("{n} ticket(s) spent, the last at {}", delulu_broker::render_ts_utc(ms))
+                }
+                (n, None) => format!("{n} ticket(s) spent"),
+            };
+            match crate::breakglass::load(&state) {
+                crate::breakglass::Policy::Absent => r.push(
+                    s,
+                    "break-glass",
+                    Status::Note,
+                    concat!(
+                        "not armed — this host does not require the sandbox. `delulu sandbox require --break-glass-key HEX` ",
+                        "requires it for every program `delulu` runs, and a ticket signed by that key is then the only way past it"
+                    ),
+                ),
+                crate::breakglass::Policy::Required(p) if p.break_glass_keys.is_empty() => r.push(
+                    s,
+                    "break-glass",
+                    Status::Note,
+                    format!("armed with no key — this host requires the sandbox and no ticket can open it; {used}"),
+                ),
+                crate::breakglass::Policy::Required(p) => {
+                    r.push(
+                        s,
+                        "break-glass",
+                        Status::Note,
+                        format!(
+                            "armed — this host requires the sandbox; tickets are accepted from {} pinned key(s); {used}",
+                            p.break_glass_keys.len()
+                        ),
+                    );
+                    // The key's value is that its private half is NOT here, as with the anchor key.
+                    for (key, path) in private_halves_here(&p.break_glass_keys) {
+                        r.push(
+                            s,
+                            "break-glass key custody",
+                            Status::Note,
+                            format!(
+                                "the private half of pinned key {}… is on this host at `{}` — a process running as this user could sign its own ticket; keep it on another machine",
+                                &key[..16],
+                                path.display()
+                            ),
+                        );
+                    }
+                }
+                crate::breakglass::Policy::Unreadable(why) => r.push(
+                    s,
+                    "break-glass",
+                    Status::Problem,
+                    format!("the host policy cannot be read ({why}); it is treated as requiring the sandbox with no key, so nothing runs outside it until it is repaired"),
+                ),
+            }
+        }
+    }
     let shortened = std::env::var("DELULU_FOREIGN_CALL_DEADLINE_MS").ok();
     r.push(
         s,
@@ -530,6 +591,27 @@ fn configured_mode(dir: &Path) -> &'static str {
 /// Kept pure deliberately: the interesting cases are combinations of two words, and a test that has
 /// to start a daemon to reach them would exercise the process plumbing instead of the judgement —
 /// and this repository allows exactly one integration test to spawn a real process.
+/// Pinned break-glass keys whose PRIVATE half `delulu keygen` left on this host: a `NAME.pub` in the
+/// keys directory holding the pinned key, with its private `NAME` beside it.
+fn private_halves_here(pinned: &[String]) -> Vec<(String, PathBuf)> {
+    let Some(dir) = crate::signing::keys_dir() else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("pub") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let key = text.trim().to_ascii_lowercase();
+        let private = path.with_extension("");
+        if pinned.contains(&key) && private.is_file() {
+            out.push((key, private));
+        }
+    }
+    out
+}
+
 fn mode_agreement(booted: &str, configured: &str) -> (Status, String) {
     if booted == configured {
         return (

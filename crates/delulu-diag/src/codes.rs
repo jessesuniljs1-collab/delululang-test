@@ -761,7 +761,13 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  apply one says so. If you are deciding whether to run unfamiliar code, `limitations` \
                  is the field to read, not `host_guarantees`.\n\
                  - `--sandbox=off` is the explicit opposite, and saying it is the point: an unconfined \
-                 run should be a sentence someone wrote, not a default nobody noticed.",
+                 run should be a sentence someone wrote, not a default nobody noticed.\n\
+                 - An operator may REQUIRE the sandbox on a host (`delulu sandbox require`, PS-B-06). \
+                 Then `run` without `--sandbox`, `test` and `repl` are refused, and the only way past \
+                 it is BREAK-GLASS: a ticket signed by a key the policy pins, naming one program, valid \
+                 for at most a day, spent on first use, announced on standard error, in the run report \
+                 and in the audit chain. It relaxes the sandbox and nothing else, and no program can \
+                 reach it: it is a flag an operator types.",
             ),
         )),
         _ => None,

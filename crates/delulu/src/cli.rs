@@ -309,6 +309,9 @@ pub(crate) struct Opts {
     /// under EXACTLY that node's authority — the orchestration payoff: whoever holds a grant
     /// delegates a slice, hands the token over, and this run can acquire nothing outside it.
     pub(crate) lease: Option<String>,
+    /// PS-B-06: `--break-glass TICKET` — an operator-signed ticket letting this one run go without
+    /// the sandbox a host policy requires (`breakglass.rs`).
+    pub(crate) break_glass: Option<String>,
     /// `--sign <keyfile>` (Stage 6 phase 6h, spec §2.2/§6): for `plugin build`, sign the artifact
     /// with the raw 32-byte ed25519 seed in `keyfile`. Signatures authenticate ORIGIN, not behavior
     /// (spec §10) — a signed plugin is not a safe plugin.
@@ -396,6 +399,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         foreign_isolation: None,
         isolation: None,
         lease: None,
+        break_glass: None,
         sign: None,
         broker_profile: None,
         adapter_cmd: None,
@@ -719,6 +723,15 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
                 }
             }
             s if s.starts_with("--lease=") => opts.lease = Some(s["--lease=".len()..].to_string()),
+            "--break-glass" => {
+                if i + 1 < rest.len() {
+                    opts.break_glass = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--break-glass".to_string());
+                }
+            }
+            s if s.starts_with("--break-glass=") => opts.break_glass = Some(s["--break-glass=".len()..].to_string()),
             "--sign" => {
                 if i + 1 < rest.len() {
                     opts.sign = Some(rest[i + 1].clone());
@@ -1234,6 +1247,8 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 package may narrow it further with `[plugins] allow = [\"<blake3>\"]` in delulu.toml)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--trace-effects] [--trace-out F] [--assert-trace] [--seed N] [--clock fixed:MS]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox | --sandbox=off] [--sandbox-profile dev|contained|hostile-agent] [--limits mem=N,cpu=S,wall=S]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--break-glass TICKET]  (PS-B-06: on a host whose operator requires the sandbox, a ticket they\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 signed lets this ONE program run once without it — loud, audited, and relaxing nothing else)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (every run is budgeted: 1 GiB of memory and 5 minutes of processor time unless --limits sets\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 others — never zero, never unlimited (D-V2-25); a run that spends one is stopped, and the\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 report's outcome.stopped_by says which)\n\
@@ -1286,6 +1301,11 @@ fn usage() -> &'static str {
      \x20 delulu sandbox   policy <file.delulu> [--sandbox-profile dev|contained|hostile-agent] [--json]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (what confinement a run WOULD have, without running: the limits, the mode, the policy hash,\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 and whether the channel can carry this program's surface at all)\n\
+     \x20 delulu sandbox   require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-B-06: the operator requires the sandbox for every program `delulu` runs on this host;\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 only a ticket signed by a pinned key lets one program past it, or takes the policy off)\n\
+     \x20 delulu sandbox   ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE]\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (mint a break-glass ticket, wherever the private key is — not on the host it is for)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\
@@ -1928,6 +1948,11 @@ fn run_module_tests(
 /// executes inside a `test-session` broker node with per-file children, transitively
 /// revoked at session end (build-order deviation 15 for the embedded fallback).
 fn cmd_test(rest: &[String]) -> i32 {
+    // PS-B-06: a test runs the program's code, so a host that requires the sandbox refuses it here,
+    // before a line is read. There is no sandboxed `test` yet and a ticket opens one `run`.
+    if let Err(code) = crate::breakglass::gate("test", false, None, None) {
+        return code;
+    }
     let mut json = false;
     let mut seed_flag: Option<u64> = None;
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
@@ -9040,6 +9065,10 @@ fn cmd_explain(rest: &[String]) -> i32 {
 }
 
 fn repl_cmd(rest: &[String]) -> i32 {
+    // PS-B-06: every line typed into a REPL is a program run in this process.
+    if let Err(code) = crate::breakglass::gate("repl", false, None, None) {
+        return code;
+    }
     let (_file, opts) = parse_opts(rest);
     // `repl --grants` opened the REPL having ignored the flag (P1-F3); it takes `--grant` only.
     if let Some(code) = refuse_unknown_flags("repl", &opts) {

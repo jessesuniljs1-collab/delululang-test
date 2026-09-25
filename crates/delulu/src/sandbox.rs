@@ -331,11 +331,26 @@ fn cmd_status(json: bool) -> i32 {
         }
     }
 
+    // PS-B-06: whether the operator requires the sandbox here, and whether the glass has been broken.
+    let (policy, spent) = match crate::brokerd::resolve_state_dir(None) {
+        Some(state) => (crate::breakglass::load(&state), crate::breakglass::spent_summary(&state).0),
+        None => (crate::breakglass::Policy::Absent, 0),
+    };
+    let policy_json = match &policy {
+        crate::breakglass::Policy::Absent => json!({ "sandbox_required": false }),
+        crate::breakglass::Policy::Required(p) => {
+            json!({ "sandbox_required": true, "break_glass_keys": p.break_glass_keys, "tickets_spent": spent })
+        }
+        crate::breakglass::Policy::Unreadable(why) => {
+            json!({ "sandbox_required": true, "unreadable": why, "break_glass_keys": [], "tickets_spent": spent })
+        }
+    };
     if json {
         crate::cli::print_success_envelope(
             "sandbox",
             json!({
                 "status": {
+                    "host_policy": policy_json,
                     "best_level_available": best,
                     "level_the_sandbox_uses": 1,
                     "l1_available": l1.is_some_and(Level::available),
@@ -354,6 +369,18 @@ fn cmd_status(json: bool) -> i32 {
         (Some((what, detail)), _) => println!("  L1 (jailed guest)      ABSENT — first missing: {what}: {detail}"),
         (None, _) => println!("  L1 (jailed guest)      ABSENT — no prerequisite was attempted"),
     }
+    let host_policy = match &policy {
+        crate::breakglass::Policy::Absent => {
+            "none — the sandbox is chosen per run (`sandbox require` makes it required)".to_string()
+        }
+        crate::breakglass::Policy::Required(p) => format!(
+            "the sandbox is REQUIRED; break-glass keys pinned: {}; tickets spent: {spent}",
+            p.break_glass_keys.len()
+        ),
+        crate::breakglass::Policy::Unreadable(why) => format!("UNREADABLE ({why}) — treated as required, with no key"),
+    };
+    // The column is padded by the format, not by spaces inside a literal.
+    println!("  {:<22} {host_policy}", "host policy");
     println!("  {chain_note}");
     for h in &history {
         println!(
@@ -373,6 +400,13 @@ fn cmd_status(json: bool) -> i32 {
 
 pub fn cmd_sandbox(rest: &[String]) -> i32 {
     let json = rest.iter().any(|a| a == "--json");
+    // PS-B-06: the host policy and break-glass. Each verb parses its own flags strictly.
+    match rest.first().map(String::as_str) {
+        Some("require") => return crate::breakglass::cmd_require(rest, json),
+        Some("release") => return crate::breakglass::cmd_release(rest, json),
+        Some("ticket") => return crate::breakglass::cmd_ticket(rest, json),
+        _ => {}
+    }
     // A flag's VALUE is not a verb: `policy f.delulu --sandbox-profile dev` has one verb and one
     // file, and counting `dev` as a third made the whole command fall through to the usage line.
     let mut verbs: Vec<&str> = Vec::new();
@@ -465,7 +499,15 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
             0
         }
         _ => {
-            eprintln!("error: `sandbox` needs a verb: probe [--json] | policy <file.delulu> [--sandbox-profile P] [--json]");
+            eprintln!(
+                "{}",
+                concat!(
+                    "error: `sandbox` needs a verb: probe [--json] | status [--json] | ",
+                    "policy <file.delulu> [--sandbox-profile P] [--json] | ",
+                    "require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET | ",
+                    "ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE]"
+                )
+            );
             2
         }
     }

@@ -471,6 +471,11 @@ no network and none of the operator's files. Read it from the run report, not fr
 `sandbox.posture.identity` is `a per-run AppContainer` only when the launch applied one, and otherwise
 `identity_separation` is listed under `limitations`.
 
+A host may REQUIRE the sandbox (`delulu sandbox status` says whether). There, `run` without
+`--sandbox`, `test` and `repl` exit 2 with "this host requires the sandbox"; the fix is `--sandbox`,
+not a workaround. Break-glass is the operator's alone: a ticket signed by a key that is not on the
+host. An agent never mints, holds or asks for one on its own behalf.
+
 ## [agents.limits] What to tell your users honestly
 
 Repeating what the rest of the project says, because a harness author is the person most likely to

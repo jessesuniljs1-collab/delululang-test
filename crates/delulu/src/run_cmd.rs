@@ -301,10 +301,12 @@ fn stop_for_budget(ctx: &BudgetRun, breach: crate::budget::Breach) -> ! {
     std::process::exit(1)
 }
 
-/// The `sandbox` object of an L0 run report: the in-process backend, no OS boundary, strict mode, no
-/// break-glass — and, since PS-B-01, the budgets the run is actually held to.
+/// The `sandbox` object of an L0 run report: the in-process backend, no OS boundary, strict mode —
+/// since PS-B-01 the budgets the run is actually held to, and since PS-B-06 whether it ran by breaking
+/// the glass, and on which ticket.
 fn l0_sandbox(requested: &str, budget: &crate::budget::Budget) -> Json {
-    json!({
+    let ticket = BREAK_GLASS.lock().ok().and_then(|g| g.clone());
+    let mut v = json!({
         "backend": "inproc",
         "level": 0,
         "requested": requested,
@@ -312,9 +314,16 @@ fn l0_sandbox(requested: &str, budget: &crate::budget::Budget) -> Json {
         "host_guarantees": [],
         "limits": budget.to_json(),
         "mode": "strict",
-        "break_glass": false,
-    })
+        "break_glass": ticket.is_some(),
+    });
+    if let Some(t) = ticket {
+        v["break_glass_ticket"] = t;
+    }
+    v
 }
+
+/// PS-B-06: the accepted ticket of a break-glass run, for its report.
+static BREAK_GLASS: std::sync::Mutex<Option<Json>> = std::sync::Mutex::new(None);
 
 /// Refuse `--report-out` / `--trace-out` inside any filesystem scope the program may write,
 /// comparing RESOLVED paths (links, `..`, case — `prim::resolve_for_decision`, the containment
@@ -485,6 +494,21 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
                 );
                 return 2;
             }
+        }
+    }
+    // PS-B-06: a host whose operator requires the sandbox runs nothing outside it, unless this run
+    // carries a ticket they signed for exactly this program. Decided before either path reads a line.
+    {
+        let program = file.as_deref().and_then(|f| std::fs::read(f).ok());
+        let sandboxed = opts.sandbox.as_deref() == Some("on");
+        match crate::breakglass::gate("run", sandboxed, opts.break_glass.as_deref(), program.as_deref()) {
+            Err(code) => return code,
+            Ok(Some(accepted)) => {
+                if let Ok(mut g) = BREAK_GLASS.lock() {
+                    *g = Some(crate::breakglass::record(&accepted));
+                }
+            }
+            Ok(None) => {}
         }
     }
     if let Some(choice) = opts.sandbox.as_deref() {

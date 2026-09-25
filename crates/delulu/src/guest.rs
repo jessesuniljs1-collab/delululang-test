@@ -1009,12 +1009,37 @@ fn limit_kill_reason(status: &std::process::ExitStatus) -> Option<String> {
 /// effort by design: a run must not fail because the machine has no broker state directory, and the
 /// record carries only what was applied, never what was intended.
 fn audit_sandbox(action: &str, decision: &str, target: Option<String>, authority: Option<serde_json::Value>) {
-    use delulu_broker::audit::{AuditEntry, AuditLog, AuditSink};
     let Some(state) = crate::brokerd::resolve_state_dir(None) else { return };
-    let dir = state.join("audit");
-    if !dir.exists() {
+    if !state.join("audit").exists() {
         return;
     }
+    let _ = append_audit(&state, action, decision, target, authority);
+}
+
+/// PS-B-06: the same append, for a record that MUST exist — a break-glass use, a refused ticket, a
+/// change to the host policy. The chain is created if this machine has none (a break-glass record is
+/// worth starting one for), and any failure is returned, so the caller can refuse to do what it
+/// could not record.
+pub(crate) fn audit_required(
+    action: &str,
+    decision: &str,
+    target: Option<String>,
+    authority: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let state = crate::brokerd::resolve_state_dir(None).ok_or("no state directory (no HOME/USERPROFILE)")?;
+    append_audit(&state, action, decision, target, authority)
+}
+
+fn append_audit(
+    state: &std::path::Path,
+    action: &str,
+    decision: &str,
+    target: Option<String>,
+    authority: Option<serde_json::Value>,
+) -> Result<(), String> {
+    use delulu_broker::audit::{AuditEntry, AuditLog, AuditSink};
+    let dir = state.join("audit");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create the audit chain at `{}`: {e}", dir.display()))?;
     // ONE writer at a time. The chain is single-writer by design — the broker daemon owns it — and
     // making every sandboxed run a writer broke that immediately: two runs in parallel each read the
     // same head, and their records landed on ONE line, `}{` in the middle, which `audit verify` then
@@ -1022,8 +1047,8 @@ fn audit_sandbox(action: &str, decision: &str, target: Option<String>, authority
     //
     // The lock is an atomic create: whoever makes the file owns the append, and the head is read
     // AFTER it is held, so no writer chains onto a head that another has already moved.
-    let Some(_lock) = AppendLock::take(&dir) else { return };
-    let Ok(mut log) = AuditLog::open(&dir) else { return };
+    let _lock = AppendLock::take(&dir).ok_or("the audit chain's append lock could not be taken")?;
+    let mut log = AuditLog::open(&dir).map_err(|e| format!("the audit chain cannot be opened: {e:?}"))?;
     // Continue the chain's numbering: the last record's seq plus one, or 1 for an empty log.
     let seq = delulu_broker::audit::tail(&dir, 1).ok().and_then(|r| r.last().map(|x| x.seq + 1)).unwrap_or(1);
     let entry = AuditEntry {
@@ -1039,7 +1064,7 @@ fn audit_sandbox(action: &str, decision: &str, target: Option<String>, authority
         span: None,
         decision: decision.to_string(),
     };
-    let _ = log.append(entry);
+    log.append(entry).map(|_| ()).map_err(|e| format!("the audit record could not be written: {e:?}"))
 }
 
 /// Exclusive access to an audit directory for the length of one append.

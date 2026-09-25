@@ -9,6 +9,10 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-06: BREAK-GLASS, 2026-09-25
+
+- **PS-B-06 (D-V2-09 owner principle; D-V2-35)** — `delulu sandbox require --break-glass-key HEX` makes the sandbox mandatory on a host (`run` without `--sandbox`, `test` and `repl` refuse). `delulu sandbox ticket` mints an Ed25519-signed ticket for one program (by the hash of its bytes), at most a day, and `run --break-glass T` spends it: banner, `break_glass` in the run report, a `break-glass` audit record, and no run if the record cannot be written. `sandbox release` needs a `policy-off` ticket. Refused tickets are recorded too. `doctor` and `sandbox status` report the policy, spent tickets, and a pinned key whose private half is still on the host.
+
 ## Unreleased — V2 PS-B-03: a sandbox guest with an identity of its own (Windows), 2026-09-25
 
 - **PS-B-03 (D-V2-34)** — on Windows a `run --sandbox` guest runs as a per-run AppContainer with no capabilities: no network of any kind (the Job Object never took it away) and none of the operator's files, the state directory included. It runs from a runtime copy readable by AppContainers, and its channel moves to inherited pipes. Measured against T14 with a control and falsified by a launch without the container. A host that cannot give the identity says so and runs the guest as before; the report's `posture.identity` and `limitations` follow what was applied.

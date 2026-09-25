@@ -560,6 +560,9 @@ fn explain_e_sandbox_carries_the_caveats_that_stop_the_wrong_assumption() {
         // Where each platform actually stops short.
         "Reads are confined on Linux (Landlock",
         "per-run AppContainer",
+        // PS-B-06: the host policy and the only way past it.
+        "REQUIRE the sandbox",
+        "BREAK-GLASS",
         "mediates TCP, not UDP or raw sockets",
         // And where to look instead of the guarantee list.
         "`limitations` is the field to read, not `host_guarantees`",
