@@ -139,6 +139,13 @@ pub struct Grants {
     pub fs_read: Vec<String>,
     pub fs_write: Vec<String>,
     pub net: Vec<String>,
+    /// PS-B-02: the hosts granted with the explicit spelling `net.special=`. Every one of them is ALSO
+    /// in `net`, so minting, the manifest ceiling and the daemon's exact-set check see one host list
+    /// as they always have; this is the subset whose owner said, in as many words, that the host may
+    /// be — or may resolve to — a special-use address. The egress client refuses a connection into a
+    /// special-use range for any host that is not in it. Before PS-B the distinction was made at parse
+    /// time and then thrown away, which was harmless only because nothing connected.
+    pub net_special: Vec<String>,
     pub clock: bool,
     pub rand: bool,
     pub declassify: bool,
@@ -226,6 +233,10 @@ impl Grants {
                     match k.trim() {
                         "fs.read" => self.fs_read.push(val.to_string()),
                         "fs.write" => self.fs_write.push(val.to_string()),
+                        "net.special" => {
+                            self.net.push(val.to_string());
+                            self.net_special.push(val.to_string());
+                        }
                         _ => self.net.push(val.to_string()),
                     }
                 }
@@ -333,6 +344,7 @@ impl Grants {
             fs_read: self.fs_read.iter().map(|p| granted_root(p)).collect(),
             fs_write: self.fs_write.iter().map(|p| granted_root(p)).collect(),
             net: self.net.clone(),
+            net_special: self.net_special.clone(),
             clock: self.clock,
             rand: self.rand,
             declassify: self.declassify,

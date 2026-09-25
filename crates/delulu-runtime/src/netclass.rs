@@ -7,9 +7,20 @@
 //! `net.special=`. The decision is made on the NORMALIZED form — case, a trailing dot, brackets, a
 //! zone id, a port, and every `inet_aton` spelling of IPv4 (`127.1`, `2130706433`, `0x7f.0.0.1`,
 //! `0177.0.0.1`) — so no spelling walks past it. Whether a public-looking NAME resolves to such an
-//! address is decided at connect time, by the PS-B egress proxy (REMAINING_WORK 4.16).
+//! address is decided at connect time by the egress client (`egress.rs`, PS-B-02), which classifies
+//! every address the name resolves to with [`addr_class`] — the same tables, so the grant-time and
+//! connect-time answers cannot drift apart.
+//!
+//! PS-B-02 widened the tables to the IANA special-purpose registries (RFC 6890 and its successors)
+//! rather than the handful of ranges an SSRF write-up usually names, because the egress client is
+//! where "reachable from the public internet" finally has to be true: the documentation and
+//! benchmarking ranges, `240/4`, `192.0.0.0/24`, IPv6 site-local, discard, Teredo and the
+//! documentation prefixes. The two translation prefixes are classified by what they CARRY: a NAT64
+//! (`64:ff9b::/96`) or 6to4 (`2002::/16`) address reaches the IPv4 address embedded in it, so it is
+//! special exactly when that IPv4 address is — `64:ff9b::a9fe:a9fe` is the metadata endpoint spelled
+//! through a translator, and an IPv6-only host reaching a public site through DNS64 is not.
 
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Why `host` is a special-use address or name, or `None` for an ordinary public host.
 pub fn special_use_class(host: &str) -> Option<&'static str> {
@@ -21,6 +32,18 @@ pub fn special_use_class(host: &str) -> Option<&'static str> {
         return v6_class(v6);
     }
     name_class(&h)
+}
+
+/// Why a RESOLVED address is special-use, or `None` when it is an ordinary public address.
+///
+/// The connect-time half of [`special_use_class`]: the egress client asks it of every address a
+/// granted name resolved to, before any of them is dialled. An IPv4-mapped IPv6 address is judged
+/// as the IPv4 address it is — a resolver that answers `::ffff:10.0.0.8` has answered `10.0.0.8`.
+pub fn addr_class(ip: IpAddr) -> Option<&'static str> {
+    match ip.to_canonical() {
+        IpAddr::V4(v4) => v4_class(v4),
+        IpAddr::V6(v6) => v6_class(v6),
+    }
 }
 
 /// Lowercase; strip `[`…`]`, a `%zone`, a `:port`, and trailing dots.
@@ -103,6 +126,17 @@ fn v4_class(ip: Ipv4Addr) -> Option<&'static str> {
         Some("broadcast (255.255.255.255)")
     } else if ip.is_multicast() {
         Some("multicast (224.0.0.0/4)")
+    } else if a >= 240 {
+        Some("reserved (240.0.0.0/4)")
+    } else if a == 192 && b == 0 && ip.octets()[2] == 0 {
+        Some("IETF protocol assignments (192.0.0.0/24)")
+    } else if (a == 192 && b == 0 && ip.octets()[2] == 2)
+        || (a == 198 && b == 51 && ip.octets()[2] == 100)
+        || (a == 203 && b == 0 && ip.octets()[2] == 113)
+    {
+        Some("documentation (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)")
+    } else if a == 198 && (b == 18 || b == 19) {
+        Some("benchmarking (198.18.0.0/15)")
     } else {
         None
     }
@@ -122,6 +156,28 @@ fn v6_class(ip: Ipv6Addr) -> Option<&'static str> {
         Some("multicast (ff00::/8)")
     } else if s[..5] == [0, 0, 0, 0, 0] && (s[5] == 0xffff || s[5] == 0) {
         Some("IPv4-mapped or IPv4-compatible (it reaches an IPv4 address by another spelling)")
+    } else if s[0] & 0xffc0 == 0xfec0 {
+        Some("site-local (fec0::/10, deprecated but still routed by some networks)")
+    } else if s[..4] == [0x0100, 0, 0, 0] {
+        Some("discard-only (100::/64)")
+    } else if s[0] == 0x2001 && s[1] == 0 {
+        Some("Teredo (2001::/32, which tunnels to an IPv4 address)")
+    } else if (s[0] == 0x2001 && s[1] == 0x0db8) || (s[0] == 0x3fff && s[1] & 0xf000 == 0) {
+        Some("documentation (2001:db8::/32, 3fff::/20)")
+    } else if s[0] == 0x2001 && s[1] == 0x0002 && s[2] == 0 {
+        Some("benchmarking (2001:2::/48)")
+    } else if s[0] == 0x5f00 {
+        Some("SRv6 segment identifiers (5f00::/16)")
+    } else if s[..3] == [0x0064, 0xff9b, 0x0001] {
+        Some("local-use NAT64 (64:ff9b:1::/48)")
+    } else if s[..6] == [0x0064, 0xff9b, 0, 0, 0, 0] {
+        // NAT64 (RFC 6052): the last 32 bits ARE an IPv4 address, and a translator will reach it.
+        let v4 = Ipv4Addr::new((s[6] >> 8) as u8, s[6] as u8, (s[7] >> 8) as u8, s[7] as u8);
+        v4_class(v4).map(|_| "NAT64 (64:ff9b::/96) carrying a special-use IPv4 address")
+    } else if s[0] == 0x2002 {
+        // 6to4 (RFC 3056): bits 16..48 are the IPv4 address the relay delivers to.
+        let v4 = Ipv4Addr::new((s[1] >> 8) as u8, s[1] as u8, (s[2] >> 8) as u8, s[2] as u8);
+        v4_class(v4).map(|_| "6to4 (2002::/16) carrying a special-use IPv4 address")
     } else {
         None
     }
@@ -164,8 +220,54 @@ mod tests {
             "example.com", "api.weather.example.com", "8.8.8.8", "1.1.1.1", "172.32.0.1", "100.128.0.1",
             "192.169.0.1", "2606:4700::1111", "*.example.com", "localhost.example.com", "metadata.example.com",
             "11.0.0.1", "0x.example.com",
+            // The translation prefixes are judged by what they carry: these reach PUBLIC addresses.
+            "64:ff9b::808:808", "2002:808:808::1", "198.20.0.1", "192.0.3.1", "239.255.255.255.example.com",
         ] {
             assert!(special_use_class(h).is_none(), "`{h}` is ordinary: {:?}", special_use_class(h));
+        }
+    }
+
+    /// PS-B-02: the IANA special-purpose ranges the egress client must never dial on a plain grant.
+    #[test]
+    fn the_registry_ranges_added_for_the_egress_client_are_special() {
+        for h in [
+            "192.0.0.1", "192.0.2.10", "198.51.100.7", "203.0.113.200", "198.18.0.1", "198.19.255.255",
+            "240.0.0.1", "250.1.2.3", "fec0::1", "100::1", "2001::1", "2001:0:4136:e378::1", "2001:db8::1",
+            "3fff::1", "2001:2::5", "5f00::1", "64:ff9b:1::1",
+            // The metadata endpoint and loopback, each spelled through a translator.
+            "64:ff9b::a9fe:a9fe", "64:ff9b::7f00:1", "2002:a9fe:a9fe::1", "2002:0a00:0001::",
+        ] {
+            assert!(special_use_class(h).is_some(), "`{h}` must be special");
+        }
+    }
+
+    /// The connect-time half agrees with the grant-time half on every address both can see, and
+    /// judges a mapped address as the IPv4 address it reaches — `::ffff:8.8.8.8` is public, and
+    /// `::ffff:10.0.0.8` is private, whatever the resolver's spelling.
+    #[test]
+    fn a_resolved_address_is_judged_by_the_same_tables() {
+        for (ip, special) in [
+            ("127.0.0.1", true),
+            ("169.254.169.254", true),
+            ("10.0.0.8", true),
+            ("8.8.8.8", false),
+            ("::1", true),
+            ("fd00::1", true),
+            ("2606:4700::1111", false),
+            ("64:ff9b::a9fe:a9fe", true),
+            ("64:ff9b::808:808", false),
+            ("::ffff:10.0.0.8", true),
+            ("::ffff:8.8.8.8", false),
+        ] {
+            let addr: IpAddr = ip.parse().unwrap();
+            assert_eq!(addr_class(addr).is_some(), special, "`{ip}`: {:?}", addr_class(addr));
+            if !ip.starts_with("::ffff:") {
+                assert_eq!(
+                    addr_class(addr).is_some(),
+                    special_use_class(ip).is_some(),
+                    "grant time and connect time must agree on `{ip}`"
+                );
+            }
         }
     }
 }

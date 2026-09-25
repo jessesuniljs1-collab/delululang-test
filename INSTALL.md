@@ -43,12 +43,16 @@ git clone <repository> DeluluLang && cd DeluluLang
 cargo install --path crates/delulu        # installs to ~/.cargo/bin
 ```
 
-This gives you the **Python-capable** build, because `default = ["python"]`. Use it if you want
-`root.python(...)` to work. For the portable configuration instead:
+This gives you the **Python-capable** build, because `default = ["python", "net"]`. Use it if you
+want `root.python(...)` to work. For the portable configuration instead — the one the archive ships:
 
 ```
-cargo install --path crates/delulu --no-default-features
+cargo install --path crates/delulu --no-default-features --features net
 ```
+
+`--features net` keeps the network client (`http.get` over verified HTTPS). `--no-default-features`
+alone builds a delulu with neither Python nor a network client, in which every `http.get` answers
+`Err(Refused)`; `delulu doctor` says which one you have, on its `network client` line.
 
 ## 3. Not available: `cargo install delulu` from crates.io
 

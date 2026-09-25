@@ -661,7 +661,11 @@ impl ActuatorEnvelope {
 #[derive(Clone, Debug)]
 pub enum CapScope {
     Fs { root: PathBuf, write: bool },
-    Net { allow: Vec<String> },
+    /// `allow` is the program's host list, each entry granted exactly. `special` is the subset of it
+    /// the operator granted with `net.special=` (PS-B-02) — the only hosts the egress client will
+    /// connect to in a special-use range. It travels WITH the capability, so an actor handed this
+    /// capability holds exactly the special-use authority its minter held, never more.
+    Net { allow: Vec<String>, special: Vec<String> },
     Console,
     Clock,
     Rand,
@@ -811,6 +815,10 @@ pub struct RootVal {
     pub fs_read: Vec<PathBuf>,
     pub fs_write: Vec<PathBuf>,
     pub net: Vec<String>,
+    /// PS-B-02: the subset of `net` granted with the explicit spelling `net.special=` (see
+    /// `Grants::net_special`). A capability minted for one of these hosts may connect into a
+    /// special-use range; one minted for any other host may not.
+    pub net_special: Vec<String>,
     pub clock: bool,
     pub rand: bool,
     pub declassify: bool,

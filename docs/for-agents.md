@@ -462,10 +462,14 @@ overstate it downstream:
   state directory, the boundary is not there.
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught.
-- **There is no network client, and no OS sandbox around the program yet.** `http.get` returns
-  `Err(Refused)` after its checks; a special-use address (loopback, link-local/metadata, private)
-  needs `--grant net.special=HOST`, never plain `net=`; `delulu sandbox probe --json` says which
-  isolation level this host can give (today L0 only — `--isolation process` contains foreign code only).
+- **The network client is `GET` over verified HTTPS, host-side, and nothing more.** `http.get` is
+  performed by the runtime (for a `--sandbox` guest, by the HOST — the guest has no socket and no
+  resolver): allowlisted host, name resolved once and pinned, special-use addresses refused unless the
+  host was granted with `--grant net.special=HOST` (never plain `net=`), every redirect re-checked,
+  response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
+  `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
+  run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
+  `delulu sandbox probe --json` says which isolation level this host can give.
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
 - **The collection surface, and what it refuses.** As of 2026-09-20 (V2 phase P3) `List` has fifteen
   methods (`len`, `is_empty`, `get`, `push`, `pop`, `map`, `filter`, `find`, `fold`, `sort`,

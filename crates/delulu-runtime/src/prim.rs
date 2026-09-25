@@ -286,23 +286,29 @@ pub fn host_of(url: &str) -> &str {
 
 fn host_allowed(url: &str, allow: &[String]) -> bool {
     let host = host_of(url);
-    allow.iter().any(|pat| {
-        if let Some(suffix) = pat.strip_prefix("*.") {
-            // Campaign finding C85 — the dot boundary is the whole point. A bare `ends_with` let
-            // `*.example.com` match `evilexample.com`, which is a different registrable domain
-            // owned by somebody else. The project's sibling matcher for Python imports
-            // (`python::allowlist_allows`) already requires the separator, which is what makes this
-            // an omission rather than a design choice: two namespace matchers, one correct.
-            //
-            // The apex (`example.com` itself) is deliberately NOT matched by `*.example.com`; that
-            // is the ordinary reading of the pattern, and narrowing is the safe direction.
-            host.len() > suffix.len()
-                && host.ends_with(suffix)
-                && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
-        } else {
-            host == pat
-        }
-    })
+    allow.iter().any(|pat| host_matches(host, pat))
+}
+
+/// Does `host` fall under the allowlist pattern `pat` — exact, or `*.suffix` on a dot boundary?
+///
+/// Public because the egress client (PS-B-02) asks the same question of every redirect hop, and of
+/// the `net.special=` subset, and two matchers kept in step by hand is how C85 happened.
+pub fn host_matches(host: &str, pat: &str) -> bool {
+    if let Some(suffix) = pat.strip_prefix("*.") {
+        // Campaign finding C85 — the dot boundary is the whole point. A bare `ends_with` let
+        // `*.example.com` match `evilexample.com`, which is a different registrable domain
+        // owned by somebody else. The project's sibling matcher for Python imports
+        // (`python::allowlist_allows`) already requires the separator, which is what makes this
+        // an omission rather than a design choice: two namespace matchers, one correct.
+        //
+        // The apex (`example.com` itself) is deliberately NOT matched by `*.example.com`; that
+        // is the ordinary reading of the pattern, and narrowing is the safe direction.
+        host.len() > suffix.len()
+            && host.ends_with(suffix)
+            && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+    } else {
+        host == pat
+    }
 }
 
 // ----- Root: mint capabilities (attenuation — no effect) -------------------
@@ -360,7 +366,11 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
         "http" => {
             let hosts = list_str_arg(args, 0, span)?;
             if hosts.iter().all(|h| root.net.iter().any(|g| g == h)) {
-                Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts }))
+                // PS-B-02: the capability carries which of its hosts the operator granted with
+                // `net.special=` — the same exact-string match the minting check above makes, so a
+                // program cannot name its way into special-use authority it was not given.
+                let special = hosts.iter().filter(|h| root.net_special.iter().any(|g| g == *h)).cloned().collect();
+                Ok(cap(ResourceKind::Http, CapScope::Net { allow: hosts, special }))
             } else {
                 Err(refused("network host", "net=HOST"))
             }
@@ -547,16 +557,26 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             }
         }
         (ResourceKind::Http, "get") => {
-            let CapScope::Net { allow } = &capv.scope else { return Err(scope_bug(span)) };
+            let CapScope::Net { allow, special } = &capv.scope else { return Err(scope_bug(span)) };
             let url = str_arg(args, 0, span)?;
             if !url.starts_with("https://") {
+                crate::egress::note_refusal(&url, crate::egress::Reason::Scheme);
                 return Ok(Value::err(net_err("Refused")));
             }
             if !host_allowed(&url, allow) {
                 return Err(Fault::at("DL0904", format!("host of `{url}` is not in the granted allowlist"), span));
             }
-            // Stage-1 runtime bundles no network client; the authority path is what matters.
-            Ok(Value::err(net_err("Refused")))
+            // PS-B-02 (NE-17 closed): the egress client. It re-checks all of the above on its own
+            // strict parse, resolves once, refuses special-use addresses unless `net.special=` named
+            // the host, pins, and follows redirects through the same check. For a sandboxed guest this
+            // line runs in the HOST — `HostChannel::decide` performs the request here — so one
+            // implementation serves L0 and every guest.
+            Ok(match crate::egress::get_for_program(&url, allow, special) {
+                crate::egress::Answer::Body(b) => Value::ok(Value::str(b)),
+                crate::egress::Answer::Refused => Value::err(net_err("Refused")),
+                crate::egress::Answer::Timeout => Value::err(net_err("Timeout")),
+                crate::egress::Answer::Other(m) => Value::err(Value::variant("Other", vec![Value::str(m)])),
+            })
         }
         (ResourceKind::Clock, "now_ms") => {
             let ms = FIXED_CLOCK.with(|c| c.get()).unwrap_or_else(|| {

@@ -285,9 +285,14 @@ types, and it refuses to imply otherwise.
 
 Minting a capability is **pure**. Deriving the handle performs no effect; *using* it does.
 
-**`Cap[Http]` has no network client behind it yet.** `client.get(url)` type-checks, is counted in
-the authority report and checked against the granted hosts, and then always returns
-`Err(Refused)`: no byte leaves a DeluluLang program over the network (`REMAINING_WORK.md` 4.12).
+**`Cap[Http]` fetches over verified HTTPS, and only from the hosts you grant.** `client.get(url)`
+type-checks, is counted in the authority report, is checked against the granted hosts, and then the
+runtime makes the request itself: it resolves the name, refuses the address if it is loopback,
+private or a cloud-metadata endpoint (unless you granted that host with `--grant net.special=HOST`),
+connects to exactly the address it checked, and verifies the certificate against your system's
+trust store. A redirect goes through the same checks, and the response is size-bounded. Your program
+gets `Ok(body)` or `Err(NetErr)` — and when the answer is `Refused`, the reason is printed on stderr
+for you, not handed to the program. Plain `http://` is refused, always.
 
 Secrets have no string form and no equality. **Two** operations get information out, and **both
 carry the `Declassify` effect**, so "this function reveals something about a secret" is visible in

@@ -5799,6 +5799,11 @@ pub(crate) fn grants_from_lease(info: &crate::broker_ipc::NodeInfo, foreign_c: H
         fs_read: info.fs_read.clone(),
         fs_write: info.fs_write.clone(),
         net: info.net.clone(),
+        // PS-B-02: the broker's node has no `net.special` dimension, so a lease cannot say which of its
+        // hosts may reach a special-use address — and a leased run therefore reaches none. Fail
+        // closed and say so: the egress client refuses such a connection with `special-use`, and the
+        // dimension joining the grant tree is recorded as open work in `V2_LOG.md` (PS-B).
+        net_special: Vec::new(),
         clock: has("Clock"),
         rand: has("Rand"),
         declassify: has("Declassify"),

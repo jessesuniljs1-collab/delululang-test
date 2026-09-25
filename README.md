@@ -264,9 +264,12 @@ Three more things worth knowing before you evaluate it:
   says so in those words.
 - **Foreign code is outside the proof.** A `ForeignCall` is a hole in the guarantee. It is
   *enumerated* in the authority report rather than hidden, which is the honest version, not a fix.
-- **There is no network client.** `Net` and `Cap[Http]` are typed, reported, granted and audited,
-  but `http.get` returns `Err(Refused)` after its checks: no byte leaves a program over the network
-  yet (`docs/REMAINING_WORK.md` 4.12).
+- **The network client is new, and deliberately narrow.** Since V2 phase PS-B (2026-09-25)
+  `http.get` fetches over verified HTTPS — rustls, the platform's trust store, no plain-HTTP path —
+  from the hosts a grant names. The host resolves each name itself, refuses loopback, private and
+  cloud-metadata addresses unless `--grant net.special=HOST` says so, pins the address, re-checks
+  every redirect and bounds the response. A sandboxed guest reaches the network only through that
+  same host-side client. It does `GET` and nothing else yet.
 - **The guarantee is about the authority boundary, not intent.** A dependency that was always
   granted `Net` and starts using it differently is not caught by this, and nothing here claims
   otherwise.

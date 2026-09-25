@@ -156,12 +156,20 @@ pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
 /// Actors, foreign C, Python, plugins, devices and secrets are not here yet: each needs its own
 /// request kind on `delulu-sandbox-channel/1`, and a handle cannot stand in for a thread or a
 /// library. They arrive with the rest of PS-A.
+///
+/// `Http` joined at PS-B-02, and needed no new request kind to do it: `get` is an ordinary
+/// capability method, the host performs it with the egress client every L0 run uses, and what
+/// crosses back is a `Str` or a `NetErr` — plain values. The guest never holds a socket, an address or
+/// a resolver; its own jail still denies it every network call but the channel. Until the client
+/// existed this refusal was the honest answer, because the host had nothing to perform the request
+/// with; now the refusal would be the dishonest one.
 const CARRIED: &[delulu_check::ResourceKind] = &[
     delulu_check::ResourceKind::Console,
     delulu_check::ResourceKind::FsRead,
     delulu_check::ResourceKind::FsWrite,
     delulu_check::ResourceKind::Clock,
     delulu_check::ResourceKind::Rand,
+    delulu_check::ResourceKind::Http,
 ];
 
 /// What this program needs that a guest cannot be given yet, in the words a caller can act on.
@@ -289,7 +297,12 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         }
     }
     let root = Rc::new(crate::cli::build_root(&grants));
-    match spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref()) {
+    let served = spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref());
+    let egress = delulu_runtime::egress::take_log();
+    if !opts.json {
+        crate::run_cmd::print_egress_notes(&egress);
+    }
+    match served {
         Ok(exit) => exit,
         Err(e) => {
             eprintln!("error: the sandboxed run failed: {e}");
@@ -478,6 +491,10 @@ pub fn spawn_and_serve_with(
         Some(serde_json::json!({ "denied_total": denied.1 })),
     );
 
+    // PS-B-02: the guest's network requests were performed HERE, by the host, so their record is in
+    // this process — the same record an L0 run reports, in the same shape. A snapshot: the caller
+    // takes the log afterwards, to tell the operator on stderr.
+    let egress = delulu_runtime::egress::snapshot();
     if let Some(path) = report_out {
         let exit = served.as_ref().copied().unwrap_or(1);
         let report = serde_json::json!({
@@ -488,6 +505,7 @@ pub fn spawn_and_serve_with(
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
             "sandbox": policy.to_json_with(backend, &applied, &denied.0, denied.1),
             "outcome": { "ran": true, "exit": exit },
+            "egress": egress.to_json(),
         });
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
         if let Err(e) = std::fs::write(path, format!("{text}\n")) {

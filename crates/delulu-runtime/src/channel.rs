@@ -294,6 +294,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     /// Answer one request. Every refusal is an answer: the guest is never left waiting, and the
     /// host never guesses at a frame it does not understand.
     pub fn answer(&mut self, req: &Request) -> Response {
+        let egress_mark = crate::egress::mark();
         let resp = self.decide(req);
         // ONE place, on the way out. Recording at each refusal site would mean a new refusal added
         // later is silently absent from the report — which is exactly the shape of defect this
@@ -308,6 +309,22 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 };
                 self.note_denied(&what);
             }
+        }
+        // PS-B-02: an egress refusal reaches the guest as a VALUE (`Err(Refused)`), so the match above
+        // never sees it — and a report of what the host refused that omits the network would be the
+        // same hole in a new place. The egress client logs every request host-side; the ones this
+        // request refused are recorded here, with the machine-readable reason the guest is not told.
+        let (records, refused) = crate::egress::records_since(egress_mark);
+        let mut noted = 0u64;
+        for r in records.iter() {
+            if let Err(reason) = &r.outcome {
+                self.note_denied(&format!("egress `{}` refused: {} ({})", r.url, reason.code(), reason.explain()));
+                noted += 1;
+            }
+        }
+        // Refusals past the log's bound are counted even though their records were not kept.
+        for _ in noted..refused {
+            self.note_denied("egress request refused (its record was past the log's bound)");
         }
         resp
     }
@@ -792,6 +809,36 @@ mod tests {
         assert_eq!(got.display(), Value::Int(1_234).display());
         assert_eq!(sink.backend(), "channel");
         crate::prim::set_fixed_clock_ms(None);
+    }
+
+    /// PS-B-02: a guest's network request is performed by the HOST, and when the host refuses it the
+    /// guest is told only `Err(Refused)` — a value, which the fault-recording branch above never sees.
+    /// The refusal must still reach `denied[]`, with the reason the guest was not told. Offline: the
+    /// scheme refusal is decided before any resolution.
+    #[test]
+    fn a_guests_refused_network_request_is_in_the_hosts_denied_list_with_its_reason() {
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let h = host.mint(std::rc::Rc::new(CapVal {
+            kind: delulu_check::ResourceKind::Http,
+            scope: crate::value::CapScope::Net { allow: vec!["example.com".into()], special: Vec::new() },
+        }));
+        let url = format!("http://example.com/denied-{}", std::process::id());
+        let resp = host.answer(&Request {
+            version: CHANNEL_VERSION.to_string(),
+            seq: 1,
+            body: ReqBody::CapMethod { cap: h, method: "get".into(), args: vec![WireValue::Str(url.clone())], file: 0, start: 0, end: 1 },
+        });
+        // The guest learns the opaque refusal and nothing else.
+        let Response::Ok(WireValue::Variant { name, fields }) = &resp else { panic!("a value, not a fault: {resp:?}") };
+        assert_eq!(name, "Err");
+        assert!(matches!(fields.first(), Some(WireValue::Variant { name, fields }) if name == "Refused" && fields.is_empty()), "{resp:?}");
+        // The host records what it refused, and why.
+        let (denied, total) = host.denied();
+        assert!(total >= 1);
+        assert!(
+            denied.iter().any(|d| d.contains(&url) && d.contains("scheme")),
+            "the refusal and its machine-readable reason must be in denied[]: {denied:?}"
+        );
     }
 
     /// The shape a real program takes: the guest mints from a root it does not hold, gets a handle,

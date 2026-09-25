@@ -134,6 +134,7 @@ fn full_root(grants: &Grants) -> RootVal {
         fs_read: vec![std::env::current_dir().unwrap_or_default()],
         fs_write: vec![std::env::current_dir().unwrap_or_default()],
         net: grants.net.clone(),
+        net_special: grants.net_special.clone(),
         clock: true,
         rand: true,
         declassify: true,

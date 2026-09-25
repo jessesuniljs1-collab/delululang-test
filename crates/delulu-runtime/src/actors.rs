@@ -90,6 +90,11 @@ pub struct RootMsg {
     pub fs_read: Vec<PathBuf>,
     pub fs_write: Vec<PathBuf>,
     pub net: Vec<String>,
+    /// PS-B-02: the `net.special=` subset of `net`, carried so a root crossing an actor boundary
+    /// keeps exactly the special-use authority it had — never widened, and never silently dropped
+    /// either (a drop would fail closed, but a rule that holds on two paths out of three is a rule
+    /// nobody can state).
+    pub net_special: Vec<String>,
     pub clock: bool,
     pub rand: bool,
     pub declassify: bool,
@@ -794,6 +799,7 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
             fs_read: r.fs_read.clone(),
             fs_write: r.fs_write.clone(),
             net: r.net.clone(),
+            net_special: r.net_special.clone(),
             clock: r.clock,
             rand: r.rand,
             declassify: r.declassify,
@@ -909,6 +915,7 @@ pub fn msg_to_value(m: MsgValue, globals: &Env) -> Value {
                 fs_read: r.fs_read,
                 fs_write: r.fs_write,
                 net: r.net,
+                net_special: r.net_special,
                 clock: r.clock,
                 rand: r.rand,
                 declassify: r.declassify,
@@ -1011,6 +1018,7 @@ mod boundary_authority_tests {
     const THREADS_THAT_NEVER_RUN_INTERPRETER_CODE: &[(&str, &str)] = &[
         ("adapter.rs", "reads the adapter subprocess's stdout so an exchange can have a deadline"),
         ("device.rs", "the dead-man heartbeat sweeper: sleeps and checks lease state"),
+        ("egress.rs", "the resolver thread: one getaddrinfo call, abandoned at the request's deadline"),
         ("limits.rs", "the WASM wall-clock watchdog: sleeps, then advances the engine epoch"),
         ("lib.rs", "the registry's HTTP listener: serves connections, never evaluates a program"),
     ];

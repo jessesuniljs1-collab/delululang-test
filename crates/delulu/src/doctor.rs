@@ -166,6 +166,41 @@ fn environment(r: &mut Report) {
         "not compiled in — `root.python(...)` returns Unavailable (DL1307). Build without `--no-default-features` to include it",
     );
 
+    // PS-B-02: whether this binary can reach the network at all, and whether it could complete an
+    // HTTPS handshake if it did. A host whose platform store yields no usable root cannot verify any
+    // certificate, so every request would fail as `tls` — which must be legible here rather than
+    // mysterious at the first `http.get`. A note, not a problem: a host that never fetches is healthy.
+    let net = delulu_runtime::egress::client_status();
+    if !net.compiled {
+        r.push(
+            "environment",
+            "network client",
+            Status::Note,
+            "not compiled in — every `http.get` answers `Err(Refused)`. Build with `--features net` (the default) to include it",
+        );
+    } else if net.trust_roots == 0 {
+        r.push(
+            "environment",
+            "network client",
+            Status::Note,
+            format!(
+                "compiled in (reqwest over rustls), but the platform trust store gave 0 usable roots ({} unusable) — every HTTPS request will fail certificate verification until the operating system's store has roots",
+                net.unusable_roots
+            ),
+        );
+    } else {
+        r.push(
+            "environment",
+            "network client",
+            Status::Ok,
+            format!(
+                "compiled in (reqwest over rustls); {} trust root(s) from the platform store{}",
+                net.trust_roots,
+                if net.unusable_roots > 0 { format!(", {} unusable and ignored", net.unusable_roots) } else { String::new() }
+            ),
+        );
+    }
+
     match state_dir() {
         Some(dir) => {
             let shown = dir.display().to_string();
@@ -285,11 +320,24 @@ fn sandbox_section(r: &mut Report) {
             }
         ),
     );
+    // PS-B-02. One host-side client serves L0 and every sandboxed guest; the guest has no resolver.
     r.push(
         s,
         "network enforcement",
         Status::Note,
-        "grant allowlist, special-use addresses refused unless `net.special=`; there is no network client (RW 4.12)",
+        if delulu_runtime::egress::client_status().compiled {
+            concat!(
+                "host-side egress client for L0 and sandboxed guests alike (PS-B-02): hosts by grant allowlist, ",
+                "each name resolved once host-side and pinned, special-use addresses refused unless `net.special=`, ",
+                "every redirect re-checked, responses bounded, TLS verified against the platform store; ",
+                "a guest has no resolver of its own"
+            )
+        } else {
+            concat!(
+                "grant allowlist and special-use refusal still apply; this build has no network client, ",
+                "so every `http.get` is refused (built without the `net` feature)"
+            )
+        },
     );
     r.push(
         s,
@@ -304,7 +352,17 @@ fn sandbox_section(r: &mut Report) {
         Status::Note,
         "none on the main program (RW 4.15); a foreign call is killed after its deadline (NE-21)",
     );
-    r.push(s, "profile", Status::Note, "none — strict mode; sandbox profiles arrive with PS-A");
+    // Was "sandbox profiles arrive with PS-A", which stopped being true when PS-A shipped them (found
+    // by reading this output during PS-B, as the owner asked). An ordinary run still has no profile.
+    r.push(
+        s,
+        "profile",
+        Status::Note,
+        concat!(
+            "none for an ordinary run (strict mode); `run --sandbox` applies one — `contained` by default, ",
+            "or `dev` / `hostile-agent` with `--sandbox-profile` (D-V2-25)"
+        ),
+    );
     r.push(s, "break-glass", Status::Note, "off — no break-glass mechanism exists in this build");
     let shortened = std::env::var("DELULU_FOREIGN_CALL_DEADLINE_MS").ok();
     r.push(

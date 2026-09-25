@@ -9,6 +9,41 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-02: the network client, 2026-09-25
+
+- **PS-B-02 (D-V2-30 owner; D-V2-31)** — `http.get` fetches over verified HTTPS (reqwest over rustls, the platform trust store; TLS never implemented here, no plain-HTTP path). One host-side client serves L0 and every `--sandbox` guest; the guest has no socket and no resolver. Per request and per redirect hop: a strict URL spelling (anything a URL parser would rewrite is refused, not normalized), userinfo refused, the allowlist with its dot boundary, the name resolved once host-side, EVERY candidate address classified, special-use addresses refused unless the host was granted with `net.special=`, the checked addresses pinned with a client that cannot resolve anything itself, proxy variables ignored, the response bounded (8 MiB), 5 redirects, 30 s. NE-17 and REMAINING_WORK 4.12/4.16 closed; C-03 flipped.
+- The program sees `NetErr`'s three variants only; `Refused` is opaque. The machine-readable reason is the operator's: stderr (`[egress: <code>]`), the run report's new `egress` object (L0 and `--sandbox`), and a guest's `sandbox.denied`.
+- `net.special=` is carried as its own dimension (`Grants` -> `RootVal` -> the capability) instead of being merged into `net` after parsing. A leased run carries none and reaches no special-use range (fail closed).
+- The special-use tables cover the IANA special-purpose registries; NAT64 and 6to4 addresses are judged by the IPv4 address they carry.
+- `--sandbox` carries programs that use `Http`.
+- **Fixed before release:** the CLI crate did not forward the runtime's `net` feature, so only a whole-workspace build had a client and the portable download (`--no-default-features`) would have had none. `default = ["python", "net"]`; the packaging script builds `--no-default-features --features net`; `tests/distribution.rs` pins both.
+- `doctor`: a `network client` line with the platform's trust-root count; the `network enforcement` and `profile` lines corrected (the latter still said profiles "arrive with PS-A").
+- Gates: feature accounting from the RESOLVED graph (`cargo metadata`), not the manifest comment; four mutants falsified (certificate checks off, proxy variables honoured, client-side redirects, a client that resolves for itself).
+
+## Unreleased — V2 PS-B opens: the TLS dependency, measured first, 2026-09-20
+
+- **D-V2-30 (owner, resolving D-NE-28)** — `reqwest` over `rustls` with an explicitly named feature set, behind a default-on `net` feature; the `cargo deny` pass taken before any code used it: 222 -> 303 distinct dependencies, 14 -> 15 licenses (`BSL-1.0`, a selectable disjunction), all four checks ok (`measurements/dependency-egress/RECORD.md`).
+
+## Unreleased — V2 P3: the standard library, 2026-09-20
+
+- **P3 (D-V2-29)** — `List` 4 -> 15 methods, `Str` 6 -> 10, and `Map[K, V]` (new, 8 methods); 23 new anchors, each with an accepting and a rejecting witness: coverage 353/353. Four deliberate refusals with their reasons (`sort` on `List[Float]`, `contains` on an opaque element, a non-scalar `Map` key, no WASM lowering). `PRIM_TABLE_VERSION` 4 -> 5.
+- **MAP-PARAM-1** — `List.map`/`Secret.map` never checked their callback's parameter type, so a type error escaped to run time. **ARITY-LABEL-1** — `actuator`/`sensor`/`compute` never had the normative arity gate. Both closed as a class.
+
+## Unreleased — V2 P4a: the Agent Skill, 2026-09-20
+
+- **P4a (D-V2-28, answering D-NE-5)** — `skills/delulu/SKILL.md` and `delulu skill [--json]`, which prints the same bytes from the binary. Every command the skill teaches is derived from the binary's own `--help`, so the two cannot drift.
+
+## Unreleased — V2 P2: a running program loads a plugin, 2026-09-20
+
+- **P2 (D-V2-27)** — NE-01 closed: `root.plugin_host()` with `--grant plugin=PATH`, and the package's `[plugins] allow` hash list checked against the bytes in hand; `verify` and `load` share one load sequence; every refusal is a `PluginErr` value. RW 4.11 closed.
+- A pre-existing checker panic fixed: the `deps.rs` prelude index held 2 of its 7 entries.
+
+## Unreleased — V2 PS-A: the L1 process sandbox, 2026-09-20
+
+- **PS-A (D-V2-25, D-V2-26)** — `run --sandbox` runs the program as a guest holding no authority of its own: every capability is a host-minted handle and every effect one canonical-CBOR frame the host performs under the ordinary checks (`delulu-sandbox-channel/1`). Under it, per platform: a Job Object and restricted token (Windows), a deny-default Seatbelt profile (macOS), rlimits, no-new-privs, Landlock and seccomp (Linux).
+- Profiles `dev`, `contained` (default), `hostile-agent`; `--limits` may only narrow; `--mode audit`; `sandbox policy --json`. The run report carries what the host applied: `host_guarantees`, `posture`, `limitations`, `denied`. Audit records `sandbox-launch`, `channel-violation`, `sandbox-limit`, `sandbox-death`.
+- Refusals rather than silent downgrades: conflicting `--sandbox` answers, sandbox-only flags without `--sandbox`, and any surface the channel cannot carry yet. Opt-in until PS-B/PS-C widen the channel (D-V2-26).
+
 ## Unreleased — V2 PS-0: sandbox truth, probes and the cheap hardenings, 2026-09-18
 
 - **PS-0-01** — README, `GETTING_STARTED.md` §6 and the Book say `http.get` has no network client; `run --help`, the run label and the authority report say `--isolation process` isolates foreign code only; REMAINING_WORK 4.12–4.16.

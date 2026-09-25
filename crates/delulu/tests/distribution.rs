@@ -43,6 +43,33 @@ fn the_packaging_script_ships_the_portable_build() {
     }
 }
 
+/// PS-B-02: the download HAS the network client. `--no-default-features` (needed to leave Python out)
+/// drops `net` too, so the build must name it back — and the page that teaches the from-source
+/// portable install must teach the same spelling, or a reader following it gets a delulu that
+/// refuses every `http.get` and has no way to guess why.
+///
+/// This gate exists because the first version of PS-B shipped exactly that defect for a commit: the
+/// CLI crate did not forward the runtime's `net` feature at all, so only a whole-workspace build had
+/// a client, by accident of feature unification.
+#[test]
+fn the_shipped_binary_and_the_portable_install_have_the_network_client() {
+    let sh = read("scripts/package-toolchain.sh");
+    assert!(
+        sh.contains("cargo build --release -p delulu --no-default-features --features net"),
+        "the portable build must name `--features net`, or the download answers every http.get with Refused"
+    );
+    let md = read("INSTALL.md");
+    assert!(
+        md.contains("cargo install --path crates/delulu --no-default-features --features net"),
+        "INSTALL.md must teach the same portable spelling the archive is built with"
+    );
+    let cli = read("crates/delulu/Cargo.toml");
+    assert!(
+        cli.contains("net = [\"delulu-runtime/net\"]") && cli.contains("default = [\"python\", \"net\"]"),
+        "the CLI crate must forward the runtime's `net` feature and enable it by default"
+    );
+}
+
 /// The two install documents must agree on the commands they teach.
 #[test]
 fn the_install_page_and_the_archive_agree_on_the_first_commands() {

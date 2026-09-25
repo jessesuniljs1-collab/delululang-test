@@ -385,9 +385,10 @@ Net is reachable because:
 ```
 
 That is the shortest path from `main` to the primitive that performs the effect — the proof, at
-function granularity. (The authority is real; the network is not yet: `http.get` is checked against
-the granted hosts and then returns `Err(Refused)`, because v1.x ships no network client —
-`REMAINING_WORK.md` 4.12.) When an AI writes a tool and you're deciding whether to run it, this is the
+function granularity. (Since V2 phase PS-B the network is real too: `http.get` is checked against the
+granted hosts and then performed over verified HTTPS by the runtime itself, which resolves the name,
+refuses private and metadata addresses unless you granted them by their explicit spelling, and pins
+the address it checked.) When an AI writes a tool and you're deciding whether to run it, this is the
 review: not reading the code, reading its authority and, if something surprises you, its `why`.
 
 This is why Chapter 1 of *every* DeluluLang tutorial ends with `delulu authority` on hello-world

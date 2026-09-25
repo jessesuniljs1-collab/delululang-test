@@ -12,7 +12,11 @@ two readings. The manifest edit is one block in `crates/delulu-runtime/Cargo.tom
 "rustls-tls-native-roots"], optional = true }` behind a new default-on `net` feature.
 
 The crate count is the DISTINCT crate names in `cargo deny list` — the whole resolved graph, every
-target and dev-dependencies included. That is deliberately the largest honest number: a
+target included. (This sentence said "and dev-dependencies included" until 2026-09-25, and was
+vacuously true: the workspace HAD no dev-dependencies. When PS-B-02 added the first ones, `cargo deny
+list` did not show them — its listing omits them — while `cargo deny check`, the actual gate, does
+see them: a temporary `[bans] deny` of `rcgen` failed the bans check at once. The count method is
+therefore stated precisely now, and the test-only crates are counted separately below.) That is deliberately the largest honest number: a
 `cargo tree --edges normal` reading of the workspace is smaller (189 → some larger figure) because it
 omits dev-dependencies and target-gated edges, and a dependency that only appears on another platform
 is still a dependency in the lockfile and still something a reviewer has to read.
@@ -74,15 +78,32 @@ than a count:
    A conformance case comparing the checked host against the connected host belongs in the network
    family, and a URL whose authority carries userinfo should be refused outright rather than parsed.
 
-### What this record does NOT yet contain
+### What this record did not contain when it was written, and does now
 
-The measurement above is the dependency's cost. It is not yet evidence that the egress client is
-correct, because at this commit **no line of code uses `reqwest`** — the dependency and its accounting
-landed first, on purpose, so the number could be taken against a tree where nothing else had changed.
-The client itself, its policy tests and the network conformance family are the rest of PS-B-02; see
-`docs/DELULULANG_V2/V2_LOG.md` for the handoff that describes them.
+When the dependency landed (`d0ae0f9`) **no line of code used `reqwest`** — on purpose, so the number
+above could be taken against a tree where nothing else had changed. That made it the dependency's
+cost, not evidence that the client is correct. The client arrived with PS-B-02 (2026-09-25):
 
-**Feature accounting is owed a gate.** The manifest names every enabled feature and why every refused
-one is absent. A comment explaining that decompression is off does not keep decompression off, so
-PS-B-02 owes a test that reads the manifest and fails if `gzip`, `brotli`, `zstd`, `deflate`, `cookies`
-or `charset` is ever enabled — the same shape as the gates P3 added for the arity column.
+**The shipped graph did not move.** `cargo deny list` still reads **303** distinct crates and **15**
+licenses. The two new direct dependencies of `delulu-runtime` — `rustls` and `rustls-native-certs`,
+named so the TLS configuration is built in this repository and a TLS failure is recognised by type —
+were already in the graph through `reqwest`, at the same versions.
+
+**Test-only: eight crates.** `rcgen` (a certificate generated at test time, so no private key is ever
+committed) and the server half of `rustls` are dev-dependencies of `delulu-runtime`. Measured as the
+difference between `cargo tree --workspace -e normal,build,dev --target all` and the same without `dev`:
+`rcgen`, `pem`, `yasna`, `time`, `time-core`, `deranged`, `powerfmt`, `num-conv` — every one
+`MIT OR Apache-2.0` or `MIT`, none reaching a release build. `Cargo.lock` gains more lines than that
+(24 names), because a lockfile records optional dependencies nothing enables — `x509-parser` and its
+family among them.
+
+    $ cargo deny check      # after PS-B-02
+    advisories ok, bans ok, licenses ok, sources ok
+
+**Feature accounting is a gate now, not a comment.** `crates/delulu-runtime/tests/egress_features.rs`
+asks `cargo metadata` — the same resolution a build makes — which reqwest features are ENABLED, and
+fails on any refused one (`gzip`, `brotli`, `zstd`, `deflate`, `cookies`, `charset`, `http2`, `json`,
+`default` and the rest) and on any feature D-V2-30 does not account for. It reads the resolved graph,
+not the manifest line, because Cargo unifies features: another crate asking for `reqwest/gzip` would
+turn it on while the manifest still read virtuously. Falsified: adding `gzip` fails both of its tests,
+naming the feature.

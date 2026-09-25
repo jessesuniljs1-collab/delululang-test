@@ -521,9 +521,71 @@ answerable rather than a matter of trust.
 one is absent; PS-B-02 owes a test that reads the manifest and fails if a refused feature is ever
 enabled, because a comment explaining that decompression is off does not keep decompression off.
 
+## D-V2-31 — PS-B-02, the egress client's shape and defaults — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+The owner ruled the dependency (D-V2-30) and the design points he listed; everything below is how
+those points were made true, and each item was decided rather than defaulted into. Reversible; the
+owner's standing instruction of 2026-09-25 ("do whatever good for delululang") delegates it.
+
+1. **Refuse, never normalize, the URL.** `egress::parse_target` accepts only a spelling no URL parser
+   would rewrite: `https://` exactly, printable ASCII, no backslash, no userinfo, a lower-case LDH host
+   or a canonical address literal, a canonical port. The HTTP client normalizes host names itself
+   (IDNA via `url`, the ICU stack D-V2-30 recorded) and a WHATWG parser reads `127.1`, `0x7f.1` and
+   `2130706433` as `127.0.0.1`; refusing those spellings makes the host checked the host dialled,
+   instead of a string that some later parser agrees with. An international host is written in its
+   `xn--` form, which is what it is on the wire anyway.
+2. **Every candidate address is classified, and ONE special-use candidate refuses the request.** A name
+   that resolves partly into a private range is a name someone pointed there, and a client that tries
+   addresses in turn would eventually dial it.
+3. **The pin is a construction, not a comparison.** The client gets the classified addresses as an
+   override for the checked host AND a resolver that refuses every lookup, so a host the pin does not
+   cover cannot be resolved at all — tested with `localhost`, the one name every system resolver would
+   have answered. Proxy variables are ignored (`no_proxy`): a proxy resolves the name itself.
+4. **`Refused` stays opaque; `Other` carries a fixed phrase.** Every POLICY decision reaches the program
+   as `NetErr::Refused`, so special-use and no-address are indistinguishable to it (a resolver oracle
+   built from error messages is still a resolver). Transport failures are `Other` with a phrase chosen
+   here — never a server's words or an address. The machine-readable reason (`egress::Reason::code`)
+   goes to the operator: stderr, the run report's `egress` object, and a guest's `sandbox.denied`
+   (which also reaches the hash-chained audit record through PS-A-08's `channel-violation`).
+5. **The defaults.** 8 MiB response, 5 redirects, 30 s for the whole request across every hop. These
+   are the egress ceilings until PS-B-01 folds per-run limits in; they are constants in `egress.rs`,
+   named in the operator's explanations, and never unlimited.
+6. **Only 2xx delivers, and only UTF-8.** A 4xx/5xx or an unfollowed 3xx is `Other("HTTP status N")`
+   rather than an error page handed over as data; a body that is not UTF-8 is `Other` rather than a
+   lossy string, because `http.get` answers a `Str` and `charset` was refused (D-V2-30).
+7. **`net.special=` is its own dimension now.** It was checked at grant parse time and then merged into
+   `net`, which was harmless only while nothing connected. `Grants.net_special` -> `RootVal.net_special`
+   -> `CapScope::Net { special }`, carried across actor boundaries. A LEASED run gets none (the
+   broker's node has no such dimension): it cannot reach a special-use range at all, fail closed, open.
+8. **The special-use tables grew to the IANA special-purpose registries**, and the two translation
+   prefixes are judged by what they carry: NAT64 `64:ff9b::/96` and 6to4 `2002::/16` are special
+   exactly when their embedded IPv4 address is. Grant time and connect time share the tables
+   (`netclass::addr_class`), and a test asserts they agree.
+9. **The sandbox carries `Http`.** The refusal "cannot carry this program yet: it uses Http" was honest
+   while the host had no client and would be dishonest now: `get` needs no new request kind, and what
+   crosses back is a `Str` or a `NetErr`.
+10. **The CLI forwards `net`, and the download names it.** The dependency's own commit left the CLI
+    crate taking the runtime with `default-features = false` and forwarding only `python`, so a network
+    client reached the binary only when another workspace member happened to enable the feature —
+    and the portable release build (`--no-default-features`, to leave Python out) would have shipped
+    none. Fixed in this phase: `default = ["python", "net"]`, and the packaging script builds
+    `--no-default-features --features net`. `tests/distribution.rs` pins both.
+11. **Two direct dependencies and two test-only ones, none new to the tree's normal graph.** `rustls`
+    and `rustls-native-certs` are named directly (already present through reqwest): the TLS
+    configuration is built here and handed over whole, `doctor` counts the platform roots with the
+    same loader, and a TLS failure is recognised by type. `rcgen` and `rustls` are dev-dependencies for
+    a loopback TLS server with a certificate made at test time, so no private key is ever committed —
+    measured in `measurements/dependency-egress/RECORD.md`.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
-D-NE-6, D-NE-7, D-NE-8, D-NE-17, D-NE-24, D-NE-25, D-NE-26, D-NE-27, D-NE-31,
-D-NE-33 (narrowed by D-V2-13); the Constitution §5.15 wording (RW 7.10a); rustfmt and a code of
-conduct; the four pre-public-repository items. Each is asked at the start of the phase that needs it
-(`V2_MASTER_PLAN.md` §7).
+D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
+code of conduct; the four pre-public-repository items. Each is asked at the start of the phase that
+needs it (`V2_MASTER_PLAN.md` §7).
+
+**Corrected 2026-09-25 — five entries this list carried were already decided.** D-NE-17 was built in
+P1-F on the owner's word; D-NE-24, D-NE-26 and **D-NE-31** were ruled by the owner in D-V2-25
+(2026-09-18) — D-NE-31's defaults are **1 GiB of memory and 5 minutes of CPU, never unlimited, the
+operator may change them**; D-NE-33 was superseded by D-V2-25 and then set by D-V2-26. The list was
+written before those rulings and never walked back, so PS-B's own entries went on calling D-NE-31
+"the owner's" while the answer sat 280 lines above them. Found while checking the earlier phases.

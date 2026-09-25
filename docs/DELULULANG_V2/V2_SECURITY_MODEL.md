@@ -194,7 +194,15 @@ reordering and truncation detected; an attacker who rewrites log and anchor is n
 rather than bearer codes; filesystem containment through resolved paths (with the TOCTOU residual
 named); the WASM in-process floor; the separate-OS-account boundary on POSIX.
 
+Egress control is claimed since PS-B-02, with witnesses and falsified mutants
+(`crates/delulu-runtime/src/egress/tests.rs`, `crates/delulu/tests/egress_cli.rs`): one host-side
+client for L0 and guests; the allowlist; resolve-once-and-pin with every candidate address
+classified; special-use refusal unless `net.special=`; redirects re-checked; the response bound;
+certificate verification against the platform store; proxy variables ignored; no resolver reachable
+by the client itself.
+
 Not claimed until its witness is green and its mutant is red: any L1 or L2 containment; any
-resource bound on the main program; any network egress control (there is no network client yet);
+resource bound on the main program; content inspection of permitted traffic (a program may send
+anything to a host it was granted — category 7, and the grant is the control);
 identity separation provided by the toolchain; anything about an L3 environment; multi-tenancy on
 one OS user (never). Kernel and hypervisor exploits and side channels are category 7 at every level.

@@ -294,9 +294,35 @@ pub(crate) fn write_nofollow(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     f.write_all(bytes)
 }
 
+/// PS-B-02: tell the operator, on stderr, about every `http.get` that did not deliver — the reason
+/// the PROGRAM is deliberately not told (it sees only `NetErr`). Human prose, so it is withheld under
+/// `--json`, where the same records are in the run report's `egress` object.
+pub(crate) fn print_egress_notes(log: &delulu_runtime::egress::EgressLog) {
+    for r in &log.records {
+        if let Err(reason) = &r.outcome {
+            eprintln!(
+                "note: `http.get` of `{}` was not delivered: {} [egress: {}]",
+                r.url.escape_debug(),
+                reason.explain(),
+                reason.code()
+            );
+        }
+    }
+    let shown = log.records.iter().filter(|r| r.outcome.is_err()).count() as u64;
+    if log.refused > shown {
+        eprintln!(
+            "note: {} more request(s) were not delivered; the log keeps the first {} records",
+            log.refused - shown,
+            delulu_runtime::egress::MAX_RECORDED
+        );
+    }
+}
+
 /// The run report envelope. At L0 the `sandbox` object is the in-process backend: level 0, no host
-/// guarantees, no limits, strict mode, no break-glass — measured facts, nothing claimed.
-fn run_report(opts: &Opts, exit: i32) -> Json {
+/// guarantees, no limits, strict mode, no break-glass — measured facts, nothing claimed. `egress` is
+/// every network request the program made and what became of it (PS-B-02), always present so a
+/// reader never has to ask whether its absence means "none".
+fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog) -> Json {
     let (ran, _) = RUN_STATE.with(|s| s.get());
     let requested = opts.isolation.clone().unwrap_or_else(|| "none".to_string());
     let mut env = success_envelope(
@@ -313,6 +339,7 @@ fn run_report(opts: &Opts, exit: i32) -> Json {
                 "break_glass": false,
             },
             "outcome": { "ran": ran, "exit": exit },
+            "egress": egress.to_json(),
         }),
     );
     if exit != 0 {
@@ -387,10 +414,14 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         }
     }
     let code = cmd_run_inner(rest);
+    let egress = delulu_runtime::egress::take_log();
+    if !opts.json {
+        print_egress_notes(&egress);
+    }
     if let Some(path) = &opts.report_out {
         let refused = RUN_STATE.with(|s| s.get().1);
         if !refused {
-            let text = serde_json::to_string_pretty(&run_report(&opts, code)).expect("the run report serializes");
+            let text = serde_json::to_string_pretty(&run_report(&opts, code, &egress)).expect("the run report serializes");
             if let Err(e) = write_nofollow(path, format!("{text}\n").as_bytes()) {
                 eprintln!("error: cannot write the run report to `{path}`: {e}");
                 return if code == 0 { 2 } else { code };

@@ -39,7 +39,7 @@ python = ["dep:pyo3"]
 # configuration, because a security rule that is only tested in one build configuration is a
 # security rule tested in one build configuration. Only the transport -- the code that actually
 # opens a socket -- is optional.
-net = ["dep:reqwest"]
+net = ["dep:reqwest", "dep:rustls", "dep:rustls-native-certs"]
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
@@ -120,6 +120,16 @@ pyo3 = { version = "0.25", optional = true }
 #                                 -- allowlist, special-use, re-resolve, re-pin -- and a policy that
 #                                 only counts hops does none of that.
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"], optional = true }
+# Named DIRECTLY, although reqwest already brings both, for three reasons that are each about control
+# rather than convenience: (1) the TLS configuration is built HERE -- `ring`, the safe default protocol
+# versions, HTTP/1.1 ALPN, and roots this crate loaded -- and handed to reqwest whole
+# (`use_preconfigured_tls`), so what verifies a certificate is written in this repository and not
+# inferred from a feature list; (2) `doctor` counts the platform's trust roots with the same loader
+# the client uses; (3) a TLS failure is recognised by its TYPE (`rustls::Error` in the error chain),
+# not by matching words in a message. Both are already in the tree at these versions, so the crate
+# count does not move -- `measurements/dependency-egress/RECORD.md`.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"], optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
 
 # macOS links the SYSTEM libffi instead of compiling the copy `libffi-sys` vendors (libffi 3.4.4),
 # whose aarch64 assembly current Apple clang rejects — "invalid CFI advance_loc expression" in
@@ -130,3 +140,13 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 # copy exactly as before, and Cargo.lock does not change.
 [target.'cfg(target_os = "macos")'.dependencies]
 libffi = { version = "3", features = ["system"] }
+
+[dev-dependencies]
+# PS-B-02's tests of the REAL transport stand up a TLS server on loopback, which needs a certificate
+# nobody trusts and a server to present it. `rcgen` makes the certificate at test time, so no private
+# key is ever committed; it defaults to `ring`, the backend already in the tree, so it brings no C
+# toolchain. `rustls` is the server half of the same TLS library the client uses. Test-only: neither
+# reaches a release build, and the root the test trusts is passed in code, never through a flag, a
+# variable or a file.
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }

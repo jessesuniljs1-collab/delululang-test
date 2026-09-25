@@ -564,7 +564,9 @@ that entry itself reserved — "the largest this project would take and needs th
 pass." The owner ruled on 2026-09-20: **`reqwest` over `rustls`**, minimal explicitly-named features,
 real HTTPS, TLS never implemented here, and HTTP-only egress explicitly refused as a production
 implementation. Recorded as **D-V2-30**, which closes D-NE-28. D-NE-31 (resource-limit *defaults*,
-PS-B-01) is still open and still the owner's.
+PS-B-01) is still open and still the owner's. [Corrected 2026-09-25: it was not. The owner ruled
+D-NE-31 on 2026-09-18 inside D-V2-25 — 1 GiB of memory and 5 minutes of CPU, never unlimited, the
+operator may change them — and this sentence repeated a stale open-list. See the PS-B-02 entry below.]
 
 ### What landed in this commit, and why only this
 
@@ -652,7 +654,8 @@ conformance case asserting the checked host equals the connected host.
 
 ### The other five tasks, untouched
 
-PS-B-01 (budgets on every engine; **defaults are D-NE-31, the owner's**), PS-B-03 (identity separation —
+PS-B-01 (budgets on every engine; defaults are D-NE-31 — **already ruled in D-V2-25**, corrected
+2026-09-25), PS-B-03 (identity separation —
 AppContainer per run on Windows, uid mapping where namespaces allow, a documented macOS recipe, reported
 in `host_guarantees`; today a guest runs as the same OS user and `identity_separation` is always in
 `limitations`), PS-B-04 (channel batching, gated on PS-A's measurement saying it pays), PS-B-05
@@ -693,3 +696,105 @@ reading, when it quoted the offending phrase verbatim to explain it. A check tha
 from a quotation of a claim is a limitation worth knowing about, and spelling the number out is a
 cheaper answer than teaching it the difference.) `doctor` is 28/28, and its network line still says
 “there is no network client” — which is the honest reading of a commit where nothing uses the client yet.
+
+## PS-B-02 — 2026-09-25 — the network client: one host-side implementation, and what reading the earlier phases turned up
+
+The owner's instruction for the session: finish the phases, check that the earlier ones are working
+and finished properly, use and update the Survey and `doctor`, update the `.md` files and `HANDOFF.md`,
+and ask nothing. Before a line of PS-B-02 was written the earlier phases were checked: the last push
+run (`35524913246`, `86f58a1`) green on every job; the four nightlies since then green on every job
+but the two `miri-slow` jobs the 240-minute cap cancels (RW 5.6 — and `miri-slow (delulu-broker)`
+finished for the first time on 2026-09-24, in three hours); the local suite 1,790/0; `doctor` 28/28;
+the Survey fresh.
+
+### What was built
+
+`crates/delulu-runtime/src/egress.rs` — the only code in DeluluLang that sends a byte over the network,
+called from the `(Http, "get")` arm of `prim.rs`, which is where a sandboxed guest's request is
+performed too (`HostChannel::decide` runs it in the host). The design in the handoff above, made true;
+D-V2-31 records each decision inside it. In one paragraph: a strict parse that refuses every spelling a
+URL parser would rewrite; the allowlist on that parsed host; the name resolved once, host-side, every
+candidate address classified and one special-use candidate enough to refuse unless the host came
+through `net.special=`; the classified addresses pinned into a client whose own resolver refuses every
+lookup; proxy variables ignored; redirects followed by this loop, each hop re-running the whole check;
+the response bounded at 8 MiB; TLS by rustls against the platform store. The program sees `NetErr`;
+the operator sees `Reason` — on stderr, in the run report's new `egress` object, and for a guest in
+`sandbox.denied` and therefore in the hash-chained `channel-violation` record.
+
+### What checking the earlier phases found — five things, all fixed in this commit
+
+1. **The download would have had no network client.** The CLI crate takes the runtime with
+   `default-features = false` and forwarded only `python`, so `net` reached the binary only when
+   another workspace member happened to enable it — true of `cargo test --workspace`, false of
+   `cargo install --path crates/delulu`, and false of the portable release build, which is
+   `--no-default-features` to leave Python out. `d0ae0f9`'s manifest said "ENABLED BY DEFAULT", and it
+   was, in the one crate that did not ship. Fixed and pinned (`tests/distribution.rs`).
+2. **D-NE-31 was never open.** The owner ruled it on 2026-09-18 inside D-V2-25 (1 GiB, 5 min, never
+   unlimited). The decision log's open list, this log twice, the phase status and the session memory
+   all went on calling it "the owner's". PS-B-01 is not blocked on anyone.
+3. **The changelog stopped at PS-0.** PS-A, P2, P4a, P3 and PS-B's opening had no entries. Written now,
+   from this log.
+4. **`doctor` still said "sandbox profiles arrive with PS-A"**, two phases after PS-A shipped them.
+   Found by reading its output, as the owner asked.
+5. **`cargo deny list` never counted dev-dependencies**, although the dependency record said it did.
+   True only vacuously: until this commit the workspace had none. `cargo deny check` — the gate — does
+   see them (a temporary ban of `rcgen` failed it), so nothing escaped a check; the record's method is
+   stated precisely now and the eight test-only crates are counted separately.
+
+And one class found on the way, NOT fixed here because it changes core output: **flattened string
+continuations.** A `\`-newline continuation written through a shell heredoc arrives in the file as a
+run of spaces inside the string, so the message prints with a gap mid-sentence. This commit's own
+`doctor` lines had it and were rewritten with `concat!`; about a dozen pre-existing messages carry it —
+four `delulu explain` texts in `codes.rs`, a repair reason in `check.rs`, three plugin refusals in
+`interp.rs`, two `run` refusals in `run_cmd.rs` among them. Several reach the core-invariance snapshot,
+so they get their own commit with a gate and a reviewed re-bless (D-NE-3), not a ride in this one.
+
+### The defects this phase's own tests caught before they shipped
+
+- **A TLS refusal reported as `connect`.** hyper wraps the `rustls::Error` in an `io::Error` inside an
+  `io::Error`, and `io::Error::source()` answers the wrapped error's source rather than the wrapped
+  error — so a walk over `source()` stepped straight past the one value that says TLS. Every nested
+  `io::Error` is opened with `get_ref()` now.
+- **A gate that could not fail.** The first version of "the client cannot resolve a host it was not
+  pinned to" used a name no resolver knows, so it failed with or without the refusing resolver. It uses
+  `localhost` now — the one name every system resolver answers, with the very address the test server
+  listens on — and removing the refusing resolver makes it fail.
+- **A counting error in the audit window.** `records_since` worked out refusals past the log's bound
+  from the GLOBAL refused count, which includes refusals before the mark. A mark now snapshots both
+  counters.
+- **The resolver thread** was caught by D67's gate (every thread sizes its stack or is listed as never
+  running a program) and listed, with its reason.
+
+### Falsified, each by breaking the thing and watching its test fail
+
+Certificate verification off (`danger_accept_invalid_certs`): two tests fail. `.no_proxy()` removed:
+the proxy test fails (it runs as a child process with `HTTPS_PROXY` set, because changing the
+environment of a multi-threaded test process is a race, not a test). The refusing resolver removed: the
+unpinned-host test fails. reqwest allowed to follow redirects itself: the redirect test fails. `gzip`
+enabled: both feature-accounting tests fail, naming it. The channel's egress recording removed: the
+guest `denied[]` test fails.
+
+### Evidence
+
+`egress` unit tests 32 (+1 ignored: the proxy child), the channel test, `netclass` 5, feature
+accounting 2, `egress_cli` 4 (C-03 flipped: a TLS handshake arrives from an L0 run AND from a guest),
+distribution 1 new. Clippy with warnings as errors: clean. `cargo deny check`: advisories, bans,
+licenses, sources ok. The shipped dependency graph is unchanged (303 distinct dependencies in
+`cargo deny list`), and eight new dependencies are test-only.
+
+**And against the real internet, by hand, on 2026-09-25** — the one thing the suite deliberately does
+not do. A program fetching `https://example.com/` under `--grant net=example.com` received **559
+characters, HTTP 200**: the name resolved to two public addresses, both classified, both pinned, the
+connection went to `104.20.23.154:443`, and the certificate chain verified against the Windows store's
+48 roots. The same program under `--sandbox` — a jailed guest in a Job Object — received the same 559
+characters from the same peer, through the same host-side client. It is the first time in this
+project's history that a DeluluLang program has received a byte over the network. The guide's own
+example (`examples/guide/05_capabilities.delulu`, fetching `/health`) now takes its `Err` branch for an
+honest reason the operator can read: `note: ... the server answered HTTP status 404 [egress: status]`.
+
+### Open, and deliberately
+
+- Only `GET`. Request bodies, headers, other methods and a per-run egress byte budget are not built.
+- A LEASED run cannot reach a special-use range: the broker's node has no `net.special` dimension, so
+  the lease carries none. Fail closed; it joins the grant tree with PS-B-05's resource authority work.
+- PS-B-01, -03, -04, -05, -06 remain. PS-B-01 needs no ruling (D-NE-31 was ruled).

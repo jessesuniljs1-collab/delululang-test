@@ -10,6 +10,7 @@ pub mod channel;
 pub mod custody;
 pub mod adapter;
 pub mod device;
+pub mod egress;
 pub mod foreign;
 pub mod interp;
 pub mod plugin;

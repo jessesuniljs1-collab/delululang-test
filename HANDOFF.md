@@ -2,9 +2,9 @@
 
 **For:** whoever picks this repository up next, human or AI.
 **Written:** 2026-08-07, at the end of the P19 ecosystem campaign.
-**Current state (2026-09-18):** V2 P1 and PS-0 complete (`32ba712`, CI green); next phase PS-A. The short log is `docs/DELULULANG_V2/V2_LOG.md`; the session resume note is `D:\nelan\DeluluLang-agent-transcripts\2026-09-18-ps0\RESUME-PS0.md`.
+**Current state (2026-09-25):** V2 phases V2-0, P1, PS-0, PS-A, P2, P4a and P3 are complete, each with its CI run read green; **PS-B is in progress** — its TLS dependency landed 2026-09-20 (D-V2-30) and **PS-B-02, the network client, on 2026-09-25**: `http.get` now fetches over verified HTTPS through one host-side client that serves L0 and sandboxed guests alike. Next: PS-B-01 (resource budgets; its defaults were already ruled in D-V2-25). **Resume from `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, then the newest entry in `docs/DELULULANG_V2/V2_LOG.md`.** §3 has the V2 ledger.
 
-**Last updated:** 2026-09-17 — **DeluluLang V2 is executing.** The owner approved the 2026 evolution plan the same evening (`docs/design/DeluluLang_V2_Execution_Master_Prompt.md`); the active source of truth is now `docs/DELULULANG_V2/` (start at `V2_README.md`; phase state in `V2_PHASE_STATUS.md`), and the two planning passes that produced the plan were archived under `docs/archive/v1/NEXT_EVOLUTION_2026/` together with sixteen other historical documents (`docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md`). Earlier that day the owner made the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all three operating systems in one run. Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
+**Last updated:** 2026-09-25 — PS-B-02 (the network client) and a check of every earlier V2 phase, which found five things (V2 log, PS-B-02 entry) — among them that the portable download would have shipped with no network client, and that the resource-limit defaults everyone was waiting on had been ruled a week earlier. Before that, 2026-09-17 — **DeluluLang V2 is executing.** The owner approved the 2026 evolution plan the same evening (`docs/design/DeluluLang_V2_Execution_Master_Prompt.md`); the active source of truth is now `docs/DELULULANG_V2/` (start at `V2_README.md`; phase state in `V2_PHASE_STATUS.md`), and the two planning passes that produced the plan were archived under `docs/archive/v1/NEXT_EVOLUTION_2026/` together with sixteen other historical documents (`docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md`). Earlier that day the owner made the testing remote public (§1.1). Before that, 2026-09-14: its first push, and CI green on all three operating systems in one run. Earlier: 2026-08-23 (`docs/REMAINING_WORK.md`), 2026-08-10 (containment + deployment hardening).
 **Repository:** `D:\nelan\DeluluLang` — a Rust workspace, 13 crates, **111,437 lines of Rust**
 (measured by the Survey on 2026-09-14, not remembered) — and on GitHub, **publicly since 2026-09-17**
 (privately from 2026-09-14): `origin` → `https://github.com/jessesuniljs1-collab/delululang-test.git` (§1.1).
@@ -55,7 +55,7 @@ Read §1 and §2 before touching anything. The rest is reference.
 | --- | --- |
 | **Push only to the testing remote — nowhere else.** `origin` is `github.com/jessesuniljs1-collab/delululang-test`, **public since 2026-09-17** (private from 2026-09-14). No other remote, and never rewrite history that has been pushed. **Push every commit there as soon as it is made**, so the local repository and GitHub stay in sync — no need to ask first (owner's standing permission, 2026-09-17). | Owner's instruction, 2026-09-14, replacing the *"NEVER push to GitHub"* that held from the first commit (and is why CI never ran before then). The remote exists for **testing on macOS and other operating systems** (CI) and for **editing from the cloud**, and the owner made it public on 2026-09-17. **The project's final public repository will be a different one, a step the owner takes personally** — do not create one or push to one. Pushed history stays as it is because the documents cite commit hashes throughout. See §1.1. |
 | **The final public repository is gated on the owner's decisions — remind him first, then wait.** Before it is created, added as a remote, or pushed to, put the items in §1.1 *Before the final public repository* in front of the owner, with the suggestions recorded there, and get his decision on each. Nothing is pushed there until every one is decided. | Owner's instruction, 2026-09-17: *"before moving to real public repo later remind to make changes to these and remind me that time before even push happens. Do not push to new real repo (future) unless my decision on these are given."* The items are already visible in the public testing repository; the final one is the chance to leave them behind. |
-| **Never auto-decide the licence.** | Owner-reserved. Apache-2.0 + NOTICE + TRADEMARK is *recommended* and staged, not decided. Present options and wait. |
+| **Never auto-decide the licence.** | Owner-reserved. The decision itself is made: Apache-2.0 for the code, `NOTICE`, and `TRADEMARK.md` for the name, under ruling **D27** (§8, §11.1). Any *change* to it is the owner's — present options and wait. (This row said "recommended and staged, not decided" until 2026-09-25, contradicting §8 and §11.1 of this same file.) |
 | **Harden, never redefine, Authority and Guard.** | You may close holes in them. You may not change what they *mean* without the owner. |
 | **Latest owner instruction beats older scheduled work.** | If a timer, a plan, or this document conflicts with what the owner just said, the owner wins. |
 | **Never claim execution that did not happen.** | "Prepared" and "green" are different words and this project keeps them different. See §8. |
@@ -224,6 +224,25 @@ has been in continuous adversarial review rather than feature work.
   same thing. It became the search key, and it is what found the Guard one *after* the campaign's own
   final phase had closed. Ask it of any string compared to decide a security outcome: **what else
   spells the same thing?**
+
+### DeluluLang V2 (2026-09-17 onwards) — the phase ledger
+
+Executed in the owner's order from `docs/DELULULANG_V2/` (the one active source of truth). A phase is
+complete only when its commit is pushed and its CI run has been read green. Details, including what
+each phase deliberately did NOT build and why, are in `docs/DELULULANG_V2/V2_LOG.md`.
+
+| Phase | Commit | CI | What it made true |
+| --- | --- | --- | --- |
+| V2-0 workspace + documentation migration | `e48f9c3` | `35258166713` | the V2 folder; 32 historical files archived under `docs/archive/v1/`; the Survey's archive-mirror rule |
+| P1 machine-contract truth | `d8dbc24` | `35299533343` | the `--json` envelope, unknown flags refused, `test --test-authority` (D-NE-17) |
+| PS-0 sandbox truth, probes, cheap hardenings | `32ba712` | `35376528795` | `run --report-out`, `sandbox probe`, doctor's sandbox section, hostile Windows spellings refused, the foreign-call deadline, `net.special=` |
+| PS-A the L1 process sandbox | `31643fe` | `35492572666` | `run --sandbox`: a guest holding no authority, the host performing every effect, an OS jail on all three systems |
+| P2 real plugin loading | `5f52eb8` | `35505790785` | NE-01 closed: a running program loads a `.dpx` |
+| P4a the Agent Skill | `2ad6e1d` | `35520103322` | `skills/delulu/SKILL.md` and `delulu skill`, derived from `--help` so they cannot drift |
+| P3 the standard library | `3ab0cc9` | `35522886721` | `List` 15, `Str` 10, `Map[K, V]` 8; coverage 353/353 |
+| PS-B (in progress) | `d0ae0f9`, then PS-B-02 | `35524134404` (opening) | the TLS dependency measured before use; **the network client** — verified HTTPS, host-side, resolve-once-and-pin, special-use refused unless `net.special=` |
+
+Still to come, in order: the rest of PS-B, P4b–e, PS-C (the Linux/KVM microVM), P6, P5, P7, PS-D, P8.
 
 ---
 
@@ -661,8 +680,8 @@ JSON, including on failure.
 ## 10. If you are starting fresh, do this
 
 1. Read `README.md`, then this file's §1 and §8.
-2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 124 test binaries, 0
-   failures. **Read cargo's own exit code, not a pipeline's** — `cargo test … | tail` reports the
+2. `cargo build --release` and `cargo test --workspace --no-fail-fast`. Expect 0 failures (about
+   1,830 tests as of 2026-09-25; the per-date figures are in §9 and the V2 log). **Read cargo's own exit code, not a pipeline's** — `cargo test … | tail` reports the
    *pipe's* status, which is how a red gate once survived a whole campaign described as green.
    If `doctor_cli` fails, run `cargo run -p delulu-survey -- build` and try again.
 3. Ask the Survey about anything you are about to change.
@@ -735,6 +754,15 @@ wins, and you should update the memory to match.
   chain-of-thought or hidden reasoning is saved or reproduced** — findings and decisions, not
   deliberation. Nothing an agent claims is used before the head chef verifies it against the current
   binary or source. The owner may change this rule; its current wording governs.
+- **Keep cooking, and do not ask (owner, 2026-09-20 and again 2026-09-25):** finish every phase in
+  order, check that the earlier ones work and are finished, be persistent and retry until a thing is
+  built, and do not ask questions — *"Even if u ask me questions I will say 'Do whatever good for
+  delululang, The lang of the future'"*. Use and update the Survey and `doctor`; keep the `.md` files
+  and this file current. Pause about a minute after each phase and major run for a reply, then
+  continue. Three things stay the owner's regardless: **entrenched files** (CODEOWNERS), **the final
+  public repository**, and **the licence**. Decisions taken under this delegation are recorded as
+  `D-V2-nn … TAKEN (head chef, under the owner's delegation)`, never as rulings he made.
+- **Agents, currently (owner, 2026-09-20):** Sonnet 5 for small, easily finished jobs only.
 - **V2 execution rules (owner, 2026-09-17, evening; `docs/design/DeluluLang_V2_Execution_Master_Prompt.md`):** Opus 5 is the main execution sous-chef and does most of the work — implementation, investigation, tests, refactors, security and adversarial testing, documentation migration, verification, cleanup; one strong agent at a time; the head chef writes the brief (objective, files, constraints, security and verification requirements, expected outputs), supervises, verifies every result against the binary, and commits; an agent asks rather than invents an architectural or security decision. Phases run one at a time in the approved order; after each phase's push and recorded result the work **stops, waits about sixty seconds for the owner, and continues to the next approved phase only if nothing arrives** — one controlled continuation, never a loop. The active source of truth is `docs/DELULULANG_V2/`; historical documents live in `docs/archive/v1/` and are neither maintained nor deleted.
 
 ### 11.2 Working rules the project has paid for

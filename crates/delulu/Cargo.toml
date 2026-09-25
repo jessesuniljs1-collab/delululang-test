@@ -36,8 +36,19 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(delulu_kvm)"] }
 # Forward the runtime's embedded-Python feature (Stage 4 phase 4f). ON by default so a normal
 # `cargo build`/`cargo test --workspace` produces a Python-capable `delulu`; build the CLI with
 # `--no-default-features` for a Python-less binary.
-default = ["python"]
+default = ["python", "net"]
 python = ["delulu-runtime/python"]
+# PS-B-02: the egress client (D-V2-30). Forwarded, and default, for the same reason `python` is: this
+# crate takes the runtime with `default-features = false`, so a runtime feature that is not forwarded
+# here reaches the binary only when some OTHER workspace member happens to enable it. That was the
+# state of the tree when the dependency landed: a workspace build had a network client and
+# `cargo install --path crates/delulu` did not, and nothing said so.
+#
+# `--no-default-features` therefore drops BOTH, which is why the portable release build names this
+# one back explicitly (`scripts/package-toolchain.sh`: `--no-default-features --features net`) --
+# Python is left out of the download for a portability reason, and networking has no such reason.
+# `tests/distribution.rs` pins that line.
+net = ["delulu-runtime/net"]
 
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }

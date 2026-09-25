@@ -732,6 +732,13 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  those guarantees), `limitations` (every question nothing is enforcing), \
                  `fully_enforced`, `denied` (what the program tried and was refused, with codes) and a \
                  `policy_hash`.\n\n\
+                 The network is the host's too (PS-B-02). A guest's `http.get` is one more request the \
+                 host performs, with the same egress client an ordinary run uses: hosts by grant \
+                 allowlist, each name resolved once host-side and pinned, special-use addresses refused \
+                 unless the host was granted with `net.special=`, redirects re-checked, the response \
+                 bounded, TLS verified against the platform's trust store. The guest has no resolver, \
+                 and what crosses back is a body or a `NetErr` — never an address. The report's `egress` \
+                 object says what became of each request, and a refused one is in `denied`.\n\n\
                  Honesty and threat-model caveats, carried because the shape of this feature invites \
                  the opposite assumption:\n\
                  - It is NOT a substitute for the separate OS account of `DEPLOYMENT.md` Tier 2. The \

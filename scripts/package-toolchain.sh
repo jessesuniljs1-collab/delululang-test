@@ -15,6 +15,12 @@
 #   interpreter, which is honest rather than a crash. A Python-capable build is a documented
 #   from-source option, never the download.
 #
+#   `--no-default-features` also drops the network client (PS-B-02, D-V2-30), which has no
+#   portability problem at all — it is pure Rust over rustls. So the build names it back:
+#   `--features net`. Without that word the download would answer every `http.get` with
+#   `Err(Refused)`; `delulu doctor` in the archive says which it got, and `tests/distribution.rs`
+#   pins this line.
+#
 # WHAT THIS IS NOT: publication. `cargo install delulu` from crates.io cannot work and is not meant
 # to — every crate but the CLI is `publish = false`, because `STABILITY.md` §2 promises the internal
 # crates are NOT a stable API. Publishing them to make one command shorter would trade a promise for
@@ -36,8 +42,8 @@ NAME="delulu-$VERSION-$HOST"
 STAGE="$OUT/$NAME"
 
 echo "packaging  $NAME"
-echo "  portable build: cargo build --release -p delulu --no-default-features"
-cargo build --release -p delulu --no-default-features
+echo "  portable build: cargo build --release -p delulu --no-default-features --features net"
+cargo build --release -p delulu --no-default-features --features net
 
 # Respect CARGO_TARGET_DIR. This project's own Linux instructions REQUIRE it — a build inside the
 # Windows working tree dies in libffi-sys on DrvFs — so a packaging script that assumes `target/`
@@ -100,6 +106,10 @@ This build has no embedded Python: root.python(...) returns DL1307
 (unavailable), exactly as on a machine with no interpreter. Build from source
 without --no-default-features if you need it, and note that such a build then
 requires that specific CPython version at runtime.
+
+This build HAS the network client: http.get fetches over verified HTTPS from
+the hosts a '--grant net=HOST' names, checking certificates against this
+machine's own trust store. 'delulu doctor' says how many trust roots it found.
 
 Verify what you downloaded before trusting it:
   sha256sum -c SHA256SUMS      (Linux/macOS)
