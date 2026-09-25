@@ -165,6 +165,26 @@ jobs:
           if [ $c -ne 0 ]; then echo "RESULT subordinate-uid-separates: NOT MEASURED (the control could not run: control=$c)";
           elif [ $e -ne 0 ]; then echo "RESULT subordinate-uid-separates: PASS (control=$c experiment=$e)";
           else echo "RESULT subordinate-uid-separates: FAIL (the mapped child read the runner's file)"; fi
+      # The first run (36167365278) measured the DEFAULT host: Ubuntu 24.04's AppArmor restriction
+      # leaves an unprivileged user namespace without capabilities, so even the control could not write
+      # its own uid_map. This step measures the host an OPERATOR has relaxed (the one sysctl such a
+      # host would change), so the answer separates "the kernel cannot" from "this distribution won't".
+      - name: the same, on a host whose operator relaxed the AppArmor userns restriction
+        continue-on-error: true
+        run: |
+          set +e
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          ls -la "$(command -v newgidmap)" 2>&1
+          d=$(mktemp -d); echo operator > "$d/secret"; chmod 600 "$d/secret"; chmod 755 "$d"
+          echo "== control: mapped to the runner's own uid =="
+          unshare --user --map-root-user sh -c "id; cat $d/secret"; c=$?; echo "exit=$c"
+          echo "== experiment: mapped to a subordinate uid =="
+          unshare --user --map-auto --setuid 0 --setgid 0 sh -c "id; cat $d/secret"; e=$?; echo "exit=$e"
+          echo "== the subordinate child can still read a world-readable binary and write its own pipe =="
+          unshare --user --map-auto --setuid 0 --setgid 0 sh -c "/bin/true && echo reachable"; r=$?; echo "exit=$r"
+          if [ $c -ne 0 ]; then echo "RESULT subordinate-uid-separates-relaxed: NOT MEASURED (control=$c)";
+          elif [ $e -ne 0 ] && [ $r -eq 0 ]; then echo "RESULT subordinate-uid-separates-relaxed: PASS (control=$c experiment=$e reachable=$r)";
+          else echo "RESULT subordinate-uid-separates-relaxed: FAIL (control=$c experiment=$e reachable=$r)"; fi
 
   windows-restricted-job-child:
     runs-on: windows-latest
