@@ -798,3 +798,52 @@ honest reason the operator can read: `note: ... the server answered HTTP status 
 - A LEASED run cannot reach a special-use range: the broker's node has no `net.special` dimension, so
   the lease carries none. Fail closed; it joins the grant tree with PS-B-05's resource authority work.
 - PS-B-01, -03, -04, -05, -06 remain. PS-B-01 needs no ruling (D-NE-31 was ruled).
+
+## 2026-09-25 — thirteen messages that printed a gap mid-sentence, and the gate that keeps them out
+
+Found while writing PS-B-02's `doctor` lines. A Rust message long enough to wrap is written as a
+string continued with a backslash at the end of the line; the compiler drops the newline and the next
+line's indentation, and the value reads as one sentence. Written through a tool that flattens the
+newline but keeps the indentation, the source becomes one long physical line and the program prints
+the indentation: `the text to change is the grant                          request in your own
+invocation`. Nothing failed — the text compiled, and every test matching on a phrase still matched.
+
+**The instances, all user-visible:** four `delulu explain` texts (DL1908, DL1910, DL1912, DL1913, the
+signing and compute-kernel entries); two `run` refusals (`--sandbox` said twice with different
+answers, and a sandbox-only flag without `--sandbox`); the broker's narrowing repair; the checker's
+row-narrowing repair; three plugin refusals in the interpreter; the actor-boundary plugin fault; and a
+test's assertion message. Forty-five gaps across twelve source lines, each restored as the
+continuation it was meant to be, so each now prints one space where the gap was.
+
+**One instance is the owner's, not fixed:** `crates/delulu-conform/src/lib.rs:515`, the validation
+message for a rejecting witness whose test body never mentions its code. `crates/delulu-conform/` is
+entrenched (CODEOWNERS). The gate names it in its `OWNERS` list, and that entry fails the gate the
+moment the owner fixes the line, so it cannot linger as an exemption.
+
+**The gate** (`crates/delulu/tests/message_spacing.rs`) decodes every ordinary string literal the way
+the compiler does — escapes, and a continuation skipping the next line's indentation — and reports a
+run of six or more spaces between two visible characters when the literal's own source line is longer
+than 150 characters. The length is part of the rule because a gap alone is ambiguous: the toolchain
+prints about fifty deliberate columns (help tables, `key:   value` renders, TOML alignment). Measured
+today, every real instance sat on a source line of 171 to 1,198 characters and every deliberate column
+on one of 140 or fewer. The blind spot is stated in the gate: two SHORT lines flattened into one stay
+under the bound. Falsified: restoring one of today's flattened lines fails it, naming the line; its
+own tests show a flattened literal is found, a real continuation is not, and a short column is not.
+
+**The snapshot moved, and the diff is the whole story (D-NE-3).** Two cases, both the `reason` of the
+checker's row-narrowing repair in `check --json` — the machine channel had been carrying the gaps to
+every agent that read it:
+
+    tests/conformance/reject/DL0405_unknown_method.delulu :: check --json
+    tests/conformance/reject/DL0504_row_conflict.delulu   :: check --json
+    - "reason": "narrowing a declared row is a review decision, not a mechanical edit:<26 spaces>the effect …
+    + "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect …
+
+Nothing else in the snapshot changed.
+
+**The cause, and the working rule it leaves.** A shell here-document written through this
+environment's command tool collapses a backslash-newline; two of this session's own edits hit it
+before the pattern was recognised. The rule: never write a backslash-newline continuation through a
+shell here-document — edit such lines with the file editor, or build the message with `concat!`.
+A stale doc comment was corrected on the way: `guest.rs` still said the guest "has no OS jail yet,
+which PS-A2 adds".

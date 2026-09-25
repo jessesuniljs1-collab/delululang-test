@@ -1488,8 +1488,24 @@ pub fn code_explain(code: &str) -> Option<String> {
              payload's bytes rather than of a simulation run. There too a missing or unreadable \
              approval record is refused exactly like a mismatched hash — never read as nothing to \
              check — and re-approval is still a human act.",
-        "DL1912" => "A kernel artifact named in a compute grant could not be accepted: the file              is unreadable, its bytes are not a kernel artifact this build understands, or its              detached signature does not verify over them (spec §7.1). The last case is the              serious one and it is a refusal regardless of policy — a signature that does not              verify means the artifact is not what it claims to be, whether that is tampering, the              wrong key, or a truncated file. This is a separate code from DL1913 on purpose: an              unsigned artifact needs signing, a badly-signed one needs investigating, and one              message cannot honestly say both. Note the order this check runs in: the signature is              verified BEFORE the artifact is parsed, because reading structure out of bytes you              have not authenticated is how a malformed-input bug becomes a supply-chain one.",
-        "DL1913" => "A kernel artifact has no detached signature (expected beside it as              `<artifact>.sig`), and kernels are always signed (spec §7.1, criterion 7). A kernel is              foreign code that runs on hardware the program cannot otherwise reach; DeluluLang              bounds its reachability, its resources and its PROVENANCE, and provenance is the only              one of the three that says anything at all about what the kernel will do. An unsigned              kernel has none. There is deliberately no policy switch to accept one: unlike a              plugin, where `require_signed` is a grant-level decision, a kernel with no provenance              is refused everywhere, always.",
+        "DL1912" => "A kernel artifact named in a compute grant could not be accepted: the file \
+             is unreadable, its bytes are not a kernel artifact this build understands, or its \
+             detached signature does not verify over them (spec §7.1). The last case is the \
+             serious one and it is a refusal regardless of policy — a signature that does not \
+             verify means the artifact is not what it claims to be, whether that is tampering, the \
+             wrong key, or a truncated file. This is a separate code from DL1913 on purpose: an \
+             unsigned artifact needs signing, a badly-signed one needs investigating, and one \
+             message cannot honestly say both. Note the order this check runs in: the signature is \
+             verified BEFORE the artifact is parsed, because reading structure out of bytes you \
+             have not authenticated is how a malformed-input bug becomes a supply-chain one.",
+        "DL1913" => "A kernel artifact has no detached signature (expected beside it as \
+             `<artifact>.sig`), and kernels are always signed (spec §7.1, criterion 7). A kernel is \
+             foreign code that runs on hardware the program cannot otherwise reach; DeluluLang \
+             bounds its reachability, its resources and its PROVENANCE, and provenance is the only \
+             one of the three that says anything at all about what the kernel will do. An unsigned \
+             kernel has none. There is deliberately no policy switch to accept one: unlike a \
+             plugin, where `require_signed` is a grant-level decision, a kernel with no provenance \
+             is refused everywhere, always.",
         "DL1907" => "A kernel dispatch asked for more than the compute device's granted envelope \
              allows (spec §7.1, invariant 50) — a buffer past `memory_bytes`, a kernel past its \
              `kernel_ms` budget, or more work in flight than `queue_depth` permits. The refusal is \
@@ -1502,7 +1518,19 @@ pub fn code_explain(code: &str) -> Option<String> {
              about what the kernel computes — that is foreign code, outside the proof, and \
              `delulu authority` prints it under the outside-the-proof separator so the boundary is \
              visible before anyone runs anything.",
-        "DL1908" => "A signature was refused by POLICY rather than by mathematics (spec §8.2,              invariant 51). Two situations produce it. The artifact carries a classical-only              signature — either a v1.0 detached ed25519 signature or a `dlsig1` envelope naming              only classical algorithms — while the verifier was told to require hybrid. Or the              envelope names an algorithm this build cannot evaluate. The second case is refused              under EVERY policy, not just hybrid-required, and the reason is the house rule: a              verifier that shrugs at a claim it cannot check is the 'when the checker cannot tell,              it says yes' failure wearing a crypto-agility costume. The cost is real and stated              rather than discovered — adding a new algorithm means updating verifiers BEFORE              signers start using it (announce, then adopt), which is the safe rollout order              anyway. Note what hybrid means here: never PQ-only. An envelope carrying a              post-quantum signature and no classical one is also refused, because the guarantee              must never be weaker than what v1.0 already ships.",
+        "DL1908" => "A signature was refused by POLICY rather than by mathematics (spec §8.2, \
+             invariant 51). Two situations produce it. The artifact carries a classical-only \
+             signature — either a v1.0 detached ed25519 signature or a `dlsig1` envelope naming \
+             only classical algorithms — while the verifier was told to require hybrid. Or the \
+             envelope names an algorithm this build cannot evaluate. The second case is refused \
+             under EVERY policy, not just hybrid-required, and the reason is the house rule: a \
+             verifier that shrugs at a claim it cannot check is the 'when the checker cannot tell, \
+             it says yes' failure wearing a crypto-agility costume. The cost is real and stated \
+             rather than discovered — adding a new algorithm means updating verifiers BEFORE \
+             signers start using it (announce, then adopt), which is the safe rollout order \
+             anyway. Note what hybrid means here: never PQ-only. An envelope carrying a \
+             post-quantum signature and no classical one is also refused, because the guarantee \
+             must never be weaker than what v1.0 already ships.",
         "DL1909" => "A `delulu deploy plan` computed the whole-deployment authority answer for \
              every named service — the same effect summary `delulu authority` prints for one \
              package — and at least one service's effects include something the environment \
@@ -1520,7 +1548,19 @@ pub fn code_explain(code: &str) -> Option<String> {
              EFFECTS only — it says nothing about capability SCOPES, foreign holes, or what a \
              service actually does once running. It is the authority-widening gate for \
              infrastructure, not a safety case for it.",
-        "DL1910" => "A post-quantum operation was attempted without `--unstable`. This build's              ML-DSA/ML-KEM implementations are adopted from RustCrypto — cryptography is never              hand-rolled — and they are not yet stable HERE for two independent reasons, both              published (build-order D14b): the official NIST known-answer vectors have not been              validated against byte-exactly, and the implementations state they have never been              independently audited. Either alone is disqualifying. The ruling that matters: **KAT              validation is necessary, not sufficient** — a known-answer test proves an              implementation computes the standard's answers and says nothing about constant-time              behaviour or conduct under adversarial input, which is what an audit finds. Both              signing AND verifying are gated, and the verify side is the more important of the              two: verifying is invoking unvalidated cryptography to make a TRUST DECISION.              `--unstable` is available and is a deliberate decision to use unvalidated              cryptography, not a formality.",
+        "DL1910" => "A post-quantum operation was attempted without `--unstable`. This build's \
+             ML-DSA/ML-KEM implementations are adopted from RustCrypto — cryptography is never \
+             hand-rolled — and they are not yet stable HERE for two independent reasons, both \
+             published (build-order D14b): the official NIST known-answer vectors have not been \
+             validated against byte-exactly, and the implementations state they have never been \
+             independently audited. Either alone is disqualifying. The ruling that matters: **KAT \
+             validation is necessary, not sufficient** — a known-answer test proves an \
+             implementation computes the standard's answers and says nothing about constant-time \
+             behaviour or conduct under adversarial input, which is what an audit finds. Both \
+             signing AND verifying are gated, and the verify side is the more important of the \
+             two: verifying is invoking unvalidated cryptography to make a TRUST DECISION. \
+             `--unstable` is available and is a deliberate decision to use unvalidated \
+             cryptography, not a formality.",
         "DL1911" => "A compute grant named an adapter that cannot attest INDEPENDENT \
              BELOW-ADAPTER envelope enforcement — a layer beneath the adapter that would refuse an \
              over-envelope submission even if the adapter itself were wrong, absent, or lying. \

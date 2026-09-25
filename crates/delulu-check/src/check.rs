@@ -1059,7 +1059,9 @@ impl<'a> Checker<'a> {
                     requires_human: true,
                     edits: vec![],
                     reason: Some(
-                        "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+                        "narrowing a declared row is a review decision, not a mechanical edit: \
+                         the effect may be declared for a caller that does not perform it yet, or \
+                         because the row is a published interface. Delete it yourself, or leave it.",
                     ),
                 }),
             );

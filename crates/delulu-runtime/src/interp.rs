@@ -1608,7 +1608,8 @@ impl Interp {
         let Some(engine) = self.plugin_engine.clone() else {
             return Err(Fault::at(
                 "DL0907",
-                "no plugin engine is wired into this run (a wiring bug, not a refusal — the CLI always                  supplies one, and saying `bad artifact` here would blame the artifact for the host)",
+                "no plugin engine is wired into this run (a wiring bug, not a refusal — the CLI always \
+                 supplies one, and saying `bad artifact` here would blame the artifact for the host)",
                 span,
             ));
         };
@@ -1632,7 +1633,11 @@ impl Interp {
         let l = &grant.limits;
         if l.fuel != 0 || l.mem_mb != 0 || l.wall_ms != 0 {
             return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
-                "this grant asks for resource limits (fuel {}, memory {} MiB, wall {} ms) and this build                  cannot enforce them: a Verified plugin executes its DIR on the interpreter, which has                  no fuel meter and no preemption. They are refused rather than ignored — a limit nothing                  enforces is worse than no limit, because it reads as one. Pass zeros, or keep the work                  in the host.",
+                "this grant asks for resource limits (fuel {}, memory {} MiB, wall {} ms) and this build \
+                 cannot enforce them: a Verified plugin executes its DIR on the interpreter, which has \
+                 no fuel meter and no preemption. They are refused rather than ignored — a limit nothing \
+                 enforces is worse than no limit, because it reads as one. Pass zeros, or keep the work \
+                 in the host.",
                 l.fuel, l.mem_mb, l.wall_ms
             )))));
         }
@@ -1645,7 +1650,9 @@ impl Interp {
         for dim in ["Declassify", "ForeignCall"] {
             if grant.effects.iter().any(|e| e == dim) {
                 return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
-                    "a plugin grant cannot carry `{dim}` in this build: its enforcement lives in                      custody, and a plugin export runs in its own interpreter which cannot share the                      host's. Remove it from the grant, or keep that work in the host."
+                    "a plugin grant cannot carry `{dim}` in this build: its enforcement lives in \
+                     custody, and a plugin export runs in its own interpreter which cannot share the \
+                     host's. Remove it from the grant, or keep that work in the host."
                 )))));
             }
         }

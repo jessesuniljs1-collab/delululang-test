@@ -824,7 +824,8 @@ pub fn value_to_msg(v: &Value, self_state: Option<(&Value, ActorId, &str)>) -> R
         Value::Plugin(_) | Value::PluginFn(_) => {
             return Err(Fault::new(
                 "DL0907",
-                "a plugin handle reached an actor boundary (checker bug if ever seen in a checked                  program) — load a plugin inside the actor that uses it",
+                "a plugin handle reached an actor boundary (checker bug if ever seen in a checked \
+                 program) — load a plugin inside the actor that uses it",
             ))
         }
         // Foreign machinery is actor-pinned or v0.7-fenced at check time; reaching here

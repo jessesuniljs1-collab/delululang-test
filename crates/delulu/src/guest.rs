@@ -361,10 +361,13 @@ pub fn run_sandboxed_cli(args: &[String]) -> i32 {
     }
 }
 
-/// The host half: launch a guest, hand it the program, and serve its effects under `root`.
+/// The host half: launch a guest, hand it the program, and serve its effects under `root`, with the
+/// default limits and the `contained` profile.
 ///
-/// Today the guest is an ordinary child process: it has no OS jail yet, which PS-A2 adds. What it
-/// already has is no capability of its own — it can only ask.
+/// The guest is jailed by `spawn_and_serve_with` (PS-A: a Job Object, Seatbelt, or rlimits with
+/// Landlock and seccomp, per platform) and holds no capability of its own — it can only ask. (This
+/// comment said the guest had "no OS jail yet, which PS-A2 adds" until 2026-09-25, a phase after
+/// PS-A2 added it.)
 pub fn spawn_and_serve(
     program: &str,
     root: Rc<RootVal>,

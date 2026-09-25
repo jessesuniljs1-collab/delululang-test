@@ -9,6 +9,10 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — thirteen messages that printed a gap mid-sentence, 2026-09-25
+
+- Four `explain` texts (DL1908, DL1910, DL1912, DL1913), two `run` refusals, the broker's and the checker's narrowing repairs, four plugin faults and a test message printed a run of spaces in the middle of a sentence: a line continuation whose newline had been flattened in the source. Restored; the checker's repair `reason` in `check --json` changes accordingly (snapshot re-blessed, two cases, reviewed). A gate decodes every string literal as the compiler does and fails on the shape. The one instance in an entrenched file (`crates/delulu-conform/src/lib.rs:515`) is left for the owner and named by the gate.
+
 ## Unreleased — V2 PS-B-02: the network client, 2026-09-25
 
 - **PS-B-02 (D-V2-30 owner; D-V2-31)** — `http.get` fetches over verified HTTPS (reqwest over rustls, the platform trust store; TLS never implemented here, no plain-HTTP path). One host-side client serves L0 and every `--sandbox` guest; the guest has no socket and no resolver. Per request and per redirect hop: a strict URL spelling (anything a URL parser would rewrite is refused, not normalized), userinfo refused, the allowlist with its dot boundary, the name resolved once host-side, EVERY candidate address classified, special-use addresses refused unless the host was granted with `net.special=`, the checked addresses pinned with a client that cannot resolve anything itself, proxy variables ignored, the response bounded (8 MiB), 5 redirects, 30 s. NE-17 and REMAINING_WORK 4.12/4.16 closed; C-03 flipped.

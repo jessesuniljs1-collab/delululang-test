@@ -6222,7 +6222,7 @@ exit 1
           "confidence": "safe",
           "edits": [],
           "id": "remove_effect_from_row",
-          "reason": "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
           "requires_human": true
         }
       ],
@@ -6902,7 +6902,7 @@ exit 1
           "confidence": "safe",
           "edits": [],
           "id": "remove_effect_from_row",
-          "reason": "narrowing a declared row is a review decision, not a mechanical edit:                          the effect may be declared for a caller that does not perform it yet, or                          because the row is a published interface. Delete it yourself, or leave it.",
+          "reason": "narrowing a declared row is a review decision, not a mechanical edit: the effect may be declared for a caller that does not perform it yet, or because the row is a published interface. Delete it yourself, or leave it.",
           "requires_human": true
         }
       ],

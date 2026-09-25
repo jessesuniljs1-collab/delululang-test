@@ -192,7 +192,9 @@ impl Denial {
                     requires_human: true,
                     edits: Vec::new(),
                     reason: Some(
-                        "the narrowing target is exact, but the text to change is the grant                          request in your own invocation or manifest, which the broker cannot see                          or edit. Narrow it to the intersection named in the message.",
+                        "the narrowing target is exact, but the text to change is the grant \
+                         request in your own invocation or manifest, which the broker cannot see \
+                         or edit. Narrow it to the intersection named in the message.",
                     ),
                 };
                 let _ = requested; // full requested authority is carried structurally on the Denial

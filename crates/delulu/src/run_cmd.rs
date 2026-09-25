@@ -368,7 +368,9 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         distinct.dedup();
         if distinct.len() > 1 {
             eprintln!(
-                "error: this command line asks for `--sandbox` {} times with different answers ({}).                  Nothing ran: a sandbox that goes on or off by argument order is not a decision                  anyone made. Say it once.",
+                "error: this command line asks for `--sandbox` {} times with different answers ({}). \
+                 Nothing ran: a sandbox that goes on or off by argument order is not a decision \
+                 anyone made. Say it once.",
                 opts.sandbox_said.len(),
                 distinct.join(", ")
             );
@@ -386,7 +388,9 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
         ] {
             if asked {
                 eprintln!(
-                    "error: `{flag}` describes a sandboxed run, and this run is not one. Nothing ran,                      because a flag that is silently ignored reads exactly like a flag that was                      applied. Add `--sandbox`, or drop `{flag}`."
+                    "error: `{flag}` describes a sandboxed run, and this run is not one. Nothing ran, \
+                     because a flag that is silently ignored reads exactly like a flag that was \
+                     applied. Add `--sandbox`, or drop `{flag}`."
                 );
                 return 2;
             }

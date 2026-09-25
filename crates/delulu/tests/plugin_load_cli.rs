@@ -342,7 +342,8 @@ fn the_load_appears_in_the_effect_trace() {
     // test name said "the load appears in the trace" while asserting only that the console write did.
     assert!(
         trace.contains("\"effect\":\"Load\"") || trace.contains("\"Load\""),
-        "the load must appear in the trace — code arriving after compile time is the one effect an          auditor most needs to see: {trace}"
+        "the load must appear in the trace — code arriving after compile time is the one effect an \
+         auditor most needs to see: {trace}"
     );
     // And the loaded NODE ID with it, because a record saying only "a plugin loaded" cannot be
     // followed into the audit chain or revoked.
