@@ -16,7 +16,11 @@ mod deploy;
 mod doctor;
 mod fix;
 mod guest;
+mod identity;
 mod jail;
+// Used by the Windows contained guest today; its tests run everywhere, so the module is not gated.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod pipe_channel;
 mod policy;
 mod fleet;
 mod foreign_worker;

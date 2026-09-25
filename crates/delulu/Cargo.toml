@@ -105,6 +105,9 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_ProcessStatus",
     "Win32_Security",
     "Win32_Security_Authorization",
+    # PS-B-03: the per-run AppContainer (`identity.rs`) and the runtime copy's module list.
+    "Win32_Security_Isolation",
+    "Win32_System_LibraryLoader",
 ] }
 
 # Foreign-worker kill-on-host-death on Linux (phase 5h): prctl(PR_SET_PDEATHSIG) — a Linux-only

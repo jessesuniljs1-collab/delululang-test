@@ -639,6 +639,34 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
    discharged (measured); one more obligation, the asymmetry at the level of the whole order, is what
    fails then. Three model mutants run in CI and must each end with obligations NOT discharged.
 
+## D-V2-34 — PS-B-03, identity separation for a sandbox guest — TAKEN (head chef, 2026-09-25, under the owner's delegation)
+
+1. **Windows: a per-run AppContainer with NO capabilities.** Created for the run, deleted after it
+   (stale profiles of dead runs are pruned by their creator's process id). No capability means no
+   network of any kind, so the guest loses the network the Job Object never took from it, and none
+   of the operator's files, because they are not granted to that identity. Measured before building
+   (a throwaway spike) and after (T14, with a control), and falsified by a launch without the
+   attribute.
+2. **The guest runs from a RUNTIME COPY** — the executable and the non-system modules this process
+   has loaded (`python313.dll` on the default build) — in `%LOCALAPPDATA%\DeluluLang\guest-runtime\<key>`,
+   whose one extra grant is read-and-execute for `ALL APPLICATION PACKAGES`. Chosen over granting the
+   operator's own install directories, which would widen what every AppContainer on the machine can
+   read into the operator's Python install. The copy is code any DeluluLang ships; pruned after a day
+   unused, never while in use.
+3. **The channel moves to inherited pipes** on that path (`pipe_channel.rs`): an AppContainer's named
+   pipes live in its own namespace. The read deadline the named pipe gave the channel is kept by a
+   drain thread and a queue.
+4. **`LOCALAPPDATA` is passed**, the one variable beyond the loader's: Windows refuses to start an
+   AppContainer from an environment without it (error 203, measured) and rewrites it to the
+   container's folder, which the T14 test checks.
+5. **Absent is loud, never silent.** A host that cannot give the identity runs the guest as PS-A did
+   and says why on standard error; the identity appears in `host_guarantees`, `posture.identity` and
+   the removal of the `identity_separation` limitation only when the launch applied it.
+6. **macOS: T14 by the profile, not an identity.** macOS gives an unprivileged launcher no second
+   identity. The Seatbelt profile, which must allow reads, now denies the state directory after the
+   broad allow. **Linux: deferred to PS-B-03b (RW 4.21)** — a subordinate uid needs a setuid helper
+   and host configuration, and Landlock already holds T14 there where the kernel has it.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6, D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -51,8 +51,28 @@ pub const LOADER_ENV: &[&str] = &["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PA
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub const LOADER_ENV: &[&str] = &[];
 
+/// The guest argument that means "your channel is your standard input and output" (PS-B-03): a guest
+/// started under a separate identity cannot reach a channel by name, so it is born holding one.
+#[cfg(windows)]
+pub const STDIO_FLAG: &str = "--stdio";
+
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
+    #[cfg(windows)]
+    if args.first().map(String::as_str) == Some(STDIO_FLAG) {
+        let mut conn = match stdio_channel() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("error: the sandbox guest cannot open its channel: {e}");
+                return 2;
+            }
+        };
+        if conn.set_read_timeout(Some(CHANNEL_DEADLINE)).is_err() {
+            eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
+            return 2;
+        }
+        return serve_as_guest(conn, None);
+    }
     // The guest is the server on its own channel, as the foreign worker is: the HOST's wait is then
     // bounded by a connect deadline rather than by an accept that could never return.
     let Some(dir) = args.first().map(std::path::PathBuf::from) else {
@@ -77,6 +97,40 @@ pub fn run_guest(args: &[String]) -> i32 {
         eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
         return 2;
     }
+    serve_as_guest(conn, Some(&dir))
+}
+
+/// The channel of a guest started with [`STDIO_FLAG`]: the pipes it inherited as standard input and
+/// output.
+///
+/// From here on standard output IS the channel, so its slot is pointed at standard error before
+/// anything else can print: a stray `println!` then lands on the operator's terminal instead of
+/// inside a frame, where it would desynchronize the conversation. (Rust's standard streams look the
+/// handle up on every write, which is what makes redirecting the slot sufficient.)
+#[cfg(windows)]
+fn stdio_channel() -> Result<crate::pipe_channel::PipeChannel<std::fs::File>, String> {
+    use std::os::windows::io::FromRawHandle as _;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    // SAFETY: the two handles are this process's own standard handles, taken over exactly once here
+    // (their slots are re-pointed before the `File`s own them, so nothing else closes them).
+    unsafe {
+        let (input, output) = (GetStdHandle(STD_INPUT_HANDLE), GetStdHandle(STD_OUTPUT_HANDLE));
+        if input.is_null() || output.is_null() || input == INVALID_HANDLE_VALUE || output == INVALID_HANDLE_VALUE {
+            return Err("it was started without the pipes a `--stdio` guest is given".into());
+        }
+        SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_ERROR_HANDLE));
+        SetStdHandle(STD_INPUT_HANDLE, std::ptr::null_mut());
+        let reader = std::fs::File::from_raw_handle(input as _);
+        let writer = std::fs::File::from_raw_handle(output as _);
+        crate::pipe_channel::PipeChannel::new(reader, writer).map_err(|e| e.to_string())
+    }
+}
+
+/// Everything a guest does once it holds a channel, however it came by it.
+fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir: Option<&std::path::Path>) -> i32 {
     let hello: Hello = match read_frame(&mut conn) {
         Ok(h) => h,
         // No hello, no run: a guest reached by anything other than its host does nothing at all.
@@ -110,13 +164,16 @@ pub fn run_guest(args: &[String]) -> i32 {
     // program asks for is performed by the HOST — and because the syscall filter below says nothing
     // about WHICH files a permitted syscall may reach.
     #[cfg(target_os = "linux")]
-    match crate::jail::confine_filesystem(&dir) {
+    match dir.and_then(crate::jail::confine_filesystem) {
         Some(applied) => eprintln!("sandbox: the guest narrowed its own view — {}", applied.join("; ")),
         // Never silence this: a host whose kernel has no Landlock must not read as one that applied
         // it. The run continues — the channel, the rlimits and the syscall filter are untouched —
-        // but nothing here is claimed.
+        // but nothing here is claimed. (A Linux guest always has its channel directory; the `None`
+        // arm covers the kernel, not a missing directory.)
         None => eprintln!("sandbox: this kernel has no Landlock — the guest's view of the filesystem was NOT narrowed"),
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = dir;
 
     // Fail closed — a guest that cannot be locked down does not run the program.
     match crate::jail::lock_down_self() {
@@ -440,18 +497,13 @@ pub fn spawn_and_serve_with(
     let exe = std::env::current_exe()?;
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
-    let (mut cmd, launched) = guest_command(&exe, &dir);
-    // Where the platform allows it, the limits are in force from the guest's first instruction.
-    let mut before_exec = crate::jail::harden(&mut cmd, limits);
-    before_exec.extend(launched);
-    let mut child = cmd.spawn()?;
-    // PS-A-04: the OS jail, applied before the guest has been told what to run — it is still waiting
-    // for a hello at this point, so it has executed no program bytes yet. (Creating the child
-    // suspended and assigning before its first instruction is the stronger form, and needs a
-    // raw-handle spawn that `std::process::Command` does not offer; it lands with the rest of PS-A2.)
-    let (jail, enforced) = crate::jail::confine(&child, limits);
-    let mut applied = before_exec;
-    applied.extend(enforced.guarantees.iter().copied());
+    let (mut child, jail, applied) = match launch(&exe, &dir, limits, false) {
+        Ok(l) => l,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(e);
+        }
+    };
     if applied.is_empty() {
         // Never claim a boundary that was not applied: PS-0-04's rule, in the place it matters most.
         eprintln!("sandbox: no OS jail on this host yet — the guest still holds no authority of its own");
@@ -459,14 +511,6 @@ pub fn spawn_and_serve_with(
         eprintln!("sandbox: the guest is confined — {}", applied.join("; "));
     }
     let _ = &jail;
-    // Only now does the guest run: on Windows it was created suspended, so it meets its jail before
-    // its first instruction rather than a moment after.
-    if !crate::jail::resume(&child) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = std::fs::remove_dir_all(&dir);
-        return Err(io::Error::other("the sandbox guest could not be started under its jail"));
-    }
     // PS-A-08: the launch is recorded before the guest is told what to run, so the evidence exists
     // even if everything after it fails.
     let policy = crate::policy::SandboxPolicy::derive(
@@ -582,6 +626,107 @@ pub fn spawn_and_serve_with(
     }
 }
 
+/// A launched guest: PS-A's, reached through a named channel in its directory, or — on Windows,
+/// since PS-B-03 — one started as a separate identity, holding its channel as inherited pipes.
+enum Guest {
+    Plain(std::process::Child),
+    #[cfg(windows)]
+    Contained(crate::identity::ContainedGuest),
+}
+
+impl Guest {
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        match self {
+            Guest::Plain(c) => c.try_wait(),
+            #[cfg(windows)]
+            Guest::Contained(c) => c.try_wait(),
+        }
+    }
+
+    fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
+        match self {
+            Guest::Plain(c) => c.wait(),
+            #[cfg(windows)]
+            Guest::Contained(c) => c.wait(),
+        }
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        match self {
+            Guest::Plain(c) => c.kill(),
+            #[cfg(windows)]
+            Guest::Contained(c) => c.kill(),
+        }
+    }
+
+    /// Standard error, when the launch captured it (the probe does; a run shares the host's).
+    fn take_stderr(&mut self) -> Option<Box<dyn io::Read>> {
+        match self {
+            Guest::Plain(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+            #[cfg(windows)]
+            Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+        }
+    }
+}
+
+/// Start a guest under its jail and return it running, with what was applied.
+///
+/// On Windows the guest is first tried as a SEPARATE IDENTITY (PS-B-03, `identity.rs`): a per-run
+/// AppContainer with no capabilities, its channel on inherited pipes. A host that cannot give it one
+/// runs it as PS-A did, and says so on standard error — never silently: the identity is named among
+/// the applied guarantees only when it was applied, so the run report cannot claim it either.
+fn launch(
+    exe: &std::path::Path,
+    dir: &std::path::Path,
+    limits: crate::jail::Limits,
+    capture_stderr: bool,
+) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
+    #[cfg(windows)]
+    {
+        let env: Vec<(String, String)> =
+            LOADER_ENV.iter().filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v))).collect();
+        let args: [&std::ffi::OsStr; 2] = [GUEST_SUBCOMMAND.as_ref(), STDIO_FLAG.as_ref()];
+        match crate::identity::spawn_contained(&args, &env, capture_stderr) {
+            Ok(mut g) => {
+                // The same Job Object as a plain guest, applied while it is still suspended.
+                let (jail, enforced) = crate::jail::confine(&g, limits);
+                let mut applied: Vec<&'static str> = enforced.guarantees.to_vec();
+                applied.push(crate::identity::GUARANTEE);
+                if !g.resume() {
+                    let _ = g.kill();
+                    let _ = g.wait();
+                    return Err(io::Error::other("the sandbox guest could not be started under its jail"));
+                }
+                return Ok((Guest::Contained(g), jail, applied));
+            }
+            Err(why) => eprintln!(
+                "sandbox: the guest could not be given a separate identity on this host ({why}); it runs as \
+                 this OS user, under the jail below"
+            ),
+        }
+    }
+    let (mut cmd, launched) = guest_command(exe, dir);
+    if capture_stderr {
+        cmd.stderr(std::process::Stdio::piped());
+    }
+    // Where the platform allows it, the limits are in force from the guest's first instruction.
+    let mut applied = crate::jail::harden(&mut cmd, limits);
+    applied.extend(launched);
+    let mut child = cmd.spawn()?;
+    // PS-A-04: the OS jail, applied before the guest has been told what to run — it is still waiting
+    // for a hello at this point, so it has executed no program bytes yet.
+    let (jail, enforced) = crate::jail::confine(&child, limits);
+    applied.extend(enforced.guarantees.iter().copied());
+    // Only now does the guest run: on Windows it was created suspended, so it meets its jail before
+    // its first instruction rather than a moment after.
+    if !crate::jail::resume(&child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(io::Error::other("the sandbox guest could not be started under its jail"));
+    }
+    Ok((Guest::Plain(child), jail, applied))
+}
+
 /// How the guest is started (PS-A-05): an EMPTY environment plus the few variables the operating
 /// system needs to load a process at all, no arguments beyond the channel directory, and no standard
 /// input.
@@ -603,7 +748,10 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
     #[cfg(target_os = "macos")]
     let (mut cmd, launched) = {
         let args: Vec<&std::ffi::OsStr> = vec![GUEST_SUBCOMMAND.as_ref(), dir.as_os_str()];
-        match crate::jail::seatbelt_launcher(exe, dir, &args) {
+        // T14: the state directory holds the broker's key and the root policy; the guest never needs
+        // it, so the profile refuses it even though every other read has to stay allowed.
+        let unreadable: Vec<std::path::PathBuf> = crate::brokerd::resolve_state_dir(None).into_iter().collect();
+        match crate::jail::seatbelt_launcher(exe, dir, &args, &unreadable) {
             Some(pair) => pair,
             None => (plain(), Vec::new()),
         }
@@ -627,7 +775,7 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
 
 /// Connect to the guest, tell it what to run, and serve it until it is done.
 fn converse(
-    child: &mut std::process::Child,
+    child: &mut Guest,
     dir: &std::path::Path,
     program: &str,
     root: Rc<RootVal>,
@@ -637,29 +785,7 @@ fn converse(
     // three CI runs in a row to a value that was only reported in the success branch.
     denied: &mut (Vec<String>, u64),
 ) -> io::Result<i32> {
-    let deadline = std::time::Instant::now() + CONNECT_DEADLINE;
-    let mut conn = loop {
-        match crate::broker_transport::connect(dir) {
-            Ok(c) => break c,
-            Err(e) if std::time::Instant::now() >= deadline => {
-                // Say WHY, not just that it timed out. A guest killed by its own jail — a resource
-                // limit at startup, a profile that refused its socket — otherwise prints nothing at
-                // all, and the host sits out the deadline against a process that died in the first
-                // millisecond (CI run 35391962354 cost two red runs to that silence).
-                let died = child.try_wait().ok().flatten();
-                let how = match died {
-                    Some(status) => format!("the guest had already exited ({status})"),
-                    None => "the guest is running but never opened its channel".to_string(),
-                };
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    format!("no channel after {CONNECT_DEADLINE:?}: {how} — {e}"),
-                ));
-            }
-            Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
-        }
-    };
-    conn.set_read_timeout(Some(CHANNEL_DEADLINE))?;
+    let mut conn = open_channel(child, dir, CHANNEL_DEADLINE)?;
     let hello = Hello {
         version: CHANNEL_VERSION.to_string(),
         program: program.to_string(),
@@ -681,6 +807,52 @@ fn converse(
     served
 }
 
+/// Either kind of channel, as one reader-and-writer.
+trait Channel: io::Read + io::Write {}
+impl<T: io::Read + io::Write> Channel for T {}
+
+/// The host's end of the guest's channel, with `deadline` on every read. A contained guest already
+/// holds its pipes; a plain one is connected to by name within the connect deadline.
+fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::Duration) -> io::Result<Box<dyn Channel>> {
+    #[cfg(windows)]
+    if let Guest::Contained(g) = child {
+        let (Some(to_guest), Some(from_guest)) = (g.stdin.take(), g.stdout.take()) else {
+            return Err(io::Error::other("the contained guest's channel was already taken"));
+        };
+        let mut conn = crate::pipe_channel::PipeChannel::new(from_guest, to_guest)?;
+        conn.set_read_timeout(Some(deadline))?;
+        return Ok(Box::new(conn));
+    }
+    let mut conn = connect_by_name(child, dir)?;
+    conn.set_read_timeout(Some(deadline))?;
+    Ok(Box::new(conn))
+}
+
+fn connect_by_name(child: &mut Guest, dir: &std::path::Path) -> io::Result<crate::broker_transport::Connection> {
+    let deadline = std::time::Instant::now() + CONNECT_DEADLINE;
+    let conn = loop {
+        match crate::broker_transport::connect(dir) {
+            Ok(c) => break c,
+            Err(e) if std::time::Instant::now() >= deadline => {
+                // Say WHY, not just that it timed out. A guest killed by its own jail — a resource
+                // limit at startup, a profile that refused its socket — otherwise prints nothing at
+                // all, and the host sits out the deadline against a process that died in the first
+                // millisecond (CI run 35391962354 cost two red runs to that silence).
+                let died = child.try_wait().ok().flatten();
+                let how = match died {
+                    Some(status) => format!("the guest had already exited ({status})"),
+                    None => "the guest is running but never opened its channel".to_string(),
+                };
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("no channel after {CONNECT_DEADLINE:?}: {how} — {e}"),
+                ));
+            }
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    };
+    Ok(conn)
+}
 
 /// PS-A-07: ATTEMPT the L1 launcher, so `sandbox probe` and `sandbox status` answer from a launch
 /// rather than from a sentence in the source.
@@ -702,7 +874,8 @@ pub fn attempt_launch() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| format!("this executable cannot be located: {e}"))?;
     let dir = std::env::temp_dir().join(format!("delulu-probe-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("no channel directory: {e}"))?;
-    let finish = |r: Result<String, String>, child: Option<&mut std::process::Child>| {
+    use std::io::Read as _;
+    let finish = |r: Result<String, String>, child: Option<&mut Guest>| {
         if let Some(c) = child {
             let _ = c.kill();
             let _ = c.wait();
@@ -710,58 +883,89 @@ pub fn attempt_launch() -> Result<String, String> {
         let _ = std::fs::remove_dir_all(&dir);
         r
     };
+    // Whatever the guest managed to say, since it is the only witness to its own death.
+    let said = |child: &mut Guest, how: String| -> String {
+        let Some(mut err) = child.take_stderr() else { return how };
+        let mut s = String::new();
+        let _ = err.read_to_string(&mut s);
+        let s = s.trim();
+        if s.is_empty() { how } else { format!("{how}: {}", s.lines().next().unwrap_or(s)) }
+    };
 
-    let (mut cmd, launched) = guest_command(&exe, &dir);
     // The probe's guest is killed on purpose, and a killed guest says so on its standard error. That
     // belongs in this function's answer, not on the operator's terminal, where "error: the sandbox
     // guest was started without a hello frame" from a successful PROBE reads as a broken host.
-    cmd.stderr(std::process::Stdio::piped());
-    let mut applied = crate::jail::harden(&mut cmd, crate::jail::Limits::default());
-    applied.extend(launched);
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => return finish(Err(format!("the guest could not be spawned: {e}")), None),
+    let (mut child, jail, applied) = match launch(&exe, &dir, crate::jail::Limits::default(), true) {
+        Ok(l) => l,
+        Err(e) => return finish(Err(format!("the guest could not be started: {e}")), None),
     };
-    let (jail, enforced) = crate::jail::confine(&child, crate::jail::Limits::default());
-    applied.extend(enforced.guarantees.iter().copied());
-    if !crate::jail::resume(&child) {
-        return finish(Err("the guest could not be resumed under its jail".into()), Some(&mut child));
+    let _ = &jail;
+    let confined = |applied: &[&str]| {
+        if applied.is_empty() {
+            "a guest started and opened its channel; this host applied no OS boundary to it".to_string()
+        } else {
+            format!("a guest started under its jail and opened its channel ({})", applied.join("; "))
+        }
+    };
+
+    // A contained guest (PS-B-03) holds its channel from birth, so "it opened its channel" is shown by
+    // a conversation instead of a connection: a hello carrying a program that does nothing, answered
+    // with its exit. Nothing is performed and nothing is recorded — the probe still writes no audit
+    // record — but it proves more than the plain probe does: the guest loaded, ran under its identity,
+    // and spoke the protocol both ways.
+    #[cfg(windows)]
+    if matches!(child, Guest::Contained(_)) {
+        let answered = (|| -> io::Result<i32> {
+            let mut conn = open_channel(&mut child, &dir, std::time::Duration::from_secs(3))?;
+            write_frame(
+                &mut conn,
+                &Hello {
+                    version: CHANNEL_VERSION.to_string(),
+                    program: PROBE_PROGRAM.to_string(),
+                    hash: blake3::hash(PROBE_PROGRAM.as_bytes()).to_hex().to_string(),
+                    seed: 0,
+                    fixed_clock_ms: None,
+                },
+            )?;
+            HostChannel::new(LocalSink).with_root(Rc::new(RootVal::default())).serve(&mut conn)
+        })();
+        return match answered {
+            Ok(0) => finish(Ok(confined(&applied)), Some(&mut child)),
+            Ok(code) => {
+                let how = said(&mut child, format!("a contained guest ran the probe's empty program and exited {code}"));
+                finish(Err(how), Some(&mut child))
+            }
+            Err(e) => {
+                let how = said(&mut child, format!("a contained guest never answered on its channel ({e})"));
+                finish(Err(how), Some(&mut child))
+            }
+        };
     }
+
     // A short deadline: this is a probe, and an unreachable guest is an answer, not something to wait
     // ten seconds for.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     loop {
         if crate::broker_transport::connect(&dir).is_ok() {
-            let _ = &jail;
-            let how = if applied.is_empty() {
-                "a guest started and opened its channel; this host applied no OS boundary to it".to_string()
-            } else {
-                format!("a guest started under its jail and opened its channel ({})", applied.join("; "))
-            };
-            return finish(Ok(how), Some(&mut child));
+            return finish(Ok(confined(&applied)), Some(&mut child));
         }
         if std::time::Instant::now() >= deadline {
             // Say WHY, as `converse` learned to: a guest killed by its own jail otherwise reads as an
             // unexplained timeout.
-            let mut how = match child.try_wait().ok().flatten() {
+            let how = match child.try_wait().ok().flatten() {
                 Some(status) => format!("the guest exited before opening its channel ({status})"),
                 None => "the guest is running but never opened its channel".to_string(),
             };
-            // Whatever the guest managed to say, since it is the only witness to its own death.
-            if let Some(mut err) = child.stderr.take() {
-                use std::io::Read as _;
-                let mut s = String::new();
-                let _ = err.read_to_string(&mut s);
-                let s = s.trim();
-                if !s.is_empty() {
-                    how = format!("{how}: {}", s.lines().next().unwrap_or(s));
-                }
-            }
+            let how = said(&mut child, how);
             return finish(Err(how), Some(&mut child));
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
+
+/// The program the probe hands a contained guest: it asks for nothing and does nothing.
+#[cfg(windows)]
+const PROBE_PROGRAM: &str = "module probe\n\nfn main(root: Root) {\n}\n";
 
 /// Did the OS kill this guest for exceeding a ceiling, and can we say WHICH?
 ///

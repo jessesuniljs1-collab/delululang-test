@@ -84,6 +84,39 @@ fn a_sandboxed_run_works_and_reports_the_policy_that_was_applied() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-B-03 (T14) end to end on Windows: the guest runs as a separate identity, the program still does
+/// what it was granted — because the HOST performs every effect, an identity that can reach none of
+/// the operator's files costs a granted write nothing — and the report names the identity. The
+/// boundary itself is measured in `identity::win::tests` (the same attempts, contained and not); this
+/// is the claim the operator reads.
+#[cfg(windows)]
+#[test]
+fn on_windows_the_guest_runs_as_a_separate_identity_and_the_report_says_so() {
+    let dir = tmp("identity");
+    let (src, scope) = writer(&dir);
+    let report = dir.join("rep.json");
+    let o = delulu(&[
+        "run",
+        src.to_str().unwrap(),
+        "--sandbox",
+        "--grant",
+        &format!("fs.write={scope}"),
+        "--report-out",
+        report.to_str().unwrap(),
+    ]);
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert_eq!(std::fs::read_to_string(dir.join("out").join("made.txt")).unwrap(), "sandboxed", "the host wrote it");
+    assert!(err.contains("a separate identity"), "the operator is told: {err}");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    let guarantees = v["sandbox"]["host_guarantees"].as_array().expect("guarantees are a list");
+    assert!(
+        guarantees.iter().any(|g| g.as_str().is_some_and(|g| g.starts_with("a separate identity"))),
+        "the report names the identity it applied: {guarantees:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A tighter profile really is tighter, and the report says which one was asked for.
 #[test]
 fn a_profile_chooses_the_limits_and_the_report_names_it() {
@@ -466,8 +499,9 @@ fn the_report_lists_what_the_host_refused_and_stays_empty_when_it_refused_nothin
 }
 
 /// The posture object answers the questions a reader has, and `limitations` names every question
-/// nothing is enforcing. Identity separation is always among them, because no platform gives it today
-/// (RW 4.4) — and a report that omitted it would let a long list of real guarantees imply it.
+/// nothing is enforcing. Identity separation is among them wherever it was not applied — everywhere
+/// but a Windows guest since PS-B-03 (RW 4.4) — because a report that omitted it would let a long
+/// list of real guarantees imply it.
 #[test]
 fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     let dir = tmp("posture");
@@ -488,9 +522,16 @@ fn the_report_names_what_is_not_confined_as_well_as_what_is() {
     let sb = &r["sandbox"];
     assert_eq!(sb["requested_level"], 1, "{r}");
     assert_eq!(sb["level"], 1, "{r}");
-    assert_eq!(sb["posture"]["identity"], "same OS user", "{r}");
     let lim: Vec<&str> = sb["limitations"].as_array().expect("limitations").iter().filter_map(|v| v.as_str()).collect();
-    assert!(lim.contains(&"identity_separation"), "identity separation must always be named: {r}");
+    if cfg!(windows) {
+        // PS-B-03: this host starts the guest as a per-run AppContainer (measured by the identity
+        // tests), so the report says so and does not list what it applied as a limitation.
+        assert_eq!(sb["posture"]["identity"], "a per-run AppContainer", "{r}");
+        assert!(!lim.contains(&"identity_separation"), "an applied identity is not a limitation: {r}");
+    } else {
+        assert_eq!(sb["posture"]["identity"], "same OS user", "{r}");
+        assert!(lim.contains(&"identity_separation"), "identity separation must be named where it is absent: {r}");
+    }
     // At least one question must be answered by something that was applied, or the test would pass
     // for a report that called everything a limitation. Which ones is PER PLATFORM, and asserting
     // otherwise is how this test first went red on macOS: it said "every platform caps memory and

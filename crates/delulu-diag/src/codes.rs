@@ -741,16 +741,21 @@ pub fn topic_explain(topic: &str) -> Option<(&'static str, String)> {
                  object says what became of each request, and a refused one is in `denied`.\n\n\
                  Honesty and threat-model caveats, carried because the shape of this feature invites \
                  the opposite assumption:\n\
-                 - It is NOT a substitute for the separate OS account of `DEPLOYMENT.md` Tier 2. The \
-                 guest runs as the SAME OS user, so this is a second wall under the account boundary, \
-                 not instead of it. `limitations` says `identity_separation` on every run for that \
-                 reason.\n\
+                 - It is NOT a substitute for the separate OS account of `DEPLOYMENT.md` Tier 2. On \
+                 Linux and macOS the guest runs as the SAME OS user, so this is a second wall under the \
+                 account boundary, not instead of it, and `limitations` says `identity_separation` there. \
+                 On Windows the guest runs as a per-run AppContainer with no capabilities (PS-B-03): no \
+                 network and none of the operator's files. The broker, the CLI and every run without \
+                 `--sandbox` are still the operator, so the account boundary is still the one that \
+                 covers them.\n\
                  - It does not carry every program yet. Actors, foreign C, Python, plugins, devices and \
                  secrets are REFUSED rather than run unconfined, because a sandbox that quietly did not \
                  apply is the failure this design exists to prevent. That is also why `--sandbox` is \
                  not yet the default it is meant to become.\n\
-                 - Reads are confined on Linux only. On Windows and macOS a guest can still read the \
-                 filesystem; what stops it acting on what it read is the other layers.\n\
+                 - Reads are confined on Linux (Landlock, to the system paths) and on Windows (the \
+                 AppContainer reaches none of the operator's files). On macOS a guest can still read the \
+                 filesystem except the state directory, which its profile refuses; what stops it acting \
+                 on what it read is the other layers.\n\
                  - Landlock mediates TCP, not UDP or raw sockets, so the guarantee says `TCP`.\n\
                  - A boundary that was not applied is never reported as applied, and a host that cannot \
                  apply one says so. If you are deciding whether to run unfamiliar code, `limitations` \

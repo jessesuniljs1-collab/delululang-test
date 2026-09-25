@@ -466,6 +466,11 @@ that asks for a larger budget than its parent holds is DL0802, and its repair is
 `--sandbox`, a flag the sandboxed run does not apply (`--lease` and `--broker` among them) is refused
 rather than ignored; a lease runs without `--sandbox`.
 
+On Windows a `--sandbox` guest also runs as a separate identity (PS-B-03): a per-run AppContainer with
+no network and none of the operator's files. Read it from the run report, not from this sentence:
+`sandbox.posture.identity` is `a per-run AppContainer` only when the launch applied one, and otherwise
+`identity_separation` is listed under `limitations`.
+
 ## [agents.limits] What to tell your users honestly
 
 Repeating what the rest of the project says, because a harness author is the person most likely to

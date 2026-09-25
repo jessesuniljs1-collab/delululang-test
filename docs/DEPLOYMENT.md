@@ -91,6 +91,19 @@ actually enforces permissions. On 9p / DrvFs / NFS / SMB / exFAT a `chmod` can b
 second account read a `0600` file and the broker key straight off such a mount (finding P21-F1). The
 broker now refuses to write a secret onto such a filesystem, and `delulu doctor` reports it.
 
+**The recipe, per platform.** The broker and its state directory belong to your account; the program
+runs as another, which cannot read `0700` directories it does not own.
+- **macOS** (no unprivileged second identity exists, so this is the only one): create a standard user,
+  `sudo sysadminctl -addUser delulu-agent`, and run the program as it —
+  `sudo -u delulu-agent delulu run app.delulu --grant …`. The grants are yours to type; the agent
+  account cannot reach your broker (it accepts only clients running as its own OS user), your state
+  directory or your files, and its own `DELULU_STATE_DIR` must be one it owns.
+- **Linux**: the same with `sudo useradd --system delulu-agent` and `sudo -u delulu-agent …`. Check the
+  state directory's filesystem first (below).
+- **Windows**: a second local account (`net user delulu-agent /add`) and `runas /user:delulu-agent`.
+  A `--sandbox` guest already runs as a per-run AppContainer (PS-B-03); the account is what covers the
+  CLI and an unsandboxed run.
+
 ### The sandbox — a second boundary, under the account, not instead of it
 
 `delulu run app.delulu --sandbox` runs the program as a guest process that holds **no authority of
@@ -100,9 +113,9 @@ enforces what it actually has:
 
 | Platform | What the guest is held to |
 |---|---|
-| Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction |
+| Windows | a Job Object: one process, a memory ceiling, a processor-time ceiling, killed with the host, no desktop, clipboard or global atoms — applied to a SUSPENDED child, before its first instruction; and since PS-B-03 **a separate identity**: a per-run AppContainer with no capabilities, so no network of any kind and none of the operator's files, the state directory included (T14, measured with a control) |
 | Linux | `no_new_privs`, `PDEATHSIG`, heap and processor-time ceilings, no core dump; then, installed by the guest on itself, a Landlock ruleset — **nothing writable anywhere**, reads only from the system paths (`/usr`, `/lib`, `/etc`, `/proc`, `/sys`, `/dev`, and its own channel directory), and no TCP bind or connect — and a seccomp filter: no new programs, no debugger, no namespace, mount or kernel-module calls |
-| macOS | a processor-time ceiling and no core dump (`setrlimit` before `exec`, both measured: a spinning program with a one-second limit was killed by SIGXCPU after one second against a control that ran sixteen, run `35480762820`; **no** memory ceiling is claimed or even requested, because `setrlimit(RLIMIT_DATA)` returns EINVAL on macOS — measured in the same run — and the time ceiling matters most here, since macOS has no `PDEATHSIG` and a guest that is computing rather than asking would not notice its host had died), plus a **deny-default** Seatbelt profile: nothing is permitted but reads, `sysctl-read`, the guest's own `exec`, and its channel socket — so no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. Each of those four allowances was measured load-bearing by removing it (run `35479148216`); reads are NOT narrowed, because every attempt to confine them by subpath aborts the guest, so on macOS a guest can still read the filesystem and only the other layers stop it acting on what it read. Measured on macOS 26.6.2 arm64: a future release needing another allowance makes the run REFUSE rather than fall back to a weaker profile |
+| macOS | a processor-time ceiling and no core dump (`setrlimit` before `exec`, both measured: a spinning program with a one-second limit was killed by SIGXCPU after one second against a control that ran sixteen, run `35480762820`; **no** memory ceiling is claimed or even requested, because `setrlimit(RLIMIT_DATA)` returns EINVAL on macOS — measured in the same run — and the time ceiling matters most here, since macOS has no `PDEATHSIG` and a guest that is computing rather than asking would not notice its host had died), plus a **deny-default** Seatbelt profile: nothing is permitted but reads, `sysctl-read`, the guest's own `exec`, and its channel socket — so no file writes, no network but the channel, no new programs, no Mach services, no signals or process info beyond itself. Each of those four allowances was measured load-bearing by removing it (run `35479148216`); reads are NOT narrowed, because every attempt to confine them by subpath aborts the guest, so on macOS a guest can still read the filesystem and only the other layers stop it acting on what it read — except the state directory, which the profile refuses since PS-B-03 (T14). Measured on macOS 26.6.2 arm64: a future release needing another allowance makes the run REFUSE rather than fall back to a weaker profile |
 
 Read the run report (`--report-out F`) rather than the program's output: it names the requested and
 actual level, the backend, the limits, the mode, the guarantees the host **actually applied**, and a
@@ -118,8 +131,9 @@ that instead — an absent boundary never reads like an applied one. `delulu san
 running kernel for its Landlock ABI directly; a kernel below ABI 3 does not mediate `truncate` and a
 kernel below ABI 4 does not mediate TCP, and the guest's report says which of the two it got.
 
-**What this is not.** It is not a substitute for Tier 2. The guest runs as the same OS user, so it is
-a second wall under the account boundary, not instead of it. And it does not carry every program yet:
+**What this is not.** It is not a substitute for Tier 2. On Linux and macOS the guest runs as the same
+OS user, so it is a second wall under the account boundary, not instead of it. On Windows the guest is
+a separate identity, but the broker, the CLI and every run without `--sandbox` are still you. And it does not carry every program yet:
 actors, foreign C, Python, plugins, devices and secrets are **refused** rather than run unconfined,
 which `delulu sandbox policy <file> --json` reports in advance.
 

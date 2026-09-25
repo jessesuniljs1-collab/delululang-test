@@ -132,6 +132,13 @@ pub fn harden(cmd: &mut std::process::Command, limits: Limits) -> Vec<&'static s
 /// cannot write, cannot reach the network, and cannot start a program to carry anything out. Linux is
 /// tighter here, because Landlock does confine reads (see [`confine_filesystem`]).
 ///
+/// **One read IS refused, since PS-B-03: the state directory.** T14 asks that a guest cannot read the
+/// broker's key or the state directory, and with `(allow file-read*)` alone it could. The narrowing
+/// that aborted the guest was an ALLOW-list of readable roots; this is the opposite shape, one DENY
+/// after the broad allow (Seatbelt applies the last rule that matches), naming a directory the guest
+/// never needs. Both spellings are named, for the reason given below for the socket.
+/// `macos_tests::the_state_directory_is_unreadable_to_a_seatbelted_guest` measures it with a control.
+///
 /// **This profile is fail-closed on purpose.** It was measured on macOS 26.6.2 (arm64). If a future
 /// release needs an allowance that is not here, the guest will fail to start and the run will REFUSE,
 /// which is the direction D-V2-25 requires — never a quiet fall back to a weaker profile. The fix is
@@ -143,6 +150,7 @@ pub fn seatbelt_launcher(
     exe: &std::path::Path,
     dir: &std::path::Path,
     args: &[&std::ffi::OsStr],
+    unreadable: &[std::path::PathBuf],
 ) -> Option<(std::process::Command, Vec<&'static str>)> {
     if !std::path::Path::new("/usr/bin/sandbox-exec").is_file() {
         return None;
@@ -158,7 +166,7 @@ pub fn seatbelt_launcher(
     let raw_exe = exe.to_path_buf();
     let resolved_exe = std::fs::canonicalize(exe).unwrap_or_else(|_| raw_exe.clone());
     let p = |x: &std::path::Path| x.display().to_string();
-    let profile = format!(
+    let mut profile = format!(
         "(version 1)\n\
          (deny default)\n\
          (allow process-exec (literal \"{}\") (literal \"{}\"))\n\
@@ -173,21 +181,36 @@ pub fn seatbelt_launcher(
         p(&raw_sock),
         p(&resolved_sock),
     );
+    // After the broad allow, so it wins. A path Seatbelt could misread (a quote or a backslash in
+    // it) is not written into the profile at all; the guarantee is then not claimed.
+    let mut denied_any = false;
+    for d in unreadable {
+        let resolved = std::fs::canonicalize(d).unwrap_or_else(|_| d.clone());
+        for spelling in [d.clone(), resolved] {
+            let s = p(&spelling);
+            if s.contains('"') || s.contains('\\') {
+                continue;
+            }
+            profile.push_str(&format!("(deny file-read* file-write* (subpath \"{s}\"))\n"));
+            denied_any = true;
+        }
+    }
     let path = dir.join("guest.sb");
     std::fs::write(&path, profile).ok()?;
     let mut cmd = std::process::Command::new("/usr/bin/sandbox-exec");
     cmd.arg("-f").arg(&path).arg(exe).args(args);
-    Some((
-        cmd,
-        vec![
-            "deny by default",
-            "no file writes",
-            "no network but the channel",
-            "no new programs",
-            "no Mach services",
-            "no signals or process info beyond itself",
-        ],
-    ))
+    let mut applied = vec![
+        "deny by default",
+        "no file writes",
+        "no network but the channel",
+        "no new programs",
+        "no Mach services",
+        "no signals or process info beyond itself",
+    ];
+    if denied_any {
+        applied.push("the state directory unreadable");
+    }
+    Some((cmd, applied))
 }
 
 /// Windows hardens at the spawn: the child is created SUSPENDED so its Job Object is in place before
@@ -470,8 +493,6 @@ pub fn resume(_child: &std::process::Child) -> bool {
 /// which is why this comment names the run that proved it.
 #[cfg(windows)]
 mod windows_jail {
-    use std::os::windows::io::AsRawHandle as _;
-
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicUIRestrictions,
@@ -497,7 +518,7 @@ mod windows_jail {
 
     /// Put `child` in a job with `limits`. Returns what was enforced, so the caller reports the
     /// truth rather than the intention.
-    pub fn confine(child: &std::process::Child, limits: super::Limits) -> (Jail, super::Enforced) {
+    pub fn confine(child: &impl std::os::windows::io::AsRawHandle, limits: super::Limits) -> (Jail, super::Enforced) {
         let mut enforced = super::Enforced::default();
         // SAFETY: every call below takes handles this function owns or the child's own handle, and
         // the structures are zeroed and sized with `size_of`.
@@ -642,7 +663,7 @@ mod windows_tests {
 mod other {
     pub struct Jail;
 
-    pub fn confine(_child: &std::process::Child, _limits: super::Limits) -> (Jail, super::Enforced) {
+    pub fn confine<T>(_child: &T, _limits: super::Limits) -> (Jail, super::Enforced) {
         (Jail, super::Enforced::default())
     }
 }
@@ -730,6 +751,50 @@ mod linux_tests {
             assert!(confined.contains("BIND=false"), "`no TCP bind or connect` was claimed and the guest bound anyway:
 {confined}");
         }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+/// PS-B-03 / T14 on macOS, measured rather than asserted: the same child, run once as the operator
+/// (the control) and once under the guest's Seatbelt profile, tries to read a key in a state
+/// directory and a file outside it. The control must read both, or the refusal proves nothing.
+#[cfg(all(test, target_os = "macos"))]
+mod macos_tests {
+    const MODE: &str = "DELULU_SEATBELT_TEST_MODE";
+
+    #[test]
+    fn seatbelt_probe_child() {
+        let Ok(paths) = std::env::var(MODE) else { return };
+        let (key, elsewhere) = paths.split_once('|').expect("two paths");
+        println!("STATE={}", std::fs::read(key).is_ok());
+        println!("ELSEWHERE={}", std::fs::read(elsewhere).is_ok());
+    }
+
+    #[test]
+    fn the_state_directory_is_unreadable_to_a_seatbelted_guest() {
+        let base = std::env::temp_dir().join(format!("dsb{}", std::process::id()));
+        let (chan, state, other) = (base.join("c"), base.join("state"), base.join("other"));
+        for d in [&chan, &state, &other] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(state.join("broker.key"), b"a key").unwrap();
+        std::fs::write(other.join("plain.txt"), b"plain").unwrap();
+        let paths = format!("{}|{}", state.join("broker.key").display(), other.join("plain.txt").display());
+        let exe = std::env::current_exe().unwrap();
+        let args: Vec<&std::ffi::OsStr> =
+            ["--exact", "jail::macos_tests::seatbelt_probe_child", "--nocapture"].iter().map(std::ffi::OsStr::new).collect();
+
+        let free = std::process::Command::new(&exe).args(&args).env(MODE, &paths).output().unwrap();
+        let free = String::from_utf8_lossy(&free.stdout).to_string();
+        assert!(free.contains("STATE=true") && free.contains("ELSEWHERE=true"), "the control must read both:\n{free}");
+
+        let (mut cmd, applied) =
+            super::seatbelt_launcher(&exe, &chan, &args, std::slice::from_ref(&state)).expect("sandbox-exec exists on macOS");
+        assert!(applied.contains(&"the state directory unreadable"), "{applied:?}");
+        let out = cmd.env(MODE, &paths).output().unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        assert!(text.contains("ELSEWHERE=true"), "the profiled child ran and could read what it may:\n{text}\n{}", String::from_utf8_lossy(&out.stderr));
+        assert!(text.contains("STATE=false"), "T14: the profiled child read the state directory:\n{text}");
         let _ = std::fs::remove_dir_all(&base);
     }
 }

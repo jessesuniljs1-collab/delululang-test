@@ -9,6 +9,12 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-B-03: a sandbox guest with an identity of its own (Windows), 2026-09-25
+
+- **PS-B-03 (D-V2-34)** — on Windows a `run --sandbox` guest runs as a per-run AppContainer with no capabilities: no network of any kind (the Job Object never took it away) and none of the operator's files, the state directory included. It runs from a runtime copy readable by AppContainers, and its channel moves to inherited pipes. Measured against T14 with a control and falsified by a launch without the container. A host that cannot give the identity says so and runs the guest as before; the report's `posture.identity` and `limitations` follow what was applied.
+- macOS: the guest's Seatbelt profile refuses the state directory (T14), measured with a control. Linux under a subordinate uid is REMAINING_WORK 4.21.
+- `sandbox probe` proves a contained guest by a round trip on its channel; `doctor`'s identity line is read from that attempt. `DEPLOYMENT.md` gains the separate-account recipe per platform.
+
 ## Unreleased — V2 PS-B-05: a budget is an authority dimension, 2026-09-25
 
 - **PS-B-05 (D-V2-08 owner direction; D-V2-33)** — memory and processor time join `⊑` as its tenth dimension (`delulu-broker/src/budget_scope.rs`): componentwise `≤`, componentwise-minimum meet, absence as the top. `grants delegate --budget mem=BYTES,cpu=SECONDS`; a delegation that names none inherits its parent's; one that names more is DL0802 with the meet. A `run --lease` is held to its node's budget (also its default; `--limits` may only ask for less). A `--broker daemon` run's root records its budget. An unreadable budget on the wire becomes the smallest, never none. Unbudgeted authorities serialize byte-identically to before.

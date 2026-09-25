@@ -107,11 +107,30 @@ impl SandboxPolicy {
     /// A report that lists only guarantees reads as though the rest were covered.
     pub fn posture(guarantees: &[&str]) -> (serde_json::Value, Vec<&'static str>) {
         let has = |needle: &str| guarantees.iter().any(|g| g.contains(needle));
+        // PS-B-03: a guest started as a separate identity (Windows, a per-run AppContainer with no
+        // capabilities). Matched on the guarantee's exact words, which `identity.rs` owns, so the
+        // report cannot say "separate" unless the launch that applied it said so.
+        let separate = guarantees.contains(&crate::identity::GUARANTEE);
+        let landlock_reads = has("reads only from the system paths");
         // (question, the answer when it IS enforced, the guarantee that enforces it)
         let rows: [(&str, &str, bool); 7] = [
-            ("filesystem_writes", "denied", has("no file writes")),
-            ("filesystem_reads", "confined to the system paths", has("reads only from the system paths")),
-            ("network", "only the channel", has("no TCP bind or connect") || has("no network but the channel")),
+            (
+                "filesystem_writes",
+                // The container may write its OWN per-run folder, which is deleted with it — so this is
+                // not "denied", and the report does not round it up to that.
+                if has("no file writes") { "denied" } else { "only its own per-run container folder" },
+                has("no file writes") || separate,
+            ),
+            (
+                "filesystem_reads",
+                if landlock_reads { "confined to the system paths" } else { "none of the operator's files" },
+                landlock_reads || separate,
+            ),
+            (
+                "network",
+                "only the channel",
+                has("no TCP bind or connect") || has("no network but the channel") || separate,
+            ),
             ("new_programs", "denied", has("no new programs") || has("one process only")),
             ("memory", "capped", has("memory ceiling")),
             ("processor_time", "capped", has("processor-time ceiling")),
@@ -137,11 +156,17 @@ impl SandboxPolicy {
                 });
             }
         }
-        // Identity is its own row because it is not a guarantee any platform gives today: the guest
-        // runs as the same OS user, which is REMAINING_WORK 4.4 and proof category 7. Saying it here
-        // stops a reader inferring separation from a long list of things that ARE enforced.
-        obj.insert("identity".to_string(), serde_json::Value::String("same OS user".to_string()));
-        limitations.push("identity_separation");
+        // Identity is its own row. Until PS-B-03 no platform gave it and this line was unconditional;
+        // now a Windows guest can run as a per-run AppContainer, and only a launch that APPLIED one
+        // may say so. Everywhere else the guest is the same OS user (REMAINING_WORK 4.4, proof
+        // category 7), and saying it stops a reader inferring separation from a long list of things
+        // that ARE enforced.
+        if separate {
+            obj.insert("identity".to_string(), serde_json::Value::String("a per-run AppContainer".to_string()));
+        } else {
+            obj.insert("identity".to_string(), serde_json::Value::String("same OS user".to_string()));
+            limitations.push("identity_separation");
+        }
         (serde_json::Value::Object(obj), limitations)
     }
 
@@ -186,8 +211,9 @@ impl SandboxPolicy {
     ) -> serde_json::Value {
         let (posture, limitations) = Self::posture(guarantees);
         // "Fully enforced" means every question above is answered by something that was applied —
-        // except identity separation, which no platform gives today (RW 4.4) and which is therefore
-        // named as a limitation on every honest run rather than quietly excluded from the total.
+        // except identity separation where no launch applied it (everywhere but a Windows guest since
+        // PS-B-03; RW 4.4), which is named as a limitation on every such run rather than quietly
+        // excluded from the total.
         let fully = self.level == 1 && limitations.iter().all(|l| *l == "identity_separation");
         serde_json::json!({
             "backend": backend,
@@ -297,6 +323,33 @@ mod tests {
             assert_eq!(obj[q], "not confined", "`{q}` claimed a boundary nothing applied");
             assert!(lim.contains(&q), "`{q}` is unenforced and was not listed as a limitation");
         }
+    }
+
+    /// PS-B-03: a guest that WAS started as a separate identity says so, and loses exactly that one
+    /// limitation — and a guarantee list that only resembles the identity's words does not.
+    #[test]
+    fn a_separate_identity_answers_identity_reads_writes_and_network_and_nothing_else() {
+        let windows_guest = [
+            "one process only",
+            "memory ceiling",
+            "processor-time ceiling",
+            "killed with the host",
+            "no desktop, clipboard or global atoms",
+            crate::identity::GUARANTEE,
+        ];
+        let (obj, lim) = SandboxPolicy::posture(&windows_guest);
+        assert_eq!(obj["identity"], "a per-run AppContainer");
+        assert_eq!(obj["filesystem_reads"], "none of the operator's files");
+        assert_eq!(obj["filesystem_writes"], "only its own per-run container folder", "never rounded up to `denied`");
+        assert_eq!(obj["network"], "only the channel");
+        assert!(!lim.contains(&"identity_separation"), "{lim:?}");
+        // Not measured on Windows, so not claimed: the report still says it.
+        assert_eq!(lim, vec!["privilege_escalation"], "{lim:?}");
+
+        // Words that merely resemble the guarantee are not the guarantee.
+        let (obj, lim) = SandboxPolicy::posture(&["a separate identity"]);
+        assert_eq!(obj["identity"], "same OS user");
+        assert!(lim.contains(&"identity_separation") && lim.contains(&"network"), "{lim:?}");
     }
 
     /// The two shapes are kept apart on purpose: a run that did not happen has no posture to report.

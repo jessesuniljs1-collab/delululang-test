@@ -63,8 +63,10 @@ launcher one** — a restricted token or AppContainer on Windows, a mapped uid o
 namespaces are usable, a VM at L2 — and is reported as present or absent in `host_guarantees`
 (PS-B-03). For autonomous deployments the intended shape is *human identity ≠ agent OS identity ≠
 broker trust root*, where the deployment model justifies it. The boundary is always principal,
-identity, authority, grant, sandbox, attestation and audit — never species. [designed; the P21
-vectors are the witnesses to re-run from inside a guest]
+identity, authority, grant, sandbox, attestation and audit — never species. [BUILT on Windows,
+PS-B-03: a `--sandbox` guest runs as a per-run AppContainer with no capabilities, measured against
+T14 with a control (D-V2-34). macOS gives no second identity; its guest profile refuses the state
+directory instead. Linux under a subordinate uid is RW 4.21.]
 
 ## 4. Resource authority
 

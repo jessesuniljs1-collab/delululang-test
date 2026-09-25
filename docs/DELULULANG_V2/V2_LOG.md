@@ -947,3 +947,49 @@ product was right: its temp directory's descriptive name put the broker's socket
 allows 103, and the broker refused to start with exactly that sentence. The test now uses a short
 directory and asserts, on every platform, that the socket path would fit on a Mac, so the limit is
 checked where it is cheapest rather than discovered where it is smallest.
+
+**The fix's run, read.** CI `36139795158` (`ca60614`): every job green, all three operating systems.
+PS-B-05 is closed with its runs read.
+
+**PS-B-03 — identity separation (Windows), and T14 on macOS.** Until now every PS-A boundary held the
+guest to what it may DO, and none changed WHO it is: on Windows the guest ran with the operator's own
+token inside a Job Object, so a guest that escaped the interpreter could read `broker.key`, the root
+policy and every file the operator can, and — since a Job Object restricts no sockets — open network
+connections. D-V2-34 records the decisions.
+
+Measured before a line of product code: a throwaway spike started a child in a fresh AppContainer
+(profile created in 40 ms), loaded from a directory with one added grant, talked to it over inherited
+pipes, and compared it with the same binary uncontained. Contained, it could not read the operator's
+file, read a key in a state directory, list or write the operator's directory, or connect out; the
+control did all five. A live `delulu` process loads exactly two modules from outside the Windows
+directory — itself and `python313.dll` — which is what the runtime copy carries.
+
+Built: `identity.rs` (the per-run AppContainer, the runtime copy, the contained launch), `pipe_channel.rs`
+(the channel over inherited pipes, with its read deadline), a `--stdio` guest whose standard-output slot
+is pointed at standard error before anything can print into a frame, and one `launch` used by a run and
+by `sandbox probe`. The probe now proves more on that path: a contained guest is handed a program that
+does nothing and must answer with its exit, so "it opened its channel" means it loaded, ran under its
+identity and spoke the protocol both ways. The run report's posture follows what was applied: identity
+`a per-run AppContainer`, reads `none of the operator's files`, network `only the channel`, writes
+`only its own per-run container folder` (not rounded up to "denied"), and privilege escalation still
+`not confined`, because nothing measured it.
+
+**Found while building, fixed before commit:**
+- Windows refuses to start an AppContainer from an explicit environment without `LOCALAPPDATA`
+  (error 203, found by the first test run and settled in the spike: the loader's four variables fail,
+  adding that one succeeds). It is passed, and the test checks the guest sees its container's folder.
+- The first pruning rule — delete every other build's runtime copy — would have pulled files out from
+  under a running guest of another build (the CLI and a test binary are two builds in use at once).
+  Pruning is now by a day unused, and a broken copy never fails a run.
+
+**T14, measured on two platforms and deferred on one.** Windows: `identity::win::tests::t14_…`, the
+same attempts contained and not; falsified by starting the guest without the AppContainer attribute,
+when it read the operator's file. macOS: the Seatbelt profile has to allow reads (every narrower
+allow-list aborted the guest), so the guest COULD read the state directory; one deny after the broad
+allow now refuses it, measured by `jail::macos_tests` with a control (a Mac is only reached through CI,
+and this is its first run). Linux: a real second identity needs a subordinate uid (RW 4.21, PS-B-03b);
+Landlock already refuses the state directory there where the kernel has it.
+
+Mutants: the launch without the AppContainer attribute (T14 fails: the guest read the operator's
+secret) and a host that never takes the contained path (the report test fails, and its guarantees show
+the report did not claim an identity it lacked).

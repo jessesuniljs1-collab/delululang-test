@@ -558,7 +558,8 @@ fn explain_e_sandbox_carries_the_caveats_that_stop_the_wrong_assumption() {
         "REFUSED rather than run unconfined",
         "not yet the default",
         // Where each platform actually stops short.
-        "Reads are confined on Linux only",
+        "Reads are confined on Linux (Landlock",
+        "per-run AppContainer",
         "mediates TCP, not UDP or raw sockets",
         // And where to look instead of the guarantee list.
         "`limitations` is the field to read, not `host_guarantees`",

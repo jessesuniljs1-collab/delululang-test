@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 249 |
-| Rust lines | 128336 |
+| Rust files | 251 |
+| Rust lines | 129609 |
 | Rust files outside `src/` (test/bench targets) | 108 |
 | Markdown documents | 188 |
-| Markdown lines | 54200 |
+| Markdown lines | 54305 |
 | DeluluLang programs | 180 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1216 / 11010 |
+| Nodes / edges in this map | 1218 / 11012 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -87,7 +87,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 27 files, 24921 lines
+- **Modules:** 29 files, 26146 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -101,19 +101,21 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/cli.rs` | 9469 | Command dispatch and the four Stage-1 commands (§9.5). |
 | `src/completions.rs` | 163 | `delulu completions` — a shell completion script, generated rather than kept. |
 | `src/deploy.rs` | 304 | `delulu deploy plan` — the whole-deployment authority answer, computed and checked BEFORE |
-| `src/doctor.rs` | 786 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
+| `src/doctor.rs` | 814 | `delulu doctor` — one command that says whether this machine, and this checkout, are healthy. |
 | `src/fix.rs` | 459 | `delulu fix` — apply the repairs the checker already computed. |
 | `src/fleet.rs` | 541 | Stage 10 phase 10j — Track H, §9.3: fleet/OTA updates (spec §9.3, criterion 9's fleet-update |
 | `src/foreign_worker.rs` | 734 | Phase 5h — foreign workers (process isolation), redeeming Stage 4's honesty note. |
-| `src/guest.rs` | 910 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
-| `src/jail.rs` | 735 | PS-A-04: the OS jail around a sandbox guest. |
+| `src/guest.rs` | 1114 | The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no |
+| `src/identity.rs` | 710 | PS-B-03: identity separation — a sandbox guest that runs as a principal other than the operator. |
+| `src/jail.rs` | 800 | PS-A-04: the OS jail around a sandbox guest. |
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1947 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
-| `src/main.rs` | 80 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
+| `src/main.rs` | 84 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
-| `src/policy.rs` | 337 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
+| `src/pipe_channel.rs` | 161 | PS-B-03: the sandbox channel over two inherited pipes. |
+| `src/policy.rs` | 390 | PS-A-06: `SandboxPolicy` — what a run's confinement IS, as one value. |
 | `src/repl.rs` | 159 | A pragmatic Stage-1 REPL (§9.5, acceptance criterion 1). Declarations accumulate; an |
 | `src/run_cmd.rs` | 1595 | `delulu run` — the command that actually executes a program. |
 | `src/sandbox.rs` | 472 | `delulu sandbox probe [--json]` (PS-0-04): which isolation levels this host can give a program |
@@ -212,12 +214,12 @@ DeluluLang diagnostics: spans, source map, code registry, JSON envelope, typed r
 
 - **Depends on:** —
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-syntax`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 3824 lines
+- **Modules:** 9 files, 3829 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/catalog.rs` | 371 | The message-catalog layer (Stage 8, spec §6.1) — the localization foundation. |
-| `src/codes.rs` | 2049 | The Stage-1 diagnostic code registry (spec §10.3). |
+| `src/codes.rs` | 2054 | The Stage-1 diagnostic code registry (spec §10.3). |
 | `src/diagnostic.rs` | 196 |  |
 | `src/json.rs` | 190 | The machine-facing JSON envelope (spec §10.1–§10.2). Field names and shapes are |
 | `src/lib.rs` | 30 | DeluluLang diagnostics. |
@@ -278,11 +280,11 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 21 files, 17434 lines
+- **Modules:** 21 files, 17435 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/actors.rs` | 1222 | The native actor runtime (Stage 7 phase 7g, spec §6). |
+| `src/actors.rs` | 1223 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
 | `src/broker.rs` | 565 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
 | `src/channel.rs` | 1019 | `delulu-sandbox-channel/1` (PS-A-02): the wire between a guest interpreter and the host that |

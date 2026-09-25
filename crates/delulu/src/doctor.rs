@@ -345,7 +345,35 @@ fn sandbox_section(r: &mut Report) {
         Status::Note,
         "primitive-table containment on resolved paths; hostile spellings refused (D-NE-29); check-then-open (RW 4.6)",
     );
-    r.push(s, "identity separation", Status::Note, "none — the program runs as this OS user (RW 4.4, category 7)");
+    // PS-B-03. Read from the launcher attempt above rather than stated: the identity is named only
+    // when a guest was actually started with one on this host just now.
+    let separated = launcher.is_some_and(|a| a.ok && a.detail.contains(crate::identity::GUARANTEE));
+    r.push(
+        s,
+        "identity separation",
+        Status::Note,
+        if separated {
+            concat!(
+                "a `run --sandbox` guest runs as a per-run AppContainer with no capabilities (PS-B-03) — no network, ",
+                "none of the operator's files, not the state directory (attempted now); an ordinary run, the broker ",
+                "and the CLI still run as this OS user (RW 4.4, category 7)"
+            )
+        } else if cfg!(windows) {
+            "none — this host could not start a guest under a separate identity just now, so a sandboxed guest runs as this OS user too (RW 4.4, category 7)"
+        } else if cfg!(target_os = "macos") {
+            concat!(
+                "none — macOS gives an unprivileged launcher no second identity, so a sandboxed guest runs as this OS ",
+                "user; its Seatbelt profile refuses it the state directory, writes and the network (PS-B-03). The ",
+                "boundary for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)"
+            )
+        } else {
+            concat!(
+                "none — a sandboxed guest runs as this OS user: this build does not yet start one under a subordinate ",
+                "uid (RW 4.21); where the kernel has Landlock the guest cannot read the operator's files. The boundary ",
+                "for everything else is a separate OS account (`DEPLOYMENT.md` Tier 2)"
+            )
+        },
+    );
     r.push(
         s,
         "resource controls",
