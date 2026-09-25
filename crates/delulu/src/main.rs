@@ -15,6 +15,7 @@ mod cli;
 mod completions;
 mod deploy;
 mod doctor;
+mod edit;
 mod examples;
 mod fix;
 mod guest;

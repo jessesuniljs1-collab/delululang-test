@@ -249,6 +249,40 @@ either the only repair widens authority (refused above) or it addresses a warnin
 stands. Do not build a harness that assumes repairs will get you to green. See
 `measurements/study-b/REPORT.md`.
 
+## [agents.edit] Checked edits — when you are not the only writer
+
+You read a file, compute an edit, and write it back. If a person or another agent changed the file in
+between, your byte offsets now point somewhere else, and the edit lands in the wrong place without a
+word. `delulu edit` refuses that:
+
+```
+delulu edit <file> --expect-hash <blake3> --edits '<JSON list>'  [--dry-run] [--if-checks] --json
+delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>'  [--dry-run] [--if-checks] --json
+```
+
+- `--expect-hash` is the blake3 of the bytes you computed the edit against (hex; any case). If the
+  file no longer has them the edit is **refused** — exit 2, nothing written — and the answer's
+  `edit.hash` is the file's hash **now**, so you re-read and recompute instead of guessing. You do
+  not need a hashing library: every `edit` answer, applied or refused, carries the hash.
+- `--edits` takes the **repair edit shape** (`[{ "range": { "start_byte", "end_byte" }, "insert" }]`,
+  `file` allowed and ignored), so a repair's `edits` pass straight through. Ranges must lie on
+  character boundaries and must not overlap; they apply together or not at all. `@FILE` reads the
+  list from a file.
+- `--node` addresses one function, type, or actor member by the id the Atlas printed
+  (`fn:app/app.main`, `type:app/app.Point`, `fn:app/app.Worker.job`) and `--with` replaces it. The
+  replacement must be exactly one item of that kind; it is formatted on its own, so the rest of the
+  file keeps its form. An id the file no longer has is refused as stale: ask the Atlas again.
+- The result is **checked** before the answer: `diagnostics` and `summary` are the edited file's,
+  exit 1 if it has errors. `--if-checks` writes only a result with no errors; `--dry-run` writes
+  nothing. The write is one rename, so no reader sees half an edit.
+- `edit.authority` compares what the program may do before and after (`effects`,
+  `required_grants`, `foreign_calls`), and `edit.authority.widened` lists what the edit **adds**.
+  A non-empty `widened` is the same signal as `authority_widening: true` on a repair: a person
+  decides it, not a loop. It is `null` when either side does not check.
+- A file stored in a surface morph is refused: offsets and Atlas ids refer to the canonical text.
+- The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
+  shape).
+
 ## [agents.authority] The authority report
 
 ```
@@ -422,8 +456,9 @@ Its tools are `check`, `authority`, `why`, `explain`, `atlas`, `atlas_query`, `t
 `survey_query`, `survey_impact` and `doctor_check`. **Every one is read-only, by construction:** each
 runs this binary's own `--json` subcommand with a fixed argument list, so its `structuredContent` is
 exactly what the CLI prints, and no tool runs a program, grants authority, loads code or writes a
-file. A tool argument that begins with `-` is refused, so nothing can be passed through as an
-option. A command that reports errors (a program that does not check) is a successful call — read
+file — `delulu edit` is deliberately not a tool, and a test holds every command to a declared
+read-only or acting class so a new one cannot become a tool unreviewed. A tool argument that begins
+with `-` is refused, so nothing can be passed through as an option. A command that reports errors (a program that does not check) is a successful call — read
 `summary.errors` in the answer — and a refused argument is `isError: true` with the reason. To run a
 program, use the CLI: granting authority stays a person's decision.
 

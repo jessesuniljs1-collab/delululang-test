@@ -30,6 +30,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ("policy", "what `delulu sandbox policy --json` carries under `policy`"),
     ("run-report", "the report `delulu run --report-out F` writes"),
     ("toolchain", "what `delulu toolchain --json` carries under `toolchain`"),
+    ("edit", "what `delulu edit --json` carries under `edit`: the checked edit, or why it was refused"),
 ];
 
 fn t(ty: &str) -> Value {
@@ -64,6 +65,46 @@ fn obj(required: &[(&str, Value)], optional: &[(&str, Value)]) -> Value {
 fn described(mut v: Value, why: &str) -> Value {
     v["description"] = json!(why);
     v
+}
+
+/// `delulu edit --json`'s `edit` object (P4-04/05): an applied edit, or a refusal. The two shapes are
+/// told apart by `refused`, which only a refusal has.
+fn edit_payload() -> Value {
+    let rows = obj(
+        &[("effects", arr(t("string"))), ("required_grants", arr(t("string"))), ("foreign_calls", arr(r("foreign_call")))],
+        &[],
+    );
+    let side = described(
+        json!({ "anyOf": [rows, t("null")] }),
+        "null when that side does not check: a program that does not check has no authority",
+    );
+    let widened = described(
+        json!({ "anyOf": [arr(json!({})), t("null")] }),
+        "what the edit adds to effects, required grants and foreign calls; null when either side does not check",
+    );
+    let applied = obj(
+        &[
+            ("file", t("string")),
+            ("previous_hash", t("string")),
+            ("hash", described(t("string"), "blake3 of the edited source; the file's hash when `written`")),
+            ("edits_applied", t("integer")),
+            ("node", nullable("string")),
+            ("written", t("boolean")),
+            ("dry_run", t("boolean")),
+            ("authority", obj(&[("before", side.clone()), ("after", side), ("widened", widened)], &[])),
+        ],
+        &[],
+    );
+    let refused = obj(
+        &[
+            ("file", t("string")),
+            ("refused", t("string")),
+            ("hash", described(nullable("string"), "the file's hash now, so a caller can re-read without a second command")),
+            ("written", json!({ "const": false })),
+        ],
+        &[],
+    );
+    json!({ "anyOf": [applied, refused] })
 }
 
 /// Every shared definition. Each document carries all of them, so any `$ref` in it resolves.
@@ -445,6 +486,7 @@ pub fn document(name: &str) -> Option<Value> {
             )
         }
         "toolchain" => toolchain_payload(),
+        "edit" => edit_payload(),
         _ => return None,
     };
     let (_, what) = NAMES.iter().find(|(n, _)| *n == name)?;

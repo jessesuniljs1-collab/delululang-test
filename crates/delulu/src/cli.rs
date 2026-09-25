@@ -1056,6 +1056,7 @@ fn run_inner(args: &[String]) -> i32 {
         "new" => crate::new::cmd_new(rest),
         "check" => cmd_check(rest),
         "fix" => crate::fix::cmd_fix(rest),
+        "edit" => crate::edit::cmd_edit(rest),
         "fmt" => cmd_fmt(rest),
         "test" => cmd_test(rest),
         // Machine-only by construction: the first-run flow is suppressed for `lsp` in
@@ -1229,7 +1230,7 @@ pub(crate) const SUBCOMMANDS: &[&str] = &[
     "new", "check", "fix", "fmt", "test", "lsp", "keygen", "sign", "verify-sig", "publish",
     "deploy", "add", "login", "build", "lock", "run", "plugin", "authority", "why", "atlas",
     "repl", "audit", "grants", "guard", "broker", "sandbox", "fleet", "secrets", "locale", "morph", "explain",
-    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp",
+    "doctor", "completions", "skill", "toolchain", "schema", "examples", "mcp", "edit",
 ];
 
 fn usage() -> &'static str {
@@ -1328,7 +1329,11 @@ fn usage() -> &'static str {
      \x20 delulu fix       <file.delulu> [--dry-run] [--json] [--accept-widening <repair-id>]...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (applies the checker's own typed repairs; a repair that would WIDEN what the program\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 may do is never applied unless you name it, and there is no accept-all flag)\n\
-     \x20 delulu fmt       <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
+     \x20 delulu edit      <file.delulu> --expect-hash H (--edits JSON|@F | --node ID --with TEXT|@F)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--dry-run] [--if-checks] [--json]   (a checked edit: refused unless the file's blake3 is\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 still H; byte ranges in the repair shape, or one fn/type replaced by its Atlas id and\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 formatted; the result is checked and the answer carries the new hash)\n\
+     \x20 delulu fmt     <file-or-dir>... [--check] [--json] | --stdin | --migrate 0.7 <file-or-dir>...\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (one canonical style, zero options; --check exits 1 on unformatted; unparseable files are refused)\n\
      \x20 delulu test      [paths|patterns]... [--json] [--seed N]   (authority-isolated tests; each holds only its declared, ceiling-bounded row)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--test-authority 'effects = [\"Write\"]']..  (a ceiling in the manifest's [test-authority] syntax:\n\
@@ -1364,7 +1369,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 levels and profiles, every diagnostic code — read from the binary's own tables)\n\
      \x20 delulu schema    [<name>] [--json] | validate <name> <file.json> [--json]   (the JSON Schema of an\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 output — envelope, diagnostic, repair, authority, atlas, sandbox, policy, run-report,\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 toolchain — closed, so every field is named; `validate` checks a file against one)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 toolchain, edit — closed, so every field is named; `validate` checks a file against one)\n\
      \x20 delulu examples  [--json]   (the shipped example programs — each checks, with the authority report\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `authority` prints for it and the `run` line its grants spell; embedded, so it reads anywhere)\n\
      \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\

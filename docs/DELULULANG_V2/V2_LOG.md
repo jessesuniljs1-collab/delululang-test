@@ -1204,3 +1204,48 @@ whose threads never run interpreter code. It is now, with that reason. The gate 
 **P4-02/09/10's run, read.** CI `36176470110` (`bc5c01c`): **success on every job**, all three operating
 systems — `toolchain`, `schema` (the emitter corpus validated through the binary on each OS) and
 `examples` (every listed run line run) included.
+
+**P4-03's run, read.** CI `36178164572` (`67d058a`): **success on every job**, all three operating
+systems — `mcp_cli` (handshake, tool list, CLI-identity, hostile argument, Survey tools in-tree) green on
+each.
+
+**P4-04 and P4-05 — `delulu edit`, checked edits.** An agent edits a file it read a moment ago; if
+someone else wrote in between, byte offsets computed against the old bytes land in the wrong place,
+silently. `delulu edit <file> --expect-hash <blake3>` refuses that: the edit names the hash of the bytes
+it was computed against and is refused (exit 2, nothing written) when the file no longer has them, the
+refusal carrying the file's CURRENT hash so the caller re-reads rather than guesses. Two ways to say
+what changes: `--edits` in the repair edit shape (a repair's `edits` pass straight through; ranges on
+character boundaries, no overlap — two inserts at one point count as one, their order would be a guess
+— applied all or none), or `--node <Atlas id> --with <text>`, which replaces one function, type or
+actor member (the Atlas names an actor's `new`, behaviors and helper fns `fn:pkg/mod.Actor.member`)
+with text that must parse as exactly that one kind of item and is formatted on its own, so the rest of
+the file keeps its form. An id the file no longer has is refused as stale. The edited source is
+CHECKED and the answer is one envelope — the new diagnostics, `previous_hash` and `hash`, whether it
+was written — plus `edit.authority`: the effects, required grants and foreign calls before and after,
+and `widened`, what the edit ADDS. That is the rule `fix` keeps for its own repairs (never a widening
+one unless named), brought to an edit an agent computed itself. `--dry-run` writes nothing,
+`--if-checks` writes only a clean result, a morph-stored file is refused, and the write is one rename.
+The answer has a closed schema (`delulu schema edit`, the tenth).
+
+Witnesses (`tests/edit_cli.rs`, six tests through the binary, every answer validated against the
+published `envelope` and `edit` schemas): the roadmap's falsifier — *edit after the hash* — a second
+writer changes the file between the read and the edit, the edit is refused, their write survives, and
+the hash the refusal reported lets the same edit through; a real `add_effect_to_row` repair taken from
+`check --json` passed straight through and checked clean; a node replaced by the id `atlas --json`
+printed, formatted, neighbours untouched, then refused as stale after a rename; a widening edit named
+(`Read`, `fs.read=./data`) on both channels; `--if-checks` and a morph file refused; and the **corpus
+witness**: every function, type and actor member the Atlas names in `examples/` — 49 nodes in 14 files
+— resolves by its id, and replacing each with its own text gives back the file's exact bytes.
+Falsified: nine mutants killed (hash check skipped, overlap allowed, morph allowed, `--if-checks`
+ignored, `widened` always empty, a stale id resolved to any fn, a second behavior or a field allowed
+in a replacement, an unknown edit field allowed), and an undocumented field in the answer fails the
+closed schema.
+
+Found while building it: the corpus witness failed first on `fn:guide.actors/guide.actors.Supervisor.
+dispatch` — the Atlas names actor members, which the first resolver did not know; they are resolved
+now rather than refused. And the MCP door rule was a list of effectors only, which `edit` — a command
+that writes — would have walked past had anyone added it as a tool. It is now two-way:
+`every_command_is_declared_read_only_or_acting` requires each command to be in exactly one of
+`READ_ONLY` and `EFFECTORS`, and a tool may run only a read-only one. Classifying every command found
+`audit` belongs with the actors (`audit bundle --out F` writes a file). `edit` is deliberately not an
+MCP tool.

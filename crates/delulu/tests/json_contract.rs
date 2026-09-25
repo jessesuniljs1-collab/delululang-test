@@ -19,7 +19,7 @@ use std::process::{Command, Output};
 /// Every run-once subcommand. Kept explicit so that adding a subcommand and forgetting the contract
 /// shows up as a missing entry in review, rather than as silence.
 const SUBCOMMANDS: &[&str] = &[
-    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "examples", "explain",
+    "add", "atlas", "audit", "authority", "build", "check", "completions", "deploy", "edit", "examples", "explain",
     "fix", "fleet", "fmt", "grants", "guard", "keygen", "locale", "lock", "login", "morph", "new",
     "plugin", "publish", "run", "sandbox", "schema", "secrets", "sign", "skill", "test", "toolchain", "verify-sig",
     "why",
@@ -445,6 +445,8 @@ effects = [\"Write\"]
     // (subcommand, argv, cwd, the `command` field the envelope must carry)
     let dpx_s = dpx.display().to_string();
     let dwx_s = dwx.display().to_string();
+    // P4-04: `edit` names the hash of the bytes it was computed against, so the case reads it.
+    let main_hash = blake3::hash(&std::fs::read(pkg.join("src").join("main.delulu")).unwrap()).to_hex().to_string();
     let cases: Vec<(&str, Vec<&str>, Cwd, &str)> = vec![
         ("check", vec!["check", ".", "--json"], Cwd::Pkg, "check"),
         ("authority", vec!["authority", ".", "--json"], Cwd::Pkg, "authority"),
@@ -474,6 +476,8 @@ effects = [\"Write\"]
         ("schema", vec!["schema", "--json"], Cwd::Pkg, "schema"),
         // P4-10: the shipped examples, each with its authority report.
         ("examples", vec!["examples", "--json"], Cwd::Pkg, "examples"),
+        // P4-04: a checked edit — no edits, dry run, so the fixture is left as it was.
+        ("edit", vec!["edit", "src/main.delulu", "--expect-hash", &main_hash, "--edits", "[]", "--dry-run", "--json"], Cwd::Pkg, "edit"),
         ("schema-one", vec!["schema", "diagnostic", "--json"], Cwd::Pkg, "schema"),
         ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),

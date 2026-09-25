@@ -469,23 +469,44 @@ mod tests {
             .collect()
     }
 
-    /// THE DOOR RULE, as a test. No tool's command line starts a command that acts: runs or tests a
-    /// program, grants, starts or stops a broker, touches the Guard, stores a secret, makes a key,
-    /// signs, publishes, logs in, deploys, commands a fleet, fixes, formats, scaffolds, adds, locks,
-    /// builds, builds a plugin, installs a locale, serves a language, or serves MCP. `sandbox` is
-    /// allowed only as `probe` and `policy`, `doctor` only with `--check`, and every tool is annotated
-    /// read-only in the list a client sees.
+    /// The commands that act: run or test a program, grant, start or stop a broker, touch the Guard,
+    /// store a secret, make a key, sign, publish, log in, deploy, command a fleet, fix, format,
+    /// scaffold, add, lock, build, build a plugin, install a locale, EDIT a file, write an audit
+    /// bundle, or serve a language or MCP. `sandbox` and `doctor` act too, outside the read-only
+    /// forms `every_tool_is_read_only` holds them to.
+    const EFFECTORS: &[&str] = &[
+        "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish",
+        "login", "deploy", "fleet", "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp",
+        "mcp", "edit", "audit",
+    ];
+    /// The commands that only read and answer. A tool may run one of these and nothing else.
+    const READ_ONLY: &[&str] = &[
+        "check", "authority", "why", "atlas", "explain", "verify-sig", "morph", "completions",
+        "skill", "toolchain", "schema", "examples", "sandbox", "doctor",
+    ];
+
+    /// Every command is one or the other, so a command added later cannot reach a tool unreviewed:
+    /// the door rule was first written as a list of effectors only, and `edit` — a command that
+    /// writes — would have walked past it, because nothing asked about a name the list did not have.
+    #[test]
+    fn every_command_is_declared_read_only_or_acting() {
+        for cmd in crate::cli::SUBCOMMANDS {
+            let (r, e) = (READ_ONLY.contains(cmd), EFFECTORS.contains(cmd));
+            assert!(r != e, "`{cmd}` must be in exactly one of READ_ONLY and EFFECTORS (read-only: {r}, acting: {e})");
+        }
+        for cmd in READ_ONLY.iter().chain(EFFECTORS) {
+            assert!(crate::cli::SUBCOMMANDS.contains(cmd), "`{cmd}` is not a delulu command");
+        }
+    }
+
+    /// THE DOOR RULE, as a test. A tool's command line starts only a command declared read-only —
+    /// `sandbox` only as `probe` and `policy`, `doctor` only with `--check` — and every tool is
+    /// annotated read-only in the list a client sees.
     #[test]
     fn every_tool_is_read_only() {
-        const EFFECTORS: &[&str] = &[
-            "run", "test", "repl", "grants", "broker", "guard", "secrets", "keygen", "sign", "publish",
-            "login", "deploy", "fleet", "fix", "fmt", "new", "add", "lock", "build", "plugin", "locale", "lsp",
-            "mcp",
-        ];
         for argv in commands_run_by_tools() {
             let cmd = argv[0].as_str();
-            assert!(!EFFECTORS.contains(&cmd), "a tool runs `delulu {}`", argv.join(" "));
-            assert!(crate::cli::SUBCOMMANDS.contains(&cmd), "`{cmd}` is not a delulu command");
+            assert!(READ_ONLY.contains(&cmd) && !EFFECTORS.contains(&cmd), "a tool runs `delulu {}`", argv.join(" "));
             if cmd == "sandbox" {
                 assert!(["probe", "policy"].contains(&argv[1].as_str()), "`sandbox {}` is not read-only", argv[1]);
             }

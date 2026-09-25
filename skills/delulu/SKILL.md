@@ -18,6 +18,7 @@ delulu authority <file|dir> --json      # what this program can do to the machin
 delulu run <file> --json --no-prompt    # run; never block waiting for a human
 delulu test --json                      # run tests under an authority ceiling
 delulu fmt <file>                       # canonical form; the only correct spelling
+delulu edit <file> --expect-hash H --edits JSON --json   # a checked edit; refused if the file moved
 delulu explain DL0501                   # long-form docs for any diagnostic code
 ```
 
@@ -144,16 +145,20 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
 
 - `docs/for-agents.md` — the pinned, field-by-field reference. Stable anchors: `[agents.start]`,
   `[agents.exit-codes]`, `[agents.json-envelope]`, `[agents.diagnostics]`, `[agents.repairs]`,
-  `[agents.authority]`, `[agents.effects]`, `[agents.tests]`, `[agents.sandbox]`, `[agents.registry]`,
-  `[agents.determinism]`, `[agents.env]`, `[agents.limits]`.
+  `[agents.edit]`, `[agents.authority]`, `[agents.effects]`, `[agents.tests]`, `[agents.sandbox]`,
+  `[agents.mcp]`, `[agents.registry]`, `[agents.determinism]`, `[agents.env]`, `[agents.limits]`.
 - `docs/reference/primitives.md` — every primitive with its row, generated from the compiler's table.
 - `delulu toolchain --json` — this toolchain as data, read from the binary's own tables: every
   command with the options its help documents, the ten effects, every `--grant` form with an example
   that parses, the primitive table, budgets and sandbox profiles, every diagnostic code and topic.
   Read it instead of guessing a flag.
 - `delulu schema <name> --json` — the closed JSON Schema of an output (envelope, diagnostic, repair,
-  authority, atlas, sandbox, policy, run-report, toolchain); `delulu schema validate <name> <file>`
-  checks a file against one.
+  authority, atlas, sandbox, policy, run-report, toolchain, edit); `delulu schema validate <name>
+  <file>` checks a file against one.
+- `delulu edit <file> --expect-hash H (--edits JSON | --node ID --with TEXT) --json` — write an edit
+  only if the file still has the bytes you read (blake3 `H`), then check it; the answer carries the
+  new hash, the diagnostics, and `authority.widened` — what the edit adds to what the program may
+  do. By Atlas id it replaces one function, type or actor member, formatted. See `[agents.edit]`.
 - `delulu examples --json` — the shipped programs, each known to check, with its authority report
   and the `run` line its grants spell. Start from one of these rather than from nothing.
 - `delulu mcp` — the same answers as MCP tools (check, authority, why, explain, atlas, toolchain,
