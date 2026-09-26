@@ -1319,3 +1319,48 @@ test state directory (mode `on`, the default `declassify:*` rule), and the polic
 replaced by declared, row tails ignored — which first SURVIVED, until the row-polymorphic case was
 added — the difference never shown, the DL0502 note dropped, the command not advertised, another guard
 verb sent).
+
+**P4-07's run, read.** CI `36205056652` (`c8b9b58`): **success on every job**, all three operating
+systems and `editor` (the extension with *Show Guard status* built, packaged and verified to activate).
+
+**P4-11 — the Atlas's V2 chain.** `delulu atlas chain <file|package> [--sandbox-profile P] [--json]`
+joins what the Atlas, the authority report and the sandbox derivation each answer separately into
+one ordered view: program → authority → effects → capabilities → sandbox policy → resources →
+plugins → actors → devices → execution boundary. It is a view over `atlas/1`, not a new graph and
+not the Survey: every fact comes from the Atlas this command builds (its nodes, `performs` and
+`requires` edges, embedded authority report) and from `SandboxPolicy::derive` — the same pure
+derivation `delulu sandbox policy` uses, so the same hash. The answer states its order as data
+(`links`), because a JSON object has none. `carried` — would `--sandbox` take this program — is the
+guest's own `unsupported_surface` on the file's text, so it cannot disagree with `sandbox policy`;
+for a package it is `null` with the reason (`--sandbox` runs one file). Custody and foreign
+isolation belong to a run, which is why the Atlas leaves them out; the boundary states an ordinary
+run's from `cli::ordinary_run_mode`, the same stamps `delulu authority` applies.
+
+Building it found the Atlas short of the chain it had to carry. Its resource classes covered six of
+the capability kinds, so a program that drove an actuator, read a sensor, dispatched to a compute
+device or hosted plugins had NONE of those in its Atlas — the resources a physical-safety or
+supply-chain audit needs most. They are resource nodes now (`actuator`, `sensor`, `compute`,
+`plugin_host`), with `requires` edges from the functions that wield them. And a resource node now
+carries `requested_scopes` — the scopes the code names, `root.fs_read("./config")` → `["./config"]` —
+where before the Atlas showed `res:fs_read:*` and the scope was only in the authority report (the
+rest of NE-14). Both are additive: no existing id changed, and a node with no scopes has no new
+attribute. `ForeignLoad` and `Python` stay out of the resource classes because the authority report
+discloses them as the foreign boundary (`foreign` nodes, `foreign_calls`, spec §6). A first draft
+derived "carried" from the report's capability list and said a Python program would be carried;
+`sandbox policy` said it would not — caught by hand before any test existed, and the reason the
+consistency test below exists.
+
+Witnesses (`tests/atlas_chain.rs`): **the snapshot on the corpus** — the chain of all 16 example
+targets (every single-file program and every package) is byte-for-byte its committed snapshot under
+`tests/snapshots/atlas_chain/`, with no host path in any (`DELULU_BLESS=1` rewrites; a snapshot with
+no example fails); the chain agrees with `sandbox policy` (hash, limits, refusal words), `authority`
+(effects, grants, custody, foreign isolation) and the Atlas (resource ids, function ids) for every
+example file; a program with an actuator, a sensor, a compute device and a plugin host shows each
+with its scopes, in the chain and in the Atlas; the actor example lists its actors; the profile
+changes the hash exactly as `sandbox policy` does; bad profiles, unknown options and a second target
+are refused. The chain has a closed schema (`delulu schema chain`, the eleventh), the JSON contract
+sweeps it, and `delulu mcp` offers it as `atlas_chain`. Six mutants killed (the actuator class
+dropped, scopes dropped, `carried` always true, the profile ignored, `performs` read as `requires`,
+custody hard-coded). The full suite then caught one more thing: `message_spacing`'s gate read the
+human rendering's padded labels (`"program            {}"`) as flattened line continuations; they are
+format widths now (`{:<18}`), the same output.

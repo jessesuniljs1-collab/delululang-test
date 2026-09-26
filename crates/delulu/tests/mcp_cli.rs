@@ -97,7 +97,7 @@ fn the_server_speaks_the_protocol_and_answers_with_the_clis_own_json() {
     // The list: read-only tools, none of them an effector, outside the source tree no Survey.
     let tools = reply(&replies, 2)["result"]["tools"].as_array().unwrap().clone();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    for want in ["check", "authority", "why", "explain", "atlas", "atlas_query", "toolchain", "schema", "sandbox_probe", "sandbox_policy", "examples"] {
+    for want in ["check", "authority", "why", "explain", "atlas", "atlas_query", "atlas_chain", "toolchain", "schema", "sandbox_probe", "sandbox_policy", "examples"] {
         assert!(names.contains(&want), "`{want}` is offered: {names:?}");
     }
     for never in ["run", "test", "grants", "broker", "fix", "fmt", "build", "edit", "survey_query", "survey_diff", "doctor_check"] {

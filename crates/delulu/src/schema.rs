@@ -31,6 +31,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ("run-report", "the report `delulu run --report-out F` writes"),
     ("toolchain", "what `delulu toolchain --json` carries under `toolchain`"),
     ("edit", "what `delulu edit --json` carries under `edit`: the checked edit, or why it was refused"),
+    ("chain", "what `delulu atlas chain --json` carries under `chain`: program to execution boundary, in ten links"),
 ];
 
 fn t(ty: &str) -> Value {
@@ -105,6 +106,128 @@ fn edit_payload() -> Value {
         &[],
     );
     json!({ "anyOf": [applied, refused] })
+}
+
+/// `delulu atlas chain --json`'s `chain` object (P4-11): one closed object per link, in the order
+/// `crate::atlas_chain::LINKS` names (a JSON object has none; the answer's `links` array states it).
+fn chain_payload() -> Value {
+    let strs = || arr(t("string"));
+    let resource = obj(
+        &[
+            ("id", t("string")),
+            ("class", t("string")),
+            ("pattern", t("string")),
+            ("requested_scopes", strs()),
+            ("required_by", strs()),
+            ("declassified_by", strs()),
+        ],
+        &[],
+    );
+    let capability = obj(
+        &[
+            ("kind", t("string")),
+            ("scopes", strs()),
+            ("requested_scopes", strs()),
+            ("resource_class", nullable("string")),
+            ("resources", strs()),
+        ],
+        &[],
+    );
+    let links: Vec<(&str, Value)> = vec![
+        (
+            "program",
+            obj(
+                &[
+                    ("name", t("string")),
+                    ("root", t("string")),
+                    ("packages", strs()),
+                    ("modules", strs()),
+                    ("functions", t("integer")),
+                ],
+                &[],
+            ),
+        ),
+        (
+            "authority",
+            obj(
+                &[("effects", strs()), ("required_grants", strs()), ("pure", t("boolean")), ("secrets", strs())],
+                &[],
+            ),
+        ),
+        ("effects", arr(obj(&[("effect", t("string")), ("performed_by", strs())], &[]))),
+        ("capabilities", arr(capability)),
+        (
+            "sandbox_policy",
+            obj(
+                &[
+                    ("profile", en(&["dev", "contained", "hostile-agent"])),
+                    ("requested_level", t("integer")),
+                    ("backend", t("string")),
+                    ("mode", t("string")),
+                    ("limits", r("limits")),
+                    ("policy_hash", t("string")),
+                    ("carried", described(nullable("boolean"), "null when the target is not one file: `--sandbox` runs one")),
+                    ("unsupported_surface", nullable("string")),
+                    ("carried_note", nullable("string")),
+                ],
+                &[],
+            ),
+        ),
+        ("resources", arr(resource.clone())),
+        (
+            "plugins",
+            obj(
+                &[
+                    ("hosts", arr(resource.clone())),
+                    ("load_performed_by", strs()),
+                    ("contained", json!({ "type": "array", "maxItems": 0 })),
+                ],
+                &[],
+            ),
+        ),
+        (
+            "actors",
+            obj(
+                &[
+                    ("actors", arr(obj(&[("actor", t("string")), ("members", strs()), ("effects", strs())], &[]))),
+                    ("async_performed_by", strs()),
+                ],
+                &[],
+            ),
+        ),
+        ("devices", obj(&[("devices", arr(resource)), ("actuate_performed_by", strs())], &[])),
+        (
+            "execution_boundary",
+            obj(
+                &[
+                    ("ordinary_run", t("string")),
+                    ("run_mode_note", t("string")),
+                    (
+                        "sandboxed_run",
+                        obj(
+                            &[
+                                ("level", t("integer")),
+                                ("backend", t("string")),
+                                ("guest_performs_effects", json!({ "const": false })),
+                                ("carried", nullable("boolean")),
+                            ],
+                            &[],
+                        ),
+                    ),
+                    ("custody", t("string")),
+                    (
+                        "foreign",
+                        obj(
+                            &[("isolation", t("string")), ("calls", arr(r("foreign_call"))), ("boundaries", strs())],
+                            &[],
+                        ),
+                    ),
+                ],
+                &[],
+            ),
+        ),
+    ];
+    obj(&links, &[])
 }
 
 /// Every shared definition. Each document carries all of them, so any `$ref` in it resolves.
@@ -224,6 +347,7 @@ fn defs() -> Value {
                 ("pure", t("boolean")),
                 ("resource_class", t("string")),
                 ("pattern", t("string")),
+                ("requested_scopes", str_list.clone()),
             ],
         ),
         "atlas_edge": obj(&[("from", t("string")), ("to", t("string")), ("kind", en(&edge_kinds))], &[]),
@@ -487,6 +611,7 @@ pub fn document(name: &str) -> Option<Value> {
         }
         "toolchain" => toolchain_payload(),
         "edit" => edit_payload(),
+        "chain" => chain_payload(),
         _ => return None,
     };
     let (_, what) = NAMES.iter().find(|(n, _)| *n == name)?;

@@ -152,7 +152,7 @@ fn the_toolchain_description_and_the_schema_listing_are_valid() {
     assert_valid(&dir, "toolchain", "toolchain", &v["toolchain"]);
     let list = json_of(&delulu(&dir, &["schema", "--json"]));
     let names: Vec<&str> = list["schemas"].as_array().unwrap().iter().filter_map(|s| s["name"].as_str()).collect();
-    for n in ["envelope", "diagnostic", "repair", "authority", "atlas", "sandbox", "policy", "run-report", "toolchain", "edit"] {
+    for n in ["envelope", "diagnostic", "repair", "authority", "atlas", "sandbox", "policy", "run-report", "toolchain", "edit", "chain"] {
         assert!(names.contains(&n), "`{n}` is listed");
         let doc = json_of(&delulu(&dir, &["schema", n, "--json"]));
         assert_eq!(doc["document"]["$id"], format!("delulu:schema/{n}"));

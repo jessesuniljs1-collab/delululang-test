@@ -481,6 +481,8 @@ effects = [\"Write\"]
         ("schema-one", vec!["schema", "diagnostic", "--json"], Cwd::Pkg, "schema"),
         ("atlas", vec!["atlas", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("atlas-query", vec!["atlas", "node", "main", ".", "--json"], Cwd::Pkg, "atlas"),
+        // P4-11: the V2 chain, a view over the same Atlas.
+        ("atlas-chain", vec!["atlas", "chain", "src/main.delulu", "--json"], Cwd::Pkg, "atlas"),
         ("locale", vec!["locale", "list", "--json"], Cwd::Pkg, "locale"),
         ("morph", vec!["morph", "list", "--json"], Cwd::Pkg, "morph"),
         ("secrets", vec!["secrets", "list", "--json"], Cwd::Pkg, "secrets"),

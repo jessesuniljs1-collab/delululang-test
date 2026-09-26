@@ -21,6 +21,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - The MCP server's read-only rule now classifies every command as read-only or acting, so a new command cannot become a tool unreviewed.
 - **`delulu-survey diff <rev>` (P4-06)** — what a change breaks: the files git says changed since a revision (the working tree and untracked files included, or a range), the Survey node for each, the entrenched ones named with their owner, and the union of their impacts with every hop cited and traced to the file it came from. Also the MCP tool `survey_diff`.
 - **The Guard, read-only, in the editor (P4-07)** — the language server answers `delulu.guardStatus` with exactly what `delulu guard status --json` prints, and the VS Code extension shows it (*Show Guard status*). Hovering a function now shows what its body performs beside the row it declares when the two differ, naming the DL0501/DL0502 difference.
+- **`delulu atlas chain` (P4-11)** — the Atlas's V2 chain: program → authority → effects → capabilities → sandbox policy → resources → plugins → actors → devices → execution boundary, one view joined from the Atlas and the sandbox derivation (the same policy hash as `delulu sandbox policy`, and whether `--sandbox` would carry the program). Also the MCP tool `atlas_chain` and `delulu schema chain`.
+- **The Atlas now shows devices and plugin hosts** — actuators, sensors, compute devices and plugin hosts are resource nodes, and a resource carries the scopes its code names (`requested_scopes`). Additive to `atlas/1`: no existing id changed.
 
 ## Unreleased — V2 PS-B-03b and PS-B-04: a Linux guest as a stranger, and a faster Windows channel, 2026-09-25
 

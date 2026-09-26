@@ -1,0 +1,197 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [
+      "Net",
+      "Read",
+      "Write"
+    ],
+    "pure": false,
+    "required_grants": [
+      "fs.read=./config",
+      "fs.write=./out",
+      "console",
+      "net=example.com"
+    ],
+    "secrets": []
+  },
+  "capabilities": [
+    {
+      "kind": "Console",
+      "requested_scopes": [],
+      "resource_class": "console",
+      "resources": [
+        "res:console:stdio"
+      ],
+      "scopes": [
+        "stdio"
+      ]
+    },
+    {
+      "kind": "FsRead",
+      "requested_scopes": [
+        "./config"
+      ],
+      "resource_class": "fs_read",
+      "resources": [
+        "res:fs_read:*"
+      ],
+      "scopes": []
+    },
+    {
+      "kind": "FsWrite",
+      "requested_scopes": [
+        "./out"
+      ],
+      "resource_class": "fs_write",
+      "resources": [
+        "res:fs_write:*"
+      ],
+      "scopes": []
+    },
+    {
+      "kind": "Http",
+      "requested_scopes": [
+        "example.com"
+      ],
+      "resource_class": "net",
+      "resources": [
+        "res:net:*"
+      ],
+      "scopes": []
+    }
+  ],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "Declassify",
+      "performed_by": [
+        "fn:guide.capabilities/guide.capabilities.password_matches"
+      ]
+    },
+    {
+      "effect": "Net",
+      "performed_by": [
+        "fn:guide.capabilities/guide.capabilities.fetch",
+        "fn:guide.capabilities/guide.capabilities.main"
+      ]
+    },
+    {
+      "effect": "Read",
+      "performed_by": [
+        "fn:guide.capabilities/guide.capabilities.main",
+        "fn:guide.capabilities/guide.capabilities.read_config"
+      ]
+    },
+    {
+      "effect": "Write",
+      "performed_by": [
+        "fn:guide.capabilities/guide.capabilities.main",
+        "fn:guide.capabilities/guide.capabilities.save"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": true,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 5,
+    "modules": [
+      "mod:guide.capabilities/guide.capabilities"
+    ],
+    "name": "guide.capabilities",
+    "packages": [
+      "pkg:guide.capabilities"
+    ],
+    "root": "guide.capabilities"
+  },
+  "resources": [
+    {
+      "class": "console",
+      "declassified_by": [],
+      "id": "res:console:stdio",
+      "pattern": "stdio",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:guide.capabilities/guide.capabilities.main"
+      ]
+    },
+    {
+      "class": "fs_read",
+      "declassified_by": [],
+      "id": "res:fs_read:*",
+      "pattern": "*",
+      "requested_scopes": [
+        "./config"
+      ],
+      "required_by": [
+        "fn:guide.capabilities/guide.capabilities.main",
+        "fn:guide.capabilities/guide.capabilities.read_config"
+      ]
+    },
+    {
+      "class": "fs_write",
+      "declassified_by": [],
+      "id": "res:fs_write:*",
+      "pattern": "*",
+      "requested_scopes": [
+        "./out"
+      ],
+      "required_by": [
+        "fn:guide.capabilities/guide.capabilities.main",
+        "fn:guide.capabilities/guide.capabilities.save"
+      ]
+    },
+    {
+      "class": "net",
+      "declassified_by": [],
+      "id": "res:net:*",
+      "pattern": "*",
+      "requested_scopes": [
+        "example.com"
+      ],
+      "required_by": [
+        "fn:guide.capabilities/guide.capabilities.fetch",
+        "fn:guide.capabilities/guide.capabilities.main"
+      ]
+    }
+  ],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": true,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": null
+  }
+}

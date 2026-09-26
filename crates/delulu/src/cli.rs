@@ -1290,6 +1290,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--out DIR] [--budget N] [--gods N] [--custody] [--json]\n\
      \x20 delulu atlas     node <name-or-id> | callers <fn> | calls <fn> | why <Effect|resource> [target] [--json] [--budget N]\n\
      \x20 delulu atlas     path <A> <B> [target] [--json]   (a typed, deterministic code + authority graph)\n\
+     \x20 delulu atlas     chain [target] [--sandbox-profile P] [--json]   (the V2 chain, one view: program →\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 authority → effects → capabilities → sandbox policy → resources → plugins →\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 actors → devices → execution boundary)\n\
      \x20 delulu plugin    build <package-dir> [-o out.dpx] [--sign keyfile] [--json]   (a `kind = \"plugin\"` package → .dpx)\n\
      \x20 delulu plugin    inspect <file.dpx> [--json]   (manifest, class, exports, section hashes, signature)\n\
      \x20 delulu plugin    verify  <file.dpx> [--json]   (load steps 1,2,5 — identical verdicts to a real load)\n\
@@ -1369,7 +1372,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 levels and profiles, every diagnostic code — read from the binary's own tables)\n\
      \x20 delulu schema    [<name>] [--json] | validate <name> <file.json> [--json]   (the JSON Schema of an\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 output — envelope, diagnostic, repair, authority, atlas, sandbox, policy, run-report,\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 toolchain, edit — closed, so every field is named; `validate` checks a file against one)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 toolchain, edit, chain — closed, so every field is named; `validate` checks a file against one)\n\
      \x20 delulu examples  [--json]   (the shipped example programs — each checks, with the authority report\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 `authority` prints for it and the `run` line its grants spell; embedded, so it reads anywhere)\n\
      \x20 delulu completions <bash|zsh|fish|powershell>   (a completion script on stdout; the command\n\
@@ -3856,6 +3859,18 @@ fn stamp_custody(report: &mut Json, opts: &Opts) {
 /// that WOULD apply when this program runs — `process` if `--foreign-isolation process` (or daemon
 /// mode's default), else `inproc`. Additive JSON key; the human render prints it only inside a
 /// non-empty foreign section, so a no-foreign report stays byte-identical (criterion 7).
+/// What an ORDINARY run's custody and foreign isolation are — the run-mode fields `delulu authority`
+/// stamps with default options, which the Atlas deliberately leaves out of its embedded report
+/// because they belong to a run, not to the program. The chain's execution boundary (P4-11) states
+/// them from here, so the default is written in one place.
+pub(crate) fn ordinary_run_mode() -> Json {
+    let (_, opts) = parse_opts(&[]);
+    let mut v = json!({});
+    stamp_custody(&mut v, &opts);
+    stamp_foreign_isolation(&mut v, &opts);
+    v
+}
+
 fn stamp_foreign_isolation(report: &mut Json, opts: &Opts) {
     let daemon = opts.broker.as_deref() == Some("daemon");
     let mode = match opts.foreign_isolation.as_deref() {
@@ -8536,6 +8551,8 @@ fn cmd_audit(rest: &[String]) -> i32 {
 fn cmd_atlas(rest: &[String]) -> i32 {
     match rest.first().map(String::as_str) {
         Some(v @ ("node" | "callers" | "calls" | "why" | "path")) => atlas_query_cmd(v, &rest[1..]),
+        // P4-11: the V2 chain, a view over `atlas/1` (`atlas_chain.rs`).
+        Some("chain") => crate::atlas_chain::cmd_chain(&rest[1..]),
         _ => atlas_graph_cmd(rest),
     }
 }
@@ -8543,7 +8560,7 @@ fn cmd_atlas(rest: &[String]) -> i32 {
 /// Build the atlas for a target: a `.delulu` file, a package directory, or a persisted `atlas.json`.
 /// On check errors it prints the diagnostics + DL1780 and refuses (no partial graph); returns the
 /// exit code to propagate. `gods` is the god-node cap.
-fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32> {
+pub(crate) fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result<Atlas, i32> {
     // A persisted graph: reuse it directly (agents can `atlas <pkg> --out .` then query atlas.json).
     //
     // Two spellings are accepted, and that is deliberate. `--out DIR` writes the BARE `atlas/1`

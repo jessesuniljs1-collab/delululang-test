@@ -145,7 +145,7 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
 
 - `docs/for-agents.md` — the pinned, field-by-field reference. Stable anchors: `[agents.start]`,
   `[agents.exit-codes]`, `[agents.json-envelope]`, `[agents.diagnostics]`, `[agents.repairs]`,
-  `[agents.edit]`, `[agents.authority]`, `[agents.effects]`, `[agents.tests]`, `[agents.sandbox]`,
+  `[agents.edit]`, `[agents.atlas-chain]`, `[agents.authority]`, `[agents.effects]`, `[agents.tests]`, `[agents.sandbox]`,
   `[agents.mcp]`, `[agents.registry]`, `[agents.determinism]`, `[agents.env]`, `[agents.limits]`.
 - `docs/reference/primitives.md` — every primitive with its row, generated from the compiler's table.
 - `delulu toolchain --json` — this toolchain as data, read from the binary's own tables: every
@@ -153,8 +153,11 @@ Every `--json` command emits exactly one object: `command`, `schema`, `delulu_ve
   that parses, the primitive table, budgets and sandbox profiles, every diagnostic code and topic.
   Read it instead of guessing a flag.
 - `delulu schema <name> --json` — the closed JSON Schema of an output (envelope, diagnostic, repair,
-  authority, atlas, sandbox, policy, run-report, toolchain, edit); `delulu schema validate <name>
+  authority, atlas, sandbox, policy, run-report, toolchain, edit, chain); `delulu schema validate <name>
   <file>` checks a file against one.
+- `delulu atlas chain <file> --json` — the program down to the machine in ten links: authority,
+  effects and who performs them, capabilities, the sandbox policy (and whether `--sandbox` would carry
+  it), resources, plugins, actors, devices, the execution boundary. See `[agents.atlas-chain]`.
 - `delulu edit <file> --expect-hash H (--edits JSON | --node ID --with TEXT) --json` — write an edit
   only if the file still has the bytes you read (blake3 `H`), then check it; the answer carries the
   new hash, the diagnostics, and `authority.widened` — what the edit adds to what the program may

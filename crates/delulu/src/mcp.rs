@@ -93,6 +93,29 @@ fn tools() -> Vec<Tool> {
             tree_only: false,
         },
         Tool {
+            name: "atlas_chain",
+            description: "The Atlas's V2 chain for a program (`delulu atlas chain <path> --json`): program, authority, effects, capabilities, the sandbox policy a confined run would hold it to (and whether the channel carries it), resources, plugins, actors, devices and the execution boundary — one view, every fact read from the Atlas and the sandbox derivation.",
+            input: || {
+                props(
+                    json!({
+                        "path": string("a .delulu file or a package directory"),
+                        "profile": { "type": "string", "enum": ["dev", "contained", "hostile-agent"] },
+                    }),
+                    &["path"],
+                )
+            },
+            source: Source::Cli(|a| {
+                let mut argv = vec!["atlas".into(), "chain".into(), word(a, "path")?];
+                if let Some(p) = optional_word(a, "profile")? {
+                    argv.push("--sandbox-profile".into());
+                    argv.push(p);
+                }
+                argv.push("--json".into());
+                Ok(argv)
+            }),
+            tree_only: false,
+        },
+        Tool {
             name: "atlas_query",
             description: "One structural question to the Atlas (`delulu atlas <verb> …`): `node` (a node by name or id), `callers`/`calls` (of a function), `why` (why a program can perform an effect or reach a resource), `path` (how one node reaches another).",
             input: || {

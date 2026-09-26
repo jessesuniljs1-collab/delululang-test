@@ -1,0 +1,98 @@
+{
+  "actors": {
+    "actors": [
+      {
+        "actor": "Supervisor",
+        "effects": [
+          "Async"
+        ],
+        "members": [
+          "fn:guide.actors/guide.actors.Supervisor.dispatch",
+          "fn:guide.actors/guide.actors.Supervisor.new"
+        ]
+      },
+      {
+        "actor": "Worker",
+        "effects": [],
+        "members": [
+          "fn:guide.actors/guide.actors.Worker.job",
+          "fn:guide.actors/guide.actors.Worker.new",
+          "fn:guide.actors/guide.actors.Worker.total"
+        ]
+      }
+    ],
+    "async_performed_by": [
+      "fn:guide.actors/guide.actors.Supervisor.dispatch",
+      "fn:guide.actors/guide.actors.main"
+    ]
+  },
+  "authority": {
+    "effects": [
+      "Async"
+    ],
+    "pure": false,
+    "required_grants": [],
+    "secrets": []
+  },
+  "capabilities": [],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "Async",
+      "performed_by": [
+        "fn:guide.actors/guide.actors.Supervisor.dispatch",
+        "fn:guide.actors/guide.actors.main"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": false,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 6,
+    "modules": [
+      "mod:guide.actors/guide.actors"
+    ],
+    "name": "guide.actors",
+    "packages": [
+      "pkg:guide.actors"
+    ],
+    "root": "guide.actors"
+  },
+  "resources": [],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": false,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": "actors"
+  }
+}

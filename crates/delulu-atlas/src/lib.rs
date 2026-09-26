@@ -17,7 +17,7 @@ mod model;
 mod query;
 mod render;
 
-pub use build::{recompute_gods, BuildInput, ModuleView, PackageView};
+pub use build::{class_of_kind, recompute_gods, BuildInput, ModuleView, PackageView};
 pub use formats::HTML_NODE_CAP;
 pub use model::{
     effect_id, fn_id, foreign_c_id, foreign_py_id, grant_id, mod_id, pkg_id, resource_id, type_id,

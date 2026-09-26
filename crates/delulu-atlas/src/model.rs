@@ -124,6 +124,11 @@ pub struct Node {
     pub resource_class: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pattern: Option<String>,
+    /// A resource's scopes as the program's code names them (`root.fs_read("./config")` →
+    /// `["./config"]`), from the authority report's `requested_scopes`. Absent when there are none,
+    /// so every Atlas that had none is byte-for-byte what it was (P4-11).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub requested_scopes: Vec<String>,
 }
 
 impl Node {
@@ -139,6 +144,7 @@ impl Node {
             pure: None,
             resource_class: None,
             pattern: None,
+            requested_scopes: Vec::new(),
         }
     }
 }

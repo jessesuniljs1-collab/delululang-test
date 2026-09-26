@@ -1,0 +1,65 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [],
+    "pure": true,
+    "required_grants": [],
+    "secrets": []
+  },
+  "capabilities": [],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": true,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 1,
+    "modules": [
+      "mod:shout/shout"
+    ],
+    "name": "shout",
+    "packages": [
+      "pkg:shout"
+    ],
+    "root": "shout"
+  },
+  "resources": [],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": true,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": null
+  }
+}

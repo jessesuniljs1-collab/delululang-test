@@ -1,0 +1,147 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [
+      "Read",
+      "Write"
+    ],
+    "pure": false,
+    "required_grants": [
+      "fs.read=./config",
+      "console",
+      "secret:API_KEY=VALUE"
+    ],
+    "secrets": [
+      "API_KEY"
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "Console",
+      "requested_scopes": [],
+      "resource_class": "console",
+      "resources": [
+        "res:console:stdio"
+      ],
+      "scopes": [
+        "stdio"
+      ]
+    },
+    {
+      "kind": "FsRead",
+      "requested_scopes": [
+        "./config"
+      ],
+      "resource_class": "fs_read",
+      "resources": [
+        "res:fs_read:*"
+      ],
+      "scopes": []
+    }
+  ],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "Read",
+      "performed_by": [
+        "fn:demo/demo.main",
+        "fn:demo/demo.read_config"
+      ]
+    },
+    {
+      "effect": "Write",
+      "performed_by": [
+        "fn:demo/demo.greet",
+        "fn:demo/demo.main"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": true,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 5,
+    "modules": [
+      "mod:demo/demo"
+    ],
+    "name": "demo",
+    "packages": [
+      "pkg:demo"
+    ],
+    "root": "demo"
+  },
+  "resources": [
+    {
+      "class": "console",
+      "declassified_by": [],
+      "id": "res:console:stdio",
+      "pattern": "stdio",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:demo/demo.greet",
+        "fn:demo/demo.main"
+      ]
+    },
+    {
+      "class": "fs_read",
+      "declassified_by": [],
+      "id": "res:fs_read:*",
+      "pattern": "*",
+      "requested_scopes": [
+        "./config"
+      ],
+      "required_by": [
+        "fn:demo/demo.main",
+        "fn:demo/demo.read_config"
+      ]
+    },
+    {
+      "class": "secret",
+      "declassified_by": [],
+      "id": "res:secret:API_KEY",
+      "pattern": "API_KEY",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:demo/demo.main"
+      ]
+    }
+  ],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": true,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": null
+  }
+}

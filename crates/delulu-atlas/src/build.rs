@@ -47,7 +47,14 @@ pub struct BuildInput<'a> {
 }
 
 /// Map a checker `ResourceKind` name / authority capability `kind` to the atlas resource class.
-fn class_of_kind(kind: &str) -> Option<&'static str> {
+///
+/// P4-11: the last four were missing, so a program that drove an actuator, read a sensor, dispatched
+/// to a compute device or hosted plugins had none of those in its Atlas — the resources a
+/// physical-safety or supply-chain audit most needs to see. Three kinds have no class, each because
+/// the authority report discloses it elsewhere: `Declassify` reaches a secret (secret nodes and
+/// `declassifies` edges), and `ForeignLoad`/`Python` are the foreign boundary (`foreign` nodes and
+/// the report's `foreign_calls`, spec §6).
+pub fn class_of_kind(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "FsRead" => "fs_read",
         "FsWrite" => "fs_write",
@@ -55,6 +62,10 @@ fn class_of_kind(kind: &str) -> Option<&'static str> {
         "Console" => "console",
         "Clock" => "clock",
         "Rand" => "rand",
+        "Actuator" => "actuator",
+        "Sensor" => "sensor",
+        "Compute" => "compute",
+        "PluginHost" => "plugin_host",
         _ => return None,
     })
 }
@@ -228,12 +239,20 @@ impl Atlas {
                     .and_then(|s| s.as_array())
                     .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
                     .unwrap_or_default();
+                // The scopes the code NAMES (`root.fs_read("./config")`) — kept on the node rather
+                // than folded into its id, so every existing id stays what it was (NE-14, P4-11).
+                let requested: Vec<String> = cap
+                    .get("requested_scopes")
+                    .and_then(|s| s.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                    .unwrap_or_default();
                 let patterns = if scopes.is_empty() { vec!["*".to_string()] } else { scopes };
                 for pat in patterns {
                     let rid = resource_id(class, &pat);
                     let mut rnode = Node::new(&rid, NodeKind::Resource, format!("{class}:{pat}"));
                     rnode.resource_class = Some(class.to_string());
                     rnode.pattern = Some(pat.clone());
+                    rnode.requested_scopes = requested.clone();
                     nodes.insert(rid.clone(), rnode);
                     class_resources.entry(class.to_string()).or_default().push(rid);
                 }

@@ -1,0 +1,124 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [
+      "ForeignCall",
+      "Write"
+    ],
+    "pure": false,
+    "required_grants": [
+      "console",
+      "foreign.python=numpy"
+    ],
+    "secrets": []
+  },
+  "capabilities": [
+    {
+      "kind": "Console",
+      "requested_scopes": [],
+      "resource_class": "console",
+      "resources": [
+        "res:console:stdio"
+      ],
+      "scopes": [
+        "stdio"
+      ]
+    }
+  ],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "ForeignCall",
+      "performed_by": [
+        "fn:numpy_mean/numpy_mean.main",
+        "fn:numpy_mean/numpy_mean.mean_of"
+      ]
+    },
+    {
+      "effect": "Write",
+      "performed_by": [
+        "fn:numpy_mean/numpy_mean.main"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [
+        "foreign:py:numpy"
+      ],
+      "calls": [
+        {
+          "abi": "python",
+          "allowlist": [],
+          "imports_seen": [
+            "numpy"
+          ],
+          "used_at": [
+            {
+              "file": "examples/numpy_mean.delulu",
+              "line": 28
+            }
+          ]
+        }
+      ],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": false,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 2,
+    "modules": [
+      "mod:numpy_mean/numpy_mean"
+    ],
+    "name": "numpy_mean",
+    "packages": [
+      "pkg:numpy_mean"
+    ],
+    "root": "numpy_mean"
+  },
+  "resources": [
+    {
+      "class": "console",
+      "declassified_by": [],
+      "id": "res:console:stdio",
+      "pattern": "stdio",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:numpy_mean/numpy_mean.main"
+      ]
+    }
+  ],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": false,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": "ForeignLoad, Python"
+  }
+}

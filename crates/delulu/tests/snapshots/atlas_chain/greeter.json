@@ -1,0 +1,100 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [
+      "Write"
+    ],
+    "pure": false,
+    "required_grants": [
+      "console"
+    ],
+    "secrets": []
+  },
+  "capabilities": [
+    {
+      "kind": "Console",
+      "requested_scopes": [],
+      "resource_class": "console",
+      "resources": [
+        "res:console:stdio"
+      ],
+      "scopes": [
+        "stdio"
+      ]
+    }
+  ],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "Write",
+      "performed_by": [
+        "fn:greeter/greeter.main"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": null,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [],
+    "load_performed_by": []
+  },
+  "program": {
+    "functions": 3,
+    "modules": [
+      "mod:greeter/greeter",
+      "mod:greeter/greeter.greetings"
+    ],
+    "name": "greeter",
+    "packages": [
+      "pkg:greeter"
+    ],
+    "root": "greeter"
+  },
+  "resources": [
+    {
+      "class": "console",
+      "declassified_by": [],
+      "id": "res:console:stdio",
+      "pattern": "stdio",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:greeter/greeter.main"
+      ]
+    }
+  ],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": null,
+    "carried_note": "`--sandbox` runs one file: ask `atlas chain` of the file to be run",
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": null
+  }
+}

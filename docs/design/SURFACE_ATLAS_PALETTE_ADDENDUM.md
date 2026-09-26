@@ -116,6 +116,15 @@ Versioned like `broker/1`; additive evolution only. Single object:
 kind-specific fields (`module`, `package`, `span` {file, line}, `effects`, `pure`). Machine
 channels are **never** colored.
 
+**V2 additions (P4-11, 2026-09-26), additive as this section requires.** Resource nodes now exist
+for every capability kind the authority report lists — `actuator`, `sensor`, `compute` and
+`plugin_host` joined the original six classes, so a program that drives a device or hosts plugins
+shows them — and a resource node carries `requested_scopes` (the scopes its code names, e.g.
+`["./config"]`) when it has any; no existing id changed. `delulu atlas chain` is a VIEW over this
+document, not a change to it: program → authority → effects → capabilities → sandbox policy →
+resources → plugins → actors → devices → execution boundary, joined from the Atlas and the sandbox
+policy derivation (`docs/for-agents.md` [agents.atlas-chain]).
+
 ### 2.5 The Palette
 
 A role-based color system for every human-facing CLI surface. Lives in `delulu-diag` so every

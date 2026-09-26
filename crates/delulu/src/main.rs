@@ -4,6 +4,7 @@
 //! 2 internal.
 
 mod advisories;
+mod atlas_chain;
 mod broker_client;
 mod broker_ipc;
 mod broker_transport;

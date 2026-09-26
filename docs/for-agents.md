@@ -293,6 +293,21 @@ delulu edit <file> --expect-hash <blake3> --node <Atlas id> --with '<one item>' 
 - The answer is described by `delulu schema edit` (a closed `anyOf` of the applied and the refused
   shape).
 
+## [agents.atlas-chain] The Atlas chain — from the program down to the machine
+
+`delulu atlas chain <file|package> [--sandbox-profile P] --json` answers an auditor's question in one
+object: from this program down to the machine, what is there? Ten links, in the order the answer's
+`links` array states: `program` → `authority` → `effects` (each with the functions that perform it)
+→ `capabilities` (each with the resources it designates) → `sandbox_policy` (the policy a confined
+run would hold it to — the same derivation and hash as `delulu sandbox policy` — and whether the
+channel carries the program, in the guest's own words) → `resources` (who requires or declassifies
+each, with the scopes the code names) → `plugins` → `actors` → `devices` (actuators, sensors,
+compute) → `execution_boundary` (what an ordinary run and a sandboxed run are, custody, the foreign
+boundary). It is a view over `atlas/1`, never a second model: every fact is read from the Atlas and
+the sandbox derivation, and a test holds it against `sandbox policy`, `authority` and the Atlas for
+every example. `carried` is `null` for a package: `--sandbox` runs one file. The shape is `delulu
+schema chain`; the MCP tool is `atlas_chain`.
+
 ## [agents.authority] The authority report
 
 ```
@@ -461,7 +476,7 @@ from the workspace you want answered:
 { "mcpServers": { "delulu": { "command": "delulu", "args": ["mcp"] } } }
 ```
 
-Its tools are `check`, `authority`, `why`, `explain`, `atlas`, `atlas_query`, `toolchain`, `schema`,
+Its tools are `check`, `authority`, `why`, `explain`, `atlas`, `atlas_query`, `atlas_chain`, `toolchain`, `schema`,
 `examples`, `sandbox_policy` and `sandbox_probe`; inside the DeluluLang source tree also
 `survey_query`, `survey_impact`, `survey_diff` and `doctor_check`. **Every one is read-only, by construction:** each
 runs this binary's own `--json` subcommand with a fixed argument list, so its `structuredContent` is

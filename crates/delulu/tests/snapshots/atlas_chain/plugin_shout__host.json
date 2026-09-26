@@ -1,0 +1,151 @@
+{
+  "actors": {
+    "actors": [],
+    "async_performed_by": []
+  },
+  "authority": {
+    "effects": [
+      "Load",
+      "Read",
+      "Write"
+    ],
+    "pure": false,
+    "required_grants": [
+      "console",
+      "plugin=PATH"
+    ],
+    "secrets": []
+  },
+  "capabilities": [
+    {
+      "kind": "Console",
+      "requested_scopes": [],
+      "resource_class": "console",
+      "resources": [
+        "res:console:stdio"
+      ],
+      "scopes": [
+        "stdio"
+      ]
+    },
+    {
+      "kind": "PluginHost",
+      "requested_scopes": [],
+      "resource_class": "plugin_host",
+      "resources": [
+        "res:plugin_host:*"
+      ],
+      "scopes": []
+    }
+  ],
+  "devices": {
+    "actuate_performed_by": [],
+    "devices": []
+  },
+  "effects": [
+    {
+      "effect": "Load",
+      "performed_by": [
+        "fn:host/host.main",
+        "fn:host/host.shouted"
+      ]
+    },
+    {
+      "effect": "Read",
+      "performed_by": [
+        "fn:host/host.main",
+        "fn:host/host.shouted"
+      ]
+    },
+    {
+      "effect": "Write",
+      "performed_by": [
+        "fn:host/host.main"
+      ]
+    }
+  ],
+  "execution_boundary": {
+    "custody": "embedded",
+    "foreign": {
+      "boundaries": [],
+      "calls": [],
+      "isolation": "inproc"
+    },
+    "ordinary_run": "in-process (L0): the language and custody in one process, no OS boundary",
+    "run_mode_note": "custody and foreign isolation are an ordinary run's; `--broker daemon` and `--foreign-isolation process` change them",
+    "sandboxed_run": {
+      "backend": "process",
+      "carried": false,
+      "guest_performs_effects": false,
+      "level": 1
+    }
+  },
+  "plugins": {
+    "contained": [],
+    "hosts": [
+      {
+        "class": "plugin_host",
+        "declassified_by": [],
+        "id": "res:plugin_host:*",
+        "pattern": "*",
+        "requested_scopes": [],
+        "required_by": [
+          "fn:host/host.main",
+          "fn:host/host.shouted"
+        ]
+      }
+    ],
+    "load_performed_by": [
+      "fn:host/host.main",
+      "fn:host/host.shouted"
+    ]
+  },
+  "program": {
+    "functions": 2,
+    "modules": [
+      "mod:host/host"
+    ],
+    "name": "host",
+    "packages": [
+      "pkg:host"
+    ],
+    "root": "host"
+  },
+  "resources": [
+    {
+      "class": "console",
+      "declassified_by": [],
+      "id": "res:console:stdio",
+      "pattern": "stdio",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:host/host.main"
+      ]
+    },
+    {
+      "class": "plugin_host",
+      "declassified_by": [],
+      "id": "res:plugin_host:*",
+      "pattern": "*",
+      "requested_scopes": [],
+      "required_by": [
+        "fn:host/host.main",
+        "fn:host/host.shouted"
+      ]
+    }
+  ],
+  "sandbox_policy": {
+    "backend": "process",
+    "carried": false,
+    "carried_note": null,
+    "limits": {
+      "cpu_seconds": 300,
+      "memory_bytes": 1073741824
+    },
+    "mode": "strict",
+    "policy_hash": "1804db04fe73e38630217c832871f82c124a8132c61c416754d3a3980e9815f0",
+    "profile": "contained",
+    "requested_level": 1,
+    "unsupported_surface": "PluginHost"
+  }
+}
