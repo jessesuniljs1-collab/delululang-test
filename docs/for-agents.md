@@ -85,10 +85,14 @@ cargo run -p delulu-survey -- impact <id>       # everything that breaks if this
 cargo run -p delulu-survey -- affected-by <id>  # everything this rests on
 cargo run -p delulu-survey -- path <a> <b>      # how one reaches the other, hop by hop
 cargo run -p delulu-survey -- rdeps <id>        # what points at it — ONE HOP
+cargo run -p delulu-survey -- diff <rev>        # what a CHANGE breaks: every file git says changed
+                                                # since <rev> (working tree and untracked included,
+                                                # or a range A..B), entrenched ones named, and the
+                                                # union of their impacts, each hop traced to its file
 ```
 
-**Every read-only verb takes `--json`** — `query`, `rdeps`, `impact`, `affected-by`, `findings`,
-`check` — and answers with **one object** carrying `tool`, `verb` and `schema`, so you can branch
+**Every read-only verb takes `--json`** — `query`, `rdeps`, `impact`, `affected-by`, `diff`,
+`findings`, `check` — and answers with **one object** carrying `tool`, `verb` and `schema`, so you can branch
 before reading anything else. Three properties are worth knowing before you build on it:
 
 - **Every edge and every hop keeps its citation**: `"via": {"kind": …, "file": …, "line": …}`. The
@@ -453,7 +457,7 @@ from the workspace you want answered:
 
 Its tools are `check`, `authority`, `why`, `explain`, `atlas`, `atlas_query`, `toolchain`, `schema`,
 `examples`, `sandbox_policy` and `sandbox_probe`; inside the DeluluLang source tree also
-`survey_query`, `survey_impact` and `doctor_check`. **Every one is read-only, by construction:** each
+`survey_query`, `survey_impact`, `survey_diff` and `doctor_check`. **Every one is read-only, by construction:** each
 runs this binary's own `--json` subcommand with a fixed argument list, so its `structuredContent` is
 exactly what the CLI prints, and no tool runs a program, grants authority, loads code or writes a
 file — `delulu edit` is deliberately not a tool, and a test holds every command to a declared

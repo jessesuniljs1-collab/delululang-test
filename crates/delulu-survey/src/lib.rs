@@ -36,6 +36,7 @@ use std::path::Path;
 
 pub mod answers;
 pub mod codeowners;
+pub mod diff;
 pub mod health;
 pub mod manifest;
 pub mod mdown;
@@ -375,12 +376,23 @@ impl Survey {
     /// thing — the property `two builds of the same tree produce the same map` already requires of
     /// everything else here.
     pub fn walk<'a>(&'a self, start: &str, dir: Dir, max_depth: u32) -> Vec<Reached<'a>> {
-        // Resolve the caller's string to the map's own id, so everything that escapes borrows from
-        // the map rather than from the argument — and so a walk from a node that does not exist
-        // returns nothing instead of an empty answer that looks like a real one.
-        let Some(start) = self.node(start).map(|n| n.id.as_str()) else {
+        self.walk_many(&[start], dir, max_depth)
+    }
+
+    /// The same walk from several starts at once: the UNION of their walks, each node reported
+    /// once, at its shortest distance from any start, with the cited edge that first reached it.
+    /// A start is never reported as reached. This is what `diff` asks — the blast radius of a
+    /// change that touched several files is the union of their radii, and a node two changed files
+    /// both reach is one node, nearest first.
+    pub fn walk_many<'a>(&'a self, starts: &[&str], dir: Dir, max_depth: u32) -> Vec<Reached<'a>> {
+        // Resolve the caller's strings to the map's own ids, so everything that escapes borrows from
+        // the map rather than from the arguments — and so a walk from a node that does not exist
+        // returns nothing instead of an empty answer that looks like a real one. Sorted, so which
+        // start a tie is credited to does not depend on the order the caller listed them in.
+        let starts: BTreeSet<&'a str> = starts.iter().filter_map(|s| self.node(s).map(|n| n.id.as_str())).collect();
+        if starts.is_empty() {
             return Vec::new();
-        };
+        }
 
         // One index, built once. `out`/`into_` are linear scans, and a breadth-first walk calling
         // either per node would be O(nodes × edges) for no reason.
@@ -393,10 +405,9 @@ impl Survey {
             adj.entry(key).or_default().push(e);
         }
 
-        let mut seen: BTreeSet<&str> = BTreeSet::new();
-        seen.insert(start);
+        let mut seen: BTreeSet<&str> = starts.clone();
         let mut out: Vec<Reached<'a>> = Vec::new();
-        let mut frontier: Vec<&'a str> = vec![start];
+        let mut frontier: Vec<&'a str> = starts.into_iter().collect();
 
         for depth in 1..=max_depth {
             let mut next: BTreeSet<&str> = BTreeSet::new();

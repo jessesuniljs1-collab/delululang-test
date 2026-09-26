@@ -100,7 +100,7 @@ fn the_server_speaks_the_protocol_and_answers_with_the_clis_own_json() {
     for want in ["check", "authority", "why", "explain", "atlas", "atlas_query", "toolchain", "schema", "sandbox_probe", "sandbox_policy", "examples"] {
         assert!(names.contains(&want), "`{want}` is offered: {names:?}");
     }
-    for never in ["run", "test", "grants", "broker", "fix", "fmt", "build", "survey_query", "doctor_check"] {
+    for never in ["run", "test", "grants", "broker", "fix", "fmt", "build", "edit", "survey_query", "survey_diff", "doctor_check"] {
         assert!(!names.contains(&never), "`{never}` must not be offered here: {names:?}");
     }
     for t in &tools {
@@ -155,11 +155,13 @@ fn inside_the_source_tree_the_survey_and_doctor_are_tools() {
             call(2, "survey_query", json!({ "id": "crate:delulu-check" })),
             call(3, "survey_impact", json!({ "id": "crate:delulu-diag", "depth": 1 })),
             call(4, "survey_query", json!({ "id": "crate:no-such-crate" })),
+            call(5, "survey_diff", json!({ "rev": "HEAD" })),
+            call(6, "survey_diff", json!({ "rev": "--output=x" })),
         ],
     );
     let names: Vec<String> =
         reply(&replies, 1)["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    for want in ["survey_query", "survey_impact", "doctor_check"] {
+    for want in ["survey_query", "survey_impact", "survey_diff", "doctor_check"] {
         assert!(names.contains(&want.to_string()), "{want}: {names:?}");
     }
     let q = &reply(&replies, 2)["result"]["structuredContent"];
@@ -173,4 +175,12 @@ fn inside_the_source_tree_the_survey_and_doctor_are_tools() {
     let miss = &reply(&replies, 4)["result"];
     assert_eq!(miss["isError"], true);
     assert!(miss["content"][0]["text"].as_str().unwrap().contains("no node"));
+    // P4-06: a change's blast radius, in the Survey's own `diff` shape; an option as a revision refused.
+    let d = &reply(&replies, 5)["result"];
+    assert_eq!(d["isError"], false, "{d}");
+    assert_eq!(d["structuredContent"]["verb"], "diff");
+    assert!(d["structuredContent"]["hops"].is_array());
+    let opt = &reply(&replies, 6)["result"];
+    assert_eq!(opt["isError"], true);
+    assert!(opt["content"][0]["text"].as_str().unwrap().contains("may not begin with `-`"), "{opt}");
 }

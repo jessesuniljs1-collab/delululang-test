@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 262 |
-| Rust lines | 135126 |
-| Rust files outside `src/` (test/bench targets) | 112 |
+| Rust files | 264 |
+| Rust lines | 135611 |
+| Rust files outside `src/` (test/bench targets) | 113 |
 | Markdown documents | 189 |
-| Markdown lines | 54907 |
+| Markdown lines | 54942 |
 | DeluluLang programs | 180 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1232 / 11100 |
+| Nodes / edges in this map | 1234 / 11115 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -87,7 +87,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 35 files, 30425 lines
+- **Modules:** 35 files, 30451 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -114,7 +114,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/locale.rs` | 296 | Locale selection + the first-run experience (Stage 8, spec §6.2–§6.3). |
 | `src/lsp.rs` | 1947 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 90 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
-| `src/mcp.rs` | 569 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
+| `src/mcp.rs` | 595 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
 | `src/microvm.rs` | 58 | Phase 5i — the microVM isolation profile (spec §6). **Linux-first, stated honestly** (playbook |
 | `src/morph_file.rs` | 222 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
@@ -318,15 +318,16 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 12 files, 4502 lines
+- **Modules:** 13 files, 4772 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/answers.rs` | 139 | The machine answers to the questions asked of the map: `query`/`rdeps` (one hop) and |
 | `src/codeowners.rs` | 197 | `.github/CODEOWNERS` — which paths are **entrenched**. |
+| `src/diff.rs` | 203 | `delulu-survey diff <git-ref>` (P4-06): what a change touched, and everything that breaks because |
 | `src/health.rs` | 277 | Repository health — the single place that knows what a healthy map looks like. |
-| `src/lib.rs` | 660 | The Survey — a measured map of the DeluluLang **repository**. |
-| `src/main.rs` | 445 | `delulu-survey` — build, query, and staleness-check the repository map. |
+| `src/lib.rs` | 671 | The Survey — a measured map of the DeluluLang **repository**. |
+| `src/main.rs` | 501 | `delulu-survey` — build, query, and staleness-check the repository map. |
 | `src/manifest.rs` | 274 | Cargo manifests — the ground truth for "which crate depends on which". |
 | `src/mdown.rs` | 541 | Reading Markdown. |
 | `src/paths.rs` | 345 | Resolving a path someone wrote in prose or a comment to a file that is actually there. |

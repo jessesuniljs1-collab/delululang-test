@@ -220,6 +220,32 @@ fn tools() -> Vec<Tool> {
             tree_only: false,
         },
         Tool {
+            name: "survey_diff",
+            description: "Inside the DeluluLang source tree: what a CHANGE breaks — the files git says changed since a revision (the working tree and untracked files included, or a range A..B), the Survey node each maps to, the entrenched ones named with their owner, and the union of their impacts, every hop cited and traced to the file it came from.",
+            input: || {
+                props(
+                    json!({
+                        "rev": string("a git revision (`HEAD`, `origin/master`) or a range (`HEAD~3..HEAD`)"),
+                        "depth": { "type": "integer", "minimum": 1 },
+                    }),
+                    &["rev"],
+                )
+            },
+            source: Source::Survey(|root, a| {
+                let rev = word(a, "rev")?;
+                let depth = a
+                    .get("depth")
+                    .and_then(Value::as_u64)
+                    .map_or(delulu_survey::MAX_WALK_DEPTH, |d| (d as u32).clamp(1, delulu_survey::MAX_WALK_DEPTH));
+                // `git diff` and `git ls-files` only: read-only, and `word` has already refused a
+                // revision that begins with `-` (`git_changes` refuses it again).
+                let changes = delulu_survey::diff::git_changes(root, &rev)?;
+                let survey = delulu_survey::Survey::build(root);
+                Ok(delulu_survey::diff::diff_json(&survey, &rev, &changes, depth))
+            }),
+            tree_only: true,
+        },
+        Tool {
             name: "survey_impact",
             description: "Inside the DeluluLang source tree: everything that breaks if a node changes (or, with `direction: rests_on`, everything it rests on), every hop cited with the file and line it was read from.",
             input: || {

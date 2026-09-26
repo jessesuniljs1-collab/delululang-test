@@ -23,14 +23,16 @@ fn main() {
 
     let f = flags(&args);
     // A node id never begins with `-`, so the flags cannot swallow one and a flag cannot be
-    // mistaken for one.
-    let pos: Vec<&str> = args[1..].iter().map(String::as_str).filter(|a| !a.starts_with('-')).collect();
-    // `--depth` takes a value, and that value is a positional-looking number that belongs to it.
-    let pos: Vec<&str> = if args.iter().any(|a| a == "--depth") {
-        pos.into_iter().filter(|a| a.parse::<u32>().is_err()).collect()
-    } else {
-        pos
-    };
+    // mistaken for one. `--depth` takes a value, and exactly that argument belongs to it — not
+    // every number: a revision can be all digits (a short commit id), and filtering numbers out
+    // would silently drop it.
+    let pos: Vec<&str> = args
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(i, a)| !a.starts_with('-') && args.get(i - 1).map(String::as_str) != Some("--depth"))
+        .map(|(_, a)| a.as_str())
+        .collect();
 
     match verb {
         "build" => build(&root, false, f.json),
@@ -43,6 +45,10 @@ fn main() {
         "impact" | "affected-by" => match pos.first() {
             Some(id) => walk(&root, id, verb == "impact", f.depth, f.json),
             None => usage(&format!("{verb} needs a node id, e.g. `crate:delulu-check`")),
+        },
+        "diff" => match pos.first() {
+            Some(rev) => diff(&root, rev, f.depth, f.json),
+            None => usage("diff needs a git revision, e.g. `HEAD`, `origin/master` or `HEAD~3..HEAD`"),
         },
         "path" => match (pos.first(), pos.get(1)) {
             (Some(a), Some(b)) => path(&root, a, b),
@@ -64,8 +70,12 @@ fn print_help() {
          TRANSITIVE — the questions you actually have before changing code\n  \
            delulu-survey impact <id>       everything that breaks if this changes\n  \
            delulu-survey affected-by <id>  everything this rests on\n  \
-           delulu-survey path <a> <b>      how one reaches the other, hop by hop\n\n  \
-         Add `--depth N` to impact/affected-by. Every hop names the file and line it was read\n  \
+           delulu-survey path <a> <b>      how one reaches the other, hop by hop\n  \
+           delulu-survey diff <rev>        what a CHANGE breaks: the files git says changed since\n  \
+                                           <rev> (the working tree included, untracked files too;\n  \
+                                           or a range A..B), their nodes, entrenched ones named,\n  \
+                                           and the union of their impacts, every hop cited\n\n  \
+         Add `--depth N` to impact/affected-by/diff. Every hop names the file and line it was read\n  \
          from, so a chain can be walked back and disagreed with, exactly like a single edge.\n  \
          `rdeps` answers one hop and says so: `mod:crates/delulu-check/src/check.rs` — the module\n  \
          that decides what type-checks — has ONE structural edge arriving at it, and changing\n  \
@@ -166,7 +176,11 @@ fn walk(root: &Path, id: &str, reverse: bool, depth: u32, json: bool) {
         println!("\nnothing. This node is a leaf in that direction.");
         return;
     }
+    render_hops(&reached);
+}
 
+/// Every hop of a walk, grouped by depth and then by the node it came from.
+fn render_hops(reached: &[delulu_survey::Reached<'_>]) {
     // Grouped by the node each hop came from, rather than one flat line carrying two ids. An
     // arrow between them would be ambiguous in the reverse direction — the walk goes one way and
     // the edge points the other — and an ambiguous rendering of a provenance chain is worse than a
@@ -193,6 +207,48 @@ fn walk(root: &Path, id: &str, reverse: bool, depth: u32, json: bool) {
                 println!("      … {hidden} more from this node (of {})", kids.len());
             }
         }
+    }
+}
+
+/// What a change touched, and everything that breaks because of it (`delulu_survey::diff`).
+fn diff(root: &Path, rev: &str, depth: u32, json: bool) {
+    let changes = match delulu_survey::diff::git_changes(root, rev) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let survey = Survey::build(root);
+    let v = delulu_survey::diff::diff_json(&survey, rev, &changes, depth);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&v).unwrap_or_else(|_| "{}".into()));
+        return;
+    }
+    let changed = v["changed"].as_array().cloned().unwrap_or_default();
+    if changed.is_empty() {
+        println!("no changes against `{rev}`");
+        return;
+    }
+    println!("changes against `{rev}` — {} path(s), {} of them in the map", changed.len(), v["mapped"]);
+    for c in &changed {
+        let node = c["node"].as_str().unwrap_or("(no node: not in the map)");
+        println!("  {:<12} {:<60} {node}", c["status"].as_str().unwrap_or(""), c["path"].as_str().unwrap_or(""));
+    }
+    for e in v["entrenched"].as_array().into_iter().flatten() {
+        println!(
+            "\nENTRENCHED: {} — changing it needs {} specifically ({}:{}); Constitution §10 asks for an entrenchment analysis first",
+            e["node"].as_str().unwrap_or(""),
+            e["owner"].as_str().unwrap_or(""),
+            e["matched_at"]["file"].as_str().unwrap_or(""),
+            e["matched_at"]["line"]
+        );
+    }
+    let starts: Vec<&str> = changed.iter().filter_map(|c| c["node"].as_str()).collect();
+    let reached = survey.walk_many(&starts, delulu_survey::Dir::Incoming, depth);
+    println!("\nwhat breaks because of this change — {} node(s) reached", reached.len());
+    if !reached.is_empty() {
+        render_hops(&reached);
     }
 }
 

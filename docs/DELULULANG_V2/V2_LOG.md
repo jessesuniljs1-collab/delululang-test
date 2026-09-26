@@ -1249,3 +1249,32 @@ that writes — would have walked past had anyone added it as a tool. It is now 
 `READ_ONLY` and `EFFECTORS`, and a tool may run only a read-only one. Classifying every command found
 `audit` belongs with the actors (`audit bundle --out F` writes a file). `edit` is deliberately not an
 MCP tool.
+
+**P4-06 — `delulu-survey diff <rev>`: what a change breaks.** `impact` answers for one node; a review
+asks about a CHANGE — several files, some added, some deleted, some the map has never read. `diff` asks
+git which paths changed since a revision (`git diff --name-status -z --no-renames <rev> --`, so the
+working tree counts, plus `git ls-files --others --exclude-standard` so a new file counts; a range
+`A..B` compares commits only), maps each to its node in the current map, names the changed nodes that
+are ENTRENCHED with the owner and the CODEOWNERS line, and walks toward what breaks from all of them at
+once. The walk is `Survey::walk_many`, a multi-source breadth-first walk: the union of the changed
+files' impacts, each node once at its nearest distance, every hop cited and carrying the changed node
+it traces back to (`origin`). `walk` is now `walk_many` from one start, and the traversal tests passed
+unchanged. Nothing named is dropped: a path with no node is listed with `node: null`. A revision that
+begins with `-` is refused before git starts (`git diff --output=F` writes F), in the library, in the
+binary's option check and in the MCP `word` guard. The positional parser also stopped discarding every
+number when `--depth` is present: only the argument after `--depth` is its value, so an all-digit short
+commit id survives. `delulu mcp` gains `survey_diff` (in-tree only, read-only).
+
+Witnesses (`crates/delulu-survey/tests/diff.rs`): the roadmap's *synthetic diff* — five changes
+written down by the test (two source modules, an entrenched document, a deleted file, a path the map
+does not read) — whose reach must EQUAL the union of the three nodes' own `impact` walks at their
+minimum depths, every hop cited and traced to a changed file, the two unplaceable paths listed without
+a node, and the Constitution named as entrenched; the git layer on a repository the test makes
+(modified, deleted, staged-new with a space in its name, untracked; then a range that excludes the
+untracked file); and the binary on this repository (`diff HEAD --json`, an unknown revision exit 2, an
+`--output=` revision refused with no file written). `mcp_cli.rs` calls `survey_diff` and has an option
+refused. Ten mutants killed (union reduced to its first start, entrenched dropped, `-` allowed,
+untracked dropped, untracked kept in a range, a rename's old path not deleted, `origin` as the parent,
+starts reported as reached, and both unit-level parses). A lesson from the mutant run: `cargo test
+--lib NAME --test T` applies the name filter to EVERY target, so the integration tests silently ran
+nothing and six mutants looked alive; each target is now run on its own.
