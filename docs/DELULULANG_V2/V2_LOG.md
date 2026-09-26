@@ -1278,3 +1278,44 @@ untracked dropped, untracked kept in a range, a rename's old path not deleted, `
 starts reported as reached, and both unit-level parses). A lesson from the mutant run: `cargo test
 --lib NAME --test T` applies the name filter to EVERY target, so the integration tests silently ran
 nothing and six mutants looked alive; each target is now run on its own.
+
+**P4-04/05's run, read.** CI `36203028170` (`05f26d4`): **success on every job**, all three operating
+systems — `edit_cli` (the stale-hash falsifier, the corpus witness) and the two-way MCP door rule green
+on each.
+
+**P4-06's run, read.** CI `36203900224` (`f943097`): **success on every job**, all three operating
+systems — `delulu-survey diff` (the synthetic diff, the git layer on a made repository, the binary)
+green on each.
+
+**P4-07 — the Guard, read-only, in the editor; declared and performed rows on hover.** Two halves.
+
+*Declared and performed.* The checker's per-function `facts[..].effects` is the DECLARED row — the
+sound upper bound the authority report is built on — and what a body PERFORMS was computed at every
+function boundary (for DL0501/DL0502) and then thrown away. It is kept now as a side table,
+`CheckResult::performed`, keyed like `facts` (functions and actor members), with each body's row
+variables settled once inference is — so an effect that arrives only through a row-polymorphic call
+counts. It is never serialized and never read by the authority report, so no artifact or answer
+changes. The language server's hover on a function name keeps `authority: <declared>` and, when the
+body performs something different, adds `performs: <row>` and names the difference: declared but
+never performed (DL0502) or performed but not declared (DL0501).
+
+*The Guard view.* `workspace/executeCommand` with `delulu.guardStatus` (advertised in
+`executeCommandProvider`) answers with what `delulu guard status --json` prints for the environment's
+state directory: the Guard's mode, rules, pending requests and live permits — or, with no broker
+running, the CLI's own `DL1401` "broker unreachable", which is the true answer (the Guard fails closed
+without one). It runs this binary's `guard status --json` rather than the request in-process, because
+in-process the CLI's printer would write onto the server's standard output — the protocol channel —
+and so it shares `mcp::run_self`, now taking its deadline: ten seconds here, since a language server
+answers one request at a time. Only `status` is ever sent. The VS Code extension adds **DeluluLang:
+Show Guard status (read-only)**, which asks the server and shows the JSON; approving, denying and rule
+changes stay in the terminal behind the owner code.
+
+Witnesses (`lsp_cli.rs`): hover on four functions — declares more (`{Read, Write}`, performs `{Write}`,
+DL0502 named), agrees (one row, no `performs:`), declares nothing and performs `Write` (DL0501 named),
+and `Write` arriving only through a row-polymorphic `apply` (one row: the tail is settled); the Guard
+view advertised, equal to the CLI's JSON with no broker (DL1401) and with a real broker started in a
+test state directory (mode `on`, the default `declassify:*` rule), and the policy unchanged by asking.
+`editor_contract.rs` holds the new editor command against the server's. Six mutants killed (performed
+replaced by declared, row tails ignored — which first SURVIVED, until the row-polymorphic case was
+added — the difference never shown, the DL0502 note dropped, the command not advertised, another guard
+verb sent).

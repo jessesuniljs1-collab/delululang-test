@@ -3,6 +3,15 @@
 The extension version tracks the workspace version; `editor_contract.rs` fails the build if they
 drift apart.
 
+## Unreleased
+
+- **Show Guard status (read-only)** (V2 P4-07): the Guard's mode, rules, pending requests and live
+  permits, answered by the language server's `delulu.guardStatus` — which is `delulu guard status
+  --json`, byte for byte, including its fail-closed "broker unreachable" when no broker runs.
+- **Hover shows what a function performs** when that differs from the row it declares: a
+  `performs:` line, and which effects are declared but never performed (DL0502) or performed but not
+  declared (DL0501).
+
 ## 1.0.0
 
 Three defects were found by writing the first test that read the server and the client together.

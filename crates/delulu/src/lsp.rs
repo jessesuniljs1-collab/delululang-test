@@ -449,7 +449,7 @@ impl Server {
                     "legend": { "tokenTypes": SEMANTIC_TOKEN_TYPES, "tokenModifiers": [] },
                     "full": true
                 },
-                "executeCommandProvider": { "commands": ["delulu.authority"] },
+                "executeCommandProvider": { "commands": ["delulu.authority", GUARD_STATUS_COMMAND] },
             },
             "serverInfo": { "name": "delulu-lsp", "version": env!("CARGO_PKG_VERSION") }
         })
@@ -775,6 +775,9 @@ impl Server {
     /// manifest scopes attach to a bare URI (the CLI's report is the one with custody
     /// and manifest stamps).
     fn execute_command(&self, params: &Value) -> Value {
+        if params["command"].as_str() == Some(GUARD_STATUS_COMMAND) {
+            return guard_status();
+        }
         if params["command"].as_str() != Some("delulu.authority") {
             return Value::Null;
         }
@@ -1027,17 +1030,32 @@ impl Server {
                         .get(&f.name.name)
                         .map(|t| t.show(&checked.table).to_string())
                         .unwrap_or_else(|| "fn".to_string());
-                    let authority = checked
-                        .result
-                        .facts
-                        .get(&f.name.name)
-                        .map(|fa| {
-                            let mut es: Vec<&str> = fa.effects.iter().map(|e| e.name()).collect();
-                            es.sort();
-                            if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
-                        })
-                        .unwrap_or_default();
-                    let md = format!("```delulu\nfn {}: {}\n```\nauthority: {}", f.name.name, sig, authority);
+                    let declared = checked.result.facts.get(&f.name.name).map(|fa| &fa.effects);
+                    let performed = checked.result.performed.get(&f.name.name);
+                    let authority = declared.map(row_words).unwrap_or_default();
+                    let mut md = format!("```delulu\nfn {}: {}\n```\nauthority: {}", f.name.name, sig, authority);
+                    // P4-07: the row a function DECLARES is its authority (the sound upper bound);
+                    // what its body PERFORMS is shown beside it when the two differ — which is
+                    // exactly when DL0501 or DL0502 is about this function.
+                    if let (Some(d), Some(p)) = (declared, performed) {
+                        if d != p {
+                            md.push_str(&format!("\n\nperforms: {}", row_words(p)));
+                            let unused: Vec<&str> = d.difference(p).map(|e| e.name()).collect();
+                            let undeclared: Vec<&str> = p.difference(d).map(|e| e.name()).collect();
+                            if !unused.is_empty() {
+                                md.push_str(&format!(
+                                    "\n\ndeclared but never performed: {} (DL0502 — the row promises more than the body does)",
+                                    unused.join(", ")
+                                ));
+                            }
+                            if !undeclared.is_empty() {
+                                md.push_str(&format!(
+                                    "\n\nperformed but not declared: {} (DL0501 — this does not check)",
+                                    undeclared.join(", ")
+                                ));
+                            }
+                        }
+                    }
                     return json!({
                         "contents": { "kind": "markdown", "value": md },
                         "range": byte_range(text, f.name.span.start, f.name.span.end),
@@ -1268,6 +1286,36 @@ fn byte_to_pos(text: &str, byte: u32) -> Value {
     }
     let character: usize = text[line_start..byte].chars().map(char::len_utf16).sum();
     json!({ "line": line, "character": character })
+}
+
+/// An effect row in words: `{Read, Write}`, or `pure`.
+fn row_words(effects: &std::collections::BTreeSet<delulu_check::Effect>) -> String {
+    let mut es: Vec<&str> = effects.iter().map(|e| e.name()).collect();
+    es.sort();
+    if es.is_empty() { "pure".to_string() } else { format!("{{{}}}", es.join(", ")) }
+}
+
+/// The server's read-only Guard view (P4-07): `workspace/executeCommand` with this name answers
+/// with what `delulu guard status --json` prints — the Guard's mode, its rules, the pending
+/// requests and live permits — so an editor shows the Guard without a terminal.
+const GUARD_STATUS_COMMAND: &str = "delulu.guardStatus";
+
+/// How long the Guard view may take. A language server answers one request at a time, so a broker
+/// that does not answer must cost the editor seconds, not the two minutes an MCP call may take.
+const GUARD_VIEW_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Ask the broker for the Guard's status, as the CLI does. It runs THIS binary's `guard status
+/// --json` rather than the request in-process: in-process, the CLI's printer would write the answer
+/// onto this server's standard output, which is the protocol channel. The answer is the CLI's own
+/// envelope, byte for byte — including, when no broker is running, its `DL1401` "broker
+/// unreachable" diagnostic, which is the true answer (the Guard fails closed without one). Nothing
+/// here writes, starts a broker, or changes a rule: `status` is a read, and the only verb sent.
+fn guard_status() -> Value {
+    let argv = ["guard", "status", "--json"].map(String::from);
+    match crate::mcp::run_self(&argv, GUARD_VIEW_DEADLINE) {
+        Ok(v) => v,
+        Err(e) => json!({ "error": e }),
+    }
 }
 
 fn byte_range(text: &str, start: u32, end: u32) -> Value {

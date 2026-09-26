@@ -339,8 +339,9 @@ fn list_json(in_tree: bool) -> Value {
     json!({ "tools": tools })
 }
 
-/// Run this binary with `argv`, bounded by [`CALL_DEADLINE`], and return its standard output as JSON.
-fn run_self(argv: &[String]) -> Result<Value, String> {
+/// Run this binary with `argv`, bounded by `deadline`, and return its standard output as JSON. Shared
+/// with the language server's Guard view (P4-07), which answers with the CLI's own JSON the same way.
+pub(crate) fn run_self(argv: &[String], deadline: std::time::Duration) -> Result<Value, String> {
     let exe = std::env::current_exe().map_err(|e| format!("this executable cannot be located: {e}"))?;
     let mut child = std::process::Command::new(exe)
         .args(argv)
@@ -368,10 +369,10 @@ fn run_self(argv: &[String]) -> Result<Value, String> {
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) if started.elapsed() > CALL_DEADLINE => {
+            Ok(None) if started.elapsed() > deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!("`delulu {}` did not finish within {CALL_DEADLINE:?}", argv.join(" ")));
+                return Err(format!("`delulu {}` did not finish within {deadline:?}", argv.join(" ")));
             }
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(5)),
             Err(e) => return Err(format!("waiting for `delulu {}`: {e}", argv.join(" "))),
@@ -393,7 +394,7 @@ fn call(name: &str, args: &Value, tree: Option<&std::path::Path>) -> Result<Valu
     };
     let args = if args.is_null() { json!({}) } else { args.clone() };
     let answer = match (&tool.source, tree) {
-        (Source::Cli(build), _) => build(&args).and_then(|argv| run_self(&argv)),
+        (Source::Cli(build), _) => build(&args).and_then(|argv| run_self(&argv, CALL_DEADLINE)),
         (Source::Survey(answer), Some(root)) => answer(root, &args),
         (Source::Survey(_), None) => Err("this tool answers only inside the DeluluLang source tree".into()),
     };

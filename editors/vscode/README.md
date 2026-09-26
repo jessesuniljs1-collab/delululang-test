@@ -47,6 +47,7 @@ limits — a *local* rename is refused rather than guessed.
 | **DeluluLang: Run test** | Runs *that* test by name |
 | **DeluluLang: Show authority report** | The §10.5 answer to "what can this program do?", as JSON |
 | **DeluluLang: Show authority atlas** | The call graph with each function's effect row on it, in a panel beside the file |
+| **DeluluLang: Show Guard status (read-only)** | The Guard's mode, rules, pending requests and permits — what `delulu guard status --json` prints for the broker this editor's environment points at. Approving and changing rules stay in the terminal |
 
 The same first three appear as code lenses on `main` and on `test` blocks.
 

@@ -53,6 +53,13 @@ transport: stdio
   reached through the client-side command **`delulu.showAuthority`**, which is what the lens names
   and what appears in the Command Palette. The two names are deliberately different — see the note
   under *VS Code* below, where making them the same disabled the language server entirely.
+- **`delulu.guardStatus`** (workspace/executeCommand, V2 P4-07) — the Guard, read-only: exactly
+  what `delulu guard status --json` prints for the broker the editor's environment points at
+  (mode, rules, pending requests, live permits), or its fail-closed `DL1401` when no broker runs.
+  In VS Code, **Show Guard status (read-only)**. Approvals and rule changes stay in the CLI.
+- **Hover on a function name** shows its signature and its declared row as `authority:`; when the
+  body performs something different, a `performs:` line names what differs — declared but never
+  performed (DL0502) or performed but not declared (DL0501).
 - **Signature help** — while writing a call, the callee's parameters *and its
   authority row*, with the argument you are on highlighted. The label is sliced from
   the declaring file's own source, so you see the signature exactly as its author wrote

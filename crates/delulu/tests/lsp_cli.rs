@@ -48,7 +48,21 @@ impl Client {
     }
 
     fn start_with(init_params: Value) -> Client {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        Client::start_with_env(init_params, &[])
+    }
+
+    /// A client whose server sees a broker state directory of the test's own, so nothing the test
+    /// asks can reach the developer's broker.
+    fn start_with_state(state: &std::path::Path) -> Client {
+        Client::start_with_env(json!({ "capabilities": {} }), &[("DELULU_STATE_DIR", state)])
+    }
+
+    fn start_with_env(init_params: Value, env: &[(&str, &std::path::Path)]) -> Client {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_delulu"));
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let mut child = cmd
             .args(["lsp"])
             .env("DELULU_NO_FIRST_RUN", "1")
             .stdin(Stdio::piped())
@@ -236,6 +250,102 @@ fn criterion1_diagnostics_equal_check_json_and_the_repair_applies() {
     let diags2 = c.wait_diagnostics("file:///m.delulu");
     assert_eq!(diags2.as_array().unwrap().len(), 0, "the repair makes it green: {fixed}");
     c.shutdown();
+}
+
+/// P4-07: the row a function DECLARES is its authority; what its body PERFORMS is shown beside it when
+/// the two differ — in both directions — and not at all when they agree.
+#[test]
+fn hover_shows_the_declared_and_the_performed_row_when_they_differ() {
+    let src = "module m\n\
+               fn wide(out: Cap[Console], n: Str) ! {Read, Write} { out.println(n) }\n\
+               fn exact(out: Cap[Console], n: Str) ! {Write} { out.println(n) }\n\
+               fn under(out: Cap[Console], n: Str) { out.println(n) }\n\
+               fn apply[T, U, e](f: fn(T) -> U ! e, x: T) -> U ! e { f(x) }\n\
+               fn via(out: Cap[Console]) ! {Write} { let r = apply(fn(n: Int) -> Int { out.println(\"x\")\n n }, 1)\n }\n";
+    let mut c = Client::start();
+    c.open("file:///rows.delulu", src);
+    let _ = c.wait_diagnostics("file:///rows.delulu");
+    let mut hover = |line: u64| -> String {
+        let h = c.request(
+            "textDocument/hover",
+            json!({ "textDocument": { "uri": "file:///rows.delulu" }, "position": { "line": line, "character": 4 } }),
+        );
+        h["contents"]["value"].as_str().expect("hover markdown").to_string()
+    };
+    let wide = hover(1);
+    assert!(wide.contains("authority: {Read, Write}"), "{wide}");
+    assert!(wide.contains("performs: {Write}"), "{wide}");
+    assert!(wide.contains("declared but never performed: Read (DL0502"), "{wide}");
+    let exact = hover(2);
+    assert!(exact.contains("authority: {Write}"), "{exact}");
+    assert!(!exact.contains("performs:"), "rows that agree are shown once: {exact}");
+    let under = hover(3);
+    assert!(under.contains("authority: pure"), "{under}");
+    assert!(under.contains("performs: {Write}"), "{under}");
+    assert!(under.contains("performed but not declared: Write (DL0501"), "{under}");
+    // `via` performs Write only THROUGH `apply`'s row variable, settled when inference is: its body
+    // performs what it declares, so the hover shows one row.
+    let via = hover(5);
+    assert!(via.contains("authority: {Write}"), "{via}");
+    assert!(!via.contains("performs:"), "an effect that arrives through a row variable is performed: {via}");
+    c.shutdown();
+}
+
+/// P4-07: the Guard, read-only, in the editor. `delulu.guardStatus` is advertised and answers with
+/// exactly what `delulu guard status --json` prints for the same state directory — with no broker,
+/// the CLI's own fail-closed "broker unreachable" (DL1401); with one, the Guard's mode and rules —
+/// and asking changes nothing.
+#[test]
+fn the_guard_view_is_the_clis_guard_status_and_changes_nothing() {
+    let base = std::env::temp_dir().join(format!("delulu_lsp_guard_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let state = base.join("state");
+    std::fs::create_dir_all(&state).unwrap();
+    let cli = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(args)
+            .current_dir(&base)
+            .env("DELULU_STATE_DIR", &state)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .output()
+            .unwrap()
+    };
+    let cli_json = |args: &[&str]| -> Value { serde_json::from_slice(&cli(args).stdout).expect("the CLI answers in JSON") };
+    let ask = |c: &mut Client| c.request("workspace/executeCommand", json!({ "command": "delulu.guardStatus", "arguments": [] }));
+
+    // No broker: the true answer is that the Guard cannot be reached, and it fails closed.
+    let mut c = Client::start_with_state(&state);
+    let advertised = c.capabilities["executeCommandProvider"]["commands"].clone();
+    assert!(advertised.as_array().unwrap().iter().any(|x| x == "delulu.guardStatus"), "{advertised}");
+    let v = ask(&mut c);
+    assert_eq!(v["command"], "guard", "{v:#}");
+    assert_eq!(v["diagnostics"][0]["code"], "DL1401", "{v:#}");
+    assert_eq!(v, cli_json(&["guard", "status", "--json"]), "the view IS the CLI's answer");
+    c.shutdown();
+
+    // A broker: the Guard's mode and its rules, the same answer as the CLI's.
+    let started = cli(&["broker", "start"]);
+    assert!(started.status.success(), "broker start: {}", String::from_utf8_lossy(&started.stderr));
+    struct Stop<'a>(&'a dyn Fn());
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            (self.0)();
+        }
+    }
+    let stop = || {
+        let _ = cli(&["broker", "stop"]);
+    };
+    let _stop = Stop(&stop);
+    let before = cli_json(&["guard", "policy", "show", "--json"]);
+    assert!(!before["rules"].as_array().unwrap().is_empty(), "a real policy to compare: {before:#}");
+    let mut c = Client::start_with_state(&state);
+    let v = ask(&mut c);
+    assert_eq!(v["mode"], "on", "{v:#}");
+    assert!(v["rules"].as_array().unwrap().iter().any(|r| r["pattern"] == "*" && r["class"] == "declassify"), "{v:#}");
+    assert_eq!(v, cli_json(&["guard", "status", "--json"]));
+    let _ = ask(&mut c);
+    c.shutdown();
+    assert_eq!(cli_json(&["guard", "policy", "show", "--json"]), before, "asking changed nothing");
 }
 
 /// Criterion 1 (hover): a fn name shows its full signature + row + transitive authority.

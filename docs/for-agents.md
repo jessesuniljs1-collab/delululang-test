@@ -45,7 +45,7 @@ Four rules that will save you time:
    check after that is the sub-millisecond part.
 
 5. **Over `delulu lsp`, ask for what you need rather than shelling out per question.** The server is
-   the same compiler, so its answers cannot drift from `delulu check --json`. Three of them are worth
+   the same compiler, so its answers cannot drift from `delulu check --json`. Four of them are worth
    knowing about specifically:
 
    - `workspace/executeCommand` with `delulu.authority` returns the §10.5 authority report as JSON —
@@ -53,6 +53,12 @@ Four rules that will save you time:
      `delulu.showAuthority`**: that one is the *editor's* command, which exists to render the report
      for a human, and the two are deliberately distinct (a client that registers the protocol name
      itself collides with its own language client and kills the server — see `docs/editors.md`).
+   - `workspace/executeCommand` with `delulu.guardStatus` returns exactly what `delulu guard status
+     --json` prints — the Guard's mode, rules, pending requests and live permits, or the CLI's own
+     `DL1401` when no broker is running (the Guard fails closed without one). It only reads; approving,
+     denying and changing a rule stay in the CLI, behind the owner code. Hovering a function name
+     shows its declared row as `authority:` and, when the body performs something different, a
+     `performs:` line and which effects are declared but unused (DL0502) or used but undeclared (DL0501).
    - `textDocument/formatting` runs the same formatter as `delulu fmt`, byte for byte, enforced by a
      test. Format through the server in a loop rather than spawning `fmt` per file.
    - `textDocument/codeAction` carries the checker's own typed repairs, with

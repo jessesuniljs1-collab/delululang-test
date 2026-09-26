@@ -371,6 +371,33 @@ function activate(context) {
         language: "json",
       });
       await vscode.window.showTextDocument(doc, { preview: true });
+    }),
+
+    // The Guard, read-only (P4-07): the server answers `delulu.guardStatus` with what
+    // `delulu guard status --json` prints — mode, rules, pending requests, live permits — or, with no
+    // broker running, the CLI's own "broker unreachable" diagnostic. Nothing here approves, denies
+    // or changes a rule; those stay in the terminal, where a person types the owner code. The editor
+    // command's name differs from the server's for the reason given above `delulu.showAuthority`.
+    vscode.commands.registerCommand("delulu.showGuard", async () => {
+      if (!client) {
+        vscode.window.showWarningMessage(
+          "delulu: the language server is not running, so there is no Guard view."
+        );
+        return;
+      }
+      const status = await client.sendRequest("workspace/executeCommand", {
+        command: "delulu.guardStatus",
+        arguments: [],
+      });
+      if (!status || status.error) {
+        vscode.window.showWarningMessage(`delulu: ${status ? status.error : "no Guard status"}`);
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument({
+        content: JSON.stringify(status, null, 2),
+        language: "json",
+      });
+      await vscode.window.showTextDocument(doc, { preview: true });
     })
   );
 }

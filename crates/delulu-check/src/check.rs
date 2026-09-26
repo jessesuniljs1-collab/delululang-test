@@ -99,6 +99,12 @@ pub struct CheckResult {
     /// effects are dropped (they contribute nothing observable — the boundary subset check in
     /// `check_fn` is the authoritative gate, and DIR re-verification replays it).
     pub node_rows: HashMap<NodeId, Row>,
+    /// What each function's body PERFORMS, keyed like `facts` (`name`, or `Actor.member`), settled
+    /// once inference is. `facts[..].effects` is the DECLARED row — the sound upper bound the
+    /// authority report uses — and this is the other half: an editor shows both when they differ
+    /// (P4-07), which is exactly when DL0501 (performs more) or DL0502 (declares more) fires.
+    /// Never serialized and never read by the authority report, so it changes no output.
+    pub performed: HashMap<String, BTreeSet<Effect>>,
     /// Send/spawn argument nodes that are statically-proven iso MOVES (Stage 7 phase 7i):
     /// what the runtime's `--debug-rcaps` verifies unaliased at each actor boundary.
     pub iso_moves: HashSet<NodeId>,
@@ -154,6 +160,7 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         cx: InferCtx::new(),
         diags: Vec::new(),
         facts: HashMap::new(),
+        performed_rows: HashMap::new(),
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
@@ -275,10 +282,24 @@ pub fn check_module(module: &Module, table: &DeclTable) -> CheckResult {
         crate::rcap_check::check_rcaps(module, table, &node_types, &fn_types_settled);
     checker.diags.extend(rcap_diags);
 
+    // A body's row tails settle only now; each resolves to the concrete effects it bound to.
+    let performed: HashMap<String, BTreeSet<Effect>> = checker
+        .performed_rows
+        .iter()
+        .map(|(k, acc)| {
+            let mut effects = acc.effects.clone();
+            for &t in &acc.tails {
+                effects.extend(checker.cx.apply_row(&Row { effects: BTreeSet::new(), tail: Some(t) }).effects);
+            }
+            (k.clone(), effects)
+        })
+        .collect();
+
     CheckResult {
         diags: checker.diags,
         iso_moves,
         facts: checker.facts,
+        performed,
         main_row,
         main_present,
         fn_types: checker.fn_types,
@@ -299,6 +320,7 @@ pub fn lower_export_signature(t: &delulu_syntax::ast::TypeExpr, table: &DeclTabl
         cx: InferCtx::new(),
         diags: Vec::new(),
         facts: HashMap::new(),
+        performed_rows: HashMap::new(),
         fn_types: HashMap::new(),
         pending_foreign_binds: Vec::new(),
         pending_gets: Vec::new(),
@@ -322,6 +344,8 @@ struct Checker<'a> {
     cx: InferCtx,
     diags: Vec<Diagnostic>,
     facts: HashMap<String, FnFacts>,
+    /// Each function body's row as inferred, tails unsettled; see [`CheckResult::performed`].
+    performed_rows: HashMap<String, RowAcc>,
     fn_types: HashMap<String, Type>,
     /// `root.foreign(load)` call sites and the fresh handle var each produced, resolved to a
     /// concrete lib name after all functions are checked (see `check_module`).
@@ -451,6 +475,7 @@ impl<'a> Checker<'a> {
             body_start: f.body.span.start,
         };
         self.check_row_subset(&body_row, &declared_row, &subj);
+        self.performed_rows.insert(f.name.name.clone(), body_row.clone());
 
         // Finalize facts: the function's authority is its declared row (sound upper bound).
         let mut facts = std::mem::take(&mut ctx.facts);
@@ -571,6 +596,7 @@ impl<'a> Checker<'a> {
             self.expect_type(&ret_ty, &body_ty, body.span, "method body type must match the return type");
         }
         self.check_member_row_subset(&body_row, &declared_row, body.span, &key);
+        self.performed_rows.insert(key.clone(), body_row.clone());
         let mut facts = std::mem::take(&mut ctx.facts);
         facts.effects = self.resolved_effects(&declared_row);
         facts.pure = facts.effects.is_empty();
