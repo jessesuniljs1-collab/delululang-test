@@ -1,0 +1,14 @@
+{"t": 1790384102.743858, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 1, "exit": 1}
+{"t": 1790384127.0059872, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 2, "exit": 1}
+{"t": 1790384183.8173726, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 3, "exit": 1}
+{"t": 1790384220.190133, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 4, "exit": 1}
+{"t": 1790384288.00453, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 5, "exit": 1}
+{"t": 1790384343.2982213, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 6, "exit": 1}
+{"t": 1790384353.0510383, "argv": ["check", "solution.delulu", "--json"], "allowed": true, "attempt": 7, "exit": 1}
+{"t": 1790384393.2736366, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 8, "exit": 1}
+{"t": 1790384476.846278, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 9, "exit": 1}
+{"t": 1790384514.4283328, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 10, "exit": 1}
+{"t": 1790384551.3107147, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 11, "exit": 1}
+{"t": 1790384563.2303257, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 12, "exit": 1}
+{"t": 1790384575.6274972, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 13, "exit": 0}
+{"t": 1790384582.7447045, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 0}

@@ -1,0 +1,3 @@
+{"t": 1790384065.9085097, "argv": ["examples", "--json"], "allowed": true, "exit": 0}
+{"t": 1790384078.215403, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 1, "exit": 0}
+{"t": 1790384082.0245998, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}

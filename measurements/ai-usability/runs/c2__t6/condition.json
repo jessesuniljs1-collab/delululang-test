@@ -1,0 +1,17 @@
+{
+  "allowed_commands": [
+    "check",
+    "run"
+  ],
+  "allowed_grants": [
+    "fs.read=./data",
+    "fs.write=./out"
+  ],
+  "condition": "c2",
+  "condition_name": "the Agent Skill only",
+  "expected": "69",
+  "knowledge": [
+    "skills/delulu/SKILL.md"
+  ],
+  "task": "t6"
+}

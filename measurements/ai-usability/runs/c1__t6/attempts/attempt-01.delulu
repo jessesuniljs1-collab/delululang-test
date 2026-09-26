@@ -1,0 +1,14 @@
+fn main() {
+    let text = fs.read("./data/numbers.txt");
+    let lines = text.split("\n");
+    let max = 0;
+    for line in lines {
+        if line.len() > 0 {
+            let n = line.to_int();
+            if n > max {
+                max = n;
+            }
+        }
+    }
+    fs.write("./out/answer.txt", max.to_string());
+}

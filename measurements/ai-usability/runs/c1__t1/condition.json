@@ -1,0 +1,14 @@
+{
+  "allowed_commands": [
+    "check",
+    "run"
+  ],
+  "allowed_grants": [
+    "console"
+  ],
+  "condition": "c1",
+  "condition_name": "never seen DeluluLang",
+  "expected": "306",
+  "knowledge": [],
+  "task": "t1"
+}

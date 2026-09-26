@@ -50,6 +50,11 @@ python = ["delulu-runtime/python"]
 # `tests/distribution.rs` pins that line.
 net = ["delulu-runtime/net"]
 
+[dev-dependencies]
+# P4-08: the AI usability benchmark's scorer and negative controls are tested here, where the real
+# `delulu` binary is `CARGO_BIN_EXE_delulu`. Test-only; `delulu-measure` depends on nothing of ours.
+delulu-measure = { path = "../delulu-measure" }
+
 [dependencies]
 delulu-diag = { path = "../delulu-diag" }
 delulu-syntax = { path = "../delulu-syntax" }

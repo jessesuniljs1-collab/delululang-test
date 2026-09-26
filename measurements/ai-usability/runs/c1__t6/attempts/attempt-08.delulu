@@ -1,0 +1,29 @@
+module probe
+
+fn t1() {
+    let authority = 1;
+    let grant = 1;
+    let perform = 1;
+    let resource = 1;
+    let channel = 1;
+    let io = 1;
+    let disk = 1;
+    let env = 1;
+    let world = 1;
+    let ctx = 1;
+    let ambient = 1;
+}
+
+fn t2() {
+    let a = read!("./data/numbers.txt");
+    let b = fs.read!("./data/numbers.txt");
+    let c = perform read("./data/numbers.txt");
+    let d = do read("./data/numbers.txt");
+}
+
+fn main(env: Env) {
+}
+
+fn broken() {
+    let x = ;
+}

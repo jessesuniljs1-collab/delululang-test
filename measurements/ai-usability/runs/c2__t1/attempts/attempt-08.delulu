@@ -1,0 +1,23 @@
+module solution;
+
+fn probe(root: Root) -> Unit {
+    let con = root.console();
+    con.print(0);
+    con.print_line(0);
+    con.write(0);
+    con.write_line(0);
+    con.write_text(0);
+    con.println(0);
+    con.emit(0);
+    con.puts(0);
+}
+
+fn main() -> Unit ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall} {
+    let nums: List[Int] = [72, 64, 24, 56, 90, 65];
+    let sum: Int = 0;
+    for n in nums {
+        if n % 2 == 0 {
+            sum = sum + n;
+        }
+    }
+}

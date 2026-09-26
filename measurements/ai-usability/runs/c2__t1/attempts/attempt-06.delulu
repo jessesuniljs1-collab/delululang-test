@@ -1,0 +1,26 @@
+module solution;
+
+fn probe_root(root: Root) -> Unit { }
+fn probe_authority(a: Authority) -> Unit { }
+fn probe_world(w: World) -> Unit { }
+fn probe_env(e: Env) -> Unit { }
+fn probe_ctx(c: Ctx) -> Unit { }
+fn probe_context(c: Context) -> Unit { }
+fn probe_system(s: System) -> Unit { }
+fn probe_io(i: Io) -> Unit { }
+fn probe_cap(c: Cap) -> Unit { }
+fn probe_console_type(c: Console) -> Unit { }
+fn probe_stdio_type(s: Stdio) -> Unit { }
+fn probe_process(p: Process) -> Unit { }
+fn probe_host(h: Host) -> Unit { }
+fn probe_machine(m: Machine) -> Unit { }
+
+fn main() -> Unit ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall} {
+    let nums: List[Int] = [72, 64, 24, 56, 90, 65];
+    let sum: Int = 0;
+    for n in nums {
+        if n % 2 == 0 {
+            sum = sum + n;
+        }
+    }
+}

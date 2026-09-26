@@ -1,0 +1,19 @@
+{
+  "allowed_commands": [
+    "check",
+    "run",
+    "mcp",
+    "lsp"
+  ],
+  "allowed_grants": [
+    "fs.read=./data",
+    "fs.write=./out"
+  ],
+  "condition": "c4",
+  "condition_name": "the Skill plus MCP/LSP",
+  "expected": "69",
+  "knowledge": [
+    "skills/delulu/SKILL.md"
+  ],
+  "task": "t6"
+}

@@ -1,0 +1,74 @@
+// Read the integers in data/numbers.txt (one per line) and write the largest
+// one to out/answer.txt. Prints nothing.
+module maxnum
+
+// A line becomes a value only if it isn't blank and parses as an Int; a blank
+// line (the trailing newline at end of file) is simply skipped.
+fn line_value(line: Str) -> Option[Int] {
+    let trimmed = line.trim()
+    if trimmed.len() == 0 {
+        None
+    } else {
+        parse_int(trimmed)
+    }
+}
+
+// Scan every line, keeping the largest Int seen so far.
+fn largest(lines: List[Str]) -> Option[Int] {
+    var best: Option[Int] = None
+    var i = 0
+    while i < lines.len() {
+        match lines.get(i) {
+            Some(line) => {
+                match line_value(line) {
+                    Some(n) => {
+                        match best {
+                            Some(b) => {
+                                if n > b {
+                                    best = Some(n)
+                                }
+                            }
+                            None => {
+                                best = Some(n)
+                            }
+                        }
+                    }
+                    None => {
+                        best = best
+                    }
+                }
+            }
+            None => {
+                best = best
+            }
+        }
+        i = i + 1
+    }
+    best
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let reader = root.fs_read("./data")
+    let writer = root.fs_write("./out")
+    var ok = true
+    match reader.read_text("numbers.txt") {
+        Ok(text) => {
+            let lines = text.split("\n")
+            match largest(lines) {
+                Some(m) => {
+                    writer.write_text("answer.txt", str(m))
+                    ok = true
+                }
+                None => {
+                    writer.write_text("answer.txt", "")
+                    ok = true
+                }
+            }
+        }
+        Err(e) => {
+            writer.write_text("answer.txt", "")
+            ok = true
+        }
+    }
+    ok = ok
+}

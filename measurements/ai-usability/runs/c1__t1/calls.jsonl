@@ -1,0 +1,32 @@
+{"t": 1790384060.1611252, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 1, "exit": 1}
+{"t": 1790384111.7295814, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 2, "exit": 1}
+{"t": 1790384121.796444, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 3, "exit": 1}
+{"t": 1790384146.4891343, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 4, "exit": 1}
+{"t": 1790384171.9454644, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 5, "exit": 1}
+{"t": 1790384200.8850472, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 6, "exit": 1}
+{"t": 1790384224.876955, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 7, "exit": 1}
+{"t": 1790384245.8281205, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 8, "exit": 1}
+{"t": 1790384302.666759, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 9, "exit": 1}
+{"t": 1790384346.6918445, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 10, "exit": 1}
+{"t": 1790384388.4411328, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 11, "exit": 1}
+{"t": 1790384436.6154537, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 12, "exit": 1}
+{"t": 1790384462.875111, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 13, "exit": 0}
+{"t": 1790384467.7423682, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384473.852159, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384543.9941604, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 14, "exit": 1}
+{"t": 1790384585.5903118, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 15, "exit": 0}
+{"t": 1790384590.0784054, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384617.3275754, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384632.967127, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384645.2902167, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 2}
+{"t": 1790384655.2234938, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384669.861089, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384693.4550943, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384703.1100621, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384711.781549, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384720.281143, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384735.3519204, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384756.405011, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384769.766553, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384794.0940974, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384805.1380305, "argv": ["run", "solution.delulu", "--grant", "console", "--no-prompt", "--sandbox"], "allowed": true, "exit": 0}

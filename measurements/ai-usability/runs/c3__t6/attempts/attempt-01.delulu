@@ -1,0 +1,59 @@
+module solution
+
+fn parsed_or(s: Str, fallback: Int) -> Int {
+    match parse_int(s) {
+        Some(n) => n
+        None => fallback
+    }
+}
+
+fn line_or(lines: List[Str], i: Int, fallback: Str) -> Str {
+    match lines.get(i) {
+        Some(v) => v
+        None => fallback
+    }
+}
+
+fn value_at(lines: List[Str], i: Int, fallback: Int) -> Int {
+    let raw = line_or(lines, i, "")
+    let t = raw.trim()
+    if t.len() > 0 {
+        parsed_or(t, fallback)
+    } else {
+        fallback
+    }
+}
+
+fn largest_in(lines: List[Str]) -> Int {
+    var best = value_at(lines, 0, 0)
+    var i = 1
+    while i < lines.len() {
+        let v = value_at(lines, i, best)
+        if v > best {
+            best = v
+        } else {
+            best = best
+        }
+        i = i + 1
+    }
+    best
+}
+
+fn main(root: Root) ! {Read, Write} {
+    let reader = root.fs_read("./data")
+    let writer = root.fs_write("./out")
+    var m = 0
+    match reader.read_text("numbers.txt") {
+        Ok(text) => {
+            let lines = text.split("\n")
+            m = largest_in(lines)
+        }
+        Err(e) => {
+            m = 0
+        }
+    }
+    match writer.write_text("answer.txt", str(m)) {
+        Ok(u) => m = m
+        Err(e) => m = m
+    }
+}

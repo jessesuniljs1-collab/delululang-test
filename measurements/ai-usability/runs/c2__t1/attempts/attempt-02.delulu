@@ -1,0 +1,12 @@
+module solution;
+
+fn main() -> Unit ! {Console} {
+    let nums: List[Int] = [72, 64, 24, 56, 90, 65];
+    let sum: Int = 0;
+    for n in nums {
+        if n % 2 == 0 {
+            sum = sum + n;
+        }
+    }
+    print(sum);
+}

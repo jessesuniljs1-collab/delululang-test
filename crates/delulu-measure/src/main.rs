@@ -5,6 +5,9 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("ai-usability") {
+        return run_ai_usability(&args[1..]);
+    }
     let mut out: Option<PathBuf> = None;
     let mut study = String::new();
     let mut i = 0;
@@ -173,6 +176,75 @@ fn run_a(out: Option<PathBuf>) -> ExitCode {
     }
 }
 
+/// The `delulu` next to this binary — the one `cargo build` made beside it.
+fn sibling_delulu() -> PathBuf {
+    let exe = std::env::current_exe().expect("current exe");
+    let dir = exe.parent().expect("target dir");
+    dir.join(if cfg!(windows) { "delulu.exe" } else { "delulu" })
+}
+
+/// `ai-usability prepare --out DIR [--tasks t1,t2] [--conditions c1,c2] [--delulu PATH]` and
+/// `ai-usability score DIR [--delulu PATH] [--record OUT]` (V2 P4-08).
+fn run_ai_usability(args: &[String]) -> ExitCode {
+    use delulu_measure::ai_usability as ai;
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let list = |name: &str, all: Vec<String>| -> Vec<String> {
+        flag(name).map(|v| v.split(',').map(str::to_string).collect()).unwrap_or(all)
+    };
+    let delulu = flag("--delulu").map(PathBuf::from).unwrap_or_else(sibling_delulu);
+    if !delulu.is_file() {
+        eprintln!("delulu-measure: no delulu binary at {} — build it (`cargo build -p delulu`) or pass --delulu", delulu.display());
+        return ExitCode::from(2);
+    }
+    match args.first().map(String::as_str) {
+        Some("prepare") => {
+            let Some(out) = flag("--out").map(PathBuf::from) else {
+                eprintln!("delulu-measure: `ai-usability prepare` needs --out DIR");
+                return ExitCode::from(2);
+            };
+            let tasks = list("--tasks", ai::tasks().iter().map(|t| t.id.clone()).collect());
+            let conds = list("--conditions", ai::CONDITIONS.iter().map(|c| c.id.to_string()).collect());
+            match ai::prepare(&out, &repo_root(), &delulu, &tasks, &conds) {
+                Ok(made) => {
+                    println!("ai-usability: {} workspace(s) under {}", made.len(), out.join("runs").display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("delulu-measure: prepare failed: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Some("score") => {
+            let Some(dir) = args.get(1).filter(|a| !a.starts_with('-')).map(PathBuf::from) else {
+                eprintln!("delulu-measure: `ai-usability score` needs the prepared directory");
+                return ExitCode::from(2);
+            };
+            let r = match ai::score(&dir, &delulu) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("delulu-measure: score failed: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            let _ = std::fs::write(dir.join("results.json"), format!("{}\n", serde_json::to_string_pretty(&r).unwrap()));
+            let _ = std::fs::write(dir.join("REPORT.md"), ai::report(&r));
+            if let Some(out) = flag("--record").map(PathBuf::from) {
+                if let Err(e) = ai::record(&dir, &out) {
+                    eprintln!("delulu-measure: could not write the record: {e}");
+                    return ExitCode::from(1);
+                }
+            }
+            println!("ai-usability: {} run(s) scored; valid: {}", r["runs"].as_array().map_or(0, Vec::len), r["valid"]);
+            if r["valid"] == true { ExitCode::SUCCESS } else { ExitCode::from(1) }
+        }
+        _ => {
+            eprint!("{}", usage());
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
@@ -185,6 +257,8 @@ fn usage() -> String {
      \x20 delulu-measure study-b [--out <dir>]   agent repair loops\n\
      \x20 delulu-measure study-c [--out <dir>]   the performance honesty baseline\n\
      \x20 delulu-measure all                     all three, to their default directories\n\
+     \x20 delulu-measure ai-usability prepare --out DIR [--tasks t1,..] [--conditions c1,..]\n\
+     \x20 delulu-measure ai-usability score DIR [--record OUT]   the V2 AI usability benchmark (P4-08)\n\
      \n\
      Study A generates a 25-package corpus with dependency depth 4, verifies each graph clean,\n\
      then injects an effect at every library position and checks that every injection is refused.\n\

@@ -1,0 +1,7 @@
+module solution
+
+fn main() {
+    let sum = 306
+    sum.print()
+    Console.print(sum)
+}

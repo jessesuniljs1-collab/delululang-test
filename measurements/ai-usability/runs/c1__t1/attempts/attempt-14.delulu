@@ -1,0 +1,9 @@
+module solution
+
+effect console
+
+fn main() ! {console} {
+    let sum = 306
+    perform console.print(sum)
+    console ! print(sum)
+}

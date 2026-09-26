@@ -45,6 +45,19 @@ A function that performs an effect not in its row does not compile. The row of a
 the rows of everything it calls, so authority composes upward to `main` — that is the whole design,
 and `delulu why <Effect> <file>` prints the chain that puts an effect there.
 
+**`main` takes the `Root`, and nothing else.** `fn main(root: Root)` (or `fn main()` for a program
+that needs no authority). Every capability is derived from it — `root.console()`,
+`root.fs_read("./data")` — never taken as a parameter of `main`: the runtime hands `main` the `Root`
+and nothing more, and the checker refuses any other signature.
+
+**The kit a first program needs** (measured: agents given only this file spent most of their checks
+discovering it — `measurements/ai-usability/`). `str(x)` turns a value into `Str`; `parse_int(s)`
+returns `Option[Int]`; a list has `len()`, `push(x)` and `get(i)`, which returns `Option[T]`; a
+`Str` has `split(sep)`, `trim()`, `len()`, `contains(s)`; `for x in xs { … }` iterates a list.
+There is no `unwrap` — `match` the `Option` or `Result`, or use `?` inside a function that returns
+`Result`. A match arm that does nothing is `None => {}`; one that assigns or `continue`s wraps it in
+braces: `Some(v) => { best = v }`, `_ => { continue }`.
+
 **Capability-relative paths.** `root.fs_read("./data")` mints a capability rooted at `./data`; every
 path used through it is relative to THAT root, not to the working directory. `w.write_text("out.txt", …)`
 writes `<root>/out.txt`. A path escaping its root is refused, and so is one that only looks like it

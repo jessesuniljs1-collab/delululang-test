@@ -620,6 +620,12 @@ published claim: `agent-loop` (why to batch `check`), `compute`, `dead-man`, `fe
 can disagree with the method rather than only with the conclusion. `measurements/METHODOLOGY.md` is
 the rule they all follow — what counts as a measurement here, and what disqualifies one.
 
+`measurements/ai-usability/` is the V2 AI usability benchmark (P4-08): its own `METHODOLOGY.md` (five
+knowledge conditions, seven measures, the negative controls, the threats), the `REPORT.md` generated
+from `results.json`, and `measurements/ai-usability/runs/` — every run's evidence, one directory per
+(condition, task): the `TASK.md` the model was shown, its program, the snapshots the wrapper took at
+each check, the call log and the run record. `crates/delulu/tests/ai_usability.rs` replays it.
+
 `rfcs/0000-template.md` is the RFC template — `governance.rs` pins its hard sections so they cannot be
 dropped. `rfcs/0001-broker-federation.md` is the federation RFC: **sponsored, and partly built during
 its own comment period**, which is recorded as a governance deviation and must never be restated as

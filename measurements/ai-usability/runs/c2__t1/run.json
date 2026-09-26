@@ -1,0 +1,8 @@
+{
+  "model": "claude-sonnet-5",
+  "harness": "Claude Code subagent (general-purpose), 2026-09-26",
+  "tokens": 124530,
+  "tool_uses": 29,
+  "duration_ms": 471730,
+  "reply": "DONE 12"
+}

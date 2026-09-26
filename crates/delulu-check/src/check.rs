@@ -440,6 +440,10 @@ impl<'a> Checker<'a> {
             _ => None,
         };
 
+        if f.name.name == "main" {
+            self.check_main_signature(f, &param_types);
+        }
+
         // Record the function's static type (rows never erase — invariant 3).
         let fn_ty = Type::Fn {
             params: param_types.clone(),
@@ -1011,6 +1015,49 @@ impl<'a> Checker<'a> {
             body_start: t.body.span.start,
         };
         self.check_row_subset(&body_row, &declared_row, &subj);
+    }
+
+    /// `main` is called with exactly one argument, the program's `Root` — the interpreter's
+    /// `call_fn("main", vec![root])` — and every capability is derived from it (§5.1: "All authority
+    /// originates in the `Root` value passed to `main`"). So `main` takes no parameter, or one of type
+    /// `Root`, and nothing else.
+    ///
+    /// Nothing checked this. `fn main(r: Cap[FsRead], w: Cap[FsWrite])` checked clean, its authority
+    /// report asked for `fs.read=PATH` as if a capability could arrive from nowhere, and at run time
+    /// the `Root` landed in `r` and the first method call faulted as DL0907 — "checker bug", which is
+    /// what it was: the checker had accepted a program the runtime cannot run. `fn main(n: Int)`
+    /// bound the `Root` to an `Int`. Found by the AI usability benchmark (V2 P4-08), where a model
+    /// with no documentation wrote exactly the first signature.
+    fn check_main_signature(&mut self, f: &FnDecl, param_types: &[Type]) {
+        if let Some(extra) = f.params.get(1) {
+            self.diags.push(
+                Diagnostic::error(
+                    "DL0403",
+                    format!(
+                        "`main` is called with one argument, the program's `Root`, but it declares {} parameters",
+                        f.params.len()
+                    ),
+                )
+                .with_span(extra.ty.span(), "`main` receives nothing here"),
+            );
+        }
+        if let (Some(p), Some(ty)) = (f.params.first(), param_types.first()) {
+            if *ty != Type::Root {
+                self.diags.push(
+                    Diagnostic::error(
+                        "DL0401",
+                        format!(
+                            "`main`'s parameter receives the program's `Root`, but it is declared `{}` — declare \
+                             `{}: Root` and derive what it needs from it (`root.fs_read(\"./data\")`): all \
+                             authority originates in the `Root` (§5.1)",
+                            self.ty(ty),
+                            p.name.name
+                        ),
+                    )
+                    .with_span(p.ty.span(), "this receives the `Root`"),
+                );
+            }
+        }
     }
 
     /// The subset check at the function boundary (T-Fn). Emits DL0501 (undeclared effect,

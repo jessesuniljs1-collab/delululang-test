@@ -1,0 +1,27 @@
+module probe
+
+fn t1(a: Cap[Root]) {
+}
+
+fn t2(a: Cap[Fs]) {
+}
+
+fn t3(a: Cap[Read]) {
+}
+
+fn t4(a: Cap[Write]) {
+}
+
+fn t5(a: Cap[FileSystem]) {
+}
+
+fn t6(a: Cap[File]) {
+}
+
+fn t7(a: Cap[PluginHost]) {
+}
+
+fn t8() {
+    let x = Read("./data/numbers.txt");
+    let y = Write("./out/answer.txt", "5");
+}

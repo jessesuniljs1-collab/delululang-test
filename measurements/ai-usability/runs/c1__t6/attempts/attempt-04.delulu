@@ -1,0 +1,21 @@
+module probe
+
+fn main() {
+    let path = "./data/numbers.txt";
+    let a1 = read(path);
+    let a2 = read_text(path);
+    let a3 = read_string(path);
+    let a4 = read_lines(path);
+    let a5 = slurp(path);
+    let a6 = load_file(path);
+    let a7 = open(path);
+    let a8 = input(path);
+
+    let content = "5";
+    let b1 = write(path, content);
+    let b2 = write_text(path, content);
+    let b3 = write_string(path, content);
+    let b4 = write_line(path, content);
+    let b5 = save_file(path, content);
+    let b6 = print_to_file(path, content);
+}

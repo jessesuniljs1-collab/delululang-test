@@ -1,0 +1,13 @@
+module solution
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let numbers = [72, 64, 24, 56, 90, 65]
+    var total = 0
+    for x in numbers {
+        if x % 2 == 0 {
+            total = total + x
+        }
+    }
+    out.println(str(total))
+}

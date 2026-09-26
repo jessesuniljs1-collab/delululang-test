@@ -1,0 +1,32 @@
+module solution
+
+fn probe(r: Cap[FsRead], w: Cap[FsWrite]) {
+    let a1 = r.read("./data/numbers.txt");
+    let a2 = r.load("./data/numbers.txt");
+    let a3 = r.open("./data/numbers.txt");
+    let a4 = r.get("./data/numbers.txt");
+    let a5 = r.contents("./data/numbers.txt");
+    let a6 = r.text("./data/numbers.txt");
+    let a7 = r.slurp("./data/numbers.txt");
+
+    let b1 = w.write("./out/answer.txt", "5");
+    let b2 = w.save("./out/answer.txt", "5");
+    let b3 = w.put("./out/answer.txt", "5");
+    let b4 = w.store("./out/answer.txt", "5");
+    let b5 = w.emit("./out/answer.txt", "5");
+}
+
+fn main(r: Cap[FsRead], w: Cap[FsWrite]) {
+    let text = r.read("./data/numbers.txt");
+    let parts = text.split("\n");
+    let max = 0;
+    for line in parts {
+        if line.len() > 0 {
+            let n = parse_int(line);
+            if n > max {
+                max = n;
+            }
+        }
+    }
+    w.write("./out/answer.txt", str(max));
+}

@@ -1,0 +1,37 @@
+module probe
+
+fn main() {
+    let s = "5";
+    let p1 = s.to_int();
+    let p2 = s.parse();
+    let p3 = parse_int(s);
+    let p4 = Int.parse(s);
+    let p5 = s.to_number();
+
+    let l1 = s.length();
+    let l2 = s.len();
+    let l3 = s.size();
+
+    let sp1 = s.split(",");
+    let sp2 = s.lines();
+
+    let n = 5;
+    let ts1 = n.to_string();
+    let ts2 = n.to_str();
+    let ts3 = str(n);
+    let ts4 = to_str(n);
+    let ts5 = String.from_int(n);
+
+    let r1 = read_file("./data/numbers.txt");
+    let r2 = read_to_string("./data/numbers.txt");
+    let r3 = fs.read("./data/numbers.txt");
+    let r4 = fs.read_to_string("./data/numbers.txt");
+    let r5 = File.read("./data/numbers.txt");
+    let r6 = Fs.read("./data/numbers.txt");
+    let r7 = Fs.read_to_string("./data/numbers.txt");
+
+    let w1 = write_file("./out/answer.txt", s);
+    let w2 = fs.write("./out/answer.txt", s);
+    let w3 = Fs.write("./out/answer.txt", s);
+    let w4 = File.write("./out/answer.txt", s);
+}

@@ -1,0 +1,15 @@
+module probe
+
+fn t1() {
+    let a = load("./data/numbers.txt");
+    let b = save("./out/answer.txt", "5");
+    let c = fetch("./data/numbers.txt");
+    let d = get("./data/numbers.txt");
+    let e = put("./out/answer.txt", "5");
+    let f = std.read("./data/numbers.txt");
+    let g = sys.read("./data/numbers.txt");
+}
+
+effect fs.read(path: Str) -> Str;
+
+effect canread(path: Str) -> Str;

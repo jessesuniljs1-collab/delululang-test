@@ -1,0 +1,22 @@
+{
+  "allowed_commands": [
+    "check",
+    "run",
+    "toolchain",
+    "schema",
+    "examples",
+    "explain",
+    "skill"
+  ],
+  "allowed_grants": [
+    "fs.read=./data",
+    "fs.write=./out"
+  ],
+  "condition": "c3",
+  "condition_name": "the Skill plus toolchain introspection",
+  "expected": "69",
+  "knowledge": [
+    "skills/delulu/SKILL.md"
+  ],
+  "task": "t6"
+}

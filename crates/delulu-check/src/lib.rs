@@ -458,12 +458,16 @@ mod tests {
     #[test]
     fn foreigncall_propagates_up_the_call_chain() {
         // This is exactly the chain `delulu why ForeignCall` walks: main -> mid -> leaf -> m.cos.
+        // `main` derives the handle from its `Root` the way a program that runs must (§5.1): it was
+        // written `fn main(m: mathlib)`, which checked clean only because nothing held `main` to the
+        // one argument the runtime passes it (V2 P4-08).
         let c = check(
             "module m\n\
              foreign \"c\" lib mathlib { fn cos(x: Float) -> Float }\n\
              fn leaf(m: mathlib) -> Float ! {ForeignCall} { m.cos(1.0) }\n\
              fn mid(m: mathlib) -> Float ! {ForeignCall} { leaf(m) }\n\
-             fn main(m: mathlib) -> Float ! {ForeignCall} { mid(m) }\n",
+             fn main(root: Root) -> Result[Float, ForeignErr] ! {ForeignCall} {\n \
+             let load = root.foreign_load()\n let m: mathlib = root.foreign(load)?\n Ok(mid(m)) }\n",
         );
         assert!(!c.has_errors(), "{:?}", c.diagnostics);
         assert!(c.result.facts["main"].effects.contains(&Effect::ForeignCall));
@@ -1176,7 +1180,7 @@ fn reader(xs: List[Int]) -> Int { xs.len() }
         let m = messages(
             "module m
 fn take_io(r: Result[Str, IoErr]) -> Str { match r { Ok(s) => s, Err(_e) => \"io\" } }
-             pub fn main(h: Cap[Http]) -> Str ! {Net} { take_io(h.get(\"https://example.com\")) }
+             pub fn fetch(h: Cap[Http]) -> Str ! {Net} { take_io(h.get(\"https://example.com\")) }
 ",
         );
         assert!(m.contains("Result[Str, IoErr]"), "the expected type must be named: {m}");
@@ -1962,4 +1966,32 @@ mod alias_declaration_tests {
             "a recursive SUM is legal for the same reason"
         );
     }
+
+    /// `main`'s signature is the runtime's: no parameter, or one `Root` (P4-08's finding). Every
+    /// shape that checked clean and then could not run is refused, with the code for its mistake;
+    /// the shapes the runtime honours still check.
+    #[test]
+    fn main_takes_the_root_or_nothing() {
+        let codes = |src: &str| -> Vec<&'static str> {
+            let c = check_source(0, src);
+            c.diagnostics.iter().filter(|d| d.is_error()).map(|d| d.code).collect()
+        };
+        for ok in [
+            "module m\nfn main() {}\n",
+            "module m\nfn main(root: Root) ! {Write} { root.console().println(\"x\") }\n",
+            "module m\nfn main(r: Root) {}\n",
+        ] {
+            assert!(codes(ok).is_empty(), "{ok}: {:?}", codes(ok));
+        }
+        assert_eq!(
+            codes("module m\nfn main(r: Cap[FsRead], w: Cap[FsWrite]) ! {Read, Write} { }\n"),
+            vec!["DL0403", "DL0401"],
+            "the benchmark's program: two parameters, and the first is not the Root"
+        );
+        assert_eq!(codes("module m\nfn main(n: Int) {}\n"), vec!["DL0401"]);
+        assert_eq!(codes("module m\nfn main(root: Root, n: Int) {}\n"), vec!["DL0403"]);
+        // A function that is not `main` may take anything.
+        assert!(codes("module m\nfn helper(n: Int) -> Int { n }\nfn main() {}\n").is_empty());
+    }
+
 }

@@ -1,0 +1,25 @@
+module probe
+
+fn t1(a: Cap[FsRead]) {
+}
+
+fn t2(a: Cap[FsWrite]) {
+}
+
+fn t3(a: Cap[ReadFs]) {
+}
+
+fn t4(a: Cap[WriteFs]) {
+}
+
+fn t5(a: Cap[Filesystem]) {
+}
+
+fn t6(a: Cap[LocalFs]) {
+}
+
+fn t7(a: Cap[Storage]) {
+}
+
+fn t8(a: Cap[Disk]) {
+}

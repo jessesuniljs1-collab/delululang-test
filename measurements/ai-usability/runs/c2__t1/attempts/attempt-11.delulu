@@ -1,0 +1,24 @@
+module solution;
+
+fn probe(x: Int) -> Unit {
+    let a = to_str(x);
+    let b = str(x);
+    let c = show(x);
+    let d = format(x);
+    let e = Str.from(x);
+    let f = Str.from_int(x);
+    let g = Str.of(x);
+    let h = "" + x;
+}
+
+fn main(root: Root) -> Unit ! {Write} {
+    let con = root.console();
+    let nums: List[Int] = [72, 64, 24, 56, 90, 65];
+    let sum: Int = 0;
+    for n in nums {
+        if n % 2 == 0 {
+            sum = sum + n;
+        }
+    }
+    con.println(sum.to_str());
+}

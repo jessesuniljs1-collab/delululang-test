@@ -1,0 +1,27 @@
+module solution
+
+fn at_or(xs: List[Int], i: Int, fallback: Int) -> Int {
+    match xs.get(i) {
+        Some(v) => v
+        None => fallback
+    }
+}
+
+fn sum_of_evens(xs: List[Int]) -> Int {
+    var total = 0
+    var i = 0
+    while i < xs.len() {
+        let v = at_or(xs, i, 0)
+        if v % 2 == 0 {
+            total = total + v
+        }
+        i = i + 1
+    }
+    total
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let xs: val List[Int] = [72, 64, 24, 56, 90, 65]
+    out.println(str(sum_of_evens(xs)))
+}

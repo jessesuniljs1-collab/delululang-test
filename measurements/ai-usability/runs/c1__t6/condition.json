@@ -1,0 +1,15 @@
+{
+  "allowed_commands": [
+    "check",
+    "run"
+  ],
+  "allowed_grants": [
+    "fs.read=./data",
+    "fs.write=./out"
+  ],
+  "condition": "c1",
+  "condition_name": "never seen DeluluLang",
+  "expected": "69",
+  "knowledge": [],
+  "task": "t6"
+}

@@ -1,0 +1,30 @@
+module solution;
+
+fn main() -> Unit ! {Read, Write, Net, Clock, Rand, Declassify, ForeignCall, Tty, Std, Input, Interactive, Prompt, Echo, Screen, Display, Log, Trace, Secret, Exec, Native, Panic, System, Sys} {
+    let nums: List[Int] = [72, 64, 24, 56, 90, 65];
+    let sum: Int = 0;
+    for n in nums {
+        if n % 2 == 0 {
+            sum = sum + n;
+        }
+    }
+    let a = console;
+    let b = stdout;
+    let c = term;
+    let d = tty;
+    let e = out;
+    let f = io;
+    let g = std;
+    let h = env;
+    let i = world;
+    let j = sys;
+    let k = root;
+    let l = puts;
+    let m = display;
+    let o = log;
+    let p = trace;
+    let q = debug;
+    let r = eprint;
+    let s = write;
+    let t = write_line;
+}

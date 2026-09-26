@@ -589,6 +589,7 @@ dependencies = [
  "delulu-broker",
  "delulu-check",
  "delulu-diag",
+ "delulu-measure",
  "delulu-runtime",
  "delulu-survey",
  "delulu-syntax",

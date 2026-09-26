@@ -1,0 +1,14 @@
+module solution
+
+effect console
+
+fn main() ! {console} {
+    let numbers = [72, 64, 24, 56, 90, 65]
+    let sum = 0
+    for n in numbers {
+        if n % 2 == 0 {
+            sum = sum + n
+        }
+    }
+    console.print(sum)
+}

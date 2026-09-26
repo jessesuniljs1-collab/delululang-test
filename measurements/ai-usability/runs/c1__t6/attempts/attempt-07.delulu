@@ -1,0 +1,30 @@
+module probe
+
+fn t1() {
+    let a = fs_read("./data/numbers.txt");
+    let b = fs_write("./out/answer.txt", "5");
+    let c = file_read("./data/numbers.txt");
+    let d = file_write("./out/answer.txt", "5");
+    let e = fs_read_to_string("./data/numbers.txt");
+    let f = read_all_text("./data/numbers.txt");
+}
+
+fn t2() {
+    with fs.read("./data/numbers.txt") as text {
+    }
+}
+
+fn t3(p: File) {
+}
+
+fn t4(p: Path) {
+}
+
+fn t5(p: Handle) {
+}
+
+effect Fs {
+    fn read(path: Str) -> Str;
+}
+
+fn main() { }

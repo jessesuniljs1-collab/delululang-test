@@ -1,0 +1,18 @@
+module solution
+
+fn main(root: Root) -> Result[Unit, IoErr] ! {Read, Write} {
+    let r = root.fs_read("./data");
+    let w = root.fs_write("./out");
+    let text = r.read_text("numbers.txt")?;
+    let lines = text.split("\n");
+    var max = 0;
+    for line in lines {
+        if line.len() > 0 {
+            let n = line.to_int();
+            if n > max {
+                max = n;
+            }
+        }
+    }
+    w.write_text("answer.txt", max)
+}

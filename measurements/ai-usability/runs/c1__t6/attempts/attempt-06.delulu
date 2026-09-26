@@ -1,0 +1,31 @@
+module probe
+
+use fs;
+use std.fs;
+use std::fs;
+import fs;
+
+fn t1() {
+    let a = fs::read("./data/numbers.txt");
+}
+
+fn t2() {
+    let a = FS.read("./data/numbers.txt");
+}
+
+fn t3() {
+    let a = Files.read("./data/numbers.txt");
+}
+
+fn t4() {
+    let a = IO.read("./data/numbers.txt");
+}
+
+fn t5(cap: Fs) {
+    let a = cap.read("./data/numbers.txt");
+}
+
+fn t6(cap: Capability) {
+}
+
+fn main() { }

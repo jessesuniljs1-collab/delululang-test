@@ -1,0 +1,9 @@
+{
+  "model": "claude-sonnet-5",
+  "harness": "Claude Code subagent (general-purpose), 2026-09-26",
+  "tokens": null,
+  "tool_uses": null,
+  "duration_ms": null,
+  "reply": "DONE 13",
+  "interrupted": "killed by a service session limit (HTTP 429) after 12 checked attempts; resumed as the same agent with the same rules; the harness reported 205665 tokens, 10 tool uses and 159259 ms for the resumed segment alone (which re-reads the whole earlier context) and nothing for the killed segment, so no comparable token total exists: UNRUN"
+}

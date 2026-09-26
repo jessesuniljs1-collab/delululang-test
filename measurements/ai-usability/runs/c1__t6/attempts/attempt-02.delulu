@@ -1,0 +1,16 @@
+module solution
+
+fn main() {
+    let text = read_file("./data/numbers.txt");
+    let lines = text.lines();
+    let max = 0;
+    for line in lines {
+        if line.length() > 0 {
+            let n = line.to_int();
+            if n > max {
+                max = n;
+            }
+        }
+    }
+    write_file("./out/answer.txt", max.to_string());
+}

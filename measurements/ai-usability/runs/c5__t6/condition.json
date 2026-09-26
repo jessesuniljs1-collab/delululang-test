@@ -1,0 +1,23 @@
+{
+  "allowed_commands": [
+    "check",
+    "run",
+    "explain"
+  ],
+  "allowed_grants": [
+    "fs.read=./data",
+    "fs.write=./out"
+  ],
+  "condition": "c5",
+  "condition_name": "the full documentation",
+  "expected": "69",
+  "knowledge": [
+    "skills/delulu/SKILL.md",
+    "docs/for-agents.md",
+    "docs/GETTING_STARTED.md",
+    "docs/book/THE_DELULULANG_BOOK.md",
+    "docs/reference",
+    "examples"
+  ],
+  "task": "t6"
+}

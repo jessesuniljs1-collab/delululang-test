@@ -1,0 +1,23 @@
+module solution
+
+fn sum_evens(xs: val List[Int]) -> Int {
+    var total = 0
+    var i = 0
+    while i < xs.len() {
+        let v = match xs.get(i) {
+            Some(v) => v
+            None => 0
+        }
+        if v % 2 == 0 {
+            total = total + v
+        }
+        i = i + 1
+    }
+    total
+}
+
+fn main(root: Root) ! {Write} {
+    let out = root.console()
+    let xs: val List[Int] = [72, 64, 24, 56, 90, 65]
+    out.println(str(sum_evens(xs)))
+}

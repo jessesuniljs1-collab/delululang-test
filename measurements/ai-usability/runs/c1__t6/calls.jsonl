@@ -1,0 +1,31 @@
+{"t": 1790384057.9869661, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 1, "exit": 1}
+{"t": 1790384088.4901328, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 2, "exit": 1}
+{"t": 1790384145.3607924, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 3, "exit": 1}
+{"t": 1790384195.443779, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 4, "exit": 1}
+{"t": 1790384351.8780165, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 5, "exit": 1}
+{"t": 1790384412.6059635, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 6, "exit": 1}
+{"t": 1790384471.892768, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 7, "exit": 1}
+{"t": 1790384539.2301795, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 8, "exit": 1}
+{"t": 1790384622.649066, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 9, "exit": 1}
+{"t": 1790384687.2526846, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 10, "exit": 1}
+{"t": 1790384707.7522168, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 11, "exit": 1}
+{"t": 1790384775.781931, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 12, "exit": 1}
+{"t": 1790384824.8171182, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384878.965513, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790384964.796402, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385020.5624838, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385043.1478708, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385078.0035963, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385129.2163064, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385159.984189, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385190.5445414, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385215.3323882, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385237.8564525, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385277.9235997, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385312.879402, "argv": ["run", "solution.delulu", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790385344.1756299, "argv": ["run", "solution.delulu", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790444108.8748338, "argv": ["run", "solution.delulu", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790444151.2162392, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790444172.9998324, "argv": ["run", "solution.delulu", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}
+{"t": 1790444227.357863, "argv": ["check", "solution.delulu"], "allowed": true, "attempt": 13, "exit": 0}
+{"t": 1790444233.904869, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 1}

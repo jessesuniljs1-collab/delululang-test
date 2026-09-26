@@ -5,6 +5,9 @@
 //! - **A** (`study_a`): whole-program authority verification at scale. The mechanism claim.
 //! - **B** (`study_b`): agent task success and repair loops.
 //! - **C** (`study_c`): the performance honesty baseline.
+//! - **ai-usability** (`ai_usability`, V2 P4-08): can a model write correct, least-authority
+//!   DeluluLang, under five knowledge conditions — the benchmark whose model runs happen outside
+//!   this crate and whose scoring, controls and record happen inside it.
 //!
 //! Every study is deterministic and reproducible from a clean checkout. Where a study cannot be
 //! run in full — Study B's live-model lane needs API keys and network — the harness ships complete
@@ -16,6 +19,7 @@
 //! failure rather than a vacuous success, and the threats to validity are part of the deliverable
 //! rather than an appendix nobody links to.
 
+pub mod ai_usability;
 pub mod corpus;
 pub mod study_a;
 pub mod study_b;

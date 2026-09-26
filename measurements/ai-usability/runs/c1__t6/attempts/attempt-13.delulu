@@ -1,0 +1,28 @@
+module solution
+
+fn main(r: Cap[FsRead], w: Cap[FsWrite]) ! {Read, Write} {
+    let read_result = r.read_text("./data/numbers.txt");
+    let text = match read_result {
+        Ok(t) => t,
+        Err(e) => "",
+    };
+    let parts = text.split("\n");
+    let max = 0;
+    for line in parts {
+        if line.len() > 0 {
+            let maybe_n = parse_int(line);
+            match maybe_n {
+                Some(n) => {
+                    if n > max {
+                        max = n;
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+    match w.write_text("./out/answer.txt", str(max)) {
+        Ok(u) => {}
+        Err(e) => {}
+    }
+}

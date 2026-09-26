@@ -1,0 +1,18 @@
+module solution
+
+fn main() {
+    let sum = 306
+    write(sum)
+    writeln(sum)
+    println(sum)
+    say(sum)
+    emit(sum)
+    show(sum)
+    display(sum)
+    echo(sum)
+    puts(sum)
+    stdout(sum)
+    log(sum)
+    out(sum)
+    print_line(sum)
+}

@@ -1364,3 +1364,79 @@ dropped, scopes dropped, `carried` always true, the profile ignored, `performs` 
 custody hard-coded). The full suite then caught one more thing: `message_spacing`'s gate read the
 human rendering's padded labels (`"program            {}"`) as flattened line continuations; they are
 format widths now (`{:<18}`), the same output.
+
+**P4-11's run, read.** CI `36206223062` (`fcd2c2f`): **success on every job**, all three operating
+systems — the 16 chain snapshots hold byte-for-byte on Windows, Linux and macOS.
+
+**P4-08 — the AI usability benchmark, and its first result.** `delulu-measure ai-usability` is the
+harness `V2_AI_NATIVE_DESIGN.md` §4 designed: five knowledge conditions (never seen DeluluLang; the
+Skill; the Skill plus `toolchain`/`schema`/`examples`/`explain`; the Skill plus MCP/LSP; the full
+documentation), seven measures (compile first try, task completion, repair iterations, tokens,
+authority mistakes, sandbox-policy mistakes, security-test failures), tasks generated from a
+grammar (three operations × three ways in and out = nine), and a record,
+`measurements/ai-usability/` (METHODOLOGY, REPORT, results.json, and every run's evidence).
+`prepare` lays out one workspace per (condition, task): the task, the condition's documentation
+copied in, and `dl.py` — a wrapper that lets through only the condition's `delulu` subcommands,
+refuses the rest, logs every call and snapshots the program at every `check`, so attempts and the
+repair loop are recorded by the harness rather than reported by the model. `score` computes every
+measure from those files alone, with NEGATIVE CONTROLS per task on every scoring — the reference
+solution must score perfectly (so every task is solvable in least authority and carried by the
+sandbox), an empty file and an unparseable one must fail, the reference widened by one grant must be
+exactly one authority mistake, and the reference that reaches for the out-of-scope canary must be an
+authority mistake AND a security failure — and the result is INVALID if any misbehaves. What was not
+measured is UNRUN, never zero; what cannot be measured on a program that does not check is null.
+
+**The first result (a pilot — two tasks, one run each, per condition; Sonnet 5 as the subject; published
+as it came out; `REPORT.md`):** with no documentation the model completed 1 of 2 tasks and never
+compiled on the first try, needing 13 repair iterations on average; with the Skill alone, 2 of 2 but
+still 0% first-try and 11.5 iterations; with the Skill plus introspection, the Skill plus MCP/LSP, or
+the full documentation, 2 of 2, first try in 50%, 100% and 50% of runs, 0–0.5 iterations. No
+authority, sandbox-policy or security-test mistake in any program that checks. Two runs cannot rank
+the conditions, and the report says so; what the pilot does show is that the Skill alone carried a
+model to completion but not to a first-try compile, and that is the gap it pointed at.
+
+**What the benchmark found in the language — fixed.** With no documentation, the model wrote
+`fn main(r: Cap[FsRead], w: Cap[FsWrite])`. It CHECKED CLEAN: nothing held `main` to the one argument
+the runtime passes it (`interp.rs`: `call_fn("main", vec![root])`). Its authority report asked for
+`fs.read=PATH` as if a capability could arrive from nowhere, contradicting §5.1 ("All authority
+originates in the `Root` value passed to `main`"); at run time the `Root` landed in `r` and the first
+method call faulted as DL0907 — "checker bug", which is what it was. `fn main(n: Int)` bound the
+`Root` to an `Int`. Verified by hand against the binary, then fixed in the checker: `main` takes no
+parameter or one `Root` (any name) — DL0403 for more parameters, DL0401 for a non-`Root` one, no new
+code. Nothing in the corpus, the examples, the Book or the conformance suite changes (all green); one
+checker unit test had `fn main(m: mathlib)` at the top of a call chain and now derives the handle
+from its `Root` as a runnable program must, and another used `main` as an ordinary helper's name and
+is renamed. Mutant: skipping the rule fails its test. The pilot was first scored before the fix
+(kept in the pilot's storage); the record is scored with it, where that run does not check.
+
+**What the pilot showed about the documentation — acted on.** Both Skill-only runs spent most of
+their checks discovering the standard functions a first program needs. The Skill now carries "`main`
+takes the `Root`, and nothing else" and "the kit a first program needs" (`str`, `parse_int` →
+`Option[Int]`, `len`/`push`/`get` → `Option`, `split`/`trim`, `for`, no `unwrap`, the braced match arm
+for an assignment or `continue`) — every clause verified against the binary first. The record says
+which documentation each run read: `prepare` now writes the knowledge commit and whether those files
+had changed; the pilot's are the files at `fcd2c2f`, before these paragraphs. A later run measures
+whether they helped.
+
+**What the replay gate caught in the harness.** `tests/ai_usability.rs` replays the committed runs
+and requires the committed `results.json` and `REPORT.md`. Its first run differed in one number — one
+sandboxed run "failed" on replay. The program was deterministic (six sandboxed runs out of six gave
+the answer); the harness was not: `score` named its scratch directory by process id, the test suite
+scores twice in one process in parallel, and each scoring's cleanup deleted the other's staged runs
+mid-run. Each scoring has its own directory now, and the gate passes repeatedly.
+
+Committing the record raised the Survey's `duplicated-file` warnings from 2 to 16: a run's final
+program is its last snapshot, the same task is shown under every condition, a model re-checked
+without a change. That rule's premise — one of two copies will be edited and drift — is about files
+people edit; a measurement record's run evidence is written once and never edited, and its copies
+are the facts it records. The Survey now leaves `measurements/*/runs/` out of that one rule, with the
+reason in the code, and the count is back to its 2.
+
+**Agent operations.** The ten runs were Sonnet 5 subagents launched together; a service session limit
+killed one (`c1__t6`) mid-run after 12 attempts, and three finished runs' usage existed only in the
+conversation when it struck. On resuming, those were saved first — each agent's final reply and usage
+into `D:\nelan\DeluluLang-agent-transcripts\2026-09-26-ai-usability-pilot\FINDINGS.md` and the
+workspaces beside it — and the killed run was resumed as the same agent with the same rules. Its token
+count is UNRUN: the killed segment reported none, and the resumed one re-reads the whole context. From
+now on each agent's findings are written to that file the moment it reports (the owner's instruction,
+2026-09-26).

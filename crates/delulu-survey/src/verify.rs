@@ -599,6 +599,13 @@ fn identical_files(files: &[ScannedFile], b: &mut Builder) {
         if f.text.len() < 400 {
             continue;
         }
+        // A measurement record's run evidence is written once and never edited, and its copies are
+        // the facts it records: the same task shown under every condition, a program checked twice
+        // without a change, a final program that is its last snapshot. "One copy will drift" is a
+        // premise about files people edit, and it does not hold here (V2 P4-08).
+        if f.rel.starts_with("measurements/") && f.rel.contains("/runs/") {
+            continue;
+        }
         let mut h = DefaultHasher::new();
         f.text.hash(&mut h);
         by_hash.entry(h.finish()).or_default().push(&f.rel);

@@ -23,16 +23,16 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 266 |
-| Rust lines | 136557 |
-| Rust files outside `src/` (test/bench targets) | 114 |
-| Markdown documents | 189 |
-| Markdown lines | 55081 |
-| DeluluLang programs | 180 |
+| Rust files | 268 |
+| Rust lines | 137618 |
+| Rust files outside `src/` (test/bench targets) | 115 |
+| Markdown documents | 201 |
+| Markdown lines | 55341 |
+| DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1252 / 11154 |
+| Nodes / edges in this map | 1380 / 11181 |
 | Open discrepancies | 28 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
@@ -49,6 +49,7 @@ graph TD
   delulu["delulu"] --> delulu_broker["delulu-broker"]
   delulu["delulu"] --> delulu_check["delulu-check"]
   delulu["delulu"] --> delulu_diag["delulu-diag"]
+  delulu["delulu"] --> delulu_measure["delulu-measure"]
   delulu["delulu"] --> delulu_runtime["delulu-runtime"]
   delulu["delulu"] --> delulu_survey["delulu-survey"]
   delulu["delulu"] --> delulu_syntax["delulu-syntax"]
@@ -85,7 +86,7 @@ graph TD
 
 The DeluluLang CLI: check | run | repl | authority
 
-- **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
+- **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
 - **Modules:** 36 files, 30992 lines
 
@@ -177,16 +178,16 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 15252 lines
+- **Modules:** 17 files, 15331 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/authority.rs` | 124 | The whole-program authority report (spec §10.5) — the data behind `delulu authority`, |
-| `src/check.rs` | 3732 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
+| `src/check.rs` | 3779 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 186 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1467 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
 | `src/dir.rs` | 850 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
-| `src/lib.rs` | 1965 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
+| `src/lib.rs` | 1997 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 561 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
 | `src/manifest.rs` | 389 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 244 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |
@@ -254,14 +255,15 @@ DeluluLang differential fuzz harness: generate programs, check them, and assert 
 The DeluluLang measurement program (Stage 9): the published, reproducible evidence
 
 - **Depends on:** —
-- **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 6 files, 1743 lines
+- **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
+- **Modules:** 7 files, 2606 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
+| `src/ai_usability.rs` | 785 | The V2 AI usability benchmark (P4-08, `docs/DELULULANG_V2/V2_AI_NATIVE_DESIGN.md` §4). |
 | `src/corpus.rs` | 240 | Study A's corpus: real-shaped packages with real dependency graphs (Stage 9d, spec §3.1). |
-| `src/lib.rs` | 22 | The DeluluLang measurement program (Stage 9, spec §3) — the published, reproducible evidence |
-| `src/main.rs` | 193 | `delulu-measure` — runs the Stage 9 measurement studies and writes their raw data. |
+| `src/lib.rs` | 26 | The DeluluLang measurement program (Stage 9, spec §3) — the published, reproducible evidence |
+| `src/main.rs` | 267 | `delulu-measure` — runs the Stage 9 measurement studies and writes their raw data. |
 | `src/study_a.rs` | 463 | Study A — whole-program authority verification at scale (Stage 9d, spec §3.1). |
 | `src/study_b.rs` | 441 | Study B — agent task success and repair loops (Stage 9e, spec §3.2). |
 | `src/study_c.rs` | 384 | Study C — the performance honesty baseline (Stage 9e, spec §3.3). |
@@ -319,7 +321,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 13 files, 4772 lines
+- **Modules:** 13 files, 4779 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -335,7 +337,7 @@ The Survey: a measured, provenance-carrying map of the DeluluLang REPOSITORY —
 | `src/render.rs` | 292 | The three channels the Survey publishes on. |
 | `src/rust.rs` | 485 | Reading Rust source as text. |
 | `src/scan.rs` | 215 | Walking the tree and deciding what each file *is*. |
-| `src/verify.rs` | 632 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
+| `src/verify.rs` | 639 | Cross-checking — the pass that decides whether an extracted relation is trustworthy. |
 
 ### `delulu-syntax`
 

@@ -1,0 +1,4 @@
+{"t": 1790384421.9713416, "argv": ["check", "solution.delulu", "--json"], "allowed": true, "attempt": 1, "exit": 1}
+{"t": 1790384437.947559, "argv": ["check", "solution.delulu", "--json"], "allowed": true, "attempt": 2, "exit": 0}
+{"t": 1790384441.9743514, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt"], "allowed": true, "exit": 0}
+{"t": 1790384449.8644295, "argv": ["run", "solution.delulu", "--grant", "fs.read=./data", "--grant", "fs.write=./out", "--no-prompt", "--sandbox"], "allowed": true, "exit": 0}

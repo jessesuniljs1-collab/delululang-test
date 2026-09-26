@@ -1,0 +1,21 @@
+module probe
+
+fn f1() authority(fs.read, fs.write) {
+}
+
+fn f2() effects(fs.read, fs.write) {
+}
+
+fn f3() uses(fs.read, fs.write) {
+}
+
+fn f4() requires(fs.read, fs.write) {
+}
+
+fn f5() with fs.read, fs.write {
+}
+
+fn f6() grants(fs.read, fs.write) {
+}
+
+fn f7() { }

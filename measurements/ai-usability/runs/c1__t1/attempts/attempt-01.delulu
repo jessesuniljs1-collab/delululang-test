@@ -1,0 +1,10 @@
+fn main() -> () ! {console} {
+    let numbers = [72, 64, 24, 56, 90, 65]
+    let mut sum = 0
+    for n in numbers {
+        if n % 2 == 0 {
+            sum = sum + n
+        }
+    }
+    print(sum)
+}
