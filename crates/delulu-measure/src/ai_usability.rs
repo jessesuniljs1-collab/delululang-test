@@ -256,7 +256,9 @@ ALLOWED = [{allowed}]
 with open(os.path.join(HERE, "dl.local.json"), encoding="utf-8") as f:
     DELULU = json.load(f)["delulu"]
 def log(entry):
-    with open(os.path.join(HERE, "calls.jsonl"), "a", encoding="utf-8") as f:
+    # newline="\n": the log is evidence committed to a repository that stores LF; written in text
+    # mode on Windows it came out CRLF, and a record must be the same bytes on every checkout.
+    with open(os.path.join(HERE, "calls.jsonl"), "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(entry) + "\n")
 args = sys.argv[1:]
 sub = args[0] if args else ""

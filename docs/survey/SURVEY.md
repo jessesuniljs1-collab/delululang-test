@@ -24,10 +24,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 268 |
-| Rust lines | 137618 |
+| Rust lines | 137620 |
 | Rust files outside `src/` (test/bench targets) | 115 |
 | Markdown documents | 201 |
-| Markdown lines | 55341 |
+| Markdown lines | 55352 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -256,11 +256,11 @@ The DeluluLang measurement program (Stage 9): the published, reproducible eviden
 
 - **Depends on:** —
 - **Depended on by:** `delulu`  ← change this crate, and these must be re-checked
-- **Modules:** 7 files, 2606 lines
+- **Modules:** 7 files, 2608 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
-| `src/ai_usability.rs` | 785 | The V2 AI usability benchmark (P4-08, `docs/DELULULANG_V2/V2_AI_NATIVE_DESIGN.md` §4). |
+| `src/ai_usability.rs` | 787 | The V2 AI usability benchmark (P4-08, `docs/DELULULANG_V2/V2_AI_NATIVE_DESIGN.md` §4). |
 | `src/corpus.rs` | 240 | Study A's corpus: real-shaped packages with real dependency graphs (Stage 9d, spec §3.1). |
 | `src/lib.rs` | 26 | The DeluluLang measurement program (Stage 9, spec §3) — the published, reproducible evidence |
 | `src/main.rs` | 267 | `delulu-measure` — runs the Stage 9 measurement studies and writes their raw data. |

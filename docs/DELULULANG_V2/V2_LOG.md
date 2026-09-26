@@ -1440,3 +1440,14 @@ workspaces beside it — and the killed run was resumed as the same agent with t
 count is UNRUN: the killed segment reported none, and the resumed one re-reads the whole context. From
 now on each agent's findings are written to that file the moment it reports (the owner's instruction,
 2026-09-26).
+
+**P4-08's run, read — P4b–e is CLOSED.** CI `36261139018` (`11a7af1`): **success on every job**, all
+three operating systems — including the benchmark's replay test, which scores the committed pilot again
+(its programs run plainly and under `--sandbox`) and requires the published numbers, on each. Every
+P4b–e item (P4-02..P4-11) is built with its run read green; the phase closed 2026-09-26.
+
+One fix rides with this record: the benchmark wrapper wrote `calls.jsonl` in text mode, so on Windows
+the committed logs were CRLF in the working tree and LF in the repository — the clean-checkout hazard
+on record (a gate built from this disk can disagree with every runner). The working copies were
+restored from the repository (the Survey regenerated to the same map, so nothing depended on the
+bytes), and the wrapper now writes with `newline="\n"`: a fresh workspace's log is LF on every system.
