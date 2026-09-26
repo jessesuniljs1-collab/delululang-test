@@ -259,7 +259,8 @@ handful of places where the code has moved ahead of the documents (§1).
 roadmap) · `docs/QUESTIONS.md` Part 5 (the short list of things this project cannot claim) ·
 `docs/MATHEMATICS.md` §12 (the proof-boundary ledger, including the categories that are empty or
 partial) · `docs/book/THE_DELULULANG_BOOK.md` Ch. 20 ("What actually remains") ·
-`docs/DEPLOYMENT.md` §5 (what is not protected) · `HANDOFF.md` §8 (what is open, and why).
+`docs/DEPLOYMENT.md` §5 (what is not protected) · `HANDOFF.md` §8 (what was open, and why — since
+2026-09-27 in `docs/archive/v1/HANDOFF_HISTORY.md`, when V2 phase P6 made `HANDOFF.md` a briefing).
 
 Those six are the sources. This file is the join across them, with every row re-checked against the
 binary rather than inherited from the prose.

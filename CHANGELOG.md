@@ -9,6 +9,13 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P6: the documentation, consolidated, 2026-09-27
+
+- **`HANDOFF.md` is a current briefing** (1,201 → 522 lines, D-V2-41): where things stand, the standing
+  rules, what DeluluLang is, how to work here, and the project's memory. Its historical sections are
+  kept verbatim, under their original numbers, in `docs/archive/v1/HANDOFF_HISTORY.md`.
+- README's status and commands, and the Book's Chapters 9, 13 and 20, brought to V2's state.
+
 ## Unreleased — V2 PS-C: the microVM runs, 2026-09-27
 
 - **P4b–e is complete** (CI `36261139018`, and the closure commit's `36262232077`, green on every job).

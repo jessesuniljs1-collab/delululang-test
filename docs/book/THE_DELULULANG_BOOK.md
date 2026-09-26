@@ -612,9 +612,12 @@ is enforcing), and `denied` (what the program tried and was refused, with codes)
 whether to run unfamiliar code, `limitations` is the field to read — a report that listed only
 guarantees would read as though the rest were covered.
 
-**What this is not.** It is not a substitute for a separate OS account. The guest runs as the *same*
-user, so this is a second wall under the account boundary, not instead of it — which is why
-`limitations` says `identity_separation` on every run, on every platform, without exception. Reads are
+**What this is not.** It is not, by itself, a substitute for a separate OS account. Where the host
+allows it, the guest is given a separate identity — a per-run AppContainer with no capabilities on
+Windows, a subordinate uid in its own user namespace on Linux — and the report says so; where it does
+not (macOS always, and a Linux host that restricts user namespaces), the guest runs as the *same*
+user, `limitations` says `identity_separation`, and this is a second wall under the account boundary,
+not instead of it. Reads are
 confined on Linux only; on Windows and macOS a guest can still read the filesystem, and what stops it
 acting on what it read is the other layers. And it does not carry every program yet: actors, foreign C,
 Python, plugins, devices and secrets are **refused** rather than run unconfined, because a sandbox that
@@ -624,6 +627,37 @@ still something you ask for rather than the default it is meant to become.
 `delulu sandbox status` says what this host can confine — measured by launching a guest, not by reading
 a version string — and `delulu explain E-SANDBOX` says all of the above in the terminal, caveats
 included.
+
+### The microVM: the same guest, in its own kernel
+
+On Linux with KVM there is a stronger wall than a process jail: a kernel of the guest's own.
+
+```
+$ delulu run untrusted.delulu --isolation microvm --grant "fs.write=./out" --report-out r.json
+sandbox: the guest is confined — a separate guest kernel under KVM; no network device; no filesystem device; …
+```
+
+The guest is the same interpreter, speaking the same channel to the same host — but it runs as PID 1
+of a small Linux kernel under Firecracker, and that kernel was built to have almost nothing: **no
+network device, no filesystem device, no IP stack at all**, one vsock device to reach its host by. A
+guest program cannot open a network socket not because a rule refuses it but because the kernel it
+runs on does not know what an IPv4 socket is; the guest measures that about itself before its program
+runs, and the report carries the result ("no network stack in its kernel"). Everything the program is
+granted still happens — on the host, under the host's checks — so a file it may read is read for it,
+and a host it may reach is reached for it, over verified HTTPS.
+
+The kernel and the initramfs that holds the interpreter are **built from source on your machine**
+(`scripts/microvm/build-image.sh`, pinned to kernel.org's 6.18 LTS by hash), and the launcher checks
+every byte of them against the image's manifest on the copy it boots — a single flipped byte is refused
+before boot. Run as root, the VM's monitor runs under Firecracker's **jailer**: a uid of its own, in a
+chroot, ended with its host by a reaper. Run as an ordinary user, the monitor is you, and the report
+says so.
+
+It costs about a second per run (booting a kernel), and nothing per effect or per instruction that
+anyone could measure. Where it cannot be given — not Linux, no KVM, no image — the run is refused with
+`DL1408`, which names what is missing and the two weaker choices, and never runs at a weaker level
+under the `microvm` name. The red team's record of what was attacked, what held and what was not
+attempted is `docs/DELULULANG_V2/V2_PS_C_RED_TEAM.md`.
 
 ---
 
@@ -842,6 +876,24 @@ anchors.
 
 **Determinism.** `--seed` and `--clock fixed:` make `Cap[Rand]` and `Cap[Clock]` reproducible, so your
 test runs are stable and your failures are re-triable.
+
+**The machine surface (V2).** Everything above is also reachable without a shell. `delulu mcp` is a
+Model Context Protocol server on stdio whose tools are all read-only — check, authority, why, explain,
+the Atlas, the schemas, the toolchain, the sandbox preview, a change's blast radius — so it is safe to
+point at a workspace you do not trust. `delulu schema` publishes closed JSON Schemas for every envelope
+the CLI emits, and `delulu schema validate` checks an output with the same code the tests use.
+`delulu toolchain --json` describes the toolchain from its own tables: every command and option, every
+grant form with an example that parses, the primitives, the sandbox levels. `delulu edit --expect-hash`
+is a checked edit for an agent that is not the only writer — refused, with the file's current hash, if
+the file changed; re-checked after; the authority it adds named. `delulu atlas chain` gives the whole
+path from program to execution boundary as one queryable view. And `delulu skill` prints the Agent
+Skill (`skills/delulu/SKILL.md`) a harness loads. Whether any of it helps is measured, not assumed:
+the first AI usability benchmark (`measurements/ai-usability/`, a pilot — two runs per condition,
+enough to show a direction and not to rank) found models that had never seen DeluluLang, or had only
+the Skill, never compiled on the first try and needed eleven to thirteen repairs, while models with
+the Skill plus the toolchain's introspection or the MCP server compiled first try half the time or
+every time and needed a repair or none. It also found a real gap: `main` was accepted with signatures
+the runtime could not run, and the checker now refuses them.
 
 **The multi-agent story is your story.** You hold a grant; you `delegate` an attenuated slice to each
 sub-agent as a portable lease token; each sub-agent — whatever it writes or loads — cannot acquire
@@ -1413,6 +1465,18 @@ the too-many-arguments gate that the primitive table's own documentation calls n
 the function mapping a receiver type to its table label was a second list nobody kept in step with
 the first. `s.read(1,2,3,4,5)` checked clean. Both are fixed, both are witnessed against the
 pre-fix binary, and in both cases the *class* was closed rather than the instance.
+
+### After v1.0: DeluluLang V2
+
+Since 2026-09-17 the project has been executing **V2** (`docs/DELULULANG_V2/`), one phase at a time,
+each with its CI run read before the next begins. What it has built so far: the machine contract made
+true (every `--json` answer validated against a closed schema); **the sandbox** — a program as a guest
+holding no authority, in a jailed process on all three systems and in its own kernel under Firecracker
+on Linux (this chapter's list above called the microVM launch "not built"; V2 built it); budgets on
+every run, as an authority dimension a delegation can only narrow; a real network client; plugins
+loaded at run time; the standard library; and the agent surfaces of Chapter 13. What it has not built
+yet: a distribution (you build from source), the verification-depth work, external launchers, and the
+owner-gated autonomy work. `V2_PHASE_STATUS.md` is the one-page answer to "where is it now".
 
 ### What actually remains
 

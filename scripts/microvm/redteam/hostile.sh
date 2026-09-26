@@ -12,6 +12,12 @@
 set -uo pipefail
 IMAGE=${1:?usage: hostile.sh <image-dir> <delulu> [firecracker]}
 DELULU=${2:?usage: hostile.sh <image-dir> <delulu> [firecracker]}
+# Absolute, because every run below starts from a scratch directory. The first CI run of this gate was
+# given `target/debug/delulu`: from the scratch directory it was not found, every mode exited 127 in a
+# millisecond, and the verdict said every expectation held — a gate that could not fail. The control
+# below is what would have caught it.
+DELULU=$(cd "$(dirname "$DELULU")" && pwd)/$(basename "$DELULU")
+[ -x "$DELULU" ] || { echo "redteam-hostile: no executable delulu at $DELULU" >&2; exit 2; }
 export DELULU_FIRECRACKER=${3:-${DELULU_FIRECRACKER:-$(command -v firecracker)}}
 HERE=$(cd "$(dirname "$0")" && pwd)
 W=$(mktemp -d)
@@ -46,6 +52,20 @@ PY
 
 bad=0
 verdict() { echo "redteam-hostile: FAILED — $*"; bad=1; }
+
+# The CONTROL: the same program, on the real image, must run and succeed. Without it a harness that
+# cannot start the host — or cannot boot a VM at all — reads exactly like a host that refused every
+# attack below.
+( cd "$W" && exec env DELULU_MICROVM_IMAGE="$IMAGE" "$DELULU" run hello.delulu --isolation microvm --grant console ) \
+    > "$W/out-control" 2> "$W/err-control"
+rc=$?
+echo "== control (the real image): exit=$rc program_ran=$(grep -c 'the program ran' "$W/out-control")"
+if [ "$rc" -ne 0 ] || ! grep -q 'the program ran' "$W/out-control"; then
+    echo "redteam-hostile: FAILED — the control did not run, so nothing below would mean anything"
+    tail -5 "$W/err-control"
+    exit 1
+fi
+
 for mode in flood garbage huge ports silent; do
     img="$W/img-$mode"
     mkdir -p "$img"
@@ -76,6 +96,9 @@ PY
     grep -v '^AAAA' "$W/err-$mode" | grep -v '^$' | cut -c1-220 | head -12
     # The verdict: a hostile guest gets no program run, no more than the console bound onto the
     # operator's terminal, no second channel answered, and nothing left behind.
+    # The hostile guest must have BOOTED and spoken: its first console line reaches the operator (the
+    # relay is bounded, not silent). A mode whose guest never ran tested nothing.
+    grep -q "HOSTILE mode: $mode" "$W/err-$mode" || verdict "$mode: the hostile guest never ran — nothing was tested"
     [ "$rc" -ne 0 ] || verdict "$mode: the run succeeded"
     [ "$(grep -c 'the program ran' "$W/out-$mode")" -eq 0 ] || verdict "$mode: the program ran"
     [ "$left_dirs" -eq 0 ] || verdict "$mode: a VM directory was left behind"

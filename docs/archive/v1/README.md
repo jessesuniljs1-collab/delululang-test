@@ -96,6 +96,16 @@ Sixteen files. `agent-notes/` holds the two sous-chef evidence records, which ar
 | `agent-notes/RED-TEAM-SANDBOX-SURFACES-opus5.md` | *Red-team note* — execution attack surfaces and the adversarial sandbox test matrix. An evidence record, never rewritten. |
 | `agent-notes/HOST-CAPABILITY-FACTS-sonnet5.md` | *Host-capability facts for sandbox/VM isolation design.* An evidence record, never rewritten; carries one marked head-chef annotation. |
 
+## `HANDOFF_HISTORY.md` — the historical sections of `HANDOFF.md` (extracted 2026-09-27)
+
+Not a move: `HANDOFF.md` stays at the repository root, rewritten in **V2 phase P6** as a current
+briefing. What left it is here, **verbatim and under its original section numbers** — the old header
+and its update trail, §1.1's six CI-run rows, §3 (the ledger), §5 (which document to read), §6 (the
+features explained), §8 (problems), §9 (numbers), §12 (performance), §13 (per operating system) and §14
+(CLI vs compiler vs editor) — so a citation of "`HANDOFF.md` §8" finds its text. Three explicit links
+inside it were rewritten to reach their targets from this folder; the prose was not touched. The
+successor of each section is named in `HANDOFF.md`'s last section, *Where the rest of this file went*.
+
 ## Where the move is recorded
 
 `docs/DELULULANG_V2/V2_DOC_MOVE_MANIFEST.md` — every row, why it moved, which inbound links changed,

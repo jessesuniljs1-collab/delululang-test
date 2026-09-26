@@ -1586,3 +1586,50 @@ buffer", "os error 11"); and the launch record did not name the image booted (it
 of the copies checked and booted, in the report too). Both scripts are gates on the KVM CI job.
 Measurements (launch, per-effect and compute cost at L0/L1/L2) are in the record, and so is what was not
 attempted.
+
+**PS-C-03b and PS-C-06's run, read.** CI `36272234370` (`b2bff06`). The `microvm` job passed on the
+KVM runner — the jailer test through `sudo -n` (the VMM as a reserved uid in its own mount namespace,
+ended by the reaper within 2 s of its host's death, root without a jailer refused), the ten other gated
+tests, and the native probe's gate. **Reading the job's log rather than its verdict found the
+hostile-guest gate had passed vacuously**: the step passed the host binary as a relative path, the script
+runs each mode from a scratch directory, and every mode exited 127 in a millisecond while the verdict —
+which checked only that nothing ran and nothing was left behind — said every expectation held. The
+binary is now resolved to an absolute path; a control runs the same program on the real image first and
+must succeed; and each mode must show its hostile guest booted. Falsified both ways (`/bin/false` as the
+host fails at the control; the relative path now resolves and the gate runs for real). Recorded as G1 in
+`V2_PS_C_RED_TEAM.md`.
+
+One job failed: on the Windows runner the actors ping-pong criterion measured a 1.39× speedup at four
+threads against its 1.5× bar, best of two — a measurement of the shared runner's parallelism, in a
+runtime this change did not touch, on a test that had passed on every push run since run 6. It was not
+loosened; the failed job was re-run to see whether it repeats, and it passed — run `36272234370`
+is **success on attempt 2**. Recorded as what it is: a criterion that measures the runner's parallelism
+as well as the runtime's. If it recurs, the project's rule for timing tests applies (reproduce the
+runner's starvation, judge against what the threads were actually given), never a lower bar.
+
+**PS-C is COMPLETE (2026-09-27)** — PS-C-01 to PS-C-04 and PS-C-06, and PS-C-03b, each with its CI run
+read green; **PS-C-05, a distributed guest image, is the owner's** (D-NE-27: distributing a built GPL
+kernel is a licensing act), and nothing in the tree distributes one.
+
+## P6 — documentation consolidation (opened 2026-09-27)
+
+**`HANDOFF.md` is a briefing again** (D-V2-41). It had grown to 1,201 lines — a ledger, a feature tour,
+two dated sets of numbers, a problems list, a per-platform record and six CI runs told in full, beside
+the briefing it was meant to be. It is 522 now: where things stand, the standing rules (§1, with the
+owner's gate for the final public repository word for word), what DeluluLang is (§2, with a paragraph
+on what V2 has added), the Survey (§4), how to work here (§7, its stale counts corrected), starting fresh
+(§10, its pointers re-aimed) and all of §11, the project's memory written down. The rest moved, verbatim
+and under the same numbers, to `docs/archive/v1/HANDOFF_HISTORY.md`, and the briefing's last section maps
+each moved section to what replaces it. Nothing was deleted; the two rule lines that spell the banned
+word were left exactly where they were and not copied (the move script asserts both). One deviation
+from the roadmap, recorded: §11.2–§11.6 stay, because they are rules in force, not history.
+
+**README and the Book, to V2's state.** README's status table now says what V2 has done and what it has
+not, with the current CI counts (1,942 tests on Linux x86-64 and arm64, 1,932 on macOS, 1,926 on Windows,
+0 failed, run `36266702402`), and its command list shows `--sandbox`, `--isolation microvm` and `sandbox
+probe`. The Book gains the microVM in Chapter 9 (and corrects a sentence that said a guest's identity was
+never separated "on every platform, without exception" — untrue since PS-B-03), the machine surface in
+Chapter 13 (with the benchmark's pilot result stated at the size it has), and V2 in Chapter 20. Checking
+the Book's new benchmark sentence against the published report corrected it before it landed: the first
+draft credited "the skill and the checker"; the report says the Skill alone did not help first-try
+compiles in the pilot, and the Skill with introspection or the MCP server did.

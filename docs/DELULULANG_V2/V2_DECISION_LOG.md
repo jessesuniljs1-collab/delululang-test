@@ -860,6 +860,21 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    reach; `redteam/hostile.sh` runs a program against five hostile guests and fails unless each is
    refused cleanly with nothing left behind. Both run on the KVM CI job.
 
+## D-V2-41 — P6, how `HANDOFF.md` becomes a briefing — TAKEN (head chef, 2026-09-27, under the owner's delegation)
+
+1. **Extract, do not delete or rename.** `HANDOFF.md` stays at the root; the sections the roadmap
+   names as history move, **verbatim and under their original numbers**, to
+   `docs/archive/v1/HANDOFF_HISTORY.md`, and `HANDOFF.md` ends with a map from each moved section to its
+   successor. A citation of "`HANDOFF.md` §8" anywhere in the tree still finds its text. The two rule
+   lines that spell the banned word stay exactly where they were and are not copied into the archive —
+   the script that made the move asserts both.
+2. **One deviation from the roadmap: all of §11 stays, not only §11.1.** §11.2–§11.6 are the project's
+   working rules, environment facts, findings that must never be re-softened and operational traps —
+   rules in force, which the archive's "not maintained" label would demote. What moved: the old header
+   and its update trail, §1.1's six CI-run rows, §3, §5, §6, §8, §9, §12, §13, §14.
+3. **Explicit links in the moved text are rewritten to reach their targets from the archive; prose
+   citations are left as written** — the V2-0 manifest's rule, for the same reason.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

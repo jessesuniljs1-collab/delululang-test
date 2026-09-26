@@ -414,7 +414,7 @@ jobs:
       - name: Red team — the native probe on the image's kernel
         run: scripts/microvm/redteam/probe.sh "$RUNNER_TEMP/microvm-image" /home/runner/.local/bin/firecracker
       - name: Red team — hostile guests against the host
-        run: scripts/microvm/redteam/hostile.sh "$RUNNER_TEMP/microvm-image" target/debug/delulu /home/runner/.local/bin/firecracker
+        run: scripts/microvm/redteam/hostile.sh "$RUNNER_TEMP/microvm-image" "$GITHUB_WORKSPACE/target/debug/delulu" /home/runner/.local/bin/firecracker
 
   # PS-C-02's verification: the image built TWICE from clean, in different directories, byte for
   # byte the same — kernel, initramfs, and the guest binary inside it. Its own job, because it is two
