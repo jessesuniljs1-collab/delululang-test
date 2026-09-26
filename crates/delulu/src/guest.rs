@@ -27,10 +27,10 @@ use delulu_runtime::value::{RootVal, Value};
 /// How long either side waits for the other before giving up. A channel with no deadline is the
 /// IPC-1 shape: one stalled peer hangs the other for ever (PS-0-07 fixed the same hole for the
 /// foreign worker, which is why the guest borrows its transport rather than using pipes).
-const CHANNEL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+pub(crate) const CHANNEL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How long the host waits for the guest to come up at all.
-const CONNECT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+pub(crate) const CONNECT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The internal subcommand name. Never advertised: the host passes it when it spawns the child.
 pub const GUEST_SUBCOMMAND: &str = "__guest";
@@ -66,6 +66,12 @@ pub const STDIO_READY: u8 = 0x06;
 
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
+    // PS-C-03: the microVM guest, run by its own kernel as PID 1, whose channel is a vsock stream to
+    // the host it dials itself.
+    #[cfg(target_os = "linux")]
+    if args.first().map(String::as_str) == Some(crate::microvm::VSOCK_FLAG) {
+        return crate::microvm::run_vm_guest(&args[1..]);
+    }
     #[cfg(any(windows, target_os = "linux"))]
     if args.first().map(String::as_str) == Some(STDIO_FLAG) {
         let mut conn = match stdio_channel() {
@@ -84,7 +90,7 @@ pub fn run_guest(args: &[String]) -> i32 {
             eprintln!("error: the sandbox guest cannot reach its host over its channel");
             return 2;
         }
-        return serve_as_guest(conn, None);
+        return serve_as_guest(conn, None, &[]);
     }
     // The guest is the server on its own channel, as the foreign worker is: the HOST's wait is then
     // bounded by a connect deadline rather than by an accept that could never return.
@@ -110,7 +116,7 @@ pub fn run_guest(args: &[String]) -> i32 {
         eprintln!("error: the sandbox guest cannot set its channel deadline — refusing to run unbounded");
         return 2;
     }
-    serve_as_guest(conn, Some(&dir))
+    serve_as_guest(conn, Some(&dir), &[])
 }
 
 /// The channel of a guest started with [`STDIO_FLAG`]: the pipes it inherited as standard input and
@@ -162,7 +168,15 @@ fn stdio_channel() -> Result<std::os::unix::net::UnixStream, String> {
 }
 
 /// Everything a guest does once it holds a channel, however it came by it.
-fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir: Option<&std::path::Path>) -> i32 {
+///
+/// `measured` is what the guest found true of its own boundary by ATTEMPTING it before this was
+/// called — the microVM guest's "no network stack in its kernel" (PS-C-03) — reported with the layers
+/// it applies below, in the same one confinement report.
+pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
+    mut conn: C,
+    dir: Option<&std::path::Path>,
+    measured: &[&'static str],
+) -> i32 {
     let hello: Hello = match read_frame(&mut conn) {
         Ok(h) => h,
         // No hello, no run: a guest reached by anything other than its host does nothing at all.
@@ -196,7 +210,7 @@ fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(mut conn: C, dir:
     // program asks for is performed by the HOST — and because the syscall filter below says nothing
     // about WHICH files a permitted syscall may reach.
     // What the guest applies to itself, for the host's report (RW 4.23).
-    let mut own: Vec<&'static str> = Vec::new();
+    let mut own: Vec<&'static str> = measured.to_vec();
     #[cfg(target_os = "linux")]
     match crate::jail::confine_filesystem(dir) {
         Some(applied) => {
@@ -319,8 +333,59 @@ pub fn unsupported_surface(program: &str) -> Option<String> {
 /// wrote for the opposite direction: a flag that is silently ignored reads exactly like a flag that
 /// was applied. An ALLOWLIST rather than a list of refusals, because every flag added to `run` after
 /// a refusal list is written falls through it (the lease-run device grants were lost that way, 10g).
-const APPLIED_UNDER_SANDBOX: &[&str] =
-    &["--sandbox", "--sandbox-profile", "--mode", "--limits", "--grant", "--json", "--report-out", "--no-prompt"];
+const APPLIED_UNDER_SANDBOX: &[&str] = &[
+    "--sandbox",
+    "--sandbox-profile",
+    "--mode",
+    "--limits",
+    "--grant",
+    "--json",
+    "--report-out",
+    "--no-prompt",
+    // PS-C: `--isolation microvm` chooses the boundary a sandboxed run gets; any other value is refused
+    // by `isolation_of` before anything runs.
+    "--isolation",
+];
+
+/// Which boundary a sandboxed run asked for: the jailed guest process (L1, `--sandbox`) or the
+/// microVM (L2, `--isolation microvm`, PS-C). The guest and the channel are the same in both; what
+/// differs is what stands between the guest and the host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Isolation {
+    Process,
+    MicroVm,
+}
+
+impl Isolation {
+    pub fn level(self) -> u8 {
+        match self {
+            Isolation::Process => 1,
+            Isolation::MicroVm => 2,
+        }
+    }
+
+    fn backend(self) -> &'static str {
+        match self {
+            Isolation::Process => "process",
+            Isolation::MicroVm => "microvm",
+        }
+    }
+}
+
+/// The boundary this command line asked for. `--isolation none` or `process` beside `--sandbox` names
+/// a weaker boundary than the one `--sandbox` gives, and which of the two was meant is not something
+/// to guess, so it is refused.
+fn isolation_of(opts: &crate::cli::Opts) -> Result<Isolation, String> {
+    match opts.isolation.as_deref() {
+        None => Ok(Isolation::Process),
+        Some("microvm") => Ok(Isolation::MicroVm),
+        Some(other) => Err(format!(
+            "`--isolation {other}` and `--sandbox` name two different boundaries. Nothing ran. `--sandbox` \
+             alone is the jailed guest process; `--isolation microvm` is the microVM; `--isolation {other}` \
+             without `--sandbox` is the weaker profile it names."
+        )),
+    }
+}
 
 fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> {
     // The ordinary path's own two refusals first. They sat in `cmd_run_inner`, AFTER the dispatch to
@@ -366,6 +431,20 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         eprintln!("error: `run --sandbox` needs a file");
         return 2;
     };
+    let isolation = match isolation_of(opts) {
+        Ok(i) => i,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 2;
+        }
+    };
+    // L2 is refused, with the fallbacks named, on a host that cannot give it — before the program is
+    // read, as the ordinary path always refused it. Never quietly run at L1 instead (trap 8).
+    if isolation == Isolation::MicroVm {
+        if let Err(detail) = crate::cli::microvm_unavailable() {
+            return crate::run_cmd::refuse_microvm(file, &detail, opts.json);
+        }
+    }
     let program = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {
@@ -402,7 +481,8 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         }
     };
     if mode == crate::policy::Mode::Audit {
-        let policy = crate::policy::SandboxPolicy::derive(1, profile, Some(limits), mode);
+        let policy =
+            crate::policy::SandboxPolicy::derive(isolation.level(), profile, Some(limits), mode).requesting(isolation.level());
         let checked = delulu_check::check_source(0, &program);
         let required = crate::cli::required_grants_of(file, &checked);
         let carried = unsupported_surface(&program);
@@ -449,7 +529,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         }
     }
     let root = Rc::new(crate::cli::build_root(&grants));
-    let served = spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref());
+    let served = spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref(), isolation);
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         crate::run_cmd::print_egress_notes(&egress);
@@ -526,7 +606,16 @@ pub fn spawn_and_serve(
     seed: u64,
     fixed_clock_ms: Option<i64>,
 ) -> io::Result<i32> {
-    spawn_and_serve_with(program, root, seed, fixed_clock_ms, crate::jail::Limits::default(), crate::policy::Profile::Contained, None)
+    spawn_and_serve_with(
+        program,
+        root,
+        seed,
+        fixed_clock_ms,
+        crate::jail::Limits::default(),
+        crate::policy::Profile::Contained,
+        None,
+        Isolation::Process,
+    )
 }
 
 /// The host half with the policy the operator chose, and the report it asked for.
@@ -539,11 +628,16 @@ pub fn spawn_and_serve_with(
     limits: crate::jail::Limits,
     profile: crate::policy::Profile,
     report_out: Option<&str>,
+    isolation: Isolation,
 ) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
-    let (mut child, jail, applied) = match launch(&exe, &dir, limits, false) {
+    let launched = match isolation {
+        Isolation::Process => launch(&exe, &dir, limits, false),
+        Isolation::MicroVm => launch_vm(limits, false),
+    };
+    let (mut child, jail, applied) = match launched {
         Ok(l) => l,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&dir);
@@ -560,12 +654,13 @@ pub fn spawn_and_serve_with(
     // PS-A-08: the launch is recorded before the guest is told what to run, so the evidence exists
     // even if everything after it fails.
     let policy = crate::policy::SandboxPolicy::derive(
-        if applied.is_empty() { 0 } else { 1 },
+        if applied.is_empty() { 0 } else { isolation.level() },
         profile,
         Some(limits),
         crate::policy::Mode::Strict,
-    );
-    let backend = if applied.is_empty() { "inproc" } else { "process" };
+    )
+    .requesting(isolation.level());
+    let backend = if applied.is_empty() { "inproc" } else { isolation.backend() };
     audit_sandbox(
         "sandbox-launch",
         "allow",
@@ -688,6 +783,9 @@ enum Guest {
     Plain(std::process::Child),
     #[cfg(any(windows, target_os = "linux"))]
     Contained(crate::identity::ContainedGuest),
+    /// PS-C: the guest is PID 1 of its own kernel, and this is its VMM.
+    #[cfg(target_os = "linux")]
+    Vm(crate::microvm::Vm),
 }
 
 impl Guest {
@@ -696,6 +794,8 @@ impl Guest {
             Guest::Plain(c) => c.try_wait(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.try_wait(),
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.try_wait(),
         }
     }
 
@@ -704,6 +804,8 @@ impl Guest {
             Guest::Plain(c) => c.wait(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.wait(),
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.wait(),
         }
     }
 
@@ -712,6 +814,8 @@ impl Guest {
             Guest::Plain(c) => c.kill(),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.kill(),
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.kill(),
         }
     }
 
@@ -721,6 +825,8 @@ impl Guest {
             Guest::Plain(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
             #[cfg(any(windows, target_os = "linux"))]
             Guest::Contained(c) => c.stderr.take().map(|e| Box::new(e) as Box<dyn io::Read>),
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.take_console(),
         }
     }
 }
@@ -859,6 +965,21 @@ fn launch(
     Ok((Guest::Plain(child), jail, applied))
 }
 
+/// Boot the microVM (PS-C-03). What the host applied comes back in the same shape as a process
+/// launch's, so everything after it — the policy, the audit records, the report — is shared.
+#[cfg(target_os = "linux")]
+fn launch_vm(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
+    let (vm, applied) = crate::microvm::boot(limits, keep_console)?;
+    let (jail, _) = crate::jail::confine(&(), limits);
+    Ok((Guest::Vm(vm), jail, applied))
+}
+
+/// Elsewhere there is no microVM; `cmd_run_sandboxed` refuses with DL1408 before reaching this.
+#[cfg(not(target_os = "linux"))]
+fn launch_vm(_limits: crate::jail::Limits, _keep_console: bool) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
+    Err(io::Error::other(crate::cli::microvm_unavailable().err().unwrap_or_default()))
+}
+
 /// How the guest is started (PS-A-05): an EMPTY environment plus the few variables the operating
 /// system needs to load a process at all, no arguments beyond the channel directory, and no standard
 /// input.
@@ -965,6 +1086,13 @@ fn open_channel(child: &mut Guest, dir: &std::path::Path, deadline: std::time::D
     #[cfg(target_os = "linux")]
     if let Guest::Contained(g) = child {
         let conn = g.channel.take().ok_or_else(|| io::Error::other("the contained guest's channel was already taken"))?;
+        conn.set_read_timeout(Some(deadline))?;
+        return Ok(Box::new(conn));
+    }
+    // A microVM's guest dialled in during the boot; its stream is the channel.
+    #[cfg(target_os = "linux")]
+    if let Guest::Vm(vm) = child {
+        let conn = vm.channel.take().ok_or_else(|| io::Error::other("the microVM guest's channel was already taken"))?;
         conn.set_read_timeout(Some(deadline))?;
         return Ok(Box::new(conn));
     }
@@ -1251,7 +1379,7 @@ impl Drop for AppendLock {
 }
 
 /// A per-call channel name: the clock alone collides when runs start together.
-fn channel_tag() -> String {
+pub(crate) fn channel_tag() -> String {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();

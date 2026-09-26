@@ -71,11 +71,7 @@ pub fn probe() -> Vec<Level> {
     // the probe's whole claim is that every line is one.
     l1.push(attempt("the L1 guest launcher", crate::guest::attempt_launch()));
 
-    let l2 = vec![
-        attempt("KVM", attempt_open_kvm()),
-        attempt("a microVM monitor on PATH", find_vmm()),
-        Attempt { what: "the L2 guest launch", ok: false, detail: "not in this build (PS-C)".into() },
-    ];
+    let l2 = l2_attempts();
 
     let l3 = vec![Attempt {
         what: "an operator-supplied external launcher",
@@ -98,18 +94,38 @@ pub fn probe() -> Vec<Level> {
     ]
 }
 
-fn find_vmm() -> Result<String, String> {
-    const VMMS: &[&str] = &["firecracker", "cloud-hypervisor"];
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&path) {
-        for v in VMMS {
-            let p = dir.join(v);
-            if p.is_file() {
-                return Ok(format!("found {}", p.display()));
-            }
-        }
-    }
-    Err(format!("none of {} on PATH", VMMS.join(", ")))
+/// L2's attempts, in the order a launch needs them (PS-C): KVM opened, the VMM asked its version, the
+/// guest image checked against its manifest, and then a VM BOOTED and its guest heard dialling in.
+/// The boot is attempted only when everything before it succeeded: without them it would only fail
+/// again at the first of them, and say less.
+#[cfg(target_os = "linux")]
+fn l2_attempts() -> Vec<Attempt> {
+    let mut out = vec![attempt("KVM", attempt_open_kvm())];
+    let vmm = crate::microvm::locate_vmm()
+        .and_then(|p| crate::microvm::vmm_version(&p).map(|v| format!("{v} at {}", p.display())));
+    out.push(attempt("a microVM monitor", vmm));
+    let image = crate::microvm::read_image().and_then(|img| {
+        crate::microvm::verify(&img).map(|_| {
+            format!("kernel {} in {}, checked against its manifest", img.kernel_version, img.dir.display())
+        })
+    });
+    out.push(attempt("the guest image", image));
+    let launch = if out.iter().all(|a| a.ok) {
+        crate::microvm::attempt_launch()
+    } else {
+        Err("not attempted: a prerequisite above is missing".into())
+    };
+    out.push(attempt("the L2 guest launch", launch));
+    out
+}
+
+/// Elsewhere the microVM does not exist: KVM is a Linux interface, and the launcher is Linux-only.
+#[cfg(not(target_os = "linux"))]
+fn l2_attempts() -> Vec<Attempt> {
+    vec![
+        attempt("KVM", attempt_open_kvm()),
+        Attempt { what: "the L2 guest launch", ok: false, detail: "the microVM is Linux-only (PS-C)".into() },
+    ]
 }
 
 #[cfg(target_os = "linux")]

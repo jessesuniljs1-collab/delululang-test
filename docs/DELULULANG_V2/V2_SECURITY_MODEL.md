@@ -20,7 +20,7 @@ principal                   who is asking — human, agent, robot, service: one 
   ↓ operator grant / lease  `--grant`, `--lease`, the manifest ceiling; ⊑ bounds it     [implemented]
   ↓ Guard                   is this operation or delegation allowed? tiers, permits     [implemented]
   ↓ sandbox policy          derive(authority, grant, profile) → SandboxPolicy           [designed]
-  ↓ sandbox backend         a launcher and a channel: process, microvm, external        [designed; `microvm` is a probe that refuses]
+  ↓ sandbox backend         a launcher and a channel: process, microvm, external        [process and microvm implemented (PS-A, PS-C); external designed]
   ↓ host effect channel     the guest asks; the host performs                           [designed; the WASM host and the foreign worker are the precedents, implemented]
   ↓ broker / custody        is this request backed by valid custody?                    [implemented]
   ↓ real effect             the host performs it, under containment                     [implemented]
@@ -148,8 +148,8 @@ semantics and the Guard are never what it changes.]
 | Level | Boundary | Platform | State |
 |---|---|---|---|
 | **L0 `none`** | the language and custody, in-process | all | implemented (today's default) |
-| **L1 `process`** | the host kernel: Landlock + seccomp + rlimits + a user cgroup (Linux; no dependence on user namespaces, which CI blocks); restricted token + Job Object (+ AppContainer) (Windows); Seatbelt (macOS); the guest reaches nothing but the channel | Linux, Windows, macOS | designed — today `process` isolates **foreign code only** (NE-16b); strengthened and announced in PS-A |
-| **L2 `microvm`** | KVM + a VMM (Firecracker under its jailer, Cloud Hypervisor second); the interpreter as `/init` in a kernel-only image; vsock only, no NIC, no filesystem device | Linux + KVM | designed — today a probe that refuses everywhere (`DL1408`); PS-C |
+| **L1 `process`** | the host kernel: Landlock + seccomp + rlimits + a user cgroup (Linux; no dependence on user namespaces, which CI blocks); restricted token + Job Object (+ AppContainer) (Windows); Seatbelt (macOS); the guest reaches nothing but the channel | Linux, Windows, macOS | implemented as `--sandbox` (PS-A, PS-B); `--isolation process` still isolates **foreign code only** (NE-16b), and says so |
+| **L2 `microvm`** | KVM + a VMM (Firecracker under its jailer, Cloud Hypervisor second); the interpreter as `/init` in a kernel-only image; vsock only, no NIC, no filesystem device | Linux + KVM | implemented on x86_64 (PS-C, 2026-09-27) as `--isolation microvm`: Firecracker v1.17.0, a 6.18 kernel built from source with vsock and nothing else, the image checked on the copy that boots; **not yet under its jailer** (the VMM runs as the operator, and the report says so); `DL1408` where it cannot be given |
 | **L3 `external`** | an operator-supplied launcher (Docker + gVisor, Kata, a cloud sandbox, Kubernetes, ssh) carrying the channel over stdio; the level is labelled `external` and the guarantees `unknown` unless attested | wherever the operator runs | designed; PS-D |
 | **L4 `attested`** | L2/L3 whose guest attests the pinned image before any lease is delegated | specific hardware | deferred; the seam is designed with a fake attester (PS-D-02) |
 

@@ -778,6 +778,54 @@ that are proved in the Z3 model, enumerated, and documented. This is how.
    this) and its run line from that report's required grants. The package examples are named with the
    command that checks them. A run line is proven sufficient by running it.
 
+## D-V2-39 — PS-C opening: the microVM's pins, its image, and what stays the owner's — TAKEN (head chef, 2026-09-27, under the owner's delegation)
+
+The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, so the phase proceeded.
+
+1. **D-NE-23, built as ruled.** The guest runs the interpreter as PID 1 of its own kernel, with one
+   device — vsock — and no network device and no filesystem device: the launcher never makes the
+   `/network-interfaces` or `/drives` API calls. Firecracker first. Cloud Hypervisor, the second VMM
+   the ruling names, is not built in PS-C and stays open.
+2. **The pins moved forward from PS-0-08's experiment.** Firecracker **v1.17.0** (release archive
+   sha256 `06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558` x86_64,
+   `e351ebe4f7a16b5873bbd51005d2e6767103cff4d5ebc829df2d3f95a93e2256` aarch64), because Firecracker's
+   own kernel policy ended 6.1-guest support on 2026-09-02; the guest kernel is **6.18 LTS**, supported
+   by v1.17 to at least 2028-06-01: `linux-6.18.54.tar.xz`, sha256
+   `9df30b02dd8102bbd0be52556288ef6889ddbe7f1ddb96fbf847d0becf3eacac`, which matches kernel.org's
+   published `sha256sums.asc` fetched over HTTPS. The signature on that file was NOT checked (the build
+   host had no working `dirmngr` to fetch the signing key) — said here rather than implied.
+3. **The kernel is ours, not the vendor's.** Built from source by `scripts/microvm/kernel.config` on top
+   of `tinyconfig` — vsock and nothing else, no IP stack at all — and the build refuses a kernel in which
+   any configured line did not survive `olddefconfig` (it refused one on its first run: Landlock had been
+   dropped by a missing dependency). Firecracker's CI kernel, used for the first probe, is not used.
+4. **D-NE-27 stays the owner's.** A built kernel is written to `target/` (ignored by git) and never
+   committed, uploaded or attached; the CI job builds its image and keeps it inside the job. PS-C-05's
+   distributed artifact waits for the owner.
+5. **The hashes live in the image's manifest, checked on the copy that boots — not compiled into the
+   CLI** (a deviation from the plan's "a manifest the CLI carries"). The guest binary is built from the
+   same source as the host, so a hash compiled into the host would be a hash of itself; and kernel
+   bytes differ by C compiler, so a compiled-in kernel hash would hold for one toolchain only. The
+   launcher copies each file into the VM's private directory while hashing it, refuses a mismatch
+   before boot (T13), and boots the copy — so the bytes checked are the bytes booted. Pinning a
+   DISTRIBUTED image into a release is PS-C-05's, with the owner. sha256, through the `sha2` crate
+   already in the tree.
+6. **The jailer is not applied yet.** It needs root (a per-VM uid, a chroot, cgroups). Until PS-C-03b
+   builds that path the VMM runs as the operator, under Firecracker's own seccomp filters and the
+   launcher's ceilings, and every L2 run reports `identity_separation` as a limitation.
+7. **The ceilings.** Memory: the VM's RAM is the guest's ceiling (it has no more), and the VMM's data is
+   capped at that plus 256 MiB; below 128 MiB a run is refused, because the guest cannot unpack its own
+   initramfs. Processor time: `RLIMIT_CPU` on the VMM, whose threads include the vCPU. Wall clock: twice
+   the processor time, never under a minute. One vCPU.
+8. **The console, bounded.** The guest's standard error reaches the operator through the serial
+   console, relayed up to 64 KiB and drained after that; the kernel's own messages are silenced
+   (`loglevel=0`). Firecracker advises no serial console in production because a guest can flood it;
+   without one a failing guest would say nothing at all, so the bound is the mitigation instead.
+9. **`--isolation microvm` IS a sandboxed run, at level 2.** Same guest, same channel, same policy,
+   audit records and run report; `--sandbox --isolation microvm` means the same. `--isolation none` or
+   `process` beside `--sandbox`, and `--sandbox=off` with `--isolation microvm`, are refused as naming
+   two boundaries at once. A host that cannot give L2 refuses with DL1408, as it always did — never a
+   run at L1 under an L2 label.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

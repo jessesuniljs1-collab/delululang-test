@@ -954,17 +954,25 @@ claimed. Every issue, delegate, revoke, and declassify is written to an append-o
 **audit log** — observability, not enforcement, and the header of every log file says exactly that.
 
 Above the broker sit the isolation profiles: **foreign workers** (C/Python in a separate minimal-
-privilege subprocess, so a segfault kills the worker, not your program) and the **microVM profile**
-(Firecracker-class, Linux-first, default-deny egress) for genuinely untrusted execution.
+privilege subprocess, so a segfault kills the worker, not your program), the **sandbox guest**
+(`--sandbox`: the program itself in a jailed child process that holds no authority of its own), and
+the **microVM** (`--isolation microvm`: the same guest in its own kernel under Firecracker) for
+genuinely untrusted execution.
 
-**The microVM profile is specified and not built, and this paragraph used to read as though it
-were.** `--isolation microvm` is a probe: it checks for `/dev/kvm` and a VMM binary, names whichever
-is missing, and then refuses with `DL1408` **even when both are present**, because the guest launch
-itself — read-only rootfs, virtio-fs mounts matching the granted `fs.*` scopes, the default-deny
-egress proxy, the vsock broker proxy — is unwritten. Nothing weaker ever launches under the
-`microvm` name, which is the correct refusal and is why you will never silently get less isolation
-than you asked for. But the profile you can actually run today is the foreign worker, and for
-genuinely untrusted execution the boundary is a separate OS account rather than a VM.
+**The microVM was specified and not built until 2026-09-27, and this paragraph used to read as
+though it were.** Until then `--isolation microvm` was a probe: it checked for `/dev/kvm` and a VMM
+binary and refused with `DL1408` **even when both were present**. V2 phase PS-C built it, for Linux
+x86_64 with KVM, to a different design from the one this paragraph once described: the guest is the
+interpreter running as PID 1 of its own kernel, with **no network device, no filesystem device and
+no IP stack at all** — one vsock channel to the host, which performs every effect the program asks
+for with the same checks as any other run. There are no scope mounts to get wrong because there is
+no filesystem to mount into, and no egress proxy to bypass because the guest has nothing to send
+packets with. The guest image — a kernel with vsock and nothing else, and an initramfs holding the
+static interpreter — is one you build from source (`scripts/microvm/build-image.sh`); the launcher
+checks it against its manifest on the copy it boots. What it does not have yet is Firecracker's
+**jailer**, so the VMM runs as your OS user, and every run report names that as a limitation.
+Everywhere it cannot be given, it still refuses with `DL1408`: nothing weaker ever launches under
+the `microvm` name.
 
 The broker defends against *the program and its delegates* — not against the OS user, root, the
 kernel, or the hardware. That boundary is stated plainly and never oversold.
@@ -1340,7 +1348,7 @@ The sequence, as history rather than plan:
   artifact, and two-engine parity. The thesis, working, tested at scale.
 - **Stage 4 — Foreign:** C FFI and embedded Python behind the `ForeignCall` line.
 - **Stage 5 — Custody:** the broker, the grant tree, revocation, foreign workers, and the microVM
-  profile's *refusal path* (the guest launch itself is platform-pending — see below).
+  profile's *refusal path* (the guest launch itself came later, in V2 phase PS-C — see below).
 - **Stage 6 — Live:** runtime plugins (Verified and Contained), the DIR typed IR.
 - **Stage 7 — Concurrent:** actors and reference capabilities; data-race freedom.
 - **Stage 8 — Surface:** the LSP, the formatter, the authority-isolated test runner, localization, the
@@ -1363,14 +1371,14 @@ heterogeneous compute behind one authority model, hybrid post-quantum signing (b
 because the implementations are unaudited by their own authors), cloud deploy plans, fleet rollouts,
 and broker federation. **Not built:** the optimizing backend described in spec §2.1, any native
 backend, a multi-threaded WASM engine, and **the microVM guest launch** — each deferred with a
-published note rather than quietly dropped. The JIT exists only as a leash: `exec_native` is
+published note rather than quietly dropped (the last of these was built later, in V2 phase PS-C). The JIT exists only as a leash: `exec_native` is
 hard-coded false on the lease path, so a delegation can never confer it.
 
-The microVM entry is the one worth reading twice, because unlike the others it is a *specified
-isolation layer* rather than a performance tier: `--isolation microvm` probes for KVM and a VMM
-binary and then refuses with `DL1408` **even when both are present**. You never get weaker isolation
-than you asked for — you also do not get that layer, and Chapter 15 now says so where it describes
-the profiles.
+The microVM entry was the one worth reading twice, because unlike the others it is a *specified
+isolation layer* rather than a performance tier: `--isolation microvm` probed for KVM and a VMM
+binary and then refused with `DL1408` **even when both were present**. You never got weaker
+isolation than you asked for — you also did not get that layer. Since 2026-09-27 you do, on Linux
+x86_64 with KVM; Chapter 15 says what it is and what it still lacks.
 
 **One more entry belonged on this list from 2026-08-23 until 2026-09-20: the standard library.**
 `list` had four methods — `len`, `get`, `push`, `map` — and there was no `Map`/`Dict`/`Set` type
@@ -1429,8 +1437,9 @@ the backends, containment, proof, tooling and platform, each checked against the
 rather than inherited from prose, and each with what closing it would actually take. It exists
 because every one of those facts was already written down somewhere in this repository and none of
 them had ever been in the same place. Three that a reader of this chapter would not otherwise
-meet: the microVM layer above, the four-method standard library, and a complete CLI-localization
-mechanism with zero strings registered in it.
+have met: the microVM layer above (built for Linux since), the four-method standard library (fifteen
+list methods and a `Map` since), and a complete CLI-localization mechanism with zero strings
+registered in it.
 
 Beyond v1.0, the language changes only through a public **RFC process**, with entrenchment analysis
 required for anything touching the constitution's core or its honesty limits. The stability contract

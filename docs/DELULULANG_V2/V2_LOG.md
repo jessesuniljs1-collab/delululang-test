@@ -1451,3 +1451,93 @@ the committed logs were CRLF in the working tree and LF in the repository — th
 on record (a gate built from this disk can disagree with every runner). The working copies were
 restored from the repository (the Survey regenerated to the same map, so nothing depended on the
 bytes), and the wrapper now writes with `newline="\n"`: a fresh workspace's log is LF on every system.
+
+**The closure commit's run, read.** CI `36262232077` (`769a646`): success on every job.
+
+## PS-C — the microVM on Linux + KVM (opened 2026-09-27)
+
+**PS-C-01, the prerequisites — all present, so the phase proceeded.** The record is
+`V2_PS_C_PREREQUISITES.md`: each prerequisite, the command that checks it, what it answered. The
+`EffectSink` seam and the channel needed nothing new — `serve_as_guest` already took any stream, so
+the microVM's guest is the L1 guest with a different way of being connected. Checking found six things,
+each fixed where it was found: libffi's musl build needs the kernel's headers and only those; a
+`-ldl` that only glibc could satisfy (linking with `musl-gcc` "fixed" it into a binary that crashed on
+start — two sets of C startup files); **the first-run language picker captured PID 1** (the guest's
+standard input is the VM's console, a terminal, and `__guest` was not a machine command — on a host
+its streams had always been a socket, which is the only reason this never showed); Firecracker v1.10.1
+and a 6.1 guest were both past their support window, so the pins moved to **v1.17.0** and **6.18 LTS**;
+KVM refuses `KVM_GET_API_VERSION` unless its variadic argument is exactly 0 (the first launch was
+refused as "API version -1" on a host where KVM works); and `tinyconfig` silently dropped Landlock
+(it depends on sysfs) — caught by the build's own check that every configured line survived.
+Decision D-V2-39 records the pins, the kernel, the manifest, the ceilings and what stays the owner's.
+
+**PS-C-02, the image.** `scripts/microvm/build-image.sh` builds, on Linux x86_64: the guest kernel from
+kernel.org's 6.18.54 source (pinned by sha256) with `scripts/microvm/kernel.config` on top of
+`tinyconfig` — vsock and nothing else, no IP stack, no PCI, no ACPI, no block layer, no modules — and
+refuses a kernel in which any configured line did not survive; the static, Python-less, network-less
+guest (`--no-default-features`, musl, paths remapped, stripped); and the initramfs, written by
+`scripts/microvm/mkinitramfs.py` byte-for-byte deterministically (four entries: `/dev`, `/dev/console`,
+`/dev/null`, `/delulu`; the device nodes are archive entries, so no root is needed). The manifest holds
+the sha256 of each. The first build took 446 s on four cores: an 11.6 MB kernel, a 26.9 MB initramfs.
+`scripts/microvm/check-reproducible.sh` builds twice from clean in different directories and compares
+every hash; its CI job is `microvm-reproducible`. No built kernel is committed, uploaded or attached
+(D-NE-27).
+
+**PS-C-03, the launcher** (`crates/delulu/src/microvm.rs`, rewritten from a 58-line probe that
+refused on every path). It checks KVM by opening it and asking its API version, finds the VMM
+(`DELULU_FIRECRACKER` or PATH) and asks its version, reads the manifest, sweeps VM directories that
+killed hosts left behind, and copies the kernel and initramfs into a new owner-only directory WHILE
+hashing them — refusing a mismatch before boot and booting the copy, so the bytes checked are the bytes
+booted. The VMM starts under `pre_exec` ceilings (no new privileges, killed with its host, processor
+time, data = the guest's memory + 256 MiB, no core) and a wall-clock watchdog that can only signal an
+unreaped process (it kills under the same lock that reaping takes); it is driven over its API socket
+by a hand-written, bounded HTTP/1.1 client — machine config (one vCPU, the run's memory), boot source,
+the ONE device (vsock), start — and never asked for a network interface or a drive. The guest dials
+the host on vsock port 1024, sends the ready byte, and from there the conversation is L1's, over the
+same channel, served by the same host code; the report, the policy and the audit records are shared.
+The guest's console reaches the operator bounded at 64 KiB; the kernel's own messages are silenced.
+A finished run waits a moment for the guest to power off, then kills, reaps and removes the directory.
+Inside the VM, `__guest --vsock <port>` asks its kernel for an IPv4 and an IPv6 socket first and
+reports "no network stack in its kernel" only when both are refused as an unsupported family — a
+measurement, carried in the one confinement report the host already validates — then powers the VM off
+as PID 1 must.
+
+`--isolation microvm` is now a sandboxed run at level 2: the run report says `backend: microvm`,
+`level: 2`, `requested_level: 2` (a real field now, where it had been the constant 1), and the posture
+answers from what was applied — the host's files "none of the host's: the guest has no filesystem
+device", privilege escalation "confined to its own kernel", identity "same OS user" with
+`identity_separation` listed, because the jailer is not applied. `--sandbox --isolation microvm` means
+the same; two boundaries on one command line are refused; a host that cannot give L2 refuses with
+DL1408 as before, through one function both routes call. `sandbox probe` answers L2 from attempts that
+end in a real boot. The first program ever run this way printed "hello from inside the microVM" — by
+the host, on the guest's request.
+
+**PS-C-04, criterion 8 — met, restated for the no-NIC guest.** Stage 5's contract imagined scope mounts
+and an egress proxy the V2 guest does not have. `microvm_criterion8.rs` now asserts what the V2 guest
+must: a program asking for a host the grant does not name gets no bytes out, while a control shows the
+machine can reach that address; the granted host's request leaves from the HOST, as TLS, recorded in
+the host's egress log and pinned to the granted address; the granted path is readable; a sibling path
+is refused and its contents never reach the guest; and the guest's own kernel refused both socket
+families (T9). With it, `microvm_cli.rs` — the lifecycle family: a run at level 2 (and its report); a
+finished run leaves no VMM and no directory (T10); a flipped byte in either image file is refused
+before boot (T13); the processor-time ceiling ends a spinning guest (T8); a guest that exhausts its
+memory ends its VM, not the host, and the next run is unaffected (T8); a host killed mid-run takes its
+VMM with it, and the next launch sweeps its directory (T10); two VMs at once, each output reaching only
+its own host (T11); an uncarried surface refused before boot; and `sandbox probe` answering from a boot,
+with a CONTROL — a fake VMM that answers `--version` like Firecracker and cannot boot must make the probe
+report the launch failed, or the probe's own sentence would be all the test read. **All ten pass on a
+KVM host (WSL2), and each claimed property was falsified**: with the image hash not compared, the VMM
+not killed with its host, the orphan sweep off, the probe not booting, the processor-time ceiling
+removed, or the VM directory left behind, the test that claims it fails. One kill was read by hand
+rather than counted: with the hash check off, the tampered image BOOTED and ran the program — one
+flipped byte in the middle of the initramfs did not stop the guest — while the report went on claiming
+"the image checked against its manifest before boot". The check is the only thing between a tampered
+image and execution, which is why it is done on the copy that boots. They are gated on
+`cfg(delulu_kvm)`; the `microvm` CI job builds the image on a KVM runner and runs them there.
+
+Everything that expected the old refusal was re-pointed at a host that is certainly not provisioned
+(`DELULU_MICROVM_IMAGE` set to a directory that does not exist), because the KVM job IS a provisioned
+host and a refusal test must not depend on the machine lacking something.
+
+Open in PS-C: **PS-C-03b**, the jailer (a per-VM uid and chroot, which needs root); **PS-C-05**, a
+distributed image (owner-reserved, D-NE-27); **PS-C-06**, the red-team record.

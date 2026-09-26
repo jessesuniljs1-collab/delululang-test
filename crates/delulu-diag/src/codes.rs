@@ -1307,14 +1307,20 @@ pub fn code_explain(code: &str) -> Option<String> {
              decision. Note that `delulu broker rotate-key` deliberately invalidates ALL \
              outstanding tokens.",
         "DL1408" => "The requested isolation profile is not available here. `--isolation microvm` \
-             requires Linux (x86_64/aarch64) with KVM and a provisioned microVM runtime \
-             (Firecracker/cloud-hypervisor); everywhere else it is refused — never silently \
-             approximated. The documented fallback is `--isolation process`: worker-style OS \
-             containment of the code outside the proof; explicitly weaker — no guest boundary, \
-             no virtio-fs scope mounts, no default-deny egress. Honesty (spec §10): Foreign \
-             workers bound blast radius, not foreign behavior; the microVM profile is the strong \
-             container and it is Linux-first — the fallback matrix is honest about weaker \
-             platforms.",
+             runs the program in a microVM (PS-C): the interpreter as PID 1 of its own kernel under \
+             Firecracker, with no network device, no filesystem device and one vsock channel to the \
+             host, which performs every effect. It needs Linux x86_64 with a `/dev/kvm` this user can \
+             open, a Firecracker binary (`DELULU_FIRECRACKER`, or `firecracker` on PATH; \
+             `scripts/microvm/fetch-firecracker.sh` fetches the tested one) and a guest image \
+             (`DELULU_MICROVM_IMAGE`, or `~/.delulu/microvm-image`; built from source by \
+             `scripts/microvm/build-image.sh`). The message names the first of these that is \
+             missing. Everywhere else it is refused — never silently approximated. The fallbacks \
+             are explicitly weaker and a human chooses: `--sandbox`, a jailed guest process that \
+             holds no authority of its own (one OS account, no guest kernel); and `--isolation \
+             process`, which confines FOREIGN code only. `delulu sandbox probe` shows what this host \
+             can give, attempt by attempt. Honesty (spec §10): Foreign workers bound blast radius, \
+             not foreign behavior; the microVM profile is the strong container and it is \
+             Linux-first — the fallback matrix is honest about weaker platforms.",
         "DL1409" => "Under `--foreign-isolation process` a granted C library runs in an isolated \
              worker subprocess. This worker died mid-call — a segfault, an abort, a hard crash in the \
              native code. That is exactly the blast-radius containment the process-isolation profile \

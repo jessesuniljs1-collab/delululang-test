@@ -37,6 +37,10 @@ pub const SELF_APPLIED: &[&str] = &[
     "no new programs",
     "no debugger",
     "no namespace or module tricks",
+    // PS-C-03: the microVM guest asks its own kernel for an IPv4 and an IPv6 socket before its program
+    // runs, and reports this only when BOTH are refused as an unsupported family — a measurement, not
+    // a reading of the kernel's configuration.
+    "no network stack in its kernel",
 ];
 
 /// Hard ceiling on one frame (16 MiB), as on the broker wire: a corrupt or hostile length prefix

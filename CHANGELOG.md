@@ -9,6 +9,32 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-C: the microVM runs, 2026-09-27
+
+- **P4b–e is complete** (CI `36261139018`, and the closure commit's `36262232077`, green on every job).
+- **`delulu run <file> --isolation microvm` runs the program in a microVM (PS-C, D-V2-39)** on Linux
+  x86_64 with KVM: the interpreter as PID 1 of its own kernel under Firecracker, with no network
+  device, no filesystem device and no IP stack — one vsock channel to the host, which performs every
+  effect with the same checks, audit records and run report as `--sandbox`. The report says
+  `backend: microvm`, `level: 2`. It needs `/dev/kvm`, Firecracker (`DELULU_FIRECRACKER`, or on PATH)
+  and a guest image (`DELULU_MICROVM_IMAGE`); anywhere one is missing it still refuses with DL1408,
+  naming which. `--sandbox --isolation microvm` means the same; two boundaries on one command line are
+  refused. Until the jailer is applied the VMM runs as your OS user, and the report lists
+  `identity_separation` as a limitation.
+- **`scripts/microvm/`** — `build-image.sh` builds the guest image from source (a 6.18 LTS kernel with
+  vsock and nothing else, pinned by sha256; the static guest; a deterministic initramfs; a manifest),
+  `check-reproducible.sh` builds it twice from clean and compares, `fetch-firecracker.sh` fetches the
+  tested Firecracker (v1.17.0) and checks its sha256. No built kernel is distributed (D-NE-27).
+- The launcher checks the image against its manifest **on the copy it boots**, refusing a mismatch
+  before boot; runs the VMM under processor-time, memory and wall-clock ceilings, killed with its host;
+  and removes each VM's directory on every path out — sweeping any a killed host left behind.
+- `delulu sandbox probe` answers L2 from attempts that end in a real boot.
+- **Stage 5 criterion 8 is met**, restated for a guest with no network device (`microvm_criterion8.rs`),
+  and runs on a KVM runner in CI (the `microvm` job) with the lifecycle tests (`microvm_cli.rs`).
+- The run report's `requested_level` is the level asked for (it was the constant 1).
+- Fixed: the first-run language picker could capture the sandbox guest when its standard input was a
+  terminal (found as PID 1 of the microVM).
+
 ## Unreleased — V2 P4b–e opens: the toolchain describes itself, 2026-09-26
 
 - **PS-B is complete** (CI `36173241488` green on every job).

@@ -481,7 +481,17 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     // and `--sandbox-profile` describe a sandboxed run and nothing else, so asking for them without
     // `--sandbox` is refused rather than dropped on the floor. `--limits` left this list at PS-B-01:
     // an ordinary run has budgets now, so the flag is APPLIED to it rather than refused.
-    if opts.sandbox.as_deref() != Some("on") {
+    // PS-C: `--isolation microvm` is a sandboxed run at level 2 — the same guest and channel as
+    // `--sandbox`, behind a hypervisor instead of a process jail.
+    let microvm = opts.isolation.as_deref() == Some("microvm");
+    if opts.sandbox.as_deref() == Some("off") && microvm {
+        eprintln!(
+            "error: `--sandbox=off` and `--isolation microvm` ask for opposite things. Nothing ran: say \
+             which one you mean."
+        );
+        return 2;
+    }
+    if opts.sandbox.as_deref() != Some("on") && !microvm {
         for (flag, asked) in [
             ("--mode", opts.sandbox_mode.is_some()),
             ("--sandbox-profile", opts.sandbox_profile.is_some()),
@@ -500,7 +510,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     // carries a ticket they signed for exactly this program. Decided before either path reads a line.
     {
         let program = file.as_deref().and_then(|f| std::fs::read(f).ok());
-        let sandboxed = opts.sandbox.as_deref() == Some("on");
+        let sandboxed = opts.sandbox.as_deref() == Some("on") || microvm;
         match crate::breakglass::gate("run", sandboxed, opts.break_glass.as_deref(), program.as_deref()) {
             Err(code) => return code,
             Ok(Some(accepted)) => {
@@ -510,6 +520,9 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             }
             Ok(None) => {}
         }
+    }
+    if microvm {
+        return crate::guest::cmd_run_sandboxed(file.as_deref(), &opts, rest);
     }
     if let Some(choice) = opts.sandbox.as_deref() {
         match choice {
@@ -577,6 +590,48 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     code
 }
 
+/// DL1408: `--isolation microvm` cannot be given on this host, and why. Nothing runs; both fallbacks
+/// are named, labelled weaker, with their exact commands — choosing a weaker boundary is a person's
+/// decision (trap 8, NE-16c / PS-0-03). One function for both routes to L2 (`run --isolation microvm`
+/// and `run --sandbox --isolation microvm`), so the two cannot drift.
+pub(crate) fn refuse_microvm(file: &str, detail: &str, json: bool) -> i32 {
+    let d = Diagnostic::error(
+        "DL1408",
+        format!(
+            "isolation profile `microvm` is unavailable: {detail} — fall back to \
+             `delulu run {file} --sandbox` (a jailed guest process holding no authority of \
+             its own; the host performs every effect. Weaker than microvm: one OS account, \
+             no guest kernel, no default-deny egress — `delulu explain E-SANDBOX`), or to \
+             `delulu run {file} --isolation process` (worker-style OS containment of the \
+             code outside the proof; weaker still: it confines FOREIGN code only and leaves \
+             the program itself unconfined) [a human must choose the weaker profile; see \
+             `delulu explain DL1408` and spec §6.1]"
+        ),
+    )
+    // NE-16c / PS-0-03: the repair STAGE5 §8 promised. No edit — choosing a weaker
+    // boundary is a person's decision — and the fallback command, ready to run.
+    .with_repair(delulu_diag::Repair {
+        // Renamed when a second, stronger fallback appeared: an id naming only one
+        // of two options is a small lie in a machine-readable field.
+        id: "fall-back-to-a-weaker-profile",
+        confidence: delulu_diag::Confidence::Suggest,
+        authority_widening: false,
+        requires_human: true,
+        edits: Vec::new(),
+        reason: Some(
+            "both fallbacks are explicitly weaker, so a human must choose. `--sandbox` is \
+             the stronger of the two — a jailed guest process that holds no authority, and \
+             available on all three systems — so it is named first; it is still one OS \
+             account with no guest kernel and no default-deny egress. `--isolation process` \
+             is weaker still: it confines foreign code only and leaves the verified program \
+             in-process. The message names both exact commands: \
+             `delulu run <file> --sandbox` and `delulu run <file> --isolation process`",
+        ),
+    });
+    print_diagnostics("run", &[d], &SourceMap::new(), None, json);
+    1
+}
+
 fn cmd_run_inner(rest: &[String]) -> i32 {
     let (file, mut opts) = parse_opts(rest);
     if let Some(code) = refuse_extra_positionals("run", &opts) {
@@ -599,53 +654,11 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     // (playbook trap 8). The capability matrix is spec §6.1.
     match opts.isolation.as_deref() {
         None | Some("none") | Some("process") => {}
-        Some("microvm") => {
-            match microvm_unavailable() {
-                Err(detail) => {
-                    let d = Diagnostic::error(
-                        "DL1408",
-                        format!(
-                            "isolation profile `microvm` is unavailable: {detail} — fall back to \
-                             `delulu run {file} --sandbox` (a jailed guest process holding no authority of \
-                             its own; the host performs every effect. Weaker than microvm: one OS account, \
-                             no guest kernel, no default-deny egress — `delulu explain E-SANDBOX`), or to \
-                             `delulu run {file} --isolation process` (worker-style OS containment of the \
-                             code outside the proof; weaker still: it confines FOREIGN code only and leaves \
-                             the program itself unconfined) [a human must choose the weaker profile; see \
-                             `delulu explain DL1408` and spec §6.1]"
-                        ),
-                    )
-                    // NE-16c / PS-0-03: the repair STAGE5 §8 promised. No edit — choosing a weaker
-                    // boundary is a person's decision — and the fallback command, ready to run.
-                    .with_repair(delulu_diag::Repair {
-                        // Renamed when a second, stronger fallback appeared: an id naming only one
-                        // of two options is a small lie in a machine-readable field.
-                        id: "fall-back-to-a-weaker-profile",
-                        confidence: delulu_diag::Confidence::Suggest,
-                        authority_widening: false,
-                        requires_human: true,
-                        edits: Vec::new(),
-                        reason: Some(
-                            "both fallbacks are explicitly weaker, so a human must choose. `--sandbox` is \
-                             the stronger of the two — a jailed guest process that holds no authority, and \
-                             available on all three systems — so it is named first; it is still one OS \
-                             account with no guest kernel and no default-deny egress. `--isolation process` \
-                             is weaker still: it confines foreign code only and leaves the verified program \
-                             in-process. The message names both exact commands: \
-                             `delulu run <file> --sandbox` and `delulu run <file> --isolation process`",
-                        ),
-                    });
-                    print_diagnostics("run", &[d], &SourceMap::new(), None, opts.json);
-                    return 1;
-                }
-                Ok(()) => {
-                    // The Linux+KVM guest-launch path (spec §6) lands with criterion-8 CI work;
-                    // v0.5's probe never returns Ok. Refuse loudly rather than pretend.
-                    eprintln!("error: the microVM guest launch is not wired in this build (v0.5)");
-                    return 2;
-                }
-            }
-        }
+        // PS-C: a microVM run IS a sandboxed run, at level 2 — `cmd_run` sends it to the sandboxed path
+        // before this function is reached. Kept as a route rather than a refusal, so a caller that
+        // arrives here some other way still gets the one gate (`refuse_microvm`) and never a run at a
+        // weaker level.
+        Some("microvm") => return crate::guest::cmd_run_sandboxed(Some(&file), &opts, rest),
         Some(other) => {
             eprintln!("error: unknown --isolation `{other}` (none | process | microvm)");
             return 2;

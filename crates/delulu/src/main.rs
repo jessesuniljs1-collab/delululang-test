@@ -34,8 +34,8 @@ mod mcp;
 mod morph_file;
 mod new;
 mod signing;
-// Phase 5i: the microVM profile is Linux-first (spec §6); the probe/launch module compiles only
-// there. Every other platform refuses `--isolation microvm` with DL1408 in `cli.rs` (trap 8 —
+// Phase 5i / PS-C: the microVM profile is Linux-only (spec §6); the probe, the launcher and the
+// in-VM guest compile only there. Every other platform refuses `--isolation microvm` with DL1408 in `cli.rs` (trap 8 —
 // never fake a weaker platform's isolation as equivalent).
 #[cfg(target_os = "linux")]
 mod microvm;

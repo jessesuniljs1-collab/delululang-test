@@ -362,6 +362,72 @@ jobs:
         if: failure()
         run: ls -la artifacts/channel_frame 2>/dev/null && for f in artifacts/channel_frame/*; do echo "== $f =="; xxd "$f" | head -20; done
 
+  # ---- PS-C: the microVM (L2), on a KVM runner ---------------------------------------------
+  # The one job that boots VMs. It builds the guest image FROM SOURCE on the runner — a kernel with
+  # vsock and nothing else (`scripts/microvm/kernel.config`), and an initramfs holding the static guest
+  # — fetches the pinned Firecracker, and runs the tests gated on `cfg(delulu_kvm)`: the lifecycle
+  # family (`microvm_cli.rs`) and criterion 8 restated for the no-NIC guest (`microvm_criterion8.rs`).
+  #
+  # The image never leaves the job. A built kernel is GPL-2.0 and distributing one is the owner's
+  # decision (D-NE-27), so nothing here uploads an artifact; what is cached is the kernel SOURCE,
+  # which kernel.org publishes and the build checks against its pinned sha256.
+  microvm:
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: What the kernel and the static guest are built with
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential flex bison bc libelf-dev musl-tools
+      # PS-0-08 measured it: /dev/kvm is present on this runner and the runner user may not open it.
+      - name: Let the runner user open /dev/kvm
+        run: |
+          sudo chmod 666 /dev/kvm
+          python3 -c 'import os, fcntl; fd = os.open("/dev/kvm", os.O_RDWR); print("KVM API", fcntl.ioctl(fd, 0xAE00, 0))'
+      - name: Cache the kernel source (checked against its pinned hash on every use)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/delulu-microvm/linux-*.tar.xz
+          key: linux-source-${{ hashFiles('scripts/microvm/build-image.sh') }}
+      - name: The pinned Firecracker
+        run: scripts/microvm/fetch-firecracker.sh "$HOME/.local/bin"
+      - name: Build the guest image
+        run: scripts/microvm/build-image.sh "$RUNNER_TEMP/microvm-image"
+      - name: The microVM tests — lifecycle, and criterion 8 restated — on the image just built
+        env:
+          RUSTFLAGS: --cfg delulu_kvm
+          DELULU_MICROVM_IMAGE: ${{ runner.temp }}/microvm-image
+          DELULU_FIRECRACKER: /home/runner/.local/bin/firecracker
+        run: cargo test -p delulu --test microvm_cli --test microvm_criterion8 -- --test-threads=2
+      - name: sandbox probe answers L2 from a boot
+        env:
+          RUSTFLAGS: --cfg delulu_kvm
+          DELULU_MICROVM_IMAGE: ${{ runner.temp }}/microvm-image
+          DELULU_FIRECRACKER: /home/runner/.local/bin/firecracker
+        run: cargo run -q -p delulu -- sandbox probe
+
+  # PS-C-02's verification: the image built TWICE from clean, in different directories, byte for
+  # byte the same — kernel, initramfs, and the guest binary inside it. Its own job, because it is two
+  # full builds and nothing else needs to wait for it.
+  microvm-reproducible:
+    if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: What the kernel and the static guest are built with
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential flex bison bc libelf-dev musl-tools
+      - name: Cache the kernel source (checked against its pinned hash on every use)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/delulu-microvm/linux-*.tar.xz
+          key: linux-source-${{ hashFiles('scripts/microvm/build-image.sh') }}
+      - name: Two clean builds, compared
+        run: scripts/microvm/check-reproducible.sh "$RUNNER_TEMP/repro"
+
   # ---- Editor surface ----------------------------------------------------------------------
   # The VS Code extension shipped for the life of the project with a command-injection hole (the
   # run lens interpolated the open file's path into a shell command STRING), a code lens the client

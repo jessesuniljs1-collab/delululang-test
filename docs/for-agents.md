@@ -591,7 +591,11 @@ overstate it downstream:
   response bounded, TLS verified against the platform store, no plain HTTP. The program sees only
   `NetErr`'s three variants; `Refused` is deliberately opaque. The reason is machine-readable in the
   run report: `egress.records[].reason` under `--report-out` (for a guest, also in `sandbox.denied`).
-  `delulu sandbox probe --json` says which isolation level this host can give.
+  `delulu sandbox probe --json` says which isolation level this host can give. Level 2,
+  `--isolation microvm` (PS-C), runs the same guest in its own kernel with no network device, no
+  filesystem device and no IP stack, on Linux x86_64 with KVM, a Firecracker binary and a guest image
+  (`DELULU_FIRECRACKER`, `DELULU_MICROVM_IMAGE`); the run report then says `level: 2`, and where it
+  cannot be given the run refuses with DL1408 rather than running at level 1.
 - **Foreign code is outside the proof.** `ForeignCall` is a hole, enumerated in the report.
 - **The collection surface, and what it refuses.** As of 2026-09-20 (V2 phase P3) `List` has fifteen
   methods (`len`, `is_empty`, `get`, `push`, `pop`, `map`, `filter`, `find`, `fold`, `sort`,

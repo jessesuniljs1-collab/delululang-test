@@ -168,9 +168,13 @@ pub fn init_locale(args: &[String]) -> (Vec<String>, Vec<String>) {
 
     // Invariant 40: each of these channels independently suppresses the picker + welcome.
     let json = cleaned.iter().any(|a| a == "--json");
-    let machine_cmd = cleaned
-        .first()
-        .is_some_and(|c| c == crate::foreign_worker::WORKER_SUBCOMMAND || c == "lsp");
+    // The sandbox guest is one of these. Its standard streams are a channel or the null device on a
+    // host, so the terminal test below happened to keep the picker away — until the microVM guest ran
+    // as PID 1, where standard input IS a terminal (the VM's console), and the guest sat at the
+    // picker's prompt instead of dialling its host (PS-C-03, found by booting it).
+    let machine_cmd = cleaned.first().is_some_and(|c| {
+        c == crate::foreign_worker::WORKER_SUBCOMMAND || c == crate::guest::GUEST_SUBCOMMAND || c == "lsp"
+    });
     let ci = std::env::var_os("CI").is_some();
     let no_first_run = std::env::var_os("DELULU_NO_FIRST_RUN").is_some();
     let interactive = interactive_tty();

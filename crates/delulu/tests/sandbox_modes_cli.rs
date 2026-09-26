@@ -225,6 +225,57 @@ fn a_sandbox_flag_without_a_sandbox_is_refused_not_ignored() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PS-C: `--isolation microvm` chooses a sandboxed run's boundary, so a command line naming two
+/// boundaries at once — or asking for the microVM and for no sandbox — is refused before anything
+/// runs, whichever the order. Which of two was meant is not something to guess.
+#[test]
+fn two_boundaries_on_one_command_line_are_refused() {
+    let dir = tmp("two-boundaries");
+    let (src, scope) = writer(&dir);
+    let grant = format!("fs.write={scope}");
+    let made = dir.join("out").join("made.txt");
+    for (extra, says) in [
+        (vec!["--sandbox=off", "--isolation", "microvm"], "opposite things"),
+        (vec!["--isolation", "microvm", "--sandbox=off"], "opposite things"),
+        (vec!["--sandbox", "--isolation", "process"], "two different boundaries"),
+        (vec!["--sandbox", "--isolation", "none"], "two different boundaries"),
+    ] {
+        let mut args = vec!["run", src.to_str().unwrap(), "--grant", &grant];
+        args.extend(extra.iter().copied());
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(2), "{extra:?}: {}", out(&o));
+        assert!(out(&o).contains(says), "{extra:?}: {}", out(&o));
+        assert!(!made.exists(), "{extra:?} ran the program: {}", out(&o));
+    }
+}
+
+/// And `--sandbox --isolation microvm` IS the microVM: on a host that cannot give it, the same DL1408
+/// that `--isolation microvm` alone gets — never a quiet run at L1 under the name of L2. The image
+/// directory is one that does not exist, so this holds on a provisioned KVM host too.
+#[test]
+fn the_microvm_asked_for_beside_sandbox_is_dl1408_where_it_cannot_be_given() {
+    let dir = tmp("microvm-refused");
+    let (src, scope) = writer(&dir);
+    let grant = format!("fs.write={scope}");
+    let made = dir.join("out").join("made.txt");
+    for extra in [vec!["--sandbox", "--isolation", "microvm"], vec!["--isolation", "microvm"]] {
+        let mut args = vec!["run", src.to_str().unwrap(), "--grant", &grant, "--json"];
+        args.extend(extra.iter().copied());
+        let o = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .args(&args)
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .env("DELULU_NO_COLOR", "1")
+            .env("DELULU_STATE_DIR", isolated_state())
+            .env("DELULU_MICROVM_IMAGE", dir.join("no-image-here"))
+            .output()
+            .expect("the delulu binary runs");
+        assert_eq!(o.status.code(), Some(1), "{extra:?}: {}", out(&o));
+        let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).expect("run --json is JSON");
+        assert_eq!(v["diagnostics"][0]["code"], "DL1408", "{extra:?}: {v}");
+        assert!(!made.exists(), "{extra:?} ran the program at a weaker level: {}", out(&o));
+    }
+}
+
 /// The same rule in the other direction, found during PS-B-05: a `run` flag the SANDBOXED path does
 /// not apply was dropped in silence. `--lease` was never redeemed (the guest ran holding nothing and
 /// was told to pass `--grant`), `--broker daemon` got embedded custody, and `--locked` and
@@ -241,7 +292,6 @@ fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
         vec!["--trace-out", "t.jsonl"],
         vec!["--trace-effects"],
         vec!["--engine", "wasm"],
-        vec!["--isolation", "microvm"],
         vec!["--grant-manifest"],
         vec!["--seed", "7"],
         vec!["--clock", "5"],

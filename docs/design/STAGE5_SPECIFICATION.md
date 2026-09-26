@@ -724,6 +724,16 @@ start command.
 Maps every spec §9 criterion to its status and the test(s) that prove it. Criterion 8 is
 **platform-pending** — stated plainly, not massaged. All test names are real and runnable.
 
+> **2026-09-27 (V2 PS-C): criterion 8 is met, RESTATED.** The microVM was built to the V2 design
+> (D-NE-23), not to §6's: the guest has no network device, no filesystem device and no IP stack, so
+> there are no scope mounts and no in-guest egress proxy for the criterion to test. It is restated in
+> `crates/delulu/tests/microvm_criterion8.rs` (`criterion_8_restated_for_the_no_nic_guest`): a request to a host the
+> grant does not name gets no bytes out though the machine can reach it (a control connects), the
+> granted host's request leaves from the HOST as TLS, the granted path is readable, a sibling path is
+> refused and its contents never reach the guest, and the guest's own kernel refuses an IPv4 and an
+> IPv6 socket (T9). It runs on the `microvm` CI job's KVM runner. The row below is kept as it was
+> written.
+
 | # | Criterion (§9) | Status | Proof |
 |---|---|---|---|
 | 1 | daemon-mode FsWrite succeeds; revoke from another terminal; next write DL1403 + audit seq | **met** | `brokerd::tests::revoke_mid_run_then_daemon_death_fail_closed` (allow → revoke on a separate connection → very next FsWrite is DL1403 with the seq, over the real pipe); CLI form in `grants_cli.rs` |

@@ -18,6 +18,19 @@ fn delulu(args: &[&str]) -> Output {
         .expect("failed to run delulu")
 }
 
+/// `delulu`, on a host that is certainly NOT provisioned for the microVM: the image directory is one
+/// that does not exist. PS-C made `--isolation microvm` real on a Linux host with KVM, a VMM and an
+/// image — the KVM CI job is such a host — so a test of the refusal must remove the prerequisite
+/// itself rather than rely on the machine lacking it.
+fn delulu_without_microvm(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(workspace_root())
+        .args(args)
+        .env("DELULU_MICROVM_IMAGE", std::env::temp_dir().join("delulu-no-microvm-image-here"))
+        .output()
+        .expect("failed to run delulu")
+}
+
 fn stdout(o: &Output) -> String {
     String::from_utf8_lossy(&o.stdout).to_string()
 }
@@ -610,7 +623,7 @@ fn explain_dl14xx_carries_the_spec_10_caveats() {
 #[test]
 fn run_isolation_microvm_is_dl1408_with_labeled_weaker_fallback() {
     let file = write_pure_program("delulu_cli_iso_microvm");
-    let o = delulu(&["run", file.to_str().unwrap(), "--isolation", "microvm", "--json"]);
+    let o = delulu_without_microvm(&["run", file.to_str().unwrap(), "--isolation", "microvm", "--json"]);
     assert_eq!(o.status.code(), Some(1), "microvm must refuse, not run: {}", stderr(&o));
     let v: Value = serde_json::from_str(&stdout(&o)).expect("run --json must be valid JSON");
     assert_eq!(v["diagnostics"][0]["code"], "DL1408");
@@ -667,7 +680,7 @@ fn run_isolation_process_is_labeled_honestly() {
 /// here), and an unknown profile is a usage error.
 #[test]
 fn authority_isolation_label_is_honest_and_unknown_is_refused() {
-    let o = delulu(&["authority", "examples/demo.delulu", "--isolation", "microvm"]);
+    let o = delulu_without_microvm(&["authority", "examples/demo.delulu", "--isolation", "microvm"]);
     assert!(o.status.success(), "{}", stderr(&o));
     let out = stdout(&o);
     assert!(out.contains("isolation:"), "{out}");

@@ -266,6 +266,14 @@ DeluluLang/
 │                                   #   the 4 REACHABLE advisories are deliberately NOT ignored, so
 │                                   #   `advisories` is RED on purpose.
 ├── scripts/
+│   ├── microvm/                    # [PS-C] the microVM's guest image, built from source on Linux:
+│   │   ├── build-image.sh          #   kernel (pinned kernel.org source + kernel.config) + static guest
+│   │   │                           #   + initramfs + manifest.json; never distributes a kernel (D-NE-27)
+│   │   ├── kernel.config           #   everything the guest kernel has, on top of tinyconfig: vsock,
+│   │   │                           #   no IP stack; the build refuses a line that did not survive
+│   │   ├── mkinitramfs.py          #   the initramfs, byte-for-byte deterministic, no root needed
+│   │   ├── check-reproducible.sh   #   two clean builds, every hash compared (PS-C-02's gate)
+│   │   └── fetch-firecracker.sh    #   the tested Firecracker, checked against its pinned sha256
 │   ├── package-toolchain.sh        # build the self-contained distributable archive
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact

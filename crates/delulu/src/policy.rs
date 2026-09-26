@@ -74,8 +74,12 @@ impl Mode {
 /// The whole confinement of one run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SandboxPolicy {
-    /// 0 = in process, no OS boundary. 1 = the guest runs as a jailed child process.
+    /// 0 = in process, no OS boundary. 1 = the guest runs as a jailed child process. 2 = the guest runs
+    /// in a microVM (PS-C).
     pub level: u8,
+    /// The level the run ASKED for, kept apart from the one it got. 1 unless [`Self::requesting`] says
+    /// otherwise, which is every caller before PS-C.
+    pub requested_level: u8,
     pub profile: Profile,
     pub limits: Limits,
     pub mode: Mode,
@@ -88,6 +92,7 @@ impl SandboxPolicy {
     pub fn derive(level: u8, profile: Profile, limits: Option<Limits>, mode: Mode) -> SandboxPolicy {
         SandboxPolicy {
             level,
+            requested_level: 1,
             profile,
             limits: limits.unwrap_or_else(|| profile.limits()),
             mode,
@@ -95,6 +100,14 @@ impl SandboxPolicy {
             // policy that could turn it on by itself would not be a boundary.
             break_glass: false,
         }
+    }
+
+    /// The same policy, asked for at `level`. Not part of [`Self::hash`]: the hash names the policy that
+    /// was IN FORCE, and a run never gets more than it asked for — an L2 request that cannot be met is
+    /// refused before a policy exists (DL1408), never run at L1 under an L2 label.
+    pub fn requesting(mut self, level: u8) -> SandboxPolicy {
+        self.requested_level = level;
+        self
     }
 
     /// PS-A-07: the questions a reader actually has, answered from what was APPLIED.
@@ -121,35 +134,56 @@ impl SandboxPolicy {
         let linux_identity = guarantees.contains(&crate::identity::LINUX_GUARANTEE);
         let separate = windows_identity || linux_identity;
         let landlock_reads = has("reads only from the system paths");
+        // PS-C: a microVM guest has its own kernel and no filesystem device, so the host's files are
+        // not something its view can be narrowed to — there is no path from it to them at all. These
+        // answers come first because they are about the HOST; the guest's own Landlock words describe
+        // its initramfs.
+        let own_kernel = has("a separate guest kernel");
+        let no_fs_device = has("no filesystem device");
         // (question, the answer when it IS enforced, the guarantee that enforces it)
         let rows: [(&str, &str, bool); 7] = [
             (
                 "filesystem_writes",
                 // The container may write its OWN per-run folder, which is deleted with it — so this is
                 // not "denied", and the report does not round it up to that.
-                if has("no file writes") { "denied" } else { "only its own per-run container folder" },
-                has("no file writes") || windows_identity,
+                if no_fs_device {
+                    "none of the host's: the guest has no filesystem device"
+                } else if has("no file writes") {
+                    "denied"
+                } else {
+                    "only its own per-run container folder"
+                },
+                no_fs_device || has("no file writes") || windows_identity,
             ),
             (
                 "filesystem_reads",
-                if landlock_reads {
+                if no_fs_device {
+                    "none of the host's: the guest has no filesystem device"
+                } else if landlock_reads {
                     "confined to the system paths"
                 } else if windows_identity {
                     "none of the operator's files"
                 } else {
                     "only what every account on the host may read"
                 },
-                landlock_reads || separate,
+                no_fs_device || landlock_reads || separate,
             ),
             (
                 "network",
                 "only the channel",
-                has("no TCP bind or connect") || has("no network but the channel") || windows_identity,
+                has("no TCP bind or connect")
+                    || has("no network but the channel")
+                    || has("no network device")
+                    || windows_identity,
             ),
             ("new_programs", "denied", has("no new programs") || has("one process only")),
             ("memory", "capped", has("memory ceiling")),
             ("processor_time", "capped", has("processor-time ceiling")),
-            ("privilege_escalation", "denied", has("no privilege escalation") || has("deny by default")),
+            (
+                "privilege_escalation",
+                if own_kernel { "confined to its own kernel" } else { "denied" },
+                own_kernel || has("no privilege escalation") || has("deny by default"),
+            ),
         ];
         let mut obj = serde_json::Map::new();
         let mut limitations: Vec<&'static str> = Vec::new();
@@ -195,7 +229,7 @@ impl SandboxPolicy {
     pub fn to_json(self, backend: &str, guarantees: &[&str]) -> serde_json::Value {
         serde_json::json!({
             "backend": backend,
-            "requested_level": 1,
+            "requested_level": self.requested_level,
             "level": self.level,
             "requested": self.profile.name(),
             "granted": if guarantees.is_empty() { "none" } else { self.profile.name() },
@@ -234,12 +268,12 @@ impl SandboxPolicy {
         // except identity separation where no launch applied it (everywhere but a Windows guest since
         // PS-B-03; RW 4.4), which is named as a limitation on every such run rather than quietly
         // excluded from the total.
-        let fully = self.level == 1 && limitations.iter().all(|l| *l == "identity_separation");
+        let fully = self.level >= 1 && limitations.iter().all(|l| *l == "identity_separation");
         serde_json::json!({
             "backend": backend,
             // Requested and ACTUAL, kept apart. A single `level` cannot say "you asked for a jailed
             // guest and this host gave you one" separately from "you asked and it did not".
-            "requested_level": 1,
+            "requested_level": self.requested_level,
             "level": self.level,
             "fully_enforced": fully,
             "requested": self.profile.name(),

@@ -131,6 +131,11 @@ seccompiler = "0.5"
 # It brings one new transitive crate, `enumflags2` (MIT OR Apache-2.0); `thiserror` and `libc` were
 # already in the tree.
 landlock = "0.4"
+# PS-C-03: the microVM launcher checks the guest image against the sha256 its manifest records, while
+# copying it into the VM's private directory, so the bytes it verified are the bytes it boots. sha256
+# because it is what `sha256sum`, kernel.org and GitHub's release digests all speak. Not a new crate:
+# `sha2` is already in the tree through `ed25519-dalek`, at the same version.
+sha2 = "0.10"
 
 # PS-A2 round three: the macOS guest gets a processor-time ceiling and no core dump, applied in
 # `pre_exec` with `setrlimit`. macOS has no `PR_SET_PDEATHSIG`, so a guest that is COMPUTING and asking

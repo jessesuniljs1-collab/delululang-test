@@ -1270,7 +1270,7 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker embedded|daemon] [--epoch-ms N]  (custody: daemon routes ops through the broker)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--lease TOKEN]  (run under a delegated lease — the authority is the delegated node's)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--isolation none|process|microvm]  (process isolates FOREIGN code only — the program stays in-process;\n\
-     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 microvm is Linux+KVM; elsewhere DL1408, see spec §6.1)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 microvm runs the program as a guest in its own kernel: Linux+KVM+a guest image; elsewhere DL1408)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
@@ -3889,13 +3889,14 @@ fn stamp_foreign_isolation(report: &mut Json, opts: &Opts) {
     }
 }
 
-/// Why `--isolation microvm` is unavailable here (`Err(detail)`), or `Ok(())` once the Linux+KVM
-/// guest launch exists. v0.5: always `Err` — on Linux the probe names the first missing
-/// prerequisite (or the pending launch work); everywhere else it is a platform refusal. Honest by
-/// construction (trap 8): there is no code path that quietly substitutes weaker isolation.
+/// Why `--isolation microvm` is unavailable here (`Err(detail)`), or `Ok(())` when this host can boot
+/// one. On Linux every prerequisite is ATTEMPTED — `/dev/kvm` opened, the VMM asked its version, the
+/// guest image's manifest read (PS-C; the boot then checks the bytes it boots against it) — and the
+/// first that fails is the detail; everywhere else it is a platform refusal. Honest by construction
+/// (trap 8): there is no code path that quietly substitutes weaker isolation.
 #[cfg(target_os = "linux")]
 pub(crate) fn microvm_unavailable() -> Result<(), String> {
-    crate::microvm::probe()
+    crate::microvm::prerequisites().map(|_| ())
 }
 
 #[cfg(not(target_os = "linux"))]
