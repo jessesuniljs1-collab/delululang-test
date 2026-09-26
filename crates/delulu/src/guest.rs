@@ -661,11 +661,20 @@ pub fn spawn_and_serve_with(
     )
     .requesting(isolation.level());
     let backend = if applied.is_empty() { "inproc" } else { isolation.backend() };
+    // PS-C-06: a microVM's launch record names the image it booted, by the hashes of the copies that
+    // were checked and booted.
+    let image = child.image();
+    let with_image = |mut v: serde_json::Value| {
+        if let (Some(img), Some(obj)) = (&image, v.as_object_mut()) {
+            obj.insert("image".to_string(), img.clone());
+        }
+        v
+    };
     audit_sandbox(
         "sandbox-launch",
         "allow",
         Some(blake3::hash(program.as_bytes()).to_hex().to_string()),
-        Some(policy.to_json_with(backend, &applied, &[], 0)),
+        Some(with_image(policy.to_json_with(backend, &applied, &[], 0))),
     );
 
     let mut evidence = Evidence::default();
@@ -749,7 +758,7 @@ pub fn spawn_and_serve_with(
             "delulu_version": env!("CARGO_PKG_VERSION"),
             "diagnostics": [],
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
-            "sandbox": policy.to_json_with(backend, &applied, &denied.0, denied.1),
+            "sandbox": with_image(policy.to_json_with(backend, &applied, &denied.0, denied.1)),
             "outcome": { "ran": true, "exit": exit },
             "egress": egress.to_json(),
         });
@@ -785,7 +794,7 @@ enum Guest {
     Contained(crate::identity::ContainedGuest),
     /// PS-C: the guest is PID 1 of its own kernel, and this is its VMM.
     #[cfg(target_os = "linux")]
-    Vm(crate::microvm::Vm),
+    Vm(Box<crate::microvm::Vm>),
 }
 
 impl Guest {
@@ -816,6 +825,15 @@ impl Guest {
             Guest::Contained(c) => c.kill(),
             #[cfg(target_os = "linux")]
             Guest::Vm(v) => v.kill(),
+        }
+    }
+
+    /// The image a microVM guest booted, for the launch record and the report; nothing for a process.
+    fn image(&self) -> Option<serde_json::Value> {
+        match self {
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.image.as_ref().map(|i| i.to_json()),
+            _ => None,
         }
     }
 
@@ -971,7 +989,7 @@ fn launch(
 fn launch_vm(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
     let (vm, applied) = crate::microvm::boot(limits, keep_console)?;
     let (jail, _) = crate::jail::confine(&(), limits);
-    Ok((Guest::Vm(vm), jail, applied))
+    Ok((Guest::Vm(Box::new(vm)), jail, applied))
 }
 
 /// Elsewhere there is no microVM; `cmd_run_sandboxed` refuses with DL1408 before reaching this.
@@ -1061,13 +1079,31 @@ fn converse(
     // says nothing about what the program TRIED — which is the interesting half when the program is
     // one nobody wrote. They are read after `serve` returns, on both paths, so a guest that died
     // mid-conversation still reports what it had been refused up to then.
-    let served = host.serve(&mut conn);
+    let served = host.serve(&mut conn).map_err(in_words);
     // Read on both paths, before the result is returned: a guest that died mid-conversation still
     // reports what it had been refused up to then.
     let (list, total) = host.denied();
     evidence.denied = (list.to_vec(), total);
     evidence.own = host.self_applied().to_vec();
     served
+}
+
+/// A channel failure in the words an operator can act on. Two of them reached the operator as the
+/// operating system's own text — "failed to fill whole buffer" for a guest that hung up, and "Resource
+/// temporarily unavailable (os error 11)" for one that went silent until the deadline — found by the
+/// red team's hostile guests (PS-C-06). Every other error keeps its words: they already say what
+/// happened ("frame length exceeds the channel's bound").
+fn in_words(e: io::Error) -> io::Error {
+    match e.kind() {
+        io::ErrorKind::UnexpectedEof => {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "the guest closed the channel without saying goodbye")
+        }
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("the guest said nothing for {CHANNEL_DEADLINE:?}, and the channel's deadline ended the run"),
+        ),
+        _ => e,
+    }
 }
 
 /// Either kind of channel, as one reader-and-writer.

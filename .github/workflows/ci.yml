@@ -407,6 +407,14 @@ jobs:
           DELULU_MICROVM_IMAGE: ${{ runner.temp }}/microvm-image
           DELULU_FIRECRACKER: /home/runner/.local/bin/firecracker
         run: cargo run -q -p delulu -- sandbox probe
+      # PS-C-06, as gates: a native probe booted on the image's own kernel must find one vsock device and
+      # no other, no block layer and no IP, packet or Unix sockets; and five hostile guests — a console
+      # flood, garbage and oversized frames, other ports and contexts, silence — must each get no program
+      # run, the console bound, no second channel, and nothing left behind.
+      - name: Red team — the native probe on the image's kernel
+        run: scripts/microvm/redteam/probe.sh "$RUNNER_TEMP/microvm-image" /home/runner/.local/bin/firecracker
+      - name: Red team — hostile guests against the host
+        run: scripts/microvm/redteam/hostile.sh "$RUNNER_TEMP/microvm-image" target/debug/delulu /home/runner/.local/bin/firecracker
 
   # PS-C-02's verification: the image built TWICE from clean, in different directories, byte for
   # byte the same — kernel, initramfs, and the guest binary inside it. Its own job, because it is two

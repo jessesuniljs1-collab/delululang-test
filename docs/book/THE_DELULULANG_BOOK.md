@@ -969,8 +969,10 @@ for with the same checks as any other run. There are no scope mounts to get wron
 no filesystem to mount into, and no egress proxy to bypass because the guest has nothing to send
 packets with. The guest image — a kernel with vsock and nothing else, and an initramfs holding the
 static interpreter — is one you build from source (`scripts/microvm/build-image.sh`); the launcher
-checks it against its manifest on the copy it boots. What it does not have yet is Firecracker's
-**jailer**, so the VMM runs as your OS user, and every run report names that as a limitation.
+checks it against its manifest on the copy it boots. Run as root, the VM's monitor runs under
+Firecracker's **jailer** — a uid of its own, in a chroot — and root without the jailer is refused
+rather than run; run as an ordinary user, the monitor is that user, and the run report names that as
+a limitation.
 Everywhere it cannot be given, it still refuses with `DL1408`: nothing weaker ever launches under
 the `microvm` name.
 

@@ -792,8 +792,10 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    own kernel policy ended 6.1-guest support on 2026-09-02; the guest kernel is **6.18 LTS**, supported
    by v1.17 to at least 2028-06-01: `linux-6.18.54.tar.xz`, sha256
    `9df30b02dd8102bbd0be52556288ef6889ddbe7f1ddb96fbf847d0becf3eacac`, which matches kernel.org's
-   published `sha256sums.asc` fetched over HTTPS. The signature on that file was NOT checked (the build
-   host had no working `dirmngr` to fetch the signing key) — said here rather than implied.
+   published `sha256sums.asc` fetched over HTTPS. The signature on that file was checked the same day,
+   once `gpg` could be given the key without `dirmngr`: **"Good signature from Kernel.org checksum
+   autosigner"**, key `B8868C80BA62A1FFFAF5FDA9632D3A06589DA6B1`, fetched over HTTPS from kernel.org's own
+   `pgpkeys` repository (not web-of-trust certified — the usual caveat, said rather than implied).
 3. **The kernel is ours, not the vendor's.** Built from source by `scripts/microvm/kernel.config` on top
    of `tinyconfig` — vsock and nothing else, no IP stack at all — and the build refuses a kernel in which
    any configured line did not survive `olddefconfig` (it refused one on its first run: Landlock had been
@@ -825,6 +827,38 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    `process` beside `--sandbox`, and `--sandbox=off` with `--isolation microvm`, are refused as naming
    two boundaries at once. A host that cannot give L2 refuses with DL1408, as it always did — never a
    run at L1 under an L2 label.
+
+## D-V2-40 — PS-C-03b, the jailer, and PS-C-06's red team — TAKEN (head chef, 2026-09-27, under the owner's delegation)
+
+1. **Root runs the VMM under Firecracker's jailer, or not at all.** Run as root, `--isolation microvm`
+   starts the VMM through `jailer`: a uid of its own, in a chroot holding only what it needs, entered
+   by `pivot_root` in a new mount namespace. Root WITHOUT a jailer is refused (DL1408, naming the
+   jailer), because the alternative is a VMM running as root — a VMM escape would then BE root. Run as
+   an ordinary user, the VMM runs as that user (the jailer needs root) and every report names
+   `identity_separation` as a limitation, as D-V2-39 said.
+2. **A uid per VM**, from a block no ordinary account is given (900000–965535), reserved by creating
+   `/srv/delulu-jailer/uid-<n>` exclusively with the host's pid in it — the create is what keeps two
+   hosts starting at once apart — and skipping any uid a process runs as or `/etc/passwd` names. A
+   reservation is released only by the host that holds it.
+3. **The jails live under `/srv/delulu-jailer`** (beside Firecracker's own `/srv/jailer`), overridable
+   with `DELULU_JAIL_BASE`, and never on a filesystem mounted `nodev` — refused with that reason. The
+   first choice was `/run`, and the first jailed launch failed inside the chroot with KVM's
+   "permission denied": `/run` is `nodev`, so the `/dev/kvm` node the jailer makes there cannot be
+   opened.
+4. **A reaper replaces the death signal.** The jailer's `setuid` clears `PR_SET_PDEATHSIG`, so a jailed
+   VMM would outlive a host killed mid-run. Each jailed VM gets a reaper (`__vm_reaper`, internal): a
+   process blocked on a pipe only its host writes to, which, when the pipe closes, kills the VMM —
+   identified by pid AND jail id, never by pid alone — and removes the jail. Measured: without it, a
+   jailed VMM whose host and reaper were both killed was still running fifteen seconds later, bounded
+   only by its processor-time ceiling.
+5. **Not in PS-C: cgroups and a network namespace for the VMM.** The jailer can place the VMM in a
+   cgroup and an empty network namespace; neither is used yet. The ceilings stay `rlimit`s (which
+   survive the jailer's `setuid`), and the VMM's own network reach is bounded by Firecracker's seccomp
+   filter rather than by a namespace. Named here so they are not mistaken for applied.
+6. **The red team's instruments are gates.** `scripts/microvm/redteam/probe.sh` boots the image's OWN
+   kernel with a native probe as init and fails unless it finds one vsock device and nothing else to
+   reach; `redteam/hostile.sh` runs a program against five hostile guests and fails unless each is
+   refused cleanly with nothing left behind. Both run on the KVM CI job.
 
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),

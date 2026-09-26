@@ -451,8 +451,12 @@ fn defs() -> Value {
                 ("denied_total", t("integer")),
                 ("policy_hash", t("string")),
             ],
-            &[],
+            &[("image", r("microvm_image"))],
         ), "a sandboxed run: what the host applied, what it answers, and what it refused"),
+        "microvm_image": described(obj(
+            &[("kernel_sha256", t("string")), ("initramfs_sha256", t("string")), ("kernel_version", t("string"))],
+            &[],
+        ), "the image a microVM run booted: the hashes of the copies checked against the manifest and booted"),
         "sandbox": json!({ "anyOf": [r("sandbox_inproc"), r("sandbox_preview"), r("sandbox_run")] }),
         "egress_hop": obj(
             &[

@@ -132,7 +132,11 @@ impl SandboxPolicy {
         // writes where every account may and opens sockets — so only the reads row moves, and only to
         // the narrower words.
         let linux_identity = guarantees.contains(&crate::identity::LINUX_GUARANTEE);
-        let separate = windows_identity || linux_identity;
+        // PS-C-03b: a microVM whose VMM runs under Firecracker's jailer — a uid of its own and a chroot.
+        // A guest in a VM reaches no host file at all; this row is about the VMM, the one process on
+        // the host a VM escape would land in.
+        let jailed_vmm = has("a uid of its own for the VMM");
+        let separate = windows_identity || linux_identity || jailed_vmm;
         let landlock_reads = has("reads only from the system paths");
         // PS-C: a microVM guest has its own kernel and no filesystem device, so the host's files are
         // not something its view can be narrowed to — there is no path from it to them at all. These
@@ -216,6 +220,11 @@ impl SandboxPolicy {
             obj.insert(
                 "identity".to_string(),
                 serde_json::Value::String("a subordinate uid in its own user namespace".to_string()),
+            );
+        } else if jailed_vmm {
+            obj.insert(
+                "identity".to_string(),
+                serde_json::Value::String("the VMM: a uid of its own, in a chroot (Firecracker's jailer)".to_string()),
             );
         } else {
             obj.insert("identity".to_string(), serde_json::Value::String("same OS user".to_string()));

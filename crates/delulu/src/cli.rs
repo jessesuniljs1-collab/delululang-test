@@ -1106,6 +1106,9 @@ fn run_inner(args: &[String]) -> i32 {
         // covered by `tests/guest_cli.rs` against the real binary.
         s if s == crate::guest::GUEST_SUBCOMMAND => crate::guest::run_guest(rest),
         s if s == crate::guest::SANDBOX_RUN_SUBCOMMAND => crate::guest::run_sandboxed_cli(rest),
+        // PS-C-03b: ends a jailed microVM's VMM when its host is gone. Linux only, like the jailer.
+        #[cfg(target_os = "linux")]
+        s if s == crate::microvm::REAPER_SUBCOMMAND => crate::microvm::run_reaper(rest),
         "completions" => crate::completions::cmd_completions(rest),
         // `delulu help <cmd>` is the same answer as `delulu <cmd> --help`, reached the way people
         // reach for it. It ignored its argument and printed the whole usage, which made the

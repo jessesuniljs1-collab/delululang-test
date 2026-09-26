@@ -91,7 +91,7 @@ hidden:
 | **The runtime and the primitive table** | A wrong row in the table is a wrong answer everywhere. |
 | **The host OS and hardware** | Capability enforcement is host-side code; a kernel that lies makes it moot. |
 | **Cryptographic primitives** | BLAKE3, Ed25519 as used. Post-quantum options are gated behind `--unstable` and are **not** validated against NIST vectors here. |
-| **The hypervisor**, if you use microVM containment | Standard containment assumption: KVM and Firecracker keep the guest in its VM. Since 2026-09-27 (V2 PS-C) `--isolation microvm` runs on Linux x86_64 with KVM, a Firecracker binary and a guest image you build from source; elsewhere it refuses with `DL1408`. Until the jailer is applied the VMM runs as your OS user, so a VMM escape would hold your account's authority — the run report says so (`identity_separation`). See `REMAINING_WORK.md` §4.1. |
+| **The hypervisor**, if you use microVM containment | Standard containment assumption: KVM and Firecracker keep the guest in its VM. Since 2026-09-27 (V2 PS-C) `--isolation microvm` runs on Linux x86_64 with KVM, a Firecracker binary and a guest image you build from source; elsewhere it refuses with `DL1408`. Run as root, the VMM runs under Firecracker's jailer — a uid of its own, in a chroot — so a VMM escape lands in an account that owns nothing; run as an ordinary user, the VMM runs as you, so an escape would hold your account's authority, and the run report says so (`identity_separation`). See `REMAINING_WORK.md` §4.1. |
 | **Side channels** | Timing, cache and power channels are **out of scope**. `Secret.verify` is constant-time; nothing else claims to be. |
 
 Anything that can be stated honestly is stated **relative to that base**. The correct sentence is

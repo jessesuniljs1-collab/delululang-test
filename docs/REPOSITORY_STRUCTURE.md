@@ -273,7 +273,9 @@ DeluluLang/
 │   │   │                           #   no IP stack; the build refuses a line that did not survive
 │   │   ├── mkinitramfs.py          #   the initramfs, byte-for-byte deterministic, no root needed
 │   │   ├── check-reproducible.sh   #   two clean builds, every hash compared (PS-C-02's gate)
-│   │   └── fetch-firecracker.sh    #   the tested Firecracker, checked against its pinned sha256
+│   │   ├── fetch-firecracker.sh    #   the tested Firecracker + jailer, checked against the pinned sha256
+│   │   └── redteam/                #   [PS-C-06] a native probe on the image's own kernel, and five
+│   │                               #   hostile guests against the host — both gates on the KVM CI job
 │   ├── package-toolchain.sh        # build the self-contained distributable archive
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact

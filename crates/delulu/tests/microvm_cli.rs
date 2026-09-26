@@ -123,6 +123,28 @@ fn a_program_runs_in_the_microvm_and_the_report_says_level_2() {
     assert_eq!(sb["posture"]["filesystem_reads"], "none of the host's: the guest has no filesystem device", "{v}");
     // Identity separation needs the jailer, which is not applied: said, not hidden.
     assert!(sb["limitations"].as_array().unwrap().iter().any(|l| l == "identity_separation"), "{v}");
+    // T13's second half: the report and the launch record name the image that was booted, by the
+    // hashes its manifest holds.
+    let (image, _) = provisioned();
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(image.join("manifest.json")).unwrap()).unwrap();
+    for part in ["kernel", "initramfs"] {
+        let want = manifest[part]["sha256"].as_str().unwrap();
+        assert_eq!(sb["image"][format!("{part}_sha256")], want, "{part} in the report: {v}");
+    }
+    let audit = delulu(&dir, &["audit", "query", "--json"]);
+    let text = String::from_utf8_lossy(&audit.stdout);
+    let launches: Vec<serde_json::Value> = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|a| a.as_array().cloned().or_else(|| a["records"].as_array().cloned()))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.to_string().contains("sandbox-launch"))
+        .collect();
+    let last = launches.last().unwrap_or_else(|| panic!("no sandbox-launch record: {text}")).to_string();
+    for part in ["kernel", "initramfs"] {
+        assert!(last.contains(manifest[part]["sha256"].as_str().unwrap()), "{part} hash missing from the launch record: {last}");
+    }
 }
 
 /// Nothing is left behind by a run that ended normally: its VMM is reaped and its directory removed
@@ -307,6 +329,171 @@ fn probe_control(dir: &Path) {
     let launch = attempts.iter().find(|a| a["what"] == "the L2 guest launch").unwrap();
     assert_eq!(launch["ok"], false, "a VMM that cannot boot was reported as booting: {l2}");
     assert_eq!(l2["available"], false, "{l2}");
+}
+
+/// The command as root: directly when this test already is, otherwise through `sudo -n` (the CI runner
+/// has passwordless sudo). The environment the run needs is passed explicitly, because sudo resets it.
+#[cfg(unix)]
+fn as_root(dir: &Path, program: &Path, args: &[&str]) -> Command {
+    let (image, vmm) = provisioned();
+    // SAFETY-free: reading the effective uid through `id -u` keeps this test free of `libc`.
+    let root = Command::new("id").arg("-u").output().map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0").unwrap_or(false);
+    let env = [
+        format!("DELULU_MICROVM_IMAGE={}", image.display()),
+        format!("DELULU_FIRECRACKER={}", vmm.display()),
+        "DELULU_NO_FIRST_RUN=1".to_string(),
+        "DELULU_NO_COLOR=1".to_string(),
+        format!("DELULU_STATE_DIR={}", dir.join("root-state").display()),
+    ];
+    let mut c = if root { Command::new("env") } else {
+        let mut s = Command::new("sudo");
+        s.arg("-n").arg("env");
+        s
+    };
+    c.current_dir(dir).args(&env).arg(program).args(args);
+    c
+}
+
+/// The process ids whose command line carries a jailer id beginning `delulu-`.
+#[cfg(unix)]
+fn jailed_vmms() -> Vec<(u32, String)> {
+    let mut found = Vec::new();
+    for e in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+        let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
+        let cmdline = std::fs::read(e.path().join("cmdline")).unwrap_or_default();
+        let args: Vec<String> = cmdline.split(|b| *b == 0).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+        if let Some(i) = args.iter().position(|a| a == "--id") {
+            if let Some(id) = args.get(i + 1).filter(|id| id.starts_with("delulu-")) {
+                if args.first().is_some_and(|a| a.ends_with("firecracker")) {
+                    found.push((p, id.clone()));
+                }
+            }
+        }
+    }
+    found
+}
+
+/// PS-C-03b: run as root, the VMM runs under Firecracker's jailer — a uid of its own, in a chroot —
+/// the report says so and drops the identity limitation, and a host killed mid-run takes the VMM with
+/// it through the reaper, because the jailer's `setuid` cleared the death signal. Root WITHOUT a jailer
+/// is refused. Needs root: the test runs the host as root itself, directly or through `sudo -n`.
+#[test]
+#[cfg(unix)]
+#[cfg_attr(not(delulu_kvm), ignore = "boots microVMs as root; see GATE")]
+fn as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host() {
+    let (_, vmm) = provisioned();
+    assert!(vmm.with_file_name("jailer").is_file(), "the jailer must sit beside {}", vmm.display());
+    let exe = PathBuf::from(env!("CARGO_BIN_EXE_delulu"));
+    let dir = tmp("jailed");
+    std::fs::create_dir_all(dir.join("root-state/audit")).unwrap();
+    write(&dir, "hello.delulu", HELLO);
+
+    // 1. A jailed run, and what its report says.
+    let o = as_root(&dir, &exe, &["run", "hello.delulu", "--isolation", "microvm", "--grant", "console", "--report-out", "rep.json"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("hello from the guest"), "{}", out(&o));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("rep.json")).unwrap()).unwrap();
+    let sb = &v["sandbox"];
+    let g: Vec<&str> = sb["host_guarantees"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
+    assert!(g.contains(&"a uid of its own for the VMM") && g.contains(&"a chroot for the VMM"), "{g:?}");
+    assert_eq!(sb["posture"]["identity"], "the VMM: a uid of its own, in a chroot (Firecracker's jailer)", "{v}");
+    assert!(!sb["limitations"].as_array().unwrap().iter().any(|l| l == "identity_separation"), "{v}");
+
+    // 2. While one runs: its VMM's uid is a reserved one, and it is chrooted.
+    write(&dir, "spin.delulu", "module m\n\nfn main(root: Root) {\n  var i = 0\n  while i >= 0 {\n    i = i + 1\n  }\n}\n");
+    let before: Vec<u32> = jailed_vmms().into_iter().map(|(p, _)| p).collect();
+    let mut sudo = as_root(&dir, &exe, &["run", "spin.delulu", "--isolation", "microvm"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(20);
+    let (vmm_pid, id) = loop {
+        if let Some(v) = jailed_vmms().into_iter().find(|(p, _)| !before.contains(p)) {
+            break v;
+        }
+        assert!(Instant::now() < until, "no jailed VMM appeared");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let status = std::fs::read_to_string(format!("/proc/{vmm_pid}/status")).unwrap();
+    let uid: u32 = status.lines().find(|l| l.starts_with("Uid:")).unwrap().split_whitespace().nth(1).unwrap().parse().unwrap();
+    assert!((900_000..965_536).contains(&uid), "the VMM runs as uid {uid}, not a reserved one");
+    // What the VMM can see of the filesystem is its jail and nothing else. (Not `readlink` of its root:
+    // the jailer pivots into the chroot inside a new mount namespace, so from outside the root reads as
+    // `/` — true in the VMM's own namespace, and no evidence either way. The first version of this test
+    // asserted on that and failed on a correctly jailed VMM.)
+    let seen = as_root(&dir, Path::new("ls"), &["-A", &format!("/proc/{vmm_pid}/root/")]).output().unwrap();
+    let seen: Vec<String> = String::from_utf8_lossy(&seen.stdout).lines().map(str::to_string).collect();
+    for inside in ["firecracker", "vmlinux", "initramfs.cpio", "dev"] {
+        assert!(seen.iter().any(|e| e == inside), "`{inside}` is not in the VMM's view: {seen:?}");
+    }
+    for host in ["etc", "home", "usr", "proc", "root"] {
+        assert!(!seen.iter().any(|e| e == host), "the VMM can see the host's `/{host}`: {seen:?}");
+    }
+    let ns = |pid: &str| {
+        let o = as_root(&dir, Path::new("readlink"), &[&format!("/proc/{pid}/ns/mnt")]).output().unwrap();
+        String::from_utf8_lossy(&o.stdout).trim().to_string()
+    };
+    assert_ne!(ns(&vmm_pid.to_string()), ns("self"), "the VMM shares this host's mount namespace");
+    let _ = &id;
+
+    // 3. Kill the HOST (the delulu process sudo started), not the VMM: the reaper must end the VMM.
+    let host_pid = std::fs::read_dir("/proc")
+        .unwrap()
+        .flatten()
+        .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
+        .find(|p| {
+            let stat = std::fs::read_to_string(format!("/proc/{p}/stat")).unwrap_or_default();
+            let cmd = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
+            // The delulu `run` whose id the jail carries: `delulu-<host pid>-…`.
+            id.starts_with(&format!("delulu-{p}-")) && !stat.is_empty() && !cmd.is_empty()
+        })
+        .expect("the host that owns the jail");
+    let k = as_root(&dir, Path::new("kill"), &["-9", &host_pid.to_string()]).output().unwrap();
+    assert!(k.status.success(), "could not kill the host: {}", out(&k));
+    let killed = Instant::now();
+    // Two seconds, not more: the reaper ends the VMM in milliseconds. The first version of this test
+    // allowed eight, and a mutant reaper that killed nothing SURVIVED it — the VM was ending ~5 s after
+    // its host anyway, through its console pipe breaking. That is incidental: with the console pipe held
+    // open (measured, PS-C-06) a jailed VMM whose host and reaper were both killed was still running
+    // after fifteen seconds, bounded only by its processor-time ceiling. Only the reaper is prompt.
+    let until = killed + Duration::from_secs(2);
+    while Path::new(&format!("/proc/{vmm_pid}")).exists() {
+        assert!(
+            Instant::now() < until,
+            "the jailed VMM {vmm_pid} outlived its host by {:?} — the reaper did not end it",
+            killed.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let _ = sudo.wait();
+    let jail = format!("/srv/delulu-jailer/firecracker/{id}");
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let still = as_root(&dir, Path::new("test"), &["-e", &jail]).status().unwrap().success();
+        if !still {
+            break;
+        }
+        assert!(Instant::now() < until, "the reaper left the jail `{jail}` behind");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // 4. Root without a jailer is refused, not run as root.
+    let alone = dir.join("fc-alone");
+    std::fs::create_dir_all(&alone).unwrap();
+    std::fs::copy(&vmm, alone.join("firecracker")).unwrap();
+    let mut c = as_root(&dir, Path::new("env"), &[
+        &format!("DELULU_FIRECRACKER={}", alone.join("firecracker").display()),
+        "PATH=/usr/bin:/bin",
+        exe.to_str().unwrap(),
+        "run", "hello.delulu", "--isolation", "microvm", "--grant", "console",
+    ]);
+    let o = c.output().unwrap();
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert!(out(&o).contains("DL1408") && out(&o).contains("jailer"), "{}", out(&o));
+    assert!(!out(&o).contains("hello from the guest"), "root ran a VMM without a jailer: {}", out(&o));
 }
 
 /// A program whose surface the channel does not carry is refused before a VM is booted, as it is

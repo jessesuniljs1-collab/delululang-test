@@ -173,7 +173,13 @@ pub fn init_locale(args: &[String]) -> (Vec<String>, Vec<String>) {
     // as PID 1, where standard input IS a terminal (the VM's console), and the guest sat at the
     // picker's prompt instead of dialling its host (PS-C-03, found by booting it).
     let machine_cmd = cleaned.first().is_some_and(|c| {
-        c == crate::foreign_worker::WORKER_SUBCOMMAND || c == crate::guest::GUEST_SUBCOMMAND || c == "lsp"
+        c == crate::foreign_worker::WORKER_SUBCOMMAND || c == crate::guest::GUEST_SUBCOMMAND || c == "lsp" || {
+            #[cfg(target_os = "linux")]
+            let reaper = c == crate::microvm::REAPER_SUBCOMMAND;
+            #[cfg(not(target_os = "linux"))]
+            let reaper = false;
+            reaper
+        }
     });
     let ci = std::env::var_os("CI").is_some();
     let no_first_run = std::env::var_os("DELULU_NO_FIRST_RUN").is_some();

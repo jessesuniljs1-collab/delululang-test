@@ -24,9 +24,12 @@
 //! static guest (`scripts/microvm/mkinitramfs.py`). This repository never ships a built kernel
 //! (D-NE-27, owner-reserved: distributing a GPL kernel is a licensing act).
 //!
-//! Not yet here, and said wherever it matters: the jailer (a per-VM uid and chroot needs root; the VMM
-//! runs as the operator, under Firecracker's own seccomp filters, and the report names
-//! `identity_separation` as a limitation), and attestation (L4).
+//! Run as root, the VMM runs under Firecracker's JAILER (PS-C-03b): a uid of its own, reserved for the
+//! VM, in a chroot holding only what it needs; and because the jailer's `setuid` clears the death
+//! signal, a small reaper process takes its place — when the host is gone, the reaper ends the VMM.
+//! Root WITHOUT a jailer is refused rather than run: the VMM would be root. Run as an ordinary user,
+//! the VMM runs as that user under Firecracker's own seccomp filters, and the report names
+//! `identity_separation` as a limitation. Not here: attestation (L4).
 //!
 //! Compiled only on Linux (`main.rs` gates the `mod`); every other platform refuses `--isolation
 //! microvm` with DL1408 in `cli.rs` without reaching here.
@@ -56,6 +59,53 @@ pub const IMAGE_ENV: &str = "DELULU_MICROVM_IMAGE";
 
 /// Which VMM binary, when the operator says; otherwise `firecracker` on `PATH`.
 pub const VMM_ENV: &str = "DELULU_FIRECRACKER";
+
+/// Which jailer binary, when the operator says; otherwise `jailer` beside the VMM, then on `PATH`.
+pub const JAILER_ENV: &str = "DELULU_JAILER";
+
+/// Where jailed VMs live (PS-C-03b): one chroot per VM, and one reservation file per uid in use,
+/// root-owned. Beside Firecracker's own default (`/srv/jailer`), and NOT under `/run`: the jailer makes
+/// `/dev/kvm` inside each chroot, and `/run` is mounted `nodev` on most hosts, where that node cannot
+/// be opened — the first jailed launch here failed exactly so, with KVM's "permission denied".
+const JAIL_BASE: &str = "/srv/delulu-jailer";
+
+/// Where jailed VMs live when the operator says (a filesystem that allows device nodes).
+pub const JAIL_BASE_ENV: &str = "DELULU_JAIL_BASE";
+
+fn jail_base() -> PathBuf {
+    std::env::var_os(JAIL_BASE_ENV).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(JAIL_BASE))
+}
+
+/// Refuse a jail base on a filesystem mounted `nodev`, naming why, rather than let KVM's "permission
+/// denied" from inside the chroot be the first anyone hears of it.
+fn allows_devices(base: &Path) -> Result<(), String> {
+    use std::os::unix::ffi::OsStrExt as _;
+    let c = std::ffi::CString::new(base.as_os_str().as_bytes()).map_err(|_| "the jail base holds a NUL byte".to_string())?;
+    // SAFETY: `c` is a valid C string and `st` a zeroed, correctly sized buffer the call fills.
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return Err(format!("the jail base `{}` cannot be examined: {}", base.display(), io::Error::last_os_error()));
+    }
+    if st.f_flag & libc::ST_NODEV != 0 {
+        return Err(format!(
+            "the jail base `{}` is on a filesystem mounted `nodev`, where the jailer's `/dev/kvm` cannot be \
+             opened — set {JAIL_BASE_ENV} to a directory on one that allows device nodes",
+            base.display()
+        ));
+    }
+    Ok(())
+}
+
+/// The uids a jailed VMM runs as: a block no ordinary account is given. Each VM reserves one that no
+/// account has and no process is running as, by creating its reservation file exclusively.
+const JAIL_UID_BASE: u32 = 900_000;
+const JAIL_UID_SPAN: u32 = 65_536;
+
+/// The internal subcommand that ends a jailed VMM when its host is gone. Never advertised.
+pub const REAPER_SUBCOMMAND: &str = "__vm_reaper";
+
+/// What a JAILED VMM has on top of [`GUARANTEES`].
+pub const JAILED_GUARANTEES: &[&str] = &["a uid of its own for the VMM", "a chroot for the VMM"];
 
 /// The manifest format `build-image.sh` writes and this launcher reads.
 pub const IMAGE_FORMAT: &str = "delulu-microvm-image/1";
@@ -110,6 +160,26 @@ pub struct Image {
     pub kernel_version: String,
     pub initramfs: PathBuf,
     pub initramfs_sha256: String,
+}
+
+/// What was BOOTED: the hashes of the copies the VMM was pointed at, each checked against the
+/// manifest before boot. It goes into the `sandbox-launch` audit record and the run report, so the
+/// record of a run names the exact image it ran on (the test plan's T13, second half).
+#[derive(Clone, Debug)]
+pub struct ImageDigest {
+    pub kernel_sha256: String,
+    pub initramfs_sha256: String,
+    pub kernel_version: String,
+}
+
+impl ImageDigest {
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "kernel_sha256": self.kernel_sha256,
+            "initramfs_sha256": self.initramfs_sha256,
+            "kernel_version": self.kernel_version,
+        })
+    }
 }
 
 /// The image directory: the operator's choice, or `<state dir>/microvm-image`.
@@ -257,6 +327,37 @@ pub fn locate_vmm() -> Result<PathBuf, String> {
         .ok_or_else(|| format!("no microVM monitor: `firecracker` is not on PATH and {VMM_ENV} is not set ({TESTED_VMM} is the tested one)"))
 }
 
+fn running_as_root() -> bool {
+    // SAFETY: `geteuid` cannot fail.
+    unsafe { libc::geteuid() == 0 }
+}
+
+/// The jailer: `DELULU_JAILER`, else `jailer` beside the VMM (where `fetch-firecracker.sh` puts it),
+/// else on `PATH`.
+pub fn locate_jailer(vmm: &Path) -> Result<PathBuf, String> {
+    if let Some(p) = std::env::var_os(JAILER_ENV) {
+        let p = PathBuf::from(p);
+        return if is_executable(&p) {
+            Ok(p)
+        } else {
+            Err(format!("{JAILER_ENV} names `{}`, which is not an executable file", p.display()))
+        };
+    }
+    let beside = vmm.with_file_name("jailer");
+    if is_executable(&beside) {
+        return Ok(beside);
+    }
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path).map(|d| d.join("jailer")).find(|p| is_executable(p)).ok_or_else(|| {
+        format!(
+            "this process is root, and without Firecracker's jailer the VMM would run as root too — \
+             refused. Put `jailer` beside `{}` (`scripts/microvm/fetch-firecracker.sh` installs both), set \
+             {JAILER_ENV}, or run as an ordinary user",
+            vmm.display()
+        )
+    })
+}
+
 /// Ask the VMM what it is. Its first line, e.g. `Firecracker v1.17.0`.
 pub fn vmm_version(vmm: &Path) -> Result<String, String> {
     let out = Command::new(vmm)
@@ -282,6 +383,9 @@ pub fn prerequisites() -> Result<(PathBuf, String, Image), String> {
     attempt_kvm()?;
     let vmm = locate_vmm()?;
     let version = vmm_version(&vmm)?;
+    if running_as_root() {
+        locate_jailer(&vmm)?;
+    }
     let image = read_image()?;
     Ok((vmm, version, image))
 }
@@ -395,6 +499,21 @@ pub struct Vm {
     /// unset, under the same lock, so it can never signal a process id the system has reused.
     reaped: Arc<Mutex<bool>>,
     status: Option<ExitStatus>,
+    /// The image this VM booted, once its copies have been checked.
+    pub image: Option<ImageDigest>,
+    /// The VMM's own log, as the host names it.
+    log: PathBuf,
+    /// A jailed VM's uid reservation and its reaper.
+    jail: Option<JailState>,
+}
+
+/// What a jailed VM holds on the host beside its directory.
+struct JailState {
+    /// The reservation file for the VM's uid; it holds this host's process id.
+    uid_lock: PathBuf,
+    /// The reaper, and the write end of the pipe it waits on: closing it (the host finishing, or
+    /// dying) is what wakes it.
+    reaper: Option<(std::process::ChildStdin, Child)>,
 }
 
 /// A VM directory's name: the host's process id first, so a sweep can tell a live host's VM from one
@@ -494,7 +613,7 @@ fn relay_console(mut out: std::process::ChildStdout, keep: bool) -> std::thread:
 impl Vm {
     /// The tail of the VMM's own log, for an error that needs it.
     fn log_tail(&self) -> String {
-        let text = std::fs::read_to_string(self.dir.join("vmm.log")).unwrap_or_default();
+        let text = std::fs::read_to_string(&self.log).unwrap_or_default();
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
         match lines.len() {
             0 => String::new(),
@@ -595,6 +714,15 @@ impl Vm {
             let _ = h.join();
         }
         let _ = std::fs::remove_dir_all(&self.dir);
+        if let Some(jail) = self.jail.as_mut() {
+            release_uid(&jail.uid_lock, std::process::id());
+            // The VMM is already reaped: closing the pipe wakes the reaper, which finds nothing of
+            // this VM left to end and exits.
+            if let Some((pipe, mut reaper)) = jail.reaper.take() {
+                drop(pipe);
+                let _ = reaper.wait();
+            }
+        }
     }
 }
 
@@ -622,11 +750,44 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
     }
     attempt_kvm().map_err(fail)?;
     let vmm = locate_vmm().map_err(fail)?;
+    // Root runs the VMM under the jailer or not at all.
+    let jailer = if running_as_root() { Some(locate_jailer(&vmm).map_err(fail)?) } else { None };
     let image = read_image().map_err(fail)?;
-    sweep_orphans();
+    let tag = format!("{}-{}", std::process::id(), crate::guest::channel_tag());
 
-    let dir = std::env::temp_dir().join(format!("{DIR_PREFIX}{}-{}", std::process::id(), crate::guest::channel_tag()));
-    std::fs::DirBuilder::new().mode(0o700).create(&dir)?;
+    // Where the VM's files go. Unjailed: a private directory, named the same by host and VMM. Jailed:
+    // the chroot the jailer will enter — `<base>/<vmm name>/<id>/root` — which the host fills before
+    // the VMM starts and the VMM sees as `/`.
+    let (dir, host_root, jail_plan) = match &jailer {
+        None => {
+            sweep_orphans();
+            let dir = std::env::temp_dir().join(format!("{DIR_PREFIX}{tag}"));
+            std::fs::DirBuilder::new().mode(0o700).create(&dir)?;
+            (dir.clone(), dir, None)
+        }
+        Some(_) => {
+            let base_dir = jail_base();
+            let base = base_dir.as_path();
+            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(base)?;
+            std::fs::set_permissions(base, std::fs::Permissions::from_mode(0o700))?;
+            allows_devices(base).map_err(fail)?;
+            let name = vmm.file_name().map(|n| n.to_owned()).unwrap_or_else(|| "firecracker".into());
+            sweep_jails(base, &name);
+            // The jailer's id: letters, digits and dashes, at most 64.
+            let id = format!("delulu-{tag}");
+            let dir = base.join(&name).join(&id);
+            let root = dir.join("root");
+            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&root)?;
+            let (uid, lock) = match reserve_uid(base) {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = std::fs::remove_dir_all(&dir);
+                    return Err(e);
+                }
+            };
+            (dir, root, Some((id, uid, lock)))
+        }
+    };
     // From here the directory is the VM's, and `Drop` removes it on every path out.
     let mut vm = Vm {
         child: None,
@@ -636,6 +797,24 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         watchdog: None,
         reaped: Arc::new(Mutex::new(false)),
         status: None,
+        image: None,
+        log: host_root.join("vmm.log"),
+        jail: jail_plan.as_ref().map(|(_, _, lock)| JailState { uid_lock: lock.clone(), reaper: None }),
+    };
+    // What the VMM calls a file the host put at `host_root/<name>`.
+    let vmm_path = |name: &str| -> PathBuf {
+        if jail_plan.is_some() {
+            Path::new("/").join(name)
+        } else {
+            host_root.join(name)
+        }
+    };
+    // A file the jailed VMM must use belongs to its uid; unjailed, it is already this user's.
+    let give = |p: &Path| -> io::Result<()> {
+        if let Some((_, uid, _)) = &jail_plan {
+            std::os::unix::fs::chown(p, Some(*uid), Some(*uid))?;
+        }
+        Ok(())
     };
 
     // The bytes verified are the bytes booted: each file is checked while it is copied into the
@@ -645,16 +824,21 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         ("kernel", &image.kernel, &image.kernel_sha256, "vmlinux"),
         ("initramfs", &image.initramfs, &image.initramfs_sha256, "initramfs.cpio"),
     ] {
-        let got = copy_hashed(src, Some(&dir.join(name)))
+        let got = copy_hashed(src, Some(&host_root.join(name)))
             .map_err(|e| fail(format!("the guest {what} `{}` cannot be read: {e}", src.display())))?;
         if got != *want {
             return Err(fail(mismatch(what, src, &got, want)));
         }
+        give(&host_root.join(name))?;
     }
+    vm.image = Some(ImageDigest {
+        kernel_sha256: image.kernel_sha256.clone(),
+        initramfs_sha256: image.initramfs_sha256.clone(),
+        kernel_version: image.kernel_version.clone(),
+    });
 
-    let api = dir.join("api.sock");
-    let vsock = dir.join("v.sock");
-    let dial_in = dir.join(format!("v.sock_{GUEST_PORT}"));
+    let api = host_root.join("api.sock");
+    let dial_in = host_root.join(format!("v.sock_{GUEST_PORT}"));
     // `sun_path` holds 108 bytes; a longer path would be cut short by the kernel, not refused.
     if dial_in.as_os_str().len() > 100 {
         return Err(fail(format!(
@@ -664,13 +848,33 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
     }
     let listener = UnixListener::bind(&dial_in)?;
     listener.set_nonblocking(true)?;
-    let log = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(dir.join("vmm.log"))?;
+    // The jailed VMM connects to this socket when the guest dials; it must be its to connect to.
+    give(&dial_in)?;
+    let log = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(host_root.join("vmm.log"))?;
+    give(&host_root.join("vmm.log"))?;
 
-    let mut cmd = Command::new(&vmm);
+    let mut cmd = match (&jailer, &jail_plan) {
+        (Some(jailer), Some((id, uid, _))) => {
+            let mut c = Command::new(jailer);
+            c.arg("--id")
+                .arg(id)
+                .arg("--exec-file")
+                .arg(&vmm)
+                .arg("--uid")
+                .arg(uid.to_string())
+                .arg("--gid")
+                .arg(uid.to_string())
+                .arg("--chroot-base-dir")
+                .arg(jail_base())
+                .arg("--");
+            c
+        }
+        _ => Command::new(&vmm),
+    };
     cmd.arg("--api-sock")
-        .arg(&api)
+        .arg(vmm_path("api.sock"))
         .arg("--log-path")
-        .arg(dir.join("vmm.log"))
+        .arg(vmm_path("vmm.log"))
         .arg("--level")
         .arg("Warning")
         .env_clear()
@@ -687,6 +891,34 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         vm.console = Some(relay_console(out, keep_console));
     }
     vm.start_watchdog(pid, wall_ceiling(limits));
+    // The jailer's `setuid` cleared the death signal `harden_vmm` set, so a jailed VMM would outlive a
+    // host killed mid-run. The reaper puts that back: it waits on a pipe only this host writes to, and
+    // when the pipe closes it ends this VMM — named by pid AND jail id, so never another process.
+    if let Some((id, _, lock)) = &jail_plan {
+        let exe = std::env::current_exe()?;
+        let mut reaper = Command::new(exe);
+        reaper
+            .arg(REAPER_SUBCOMMAND)
+            .arg(pid.to_string())
+            .arg(id)
+            .arg(&dir)
+            .arg(lock)
+            .env_clear()
+            .current_dir("/")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        for name in crate::guest::LOADER_ENV {
+            if let Ok(v) = std::env::var(name) {
+                reaper.env(name, v);
+            }
+        }
+        let mut reaper = reaper.spawn().map_err(|e| fail(format!("the jailed VM's reaper could not be started: {e}")))?;
+        let pipe = reaper.stdin.take().ok_or_else(|| fail("the reaper has no pipe".to_string()))?;
+        if let Some(j) = vm.jail.as_mut() {
+            j.reaper = Some((pipe, reaper));
+        }
+    }
 
     // The API socket appears once the VMM is listening.
     let until = Instant::now() + API_DEADLINE;
@@ -710,13 +942,13 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
             &api,
             "/boot-source",
             &serde_json::json!({
-                "kernel_image_path": dir.join("vmlinux"),
-                "initrd_path": dir.join("initramfs.cpio"),
+                "kernel_image_path": vmm_path("vmlinux"),
+                "initrd_path": vmm_path("initramfs.cpio"),
                 "boot_args": boot_args(),
             }),
         )?;
         // The one device. No `/network-interfaces`, no `/drives`: those calls are never made.
-        api_put(&api, "/vsock", &serde_json::json!({ "guest_cid": GUEST_CID, "uds_path": vsock }))?;
+        api_put(&api, "/vsock", &serde_json::json!({ "guest_cid": GUEST_CID, "uds_path": vmm_path("v.sock") }))?;
         api_put(&api, "/actions", &serde_json::json!({ "action_type": "InstanceStart" }))
     };
     configure().map_err(|e| fail(format!("{e}{}", vm.log_tail())))?;
@@ -741,6 +973,14 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         }
         std::thread::sleep(Duration::from_millis(10));
     };
+    // One connection is the channel, and the listener goes the moment it is accepted — closed, and its
+    // socket file removed. Found by the red team's `ports` guest (PS-C-06), which dials port 1024 a
+    // second time straight after its ready byte: that connection can still complete into the listening
+    // socket's backlog before the first is accepted, but nothing ever reads it, and closing the
+    // listener here closes it (the guest reads end-of-file on it). A dial-in after this has nothing to
+    // land on at all.
+    drop(listener);
+    let _ = std::fs::remove_file(&dial_in);
     conn.set_nonblocking(false)?;
     conn.set_read_timeout(Some(crate::guest::CONNECT_DEADLINE))?;
     let mut first = [0u8; 1];
@@ -752,7 +992,144 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
     }
     conn.set_read_timeout(None)?;
     vm.channel = Some(conn);
-    Ok((vm, GUARANTEES.to_vec()))
+    let mut applied = GUARANTEES.to_vec();
+    if jail_plan.is_some() {
+        applied.extend(JAILED_GUARANTEES);
+    }
+    Ok((vm, applied))
+}
+
+/// The uids of every running process.
+fn uids_in_use() -> std::collections::HashSet<u32> {
+    let mut uids = std::collections::HashSet::new();
+    for e in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+        let Ok(status) = std::fs::read_to_string(e.path().join("status")) else { continue };
+        if let Some(line) = status.lines().find(|l| l.starts_with("Uid:")) {
+            uids.extend(line.split_whitespace().skip(1).filter_map(|u| u.parse::<u32>().ok()));
+        }
+    }
+    uids
+}
+
+/// Whether an account in `/etc/passwd` has this uid.
+fn account_has(uid: u32) -> bool {
+    std::fs::read_to_string("/etc/passwd")
+        .map(|t| t.lines().any(|l| l.split(':').nth(2).and_then(|u| u.parse::<u32>().ok()) == Some(uid)))
+        .unwrap_or(true)
+}
+
+/// Reserve a uid for one jailed VM: one no account has, no process runs as, and no other VM holds.
+/// The reservation is a file created exclusively, holding this host's process id — the create is
+/// what makes two hosts starting at once pick different uids.
+fn reserve_uid(base: &Path) -> io::Result<(u32, PathBuf)> {
+    use std::io::Write as _;
+    let busy = uids_in_use();
+    let start = std::process::id().wrapping_mul(2_654_435_761) % JAIL_UID_SPAN;
+    for i in 0..JAIL_UID_SPAN {
+        let uid = JAIL_UID_BASE + (start + i) % JAIL_UID_SPAN;
+        if busy.contains(&uid) || account_has(uid) {
+            continue;
+        }
+        let lock = base.join(format!("uid-{uid}"));
+        match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&lock) {
+            Ok(mut f) => {
+                writeln!(f, "{}", std::process::id())?;
+                return Ok((uid, lock));
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::other(format!(
+        "every uid from {JAIL_UID_BASE} to {} is in use — no jailed VM can be started",
+        JAIL_UID_BASE + JAIL_UID_SPAN - 1
+    )))
+}
+
+/// Give a uid back — only if the reservation is still `owner`'s, so a late reaper never releases a uid
+/// a newer VM has since reserved under the same name.
+fn release_uid(lock: &Path, owner: u32) {
+    if std::fs::read_to_string(lock).ok().and_then(|t| t.trim().parse::<u32>().ok()) == Some(owner) {
+        let _ = std::fs::remove_file(lock);
+    }
+}
+
+fn process_gone(pid: libc::pid_t) -> bool {
+    // SAFETY: signal 0 only asks whether the process exists.
+    unsafe { libc::kill(pid, 0) != 0 && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) }
+}
+
+/// Whether process `pid` is the jailed VMM of jail `id`: its command line carries `--id <id>`.
+fn is_vmm_of(pid: libc::pid_t, id: &str) -> bool {
+    let Ok(cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) else { return false };
+    let args: Vec<&[u8]> = cmdline.split(|b| *b == 0).collect();
+    args.windows(2).any(|w| w[0] == b"--id" && w[1] == id.as_bytes())
+}
+
+/// Jails whose host is gone. The reaper normally removes them; this covers a reaper that could not —
+/// the whole machine losing power between the two, say. Their VMMs are ended first, by jail id.
+fn sweep_jails(base: &Path, vmm_name: &std::ffi::OsStr) {
+    if let Ok(entries) = std::fs::read_dir(base.join(vmm_name)) {
+        for e in entries.flatten() {
+            let id = e.file_name().to_string_lossy().into_owned();
+            let Some(pid) = id.strip_prefix("delulu-").and_then(|r| r.split('-').next()).and_then(|p| p.parse().ok()) else {
+                continue;
+            };
+            if pid == std::process::id() as libc::pid_t || !process_gone(pid) {
+                continue;
+            }
+            for p in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+                if let Ok(vmm) = p.file_name().to_string_lossy().parse::<libc::pid_t>() {
+                    if is_vmm_of(vmm, &id) {
+                        // SAFETY: the process was just identified by its jail id.
+                        unsafe { libc::kill(vmm, libc::SIGKILL) };
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(e.path());
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(base) {
+        for e in entries.flatten() {
+            if !e.file_name().to_string_lossy().starts_with("uid-") {
+                continue;
+            }
+            let owner = std::fs::read_to_string(e.path()).ok().and_then(|t| t.trim().parse::<libc::pid_t>().ok());
+            if owner.is_some_and(process_gone) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
+/// `__vm_reaper <vmm pid> <jail id> <jail dir> <uid reservation>`: wait for the host to close this
+/// process's standard input — by finishing, or by dying — then end the VMM if it is still that jail's,
+/// and remove what the jail left. Its parent's pid is read FIRST, while the parent is still the host,
+/// because the reservation it may release is the one holding that pid.
+pub fn run_reaper(args: &[String]) -> i32 {
+    use std::io::Read as _;
+    // SAFETY: `getppid` cannot fail.
+    let host = unsafe { libc::getppid() } as u32;
+    let [pid, id, dir, lock] = args else { return 2 };
+    let Ok(pid) = pid.parse::<libc::pid_t>() else { return 2 };
+    let mut sink = [0u8; 64];
+    loop {
+        match io::stdin().read(&mut sink) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+    }
+    if is_vmm_of(pid, id) {
+        // SAFETY: the process carries this jail's id, so it is this jail's VMM.
+        unsafe { libc::kill(pid, libc::SIGKILL) };
+        let until = Instant::now() + Duration::from_secs(5);
+        while is_vmm_of(pid, id) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+    release_uid(Path::new(lock), host);
+    0
 }
 
 /// PS-A-07's rule, at L2: ATTEMPT the launcher, so `sandbox probe` and `doctor` answer from a boot.

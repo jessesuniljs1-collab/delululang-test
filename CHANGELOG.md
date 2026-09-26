@@ -34,6 +34,15 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 - The run report's `requested_level` is the level asked for (it was the constant 1).
 - Fixed: the first-run language picker could capture the sandbox guest when its standard input was a
   terminal (found as PID 1 of the microVM).
+- **Run as root, the microVM's monitor runs under Firecracker's jailer (PS-C-03b, D-V2-40)** — a uid of
+  its own and a chroot per VM, and a reaper that ends the VM when its host dies (the jailer's `setuid`
+  clears the death signal). Root without a jailer is refused, never run as root. Jails live under
+  `/srv/delulu-jailer` (`DELULU_JAIL_BASE`), never on a `nodev` filesystem.
+- **The L2 red team (PS-C-06)** — `scripts/microvm/redteam/`: a native probe booted on the image's own
+  kernel, and five hostile guests (a console flood, garbage and oversized frames, other ports, silence),
+  both run as gates on the KVM CI job. It found and fixed: the dial-in listener closed at the first
+  accept; two channel errors in plain words ("the guest closed the channel without saying goodbye");
+  and the launch record and run report now name the image booted, by hash.
 
 ## Unreleased — V2 P4b–e opens: the toolchain describes itself, 2026-09-26
 

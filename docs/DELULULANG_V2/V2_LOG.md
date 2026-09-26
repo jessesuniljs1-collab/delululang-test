@@ -1541,3 +1541,48 @@ host and a refusal test must not depend on the machine lacking something.
 
 Open in PS-C: **PS-C-03b**, the jailer (a per-VM uid and chroot, which needs root); **PS-C-05**, a
 distributed image (owner-reserved, D-NE-27); **PS-C-06**, the red-team record.
+
+**PS-C-01..04's run, read.** CI `36266702402` (`ab1bfdc`): **success on every job** — and the two new
+ones say what no local run could. `microvm`: on a GitHub `ubuntu-latest` runner, `/dev/kvm` answered API
+12 once opened to the runner, the pinned Firecracker installed, the image built from source (kernel,
+static guest, initramfs) in under seven minutes, and all ten gated tests passed — the lifecycle family
+and criterion 8 restated — with `sandbox probe` answering "L2 microvm present" from a boot.
+`microvm-reproducible`: two clean builds in different directories, **every hash identical** (kernel
+`3a35d1f4…`, initramfs `1417a0f4…`, guest `4bb784e5…`, kernel config `148fec4b…`). Those differ from this
+machine's build (kernel `f19758e4…`): a different C compiler builds different kernel bytes, which is why
+the manifest, not the CLI, carries the hashes (D-V2-39) and why reproducibility is claimed per machine.
+
+**PS-C-03b, the jailer (D-V2-40).** Run as root, the VMM now runs under Firecracker's jailer: a uid of
+its own from a reserved block (reserved by creating a file exclusively, so two hosts starting at once
+cannot collide), in a chroot the host fills before the VMM starts, entered by `pivot_root` in a new
+mount namespace. Root WITHOUT a jailer is refused — the alternative is a VMM running as root. Two
+things the first attempts found: the jails cannot live under `/run` (mounted `nodev`, so the `/dev/kvm`
+node the jailer makes cannot be opened — the first jailed launch failed there with KVM's "permission
+denied"; they live under `/srv/delulu-jailer`, and a `nodev` base is refused with that reason); and the
+jailer's `setuid` clears the death signal, so a jailed VMM does NOT die with its host. **Measured**: host
+and reaper both killed, the console pipe held open, the VMM was still running 15.7 s later, bounded only
+by its processor-time ceiling. The answer is a reaper per jailed VM — a process blocked on a pipe only
+its host writes to, which kills the VMM by pid AND jail id when the pipe closes, and removes the jail.
+
+The jailer test (`as_root_the_vmm_is_jailed_as_its_own_uid_and_dies_with_its_host`) runs the host as
+root (directly, or through `sudo -n` on the CI runner) and checks the uid, what the VMM can see (its
+jail, none of the host's directories), that its mount namespace is its own, the report's identity row,
+the reaper, and the refusal. **Its first version could not fail where it mattered**: a mutant reaper that
+killed nothing survived an 8-second bound, because the VM was ending ~5 s after its host anyway through
+its console pipe breaking — incidental, as the held-pipe measurement shows. The bound is 2 s now, only
+the reaper is that prompt, and the mutant is killed ("outlived its host by 2.0s"). Its first chroot
+assertion was wrong the other way — `/proc/<pid>/root` reads `/` from outside a pivoted mount namespace
+— and now checks what the VMM can see instead.
+
+**PS-C-06, the L2 red team** — the record is `V2_PS_C_RED_TEAM.md`. A native probe booted on the image's
+own kernel (`scripts/microvm/redteam/probe.sh`) found one virtio device (vsock), `lo` and no NIC, no block
+layer, IPv4/IPv6/packet/Unix sockets refused, no `/proc`, and nothing of the host's in the guest's
+arguments or environment. Five hostile guests (`redteam/hostile.sh`: a 1 MiB console flood, garbage and
+4 GiB frames, other ports and contexts, silence) each got no program run, the 64 KiB console bound, no
+second channel and nothing left behind. It found three things, all fixed: the dial-in listener stayed
+open until the ready byte was read, so a second dial could land in its backlog (never read — it is now
+closed at the first accept); two channel errors reached the operator as OS text ("failed to fill whole
+buffer", "os error 11"); and the launch record did not name the image booted (it does now, by the hashes
+of the copies checked and booted, in the report too). Both scripts are gates on the KVM CI job.
+Measurements (launch, per-effect and compute cost at L0/L1/L2) are in the record, and so is what was not
+attempted.
