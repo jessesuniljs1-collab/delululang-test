@@ -477,15 +477,18 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                 // interpreter's own mapping, so the two cannot name an operation differently). A
                 // denial is the broker's code and words — DL1403 revoked, DL1410 guarded, DL1413
                 // sealed — returned to the guest as the fault the program would have raised locally.
+                // GUARD-ALIAS-1: the file effect's path is pinned once; the custody decides on it
+                // and the sink opens exactly it.
+                let recv = Value::Cap(capv.clone());
+                let fs_pin = crate::interp::fs_pin_for(&recv, method, &decoded);
                 if let Some(custody) = self.custody.as_mut() {
-                    let recv = Value::Cap(capv.clone());
-                    if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded) {
+                    if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded, fs_pin.as_deref()) {
                         if let crate::custody::CustodyDecision::Deny(d) = custody.check(op, arg.as_deref()) {
                             return Response::Fault { code: d.code.to_string(), message: d.message };
                         }
                     }
                 }
-                match self.sink.cap_method(&capv, method, &decoded, span) {
+                match self.sink.cap_method_pinned(&capv, method, &decoded, span, fs_pin.as_deref()) {
                     Ok(v) => self.encode_result(v),
                     Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },
                 }

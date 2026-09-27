@@ -489,6 +489,9 @@ fn defs() -> Value {
                 ("observed_bytes", t("integer")),
                 ("budget_seconds", t("number")),
                 ("observed_seconds", t("number")),
+                // A sandboxed run says how the stop was known (SANDBOX-STOP-1): the OS's signal, the
+                // job's accounting, the guest's allocator, the host's watchdog.
+                ("source", t("string")),
             ],
         ),
     })

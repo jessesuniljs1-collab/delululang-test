@@ -498,6 +498,10 @@ pub struct Vm {
     /// Set, under this lock, the moment the VMM has been reaped. The watchdog kills only while it is
     /// unset, under the same lock, so it can never signal a process id the system has reused.
     reaped: Arc<Mutex<bool>>,
+    /// Set by the watchdog when it ended the VM, so the run names the stop (SANDBOX-STOP-1).
+    wall_fired: Arc<std::sync::atomic::AtomicBool>,
+    /// Set by the console relay when the guest said it reached its memory ceiling.
+    memory_ceiling: Arc<std::sync::atomic::AtomicBool>,
     status: Option<ExitStatus>,
     /// The image this VM booted, once its copies have been checked.
     pub image: Option<ImageDigest>,
@@ -570,26 +574,49 @@ fn harden_vmm(cmd: &mut Command, limits: crate::jail::Limits) {
 
 /// The wall-clock ceiling: twice the processor time allowed, and never under a minute. A VM that is
 /// neither computing nor asking — a hung guest kernel, a stuck VMM — is ended by it; one that is
-/// computing meets the processor-time ceiling first.
+/// computing meets the processor-time ceiling first. An operator's `--limits wall=` narrows it,
+/// never widens it (SANDBOX-STOP-1).
 fn wall_ceiling(limits: crate::jail::Limits) -> Duration {
-    Duration::from_secs(limits.cpu_seconds.saturating_mul(2).max(60))
+    let own = Duration::from_secs(limits.cpu_seconds.saturating_mul(2).max(60));
+    match limits.wall_seconds {
+        Some(w) => own.min(Duration::from_secs(w)),
+        None => own,
+    }
 }
 
 /// Relay the guest's console to the operator's standard error — or keep it, for a probe — up to
 /// [`CONSOLE_CAP`], and keep draining after that so the VMM never blocks on a full pipe.
-fn relay_console(mut out: std::process::ChildStdout, keep: bool) -> std::thread::JoinHandle<Vec<u8>> {
+fn relay_console(
+    mut out: std::process::ChildStdout,
+    keep: bool,
+    memory_ceiling: Arc<std::sync::atomic::AtomicBool>,
+) -> std::thread::JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut kept = Vec::new();
         let mut passed = 0usize;
         let mut told = false;
         let mut buf = [0u8; 4096];
+        // The last bytes seen, so the ceiling marker is recognised across a read boundary.
+        let mut window: Vec<u8> = Vec::new();
+        let marker = crate::ceiling::VM_MEMORY_MARKER.trim_ascii();
         loop {
             let n = match out.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
             // The console line discipline turns each newline into CR LF; the operator's does not.
-            let text: Vec<u8> = buf[..n].iter().copied().filter(|b| *b != b'\r').collect();
+            let mut text: Vec<u8> = buf[..n].iter().copied().filter(|b| *b != b'\r').collect();
+            // SANDBOX-STOP-1: the guest's ceiling line is for the host, not the operator's terminal —
+            // the host names the stop in its own words.
+            window.extend_from_slice(&text);
+            if window.windows(marker.len()).any(|w| w == marker) {
+                memory_ceiling.store(true, std::sync::atomic::Ordering::SeqCst);
+                if let Some(i) = text.windows(marker.len()).position(|w| w == marker) {
+                    text.drain(i..i + marker.len());
+                }
+            }
+            let keep_from = window.len().saturating_sub(marker.len());
+            window.drain(..keep_from);
             let take = text.len().min(CONSOLE_CAP.saturating_sub(passed));
             if take > 0 {
                 if keep {
@@ -624,10 +651,12 @@ impl Vm {
     fn start_watchdog(&mut self, pid: u32, wall: Duration) {
         let (tx, rx) = mpsc::channel::<()>();
         let reaped = Arc::clone(&self.reaped);
+        let fired = Arc::clone(&self.wall_fired);
         let handle = std::thread::spawn(move || {
             if let Err(mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(wall) {
                 let reaped = reaped.lock().unwrap_or_else(|p| p.into_inner());
                 if !*reaped {
+                    fired.store(true, std::sync::atomic::Ordering::SeqCst);
                     eprintln!("sandbox: the microVM passed its wall-clock ceiling ({} s) — ended", wall.as_secs());
                     // SAFETY: the VMM has not been reaped (checked under the lock that reaping takes),
                     // so this process id is still the VMM's.
@@ -643,6 +672,17 @@ impl Vm {
             drop(tx);
             let _ = handle.join();
         }
+    }
+
+    /// Whether the wall-clock watchdog ended this VM.
+    pub fn wall_fired(&self) -> bool {
+        self.wall_fired.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Whether the guest said, on its console, that it reached its memory ceiling. Read after the VMM
+    /// has been waited for, when the relay has seen everything the console carried.
+    pub fn memory_ceiling_reached(&self) -> bool {
+        self.memory_ceiling.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Whether the VMM has exited, reaping it if it has.
@@ -796,6 +836,8 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
         console: None,
         watchdog: None,
         reaped: Arc::new(Mutex::new(false)),
+        wall_fired: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        memory_ceiling: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         status: None,
         image: None,
         log: host_root.join("vmm.log"),
@@ -888,7 +930,7 @@ pub fn boot(limits: crate::jail::Limits, keep_console: bool) -> io::Result<(Vm, 
     let console = child.stdout.take();
     vm.child = Some(child);
     if let Some(out) = console {
-        vm.console = Some(relay_console(out, keep_console));
+        vm.console = Some(relay_console(out, keep_console, Arc::clone(&vm.memory_ceiling)));
     }
     vm.start_watchdog(pid, wall_ceiling(limits));
     // The jailer's `setuid` cleared the death signal `harden_vmm` set, so a jailed VMM would outlive a
@@ -1210,6 +1252,7 @@ fn dial_host(port: u32) -> io::Result<UnixStream> {
 /// `__guest --vsock <port>`: the microVM guest. Returns only when it is not PID 1 (a test running it
 /// by hand); as PID 1 it powers the VM off, because init returning panics the kernel.
 pub fn run_vm_guest(args: &[String]) -> i32 {
+    crate::ceiling::enter_vm_guest_mode();
     let code = serve_vm_guest(args);
     if std::process::id() == 1 {
         // SAFETY: `sync` and `reboot` take no pointers. With `reboot=k` on the command line the VMM
@@ -1340,8 +1383,11 @@ mod tests {
 
     #[test]
     fn the_wall_ceiling_is_twice_the_processor_time_and_at_least_a_minute() {
-        let l = |cpu| crate::jail::Limits { memory_bytes: 1 << 30, cpu_seconds: cpu };
+        let l = |cpu| crate::jail::Limits { memory_bytes: 1 << 30, cpu_seconds: cpu, wall_seconds: None };
         assert_eq!(wall_ceiling(l(300)), Duration::from_secs(600));
         assert_eq!(wall_ceiling(l(5)), Duration::from_secs(60));
+        let w = |cpu, wall| crate::jail::Limits { memory_bytes: 1 << 30, cpu_seconds: cpu, wall_seconds: Some(wall) };
+        assert_eq!(wall_ceiling(w(300, 9)), Duration::from_secs(9), "the operator's wall narrows it");
+        assert_eq!(wall_ceiling(w(5, 900)), Duration::from_secs(60), "and never widens it");
     }
 }

@@ -101,7 +101,19 @@ fn not_regular() -> io::Error {
 
 /// Read a regular file inside `root` as UTF-8 text.
 pub fn read_text(root: &Path, joined: &Path) -> Outcome<String> {
-    match open(root, joined, Access::Read) {
+    finish_read_text(open(root, joined, Access::Read))
+}
+
+/// Read the file at `real`, a path already PINNED — resolved and checked inside its grant by
+/// [`crate::prim::pin_fs`] — without resolving it again (GUARD-ALIAS-1). The decision about a use
+/// (the broker's scope, the Guard's tiers) was made on this exact string; opening it with no link
+/// followed is what makes the decision about the file that is actually opened.
+pub fn read_text_at(real: &Path) -> Outcome<String> {
+    finish_read_text(imp::open_nofollow(real, Access::Read))
+}
+
+fn finish_read_text(opened: Outcome<Opened>) -> Outcome<String> {
+    match opened {
         Outcome::Done(Opened::File(mut f)) => {
             let mut s = String::new();
             match f.read_to_string(&mut s) {
@@ -133,7 +145,16 @@ pub fn read_bytes(root: &Path, joined: &Path) -> Outcome<Vec<u8>> {
 
 /// Write (or append) `body` to a regular file inside `root`, creating it if absent.
 pub fn write_text(root: &Path, joined: &Path, body: &str, append: bool) -> Outcome<()> {
-    match open(root, joined, if append { Access::Append } else { Access::Write }) {
+    finish_write(open(root, joined, if append { Access::Append } else { Access::Write }), body, append)
+}
+
+/// [`write_text`] at a pinned path (see [`read_text_at`]).
+pub fn write_text_at(real: &Path, body: &str, append: bool) -> Outcome<()> {
+    finish_write(imp::open_nofollow(real, if append { Access::Append } else { Access::Write }), body, append)
+}
+
+fn finish_write(opened: Outcome<Opened>, body: &str, append: bool) -> Outcome<()> {
+    match opened {
         Outcome::Done(Opened::File(mut f)) => {
             let res = if append { Ok(()) } else { f.set_len(0) };
             match res.and_then(|()| f.write_all(body.as_bytes())) {
@@ -149,7 +170,16 @@ pub fn write_text(root: &Path, joined: &Path, body: &str, append: bool) -> Outco
 
 /// The entry names of a directory inside `root` (`.` and `..` excluded), in the order the OS gives.
 pub fn list_dir(root: &Path, joined: &Path) -> Outcome<Vec<String>> {
-    match open(root, joined, Access::List) {
+    finish_list(open(root, joined, Access::List))
+}
+
+/// [`list_dir`] at a pinned path (see [`read_text_at`]).
+pub fn list_dir_at(real: &Path) -> Outcome<Vec<String>> {
+    finish_list(imp::open_nofollow(real, Access::List))
+}
+
+fn finish_list(opened: Outcome<Opened>) -> Outcome<Vec<String>> {
+    match opened {
         Outcome::Done(Opened::Dir(d)) => match imp::entries(d) {
             Ok(v) => Outcome::Done(v),
             Err(e) => Outcome::Io(e),

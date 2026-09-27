@@ -961,9 +961,20 @@ fn seed_guard_policy(state_dir: &Path, file: &str) -> Result<(), i32> {
             return Err(2);
         }
     };
-    let policy = serde_json::from_str::<serde_json::Value>(&text)
-        .ok()
-        .and_then(|v| delulu_broker::GuardPolicy::from_json(&v));
+    // GUARD-ALIAS-1: a path rule in the file is stored as the path it resolves to, as `guard policy
+    // set` stores it, so the file and the command cannot mean two different things.
+    let policy = serde_json::from_str::<serde_json::Value>(&text).ok().map(|mut v| {
+        if let Some(rules) = v.get_mut("rules").and_then(|r| r.as_array_mut()) {
+            for rule in rules.iter_mut() {
+                let class = rule.get("class").and_then(|c| c.as_str()).unwrap_or_default().to_string();
+                if let Some(pattern) = rule.get("pattern").and_then(|p| p.as_str()).map(str::to_string) {
+                    rule["pattern"] = serde_json::Value::String(crate::cli::guard_pattern_for_broker(&class, &pattern));
+                }
+            }
+        }
+        v
+    });
+    let policy = policy.and_then(|v| delulu_broker::GuardPolicy::from_json(&v));
     match policy {
         Some(p) => {
             if let Err(e) = std::fs::create_dir_all(state_dir) {

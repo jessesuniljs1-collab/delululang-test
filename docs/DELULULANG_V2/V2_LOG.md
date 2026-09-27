@@ -1781,7 +1781,7 @@ the number), and `tests/unreadable_paths.rs` sweeps every command `toolchain --j
 that takes a value, given none, now says so (`--grant fs.read` was "unknown grant"), and a `--limits`
 value that is not a number names the units.
 
-**Found by the head chef while writing the next brief — GUARD-ALIAS-1 (CRITICAL, OPEN, fix in progress).**
+**Found by the head chef while writing the next brief — GUARD-ALIAS-1 (CRITICAL; open at `5e2c8fd`, fixed in P5c below).**
 The Guard is handed the LEXICAL path of a use (`interp::fs_scope_arg`, no filesystem access), and the
 filesystem follows links. With `<data>/secretstuff` sealed and a junction `<data>/alias → secretstuff`
 inside the grant, `read_text("alias/key.txt")` returned the sealed key under a lease, plain and
@@ -1796,3 +1796,84 @@ although the report lists a wall-clock ceiling; the host's serving work is not c
 `--report-out` is not written when a sandboxed run is refused before it starts; a dangling link read is
 explained as "where a WRITE would land"; a 500-deep `../` path is echoed whole. The hard-link alias is the
 documented residual it was (P20-R1).
+
+
+## 2026-09-27 — P5c: agent pass 2 (Haiku 4.5 and Sonnet 5), GUARD-ALIAS-1, SANDBOX-STOP-1, GUARD-STALE-1
+
+The owner asked for agents in the sandbox of more than one OS, deliberately attempting what they should
+not be able to do, with authority from `delulu authority` validated by the Guard, end to end — first with
+Haiku 4.5, then "use sonnet 5", then "use haiku 4.5 and sonnet 5". The archives were built from clean
+clones of `5e2c8fd` (both name that commit, not `-dirty`). Pass folder:
+`D:\nelan\DeluluLang-agent-transcripts\2026-09-27-p5b-haiku-guard\` — `BRIEF.md` (with the two addenda),
+`FINDINGS.md` (every agent claim re-run or read against its logs, with the verdict), each agent's
+`work-*` folder and findings file.
+
+**What the agents established, with evidence** (the Haiku summaries overclaimed; only what their logs
+show is counted): at L0 and L1 on Windows and Linux, and at L2 under a lease — a sealed directory's
+files DL1413 at any depth and under case and `..` spellings, a file beside it readable; a guarded write
+DL1410 naming the exact `guard request`; a wrong owner code DL1414; bypass does not lift a seal; a
+tampered token DL1407; single-use DL1407; a local `--grant` beside `--lease` exit 2; the run report's
+`custody` names the node, `sandbox.level` 2 in the VM; a corrupted audit copy DL1405; examples run with
+exactly the grants `authority --grants` prints; the sandbox refuses actors, plugins and foreign code
+legibly; a secret's value reaches neither stdout nor the report. The microVM tester's three "findings"
+were its own test mistakes (a guessed DL code, a single-use lease reused, a request never filed) — the
+head chef re-ran the first properly: a `--ttl 2s` lease reads at L0/L1/L2 while fresh and is DL1402 at all
+three after 4 s (`verify-ttl-microvm.log`). The Sonnet 5 testers' deeper pass is recorded separately.
+
+**GUARD-ALIAS-1 (CRITICAL, fixed) — found by the head chef writing the brief.** The broker and the Guard
+were handed the LEXICAL path of a use (`interp::fs_scope_arg`), and the filesystem follows links. With
+`<data>/secretstuff` sealed, `read_text("alias/key.txt")` through a junction `alias → secretstuff` inside
+the grant returned the sealed key under a lease, plain and `--sandbox` (Windows, witnessed; the direct
+path was DL1413); the 8.3 name `SECRET~1` and `SecretStuff` did the same against the pass-1 archive. It is
+GUARD-SPELL-1's shape: a decision on one spelling, the object reached through another. The fix keeps the
+broker purely lexical (ruling 2) and resolves at the edges that have a filesystem:
+- the runtime PINS a file effect's path once (`prim::pin_fs`: every link followed, the result checked
+  inside the grant on disk), the custody gate decides on that pin (`prim::disk_spelling`, no Windows
+  verbatim prefix), and the effect opens exactly the pin with no link followed (`beneath::*_at`, carried
+  through `EffectSink::cap_method_pinned` by the interpreter and the host channel, and by the wasm
+  engine's read) — so a link swapped in after the decision is refused at the open (FS-RACE-1's walk);
+- operator paths are stored resolved (`cli::broker_path`): `grants delegate --fs-read/--fs-write`, the
+  root a `--broker daemon` run issues, `guard policy set/unset`, `guard request --use`, and a
+  `--guard-policy` file's rules. (A relative rule pattern is still refused, as GUARD-SPELL-1 decided.)
+Verified: every spelling DL1413 on Windows (direct, junction alias, `SECRET~1`, other case) and on Linux
+at L0, L1 AND L2 (symlink alias). `sandbox_guard_e2e.rs` step 4b asserts it for the guest and the ordinary
+run; a mutant that decides on the lexical path again fails it with the key read. Unit tests: the pin is
+where the path resolves and nothing outside is pinned; the verbatim prefix never reaches the broker.
+
+**SANDBOX-STOP-1 (HIGH, fixed) — from pass 1.** A ceiling hit under `--sandbox`/`microvm` stopped the
+guest but the operator read `memory allocation of N bytes failed` / "closed the channel without saying
+goodbye", the report had no `outcome.stopped_by`, the Windows exit (68, 9) disagreed with the report's 1,
+and `--limits wall=` was refused although the report listed a wall-clock ceiling. Now a stop is named only
+from evidence:
+- memory: a global allocator (`ceiling.rs`) ends a guest whose allocation is refused with status 197
+  (the program cannot choose the guest's status); a microVM guest also writes a fixed line on its serial
+  console, which the host's relay recognises and removes (the program cannot write to that console);
+  on Windows also the job's peak-memory accounting;
+- processor time: `SIGXCPU`; or `SIGKILL` (what equal soft and hard limits deliver, and also what a host's
+  death or an operator sends) only when the OS's accounting of the reaped guest (`RUSAGE_CHILDREN`,
+  before/after) shows the budget spent; on Windows the job's processor-time accounting;
+- wall clock: `jail::Limits.wall_seconds` — a host watchdog for a process guest, stopped and joined before
+  the guest is reaped so it can never signal a reused process id; the tighter of it and the VM's own
+  ceiling for a microVM.
+The run says the stop in the ordinary run's words, `outcome.stopped_by` carries dimension, budget,
+observed (when measured) and `source`, the audit `sandbox-limit` record carries it, and the exit is 1 as
+the report says. `wall_seconds` enters the policy's JSON and hash only when set, so every existing policy
+hash is unchanged. Verified on Windows (memory, cpu with the job's measurement, wall) and on Linux: memory,
+cpu (SIGKILL, 3.0 s accounted) and wall at L1; cpu (5.0 s accounted on the VMM) and wall (the VM's watchdog)
+at L2 (`verify-fixes-linux.log` in the pass folder);
+`sandbox_run_cli.rs::a_ceiling_that_stops_a_sandboxed_run_is_named_and_the_exit_agrees_with_the_report`.
+**OPEN: the memory stop at L2.** The VM boots a prebuilt image whose guest binary predates `ceiling.rs`, so
+the console line is not written yet; rebuilding the image from the Windows-mounted checkout failed in
+`libffi-sys`'s configure (`verify-vm-memory.log`). Rebuild it from a clone on the Linux filesystem
+(`scripts/microvm/build-image.sh ~/microvm-image-b`) and rerun `verify-vm-memory.sh`.
+
+**GUARD-STALE-1 (MEDIUM, fixed) — found by the head chef's own end-to-end test.** Extending
+`sandbox_guard_e2e.rs` with deny and a single-use permit: once the new request's permit was spent, the
+next write was refused DL1412 with the OLD denial's comment, not DL1410; a retry while the new request was
+pending would have said DL1412, not DL1411 with the new id. `guard_verdict_use` took the first (oldest)
+matching request. Fail-closed throughout, but the principal's latest decision was misreported. Fixed
+(`iter().rev()`); unit test fails against the old line.
+
+**Lesson, recorded in memory:** Haiku 4.5 summaries overclaimed (checks marked done whose logs show they
+never ran); a pass is judged on its logs, briefs now ask for each check's command and verbatim output, and
+the headline behaviours are held by the head chef's own tests regardless.

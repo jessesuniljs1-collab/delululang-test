@@ -206,7 +206,7 @@ impl Breach {
     }
 }
 
-fn human_bytes(n: u64) -> String {
+pub(crate) fn human_bytes(n: u64) -> String {
     const MIB: u64 = 1024 * 1024;
     if n >= 1024 * MIB {
         format!("{:.2} GiB", n as f64 / (1024 * MIB) as f64)

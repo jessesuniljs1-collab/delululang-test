@@ -2748,6 +2748,31 @@ fn strip_morph_pragma(src: &str) -> String {
 /// doing it. A missing file and a refused one get plain words too; anything rarer keeps the OS's own
 /// sentence, which is worth reading, without its number. `tests/unreadable_paths.rs` sweeps every
 /// command so a new site cannot bring the raw text back.
+/// An operator's filesystem path as the broker compares it (campaign finding GUARD-ALIAS-1):
+/// absolute against this command's working directory, then resolved on disk — links followed,
+/// Windows 8.3 names expanded, macOS `/var` read as `/private/var` — and spelled as a program's use
+/// is spelled (`prim::disk_spelling`). A program's file effect reaches the broker as the path it
+/// RESOLVES to; a grant, a Guard rule or a request spelled any other way would then fail to meet it —
+/// a seal set as `…/RUNNER~1/…` would miss every use, which is GUARD-SPELL-1's failure again. The
+/// broker stays purely lexical (ruling 2); what it compares is resolved here, at the edge that has a
+/// filesystem. A path with a link that does not resolve keeps its absolute lexical spelling (and a
+/// use through it is refused by the runtime).
+pub(crate) fn broker_path(p: &str) -> String {
+    let abs = delulu_runtime::prim::granted_root(p);
+    delulu_runtime::prim::resolve_spelling(&abs).unwrap_or_else(|| abs.to_string_lossy().to_string())
+}
+
+/// A Guard `class:pattern` with an absolute filesystem pattern put through [`broker_path`]; any
+/// other rule is returned as written (a relative path pattern is refused by the broker, by design).
+pub(crate) fn guard_pattern_for_broker(class: &str, pattern: &str) -> String {
+    let is_fs = matches!(class, "fs_read" | "fs_write");
+    if is_fs && pattern != "*" && std::path::Path::new(pattern).is_absolute() {
+        broker_path(pattern)
+    } else {
+        pattern.to_string()
+    }
+}
+
 pub(crate) fn unreadable(path: &dyn AsRef<std::path::Path>, e: &std::io::Error) -> String {
     let p = path.as_ref();
     let why = if p.is_dir() {
@@ -5899,8 +5924,9 @@ pub(crate) fn authority_spec_from_grants(grants: &Grants, program: &str) -> crat
     secret_names.sort();
     crate::broker_ipc::AuthoritySpec {
         effects: effects.into_iter().map(str::to_string).collect(),
-        fs_read: root.fs_read.iter().map(|p| p.to_string_lossy().to_string()).collect(),
-        fs_write: root.fs_write.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+        // GUARD-ALIAS-1: resolved, as the runtime spells a use.
+        fs_read: root.fs_read.iter().map(|p| broker_path(&p.to_string_lossy())).collect(),
+        fs_write: root.fs_write.iter().map(|p| broker_path(&p.to_string_lossy())).collect(),
         net: root.net.clone(),
         secrets: secret_names,
         declassify: Vec::new(),
@@ -7021,11 +7047,11 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
     // normalized strings the embedded RootVal carries") — so the broker's path lattice sees exactly
     // what an agent's runtime will resolve its file arguments against. Consequence for holders:
     // mint the delegation from the directory the paths are relative to.
-    let norm = |v: Vec<String>| -> Vec<String> {
-        v.into_iter()
-            .map(|p| delulu_runtime::prim::granted_root(&p).to_string_lossy().to_string())
-            .collect()
-    };
+    //
+    // GUARD-ALIAS-1: and then resolved on disk (`broker_path`), because that is how a use reaches the
+    // broker now — a lease minted as `…/RUNNER~1/…` or through a symlinked directory would otherwise
+    // refuse every use of what it grants.
+    let norm = |v: Vec<String>| -> Vec<String> { v.into_iter().map(|p| broker_path(&p)).collect() };
     let fs_read = norm(fs_read);
     let fs_write = norm(fs_write);
     let ttl_millis = match &ttl {
@@ -7334,6 +7360,14 @@ fn cmd_guard_request(args: &[String], state_dir: &std::path::Path, json: bool) -
         eprintln!("error: `guard request` requires `--why \"<justification>\"` — explain why you need the authority");
         return 2;
     };
+    // GUARD-ALIAS-1: a requested path in the spelling the use will arrive in.
+    let uses: Vec<String> = uses
+        .into_iter()
+        .map(|u| match u.split_once(':') {
+            Some((class, pattern)) => format!("{class}:{}", guard_pattern_for_broker(class, pattern)),
+            None => u,
+        })
+        .collect();
     match guard_rpc(state_dir, ReqBody::GuardRequest { node, uses, why }, json) {
         Ok(Response::GuardRequested { id, deduped }) => {
             if json {
@@ -7584,6 +7618,10 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 return 2;
             };
             let owner = guard_owner(args);
+            // GUARD-ALIAS-1: a path rule is stored as the path it resolves to, the spelling a use
+            // arrives in; the confirmation below shows what was stored.
+            let pattern = guard_pattern_for_broker(class, pattern);
+            let pattern = pattern.as_str();
             match guard_rpc(
                 state_dir,
                 ReqBody::GuardPolicySet {
@@ -7617,6 +7655,8 @@ fn cmd_guard_policy(args: &[String], state_dir: &std::path::Path, json: bool) ->
                 return 2;
             };
             let owner = guard_owner(args);
+            let pattern = guard_pattern_for_broker(class, pattern);
+            let pattern = pattern.as_str();
             match guard_rpc(
                 state_dir,
                 ReqBody::GuardPolicyUnset { owner, class: class.to_string(), pattern: pattern.to_string() },

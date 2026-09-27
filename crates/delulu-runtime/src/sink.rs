@@ -26,6 +26,21 @@ pub trait EffectSink {
     /// Perform one capability operation, or refuse it exactly as the primitive table would.
     fn cap_method(&self, cap: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault>;
 
+    /// The same, with a file effect's path PINNED by `prim::pin_fs` — the path the custody gate
+    /// decided on, to be opened exactly (GUARD-ALIAS-1). A sink that does not perform effects in this
+    /// process (a guest's channel) ignores it: the host pins on its own side.
+    fn cap_method_pinned(
+        &self,
+        cap: &CapVal,
+        method: &str,
+        args: &[Value],
+        span: Span,
+        pin: Option<&std::path::Path>,
+    ) -> Result<Value, Fault> {
+        let _ = pin;
+        self.cap_method(cap, method, args, span)
+    }
+
     /// Mint a capability from the root, or refuse it exactly as the primitive table would.
     ///
     /// This is on the seam for the same reason the operations are: a guest that could mint its own
@@ -46,6 +61,17 @@ pub struct LocalSink;
 impl EffectSink for LocalSink {
     fn cap_method(&self, cap: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
         crate::prim::call_cap_method(cap, method, args, span)
+    }
+
+    fn cap_method_pinned(
+        &self,
+        cap: &CapVal,
+        method: &str,
+        args: &[Value],
+        span: Span,
+        pin: Option<&std::path::Path>,
+    ) -> Result<Value, Fault> {
+        crate::prim::call_cap_method_pinned(cap, method, args, span, pin)
     }
 
     fn root_method(&self, root: &RootVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {

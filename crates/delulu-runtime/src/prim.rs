@@ -106,6 +106,60 @@ pub fn resolve_for_decision(p: &Path) -> Option<PathBuf> {
     canonical_existing(p)
 }
 
+/// The ONE resolved path a file effect is decided on and opened at (campaign finding GUARD-ALIAS-1).
+///
+/// # The finding (2026-09-27, found by the head chef writing the second agent brief)
+///
+/// The broker and the Guard were handed the LEXICAL path of a use (`root` joined with what the program
+/// wrote, `.` and `..` folded, no filesystem access), while the filesystem follows links. With
+/// `<data>/secretstuff` sealed and a junction `<data>/alias → secretstuff` inside the grant — a link
+/// that stays inside the grant is allowed by containment, and git can carry one — the program's
+/// `read_text("alias/key.txt")` was decided as `<data>/alias/key.txt`, matched no rule, and returned the
+/// sealed key: under a lease, plain and sandboxed (the direct path was DL1413). It is GUARD-SPELL-1's
+/// shape exactly: a security decision made on one spelling, and the object reached through another.
+///
+/// Now the path is resolved ONCE, here — every link on it followed, the result checked inside the
+/// grant on disk (C84's rule) — and that resolved path is both what the broker and the Guard decide
+/// on ([`disk_spelling`]) and what is opened, by [`crate::beneath`]'s `*_at` functions, which follow
+/// no link at all. A link swapped in between is refused at the open (FS-RACE-1), so the decision and
+/// the file cannot come apart. `None`: the path does not resolve inside the grant — the effect is then
+/// refused by the ordinary check, with its ordinary message.
+pub fn pin_fs(root: &Path, rel: &str) -> Option<PathBuf> {
+    if hostile_path(rel, false).is_some() {
+        return None;
+    }
+    let joined = normalize(&root.join(rel));
+    if !joined.starts_with(root) {
+        return None;
+    }
+    let real = canonical_existing(&joined)?;
+    let r = canonical_existing(root)?;
+    real.starts_with(&r).then_some(real)
+}
+
+/// A resolved path as the broker, the Guard and the operator spell it: the canonical path without
+/// Windows' `\\?\` verbatim prefix (`\\?\C:\x` → `C:\x`, `\\?\UNC\srv\share` → `\\srv\share`),
+/// which no grant, rule or person writes.
+pub fn disk_spelling(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix("\\\\?\\UNC\\") {
+        return format!("\\\\{rest}");
+    }
+    if let Some(rest) = s.strip_prefix("\\\\?\\") {
+        if rest.as_bytes().get(1) == Some(&b':') {
+            return rest.to_string();
+        }
+    }
+    s.into_owned()
+}
+
+/// Where a path an OPERATOR wrote — a grant being delegated, a Guard rule, a Guard request — really
+/// is, spelled as [`disk_spelling`] spells a program's use, so the broker compares one spelling with
+/// one spelling (GUARD-ALIAS-1). `None` when a link on the path does not resolve (SYMLINK-DANGLE-1).
+pub fn resolve_spelling(p: &Path) -> Option<String> {
+    canonical_existing(p).map(|c| disk_spelling(&c))
+}
+
 /// Does `p` itself exist as a symbolic link (without following it)? `false` when `p` is absent or
 /// cannot be stat'd — the callers treat "cannot tell" as "do not admit".
 fn is_symlink(p: &Path) -> bool {
@@ -487,6 +541,19 @@ fn cap(kind: ResourceKind, scope: CapScope) -> Value {
 // ----- capability operations (the effects themselves) ----------------------
 
 pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) -> Result<Value, Fault> {
+    call_cap_method_pinned(capv, method, args, span, None)
+}
+
+/// [`call_cap_method`], with the file effect's path already PINNED by [`pin_fs`] — the path the
+/// custody gate decided on, which is then opened exactly, with no link followed (GUARD-ALIAS-1).
+/// `None` is the unpinned path: resolved and checked here, as before.
+pub fn call_cap_method_pinned(
+    capv: &CapVal,
+    method: &str,
+    args: &[Value],
+    span: Span,
+    pin: Option<&Path>,
+) -> Result<Value, Fault> {
     // PS-A-02: a host-held capability carries no path, host or socket — only the number the host
     // minted. This process cannot perform it, and must not pretend to: a handle reaching the local
     // path means the guest was wired to the wrong sink, which is a failure, not a quiet no-op.
@@ -520,7 +587,11 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
             let rel = str_arg(args, 0, span)?;
             let p = resolve_in_scope(root, &rel, span)?;
-            match crate::beneath::read_text(root, &p) {
+            let read = match pin {
+                Some(real) => crate::beneath::read_text_at(real),
+                None => crate::beneath::read_text(root, &p),
+            };
+            match read {
                 crate::beneath::Outcome::Done(s) => Ok(Value::ok(Value::str(s))),
                 crate::beneath::Outcome::Io(e) => Ok(Value::err(io_err_for(&e))),
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
@@ -530,7 +601,11 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
             let rel = str_arg(args, 0, span)?;
             let p = resolve_in_scope(root, &rel, span)?;
-            match crate::beneath::list_dir(root, &p) {
+            let listed = match pin {
+                Some(real) => crate::beneath::list_dir_at(real),
+                None => crate::beneath::list_dir(root, &p),
+            };
+            match listed {
                 crate::beneath::Outcome::Done(names) => {
                     let names: Vec<Value> = names.into_iter().map(Value::str).collect();
                     Ok(Value::ok(Value::List(Rc::new(std::cell::RefCell::new(names)))))
@@ -549,7 +624,12 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
             let rel = str_arg(args, 0, span)?;
             let p = resolve_in_scope(root, &rel, span)?;
             let body = str_arg(args, 1, span)?;
-            match crate::beneath::write_text(root, &p, &body, method == "append_text") {
+            let append = method == "append_text";
+            let wrote = match pin {
+                Some(real) => crate::beneath::write_text_at(real, &body, append),
+                None => crate::beneath::write_text(root, &p, &body, append),
+            };
+            match wrote {
                 crate::beneath::Outcome::Done(()) => Ok(Value::ok(Value::Unit)),
                 crate::beneath::Outcome::Io(e) => Ok(Value::err(io_err_for(&e))),
                 crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
@@ -1290,6 +1370,52 @@ mod containment_tests {
              fail if the parent is missing — that is an IO error, not a containment decision)"
         );
         let _ = fs::remove_dir_all(&base);
+    }
+
+    /// GUARD-ALIAS-1: the pin is the path a use RESOLVES to — a link inside the grant is followed to
+    /// where it lands, so the Guard is asked about that, and a path that resolves outside is not pinned
+    /// at all (the effect then refuses it with DL0904).
+    #[test]
+    fn the_pin_is_where_the_path_resolves_and_nothing_outside_is_pinned() {
+        use super::{disk_spelling, pin_fs};
+        let base = unique_dir("pin");
+        let grant = base.join("grant");
+        fs::create_dir_all(grant.join("secret")).unwrap();
+        fs::write(grant.join("secret").join("key.txt"), b"k").unwrap();
+        fs::write(base.join("outside").join("o.txt"), b"o").unwrap();
+        let real_key = fs::canonicalize(grant.join("secret").join("key.txt")).unwrap();
+        assert_eq!(pin_fs(&grant, "secret/key.txt").as_deref(), Some(real_key.as_path()));
+        assert_eq!(pin_fs(&grant, "../outside/o.txt"), None, "a lexical escape is not pinned");
+        assert_eq!(pin_fs(&grant, "secret/new.txt"), Some(real_key.parent().unwrap().join("new.txt")), "a file a write will create");
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(grant.join("secret"), grant.join("alias")).is_ok()
+            && std::os::unix::fs::symlink(base.join("outside"), grant.join("out")).is_ok();
+        #[cfg(windows)]
+        let linked = ["alias", "out"].iter().zip([grant.join("secret"), base.join("outside")]).all(|(l, t)| {
+            std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(grant.join(l))
+                .arg(t)
+                .output()
+                .is_ok_and(|o| o.status.success())
+        });
+        if linked {
+            assert_eq!(pin_fs(&grant, "alias/key.txt").as_deref(), Some(real_key.as_path()), "the alias is pinned where it lands");
+            assert_eq!(pin_fs(&grant, "out/o.txt"), None, "a link out of the grant is not pinned");
+        }
+        let spelled = disk_spelling(&real_key);
+        assert!(!spelled.starts_with(r"\\?\"), "no verbatim prefix reaches the broker: {spelled}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// The spelling rule itself, on strings (no filesystem): the verbatim prefixes go, nothing else.
+    #[test]
+    fn the_disk_spelling_drops_only_the_verbatim_prefix() {
+        use super::disk_spelling;
+        use std::path::Path;
+        assert_eq!(disk_spelling(Path::new(r"\\?\C:\Users\x")), r"C:\Users\x");
+        assert_eq!(disk_spelling(Path::new(r"\\?\UNC\srv\share\x")), r"\\srv\share\x");
+        assert_eq!(disk_spelling(Path::new("/srv/app/x")), "/srv/app/x");
     }
 
     /// **The documented boundary, pinned as an executed fact.** A hardlink inside the grant whose

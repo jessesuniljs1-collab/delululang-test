@@ -198,6 +198,11 @@ mod linux {
         pub fn kill(&mut self) -> io::Result<()> {
             self.child.kill()
         }
+
+        /// The guest's process id, for the wall-clock watchdog (valid until it is reaped).
+        pub fn id(&self) -> u32 {
+            self.child.id()
+        }
     }
 
     // What the child reports to the helper thread: a tag byte, then four bytes (a pid, or an errno).
@@ -888,6 +893,11 @@ mod win {
     }
 
     impl ContainedGuest {
+        /// The guest's process handle, for the wall-clock watchdog (valid while this value lives).
+        pub fn raw_process(&self) -> std::os::windows::io::RawHandle {
+            self.process.as_raw_handle()
+        }
+
         /// Start the suspended guest. `false` means it could not be, and must not be waited on.
         pub fn resume(&self) -> bool {
             // SAFETY: the thread handle is owned by this value.

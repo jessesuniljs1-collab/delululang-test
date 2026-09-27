@@ -922,6 +922,22 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
 4. **A guest runs under the broker when the run does** (REMAINING_WORK 4.20): the host authorizes each
    channel request through the run's custody, with the interpreter's op mapping, before performing it.
 
+## D-V2-44 — the Guard decides on the resolved path, resolved at the edges — TAKEN (head chef, 2026-09-27, under the owner's delegation; FLAGGED for the owner's review)
+
+1. **A file effect is decided on, and opened at, ONE resolved path** (GUARD-ALIAS-1). The runtime pins
+   the path (links followed, checked inside the grant on disk); the broker and the Guard decide on the
+   pin; the effect opens exactly the pin with no link followed. A decision on a spelling the filesystem
+   does not honour was GUARD-SPELL-1's class, and this closes it for every link, 8.3 name and case.
+2. **Ruling 2 stands: the broker never touches the disk.** The resolution happens where a filesystem is:
+   the runtime for a use, the CLI (and the daemon's policy-file seed) for an operator's grant, rule or
+   request, which are stored resolved. Consequence, stated because it changes what a stored lease means:
+   a lease or rule names the directory as it resolved WHEN IT WAS WRITTEN — repointing a symlinked path
+   afterwards does not move the authority with it. Leases and rules written before this change keep
+   their old spelling and can now fail to match (fail-closed); re-delegate or re-set them.
+3. **A sandboxed stop is named only from evidence** (SANDBOX-STOP-1): the guest's allocator status, a
+   microVM guest's console line, the signal, the OS's own accounting, the host's watchdog — never an exit
+   code that does not say. The process exit is the report's.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

@@ -851,8 +851,15 @@ impl Broker {
                     return GuardVerdict::PermitUse;
                 }
                 // No permit: a pending request → DL1411; a denial → DL1412 (comment verbatim); else DL1410.
+                //
+                // GUARD-STALE-1 (2026-09-27, found by `sandbox_guard_e2e.rs`): the MOST RECENT matching
+                // request decides. This took the first — the oldest — so after a denial and a fresh
+                // request, a retry while the new one was pending was told DL1412 "denied" instead of
+                // DL1411 with the new id, and once the new request's single-use permit was spent the
+                // old denial resurfaced instead of DL1410. Fail-closed either way, but the holder and
+                // the principal were told the wrong thing about the principal's own latest decision.
                 if let Some(req) =
-                    self.guard.requests.iter().find(|r| r.node == *node && r.subset.covers_use(op, arg))
+                    self.guard.requests.iter().rev().find(|r| r.node == *node && r.subset.covers_use(op, arg))
                 {
                     return match &req.status {
                         ReqStatus::Pending => GuardVerdict::Block(Denial::GuardPending {
@@ -1437,6 +1444,31 @@ mod tests {
             }
             _ => panic!("a denied request must yield DL1412"),
         }
+    }
+
+    /// GUARD-STALE-1: the principal's LATEST decision is the one a retried use is told. Deny, then a
+    /// fresh request: pending (DL1411 with the NEW id), not the old denial; approve it for one use: one
+    /// use, then DL1410 — the old denial does not come back.
+    #[test]
+    fn the_latest_request_decides_and_an_old_denial_does_not_resurface() {
+        let mut b = broker();
+        let (_root, child) = declassify_root_and_child(&mut b);
+        let subset = || GuardSubset::parse(&["declassify:foo".to_string()]).unwrap();
+        let (first, _) = b.guard_request(&child, subset(), "first".into()).unwrap();
+        assert!(b.guard_deny(Some("gow1_testowner"), &first, "not now".into()).unwrap());
+        let code = |b: &mut Broker| match b.guard_verdict_use(&child, Op::Declassify, Some("foo")) {
+            GuardVerdict::Block(d) => (d.code().to_string(), d.to_diagnostic().message),
+            _ => ("not a block".to_string(), String::new()),
+        };
+        assert_eq!(code(&mut b).0, "DL1412");
+        let (second, deduped) = b.guard_request(&child, subset(), "second".into()).unwrap();
+        assert!(!deduped, "a denied request is not a pending one to dedup onto");
+        let (c, m) = code(&mut b);
+        assert_eq!(c, "DL1411", "the new request is pending: {m}");
+        assert!(m.contains(&second), "DL1411 names the NEW request: {m}");
+        b.guard_approve(Some("gow1_testowner"), &second, None, Some(1), Some("once".into())).unwrap().unwrap();
+        assert!(matches!(b.guard_verdict_use(&child, Op::Declassify, Some("foo")), GuardVerdict::PermitUse));
+        assert_eq!(code(&mut b).0, "DL1410", "the spent permit leaves a fresh DL1410, not the old denial");
     }
 
     /// Head-chef soundness requirement: a permit for `declassify:foo` does NOT cover `declassify:bar`

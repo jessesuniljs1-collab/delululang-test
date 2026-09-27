@@ -750,7 +750,12 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             // Custody gate (Stage 5 phase 5f, epoch class) with the RESOLVED path — the same string
             // the broker node's fs scope was granted against. Recorded refusal, never an Err (trap 5).
-            let resolved_str = resolved.to_string_lossy().to_string();
+            // GUARD-ALIAS-1: decided on the path it resolves to, which is then opened exactly.
+            let pin = delulu_runtime::prim::pin_fs(&scope, &rel);
+            let resolved_str = match &pin {
+                Some(real) => delulu_runtime::prim::disk_spelling(real),
+                None => resolved.to_string_lossy().to_string(),
+            };
             if !caller.data_mut().custody_allows(CustodyOp::FsRead, Some(&resolved_str)) {
                 return 0;
             }
@@ -758,7 +763,11 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
             // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that
             // appeared after the check above is followed, and only a regular file is read.
-            let built = match delulu_runtime::beneath::read_text(&scope, &resolved) {
+            let read = match &pin {
+                Some(real) => delulu_runtime::beneath::read_text_at(real),
+                None => delulu_runtime::beneath::read_text(&scope, &resolved),
+            };
+            let built = match read {
                 delulu_runtime::beneath::Outcome::Done(content) => build_ok_str(&mut caller, &content),
                 delulu_runtime::beneath::Outcome::Io(e) => {
                     use std::io::ErrorKind::*;

@@ -14,12 +14,16 @@
 pub struct Limits {
     pub memory_bytes: u64,
     pub cpu_seconds: u64,
+    /// `--limits wall=SECONDS`, the operator's wall-clock ceiling (SANDBOX-STOP-1). No default, as for
+    /// an ordinary run (D-V2-25 ruled memory and processor time): a process guest gets it from the
+    /// host's watchdog, a microVM as the tighter of it and the VM's own ceiling.
+    pub wall_seconds: Option<u64>,
 }
 
 impl Default for Limits {
     /// D-V2-25 (owner, 2026-09-18): 1 GiB and 5 minutes of processor time.
     fn default() -> Self {
-        Limits { memory_bytes: 1024 * 1024 * 1024, cpu_seconds: 300 }
+        Limits { memory_bytes: 1024 * 1024 * 1024, cpu_seconds: 300, wall_seconds: None }
     }
 }
 
@@ -496,8 +500,9 @@ pub fn resume(_child: &std::process::Child) -> bool {
 mod windows_jail {
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicUIRestrictions,
-        JobObjectExtendedLimitInformation, SetInformationJobObject, JOBOBJECT_BASIC_UI_RESTRICTIONS,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicAccountingInformation, JobObjectBasicUIRestrictions,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_BASIC_UI_RESTRICTIONS,
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_ACTIVE_PROCESS,
         JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         JOB_OBJECT_LIMIT_PROCESS_MEMORY, JOB_OBJECT_UILIMIT_DESKTOP, JOB_OBJECT_UILIMIT_EXITWINDOWS,
@@ -513,6 +518,42 @@ mod windows_jail {
         fn drop(&mut self) {
             if !self.0.is_null() {
                 unsafe { CloseHandle(self.0) };
+            }
+        }
+    }
+
+    impl Jail {
+        /// What the job measured: processor time (user + kernel) and the peak memory any process in
+        /// it committed. The job's own accounting, read after the guest ended — so a stop is named
+        /// from the OS's measurement, never guessed from an exit code that does not say
+        /// (SANDBOX-STOP-1).
+        pub fn usage(&self) -> Option<(std::time::Duration, u64)> {
+            if self.0.is_null() {
+                return None;
+            }
+            // SAFETY: structures zeroed and sized with `size_of`; the handle is this value's.
+            unsafe {
+                let mut acct: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = std::mem::zeroed();
+                let mut ext: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                let ok = QueryInformationJobObject(
+                    self.0,
+                    JobObjectBasicAccountingInformation,
+                    &mut acct as *mut _ as *mut core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                    std::ptr::null_mut(),
+                ) != 0
+                    && QueryInformationJobObject(
+                        self.0,
+                        JobObjectExtendedLimitInformation,
+                        &mut ext as *mut _ as *mut core::ffi::c_void,
+                        std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                        std::ptr::null_mut(),
+                    ) != 0;
+                if !ok {
+                    return None;
+                }
+                let ticks = (acct.TotalUserTime.max(0) + acct.TotalKernelTime.max(0)) as u64;
+                Some((std::time::Duration::from_nanos(ticks.saturating_mul(100)), ext.PeakProcessMemoryUsed as u64))
             }
         }
     }

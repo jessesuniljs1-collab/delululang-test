@@ -1267,7 +1267,10 @@ impl Interp {
         // enforcement — criterion 11); daemon custody round-trips synchronous ops to the broker and
         // validates epoch ops against the cached snapshot, so a revoked/expired lease faults here
         // (DL1403/DL1402) and an unreachable broker faults DL1401 (fail closed, invariant 27).
-        if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals) {
+        // GUARD-ALIAS-1: a file effect's path is resolved ONCE; the custody gate decides on that
+        // resolved path and the effect opens exactly it (below), so no link can make the two differ.
+        let fs_pin = fs_pin_for(&recvv, &name.name, &argvals);
+        if let Some((op, arg)) = custody_op_for(&recvv, &name.name, &argvals, fs_pin.as_deref()) {
             if let CustodyDecision::Deny(d) = self.custody.borrow_mut().check(op, arg.as_deref()) {
                 // `Actuate` is the one custody refusal that is a VALUE rather than a fault, and the
                 // asymmetry is deliberate (10e's law, carried up a layer). Every other denial here
@@ -1409,7 +1412,7 @@ impl Interp {
             }
             // PS-A-01: the seam. `LocalSink` calls `prim::call_cap_method` — the same call this line
             // made before — so the local path is unchanged; a guest sends it to the host instead.
-            Value::Cap(c) => self.effects.cap_method(c, &name.name, &argvals, span),
+            Value::Cap(c) => self.effects.cap_method_pinned(c, &name.name, &argvals, span, fs_pin.as_deref()),
             // T-Py (spec §5): a `PyObj` operation (attr/call/call_method/index). Present only with the
             // `python` feature — with it off no `Cap[Python]` exists, so no `PyObj` value is ever made.
             #[cfg(feature = "python")]
@@ -2307,15 +2310,21 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
 /// (attenuation like `fs.narrow`, `Str`/`List` methods, `Root` minting) — those never gate. The fs
 /// argument is the resolved absolute path (the exact string the daemon node's fs scope was granted
 /// against); the net argument is the URL host.
-pub(crate) fn custody_op_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<(CustodyOp, Option<String>)> {
+pub(crate) fn custody_op_for(
+    recvv: &Value,
+    method: &str,
+    argvals: &[Value],
+    pin: Option<&std::path::Path>,
+) -> Option<(CustodyOp, Option<String>)> {
     let Value::Cap(c) = recvv else { return None };
+    // A pinned file effect is decided on the path it will open (GUARD-ALIAS-1); an unpinned one —
+    // which the effect itself will refuse — on its lexical path, as before.
+    let fs_arg = |c: &CapVal| pin.map(prim::disk_spelling).or_else(|| fs_scope_arg(&c.scope, argvals));
     match (c.kind, method) {
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),
-        (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => {
-            Some((CustodyOp::FsRead, fs_scope_arg(&c.scope, argvals)))
-        }
+        (ResourceKind::FsRead, "read_text") | (ResourceKind::FsRead, "list_dir") => Some((CustodyOp::FsRead, fs_arg(c))),
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
-            Some((CustodyOp::FsWrite, fs_scope_arg(&c.scope, argvals)))
+            Some((CustodyOp::FsWrite, fs_arg(c)))
         }
         (ResourceKind::Http, "get") => {
             let host = match argvals.first() {
@@ -2342,6 +2351,23 @@ fn actuator_device(scope: &CapScope) -> Option<String> {
         CapScope::Actuator(env) => Some(env.device.clone()),
         _ => None,
     }
+}
+
+/// The pinned path of a file effect (GUARD-ALIAS-1): resolved on disk and checked inside the grant
+/// by `prim::pin_fs`, or `None` when the operation is not a file effect or the path does not resolve
+/// inside the grant (the effect then refuses it with its ordinary message).
+pub(crate) fn fs_pin_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<std::path::PathBuf> {
+    let Value::Cap(c) = recvv else { return None };
+    let file_effect = matches!(
+        (c.kind, method),
+        (ResourceKind::FsRead, "read_text" | "list_dir") | (ResourceKind::FsWrite, "write_text" | "append_text")
+    );
+    let CapScope::Fs { root, .. } = &c.scope else { return None };
+    let Some(Value::Str(rel)) = argvals.first() else { return None };
+    if !file_effect {
+        return None;
+    }
+    prim::pin_fs(root, rel)
 }
 
 /// The resolved absolute path a filesystem op reaches (cap-scope root joined with the relative arg,

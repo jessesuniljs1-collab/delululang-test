@@ -224,6 +224,85 @@ fn limits_narrow_a_profile_and_never_widen_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// SANDBOX-STOP-1 (the 2026-09-27 agent pass): a ceiling that stops a SANDBOXED run is named the way
+/// the ordinary run names it — a sentence, the report's `outcome.stopped_by` with how it was known —
+/// and the process exit agrees with the report. Before: the guest printed Rust's own
+/// `memory allocation of N bytes failed`, the host said "closed the channel without saying goodbye",
+/// the report said only `exit: 1`, the process exited 68 or 9 on Windows, and `--limits wall=` was
+/// refused outright under `--sandbox`.
+#[test]
+fn a_ceiling_that_stops_a_sandboxed_run_is_named_and_the_exit_agrees_with_the_report() {
+    let dir = tmp("stops");
+    let spin = dir.join("spin.delulu");
+    std::fs::write(&spin, "module spin
+
+fn main(root: Root) {
+    var x = 0
+    while true {
+        x = x + 1
+    }
+}
+").unwrap();
+    let mem = dir.join("mem.delulu");
+    std::fs::write(
+        &mem,
+        "module mem
+
+fn big() -> Str {
+    var s = \"X\"
+    var i = 0
+    while i < 20 {
+        s = s + s
+        i = i + 1
+    }
+    s
+}
+
+         fn main(root: Root) {
+    let xs = []
+    while true {
+        xs.push(big())
+    }
+}
+",
+    )
+    .unwrap();
+    let report = dir.join("rep.json");
+    let run = |prog: &std::path::Path, limits: &str| {
+        let _ = std::fs::remove_file(&report);
+        let o = delulu(&["run", prog.to_str().unwrap(), "--sandbox", "--limits", limits, "--report-out", report.to_str().unwrap()]);
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap_or_default()).unwrap_or_default();
+        (o, v)
+    };
+    // Wall: the host's own watchdog, on every platform with a process guest.
+    let (o, v) = run(&spin, "cpu=60,wall=2");
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert_eq!(v["outcome"]["exit"], 1, "the report and the exit agree: {v}");
+    assert_eq!(v["outcome"]["stopped_by"]["dimension"], "wall", "{v}");
+    assert_eq!(v["outcome"]["stopped_by"]["budget_seconds"], 2, "{v}");
+    assert_eq!(v["sandbox"]["limits"]["wall_seconds"], 2, "{v}");
+    assert!(out(&o).contains("wall-clock time"), "{}", out(&o));
+    let guarantees = v["sandbox"]["host_guarantees"].to_string();
+    // Processor time, where the host applies that ceiling.
+    if guarantees.contains("processor-time ceiling") {
+        let (o, v) = run(&spin, "cpu=2");
+        assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+        assert_eq!(v["outcome"]["exit"], 1, "{v}");
+        assert_eq!(v["outcome"]["stopped_by"]["dimension"], "cpu", "{v} / {}", out(&o));
+        assert!(out(&o).contains("processor time"), "{}", out(&o));
+    }
+    // Memory, where the host applies that ceiling (macOS's guest has none, and says so).
+    if guarantees.contains("memory ceiling") {
+        let (o, v) = run(&mem, "mem=67108864,cpu=30");
+        assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+        assert_eq!(v["outcome"]["exit"], 1, "{v}");
+        assert_eq!(v["outcome"]["stopped_by"]["dimension"], "memory", "{v} / {}", out(&o));
+        assert!(!out(&o).contains("memory allocation of"), "the runtime's own abort text reached the operator: {}", out(&o));
+        assert!(out(&o).contains("memory ceiling"), "{}", out(&o));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Every refusal: nothing runs, and the reason says what to do instead.
 #[test]
 fn a_sandbox_that_cannot_apply_refuses_instead_of_running_unconfined() {

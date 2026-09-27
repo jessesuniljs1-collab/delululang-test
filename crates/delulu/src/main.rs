@@ -11,6 +11,7 @@ mod broker_transport;
 mod brokerd;
 mod breakglass;
 mod budget;
+mod ceiling;
 mod cert_crypto;
 mod cli;
 mod completions;
@@ -46,6 +47,11 @@ mod schema;
 mod toolchain;
 
 use std::process::ExitCode;
+
+/// SANDBOX-STOP-1: a sandbox guest whose allocation is refused at its memory ceiling ends with a
+/// status the host can name, instead of Rust's abort text (`ceiling.rs`). Unchanged outside a guest.
+#[global_allocator]
+static ALLOCATOR: ceiling::CeilingAware = ceiling::CeilingAware;
 
 /// The interpreter is a tree-walker: one DeluluLang call costs several native frames, and a debug
 /// build's frames are large. On a default 1 MiB main stack, recursion a few hundred deep exhausted

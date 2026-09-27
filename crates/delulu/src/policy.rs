@@ -45,11 +45,11 @@ impl Profile {
     pub fn limits(self) -> Limits {
         match self {
             // Your own code, on your own machine: generous, still bounded.
-            Profile::Dev => Limits { memory_bytes: 4 * 1024 * 1024 * 1024, cpu_seconds: 1_800 },
+            Profile::Dev => Limits { memory_bytes: 4 * 1024 * 1024 * 1024, cpu_seconds: 1_800, wall_seconds: None },
             // The ordinary case, and the owner's defaults (D-V2-25).
             Profile::Contained => Limits::default(),
             // Code you did not write: tight enough that a runaway is stopped quickly.
-            Profile::HostileAgent => Limits { memory_bytes: 256 * 1024 * 1024, cpu_seconds: 60 },
+            Profile::HostileAgent => Limits { memory_bytes: 256 * 1024 * 1024, cpu_seconds: 60, wall_seconds: None },
         }
     }
 }
@@ -243,7 +243,7 @@ impl SandboxPolicy {
             "requested": self.profile.name(),
             "granted": if guarantees.is_empty() { "none" } else { self.profile.name() },
             "host_guarantees": guarantees,
-            "limits": { "memory_bytes": self.limits.memory_bytes, "cpu_seconds": self.limits.cpu_seconds },
+            "limits": self.limits_json(),
             "mode": self.mode.name(),
             "break_glass": self.break_glass,
             "policy_hash": self.hash(),
@@ -290,7 +290,7 @@ impl SandboxPolicy {
             "host_guarantees": guarantees,
             "posture": posture,
             "limitations": limitations,
-            "limits": { "memory_bytes": self.limits.memory_bytes, "cpu_seconds": self.limits.cpu_seconds },
+            "limits": self.limits_json(),
             "mode": self.mode.name(),
             "break_glass": self.break_glass,
             "denied": denied,
@@ -299,11 +299,22 @@ impl SandboxPolicy {
         })
     }
 
+    /// The limits as the report and the audit record carry them; `wall_seconds` only when set, so a
+    /// run without one reads — and hashes — exactly as before it existed.
+    fn limits_json(self) -> serde_json::Value {
+        let mut v = serde_json::json!({ "memory_bytes": self.limits.memory_bytes, "cpu_seconds": self.limits.cpu_seconds });
+        if let Some(w) = self.limits.wall_seconds {
+            v["wall_seconds"] = serde_json::json!(w);
+        }
+        v
+    }
+
     /// A stable name for this policy: the same policy hashes the same in any run, on any machine, so
     /// an audit record can say WHICH policy was in force without repeating it.
     pub fn hash(self) -> String {
+        let wall = self.limits.wall_seconds.map(|w| format!(" wall={w}")).unwrap_or_default();
         let canonical = format!(
-            "delulu-sandbox-policy/1 level={} profile={} mem={} cpu={} mode={} break_glass={}",
+            "delulu-sandbox-policy/1 level={} profile={} mem={} cpu={}{wall} mode={} break_glass={}",
             self.level,
             self.profile.name(),
             self.limits.memory_bytes,
@@ -351,7 +362,8 @@ mod tests {
             SandboxPolicy::derive(0, Profile::Contained, None, Mode::Strict),
             SandboxPolicy::derive(1, Profile::Dev, None, Mode::Strict),
             SandboxPolicy::derive(1, Profile::Contained, None, Mode::Audit),
-            SandboxPolicy::derive(1, Profile::Contained, Some(Limits { memory_bytes: 1, cpu_seconds: 1 }), Mode::Strict),
+            SandboxPolicy::derive(1, Profile::Contained, Some(Limits { memory_bytes: 1, cpu_seconds: 1, wall_seconds: None }), Mode::Strict),
+            SandboxPolicy::derive(1, Profile::Contained, Some(Limits { wall_seconds: Some(9), ..Limits::default() }), Mode::Strict),
         ] {
             assert_ne!(a.hash(), other.hash(), "a different policy must hash differently: {other:?}");
         }

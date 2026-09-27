@@ -9,6 +9,26 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P5c: the Guard decides on the real path; sandbox stops are named, 2026-09-27
+
+- **Security, fixed: a sealed directory could be reached by another name** (GUARD-ALIAS-1). The Guard
+  and the broker decided on the path as the program spelled it, and the filesystem followed links: a link
+  inside the grant aimed at a sealed directory, a Windows 8.3 short name, or another case read the sealed
+  file under a lease, sandboxed or not. A file effect's path is now resolved ONCE; the broker and the
+  Guard decide on that path and the effect opens exactly it, following no link. Grants delegated, Guard
+  rules and Guard requests are stored in the same resolved spelling.
+- **Fixed: a ceiling that stopped a sandboxed run was not named** (SANDBOX-STOP-1). The operator saw the
+  runtime's own `memory allocation of N bytes failed` or "closed the channel without saying goodbye", the
+  report had no `stopped_by`, and on Windows the exit (68, 9) disagreed with the report. A memory,
+  processor-time or wall-clock stop under `--sandbox` or `--isolation microvm` is now named in words and in
+  `outcome.stopped_by` (with how it was known), and the exit is 1, as the report says. (A microVM's
+  memory stop needs a guest image rebuilt with this change; until then it is still unnamed.)
+- **New: `--limits wall=SECONDS` under `--sandbox` and `--isolation microvm`** — refused before; now a
+  host watchdog for a process guest, and the tighter of it and the VM's own ceiling for a microVM.
+- **Fixed: the Guard told a retried use the principal's OLDEST decision** (GUARD-STALE-1): after a denial
+  and a new request, a retry said "denied" instead of "pending", and a spent single-use permit brought the
+  old denial back. The latest request now decides.
+
 ## Unreleased — V2 P5b: what the multi-OS agent pass found, 2026-09-27
 
 - **Security, fixed: a Guard rule on a directory sealed only the directory entry** (GUARD-SCOPE-1,

@@ -66,6 +66,8 @@ pub const STDIO_READY: u8 = 0x06;
 
 /// Run as the guest. Returns the process exit status.
 pub fn run_guest(args: &[String]) -> i32 {
+    // SANDBOX-STOP-1: from here a refused allocation ends this process with a status the host names.
+    crate::ceiling::enter_guest_mode();
     // PS-C-03: the microVM guest, run by its own kernel as PID 1, whose channel is a vsock stream to
     // the host it dials itself.
     #[cfg(target_os = "linux")]
@@ -652,12 +654,16 @@ fn parse_limits(spec: Option<&str>, profile: crate::policy::Profile) -> Result<c
     for part in spec.split(',').filter(|p| !p.is_empty()) {
         let (key, value) = part
             .split_once('=')
-            .ok_or_else(|| format!("`--limits {part}` needs the form mem=BYTES or cpu=SECONDS"))?;
+            .ok_or_else(|| format!("`--limits {part}` needs the form mem=BYTES, cpu=SECONDS or wall=SECONDS"))?;
         let n: u64 = value.parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}` — memory is a count of bytes (1 GiB is 1073741824), processor and wall time are seconds"))?;
         match key.trim() {
             "mem" => limits.memory_bytes = n.min(limits.memory_bytes),
             "cpu" => limits.cpu_seconds = n.min(limits.cpu_seconds),
-            other => return Err(format!("`--limits {other}=…` is not a limit this command knows (mem, cpu)")),
+            // SANDBOX-STOP-1: accepted under the sandbox as it is without it (the agent pass found it
+            // refused while the report listed a wall-clock ceiling). Narrowing only, like the others.
+            "wall" if n == 0 => return Err("`--limits wall=0` would stop the run before it started".to_string()),
+            "wall" => limits.wall_seconds = Some(limits.wall_seconds.map_or(n, |w| w.min(n))),
+            other => return Err(format!("`--limits {other}=…` is not a limit this command knows (mem, cpu, wall)")),
         }
     }
     Ok(limits)
@@ -764,19 +770,26 @@ fn serve_under(
     custody_record: Option<serde_json::Value>,
 ) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
+    // SANDBOX-STOP-1: the processor time of this process's reaped children, before the guest exists
+    // — the guest's own use is the difference after it is reaped.
+    let children_before = children_cpu();
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
     let launched = match isolation {
         Isolation::Process => launch(&exe, &dir, limits, false),
         Isolation::MicroVm => launch_vm(limits, false),
     };
-    let (mut child, jail, applied) = match launched {
+    let (mut child, jail, mut applied) = match launched {
         Ok(l) => l,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&dir);
             return Err(e);
         }
     };
+    // SANDBOX-STOP-1: a process guest's wall-clock ceiling is the host's watchdog, started below.
+    if limits.wall_seconds.is_some() && child.killer().is_some() && !applied.contains(&"wall-clock ceiling") {
+        applied.push("wall-clock ceiling");
+    }
     if applied.is_empty() {
         // Never claim a boundary that was not applied: PS-0-04's rule, in the place it matters most.
         eprintln!("sandbox: no OS jail on this host yet — the guest still holds no authority of its own");
@@ -811,11 +824,23 @@ fn serve_under(
     );
 
     let mut evidence = Evidence::default();
+    // SANDBOX-STOP-1: the operator's wall-clock ceiling for a process guest (a microVM's VMM carries
+    // its own watchdog, which honours the same number).
+    let watch = match (limits.wall_seconds, child.killer()) {
+        (Some(w), Some(k)) => Some(WallWatch::start(k, std::time::Duration::from_secs(w))),
+        _ => None,
+    };
     let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, custody, &mut evidence);
+    // Stopped, and joined, BEFORE the guest is reaped below: until then its process id cannot have
+    // been reused, so the watchdog can only ever have ended this guest.
+    let wall_fired = match (watch.map(WallWatch::stop).unwrap_or(false), child.vm_wall_fired()) {
+        (true, _) => Some("the host's wall-clock watchdog"),
+        (_, true) => Some("the microVM's wall-clock watchdog"),
+        _ => None,
+    };
     let denied = evidence.denied;
     // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
     // chain — they were in force before the program's first line, and the host checked the words.
-    let mut applied = applied;
     for w in evidence.own {
         if !applied.contains(&w) {
             applied.push(w);
@@ -824,6 +849,18 @@ fn serve_under(
     // Whatever happened on the channel, the child is not left running and the channel is removed.
     let status = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
+    // SANDBOX-STOP-1: a guest that ended without saying goodbye may have been STOPPED by a ceiling —
+    // named here only from evidence (the watchdog, the guest's allocator status, the OS's signal, the
+    // job's accounting), as the ordinary run names its stops.
+    let evidence_of_stop = StopEvidence {
+        wall_fired,
+        guest_cpu: children_cpu().zip(children_before).map(|(after, before)| after.saturating_sub(before)),
+        vm_memory: child.vm_memory_ceiling(),
+    };
+    let stop = match (&served, &status) {
+        (Err(_), Ok(st)) => stop_reason(st, limits, evidence_of_stop, &jail),
+        _ => None,
+    };
     // The run report (D-V2-21): written by the RUNTIME to the file the operator named, never on the
     // program's own output, which the program could forge. `granted` and `host_guarantees` carry
     // what this host actually applied, so a report never claims a boundary that was not there.
@@ -853,13 +890,15 @@ fn serve_under(
     // claim WHICH limit fired when the status cannot tell.
     if let Ok(st) = &status {
         if !st.success() {
-            if let Some(why) = limit_kill_reason(st) {
+            let why = stop.as_ref().map(|s| s.message.clone()).or_else(|| limit_kill_reason(st));
+            if let Some(why) = why {
                 audit_sandbox(
                     "sandbox-limit",
                     "deny",
                     Some(why),
                     Some(serde_json::json!({
-                        "limits": { "memory_bytes": limits.memory_bytes, "cpu_seconds": limits.cpu_seconds },
+                        "limits": { "memory_bytes": limits.memory_bytes, "cpu_seconds": limits.cpu_seconds, "wall_seconds": limits.wall_seconds },
+                        "stopped_by": stop.as_ref().map(|s| s.json.clone()),
                         "policy_hash": policy.hash(),
                     })),
                 );
@@ -883,8 +922,15 @@ fn serve_under(
     // this process — the same record an L0 run reports, in the same shape. A snapshot: the caller
     // takes the log afterwards, to tell the operator on stderr.
     let egress = delulu_runtime::egress::snapshot();
+    if let Some(s) = &stop {
+        eprintln!("error: {}", s.message);
+    }
     if let Some(path) = report_out {
         let exit = served.as_ref().copied().unwrap_or(1);
+        let mut outcome = serde_json::json!({ "ran": true, "exit": exit });
+        if let Some(s) = &stop {
+            outcome["stopped_by"] = s.json.clone();
+        }
         let report = serde_json::json!({
             "command": "run",
             "schema": 1,
@@ -892,7 +938,7 @@ fn serve_under(
             "diagnostics": [],
             "summary": { "errors": if exit == 0 { 0 } else { 1 }, "warnings": 0 },
             "sandbox": with_image(policy.to_json_with(backend, &applied, &denied.0, denied.1)),
-            "outcome": { "ran": true, "exit": exit },
+            "outcome": outcome,
             "egress": egress.to_json(),
             // Who decided each use: the broker's node when the run was under it, else embedded.
             "custody": custody_record.clone().unwrap_or_else(|| serde_json::json!({ "mode": "embedded", "node": null })),
@@ -910,11 +956,16 @@ fn serve_under(
         // status was non-zero, which is exactly when the reason matters most: the channel diagnosis
         // was written, thrown away in a branch, and three CI runs read as an unexplained timeout.
         Err(e) => {
-            eprintln!("sandbox: {e}");
-            if status.success() {
+            if stop.is_none() {
+                eprintln!("sandbox: {e}");
+            }
+            if status.success() && stop.is_none() {
                 Err(io::Error::new(io::ErrorKind::UnexpectedEof, format!("the guest stopped mid-conversation: {e}")))
             } else {
-                Ok(status.code().unwrap_or(1))
+                // Exit 1, as the report says (SANDBOX-STOP-1): the guest's own status — 68, 9, a
+                // signal — is the OS's word about the guest, recorded in the audit chain, and a
+                // process exit that disagreed with its own report was the agent pass's finding.
+                Ok(1)
             }
         }
     }
@@ -960,6 +1011,42 @@ impl Guest {
             Guest::Contained(c) => c.kill(),
             #[cfg(target_os = "linux")]
             Guest::Vm(v) => v.kill(),
+        }
+    }
+
+    /// What the wall-clock watchdog needs to end this guest from its own thread: the process id on
+    /// Unix, the process handle on Windows — both valid until the guest is reaped, which happens only
+    /// after the watchdog has been stopped. `None` for a microVM, whose VMM has its own watchdog.
+    fn killer(&self) -> Option<Killer> {
+        match self {
+            #[cfg(unix)]
+            Guest::Plain(c) => Some(Killer(c.id() as usize)),
+            #[cfg(windows)]
+            Guest::Plain(c) => Some(Killer(std::os::windows::io::AsRawHandle::as_raw_handle(c) as usize)),
+            #[cfg(target_os = "linux")]
+            Guest::Contained(c) => Some(Killer(c.id() as usize)),
+            #[cfg(windows)]
+            Guest::Contained(c) => Some(Killer(c.raw_process() as usize)),
+            #[cfg(target_os = "linux")]
+            Guest::Vm(_) => None,
+        }
+    }
+
+    /// Whether a microVM's guest said it reached its memory ceiling.
+    fn vm_memory_ceiling(&self) -> bool {
+        match self {
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.memory_ceiling_reached(),
+            _ => false,
+        }
+    }
+
+    /// Whether a microVM's own watchdog ended it.
+    fn vm_wall_fired(&self) -> bool {
+        match self {
+            #[cfg(target_os = "linux")]
+            Guest::Vm(v) => v.wall_fired(),
+            _ => false,
         }
     }
 
@@ -1415,6 +1502,172 @@ pub fn attempt_launch() -> Result<String, String> {
 /// The program the probe hands a contained guest: it asks for nothing and does nothing.
 #[cfg(any(windows, target_os = "linux"))]
 const PROBE_PROGRAM: &str = "module probe\n\nfn main(root: Root) {\n}\n";
+
+/// A guest's process id (Unix) or process handle (Windows), for ending it from another thread.
+#[derive(Clone, Copy)]
+struct Killer(usize);
+
+impl Killer {
+    fn kill(self) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        // SAFETY: the guest has not been reaped (the watchdog is stopped first), so the id is its.
+        unsafe {
+            libc::kill(self.0 as libc::pid_t, libc::SIGKILL);
+        }
+        #[cfg(windows)]
+        // SAFETY: the handle is the guest's own, alive for as long as the guest value is.
+        unsafe {
+            windows_sys::Win32::System::Threading::TerminateProcess(self.0 as windows_sys::Win32::Foundation::HANDLE, 1);
+        }
+    }
+}
+
+/// The host's wall-clock watchdog for a process guest (SANDBOX-STOP-1): ends the guest when the
+/// operator's `--limits wall=` passes, unless stopped first. `stop` says whether it fired.
+struct WallWatch {
+    cancel: std::sync::mpsc::Sender<()>,
+    handle: std::thread::JoinHandle<bool>,
+}
+
+impl WallWatch {
+    fn start(k: Killer, wall: std::time::Duration) -> WallWatch {
+        let (cancel, rx) = std::sync::mpsc::channel::<()>();
+        let handle = std::thread::spawn(move || match rx.recv_timeout(wall) {
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                k.kill();
+                true
+            }
+            _ => false,
+        });
+        WallWatch { cancel, handle }
+    }
+
+    fn stop(self) -> bool {
+        drop(self.cancel);
+        self.handle.join().unwrap_or(false)
+    }
+}
+
+/// The processor time (user + system) of this process's REAPED children, as the OS accounts it.
+fn children_cpu() -> Option<std::time::Duration> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        // SAFETY: `getrusage` writes one `rusage`.
+        let r = unsafe {
+            let mut r: libc::rusage = std::mem::zeroed();
+            if libc::getrusage(libc::RUSAGE_CHILDREN, &mut r) != 0 {
+                return None;
+            }
+            r
+        };
+        let tv = |t: libc::timeval| std::time::Duration::new(t.tv_sec as u64, (t.tv_usec as u32).saturating_mul(1000));
+        Some(tv(r.ru_utime) + tv(r.ru_stime))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
+}
+
+/// What the host knows about how a guest ended, beyond its exit status.
+struct StopEvidence {
+    /// Which watchdog ended it, if one did.
+    wall_fired: Option<&'static str>,
+    /// Its processor time, measured by the OS once it was reaped (Unix).
+    #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
+    guest_cpu: Option<std::time::Duration>,
+    /// A microVM guest's own console line: its memory ceiling was reached.
+    vm_memory: bool,
+}
+
+/// A named stop: the operator's sentence and the report's `stopped_by`.
+struct Stop {
+    message: String,
+    json: serde_json::Value,
+}
+
+/// Why a guest that ended without saying goodbye was stopped — ONLY from evidence: the host's own
+/// watchdog; the guest's allocator status ([`crate::ceiling::GUEST_MEMORY_EXIT`], which the program
+/// cannot choose); `SIGXCPU`, which exists for exactly this; on Windows the job's own accounting of
+/// processor time and peak memory. Anything else stays unnamed ("closed the channel without saying
+/// goodbye"), because a record that guesses which limit fired would be read as a measurement.
+#[allow(unused_variables)]
+fn stop_reason(st: &std::process::ExitStatus, limits: crate::jail::Limits, ev: StopEvidence, jail: &crate::jail::Jail) -> Option<Stop> {
+    let budgets = "Budgets are the operator's, set per run with `--limits";
+    if let Some(source) = ev.wall_fired {
+        if let Some(w) = limits.wall_seconds {
+            return Some(Stop {
+                message: format!("the run was stopped: it ran for {w} s of wall-clock time, its budget. {budgets} wall=SECONDS`"),
+                json: serde_json::json!({ "dimension": "wall", "budget_seconds": w, "source": source }),
+            });
+        }
+        return Some(Stop {
+            message: "the run was stopped: the microVM passed its wall-clock ceiling (twice its processor time, at least a minute)".to_string(),
+            json: serde_json::json!({ "dimension": "wall", "source": source }),
+        });
+    }
+    let memory = |observed: Option<u64>, source: &str| {
+        let mut json = serde_json::json!({ "dimension": "memory", "budget_bytes": limits.memory_bytes, "source": source });
+        if let Some(o) = observed {
+            json["observed_bytes"] = serde_json::json!(o);
+        }
+        Stop {
+            message: format!(
+                "the run was stopped: the guest reached its memory ceiling of {} (D-V2-25), and the operating \
+                 system refused it more. {budgets} mem=BYTES`",
+                crate::budget::human_bytes(limits.memory_bytes)
+            ),
+            json,
+        }
+    };
+    if st.code() == Some(crate::ceiling::GUEST_MEMORY_EXIT) {
+        return Some(memory(None, "the guest's allocator, refused at the ceiling"));
+    }
+    if ev.vm_memory {
+        return Some(memory(None, "the microVM guest's allocator, refused at the VM's memory"));
+    }
+    let cpu = |observed: Option<std::time::Duration>, source: &str| {
+        let mut json = serde_json::json!({ "dimension": "cpu", "budget_seconds": limits.cpu_seconds, "source": source });
+        if let Some(o) = observed {
+            json["observed_seconds"] = serde_json::json!(o.as_secs_f64());
+        }
+        Stop {
+            message: format!(
+                "the run was stopped: the guest used its {} s of processor time (D-V2-25). {budgets} cpu=SECONDS`",
+                limits.cpu_seconds
+            ),
+            json,
+        }
+    };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use std::os::unix::process::ExitStatusExt as _;
+        if st.signal() == Some(libc::SIGXCPU) {
+            return Some(cpu(ev.guest_cpu, "SIGXCPU from the operating system"));
+        }
+        // With equal soft and hard processor-time limits the kernel's answer is SIGKILL, which is also
+        // what a host's death or an operator sends — so it is named a processor-time stop only when the
+        // OS's own accounting of the reaped guest shows the budget spent.
+        if st.signal() == Some(libc::SIGKILL) {
+            if let Some(used) = ev.guest_cpu.filter(|u| u.as_secs_f64() >= limits.cpu_seconds as f64 * 0.95) {
+                return Some(cpu(Some(used), "the operating system's processor-time limit (SIGKILL), with the time the OS accounted"));
+            }
+        }
+    }
+    #[cfg(windows)]
+    if let Some((used, peak)) = jail.usage() {
+        // The job ends a process at its limit, so a measurement at (or within 5% of) the budget IS
+        // the limit firing; one well below it is some other death, and stays unnamed.
+        if used.as_secs_f64() >= limits.cpu_seconds as f64 * 0.95 {
+            return Some(cpu(Some(used), "the job's processor-time accounting"));
+        }
+        if peak as f64 >= limits.memory_bytes as f64 * 0.95 {
+            return Some(memory(Some(peak), "the job's peak-memory accounting"));
+        }
+    }
+    let _ = cpu;
+    None
+}
 
 /// Did the OS kill this guest for exceeding a ceiling, and can we say WHICH?
 ///

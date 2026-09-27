@@ -12,10 +12,13 @@
 //! 1. `delulu authority --grants` names what the program needs; the principal delegates exactly that
 //!    as a lease, and SEALS one directory inside the read scope and GUARDS the write scope.
 //! 2. The guest's write is refused DL1410 with the exact `guard request` command; nothing is written.
-//! 3. The request (with `--why`) makes a retry DL1411; the principal approves; the retry writes.
+//! 3. The request (with `--why`) makes a retry DL1411; a denial makes it DL1412; a permit for ONE use
+//!    lets exactly one write through and the next is DL1410 again; a standing approval then writes.
 //! 4. A read inside the sealed directory is DL1413 — for the guest AND for the ordinary run (before
 //!    GUARD-SCOPE-1 both READ it: a rule on a directory sealed only the directory entry). A file beside
 //!    it is still readable.
+//!    The same sealed file reached through a link inside the grant, another case, or a Windows 8.3
+//!    name is DL1413 too (GUARD-ALIAS-1: the Guard decides on the path the use resolves to).
 //! 5. A local `--grant` beside the lease is refused; revoking the node stops the guest.
 //! 6. The report names the node the guest ran under; `audit verify` is green over all of it.
 
@@ -56,6 +59,37 @@ fn owner_code(t: &str) -> String {
     let tail = &t[i..];
     let end = tail.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(tail.len());
     tail[..end].to_string()
+}
+
+/// A directory link any user can make: a junction on Windows (a symlink there needs privilege), a
+/// symlink elsewhere. `false` when this host will not make one.
+fn make_dir_link(target: &Path, link: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link).is_ok()
+    }
+}
+
+/// The Windows 8.3 short name of `dir/name`, when the volume generates them (many do not).
+fn short_name(dir: &Path, name: &str) -> Option<String> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let o = Command::new("cmd").args(["/C", "dir", "/x", "/ad"]).current_dir(dir).output().ok()?;
+    String::from_utf8_lossy(&o.stdout).lines().find_map(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        (f.len() >= 5 && f[f.len() - 1] == name && f[f.len() - 2].contains('~')).then(|| f[f.len() - 2].to_string())
+    })
 }
 
 /// The path as a program and a rule spell it: absolute, forward slashes.
@@ -138,12 +172,31 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
     assert!(text(&r).contains("custody: daemon"), "{}", text(&r));
     assert!(!out.join("result.txt").exists(), "nothing written under a guard block");
 
-    // 3. Request → DL1411 → approve → the guest writes, and the report names its node.
-    let q = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &format!("fs_write:{o}"), "--why", "write the result"]);
-    assert!(q.status.success(), "request: {}", text(&q));
-    let req = String::from_utf8_lossy(&q.stdout).trim().to_string();
+    // 3. Request → DL1411 → DENY → DL1412; a new request → approve ONE use → exactly one write, and the
+    //    next is refused again; the report names the node.
+    let request = || {
+        let q = delulu_in(&cwd, &state, &["guard", "request", &node, "--use", &format!("fs_write:{o}"), "--why", "write the result"]);
+        assert!(q.status.success(), "request: {}", text(&q));
+        String::from_utf8_lossy(&q.stdout).trim().to_string()
+    };
+    let req = request();
     let r = run("writer.delulu", true, &[]);
     assert!(text(&r).contains("DL1411") && text(&r).contains(&req), "pending: {}", text(&r));
+    let dn = delulu_in(&cwd, &state, &["guard", "deny", &req, "--owner", &owner, "--comment", "not this one"]);
+    assert!(dn.status.success(), "deny: {}", text(&dn));
+    let r = run("writer.delulu", true, &[]);
+    assert!(text(&r).contains("DL1412"), "a denied request refuses the guest: {}", text(&r));
+    assert!(!out.join("result.txt").exists(), "nothing written after a denial");
+    let req = request();
+    let ap = delulu_in(&cwd, &state, &["guard", "approve", &req, "--owner", &owner, "--uses", "1", "--comment", "once"]);
+    assert!(ap.status.success(), "approve: {}", text(&ap));
+    let r = run("writer.delulu", true, &[]);
+    assert_eq!(r.status.code(), Some(0), "the single-use permit lets the guest write once: {}", text(&r));
+    std::fs::remove_file(out.join("result.txt")).unwrap();
+    let r = run("writer.delulu", true, &[]);
+    assert!(text(&r).contains("DL1410"), "the permit was used up: the next write is guarded again: {}", text(&r));
+    assert!(!out.join("result.txt").exists(), "no second write on a spent permit");
+    let req = request();
     let ap = delulu_in(&cwd, &state, &["guard", "approve", &req, "--owner", &owner, "--comment", "fine"]);
     assert!(ap.status.success(), "approve: {}", text(&ap));
     let report = base.join("report.json");
@@ -163,6 +216,43 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
         assert!(!all.contains("THE-SEALED-KEY"), "sandbox={sandbox}: the sealed bytes never reach the program: {all}");
     }
 
+    // 4b. GUARD-ALIAS-1: the seal holds whatever the path is CALLED. A link inside the grant aimed at
+    //     the sealed directory (a junction on Windows, which any user can make; a symlink elsewhere),
+    //     another case where the filesystem folds case, and the Windows 8.3 short name when the volume
+    //     makes one. Before the fix the Guard decided on the path as spelled, and the alias read the key.
+    let mut spellings = vec!["secret/key.txt".to_string()];
+    if make_dir_link(&data.join("secret"), &data.join("alias")) {
+        spellings.push("alias/key.txt".to_string());
+    }
+    if cfg!(any(windows, target_os = "macos")) {
+        spellings.push("SECRET/key.txt".to_string());
+    }
+    if let Some(short) = short_name(&data, "secret") {
+        spellings.push(format!("{short}/key.txt"));
+    }
+    for rel in &spellings {
+        let prog = format!(
+            "module spell
+
+fn main(root: Root) ! {{Read, Write}} {{
+    let out = root.console()
+                 let fr = root.fs_read(\"{d}\")
+    match fr.read_text(\"{rel}\") {{
+                     Ok(v) => out.println(\"read: \" + v),
+        Err(_) => out.println(\"refused\")
+    }}
+}}
+"
+        );
+        std::fs::write(cwd.join("spell.delulu"), &prog).unwrap();
+        for sandbox in [true, false] {
+            let r = run("spell.delulu", sandbox, &[]);
+            let all = text(&r);
+            assert!(all.contains("DL1413"), "`{rel}` (sandbox={sandbox}) must meet the seal: {all}");
+            assert!(!all.contains("THE-SEALED-KEY"), "`{rel}` (sandbox={sandbox}) read the sealed key: {all}");
+        }
+    }
+
     // 5. A local grant beside a lease is refused, for the guest as for the ordinary run; revocation
     //    stops the guest.
     let r = run("reader.delulu", true, &["--grant", "console"]);
@@ -178,7 +268,7 @@ fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
     let a = delulu_in(&cwd, &state, &["audit", "verify"]);
     assert!(a.status.success(), "audit verify: {}", text(&a));
     let tail = text(&delulu_in(&cwd, &state, &["audit", "tail", "200"]));
-    for event in ["guard_block", "guard_request", "guard_approve", "sandbox-launch"] {
+    for event in ["guard_block", "guard_request", "guard_deny", "guard_approve", "guard_permit_use", "sandbox-launch"] {
         assert!(tail.contains(event), "the chain records `{event}`: {tail}");
     }
     drop(_daemon);
