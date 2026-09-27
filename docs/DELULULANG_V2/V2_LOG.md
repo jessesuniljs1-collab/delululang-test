@@ -1862,10 +1862,18 @@ hash is unchanged. Verified on Windows (memory, cpu with the job's measurement, 
 cpu (SIGKILL, 3.0 s accounted) and wall at L1; cpu (5.0 s accounted on the VMM) and wall (the VM's watchdog)
 at L2 (`verify-fixes-linux.log` in the pass folder);
 `sandbox_run_cli.rs::a_ceiling_that_stops_a_sandboxed_run_is_named_and_the_exit_agrees_with_the_report`.
-**OPEN: the memory stop at L2.** The VM boots a prebuilt image whose guest binary predates `ceiling.rs`, so
-the console line is not written yet; rebuilding the image from the Windows-mounted checkout failed in
-`libffi-sys`'s configure (`verify-vm-memory.log`). Rebuild it from a clone on the Linux filesystem
-(`scripts/microvm/build-image.sh ~/microvm-image-b`) and rerun `verify-vm-memory.sh`.
+**The memory stop at L2 — closed in P5d.** Two layers were missing. The image was rebuilt from a clone on
+the Linux filesystem (from `/mnt/d`, `libffi-sys`'s configure failed); with the new guest the stop was STILL
+unnamed, because nothing limited the guest's own address space inside the VM: Linux overcommitted, the
+allocator never saw a refusal, and the guest kernel's OOM handling ended the VM silently. The microVM
+guest now caps its own `RLIMIT_DATA` at 85% of the memory free when it starts (`sysinfo`, no `/proc`;
+reported as the new known word "memory refused to the guest before its kernel runs out"), so the allocator
+meets the ceiling first and `ceiling.rs` writes its console line. The next run named the stop — but the
+line also reached the operator, because the serial console delivers a line in pieces; the relay now passes
+the console a LINE at a time (a partial line held to one read's worth) and withholds that line whole.
+Verified in WSL with the rebuilt image: `stopped_by` memory, source "the microVM guest's allocator", the
+line withheld, an ordinary program unaffected, `microvm_criterion8` green, `microvm_cli` 9/10 (the tenth
+needs root, which CI's microvm job has) — `verify-vm-memory3.log`, `verify-vm-relay.log`.
 
 **GUARD-STALE-1 (MEDIUM, fixed) — found by the head chef's own end-to-end test.** Extending
 `sandbox_guard_e2e.rs` with deny and a single-use permit: once the new request's permit was spent, the

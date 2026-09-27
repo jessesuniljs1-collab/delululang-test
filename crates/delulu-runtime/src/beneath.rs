@@ -688,7 +688,11 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_fifo_in_the_grant_is_refused_at_once_for_read_and_write() {
-        let b = base("fifo");
+        // Under `/tmp`, not the temp dir: the socket below needs a path macOS accepts (104 bytes,
+        // and its temp dir alone is ~50 — the first macOS CI run refused this test's socket).
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let b = PathBuf::from("/tmp").join(format!("dlbf-{}-{}", std::process::id(), t % 1_000_000_000));
+        fs::create_dir_all(b.join("scope")).unwrap();
         let scope = b.join("scope");
         let fifo = scope.join("pipe");
         let c = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();

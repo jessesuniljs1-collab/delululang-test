@@ -24,10 +24,10 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 275 |
-| Rust lines | 143369 |
+| Rust lines | 143416 |
 | Rust files outside `src/` (test/bench targets) | 120 |
 | Markdown documents | 204 |
-| Markdown lines | 56586 |
+| Markdown lines | 56595 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
@@ -88,7 +88,7 @@ The DeluluLang CLI: check | run | repl | authority
 
 - **Depends on:** `delulu-atlas`, `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-measure`, `delulu-runtime`, `delulu-survey`, `delulu-syntax`, `delulu-wasm`
 - **Depended on by:** —  ← change this crate, and these must be re-checked
-- **Modules:** 37 files, 33423 lines
+- **Modules:** 37 files, 33463 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -118,7 +118,7 @@ The DeluluLang CLI: check | run | repl | authority
 | `src/lsp.rs` | 1995 | `delulu lsp` — the language server (Stage 8, spec §3). Stdio, LSP 3.17, one instance |
 | `src/main.rs` | 97 | The `delulu` CLI (spec §9.5). Terminal-first: everything the language can do is reachable |
 | `src/mcp.rs` | 619 | P4-03: `delulu mcp` — a Model Context Protocol server over stdio, READ-ONLY by construction |
-| `src/microvm.rs` | 1393 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
+| `src/microvm.rs` | 1433 | PS-C — L2, the microVM on Linux + KVM (V2 security model §6–§7). |
 | `src/morph_file.rs` | 257 | Loading surface morphs from disk (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/new.rs` | 312 | `delulu new` — start a package that already works. |
 | `src/pipe_channel.rs` | 393 | PS-B-03: the sandbox channel of a Windows guest started under a separate identity. |
@@ -290,15 +290,15 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18710 lines
+- **Modules:** 22 files, 18717 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1226 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
-| `src/beneath.rs` | 765 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
+| `src/beneath.rs` | 769 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
 | `src/broker.rs` | 671 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
-| `src/channel.rs` | 1186 | `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire |
+| `src/channel.rs` | 1189 | `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 266 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
 | `src/cycles.rs` | 230 | The per-worker cycle collector (Stage 10 phase 10d, Track B1, spec §3). |

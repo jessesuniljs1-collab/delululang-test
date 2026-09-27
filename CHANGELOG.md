@@ -38,7 +38,8 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   report had no `stopped_by`, and on Windows the exit (68, 9) disagreed with the report. A memory,
   processor-time or wall-clock stop under `--sandbox` or `--isolation microvm` is now named in words and in
   `outcome.stopped_by` (with how it was known), and the exit is 1, as the report says. (A microVM's
-  memory stop needs a guest image rebuilt with this change; until then it is still unnamed.)
+  memory stop is named from P5d: the guest caps its own data below the VM's memory, and a rebuilt guest
+  image carries it.)
 - **New: `--limits wall=SECONDS` under `--sandbox` and `--isolation microvm`** — refused before; now a
   host watchdog for a process guest, and the tighter of it and the VM's own ceiling for a microVM.
 - **Fixed: the Guard told a retried use the principal's OLDEST decision** (GUARD-STALE-1): after a denial
