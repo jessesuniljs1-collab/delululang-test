@@ -572,6 +572,8 @@ fn handle(
         }
         ReqBody::Expose { node, name, span } => {
             let node = GrantId::from_trusted(node);
+            // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
+            secrets.refresh();
             failed.set(false);
             // Guard-aware expose (Stage 5 chunk 6): declassify is guarded by default, so a delegated
             // node's expose is gated (DL1410 without a permit). The agent-side warn note (bypass /
@@ -594,8 +596,33 @@ fn handle(
                 Err(d) => (deny_response(&d), false),
             }
         }
+        ReqBody::Verify { node, a, b, span } => {
+            let node = GrantId::from_trusted(node);
+            // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
+            secrets.refresh();
+            failed.set(false);
+            let (result, _warn) = broker.verify_guarded(&node, &a, &b, secrets, span);
+            match result {
+                Ok(equal) => {
+                    if failed.get() {
+                        return (
+                            Response::Error {
+                                code: "DL1401".to_string(),
+                                message: "broker could not append the verify audit record — refused (fail closed, invariant 26)".to_string(),
+                                requires_human: true,
+                            },
+                            false,
+                        );
+                    }
+                    (Response::Verified { equal }, false)
+                }
+                Err(d) => (deny_response(&d), false),
+            }
+        }
         ReqBody::SecretMap { node, name, op, arg } => {
             let node = GrantId::from_trusted(node);
+            // SECRETS-STALE-1: a secret stored by `delulu secrets set` while the daemon runs.
+            secrets.refresh();
             match broker.secret_map(&node, &name, &op, arg.as_deref(), secrets) {
                 Ok(new_name) => (Response::Mapped { name: new_name }, false),
                 Err(d) => (deny_response(&d), false),

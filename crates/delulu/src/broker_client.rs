@@ -277,6 +277,23 @@ impl Custody for BrokerClientCustody {
         }
     }
 
+    fn verify(&mut self, a: &str, b: &str, span: Option<&str>) -> Result<bool, CustodyDenial> {
+        let resp = rpc(
+            &self.state_dir,
+            ReqBody::Verify {
+                node: self.node.as_str().to_string(),
+                a: a.to_string(),
+                b: b.to_string(),
+                span: span.map(str::to_string),
+            },
+        )?;
+        match resp {
+            Response::Verified { equal } => Ok(equal),
+            Response::Error { code, message, .. } => Err(CustodyDenial::new(static_code(&code), message)),
+            other => Err(dl1401(&format!("unexpected verify response: {other:?}"))),
+        }
+    }
+
     fn refresh_epoch(&mut self) {
         let _ = self.refresh_cache();
     }

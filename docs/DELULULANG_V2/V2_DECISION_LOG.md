@@ -934,7 +934,10 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    a lease or rule names the directory as it resolved WHEN IT WAS WRITTEN — repointing a symlinked path
    afterwards does not move the authority with it. Leases and rules written before this change keep
    their old spelling and can now fail to match (fail-closed); re-delegate or re-set them.
-3. **A sandboxed stop is named only from evidence** (SANDBOX-STOP-1): the guest's allocator status, a
+3. **`Secret.verify` of broker-held secrets is a declassification of ONE BIT about BOTH secrets**
+   (VERIFY-FABRICATED-1): computed broker-side, the Guard asked for each secret, audited — and a custody
+   without the bytes refuses rather than answers.
+4. **A sandboxed stop is named only from evidence** (SANDBOX-STOP-1): the guest's allocator status, a
    microVM guest's console line, the signal, the OS's own accounting, the host's watchdog — never an exit
    code that does not say. The process exit is the report's.
 

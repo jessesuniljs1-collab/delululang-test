@@ -6996,6 +6996,16 @@ fn cmd_grants_delegate(args: &[String], state_dir: &std::path::Path, json: bool)
         } else if let Some(v) = flag_value(args, &mut i, "--net") {
             net.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--secret") {
+            // A delegation NAMES a secret the broker holds; it never carries the value. `NAME=VALUE`
+            // was accepted and stored as a name no program could ever mint (agent pass 2).
+            if v.contains('=') {
+                let name = v.split('=').next().unwrap_or_default();
+                eprintln!(
+                    "error: `--secret {v}`: a delegation names a secret the broker already holds — \
+                     `--secret {name}`. Store its value first with `delulu secrets set {name} VALUE`."
+                );
+                return 2;
+            }
             secrets.push(v);
         } else if let Some(v) = flag_value(args, &mut i, "--declassify") {
             declassify.push(v);

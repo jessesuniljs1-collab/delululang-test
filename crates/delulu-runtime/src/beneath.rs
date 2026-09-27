@@ -301,6 +301,11 @@ mod imp {
         };
         let fd = match step(cur.as_raw_fd(), last, flags) {
             Ok(fd) => fd,
+            // A unix socket (ENXIO) or a device with no driver (ENODEV) is not a regular file: say so,
+            // as for a FIFO, rather than the OS's `os error 6` (found by the Sonnet 5 Linux tester).
+            Err(Outcome::Io(e)) if matches!(e.raw_os_error(), Some(libc::ENXIO) | Some(libc::ENODEV)) => {
+                return Outcome::Io(not_regular());
+            }
             Err(o) => return o,
         };
         let kind = match file_type(fd.as_raw_fd()) {
@@ -693,6 +698,13 @@ mod tests {
         assert!(matches!(read_text(&scope, &fifo), Outcome::Io(_)));
         assert!(matches!(write_text(&scope, &fifo, "x", false), Outcome::Io(_)));
         assert!(t.elapsed() < std::time::Duration::from_secs(5), "refused without blocking");
+        // A unix socket in the grant: the same words, not `os error 6` (Sonnet 5 Linux tester).
+        let sock = scope.join("sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        match read_text(&scope, &sock) {
+            Outcome::Io(e) => assert!(e.to_string().contains("not a regular file"), "{e}"),
+            o => panic!("{o:?}"),
+        }
         let _ = fs::remove_dir_all(&b);
     }
 

@@ -1394,6 +1394,8 @@ impl Interp {
             // the bytes cross for the first time here, via `Custody::expose` (audited with the span).
             // In embedded mode the secret is local and reveals in-process (Stage 1–4 behavior).
             Value::Secret(s) if name.name == "expose" => self.expose_secret(s, span),
+            // VERIFY-FABRICATED-1: a broker-held secret is compared by the broker, never answered here.
+            Value::Secret(s) if name.name == "verify" => self.verify_secret(s, &argvals, span),
             // T-ForeignCall (spec §4): a method on a bound lib handle marshals + calls foreign code.
             Value::Foreign(h) => self.call_foreign(h, &name.name, &argvals, span),
             // T-Py (spec §5): a `Cap[Python]` operation (import/of_*/list/to_*) runs the embedded
@@ -2046,6 +2048,31 @@ impl Interp {
     /// receiver is an opaque broker handle — fetch the bytes through `Custody::expose` (a synchronous
     /// broker round-trip, audited with the calling span). This is the ONLY place daemon secret bytes
     /// enter the program process (invariant 23 / spec §4.4).
+    /// `Secret.verify`: two local secrets compare here, as always; two broker-held ones are compared
+    /// by the broker (`Custody::verify` — the Guard decides, the chain records it); one of each is
+    /// refused, because neither side holds both (VERIFY-FABRICATED-1: the old path answered `false`).
+    fn verify_secret(&self, s: &Rc<SecretVal>, args: &[Value], span: delulu_diag::Span) -> Result<Value, Fault> {
+        let Some(Value::Secret(other)) = args.first() else {
+            return prim::call_secret_method(s, "verify", args, span);
+        };
+        match (s.handle_name(), other.handle_name()) {
+            (None, None) => prim::call_secret_method(s, "verify", args, span),
+            (Some(a), Some(b)) => {
+                let span_str = format!("{}:{}:{}", span.file, span.start, span.end);
+                match self.custody.borrow_mut().verify(a, b, Some(&span_str)) {
+                    Ok(equal) => Ok(Value::Bool(equal)),
+                    Err(d) => Err(Fault::at(d.code, d.message, span)),
+                }
+            }
+            _ => Err(Fault::at(
+                "DL0904",
+                "`Secret.verify` of a broker-held secret against one this process holds: neither side has both, \
+                 so the comparison cannot be made — hold both in the broker (a lease) or both locally (`--grant secret:`)",
+                span,
+            )),
+        }
+    }
+
     fn expose_secret(&self, s: &Rc<SecretVal>, span: delulu_diag::Span) -> Result<Value, Fault> {
         match s.handle_name() {
             Some(name) => {

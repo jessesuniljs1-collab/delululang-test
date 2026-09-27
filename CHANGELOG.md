@@ -9,6 +9,22 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P5d: `Secret.verify` under a lease, and broker secrets stored while it runs, 2026-09-27
+
+- **Fixed: `Secret.verify` under a lease returned a made-up `false`** (VERIFY-FABRICATED-1, found by the
+  Sonnet 5 testers on Windows and Linux independently). A leased program's secrets are broker handles
+  with no bytes in its process, and `verify` compared the handles — `false` even for equal secrets, with
+  the Guard's `declassify` tier never asked. The broker now computes the bit where the bytes are: the
+  lease must hold `Declassify` and both secrets, the Guard decides for each secret, the chain records it.
+  A broker-held secret compared with a local one is refused in words instead of answered.
+- **Fixed: a secret stored with `delulu secrets set` while the broker ran was invisible to it**
+  (SECRETS-STALE-1) — refused as "not in the store" until a restart, which read as "`expose` under a lease
+  never works". The broker re-reads its store before every secret operation.
+- `grants delegate --secret NAME=VALUE` is refused (a lease names a secret the broker holds; values go in
+  with `delulu secrets set`), and a secret the broker does not hold says how to store it.
+- CI after P5c: a lease's resolved scope now meets a program path spelled from an 8.3 working directory
+  (Windows runners); "broker unreachable" is said in words on Linux and macOS.
+
 ## Unreleased — V2 P5c: the Guard decides on the real path; sandbox stops are named, 2026-09-27
 
 - **Security, fixed: a sealed directory could be reached by another name** (GUARD-ALIAS-1). The Guard

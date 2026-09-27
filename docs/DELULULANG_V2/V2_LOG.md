@@ -1877,3 +1877,75 @@ matching request. Fail-closed throughout, but the principal's latest decision wa
 **Lesson, recorded in memory:** Haiku 4.5 summaries overclaimed (checks marked done whose logs show they
 never ran); a pass is judged on its logs, briefs now ask for each check's command and verbatim output, and
 the headline behaviours are held by the head chef's own tests regardless.
+
+
+## 2026-09-27 — P5d: `Secret.verify` under a lease (VERIFY-FABRICATED-1), SECRETS-STALE-1, and CI after P5c
+
+**The session limit** cut the two Sonnet 5 testers off mid-pass; both had written checkpoints on the
+head chef's instruction, and both were RESUMED with `SendMessage` after the reset (the standing rule:
+resume, never respawn). The first CI runs of `5e2c8fd` and `0940ea1` were red on all three OSes; the causes
+were fixed in `f284a37` (below) before anything else.
+
+**CI after P5c (`f284a37`).** (1) Windows: a lease's scope is stored as the path it resolves to
+(GUARD-ALIAS-1), but minting a capability compared it LEXICALLY with the program's path, spelled from the
+runner's 8.3 working directory (`C:\Users\RUNNER~1\…`) — a legitimate `fs_read` was refused DL0703. The
+mint is decided on disk only now (interpreter and wasm); `sandbox_guard_e2e.rs` step 4c names the granted
+directory through a link and the 8.3 name, and fails against the old lexical gate. (2) Linux/macOS: with
+no broker, `grants`/`guard`/lease runs printed `No such file or directory (os error 2)` — caught by the new
+sweep (`unreadable_paths.rs`); `cli::broker_unreachable_detail` says it in words at all four sites. (3)
+macOS: the e2e test's socket path was 109 bytes (limit 103) — shortened.
+
+**VERIFY-FABRICATED-1 (found by BOTH Sonnet testers, independently; filed by them as CRITICAL — the
+head chef's verdict: a real defect, but not a disclosure).** Under a lease a program's secrets are broker
+HANDLES with no bytes in its process. `Secret.verify` was never routed to the broker: `SecretVal::verify`
+of two handles returned a constant `false` (the code said "broker-side verify is post-chunk-3", flagged and
+then forgotten). The Windows tester proved it with byte-identical broker-held secrets: `match: false`, even
+with `declassify:*` SEALED, and no declassify record in the chain. A constant carries no information, so
+nothing leaked; but the answer was fabricated — a program checking a token under a lease was told "no
+match" for a match — and the Guard's decision was skipped. Fixed: `Broker::verify_guarded` computes the bit
+where the bytes are (the node must hold `Declassify` and BOTH secrets in scope, the store must hold both),
+the Guard decides for EACH secret (the bit depends on both; a permit on one does not buy the other), the
+comparison is constant-time over equal lengths, and a `verify` record carries the decision; the wire gains
+`ReqBody::Verify`/`Response::Verified`; `Custody::verify` (default: refuse — a custody without the bytes
+must never answer); the interpreter routes two handles to it, two locals compare as before, and a mixed
+pair is refused in words. Tests: broker units (the bit from the bytes; per-secret Guard), and
+`secret_verify_cli.rs` through the binary (DL1410 until approved; then `same: true`, `diff: false`; the
+chain records it). A mutant that removes the interpreter's route prints `same: false` with no Guard decision
+— the original defect — and fails the test.
+
+**SECRETS-STALE-1 (found writing that test).** `delulu secrets set` writes `secrets.json` from its own
+process; the daemon read the store once, at start. A secret stored while the broker ran was refused
+"not in the store" until a restart — which is what the testers' "SECRET-DELEGATE-DEAD-1: `expose` under a
+lease can never succeed" was (the Windows tester had run `secrets set` after starting the broker). Fixed:
+`SecretStore::refresh` re-reads the file before every `expose`, `verify` and `map` (a removed file is an
+empty store; an unreadable one keeps what was loaded). `secret_verify_cli.rs` stores the secrets AFTER
+the broker starts and exposes one after approval; a mutant without the refresh fails it. Also: `grants
+delegate --secret NAME=VALUE` stored the whole string as a name no program could mint — refused now,
+pointing at `secrets set`; and a secret the broker does not hold says how to store it rather than naming a
+scope dimension.
+
+**The Windows Sonnet tester's pass (finished; resumed once).** Backed by its logs: the permit machinery
+(request/deny DL1412, approve with uses and TTL, exhaustion, permit revoke, no cross-node or cross-pattern
+use, a sealed path not approvable); delegation trees (grandchild, cascading revocation at L0 and L1, effect,
+scope and budget attenuation DL0802, no window after a parent's revocation); concurrency (five parallel runs
+racing a seal and a revocation: no unauthorized effect at L1 or L0); the daemon as a target (stopped →
+DL1401, cross-broker tokens DL1407 both ways, another state directory harmless); audit tamper (a byte, a
+deleted record, a tampered bundle reconciled — all DL1405 or refused). Its remaining MEDIUM, recorded for
+the owner rather than changed: a broker restart forgets delegated nodes and permits (fail-closed: a stale
+token is "unknown node"), and the chain's `seq` restarts at 1 per daemon life (the chain's integrity is its
+hashes and anchor — D-V2-43 item 2).
+
+**The Linux Sonnet tester's pass (finished; resumed once).** It found VERIFY-FABRICATED-1 independently and,
+on retest, confirmed the constant `false` for equal and unequal secrets alike; its "expose never works even
+with `secrets set` first" used the order broker start → `secrets set` → delegate, which is SECRETS-STALE-1
+exactly (the e2e test now uses that order and exposes after approval). Two more, both fixed here: a unix
+**socket** in a granted directory surfaced `os error 6` (ENXIO) where a FIFO says "not a regular file" —
+`beneath.rs` now maps ENXIO/ENODEV to the same words (Linux unit test with a bound `UnixListener`); and
+`SKILL.md` said a program using secrets exits 2 under `--sandbox` before anything runs, while the sandbox
+refuses a secret at its first use (exit 1, a channel-violation record) — the page now says what happens.
+Backed by its logs: the permit machinery, delegation trees with cascading revocation through a grandchild,
+the daemon as a target (no broker, two brokers, MAC-bound tokens refused across brokers, a garbage state
+directory), audit tamper (subtle edit, deleted record, tampered bundle), five parallel sandboxed runs losing
+the race to a revocation with nothing written, items 1/2/4 under `--isolation microvm` matching L0, FIFO and
+`/proc/self` refusals. Informational, recorded for the owner: `grants revoke` needs no owner code (revocation
+only narrows; a same-account process that can read a node id can end that lease).

@@ -754,9 +754,10 @@ impl SecretVal {
         }
     }
 
-    /// Constant-time-ish comparison for `Secret.verify` (no early return on mismatch). Two daemon
-    /// handles (no local bytes) never compare equal in v0.5 — broker-side `verify` is post-chunk-3
-    /// (flagged); embedded comparison is unchanged.
+    /// Constant-time-ish comparison for `Secret.verify` of two LOCAL secrets (no early return on
+    /// mismatch). A daemon handle carries no bytes, so it is never compared here: the interpreter
+    /// routes two handles to the broker (`Custody::verify`) and refuses a mixed pair
+    /// (VERIFY-FABRICATED-1 — this used to be where two handles got a made-up `false`).
     pub fn verify(&self, other: &SecretVal) -> bool {
         let (SecretInner::Local(a), SecretInner::Local(b)) = (&self.inner, &other.inner) else {
             return false;

@@ -114,8 +114,9 @@ more than the rest:
 - `denied` — what the program TRIED and was refused, each entry naming its code.
 
 The sandbox is **opt-in**: ask for it. It refuses rather than downgrading — a program using actors,
-foreign C, Python, plugins, devices or secrets exits 2 with a named refusal, because a sandbox that
-quietly did not apply is the failure the design exists to prevent. `--sandbox=off` is the explicit
+foreign C, Python, plugins or devices exits 2 with a named refusal before anything runs, and a secret is
+refused at its first use (exit 1, recorded as a channel violation), because a secret's bytes never cross
+the channel. A sandbox that quietly did not apply is the failure the design exists to prevent. `--sandbox=off` is the explicit
 opposite; say it deliberately.
 
 `delulu explain E-SANDBOX` is the full model with every caveat.

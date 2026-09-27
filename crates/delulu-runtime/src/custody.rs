@@ -53,6 +53,17 @@ pub trait Custody {
     /// this is the daemon path where the bytes cross for the first time on `expose`.
     fn expose(&mut self, name: &str, span: Option<&str>) -> Result<String, CustodyDenial>;
 
+    /// `Secret.verify` of two broker-held secrets (VERIFY-FABRICATED-1): the broker computes the bit,
+    /// the Guard decides, the chain records it. A custody that holds no broker secrets refuses — it
+    /// must never answer, because an answer without the bytes can only be made up.
+    fn verify(&mut self, a: &str, b: &str, span: Option<&str>) -> Result<bool, CustodyDenial> {
+        let _ = (a, b, span);
+        Err(CustodyDenial::new(
+            "DL0904",
+            "this custody holds no broker secrets, so it cannot compare two (internal wiring error)",
+        ))
+    }
+
     /// Refresh the cached revocation-epoch snapshot (no-op for embedded). The daemon client refreshes
     /// lazily on the next epoch-class check when the cache is older than `--epoch-ms`.
     fn refresh_epoch(&mut self);

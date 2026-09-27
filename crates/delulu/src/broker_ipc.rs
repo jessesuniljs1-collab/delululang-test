@@ -179,6 +179,9 @@ pub enum ReqBody {
     NodeState { node: String },
     /// Synchronous declassification of a broker-held secret (phase 5g); audited with `span`.
     Expose { node: String, name: String, span: Option<String> },
+    /// `Secret.verify` of two broker-held secrets: the bit, computed broker-side, Guard-gated and
+    /// audited (VERIFY-FABRICATED-1). No bytes cross.
+    Verify { node: String, a: String, b: String, span: Option<String> },
     /// A broker-side `Secret.map` whitelist op (phase 5g): apply `op` to the held bytes, returning a
     /// fresh handle name — bytes never cross.
     SecretMap { node: String, name: String, op: String, arg: Option<String> },
@@ -265,6 +268,8 @@ pub enum Response {
     },
     /// The declassified bytes (phase 5g — the only response that carries secret material).
     Exposed { bytes: String },
+    /// `Secret.verify`'s one bit.
+    Verified { equal: bool },
     /// A fresh broker-held secret handle name from a broker-side `Secret.map` (phase 5g).
     Mapped { name: String },
     Status { pid: u32, nodes: usize, epoch: u64 },

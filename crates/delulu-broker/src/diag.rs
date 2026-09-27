@@ -223,6 +223,16 @@ impl Denial {
                     node.as_str()
                 ),
             ),
+            // The broker's secret store holds no such secret: not a scope the lease lacks, but a value
+            // nobody stored — say how to store one (found by agent pass 2, whose testers read the
+            // scope wording as "the feature is dead").
+            Denial::OutOfScope { node, dimension: "secrets.store", arg } => Diagnostic::error(
+                "DL0904",
+                format!(
+                    "the broker holds no secret `{arg}` for lease `{}` — store it first with `delulu secrets set {arg} VALUE` (the same state directory as the broker); a lease names a secret the broker holds, it does not carry the value",
+                    node.as_str()
+                ),
+            ),
             Denial::OutOfScope { node, dimension, arg } => Diagnostic::error(
                 "DL0904",
                 format!(

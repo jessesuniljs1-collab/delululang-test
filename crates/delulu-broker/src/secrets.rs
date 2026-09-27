@@ -64,6 +64,23 @@ impl SecretStore {
         }
     }
 
+    /// Re-read the persistent entries from disk (campaign finding SECRETS-STALE-1). `delulu secrets
+    /// set` writes the file from its own process; the daemon read the store once, at start, so a
+    /// secret stored while it ran could not be exposed or verified until a restart — refused as if
+    /// never stored (found writing the VERIFY-FABRICATED-1 test). The daemon calls this before every
+    /// secret operation. A missing file is an empty store (fail closed: removed means gone); a file
+    /// that cannot be read keeps what was loaded rather than guessing. Derived entries are untouched.
+    pub fn refresh(&self) {
+        let Some(path) = &self.path else { return };
+        match std::fs::read_to_string(path) {
+            Ok(text) => *self.entries.borrow_mut() = parse_entries(&text),
+            // Gone (not merely unreadable): an empty store. Asked of the path rather than the error,
+            // so holder-neutrality's `.kind` sweep has nothing to misread.
+            Err(_) if !path.exists() => self.entries.borrow_mut().clear(),
+            Err(_) => {}
+        }
+    }
+
     /// Set a persistent secret and mirror the store to disk (`delulu secrets set`).
     pub fn set(&self, name: impl Into<String>, value: impl Into<String>) -> std::io::Result<()> {
         self.entries.borrow_mut().insert(name.into(), value.into());
@@ -183,6 +200,83 @@ impl Broker {
             span,
         );
         result
+    }
+
+    /// `Secret.verify` of two broker-held secrets (campaign finding VERIFY-FABRICATED-1): the one bit —
+    /// equal or not — computed HERE, where the bytes are, and gated and audited like the declassify it is.
+    ///
+    /// # The finding (2026-09-27, agent pass 2, Sonnet 5 on Windows and on Linux, independently)
+    ///
+    /// Under a lease a program's secrets are broker handles: no bytes in its process. `Secret.verify`
+    /// was never routed to the broker — `SecretVal::verify` of two handles returned a constant `false`
+    /// ("broker-side verify is post-chunk-3", flagged in the code and then forgotten). So a program
+    /// checking a token under a lease was told "no match" for EQUAL secrets, and the Guard's
+    /// `declassify` tier — guarded by default — was never asked. Nothing leaked (a constant carries no
+    /// information), but the answer was fabricated, which this project refuses everywhere else
+    /// (invariant 50: never a fabricated reading).
+    ///
+    /// Now: the node must hold `Declassify` and BOTH secrets in its scope, and the store must hold both
+    /// (as for `expose`); the Guard decides for EACH secret, because the bit depends on both (a
+    /// single-use permit on one does not buy the other); the comparison is constant-time over the
+    /// bytes; one `verify` record carries the decision. Returns the bit plus an optional warn note.
+    pub fn verify_guarded(
+        &mut self,
+        node_id: &GrantId,
+        a: &str,
+        b: &str,
+        store: &SecretStore,
+        span: Option<String>,
+    ) -> (Result<bool, Denial>, Option<String>) {
+        use crate::guard::GuardVerdict;
+        let actor = || Some(node_id.as_str().to_string());
+        let pair = format!("{a} ~ {b}");
+        // 1. Authority for both, exactly as `expose` requires it.
+        for name in [a, b] {
+            if let Err(d) = self.expose_inner(node_id, name, store) {
+                let seq = self.consume_seq();
+                self.record_op(seq, "verify", actor(), Some(pair.clone()), None, "deny", span);
+                return (Err(d), None);
+            }
+        }
+        // 2. The Guard, per distinct secret.
+        let mut note = None;
+        let names: Vec<&str> = if a == b { vec![a] } else { vec![a, b] };
+        for name in names {
+            let event = match self.guard_verdict_use(node_id, crate::validate::Op::Declassify, Some(name)) {
+                GuardVerdict::Block(d) => {
+                    let seq = self.consume_seq();
+                    self.record_op(seq, "guard_block", actor(), Some(name.to_string()), None, "deny", span);
+                    return (Err(d), None);
+                }
+                GuardVerdict::Ungated => None,
+                GuardVerdict::PermitUse => Some("guard_permit_use"),
+                GuardVerdict::BypassedUse { note: n } => {
+                    note = Some(n);
+                    Some("guard_bypassed_use")
+                }
+                GuardVerdict::Warn { note: n } => {
+                    note = Some(n);
+                    Some("guard_warn")
+                }
+            };
+            if let Some(event) = event {
+                let seq = self.consume_seq();
+                self.record_op(seq, event, actor(), Some(name.to_string()), None, "allow", span.clone());
+            }
+        }
+        // 3. The bit, computed over the bytes, in constant time for equal lengths.
+        let (Some(va), Some(vb)) = (store.get(a), store.get(b)) else {
+            let seq = self.consume_seq();
+            self.record_op(seq, "verify", actor(), Some(pair), None, "deny", span);
+            return (
+                Err(Denial::OutOfScope { node: node_id.clone(), dimension: "secrets.store", arg: format!("{a}, {b}") }),
+                None,
+            );
+        };
+        let equal = va.len() == vb.len() && va.bytes().zip(vb.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0;
+        let seq = self.consume_seq();
+        self.record_op(seq, "verify", actor(), Some(pair), None, "allow", span);
+        (Ok(equal), note)
     }
 
     /// Guard-aware `expose` (Stage 5 chunk 6): a declassification from a delegated node is guarded by
@@ -439,6 +533,80 @@ mod tests {
         store.set("API_KEY", "hunter2").unwrap();
         store.set("OTHER", "nope").unwrap();
         (b, sink, root, store)
+    }
+
+    /// SECRETS-STALE-1: a secret another process stores (`delulu secrets set` while the daemon runs)
+    /// is seen after `refresh`; one removed from the file is gone after it.
+    #[test]
+    fn refresh_sees_what_another_process_stored() {
+        let dir = std::env::temp_dir().join(format!("delulu-secrets-refresh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.json");
+        let daemon = SecretStore::load(&path);
+        assert!(daemon.get("LATE").is_none());
+        SecretStore::load(&path).set("LATE", "v").unwrap();
+        assert!(daemon.get("LATE").is_none(), "the daemon's copy is stale until it refreshes");
+        daemon.refresh();
+        assert_eq!(daemon.get("LATE").as_deref(), Some("v"));
+        std::fs::remove_file(&path).unwrap();
+        daemon.refresh();
+        assert!(daemon.get("LATE").is_none(), "a removed store is empty, not remembered");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// VERIFY-FABRICATED-1: the bit is computed from the bytes — equal is `true`, unequal is `false` —
+    /// both secrets must be in scope, and the decision is audited with the span.
+    #[test]
+    fn verify_computes_the_bit_where_the_bytes_are() {
+        let sink = crate::audit::MemSink::new();
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_sink(Box::new(sink.clone()));
+        let root = b.issue(
+            Holder::new("process", "app", "pid:1"),
+            Authority::new(eff(&["Declassify"]), Scopes { secrets: names(&["KEY", "SAME", "DIFF"]), ..Default::default() }),
+            None,
+        );
+        let store = SecretStore::in_memory();
+        store.set("KEY", "hunter2").unwrap();
+        store.set("SAME", "hunter2").unwrap();
+        store.set("DIFF", "hunter3").unwrap();
+        store.set("OUT", "hunter2").unwrap();
+        assert!(b.verify_guarded(&root, "KEY", "SAME", &store, Some("p.delulu:3:9".into())).0.unwrap());
+        assert!(!b.verify_guarded(&root, "KEY", "DIFF", &store, None).0.unwrap());
+        let last = sink.records().last().cloned().unwrap();
+        assert_eq!((last.action.as_str(), last.decision.as_str()), ("verify", "allow"));
+        // A secret outside the node's scope: refused, and audited as a refusal.
+        let err = b.verify_guarded(&root, "KEY", "OUT", &store, None).0.unwrap_err();
+        assert_eq!(err.code(), "DL0904");
+        let last = sink.records().last().cloned().unwrap();
+        assert_eq!((last.action.as_str(), last.decision.as_str()), ("verify", "deny"));
+    }
+
+    /// The Guard decides for EACH secret: a delegated node's verify is DL1410 until both are
+    /// permitted — a permit on one does not buy the comparison with the other.
+    #[test]
+    fn a_delegated_verify_is_guarded_for_each_secret() {
+        let mut b = Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(Rc::new(ManualClock::new(1000))))
+            .with_owner_code("gow1_testowner");
+        let auth = || Authority::new(eff(&["Declassify"]), Scopes { secrets: names(&["A", "B"]), ..Default::default() });
+        let root = b.issue(Holder::new("process", "app", "pid:1"), auth(), None);
+        b.guard_check_mint(&auth(), &root, Some("gow1_testowner")).unwrap();
+        let child = b.attenuate(&root, auth(), Holder::new("process", "agent", "pid:2"), None).unwrap();
+        let store = SecretStore::in_memory();
+        store.set("A", "same").unwrap();
+        store.set("B", "same").unwrap();
+        let code = |r: Result<bool, Denial>| r.map_err(|d| d.code()).err();
+        assert_eq!(code(b.verify_guarded(&child, "A", "B", &store, None).0), Some("DL1410"));
+        let approve = |b: &mut Broker, name: &str| {
+            let subset = crate::guard::GuardSubset::parse(&[format!("declassify:{name}")]).unwrap();
+            let (id, _) = b.guard_request(&child, subset, "compare".into()).unwrap();
+            b.guard_approve(Some("gow1_testowner"), &id, None, None, None).unwrap().unwrap();
+        };
+        approve(&mut b, "A");
+        assert_eq!(code(b.verify_guarded(&child, "A", "B", &store, None).0), Some("DL1410"), "B is not permitted yet");
+        approve(&mut b, "B");
+        assert!(b.verify_guarded(&child, "A", "B", &store, None).0.unwrap());
     }
 
     #[test]
