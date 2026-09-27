@@ -1265,6 +1265,26 @@ pub fn run_vm_guest(args: &[String]) -> i32 {
     code
 }
 
+/// Set this process's `RLIMIT_DATA` to 85% of the memory the kernel reports free now (the rest is the
+/// kernel's, the in-memory root filesystem's, and headroom for the page cache). `sysinfo`, so it needs no
+/// `/proc`. `false` when either call fails — the guest still runs, just without the named stop.
+fn cap_data_below_free_memory() -> bool {
+    // SAFETY: `sysinfo` writes one struct we own; `setrlimit` reads one.
+    unsafe {
+        let mut info: libc::sysinfo = std::mem::zeroed();
+        if libc::sysinfo(&mut info) != 0 {
+            return false;
+        }
+        let free = (info.freeram as u64).saturating_mul(info.mem_unit.max(1) as u64);
+        let cap = free / 100 * 85;
+        if cap == 0 {
+            return false;
+        }
+        let lim = libc::rlimit { rlim_cur: cap as libc::rlim_t, rlim_max: cap as libc::rlim_t };
+        libc::setrlimit(libc::RLIMIT_DATA, &lim) == 0
+    }
+}
+
 fn serve_vm_guest(args: &[String]) -> i32 {
     let port = match args {
         [p] => match p.parse::<u32>() {
@@ -1283,6 +1303,14 @@ fn serve_vm_guest(args: &[String]) -> i32 {
     let mut measured: Vec<&'static str> = Vec::new();
     if kernel_has_no_ip() {
         measured.push("no network stack in its kernel");
+    }
+    // SANDBOX-STOP-1 at L2: the VM's memory IS the guest's ceiling, but nothing limited the guest's
+    // own address space, so Linux overcommitted, the allocator never saw a refusal, and the guest
+    // kernel's OOM handling ended the VM with nothing said (verified: `verify-vm-memory2.log`). A data
+    // limit below the memory still free lets the ALLOCATOR meet the ceiling first, so `ceiling.rs`
+    // can say so on the console the host relays.
+    if cap_data_below_free_memory() {
+        measured.push("memory refused to the guest before its kernel runs out");
     }
     let mut conn = match dial_host(port) {
         Ok(c) => c,

@@ -41,6 +41,9 @@ pub const SELF_APPLIED: &[&str] = &[
     // runs, and reports this only when BOTH are refused as an unsupported family — a measurement, not
     // a reading of the kernel's configuration.
     "no network stack in its kernel",
+    // SANDBOX-STOP-1 at L2: the microVM guest caps its own data below the VM's free memory, so a
+    // runaway allocation is refused to the allocator (and named) before the guest kernel runs out.
+    "memory refused to the guest before its kernel runs out",
 ];
 
 /// Hard ceiling on one frame (16 MiB), as on the broker wire: a corrupt or hostile length prefix
