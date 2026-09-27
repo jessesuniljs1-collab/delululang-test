@@ -308,7 +308,8 @@ mod tests {
             "\u{0}\u{1}\u{2}".into(),
             "[package]\nname=\"a\"\nname=\"b\"\nversion=\"0.1.0\"".into(), // duplicate key
             "[package]\nname=1\nversion=true".into(),                      // wrong value types
-            format!("[package]\nname=\"{}\"\nversion=\"0.1.0\"", "x".repeat(200_000)), // oversized
+            // oversized — 200,000 natively; under Miri (RW 5.6) 2,000, still larger than any real name
+            format!("[package]\nname=\"{}\"\nversion=\"0.1.0\"", "x".repeat(if cfg!(miri) { 2_000 } else { 200_000 })),
         ];
         cases.push(deep);
         for src in &cases {

@@ -363,6 +363,20 @@ fn write_key_file(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
     std::fs::write(path, key)
 }
 
+/// The fuzz property for the lease token (RW 5.4, V2 P7): the string a `run --lease` is handed,
+/// which anyone can type. A broker that has minted NOTHING must refuse every input — an `Ok` would be
+/// a forged MAC — and no input may panic. One copy: the `cargo-fuzz` target and the suite both call it.
+#[doc(hidden)]
+pub fn fuzz_one_lease_token(data: &[u8]) {
+    let mut b = Broker::with_sources(
+        Box::new(crate::ids::SeqIdSource::new()),
+        Box::new(std::rc::Rc::new(crate::time::ManualClock::new(1_000))),
+    )
+    .with_key([0x5a; 32]);
+    let token = Token::from_wire(String::from_utf8_lossy(data).into_owned());
+    assert!(b.redeem(&token, "fuzz").is_err(), "a token this broker never minted was redeemed");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,6 +400,45 @@ mod tests {
     }
     fn broker(clock: Rc<ManualClock>) -> Broker {
         Broker::with_sources(Box::new(SeqIdSource::new()), Box::new(clock)).with_key([7u8; 32])
+    }
+
+    /// RW 5.4: the lease-token property over genuine tokens mutated — from another broker's key, so a
+    /// mutation that happened to reproduce one exactly is still a forgery here — plus the empty and
+    /// junk cases.
+    #[test]
+    fn the_lease_token_property_holds_over_a_seeded_corpus() {
+        let clock = Rc::new(ManualClock::new(1_000));
+        let mut minting = broker(clock);
+        let root = root_with_readnet(&mut minting);
+        let (_, t1) = minting
+            .delegate(&root, Authority::new(eff(&["Read"]), Scopes { fs_read: names(&["./data"]), ..Default::default() }), holder(), None, false)
+            .unwrap();
+        let (_, t2) = minting.delegate(&root, Authority::new(eff(&["Net"]), Scopes { net: names(&["a.com"]), ..Default::default() }), holder(), Some(5_000), true).unwrap();
+        let seeds = vec![t1.as_str().as_bytes().to_vec(), t2.as_str().as_bytes().to_vec(), b"dlt1_".to_vec(), vec![]];
+        let mut s: u64 = 0x1EA5_E70C_E0F2_2A11;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        for seed in &seeds {
+            fuzz_one_lease_token(seed);
+        }
+        for _ in 0..if cfg!(miri) { 16 } else { 1_500 } {
+            let mut b = seeds[(next() % 2) as usize].clone();
+            for _ in 0..1 + next() % 3 {
+                let at = (next() % b.len() as u64) as usize;
+                match next() % 3 {
+                    0 => b[at] ^= 1 << (next() % 8),
+                    1 => b.insert(at, next() as u8),
+                    _ => {
+                        b.remove(at);
+                    }
+                }
+            }
+            fuzz_one_lease_token(&b);
+        }
     }
 
     fn root_with_readnet(b: &mut Broker) -> GrantId {

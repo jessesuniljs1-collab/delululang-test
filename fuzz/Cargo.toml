@@ -29,10 +29,49 @@ libfuzzer-sys = "0.4"
 # `default-features = false` for the same reason the `delulu` binary asks for it: the default feature
 # set pulls in the embedded interpreter's optional halves, and the channel needs none of them.
 delulu-runtime = { path = "../crates/delulu-runtime", default-features = false }
+# RW 5.4 (V2 P7): the parsers of bytes an attacker controls — program source, manifests, a plugin's
+# compiled DIR (the checker), and a lease token (the broker). Each property lives in its crate.
+delulu-check = { path = "../crates/delulu-check" }
+delulu-broker = { path = "../crates/delulu-broker" }
 
 [[bin]]
 name = "channel_frame"
 path = "fuzz_targets/channel_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "source"
+path = "fuzz_targets/source.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "manifest"
+path = "fuzz_targets/manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dir"
+path = "fuzz_targets/dir.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lease_token"
+path = "fuzz_targets/lease_token.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "grant"
+path = "fuzz_targets/grant.rs"
 test = false
 doc = false
 bench = false

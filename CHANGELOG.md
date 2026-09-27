@@ -9,6 +9,20 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P7 (first half): NIST known-answer tests, parser fuzzing, Miri in budget, 2026-09-27
+
+- **The NIST ACVP vectors are checked byte-exact** (`nist_kat.rs`): ML-DSA-65 keyGen, sigGen and sigVer and
+  ML-KEM-768 keyGen and encaps/decaps, against NIST's own answer keys, with their provenance asserted. PQC
+  stays `--unstable`: an independent audit of the crates is the other gate, and this project cannot do it.
+- **Six `cargo-fuzz` targets under AddressSanitizer on every push** — the sandbox channel and, new, program
+  source, manifests, a plugin's DIR, a lease token and the `--grant` parser; each property is also replayed
+  by the ordinary suite on every commit.
+- **The Miri-slow tests are shrunk under Miri only**, keeping every size that is itself a witness.
+- **Fixed on macOS:** a unix socket in a granted directory is "not a regular file" there too (macOS answers
+  `EOPNOTSUPP`, not `ENXIO`).
+- **P5 closed:** the release workflow's dry run built, checked and installed all four targets and published
+  nothing.
+
 ## Unreleased — V2 P5d: `Secret.verify` under a lease, and broker secrets stored while it runs, 2026-09-27
 
 - **Fixed: `Secret.verify` under a lease returned a made-up `false`** (VERIFY-FABRICATED-1, found by the

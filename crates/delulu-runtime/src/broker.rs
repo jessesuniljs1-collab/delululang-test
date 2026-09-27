@@ -222,6 +222,23 @@ pub const GRANT_FORMS: &[GrantForm] = &[
     GrantForm { key: "secret:", form: "secret:NAME=VALUE | secret:NAME=env:VAR", example: "secret:TOKEN=abc", grants: "the secret NAME, held by the runtime" },
 ];
 
+/// The fuzz property for the `--grant` parser (RW 5.4, V2 P7): whatever an operator — or a script
+/// assembling a command line from untrusted parts — passes, no input may panic, and one that is
+/// accepted must be accepted again (parsing is a function of its input, not of what came before).
+/// One copy: the `cargo-fuzz` target and the suite both call it.
+#[doc(hidden)]
+pub fn fuzz_one_grant(data: &[u8]) {
+    let spec = String::from_utf8_lossy(data);
+    // `secret:NAME=env:VAR` reads the environment; a fuzzer may name any variable, which is harmless
+    // (a read), but it must not make the verdict depend on what happens to be set.
+    if spec.contains("env:") {
+        return;
+    }
+    let first = Grants::default().add(&spec).is_ok();
+    let again = Grants::default().add(&spec).is_ok();
+    assert_eq!(first, again, "the grant parser answered twice differently for `{spec}`");
+}
+
 impl Grants {
     /// Parse one `--grant` argument. Returns an error string on malformed input.
     pub fn add(&mut self, spec: &str) -> Result<(), String> {
@@ -470,6 +487,44 @@ pub fn missing_kinds(needs: &std::collections::BTreeSet<ResourceKind>, grants: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RW 5.4: the grant-parser property over every documented form and mutations of them.
+    #[test]
+    fn the_grant_property_holds_over_a_seeded_corpus() {
+        let seeds: Vec<Vec<u8>> = [
+            "console", "clock", "rand", "declassify", "fs.read=./data", "fs.write=C:/out", "net=example.com",
+            "net.special=localhost", "secret:TOKEN=abc", "plugin=./plugins", "foreign.c=m:/usr/lib/libm.so",
+            "sensor=temp:lo=0,hi=5", "fs.read=", "=", "",
+        ]
+        .iter()
+        .map(|s| s.as_bytes().to_vec())
+        .collect();
+        let mut s: u64 = 0x6A2A_47F0_22E5_EED5;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        for seed in &seeds {
+            fuzz_one_grant(seed);
+        }
+        for _ in 0..if cfg!(miri) { 16 } else { 2_000 } {
+            let mut b = seeds[(next() % seeds.len() as u64) as usize].clone();
+            for _ in 0..1 + next() % 3 {
+                let at = if b.is_empty() { 0 } else { (next() % b.len() as u64) as usize };
+                match next() % 4 {
+                    0 if !b.is_empty() => b[at] ^= 1 << (next() % 8),
+                    1 => b.insert(at, b"=:.,/\\x0 ~"[(next() % 10) as usize]),
+                    2 if !b.is_empty() => {
+                        b.remove(at);
+                    }
+                    _ => b.insert(at, next() as u8),
+                }
+            }
+            fuzz_one_grant(&b);
+        }
+    }
 
     /// P4-02: [`GRANT_FORMS`] is the grant grammar as data, so it must be exactly what [`Grants::add`]
     /// parses. The keys are read from `add`'s own match arms — a key parsed but not listed, or listed

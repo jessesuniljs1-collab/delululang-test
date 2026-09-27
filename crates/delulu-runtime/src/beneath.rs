@@ -303,7 +303,10 @@ mod imp {
             Ok(fd) => fd,
             // A unix socket (ENXIO) or a device with no driver (ENODEV) is not a regular file: say so,
             // as for a FIFO, rather than the OS's `os error 6` (found by the Sonnet 5 Linux tester).
-            Err(Outcome::Io(e)) if matches!(e.raw_os_error(), Some(libc::ENXIO) | Some(libc::ENODEV)) => {
+            // macOS answers a socket with EOPNOTSUPP (os error 102) — its first CI run.
+            Err(Outcome::Io(e))
+                if matches!(e.raw_os_error(), Some(libc::ENXIO) | Some(libc::ENODEV) | Some(libc::EOPNOTSUPP)) =>
+            {
                 return Outcome::Io(not_regular());
             }
             Err(o) => return o,

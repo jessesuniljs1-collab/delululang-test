@@ -412,7 +412,9 @@ mod tests {
     #[test]
     fn set_canonicalization_preserves_the_covered_region_on_generated_input() {
         let mut rng = Rng(0x000A_11CE_5EED);
-        for i in 0..3_000u32 {
+        // RW 5.6 (V2 P7): 3,000 generated sets natively; 30 under Miri, where this was the test in
+        // flight when the crate's 240-minute run was cancelled (run 35147900141).
+        for i in 0..if cfg!(miri) { 30u32 } else { 3_000 } {
             let raw: BTreeSet<String> =
                 (0..1 + (rng.next() % 4) as usize).map(|_| random_path(&mut rng)).collect();
             let canon = canonicalize_set(&raw);

@@ -941,6 +941,20 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
    microVM guest's console line, the signal, the OS's own accounting, the host's watchdog — never an exit
    code that does not say. The process exit is the report's.
 
+## D-V2-45 — P7: which parsers are fuzzed, and how a Miri test is shrunk — TAKEN (head chef, 2026-09-27, under the owner's delegation)
+
+1. **"The four parsers" are the parsers of bytes an attacker controls:** program source (through the whole
+   checker), a package's manifests (`delulu.toml`, a plugin manifest, a lockfile), a plugin's compiled DIR,
+   and a lease token — plus the `--grant` parser, which RW 5.4 names. The plan never listed four; this is
+   the rule that decides them. The `.dpx` container parser lives in the wasm crate and would bring wasmtime
+   into the fuzz build; the DIR it carries is fuzzed instead.
+2. **A fuzz property is one function in its crate** (the channel's rule, PS-A-02), replayed by the ordinary
+   suite over a deterministic mutation corpus, so a coverage-guided run and a per-commit run cannot test
+   different things.
+3. **A test is shrunk for Miri only where its size is not the witness.** Miri looks for undefined behaviour;
+   generator counts and exhaustive sweeps shrink under `cfg!(miri)`, and every size that IS a witness (the
+   100,000-level nesting input) keeps running at full size natively on every push.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

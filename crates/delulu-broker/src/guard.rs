@@ -1618,7 +1618,10 @@ mod tests {
             args.push(Some(p));
         }
 
-        for _ in 0..30_000 {
+        // RW 5.6 (V2 P7): 30,000 generated policies natively; under Miri — which looks for undefined
+        // behaviour, not for a rare policy — 60, so this test stops being the one the whole crate's
+        // Miri run stalled in (CI run 34836508713).
+        for _ in 0..if cfg!(miri) { 60 } else { 30_000 } {
             let mut policy = GuardPolicy::default_policy();
             for _ in 0..(1 + next(4)) {
                 policy.set(classes[next(classes.len())], pats[next(pats.len())].to_string(), tiers[next(tiers.len())]);

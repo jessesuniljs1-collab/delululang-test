@@ -1957,3 +1957,48 @@ directory), audit tamper (subtle edit, deleted record, tampered bundle), five pa
 the race to a revocation with nothing written, items 1/2/4 under `--isolation microvm` matching L0, FIFO and
 `/proc/self` refusals. Informational, recorded for the owner: `grants revoke` needs no owner code (revocation
 only narrows; a same-account process that can read a node id can end that lease).
+
+
+## 2026-09-27 — P5 closes (the release dry run); P7 begins: NIST vectors, parser fuzz targets, Miri shrinks
+
+**P5's last item — the release workflow's dry run on CI — is done.** Run `36332086632` (manual, on
+`56eb5a6`): all four targets packaged, checked (target and commit named), and INSTALLED through
+`INSTALL.md`'s install-gate block; the `release` job skipped (no tag); **0 artifacts, no release, the
+attestation and "keep" steps skipped** — D-NE-7 held in practice, not only on paper. `gh attestation
+verify` waits for the owner's first `v*` tag, which is the owner's act.
+
+**CI after P5d.** `f284a37` green on every job (run `36330278053`). `56eb5a6`: every job green but macOS,
+where the new unix-socket test's socket path was too long (104 bytes there) — fixed under `/tmp`.
+`5065be1`: macOS again, two real ones: a unix socket on macOS answers `EOPNOTSUPP` (os error 102), not
+Linux's ENXIO — mapped to the same "not a regular file" words (a product fix, not only a test fix); and
+`unreadable_paths.rs`'s two tests could get ONE scratch directory, because macOS's clock resolves to
+microseconds, and the short test deleted it under the sweep — a counter now joins the clock.
+
+**The agents' verification of the fixes (pass-2 folder, `FINDINGS.md`).** On archives of `5065be1` built
+from clean clones: the Sonnet 5 Linux tester found **all five fixes holding** at L0, `--sandbox` and the
+microVM — including a 220-read race flipping an alias between a public and a sealed directory (no leak),
+and "a permit on only one secret does not let `verify` through" — and the Haiku 4.5 Linux tester items 2, 4
+and 5 holding, both with verbatim evidence. The Sonnet 5 Windows tester was stopped by the model's WEEKLY
+usage limit mid-way; its file holds what it did, and it is resumed after the reset.
+
+**P7 (verification depth), the three head-chef items:**
+- **RW 4.10a — the NIST vectors, wired.** `crates/delulu-runtime/tests/nist_kat.rs` checks every saved case
+  the pinned crates' public API can express, byte-exact against NIST's answer keys: ML-DSA-65 keyGen (5,
+  pk and expanded sk), sigGen (15 — deterministic and randomized, external and both internal forms), sigVer
+  (9, both verdicts present), ML-KEM-768 keyGen (5, ek and expanded dk), encaps/decaps and both key checks
+  (12). The groups it cannot express are NAMED in the test (HashML-DSA — the crate has no pre-hash API and
+  this project never pre-hashes; randomized signing over a precomputed μ). Each file's NIST provenance is
+  asserted. A mutant with the wrong FIPS 204 domain separator fails it. This does not make PQC stable:
+  D14b's second gate, an independent audit of the crates, stands, and `--unstable` (DL1910) with it.
+- **RW 5.4 — the parser fuzz targets.** Five new targets beside `channel_frame`, chosen because an attacker
+  controls the bytes: `source`, `manifest`, `dir`, `lease_token`, `grant` (D-V2-45). As for the channel,
+  each property is one function in its crate that the ordinary suite replays over a seeded, deterministic
+  mutation corpus on every commit; CI's `fuzz` job runs each target 30 s coverage-guided under
+  AddressSanitizer (named in the command — it is cargo-fuzz's default, and the log should say it).
+- **RW 5.6 — the Miri-slow tests, shrunk under `cfg!(miri)`.** Every test the two measured runs named as
+  stalled or in flight: the Guard's policy generator, the nesting refusal, the path canonicalization
+  generator, both DIR flip sweeps, the manifest's oversized name. Natively each keeps its full size (the
+  100,000-level nesting input is a witness that must run at full size, and does, on every push). The
+  measurement is a `miri-slow` run, started after this push.
+- RW 5.2 (restating Progress as progress-or-fault in `DELULU_CORE.md`) is the owner's: the file is
+  entrenched.

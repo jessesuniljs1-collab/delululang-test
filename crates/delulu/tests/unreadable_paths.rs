@@ -22,8 +22,13 @@ fn delulu() -> Command {
 }
 
 fn scratch() -> PathBuf {
+    // A counter as well as the clock: macOS's clock resolves to microseconds, so this file's two tests,
+    // started together, got ONE directory, and the short one deleted it under the sweep (CI run
+    // 36333001114: `spawn: NotFound`).
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-    let d = std::env::temp_dir().join(format!("delulu-unreadable-{}-{t}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("delulu-unreadable-{}-{t}-{n}", std::process::id()));
     std::fs::create_dir_all(d.join("state")).unwrap();
     std::fs::create_dir_all(d.join("adir")).unwrap();
     d

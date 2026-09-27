@@ -656,7 +656,10 @@ mod tests {
         // Phase 6b (`verify`) that then refutes a decoded-but-dishonest DIR.
         let c = check_source(0, "module m\nfn f(out: Cap[Console]) ! {Write} { out.println(\"x\") }\n");
         let bytes = serialize(&c.module, &c.result);
-        for i in 0..bytes.len() {
+        // RW 5.6 (V2 P7): exhaustive natively; under Miri every bit of ~32 evenly spaced bytes (the
+        // `dir` cargo-fuzz target covers this decoder coverage-guided, under AddressSanitizer).
+        let stride = if cfg!(miri) { (bytes.len() / 32).max(1) } else { 1 };
+        for i in (0..bytes.len()).step_by(stride) {
             for bit in 0..8u32 {
                 let mut t = bytes.clone();
                 t[i] ^= 1 << bit;
@@ -785,7 +788,11 @@ mod tests {
         let (of, oft, ont, onr) =
             (orig.facts.clone(), orig.fn_types.clone(), orig.node_types.clone(), orig.node_rows.clone());
 
-        for i in 0..bytes.len() {
+        // RW 5.6 (V2 P7): natively EVERY bit of every byte; under Miri — where each `verify` is a full
+        // re-check, and this was the test in flight when the crate's 240-minute run was cancelled
+        // (run 35147900141) — every bit of four evenly spaced bytes.
+        let stride = if cfg!(miri) { (bytes.len() / 4).max(1) } else { 1 };
+        for i in (0..bytes.len()).step_by(stride) {
             for bit in 0..8u32 {
                 let mut t = bytes.clone();
                 t[i] ^= 1 << bit;

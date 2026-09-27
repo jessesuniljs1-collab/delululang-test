@@ -23,17 +23,17 @@ files, so it still opens when the tree does not build.
 | … plus crates that are their OWN workspace (not members) | 1 — `delulu-fuzz-targets` |
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
-| Rust files | 275 |
-| Rust lines | 143416 |
-| Rust files outside `src/` (test/bench targets) | 120 |
+| Rust files | 282 |
+| Rust lines | 143951 |
+| Rust files outside `src/` (test/bench targets) | 126 |
 | Markdown documents | 204 |
-| Markdown lines | 56595 |
+| Markdown lines | 56668 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1402 / 11364 |
-| Open discrepancies | 28 |
+| Nodes / edges in this map | 1409 / 11380 |
+| Open discrepancies | 30 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests
 is produced by `cargo test`, not by reading files, and the Survey does not restate numbers
@@ -67,6 +67,8 @@ graph TD
   delulu_fuzz["delulu-fuzz"] --> delulu_check["delulu-check"]
   delulu_fuzz["delulu-fuzz"] --> delulu_diag["delulu-diag"]
   delulu_fuzz["delulu-fuzz"] --> delulu_runtime["delulu-runtime"]
+  delulu_fuzz_targets["delulu-fuzz-targets"] --> delulu_broker["delulu-broker"]
+  delulu_fuzz_targets["delulu-fuzz-targets"] --> delulu_check["delulu-check"]
   delulu_fuzz_targets["delulu-fuzz-targets"] --> delulu_runtime["delulu-runtime"]
   delulu_registry["delulu-registry"] --> delulu_runtime["delulu-runtime"]
   delulu_runtime["delulu-runtime"] --> delulu_broker["delulu-broker"]
@@ -152,8 +154,8 @@ The Atlas: a typed, deterministic code + authority graph derived only from Delul
 DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory grant tree, the two validation classes with revocation epochs, the hash-chained audit log, and MAC-signed lease tokens. Transport-free — no sockets, no daemon, no runtime wiring.
 
 - **Depends on:** `delulu-check`, `delulu-diag`
-- **Depended on by:** `delulu`, `delulu-runtime`  ← change this crate, and these must be re-checked
-- **Modules:** 15 files, 10305 lines
+- **Depended on by:** `delulu`, `delulu-fuzz-targets`, `delulu-runtime`  ← change this crate, and these must be re-checked
+- **Modules:** 15 files, 10363 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -163,11 +165,11 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 | `src/cert.rs` | 1752 | RFC 0001 phase F2 — the **grant certificate**: an offline, self-describing, chain-verifiable |
 | `src/device_scope.rs` | 503 | RFC 0001 phase F1 — the **device** scope dimension and its lattice (build-order D12e). |
 | `src/diag.rs` | 457 | Broker denials and their mapping to `delulu_diag::Diagnostic`. |
-| `src/guard.rs` | 1788 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
+| `src/guard.rs` | 1791 | Stage 5 chunk 6 (phases 5k–5m) — **the Guard**: a dcg-inspired principal-approval layer. |
 | `src/ids.rs` | 80 | GrantId sources (ruling 3: determinism injection). |
-| `src/lease.rs` | 697 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
+| `src/lease.rs` | 750 | Phase 5e — portable lease tokens: `delegate` / `redeem` / `rotate_key` (spec §2, §3.2). |
 | `src/lib.rs` | 60 | `delulu-broker` — DeluluLang custody core (Stage 5, "Custody"). |
-| `src/path.rs` | 563 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
+| `src/path.rs` | 565 | Pure-lexical path descendant semantics for the `⊑` lattice (Stage 5, spec §A.3 "path is a |
 | `src/secrets.rs` | 679 | Phase 5g — the broker-resident secret store (spec §4.4, invariant 23). |
 | `src/time.rs` | 56 | The pluggable TTL clock (ruling 3: determinism injection). |
 | `src/tree.rs` | 1129 | Phase 5b — the in-memory grant tree (spec §3): issue / attenuate / revoke / inspect / tree. |
@@ -178,8 +180,8 @@ DeluluLang custody core (Stage 5): the ⊑ attenuation lattice, the in-memory gr
 DeluluLang name resolution, type & effect/authority checker — the soundness core
 
 - **Depends on:** `delulu-diag`, `delulu-syntax`
-- **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 17 files, 15343 lines
+- **Depended on by:** `delulu`, `delulu-atlas`, `delulu-broker`, `delulu-conform`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
+- **Modules:** 18 files, 15480 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -187,10 +189,11 @@ DeluluLang name resolution, type & effect/authority checker — the soundness co
 | `src/check.rs` | 3779 | The type & effect/authority judgment (spec §6.2–§6.5). THE HEART. |
 | `src/deprecation.rs` | 186 | The deprecation registry and DL1801 (Stage 9c, spec §2.2). |
 | `src/deps.rs` | 1479 | Cross-package dependency resolution and whole-workspace checking (Stage 2 §3–§4). |
-| `src/dir.rs` | 850 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
-| `src/lib.rs` | 1997 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
+| `src/dir.rs` | 857 | DIR — the Delulu typed IR (Stage 6 "Live", spec §2.3). |
+| `src/fuzz.rs` | 126 | The fuzz properties for the checker's parsers of untrusted bytes (RW 5.4, V2 P7). |
+| `src/lib.rs` | 2000 | DeluluLang name resolution, type & effect/authority checking — the soundness core. |
 | `src/lockfile.rs` | 561 | The authority lockfile (`delulu.lock`), Stage 2 §4.4. |
-| `src/manifest.rs` | 389 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
+| `src/manifest.rs` | 390 | The canonical compile-time package manifest (`delulu.toml`), Stage 2 §3.2. |
 | `src/package.rs` | 244 | Package loading and module-graph discovery (Stage 2, §3). A package is a directory with a |
 | `src/plugin.rs` | 590 | `kind = "plugin"` packages: the plugin manifest tables and the manifest-vs-code fence |
 | `src/prim_table.rs` | 431 | The declarative primitive-table index (Stage 9, invariant 42 — the coverage law). |
@@ -290,14 +293,14 @@ DeluluLang runtime: values, capability table, Stage-1 grant broker, tree-walking
 
 - **Depends on:** `delulu-broker`, `delulu-check`, `delulu-diag`, `delulu-syntax`
 - **Depended on by:** `delulu`, `delulu-fuzz`, `delulu-fuzz-targets`, `delulu-registry`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 22 files, 18717 lines
+- **Modules:** 22 files, 18775 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
 | `src/actors.rs` | 1226 | The native actor runtime (Stage 7 phase 7g, spec §6). |
 | `src/adapter.rs` | 542 | The first real hardware adapter: a **line-protocol subprocess** (`Profile::Hw`). |
-| `src/beneath.rs` | 769 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
-| `src/broker.rs` | 671 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
+| `src/beneath.rs` | 772 | Opening a checked path so that what is opened is what was checked (campaign finding FS-RACE-1). |
+| `src/broker.rs` | 726 | The Stage-1 capability broker (spec §7.2). In Stage 1 the CLI *is* the human-controlled |
 | `src/channel.rs` | 1189 | `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire |
 | `src/compute.rs` | 654 | Stage 10 phase 10h — heterogeneous compute (Track F, spec §7, invariants 49 and 50). |
 | `src/custody.rs` | 266 | Phase 5f — the `Custody` trait: the seam between the runtime and *where authority lives*. |
@@ -347,7 +350,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 
 - **Depends on:** `delulu-diag`
 - **Depended on by:** `delulu`, `delulu-atlas`, `delulu-check`, `delulu-conform`, `delulu-runtime`, `delulu-wasm`  ← change this crate, and these must be re-checked
-- **Modules:** 9 files, 7574 lines
+- **Modules:** 9 files, 7578 lines
 
 | Module | Lines | What it is |
 |---|---:|---|
@@ -358,7 +361,7 @@ DeluluLang lexer, token model, AST, and error-recovering recursive-descent parse
 | `src/lib.rs` | 38 | DeluluLang syntax: tokens, lexer, AST, parser (Stage-1 spec §2–§4). |
 | `src/morph.rs` | 734 | Surface-syntax morphs (Stage 8 §6.5; `docs/design/SYNTAX_MORPH_SPEC.md`). |
 | `src/num.rs` | 113 | The language's one rule for turning written decimal text into a `Float`. |
-| `src/parser.rs` | 2970 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
+| `src/parser.rs` | 2974 | The Stage-1 parser (spec §3): error-recovering recursive descent with a Pratt |
 | `src/token.rs` | 467 | The Stage-1 token model (spec §2). |
 
 ### `delulu-wasm`

@@ -8,6 +8,9 @@ pub mod authority;
 pub mod check;
 pub mod deps;
 pub mod dir;
+// RW 5.4 (V2 P7): the fuzz properties, one copy each — the cargo-fuzz targets and the suite call them.
+#[doc(hidden)]
+pub mod fuzz;
 pub mod lockfile;
 pub mod manifest;
 pub mod package;

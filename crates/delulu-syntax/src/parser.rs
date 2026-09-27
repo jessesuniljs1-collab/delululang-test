@@ -2221,7 +2221,11 @@ mod tests {
     /// second defect through.
     #[test]
     fn nesting_past_the_limit_is_refused_with_a_diagnostic_not_a_crash() {
-        let src = format!("module m\nfn f() -> Int {{\n  {}1{}\n}}\n", "(".repeat(100_000), ")".repeat(100_000));
+        // RW 5.6 (V2 P7): natively the full 100,000 levels, for the reason above; under Miri — which
+        // looks for undefined behaviour on the refusal path, not for the size that separates the two
+        // fixes — just past the limit, so the crate's Miri run stops stalling here for hours.
+        let n = if cfg!(miri) { MAX_EXPR_DEPTH as usize + 50 } else { 100_000 };
+        let src = format!("module m\nfn f() -> Int {{\n  {}1{}\n}}\n", "(".repeat(n), ")".repeat(n));
         let (_, d) = parse_src(&src);
         assert!(d.iter().any(|x| x.code == "DL0210"), "expected DL0210, got {d:?}");
     }

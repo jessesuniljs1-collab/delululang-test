@@ -494,7 +494,7 @@ question that cost this project its worst soundness hole, and it settles nothing
 | 3 | Model checked | **Non-empty.** 585,771 + 2,421 distinct states, with three teeth tests reconstructing three real bugs. |
 | 4 | Property tested | **Non-empty.** 250,000 generated programs; exhaustive enumeration of the order laws; the Survey's totality properties. |
 | 5 | Differentially verified | **Non-empty.** Interpreter vs WASM engine, ~1,000 lines of parity tests; fault parity is a tested law. |
-| 6 | Fuzz verified | **Partial.** The differential harness runs, and since 2026-09-20 there is one real `cargo-fuzz` target (`fuzz/fuzz_targets/channel_frame.rs`) aimed at the sandbox channel, run coverage-guided on every push; its property is also replayed over a seeded corpus by the ordinary suite. The four parsers and the grant still have **no target**, and no sanitizer run is wired up. |
+| 6 | Fuzz verified | **Partial — every untrusted-bytes parser now has a target.** The differential harness runs; since 2026-09-27 (V2 P7) six `cargo-fuzz` targets run coverage-guided under AddressSanitizer on every push — the sandbox channel, program source, manifests, a plugin's DIR, a lease token and the `--grant` parser — and each property is one function its crate's own suite replays over a seeded mutation corpus. Still partial because the runs are short (30–60 s per push) and MemorySanitizer is not wired. |
 | 7 | Outside the boundary | **Populated and named** — see below. |
 
 ### Explicitly outside the proof boundary
