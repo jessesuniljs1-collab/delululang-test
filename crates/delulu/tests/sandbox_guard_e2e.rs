@@ -100,9 +100,11 @@ fn fwd(p: &Path) -> String {
 #[test]
 fn a_sandboxed_guest_runs_under_a_lease_and_the_guard_decides_its_every_use() {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-    let base = std::env::temp_dir().join(format!("delulu-sbx-guard-{}-{t}", std::process::id()));
+    // Short: the broker's socket lives in the state directory, and macOS allows 103 bytes of socket
+    // path under a temp directory that is already ~50 (the first CI run refused a 109-byte one).
+    let base = std::env::temp_dir().join(format!("dsg-{}-{}", std::process::id(), t % 1_000_000_000));
     let cwd = base.join("work");
-    let state = base.join("state");
+    let state = base.join("s");
     let data = cwd.join("data");
     let out = cwd.join("out");
     std::fs::create_dir_all(data.join("secret")).unwrap();
@@ -250,6 +252,31 @@ fn main(root: Root) ! {{Read, Write}} {{
             let all = text(&r);
             assert!(all.contains("DL1413"), "`{rel}` (sandbox={sandbox}) must meet the seal: {all}");
             assert!(!all.contains("THE-SEALED-KEY"), "`{rel}` (sandbox={sandbox}) read the sealed key: {all}");
+        }
+    }
+
+    // 4c. The other direction: the program names its GRANTED directory by another name — a link to
+    //     it, or (Windows) its 8.3 short name, which is how a CI runner's temp directory is spelled
+    //     (`C:/Users/RUNNER~1/…`). The lease stores the directory as it resolves; minting the
+    //     capability compared the two lexically and refused the program DL0703 (found by the first CI
+    //     run after GUARD-ALIAS-1). It is the same directory, so it must be granted.
+    let mut names = Vec::new();
+    if make_dir_link(&data, &cwd.join("data_alias")) {
+        names.push(fwd(&cwd.join("data_alias")));
+    }
+    if let Some(short) = short_name(&cwd, "data") {
+        names.push(fwd(&cwd.join(short)));
+    }
+    for name in &names {
+        let prog = format!(
+            "module other\n\nfn main(root: Root) ! {{Read, Write}} {{\n    let out = root.console()\n    \
+             let fr = root.fs_read(\"{name}\")\n    match fr.read_text(\"public.txt\") {{\n        \
+             Ok(v) => out.println(\"public: \" + v),\n        Err(_) => out.println(\"refused\")\n    }}\n}}\n"
+        );
+        std::fs::write(cwd.join("other.delulu"), &prog).unwrap();
+        for sandbox in [true, false] {
+            let r = run("other.delulu", sandbox, &[]);
+            assert!(text(&r).contains("public: public words"), "`{name}` (sandbox={sandbox}) is the granted directory: {}", text(&r));
         }
     }
 

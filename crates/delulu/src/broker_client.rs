@@ -28,8 +28,9 @@ fn dl1401(detail: &str) -> CustodyDenial {
     CustodyDenial::new(
         "DL1401",
         format!(
-            "broker unreachable: {detail} — start it with `delulu broker start` \
-             (fail closed, invariant 27: effectful ops never fall back to embedded custody)"
+            "broker unreachable: {} — start it with `delulu broker start` \
+             (fail closed, invariant 27: effectful ops never fall back to embedded custody)",
+            crate::cli::broker_unreachable_detail(&detail)
         ),
     )
 }

@@ -2773,6 +2773,31 @@ pub(crate) fn guard_pattern_for_broker(class: &str, pattern: &str) -> String {
     }
 }
 
+/// Why the broker could not be reached, in words — never the OS's raw error text. `grants inspect`
+/// with no broker printed `No such file or directory (os error 2)` on Linux and macOS (caught by
+/// `tests/unreadable_paths.rs` on the first CI run after the raw-OS-error class was swept; Windows'
+/// pipe error read differently, so the local run was green).
+pub(crate) fn broker_unreachable_detail(e: &dyn std::fmt::Display) -> String {
+    let mut raw = e.to_string();
+    let lower = raw.to_lowercase();
+    if lower.contains("no such file or directory") || lower.contains("cannot find the file") {
+        return "no broker is running for this state directory (its socket does not exist)".to_string();
+    }
+    if lower.contains("connection refused") {
+        return "a broker socket exists but nothing answers on it — a broker that stopped without cleaning up"
+            .to_string();
+    }
+    if lower.contains("permission denied") || lower.contains("access is denied") {
+        return "the broker's socket is not this user's to open (permission denied)".to_string();
+    }
+    if let Some(i) = raw.find(" (os error ") {
+        if let Some(j) = raw[i..].find(')') {
+            raw.replace_range(i..i + j + 1, "");
+        }
+    }
+    raw
+}
+
 pub(crate) fn unreadable(path: &dyn AsRef<std::path::Path>, e: &std::io::Error) -> String {
     let p = path.as_ref();
     let why = if p.is_dir() {
@@ -6170,8 +6195,9 @@ fn grants_rpc(
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {e} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `grants` verbs never fall back to local state)"
+                    "broker unreachable: {} — start it with `delulu broker start` \
+                     (fail closed, invariant 27: `grants` verbs never fall back to local state)",
+                    broker_unreachable_detail(&e)
                 ),
             );
             print_diagnostics("grants", &[d], &map, None, json);
@@ -7190,8 +7216,9 @@ fn guard_rpc(
             let d = Diagnostic::error(
                 "DL1401",
                 format!(
-                    "broker unreachable: {e} — start it with `delulu broker start` \
-                     (fail closed, invariant 27: `guard` verbs never fall back to local state)"
+                    "broker unreachable: {} — start it with `delulu broker start` \
+                     (fail closed, invariant 27: `guard` verbs never fall back to local state)",
+                    broker_unreachable_detail(&e)
                 ),
             );
             print_diagnostics("guard", &[d], &map, None, json);

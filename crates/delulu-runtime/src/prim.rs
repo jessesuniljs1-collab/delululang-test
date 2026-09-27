@@ -393,10 +393,13 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
             // Both gates, for the same reason as `resolve_in_scope`: minting the capability
             // *rooted at* a junction would otherwise put every later read lexically "inside" a
             // scope that resolves somewhere else entirely (C84, the second door).
-            match root
-                .fs_read
-                .iter()
-                .find(|g| want.starts_with(g.as_path()) && contains_on_disk(g, &want))
+            // Decided ON DISK only (GUARD-ALIAS-1's follow-up, found by the first CI run after it):
+            // a lease's scope is now stored as the path it resolves to, while `want` is spelled from
+            // this process's working directory — on a CI runner `C:\Users\RUNNER~1\…` against
+            // `C:\Users\runneradmin\…`, one directory, and a lexical prefix test refused the
+            // program DL0703. `contains_on_disk` resolves both sides, which is the containment the
+            // lexical test was only ever an approximation of.
+            match root.fs_read.iter().find(|g| contains_on_disk(g, &want))
             {
                 Some(_) => Ok(cap(ResourceKind::FsRead, CapScope::Fs { root: want, write: false })),
                 None => Err(Fault::at("DL0703", format!("filesystem read of `{p}` was not granted — pass `--grant fs.read={p}`"), span)),
@@ -408,10 +411,8 @@ pub fn call_root_method(root: &RootVal, method: &str, args: &[Value], span: Span
                 return Err(Fault::at("DL0904", format!("path `{}` is refused: {why}", p.escape_debug()), span));
             }
             let want = normalize(&std::env::current_dir().unwrap_or_default().join(&p));
-            match root
-                .fs_write
-                .iter()
-                .find(|g| want.starts_with(g.as_path()) && contains_on_disk(g, &want))
+            // On disk only, as `fs_read` above.
+            match root.fs_write.iter().find(|g| contains_on_disk(g, &want))
             {
                 Some(_) => Ok(cap(ResourceKind::FsWrite, CapScope::Fs { root: want, write: true })),
                 None => Err(Fault::at("DL0703", format!("filesystem write of `{p}` was not granted — pass `--grant fs.write={p}`"), span)),

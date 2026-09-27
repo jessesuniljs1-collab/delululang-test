@@ -704,7 +704,9 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
                 .data()
                 .fs_read_roots
                 .iter()
-                .any(|g| want.starts_with(g) && delulu_runtime::prim::contains_on_disk(g, &want));
+                // On disk only, as the interpreter's mint (a resolved lease scope against a path
+                // spelled from the working directory).
+                .any(|g| delulu_runtime::prim::contains_on_disk(g, &want));
             if !granted {
                 caller.data_mut().refused = Some(format!("DL0703: filesystem read of `{path}` was not granted"));
                 return -1;
