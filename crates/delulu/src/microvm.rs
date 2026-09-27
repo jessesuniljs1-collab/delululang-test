@@ -596,42 +596,54 @@ fn relay_console(
         let mut passed = 0usize;
         let mut told = false;
         let mut buf = [0u8; 4096];
-        // The last bytes seen, so the ceiling marker is recognised across a read boundary.
-        let mut window: Vec<u8> = Vec::new();
+        // Relayed a LINE at a time, so the guest's ceiling line (SANDBOX-STOP-1) is recognised and
+        // withheld whole: the serial console delivers a line in pieces, and a relay that looked at each
+        // piece recognised the line but still passed it to the operator (verify-vm-memory3.log). A
+        // partial line is held until its newline, but never beyond one read's worth.
         let marker = crate::ceiling::VM_MEMORY_MARKER.trim_ascii();
+        let mut pending: Vec<u8> = Vec::new();
+        let mut emit = |bytes: &[u8], kept: &mut Vec<u8>| {
+            let take = bytes.len().min(CONSOLE_CAP.saturating_sub(passed));
+            if take > 0 {
+                if keep {
+                    kept.extend_from_slice(&bytes[..take]);
+                } else {
+                    let _ = io::stderr().write_all(&bytes[..take]);
+                }
+                passed += take;
+            }
+            if take < bytes.len() && !told {
+                told = true;
+                if !keep {
+                    eprintln!("\nsandbox: the guest's console passed {} KiB; the rest was discarded", CONSOLE_CAP / 1024);
+                }
+            }
+        };
         loop {
             let n = match out.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
             // The console line discipline turns each newline into CR LF; the operator's does not.
-            let mut text: Vec<u8> = buf[..n].iter().copied().filter(|b| *b != b'\r').collect();
-            // SANDBOX-STOP-1: the guest's ceiling line is for the host, not the operator's terminal —
-            // the host names the stop in its own words.
-            window.extend_from_slice(&text);
-            if window.windows(marker.len()).any(|w| w == marker) {
-                memory_ceiling.store(true, std::sync::atomic::Ordering::SeqCst);
-                if let Some(i) = text.windows(marker.len()).position(|w| w == marker) {
-                    text.drain(i..i + marker.len());
-                }
-            }
-            let keep_from = window.len().saturating_sub(marker.len());
-            window.drain(..keep_from);
-            let take = text.len().min(CONSOLE_CAP.saturating_sub(passed));
-            if take > 0 {
-                if keep {
-                    kept.extend_from_slice(&text[..take]);
+            pending.extend(buf[..n].iter().copied().filter(|b| *b != b'\r'));
+            while let Some(i) = pending.iter().position(|b| *b == b'\n') {
+                let line: Vec<u8> = pending.drain(..=i).collect();
+                if line.trim_ascii() == marker {
+                    // The host names the stop in its own words; this line is for the host.
+                    memory_ceiling.store(true, std::sync::atomic::Ordering::SeqCst);
                 } else {
-                    let _ = io::stderr().write_all(&text[..take]);
-                }
-                passed += take;
-            }
-            if take < text.len() && !told {
-                told = true;
-                if !keep {
-                    eprintln!("\nsandbox: the guest's console passed {} KiB; the rest was discarded", CONSOLE_CAP / 1024);
+                    emit(&line, &mut kept);
                 }
             }
+            if pending.len() > buf.len() {
+                let line = std::mem::take(&mut pending);
+                emit(&line, &mut kept);
+            }
+        }
+        if pending.trim_ascii() == marker {
+            memory_ceiling.store(true, std::sync::atomic::Ordering::SeqCst);
+        } else if !pending.is_empty() {
+            emit(&pending, &mut kept);
         }
         kept
     })
