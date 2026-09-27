@@ -514,26 +514,29 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
                 Err(_) => Ok(Value::err(io_err("Other"))),
             }
         }
+        // FS-RACE-1: every file effect opens the path the check approved through `beneath`, which
+        // follows no link that appeared after the check (and opens only regular files).
         (ResourceKind::FsRead, "read_text") => {
             let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
-            let p = resolve_in_scope(root, &str_arg(args, 0, span)?, span)?;
-            match std::fs::read_to_string(&p) {
-                Ok(s) => Ok(Value::ok(Value::str(s))),
-                Err(e) => Ok(Value::err(io_err_for(&e))),
+            let rel = str_arg(args, 0, span)?;
+            let p = resolve_in_scope(root, &rel, span)?;
+            match crate::beneath::read_text(root, &p) {
+                crate::beneath::Outcome::Done(s) => Ok(Value::ok(Value::str(s))),
+                crate::beneath::Outcome::Io(e) => Ok(Value::err(io_err_for(&e))),
+                crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
         (ResourceKind::FsRead, "list_dir") => {
             let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
-            let p = resolve_in_scope(root, &str_arg(args, 0, span)?, span)?;
-            match std::fs::read_dir(&p) {
-                Ok(rd) => {
-                    let names: Vec<Value> = rd
-                        .filter_map(|e| e.ok())
-                        .map(|e| Value::str(e.file_name().to_string_lossy().to_string()))
-                        .collect();
+            let rel = str_arg(args, 0, span)?;
+            let p = resolve_in_scope(root, &rel, span)?;
+            match crate::beneath::list_dir(root, &p) {
+                crate::beneath::Outcome::Done(names) => {
+                    let names: Vec<Value> = names.into_iter().map(Value::str).collect();
                     Ok(Value::ok(Value::List(Rc::new(std::cell::RefCell::new(names)))))
                 }
-                Err(e) => Ok(Value::err(io_err_for(&e))),
+                crate::beneath::Outcome::Io(e) => Ok(Value::err(io_err_for(&e))),
+                crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
         (ResourceKind::FsRead, "narrow") => {
@@ -543,17 +546,13 @@ pub fn call_cap_method(capv: &CapVal, method: &str, args: &[Value], span: Span) 
         }
         (ResourceKind::FsWrite, "write_text") | (ResourceKind::FsWrite, "append_text") => {
             let CapScope::Fs { root, .. } = &capv.scope else { return Err(scope_bug(span)) };
-            let p = resolve_in_scope(root, &str_arg(args, 0, span)?, span)?;
+            let rel = str_arg(args, 0, span)?;
+            let p = resolve_in_scope(root, &rel, span)?;
             let body = str_arg(args, 1, span)?;
-            let res = if method == "append_text" {
-                use std::io::Write as _;
-                std::fs::OpenOptions::new().create(true).append(true).open(&p).and_then(|mut f| f.write_all(body.as_bytes()))
-            } else {
-                std::fs::write(&p, body.as_bytes())
-            };
-            match res {
-                Ok(()) => Ok(Value::ok(Value::Unit)),
-                Err(e) => Ok(Value::err(io_err_for(&e))),
+            match crate::beneath::write_text(root, &p, &body, method == "append_text") {
+                crate::beneath::Outcome::Done(()) => Ok(Value::ok(Value::Unit)),
+                crate::beneath::Outcome::Io(e) => Ok(Value::err(io_err_for(&e))),
+                crate::beneath::Outcome::Escaped(why) => Err(escaped_at_open(&rel, why, span)),
             }
         }
         (ResourceKind::Http, "get") => {
@@ -942,6 +941,12 @@ fn io_err_for(e: &std::io::Error) -> Value {
         _ => Value::variant("Other", vec![Value::str(e.to_string())]),
     }
 }
+/// DL0904 for a path that passed the scope check and then was not inside the grant when it was
+/// opened (FS-RACE-1) — the same code as every other escape, with the reason in the text.
+fn escaped_at_open(rel: &str, why: &str, span: Span) -> Fault {
+    Fault::at("DL0904", format!("path `{rel}` escapes the granted scope — {why}"), span)
+}
+
 fn scope_bug(span: Span) -> Fault {
     Fault::at("DL0907", "capability scope mismatch (checker bug)", span)
 }

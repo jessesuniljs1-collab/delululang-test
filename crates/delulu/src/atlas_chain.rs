@@ -178,7 +178,7 @@ pub(crate) fn chain(atlas: &Value, profile: crate::policy::Profile, carried: Car
             "carried_note": if carried.is_some() {
                 Value::Null
             } else {
-                json!("`--sandbox` runs one file: ask `atlas chain` of the file to be run")
+                json!("no sandboxed run to ask about: `--sandbox` runs a `.delulu` file, or a package `delulu run` would run")
             },
         },
         "resources": resources,
@@ -261,11 +261,16 @@ pub(crate) fn cmd_chain(args: &[String]) -> i32 {
         Ok(a) => a,
         Err(c) => return c,
     };
-    // Whether `--sandbox` would carry it is a question about ONE file — the guest's own rule on that
-    // file's text, exactly what `delulu sandbox policy` answers. A package or a saved Atlas has no
-    // sandboxed run to ask about, and says so rather than guessing.
-    let carried: Carried = if std::path::Path::new(&target).is_file() && target.ends_with(".delulu") {
+    // Whether `--sandbox` would carry it is the guest's own rule on the text the guest would be
+    // handed: a file's text, exactly what `delulu sandbox policy` answers, or — since P5 (D-V2-42) —
+    // a package's flattened text, exactly what `run <dir> --sandbox` hands its guest. A saved Atlas,
+    // or a package that would not run, has no sandboxed run to ask about, and says so rather than
+    // guessing.
+    let path = std::path::Path::new(&target);
+    let carried: Carried = if path.is_file() && target.ends_with(".delulu") {
         std::fs::read_to_string(&target).ok().map(|src| crate::guest::unsupported_surface(&src))
+    } else if path.is_dir() {
+        crate::run_cmd::flattened_package(&target).map(|src| crate::guest::unsupported_surface(&src))
     } else {
         None
     };

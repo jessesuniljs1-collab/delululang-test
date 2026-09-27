@@ -756,15 +756,21 @@ fn build_linker(engine: &Engine) -> Result<Linker<HostState>, WasmError> {
             }
             // Read host-side, then construct the Result[Str, IoErr] cell in guest memory (matching the
             // interpreter's io-error mapping: NotFound / PermissionDenied / Other(message)).
-            let built = match std::fs::read_to_string(&resolved) {
-                Ok(content) => build_ok_str(&mut caller, &content),
-                Err(e) => {
+            // FS-RACE-1: opened through `beneath`, as the interpreter opens it — no link that
+            // appeared after the check above is followed, and only a regular file is read.
+            let built = match delulu_runtime::beneath::read_text(&scope, &resolved) {
+                delulu_runtime::beneath::Outcome::Done(content) => build_ok_str(&mut caller, &content),
+                delulu_runtime::beneath::Outcome::Io(e) => {
                     use std::io::ErrorKind::*;
                     match e.kind() {
                         NotFound => build_err_ioerr(&mut caller, 0, None),
                         PermissionDenied => build_err_ioerr(&mut caller, 1, None),
                         _ => build_err_ioerr(&mut caller, 2, Some(&e.to_string())),
                     }
+                }
+                delulu_runtime::beneath::Outcome::Escaped(why) => {
+                    caller.data_mut().refused = Some(format!("DL0904: path `{rel}` escapes the granted scope — {why}"));
+                    return 0;
                 }
             };
             match built {

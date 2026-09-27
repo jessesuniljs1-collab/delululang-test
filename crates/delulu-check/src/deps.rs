@@ -122,8 +122,20 @@ fn resolve_dir(
         Ok(s) => s,
         Err(e) => {
             let f = ws.source_map.add_file(display_manifest(dir, is_root), String::new());
+            // In words, the same on every OS (C27's rule; the 2026-09-27 multi-OS pass found the raw
+            // `(os error 2)` here, behind every `atlas` query run outside a package).
+            let why = match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    "it does not exist — a DeluluLang package has a `delulu.toml` at its root".to_string()
+                }
+                std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
+                _ => {
+                    let text = e.to_string();
+                    text.rfind(" (os error ").map_or(text.clone(), |i| text[..i].to_string())
+                }
+            };
             ws.diagnostics.push(
-                Diagnostic::error("DL1004", format!("cannot read manifest `{}`: {e}", manifest_path.display()))
+                Diagnostic::error("DL1004", format!("cannot read manifest `{}`: {why}", manifest_path.display()))
                     .with_bare_span(Span::new(f, 0, 0)),
             );
             return None;

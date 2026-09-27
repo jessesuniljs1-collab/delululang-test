@@ -88,7 +88,7 @@ pub fn load_feed(path: &Path) -> FeedStatus {
     }
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
-        Err(e) => return FeedStatus::Unreadable(format!("cannot read `{}`: {e}", path.display())),
+        Err(e) => return FeedStatus::Unreadable(crate::cli::unreadable(&path, &e)),
     };
     let doc: Value = match serde_json::from_str(&text) {
         Ok(v) => v,

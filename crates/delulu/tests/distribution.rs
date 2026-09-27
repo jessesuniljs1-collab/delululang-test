@@ -154,3 +154,131 @@ fn exactly_one_crate_is_publishable_which_is_what_makes_section_three_true() {
          argument stops being true with it"
     );
 }
+
+/// P5 (D-V2-42): the archive carries what the binary looks for beside itself — the surface morphs,
+/// where `morph_file.rs` searches last, and the Agent Skill — so a person or an agent with nothing
+/// installed but the unpacked archive has both.
+#[test]
+fn the_archive_ships_the_morphs_and_the_skill() {
+    let sh = read("scripts/package-toolchain.sh");
+    assert!(sh.contains(r#"cp morphs/*.toml "$STAGE/morphs/""#), "the archive must ship the morphs beside bin/");
+    assert!(sh.contains(r#"skills/delulu/SKILL.md "$STAGE/skills/delulu/""#), "the archive must ship the Agent Skill");
+    assert!(sh.contains(r#"cp -r examples/guide "$STAGE/examples/""#), "the archive must ship the guided tour GETTING_STARTED walks");
+    let morph = read("crates/delulu/src/morph_file.rs");
+    assert!(morph.contains(r#"root.join("morphs")"#), "the binary must look for the morphs where the archive puts them");
+    assert!(
+        std::fs::read_dir(root().join("morphs")).expect("morphs/").flatten().any(|e| e.path().extension().is_some_and(|x| x == "toml")),
+        "there must be morphs to ship"
+    );
+}
+
+/// P5-05: INSTALL.md §1 carries exactly one `install-gate` block, and it is the whole first-run
+/// path — verify, unpack, PATH, a new program, its test, its authority, a run and a sandboxed run.
+/// `scripts/check-install.sh` executes that block against a real archive (the release workflow does,
+/// on every target); this pins that the block still walks the path, so the gate cannot be hollowed
+/// out by trimming the page.
+#[test]
+fn the_install_page_carries_the_gate_the_release_workflow_runs() {
+    let md = read("INSTALL.md");
+    assert_eq!(md.matches("```sh install-gate\n").count(), 1, "exactly one install-gate block");
+    let block: String = md
+        .split("```sh install-gate\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n```").next())
+        .expect("the block closes")
+        .to_string();
+    for step in [
+        "sha256sum -c delulu-<version>-<target>.tar.gz.sha256",
+        "tar -xzf delulu-<version>-<target>.tar.gz",
+        "sha256sum -c SHA256SUMS",
+        "export PATH=",
+        "delulu --version",
+        "delulu new hello",
+        "delulu test .",
+        "delulu authority . --grants",
+        "delulu run . --grant console",
+        "delulu run . --grant console --sandbox",
+    ] {
+        assert!(block.contains(step), "the install gate must still do `{step}`:\n{block}");
+    }
+    let gate = read("scripts/check-install.sh");
+    assert!(gate.contains("install-gate") && gate.contains("eval \"$BLOCK\""), "the gate runs the page's block");
+    assert!(gate.contains("set -euo pipefail"), "a step that fails must fail the gate");
+    let wf = read(".github/workflows/release.yml");
+    assert!(wf.contains("bash scripts/check-install.sh"), "the release workflow runs the gate");
+    assert!(wf.contains("bash scripts/package-toolchain.sh"), "the release workflow builds with the same script");
+}
+
+/// D-NE-7 stays the owner's: the release workflow builds, attests and tests on every run, and
+/// PUBLISHES nothing unless the run came from a `v*` tag AND the owner switched `RELEASES` on — and
+/// even then only a draft, which a person publishes.
+#[test]
+fn the_release_workflow_publishes_only_a_draft_and_only_when_the_owner_says() {
+    let wf = read(".github/workflows/release.yml");
+    assert!(
+        wf.contains("if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASES == 'on'"),
+        "the release job must be gated on a tag AND the owner's switch"
+    );
+    assert_eq!(wf.matches("gh release create").count(), 1, "one place creates a release");
+    let create = wf.lines().find(|l| l.contains("gh release create")).unwrap();
+    assert!(create.contains("--draft"), "a release is a draft a person publishes: {create}");
+    assert!(wf.contains("actions/attest-build-provenance"), "a release's archives are attested");
+    // A dry run distributes nothing: the upload and the (public, permanent) attestation are a tag's.
+    for step in ["uses: actions/attest-build-provenance", "uses: actions/upload-artifact"] {
+        let at = wf.find(step).unwrap_or_else(|| panic!("the workflow has `{step}`"));
+        let before = &wf[..at];
+        let step_start = before.rfind("- name:").expect("the step is named");
+        assert!(
+            wf[step_start..at].contains("if: startsWith(github.ref, 'refs/tags/v')"),
+            "`{step}` must run only for a `v*` tag: {}",
+            &wf[step_start..at]
+        );
+    }
+    for target in ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"] {
+        assert!(wf.contains(target), "the workflow builds {target}, which INSTALL.md names");
+        assert!(read("INSTALL.md").contains(target), "INSTALL.md names {target}, which the workflow builds");
+    }
+    // Nothing in the workflow pushes anywhere: no crates.io, no second repository.
+    for never in ["cargo publish", "git push", "CARGO_REGISTRY_TOKEN"] {
+        assert!(!wf.contains(never), "the release workflow must not `{never}`");
+    }
+}
+
+/// P5-04: `delulu --version --json` names the target the binary was compiled for and the commit it was
+/// built from — `null` when the build was not told, never a guess.
+#[test]
+fn the_binary_names_its_target_and_its_commit_or_says_it_was_not_told() {
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .args(["--version", "--json"])
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .output()
+        .expect("the binary runs");
+    assert!(o.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON");
+    let target = v["target"].as_str().expect("a target");
+    let arch = std::env::consts::ARCH;
+    assert!(target.starts_with(arch), "`{target}` must be this machine's {arch} build");
+    match &v["commit"] {
+        serde_json::Value::Null => {}
+        serde_json::Value::String(c) => {
+            let hex = c.strip_suffix("-dirty").unwrap_or(c);
+            assert!(hex.len() == 40 && hex.chars().all(|ch| ch.is_ascii_hexdigit()), "a commit, not a guess: {c}");
+        }
+        other => panic!("commit must be a string or null: {other}"),
+    }
+}
+
+/// P5-04: a release says what changed. The version this tree builds has its own `## [X.Y.Z]` section
+/// in CHANGELOG.md, and the release workflow refuses a `vX.Y.Z` tag without one before building
+/// anything for it — so bumping the version is the moment the section gets written.
+#[test]
+fn the_version_has_its_changelog_section_and_a_tag_without_one_is_refused() {
+    let changelog = read("CHANGELOG.md");
+    let version = env!("CARGO_PKG_VERSION");
+    assert!(
+        changelog.lines().any(|l| l.starts_with(&format!("## [{version}]"))),
+        "CHANGELOG.md has no `## [{version}]` section for the version this tree builds"
+    );
+    let wf = read(".github/workflows/release.yml");
+    assert!(wf.contains("The tag has its CHANGELOG section"), "the release workflow checks the tag's section");
+}

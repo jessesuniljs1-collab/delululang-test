@@ -254,7 +254,7 @@ fn authority_change(file: &str, before: &str, after: &str) -> Value {
 /// Read a value given as TEXT or as `@FILE`.
 fn text_or_file(v: &str) -> Result<String, String> {
     match v.strip_prefix('@') {
-        Some(path) => std::fs::read_to_string(path).map_err(|e| format!("cannot read `{path}`: {e}")),
+        Some(path) => std::fs::read_to_string(path).map_err(|e| crate::cli::unreadable(&path, &e)),
         None => Ok(v.to_string()),
     }
 }
@@ -349,7 +349,7 @@ pub fn cmd_edit(rest: &[String]) -> i32 {
     };
     let bytes = match std::fs::read(&a.file) {
         Ok(b) => b,
-        Err(e) => return refuse(json_out, &a.file, &format!("cannot read `{}`: {e}", a.file), None),
+        Err(e) => return refuse(json_out, &a.file, &crate::cli::unreadable(&a.file, &e), None),
     };
     let current = file_hash(&bytes);
     let expected = a.expect.as_deref().unwrap_or("").to_ascii_lowercase();

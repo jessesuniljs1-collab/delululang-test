@@ -1633,3 +1633,166 @@ Chapter 13 (with the benchmark's pilot result stated at the size it has), and V2
 the Book's new benchmark sentence against the published report corrected it before it landed: the first
 draft credited "the skill and the checker"; the report says the Skill alone did not help first-try
 compiles in the pilot, and the Skill with introspection or the MCP server did.
+
+**P6's run, read.** CI `36273691693` (`15c025d`): **success on every job**, first attempt. The
+hostile-guest gate on the KVM runner ran for real this time: the control on the real image exited 0
+with the program run, each of the five hostile modes booted and was refused (flood 10.4 s, garbage,
+huge and ports ~2.7 s, silent 67 s by the channel's deadline), no VM directory and no VMM left behind,
+and `microvm-reproducible` built the same kernel, initramfs, guest and config twice. Suite counts:
+Linux x86-64 and arm64 1,942, macOS 1,932, Windows 1,926, 0 failed, 145 binaries. **P6 is COMPLETE.**
+
+## P5 — distribution (opened 2026-09-27)
+
+**D-NE-7 and D-NE-8, asked at the start as the plan says** — and answered under the owner's delegation
+where the answer is the project's, left with the owner where it is his (D-V2-42). The release workflow
+is hand-written around `scripts/package-toolchain.sh` (D-NE-8's first half: no `cargo-dist`); **no
+installer scripts** are built — a `curl | sh` posture is a security-policy choice, so the documented,
+tested manual path stands until the owner chooses otherwise. **Publication stays the owner's (D-NE-7)**:
+a run not started by a `v*` tag builds, checks and installs the archive on all four targets and then
+throws it away — nothing uploaded, nothing written to the public (and permanent) attestation log; a tag
+keeps the archives and attests them; a draft release needs the tag AND `vars.RELEASES == 'on'`, which is
+off.
+
+**What P5 built.**
+- `.github/workflows/release.yml`: four targets (linux x86-64 and arm64, macOS arm64, Windows x64), the
+  archive checked to be the target the job claims, the binary checked to name that target and the
+  commit the run checked out, a tag refused without its `## [X.Y.Z]` section in `CHANGELOG.md`, the
+  install gate, and — for a tag only — provenance attestations, kept artifacts and (owner's switch) a
+  draft release.
+- `scripts/check-install.sh`, the install gate: it reads the one fenced block marked `install-gate`
+  out of `INSTALL.md` and runs it as written — verify the download's `.sha256`, unpack, verify
+  `SHA256SUMS`, put `bin/` on `PATH`, `delulu --version`, `delulu new hello`, `test`, `authority
+  --grants`, `run --grant console`, and the same run `--sandbox`. The page cannot drift from the test.
+  Falsified three ways: a mistyped command on the page (rc 2), a tampered `.sha256` (rc 1), the block's
+  marker removed (rc 2). Run green on a real Windows archive and a real Linux archive built in WSL (the
+  guest a subordinate uid there).
+- `INSTALL.md` §1 rewritten around that block, with the targets, the macOS/PowerShell variants, the
+  sandbox line, and the attestation and `--version --json` check under "Verifying".
+- The archive ships the surface morphs beside `bin/`, where the binary now looks last
+  (`morph_file.rs::search_dirs_from`, unit-tested), and the guided tour `examples/guide/` that
+  `GETTING_STARTED.md` walks (the archive had not carried it). `INSTALL.txt` names the sandbox and the
+  morph commands.
+- `delulu --version --json` names the `target` it was compiled for and the `commit` it was built from
+  (`crates/delulu/build.rs`); `null` when the builder did not say, never a guess; a local package of an
+  uncommitted tree says `-dirty`.
+- `crates/delulu/tests/distribution.rs` +5: morphs, skill and guide shipped; the install-gate block's
+  steps; the workflow publishes only a draft, only on the owner's switch, and uploads/attests only for a
+  tag (a mutant removing the upload's tag condition fails it); the version's CHANGELOG section; the
+  version JSON.
+
+**Found by walking the new install path, fixed: `delulu run . --sandbox` did not work on a package.**
+The command a new package's own output points at, run sandboxed, died on the raw OS error — `Access is
+denied. (os error 5)` on Windows, `Is a directory` on Linux — because the sandboxed path read its target
+as one file. That is campaign finding C27's defect in the one path C27's fix never reached. A package now
+runs sandboxed exactly as it runs without the sandbox: the ordinary run's own loader resolves, checks and
+flattens it (`run_cmd::load_package_for_run`), the guest is handed that text, and the host checks it
+before a guest exists. Walking it found two more:
+- **The manifest did not bind a sandboxed run — the sandbox was LESS strict than no sandbox.** DL0701
+  (main's row outside what the manifest declares) was checked on the ordinary path only. Witnessed
+  against the pre-change binary: a file declaring `! {Write}` beside a `delulu.toml` whose `effects = []`
+  was refused by `run --grant console` (DL0701, exit 1) and RAN under `run --grant console --sandbox`
+  (printed, exit 0). The grants still bounded what it did — this was the manifest's ceiling ignored,
+  not an effect without a grant — but a run that adds confinement must never drop a check. The check
+  is one shared function now (`run_cmd::manifest_gate`), called by both paths, for a package and for a
+  file beside a manifest; a mutant removing it from the sandboxed path fails the new test.
+- **A sandboxed program that did not check got no diagnostic.** The guest could only say "the host sent
+  a program that does not check" and hang up; the host now prints the checker's diagnostics — line,
+  code, fix — and starts no guest.
+- `sandbox policy <dir>` had the same raw-OS-error defect; it previews a package from the same
+  flattened text now (same policy hash as the run), and `atlas chain` answers `carried` for a package
+  instead of saying a package has no sandboxed run. Three Atlas-chain snapshots changed accordingly
+  (`greeter` now `carried: true`; the two plugin packages keep `null` with the reworded reason).
+- Two existing tests' "actor" programs did not check (`C()` for `spawn C()`); they had passed only because
+  the surface refusal happened to come before any check. Corrected, and the test now asserts its
+  program checks, so its refusal is the surface's and not the checker's.
+
+
+## 2026-09-27 — P5b: the multi-OS agent pass (Haiku 4.5 and Sonnet 5, Windows and Linux), and what it found
+
+The owner asked for agents, in the sandbox, on more than one OS, deliberately attempting what they
+should not be able to do. Four ran against the P5 archives — Haiku 4.5 and Sonnet 5, each on Windows and
+on Linux (WSL2) — with a brief, their own state directories, and their findings saved as they went
+(`D:\nelan\DeluluLang-agent-transcripts\2026-09-27-p5-multios\`: `BRIEF.md`, `FINDINGS.md` with the head
+chef's verification of each, and every agent's scripts and logs). Every claim below was re-run against
+the current binary before it was believed.
+
+**GUARD-SCOPE-1 (CRITICAL, fixed).** Guard path rules were matched by EXACT equality. A seal on a
+directory sealed the directory entry and nothing in it: with `fs_read:<data>/secret` sealed, a lease
+holder granted `<data>` read `<data>/secret/key.txt` — witnessed on Windows under a lease, as an ordinary
+run and as a sandboxed guest. `fs_read:<data>/secret/**` was stored and answered `ok: … → sealed` while it
+could match nothing. The addendum (§2.3) had promised the broker's own vocabulary, and for paths that is
+containment. Now: a path rule covers its subtree (`guard.rs::path_within`, the broker's
+`is_descendant_or_equal`); at mint and at request time a path scope is judged by overlap either way; a
+glob is refused when the rule is set; case is folded on Windows and macOS and for any drive-letter path
+(a Guard rule REFUSES, so the lattice's case-sensitive choice would fail open here). Recorded as D-V2-43.
+Tests: `a_path_rule_covers_its_subtree_at_use_mint_request_and_permit`,
+`a_glob_is_refused_and_a_drive_path_matches_in_any_case`; the broker suite 191/0.
+
+**Broker custody for sandboxed guests (REMAINING_WORK 4.20's other half, closed).** A sandboxed run
+refused `--lease` and `--broker`, so nothing the Guard said applied to a guest. The host now authorizes
+every operation a guest asks for through the custody the run chose, before performing it, with the
+interpreter's own op mapping (`channel.rs::HostChannel::with_custody`; `interp::custody_op_for`). A lease
+is redeemed by the ordinary path's code (`run_cmd::redeem_lease`): its grants become the node's, a local
+`--grant` beside it is refused, and its budget narrows the guest's limits (never widens them). The run
+report says who decided (`custody: {mode, node}`). `crates/delulu/tests/sandbox_guard_e2e.rs` tells the
+whole story through the real binary: `authority --grants` → broker → seal + guard → `grants delegate` →
+the sandboxed writer DL1410 naming the exact `guard request` → request → DL1411 → approve → the write →
+the sealed read DL1413 for the guest and for the ordinary run → a local grant refused → revocation →
+`audit verify`.
+
+**AUDIT-WRITERS-1 (fixed; found by that test).** `audit verify` failed DL1405 "prev_hash chain break" on a
+chain nobody had touched. The chain was designed single-writer; sandboxed runs, `reconcile` and a run's
+own records made it multi-writer, and each writer cached its head, so the daemon's next record chained
+onto a head it had read before the run's. The append lock moved from `guest.rs` into
+`delulu-broker::audit` (`AppendLock`); `AuditLog::open` recovers and `append` catches up UNDER it (the
+anchor and the tail file's length are the fast check); a lock taken over from a dead writer carries a
+nonce so the old holder does not delete it; `verify` re-reads a failing pass under the lock before
+believing it. Tests: two handles interleaved across a day boundary, four threads × 25 records, a stale
+lock taken over — the first two fail against a mutant with the catch-up removed.
+
+**FS-RACE-1 (CRITICAL, fixed).** Containment was check-then-use: the path was canonicalized and checked
+(C84, SYMLINK-DANGLE-1), then the lexical path was handed to `std::fs::write`, which resolved it again.
+A link inside `fs.write=./scope` flipped in a loop between an inside and an outside target let
+`write_text` land OUTSIDE the grant — the agent's own script, re-run by the head chef against the
+archive binary: 75 of 150 runs wrote the payload into `outside/race_target.txt`. It reproduced under
+`--sandbox` (the host performs a guest's effects with the same code). Who can race: not a DeluluLang
+program (the language cannot make a link) — another process with write access to the granted
+directory, the confused-deputy case a grant exists to bound. Fix: `delulu-runtime/src/beneath.rs` opens
+the approved canonical path one component at a time from the top of the filesystem and follows no link:
+`openat(…, O_NOFOLLOW)` on Unix (`O_PATH` on Linux), `NtCreateFile` relative to the parent's handle with
+`FILE_OPEN_REPARSE_POINT` on Windows, a directory found to be a junction or link refused, listing by
+handle. Every file effect goes through it — the interpreter's `read_text`, `list_dir`, `write_text`,
+`append_text`, the wasm engine's `read_text`, and a plugin artifact's bytes (whose check had been lexical
+only). The same agent script against the fixed tree, Linux: L0 150 runs and L1 `--sandbox
+hostile-agent` 80 runs, the outside file untouched both times. Unit race test (one thread flipping a
+directory between real and a link to outside, another writing and reading through it for 3 s): Windows
+444 flips, Linux 25,739, nothing written or read outside; against a mutant that opens by path after the
+check, a write lands outside (Windows, witnessed). Not closed, and said so in the module: a hard link (a
+file that IS inside the grant), and the granted directory's own path, which is resolved at use as before.
+`libc` and `windows-sys` became direct dependencies of the runtime at the versions the CLI already uses;
+the lockfile gained nothing.
+
+**FIFO (HIGH, fixed with it).** Reading a FIFO placed in a granted directory hung for ever. The open is
+non-blocking and only a regular file is read or written; a FIFO, device or socket is refused at once.
+
+**The raw-OS-error class (MEDIUM, fixed).** `sign <dir>` and 35 other sites printed `os error N`;
+`cli::unreadable` says it in words (a directory, not found, permission denied, or the OS's text without
+the number), and `tests/unreadable_paths.rs` sweeps every command `toolchain --json` lists. A grant key
+that takes a value, given none, now says so (`--grant fs.read` was "unknown grant"), and a `--limits`
+value that is not a number names the units.
+
+**Found by the head chef while writing the next brief — GUARD-ALIAS-1 (CRITICAL, OPEN, fix in progress).**
+The Guard is handed the LEXICAL path of a use (`interp::fs_scope_arg`, no filesystem access), and the
+filesystem follows links. With `<data>/secretstuff` sealed and a junction `<data>/alias → secretstuff`
+inside the grant, `read_text("alias/key.txt")` returned the sealed key under a lease, plain and
+`--sandbox` (witnessed on Windows, script `guard_alias.sh` in the pass folder); the direct path was
+DL1413. A link that stays inside the grant is allowed by containment, and git can carry one. The fix
+pins the resolved path before the decision and opens exactly that path (next entry).
+
+**Open from the pass (not yet fixed):** a memory or processor ceiling hit under `--sandbox`/`microvm`
+kills the guest but prints the allocator's own text, reports no `outcome.stopped_by`, and on Windows the
+process exit (68, 9) disagrees with the report's `exit: 1`; `--limits wall=` is refused under `--sandbox`
+although the report lists a wall-clock ceiling; the host's serving work is not counted against `cpu=`;
+`--report-out` is not written when a sandboxed run is refused before it starts; a dangling link read is
+explained as "where a WRITE would land"; a 500-deep `../` path is echoed whole. The hard-link alias is the
+documented residual it was (P20-R1).

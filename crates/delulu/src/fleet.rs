@@ -131,7 +131,7 @@ fn resolve_hash_or_path(s: &str) -> Result<String, String> {
         }
         return Ok(s.to_string());
     }
-    let bytes = std::fs::read(s).map_err(|e| format!("cannot read `{s}`: {e}"))?;
+    let bytes = std::fs::read(s).map_err(|e| crate::cli::unreadable(&s, &e))?;
     Ok(delulu_broker::content_hash(&bytes))
 }
 
@@ -217,7 +217,7 @@ fn cmd_fleet_update(rest: &[String]) -> i32 {
     let bytes = match std::fs::read(&artifact) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{artifact}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&artifact, &e));
             return 2;
         }
     };

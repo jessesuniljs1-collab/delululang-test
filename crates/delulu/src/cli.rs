@@ -1134,7 +1134,15 @@ fn run_inner(args: &[String]) -> i32 {
             // the machine channel for the toolchain version got prose. `delulu_version` is already
             // an envelope field, so the answer is the envelope itself.
             if rest.iter().any(|a| a == "--json") || args.iter().any(|a| a == "--json") {
-                print_success_envelope("version", json!({}));
+                // P5-04: which build this is — the target it was compiled for, and the commit it was
+                // built from when the builder said (`crates/delulu/build.rs`); `null` when it did not.
+                print_success_envelope(
+                    "version",
+                    json!({
+                        "target": env!("DELULU_BUILD_TARGET"),
+                        "commit": option_env!("DELULU_BUILD_COMMIT"),
+                    }),
+                );
             } else {
                 println!("delulu {}", env!("CARGO_PKG_VERSION"));
             }
@@ -1471,7 +1479,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
                     return 2;
                 }
                 if let Err(e) = collect_delulu_files(p, &mut files) {
-                    eprintln!("error: cannot read {}: {e}", p.display());
+                    eprintln!("error: {}", crate::cli::unreadable(&p, &e));
                     return 2;
                 }
             }
@@ -1539,7 +1547,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
             return 2;
         }
         if let Err(e) = collect_delulu_files(p, &mut files) {
-            eprintln!("error: cannot read {}: {e}", p.display());
+            eprintln!("error: {}", crate::cli::unreadable(&p, &e));
             return 2;
         }
     }
@@ -1551,7 +1559,7 @@ fn cmd_fmt(args: &[String]) -> i32 {
         let src = match std::fs::read_to_string(f) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: cannot read {}: {e}", f.display());
+                eprintln!("error: {}", crate::cli::unreadable(&f, &e));
                 return 2;
             }
         };
@@ -1639,7 +1647,7 @@ fn cmd_fmt_migrate(files: Vec<std::path::PathBuf>, json: bool) -> i32 {
         let src = match std::fs::read_to_string(f) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: cannot read {}: {e}", f.display());
+                eprintln!("error: {}", crate::cli::unreadable(&f, &e));
                 return 2;
             }
         };
@@ -2064,7 +2072,7 @@ fn cmd_test(rest: &[String]) -> i32 {
     for p in &paths {
         let mut found = Vec::new();
         if let Err(e) = collect_delulu_files(p, &mut found) {
-            eprintln!("error: cannot read {}: {e}", p.display());
+            eprintln!("error: {}", crate::cli::unreadable(&p, &e));
             return 2;
         }
         let mut modules: Vec<std::path::PathBuf> = Vec::new();
@@ -2340,7 +2348,7 @@ fn cmd_locale(rest: &[String]) -> i32 {
             let bytes = match std::fs::read(file) {
                 Ok(b) => b,
                 Err(e) => {
-                    eprintln!("error: cannot read `{file}`: {e}");
+                    eprintln!("error: {}", crate::cli::unreadable(&file, &e));
                     return 2;
                 }
             };
@@ -2731,6 +2739,35 @@ fn strip_morph_pragma(src: &str) -> String {
     }
 }
 
+/// Why a path named on the command line could not be read, in the same words on every OS — C27's rule
+/// as ONE function instead of a fix per command. Reading a directory as a file is the case that
+/// misleads: Windows says `Access is denied. (os error 5)`, which sends the reader hunting for an ACL
+/// that was never involved, and Linux says `Is a directory (os error 21)` — two texts for one mistake.
+/// C27 fixed `run`, `check` and `authority` one site at a time; `sign`, `verify-sig`, `fleet`, `edit`
+/// and the rest kept printing the raw error until the 2026-09-27 multi-OS test pass found `sign <dir>`
+/// doing it. A missing file and a refused one get plain words too; anything rarer keeps the OS's own
+/// sentence, which is worth reading, without its number. `tests/unreadable_paths.rs` sweeps every
+/// command so a new site cannot bring the raw text back.
+pub(crate) fn unreadable(path: &dyn AsRef<std::path::Path>, e: &std::io::Error) -> String {
+    let p = path.as_ref();
+    let why = if p.is_dir() {
+        "it is a directory, and a file was expected here".to_string()
+    } else {
+        match e.kind() {
+            std::io::ErrorKind::NotFound => "no such file".to_string(),
+            std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
+            _ => {
+                let text = e.to_string();
+                match text.rfind(" (os error ") {
+                    Some(i) => text[..i].to_string(),
+                    None => text,
+                }
+            }
+        }
+    };
+    format!("cannot read `{}`: {why}", p.display())
+}
+
 /// Read one `.delulu` source file named on the command line.
 ///
 /// The directory case is handled explicitly (`HARDENING_CAMPAIGN.md` C27). Passing a package
@@ -2830,7 +2867,7 @@ pub(crate) fn load_into(map: &mut SourceMap, file: &str) -> Result<(u32, String)
                 );
                 return Err(2);
             }
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             Err(2)
         }
     }
@@ -2850,7 +2887,7 @@ fn authority_artifact(file: &str, opts: &Opts) -> i32 {
     let bytes = match std::fs::read(file) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -4268,7 +4305,7 @@ fn cmd_plugin_verify(rest: &[String]) -> i32 {
     let bytes = match std::fs::read(&file) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -4337,7 +4374,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     let manifest_src = match std::fs::read_to_string(&manifest_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read `{}`: {e}", manifest_path.display());
+            eprintln!("error: {}", crate::cli::unreadable(&manifest_path, &e));
             return 2;
         }
     };
@@ -4388,7 +4425,7 @@ fn cmd_plugin_build(rest: &[String]) -> i32 {
     let src = match std::fs::read_to_string(src_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read `{}`: {e}", src_path.display());
+            eprintln!("error: {}", crate::cli::unreadable(&src_path, &e));
             return 2;
         }
     };
@@ -4561,7 +4598,7 @@ fn cmd_plugin_inspect(rest: &[String]) -> i32 {
     let bytes = match std::fs::read(&file) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -5137,7 +5174,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
     let old_text = match std::fs::read_to_string(old_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read `{old_path}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&old_path, &e));
             return 2;
         }
     };
@@ -5157,7 +5194,7 @@ fn cmd_authority_diff(old_path: &str, new_arg: &str, opts: &Opts) -> i32 {
         let text = match std::fs::read_to_string(new_arg) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: cannot read `{new_arg}`: {e}");
+                eprintln!("error: {}", crate::cli::unreadable(&new_arg, &e));
                 return 2;
             }
         };
@@ -5455,7 +5492,7 @@ fn cmd_why_plugin(effect_name: &str, path: &str, opts: &Opts) -> i32 {
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{path}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&path, &e));
             return 2;
         }
     };
@@ -6741,7 +6778,7 @@ fn cmd_grants_renew(args: &[String], state_dir: &std::path::Path, json: bool) ->
     let receipt = match std::fs::read_to_string(&file) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("error: cannot read {file}: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -6826,7 +6863,7 @@ fn cmd_grants_adopt(args: &[String], state_dir: &std::path::Path, json: bool) ->
         match std::fs::read_to_string(f) {
             Ok(t) => chain.push(t),
             Err(e) => {
-                eprintln!("error: cannot read {f}: {e}");
+                eprintln!("error: {}", crate::cli::unreadable(&f, &e));
                 return 2;
             }
         }
@@ -7228,10 +7265,12 @@ pub(crate) fn lease_guard_status_line(bypass: bool, poisoned: bool, rules: &[cra
     if bypass {
         return "guard: BYPASSED by the principal — guarded uses will proceed and be audited".to_string();
     }
+    // Each rule with its tier: a `sealed` rule listed under "guarded" told the holder a request
+    // could lift it, which is exactly what sealed means it cannot (found 2026-09-27).
     let guarded: Vec<String> = rules
         .iter()
         .filter(|r| r.tier != "warn")
-        .map(|r| format!("{}:{}", r.class, r.pattern))
+        .map(|r| format!("{}:{} ({})", r.class, r.pattern, r.tier))
         .collect();
     let poisoned = if poisoned { " [policy store unreadable — fail closed]" } else { "" };
     if guarded.is_empty() {
@@ -8422,7 +8461,7 @@ fn cmd_audit(rest: &[String]) -> i32 {
             let text = match std::fs::read_to_string(&path) {
                 Ok(t) => t,
                 Err(e) => {
-                    eprintln!("error: cannot read {path}: {e}");
+                    eprintln!("error: {}", crate::cli::unreadable(&path, &e));
                     return 2;
                 }
             };
@@ -8586,7 +8625,7 @@ pub(crate) fn atlas_from_target(target: &str, gods: usize, json: bool) -> Result
                     2
                 }),
             Err(e) => {
-                eprintln!("error: cannot read `{target}`: {e}");
+                eprintln!("error: {}", crate::cli::unreadable(&target, &e));
                 Err(2)
             }
         };

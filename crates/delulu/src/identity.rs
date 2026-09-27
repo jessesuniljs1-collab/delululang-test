@@ -768,7 +768,7 @@ mod win {
         let modules = own_modules()?;
         let mut key = blake3::Hasher::new();
         for m in &modules {
-            let md = std::fs::metadata(m).map_err(|e| format!("cannot read `{}`: {e}", m.display()))?;
+            let md = std::fs::metadata(m).map_err(|e| crate::cli::unreadable(&m, &e))?;
             key.update(m.as_os_str().as_encoded_bytes());
             key.update(&md.len().to_le_bytes());
             let t = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).unwrap_or_default();

@@ -214,6 +214,87 @@ pub struct AuditLog {
     /// truncation is detectable even in the (impossible-by-hash but cheap-to-check) case where a
     /// shortened chain somehow ended on the same head.
     records: usize,
+    /// The byte length of `current_day`'s file after this handle last touched it. With the anchor,
+    /// this is how an append notices that ANOTHER writer moved the chain since (AUDIT-WRITERS-1).
+    tail_len: Option<u64>,
+}
+
+/// The append lock's file name, beside the day files and the anchor (neither reader lists it).
+pub const APPEND_LOCK_FILE: &str = "append.lock";
+
+/// Exclusive access to an audit directory for the length of one append or one recovery.
+///
+/// # Campaign finding AUDIT-WRITERS-1 (2026-09-27)
+///
+/// The chain was designed single-writer — the broker daemon owns it — and it stopped being that the
+/// day sandboxed runs began recording `sandbox-launch`/`sandbox-death` in it, as `reconcile` and a
+/// run's own records already did. Each writer caches the head it opened with. So a sandboxed run
+/// under a lease appended two records, and the daemon's next record chained onto the head it had
+/// cached BEFORE them: `audit verify` failed DL1405 "prev_hash chain break" on a chain nobody had
+/// tampered with. Found by the end-to-end Guard test (`sandbox_guard_e2e.rs`), the first test to
+/// put both writers on one chain.
+///
+/// Now every write goes through this lock, and under it [`AuditLog::append`] first catches up with
+/// what any other writer did. `create_new` is the whole mechanism: it succeeds for exactly one
+/// process. A lock nobody released (a writer killed mid-append) is taken over after a short wait
+/// rather than blocking for ever, because an audit record must not be able to hang a run; the file
+/// carries its holder's nonce, so a writer whose lock was taken over does not delete its
+/// successor's on the way out.
+pub struct AppendLock {
+    path: PathBuf,
+    nonce: String,
+}
+
+impl AppendLock {
+    /// Take the lock on `dir`, waiting up to five seconds for another writer. `None` only when even
+    /// the takeover of a stale lock fails (the directory is not writable).
+    pub fn take(dir: &Path) -> Option<AppendLock> {
+        AppendLock::take_within(dir, std::time::Duration::from_secs(5))
+    }
+
+    fn take_within(dir: &Path, wait: std::time::Duration) -> Option<AppendLock> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let nonce = format!("{}-{t}-{n}", std::process::id());
+        let path = dir.join(APPEND_LOCK_FILE);
+        let create = |path: &Path| -> std::io::Result<()> {
+            let mut f = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+            f.write_all(nonce.as_bytes())
+        };
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            match create(&path) {
+                Ok(()) => return Some(AppendLock { path, nonce }),
+                Err(_) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                Err(_) => {
+                    let _ = fs::remove_file(&path);
+                    return create(&path).ok().map(|()| AppendLock { path, nonce });
+                }
+            }
+        }
+    }
+}
+
+impl Drop for AppendLock {
+    fn drop(&mut self) {
+        // Only our own lock: after a takeover the file is the successor's.
+        if fs::read_to_string(&self.path).map(|s| s == self.nonce).unwrap_or(false) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn lock_unavailable(dir: &Path) -> AuditError {
+    AuditError::Io(format!(
+        "the audit chain's append lock `{}` could not be taken",
+        dir.join(APPEND_LOCK_FILE).display()
+    ))
 }
 
 /// The anchor file's name. Deliberately NOT a `.jsonl` day file, so `list_day_files` never sees it.
@@ -261,48 +342,85 @@ fn read_anchor(dir: &Path) -> Option<(String, usize)> {
     Some((head, records))
 }
 
+/// What the files say — the head, the latest day file, the record count — checked against the
+/// anchor, and the anchor written if there is none. Called under the append lock.
+fn recover(dir: &Path) -> Result<(String, Option<String>, usize), AuditError> {
+    let days = list_day_files(dir)?;
+    // Head = the hash of the last record across all files, in day order (robust to a trailing
+    // header-only file). current_day = the latest existing file, so same-day appends don't
+    // rewrite the header.
+    let mut head = GENESIS_HASH.to_string();
+    for day in &days {
+        if let Some(h) = last_record_hash(&day_path(dir, day))? {
+            head = h;
+        }
+    }
+    let current_day = days.last().cloned();
+    // Count what is on disk so the anchor can be refreshed. A log opened for the first time
+    // gets its anchor here; an existing one gets it re-affirmed only if it already AGREES —
+    // silently rewriting a disagreeing anchor would erase the very evidence it exists to keep.
+    let mut records = 0usize;
+    for day in &days {
+        records += count_records(&day_path(dir, day))?;
+    }
+    match read_anchor(dir) {
+        Some((a_head, a_records)) if a_head != head || a_records != records => {
+            return Err(AuditError::corrupt(
+                records as u64,
+                format!(
+                    "audit anchor disagrees with the log: anchor says {a_records} record(s) \
+                     ending {a_head}, the files hold {records} ending {head} — the chain has \
+                     been truncated, replaced or rolled back"
+                ),
+            ));
+        }
+        _ => write_anchor(dir, &head, records)?,
+    }
+    Ok((head, current_day, records))
+}
+
+fn file_len(path: &Path) -> Option<u64> {
+    fs::metadata(path).ok().map(|m| m.len())
+}
+
 impl AuditLog {
     /// Open (creating `dir` if needed) and recover the chain head from any existing day files.
     pub fn open(dir: impl Into<PathBuf>) -> Result<AuditLog, AuditError> {
         let dir = dir.into();
         fs::create_dir_all(&dir).map_err(AuditError::io)?;
-        let days = list_day_files(&dir)?;
-        // Head = the hash of the last record across all files, in day order (robust to a trailing
-        // header-only file). current_day = the latest existing file, so same-day appends don't
-        // rewrite the header.
-        let mut head = GENESIS_HASH.to_string();
-        for day in &days {
-            if let Some(h) = last_record_hash(&day_path(&dir, day))? {
-                head = h;
-            }
-        }
-        let current_day = days.last().cloned();
-        // Count what is on disk so the anchor can be refreshed. A log opened for the first time
-        // gets its anchor here; an existing one gets it re-affirmed only if it already AGREES —
-        // silently rewriting a disagreeing anchor would erase the very evidence it exists to keep.
-        let mut records = 0usize;
-        for day in &days {
-            records += count_records(&day_path(&dir, day))?;
-        }
-        match read_anchor(&dir) {
-            Some((a_head, a_records)) if a_head != head || a_records != records => {
-                return Err(AuditError::corrupt(
-                    records as u64,
-                    format!(
-                        "audit anchor disagrees with the log: anchor says {a_records} record(s) \
-                         ending {a_head}, the files hold {records} ending {head} — the chain has \
-                         been truncated, replaced or rolled back"
-                    ),
-                ));
-            }
-            _ => write_anchor(&dir, &head, records)?,
-        }
-        Ok(AuditLog { dir, head, current_day, records })
+        // Under the lock: a recovery that raced another writer's append would see its record
+        // without its anchor, and refuse a chain that is fine.
+        let _lock = AppendLock::take(&dir).ok_or_else(|| lock_unavailable(&dir))?;
+        let (head, current_day, records) = recover(&dir)?;
+        let tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&dir, d)));
+        Ok(AuditLog { dir, head, current_day, records, tail_len })
     }
 
     /// The current chain head (for tests / cross-links).
     pub fn head(&self) -> &str {
         &self.head
+    }
+
+    /// Catch up with any other writer (AUDIT-WRITERS-1). Called under the append lock. The fast
+    /// path is two small reads — the anchor, and the tail file's length — both of which every
+    /// writer moves on every append; only when either disagrees with what this handle last wrote is
+    /// the chain re-read. A chain that disagrees with its own anchor is refused here exactly as
+    /// `open` refuses it.
+    fn catch_up(&mut self) -> Result<(), AuditError> {
+        let anchor_agrees = read_anchor(&self.dir).is_some_and(|(h, n)| h == self.head && n == self.records);
+        let tail_agrees = match &self.current_day {
+            Some(d) => file_len(&day_path(&self.dir, d)) == self.tail_len,
+            None => list_day_files(&self.dir)?.is_empty(),
+        };
+        if anchor_agrees && tail_agrees {
+            return Ok(());
+        }
+        let (head, current_day, records) = recover(&self.dir)?;
+        self.tail_len = current_day.as_deref().and_then(|d| file_len(&day_path(&self.dir, d)));
+        self.head = head;
+        self.current_day = current_day;
+        self.records = records;
+        Ok(())
     }
 
     fn ensure_day_file(&mut self, day: &str) -> Result<(), AuditError> {
@@ -324,10 +442,15 @@ impl AuditLog {
 
 impl AuditSink for AuditLog {
     fn append(&mut self, entry: AuditEntry) -> Result<AuditRecord, AuditError> {
+        // AUDIT-WRITERS-1: one writer at a time, and never onto a head another writer has moved.
+        let _lock = AppendLock::take(&self.dir).ok_or_else(|| lock_unavailable(&self.dir))?;
+        self.catch_up()?;
         let day = day_string(entry.ts);
         self.ensure_day_file(&day)?;
         let rec = entry.into_record(&self.head);
-        append_line(&day_path(&self.dir, &day), &rec.to_line())?;
+        let path = day_path(&self.dir, &day);
+        append_line(&path, &rec.to_line())?;
+        self.tail_len = file_len(&path);
         self.head = rec.hash.clone();
         self.records += 1;
         // The anchor is refreshed AFTER the record lands, so a crash between the two leaves the
@@ -425,8 +548,23 @@ impl std::fmt::Display for AuditError {
 /// Verify the whole chain across every day file in `dir`, in order, recomputing each record's hash
 /// and every cross-record (and cross-file) `prev_hash` linkage. Any mismatch is DL1405 at the failing
 /// seq (spec §8, `requires_human`).
+///
+/// A pass that fails is read again under the append lock before it is believed (AUDIT-WRITERS-1):
+/// a live broker writes a record and THEN its anchor, and a reader that lands between the two sees a
+/// chain one ahead of its anchor, or a half-written last line. A clean pass never touches the lock,
+/// so a read-only copy of a log verifies as before.
 pub fn verify(dir: impl AsRef<Path>) -> Result<VerifiedStats, AuditError> {
     let dir = dir.as_ref();
+    match verify_unlocked(dir) {
+        Err(AuditError::Corrupt(first)) => match AppendLock::take_within(dir, std::time::Duration::from_secs(2)) {
+            Some(_lock) => verify_unlocked(dir),
+            None => Err(AuditError::Corrupt(first)),
+        },
+        other => other,
+    }
+}
+
+fn verify_unlocked(dir: &Path) -> Result<VerifiedStats, AuditError> {
     let days = list_day_files(dir)?;
     let mut expected_prev = GENESIS_HASH.to_string();
     let mut files = 0usize;
@@ -1087,4 +1225,71 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// AUDIT-WRITERS-1: two writers on one chain — the broker daemon and a sandboxed run — each
+    /// holding its own handle. Before the fix the first handle's next record chained onto the head
+    /// it had cached before the second one wrote, and `verify` failed DL1405 on an untampered chain.
+    #[test]
+    fn two_handles_on_one_chain_interleave_without_breaking_it() {
+        let dir = tmp_dir("two-writers");
+        let mut daemon = AuditLog::open(&dir).unwrap();
+        daemon.append(entry(1, 1000, "issue", "g_a", "allow")).unwrap();
+        let mut run = AuditLog::open(&dir).unwrap();
+        run.append(entry(2, 1001, "sandbox-launch", "g_a", "allow")).unwrap();
+        run.append(entry(3, 1002, "sandbox-death", "g_a", "allow")).unwrap();
+        // The daemon's handle is stale here; its record must chain onto the run's last one.
+        let r = daemon.append(entry(4, 1003, "use", "g_a", "allow")).unwrap();
+        assert_eq!(r.prev_hash, tail(&dir, 2).unwrap()[0].hash, "chained onto the other writer's head");
+        let stats = verify(&dir).expect("an interleaved chain verifies");
+        assert_eq!(stats.records, 4);
+        assert_eq!(daemon.head(), stats.head);
+        // And across a day boundary another writer opened.
+        run.append(entry(5, 1000 + 86_400_000, "sandbox-launch", "g_a", "allow")).unwrap();
+        daemon.append(entry(6, 1001 + 86_400_000, "use", "g_a", "allow")).unwrap();
+        assert_eq!(verify(&dir).expect("across days too").records, 6);
+        assert!(!dir.join(APPEND_LOCK_FILE).exists(), "no lock is left behind");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The same, as it happens: writers in parallel threads, each with its own handle, as parallel
+    /// sandboxed runs beside a daemon are. Every record lands, on its own line, in one chain.
+    #[test]
+    fn parallel_writers_leave_one_verifiable_chain() {
+        let dir = tmp_dir("parallel-writers");
+        drop(AuditLog::open(&dir).unwrap());
+        let handles: Vec<_> = (0..4u64)
+            .map(|w| {
+                let dir = dir.clone();
+                std::thread::spawn(move || {
+                    let mut log = AuditLog::open(&dir).unwrap();
+                    for i in 0..25u64 {
+                        log.append(entry(w * 100 + i, 5000, "use", &format!("g_{w}"), "allow")).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(verify(&dir).expect("parallel writers leave a sound chain").records, 100);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A stale lock (a writer killed mid-append) is taken over, and the one whose lock was taken
+    /// does not delete its successor's.
+    #[test]
+    fn a_stale_lock_is_taken_over_and_never_deleted_by_the_one_it_was_taken_from() {
+        let dir = tmp_dir("stale-lock");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(APPEND_LOCK_FILE), "a writer that died").unwrap();
+        let first = AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).expect("taken over");
+        let lock_text = fs::read_to_string(dir.join(APPEND_LOCK_FILE)).unwrap();
+        assert_ne!(lock_text, "a writer that died");
+        // Someone else takes it over from `first` (as if `first` had stalled past the wait).
+        let second = AppendLock::take_within(&dir, std::time::Duration::from_millis(50)).expect("taken over again");
+        drop(first);
+        assert!(dir.join(APPEND_LOCK_FILE).exists(), "the stalled holder left its successor's lock alone");
+        drop(second);
+        assert!(!dir.join(APPEND_LOCK_FILE).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

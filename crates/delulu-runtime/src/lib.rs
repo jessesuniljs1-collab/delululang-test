@@ -3,6 +3,7 @@
 //! (invariant 7), independently of the compile-time authority proof.
 
 pub mod actors;
+pub mod beneath;
 pub mod broker;
 pub mod compute;
 pub mod cycles;

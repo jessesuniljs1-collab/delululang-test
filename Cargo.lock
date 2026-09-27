@@ -693,6 +693,7 @@ dependencies = [
  "delulu-diag",
  "delulu-syntax",
  "ed25519-dalek",
+ "libc",
  "libffi",
  "libloading",
  "ml-dsa",
@@ -704,6 +705,7 @@ dependencies = [
  "rustls-native-certs",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

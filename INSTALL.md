@@ -6,17 +6,37 @@ a build at the exact moment they were deciding whether to bother.
 
 ## 1. From a release archive — no Rust toolchain needed
 
-The shortest path. Unpack, put the binary on your `PATH`, done.
+The shortest path. An archive is built for four targets — `x86_64-unknown-linux-gnu`,
+`aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` — and comes with a
+`.sha256` beside it. Download both, then, in a POSIX shell (on Windows, Git Bash):
 
-```
+```sh install-gate
+sha256sum -c delulu-<version>-<target>.tar.gz.sha256   # the download is what was built
 tar -xzf delulu-<version>-<target>.tar.gz
 cd delulu-<version>-<target>
-sha256sum -c SHA256SUMS          # verify before you trust it
-./bin/delulu --version
+sha256sum -c SHA256SUMS                                # and so is every file inside it
+export PATH="$PWD/bin:$PATH"                           # put this in your shell profile to keep it
+cd ..
+delulu --version
+delulu new hello
+cd hello
+delulu test .                                          # one test, holding no authority at all
+delulu authority . --grants                            # what to type to run it: --grant console
+delulu run . --grant console
+delulu run . --grant console --sandbox                 # the same program, as a confined guest
 ```
 
-Then the first two minutes with the language, which are the same two minutes in `INSTALL.txt`
-inside the archive:
+**This block is a test, not a recollection.** `scripts/check-install.sh` reads it out of this page
+and runs it, as written, against a real archive; the release workflow does that on all four targets,
+so a command here that stopped working would fail a build before it failed a reader. On macOS without
+`sha256sum`, use `shasum -a 256` with the same arguments; in PowerShell, compare
+`Get-FileHash <archive>` with the `.sha256` by eye.
+
+The last line is the sandbox: the program runs as a guest that holds no authority of its own, and the
+host performs each thing it asks for under the same grants. `delulu sandbox probe` says what this
+machine can confine.
+
+Then the examples in the archive, which are the same two minutes as `INSTALL.txt` inside it:
 
 ```
 delulu check     examples/hello_wasm.delulu     # does it type- and effect-check?
@@ -33,8 +53,8 @@ the refusal arrives before anything happens rather than after.
 (unavailable) — the same behaviour as a machine with no interpreter, reported rather than crashed.
 That is deliberate, and §3 explains why.
 
-Build the archive yourself with `scripts/package-toolchain.sh`; it is the same script that produces
-the published one.
+Build the archive yourself with `scripts/package-toolchain.sh`; the release workflow
+(`.github/workflows/release.yml`) runs the same script.
 
 ## 2. From source — needs Rust (see `rust-toolchain.toml` for the pinned version)
 
@@ -87,6 +107,18 @@ what is actually inside rather than what was intended to be. Check it before run
 sha256sum -c SHA256SUMS                 # Linux/macOS
 Get-FileHash bin\delulu.exe             # Windows PowerShell, compare by eye
 ```
+
+A checksum says the bytes are the bytes that were packed; it does not say who packed them. For that,
+the release workflow attests each archive's provenance — the repository, commit and workflow run that
+built it — and the binary names its own build:
+
+```
+gh attestation verify delulu-<version>-<target>.tar.gz -R <repository>
+delulu --version --json                 # "target" and "commit": what it was built for, and from
+```
+
+A binary built from a tree with uncommitted changes says so: its commit ends in `-dirty`. One built
+without being told its commit says `null`, never a guess.
 
 ## Platform honesty
 

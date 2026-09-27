@@ -11,6 +11,9 @@
 //! 2. `$DELULU_MORPH_PATH/<id>.toml` — an explicit override, for testing and for installs that keep
 //!    morphs outside the project.
 //! 3. `~/.delulu/morphs/<id>.toml` — a user's installed morphs.
+//! 4. `<the binary's directory>/../morphs/<id>.toml` — the morphs an unpacked toolchain archive ships
+//!    beside `bin/` (P5-02). Last, so anything a project or a user installed wins over what came in
+//!    the box.
 //!
 //! Nothing is embedded in the binary. Canonical DeluluLang is the only surface the toolchain ships,
 //! which keeps "no party's preferred surface is privileged" true in the build as well as the prose:
@@ -81,14 +84,28 @@ pub fn parse_morph(text: &str, id_hint: &str) -> Result<Morph, LoadError> {
 
 /// The directories searched for `<id>.toml`, in order.
 pub fn search_dirs() -> Vec<PathBuf> {
+    search_dirs_from(
+        std::env::var("DELULU_MORPH_PATH").ok(),
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from),
+        std::env::current_exe().ok(),
+    )
+}
+
+/// The search order, from its three inputs — a pure function, so the order is testable without
+/// moving the binary.
+fn search_dirs_from(morph_path: Option<String>, home: Option<PathBuf>, exe: Option<PathBuf>) -> Vec<PathBuf> {
     let mut dirs = vec![PathBuf::from("morphs")];
-    if let Ok(p) = std::env::var("DELULU_MORPH_PATH") {
-        if !p.is_empty() {
-            dirs.push(PathBuf::from(p));
-        }
+    if let Some(p) = morph_path.filter(|p| !p.is_empty()) {
+        dirs.push(PathBuf::from(p));
     }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        dirs.push(PathBuf::from(home).join(".delulu").join("morphs"));
+    if let Some(home) = home {
+        dirs.push(home.join(".delulu").join("morphs"));
+    }
+    // The archive's layout is `<root>/bin/delulu` beside `<root>/morphs/`.
+    if let Some(bin_dir) = exe.as_deref().and_then(Path::parent) {
+        if let Some(root) = bin_dir.parent() {
+            dirs.push(root.join("morphs"));
+        }
     }
     dirs
 }
@@ -126,7 +143,7 @@ pub fn load(id: &str) -> Result<Morph, LoadError> {
 /// Load a morph file by explicit path (for `delulu morph check <file.toml>`).
 pub fn load_path(path: &Path) -> Result<Morph, LoadError> {
     let text = std::fs::read_to_string(path)
-        .map_err(|e| LoadError::one("DL1714", format!("cannot read `{}`: {e}", path.display())))?;
+        .map_err(|e| LoadError::one("DL1714", crate::cli::unreadable(&path, &e)))?;
     let hint = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     parse_morph(&text, &hint)
 }
@@ -156,6 +173,24 @@ pub fn installed() -> Vec<(String, PathBuf)> {
 
 #[cfg(test)]
 mod tests {
+    /// P5-02: an unpacked archive's own morphs are found, and found LAST — a project's, the override's
+    /// and the user's all come first.
+    #[test]
+    fn the_archive_beside_the_binary_is_searched_last() {
+        let dirs = super::search_dirs_from(
+            Some("/override".to_string()),
+            Some(std::path::PathBuf::from("/home/u")),
+            Some(std::path::PathBuf::from("/opt/delulu-1.0.0/bin/delulu")),
+        );
+        let want: Vec<std::path::PathBuf> = ["morphs", "/override", "/home/u/.delulu/morphs", "/opt/delulu-1.0.0/morphs"]
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect();
+        assert_eq!(dirs, want);
+        // No binary path, no fourth directory; an empty override is no override.
+        assert_eq!(super::search_dirs_from(Some(String::new()), None, None), vec![std::path::PathBuf::from("morphs")]);
+    }
+
     use super::*;
 
     fn codes(e: &LoadError) -> Vec<String> {

@@ -488,11 +488,26 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
                     return 2;
                 }
             };
-            let program = match std::fs::read_to_string(file) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: cannot read `{file}`: {e}");
-                    return 2;
+            // A package is previewed from the flattened text `run <dir> --sandbox` would hand its
+            // guest (P5, D-V2-42); it used to be read as a file and answered with the raw OS error.
+            let program = if std::path::Path::new(file).is_dir() {
+                match crate::run_cmd::flattened_package(file) {
+                    Some(p) => p,
+                    None => {
+                        eprintln!(
+                            "error: `{file}` is not a package `delulu run` would run, so there is no sandboxed \
+                             run to preview — `delulu run {file}` says why"
+                        );
+                        return 2;
+                    }
+                }
+            } else {
+                match std::fs::read_to_string(file) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: {}", crate::cli::unreadable(&file, &e));
+                        return 2;
+                    }
                 }
             };
             let policy = crate::policy::SandboxPolicy::derive(1, profile, None, crate::policy::Mode::Strict);

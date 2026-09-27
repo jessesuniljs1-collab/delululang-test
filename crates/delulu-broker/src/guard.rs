@@ -246,6 +246,16 @@ pub fn dead_pattern_reason(class: GuardClass, pattern: &str) -> Option<String> {
         ));
     }
     if class_is_path_valued(class) {
+        // GUARD-SCOPE-1: a glob was stored and could never match (paths are compared as paths, not
+        // as patterns). A rule on a directory covers everything beneath it, so the directory is the
+        // spelling that means "all of this".
+        if pattern.contains(['*', '?', '[']) {
+            return Some(format!(
+                "`{pattern}` is a glob, and path rules are not globs: a rule covers the path it names and \
+                 everything beneath it. Name the directory itself (e.g. `fs_read:/srv/app/secret`), or \
+                 use `*` to gate the whole class."
+            ));
+        }
         let norm = path_norm(pattern);
         let absolute = norm.starts_with('/') || is_windows_absolute(&norm);
         if !absolute {
@@ -276,9 +286,47 @@ fn pattern_matches(class: GuardClass, pattern: &str, token: Option<&str>) -> boo
         None => false,
         // GUARD-SPELL-1: both sides through one normalizer, so `C:\out\x`, `C:/out/x` and
         // `C:/out/./x` are one rule rather than three that silently fail to be each other.
-        Some(t) if class_is_path_valued(class) => path_norm(pattern) == path_norm(t),
+        // GUARD-SCOPE-1: and a path rule covers its SUBTREE, as a grant's scope does.
+        Some(t) if class_is_path_valued(class) => path_within(t, pattern),
         Some(t) => t == pattern,
     }
+}
+
+/// Is the path `token` the path `pattern` or beneath it — the broker's own scope vocabulary
+/// (`path::is_descendant_or_equal`: lexical, component-wise, so `/data/secret2` is NOT inside
+/// `/data/secret`), with case folded where the host's filesystem folds it.
+///
+/// # Campaign finding GUARD-SCOPE-1 (2026-09-27, the multi-OS agent pass)
+///
+/// Path rules were matched by EXACT equality. So `guard policy set "fs_read:/srv/app/secret" sealed`
+/// sealed the directory entry and nothing in it — a program holding `fs.read=/srv/app` read
+/// `/srv/app/secret/key.pem` with the seal in place — and `fs_read:/srv/app/secret/**` was stored
+/// and answered `ok: … → sealed` while it could match nothing at all. Witnessed end to end on
+/// Windows, under a lease, both as an ordinary run and as a sandboxed guest: the file inside the
+/// sealed directory was read. The addendum (§2.3) had promised "the same matcher vocabulary the broker
+/// already uses for that axis", and for files that vocabulary is containment: `fs.read=DIR` grants
+/// the subtree. A Guard rule now covers exactly what a grant of the same path would cover.
+///
+/// Case: the scope lattice compares case-SENSITIVELY on purpose, because for a grant that can only
+/// narrow what is covered. A Guard rule REFUSES, so the same choice would fail open: `C:/Data/Secret`
+/// would not stop a program reaching `c:/data/secret`, one directory on Windows. Here the fail-closed
+/// choice is to fold case on the hosts whose filesystems fold it by default, and for any path in
+/// Windows drive spelling wherever it is judged.
+fn path_within(token: &str, pattern: &str) -> bool {
+    let fold = cfg!(windows) || cfg!(target_os = "macos") || is_windows_absolute(&path_norm(pattern));
+    if fold {
+        crate::path::is_descendant_or_equal(&token.to_lowercase(), &pattern.to_lowercase())
+    } else {
+        crate::path::is_descendant_or_equal(token, pattern)
+    }
+}
+
+/// Do two path patterns share any path — does one contain the other? For trees that is exactly
+/// "their covered regions intersect", which is what a request or a mint must be judged by: a child
+/// granted `/srv/app` can reach a sealed `/srv/app/secret`, and a request for `/srv/app/secret/x`
+/// lies inside it.
+fn paths_overlap(a: &str, b: &str) -> bool {
+    path_within(a, b) || path_within(b, a)
 }
 
 fn rule_label(class: GuardClass, pattern: &str) -> String {
@@ -398,7 +446,15 @@ impl GuardPolicy {
         for (class, set) in dims {
             for item in set {
                 for r in self.rules.iter().filter(|r| r.class == class) {
-                    if pattern_matches(class, &r.pattern, Some(item)) {
+                    // A child's path scope grants its whole subtree, so it includes ruled authority
+                    // when the two regions overlap either way (GUARD-SCOPE-1): `/srv/app` includes a
+                    // sealed `/srv/app/secret`.
+                    let hit = if class_is_path_valued(class) && r.pattern != "*" {
+                        paths_overlap(item, &r.pattern)
+                    } else {
+                        pattern_matches(class, &r.pattern, Some(item))
+                    };
+                    if hit {
                         consider(r.tier, rule_label(r.class, &r.pattern));
                     }
                 }
@@ -455,6 +511,9 @@ impl GuardPolicy {
             for r in self.rules.iter().filter(|r| r.class == *class) {
                 let hit = if *class == GuardClass::Effect {
                     effect_pattern_denotes(&r.pattern) && effect_pattern_denotes(pat) && overlaps(&r.pattern, pat)
+                } else if class_is_path_valued(*class) {
+                    // A request for a path covers its subtree, as a rule does (GUARD-SCOPE-1).
+                    overlaps(&r.pattern, pat) || paths_overlap(&r.pattern, pat)
                 } else {
                     overlaps(&r.pattern, pat)
                 };
@@ -1631,9 +1690,67 @@ mod tests {
         }
         // A different file must still NOT match — normalizing must not blur distinct paths.
         assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/out/other.txt", Some(win)));
-        assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/out", Some(win)), "the parent is not the file");
+        // GUARD-SCOPE-1: a rule on the directory covers the file inside it (it used to assert the
+        // opposite — "the parent is not the file" — which is how a sealed directory sealed nothing)…
+        assert!(pattern_matches(GuardClass::FsWrite, "C:/Users/j/out", Some(win)), "a directory rule covers its files");
+        // …and containment is by COMPONENT, never by string prefix: a sibling that shares the prefix
+        // is a different directory, and a rule on it covers nothing here.
+        assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/ou", Some(win)), "`ou` is not `out`");
+        assert!(!pattern_matches(GuardClass::FsWrite, "C:/Users/j/out2", Some("C:\\Users\\j\\out\\x")), "`out2` is not `out`");
         // And a NON-path class keeps exact-string semantics (a device id is not a path).
         assert!(pattern_matches(GuardClass::Device, "sat0/hga", Some("sat0/hga")));
         assert!(!pattern_matches(GuardClass::Device, "sat0/./hga", Some("sat0/hga")), "no path rules off-path");
+    }
+
+    /// **GUARD-SCOPE-1 regression lock.** A path rule covers the path it names and its subtree — the
+    /// broker's own scope vocabulary — at every point the Guard judges: use, mint, request and permit.
+    /// Before the fix a sealed directory sealed only its own entry: a lease holding `fs.read` on the
+    /// parent read the files inside it, witnessed end to end as an ordinary run and as a sandboxed
+    /// guest (2026-09-27).
+    #[test]
+    fn a_path_rule_covers_its_subtree_at_use_mint_request_and_permit() {
+        let mut p = GuardPolicy::default_policy();
+        p.set(GuardClass::FsRead, "/srv/app/secret".into(), GuardTier::Sealed);
+        p.set(GuardClass::FsWrite, "/srv/app/drafts".into(), GuardTier::Guarded);
+        // Use time: the directory, anything under it, however deep — and not a prefix-sharing sibling.
+        for inside in ["/srv/app/secret", "/srv/app/secret/key.pem", "/srv/app/secret/a/b/c", "/srv/app/x/../secret/k"] {
+            assert!(matches!(p.tier_for_use(Op::FsRead, Some(inside)), Some((GuardTier::Sealed, _))), "{inside}");
+        }
+        for outside in ["/srv/app", "/srv/app/secret2/k", "/srv/app/secre", "/srv/app/public/secret", "/srv/app/secret/../k"] {
+            assert!(p.tier_for_use(Op::FsRead, Some(outside)).is_none(), "{outside} is not under the seal");
+        }
+        assert!(matches!(p.tier_for_use(Op::FsWrite, Some("/srv/app/drafts/d1.txt")), Some((GuardTier::Guarded, _))));
+        // Mint time: a child whose scope overlaps the ruled region either way includes ruled authority.
+        let child = |dir: &str| Authority::new(eff(&["Read"]), Scopes { fs_read: names(&[dir]), ..Default::default() });
+        for overlapping in ["/srv/app", "/srv", "/srv/app/secret", "/srv/app/secret/inner"] {
+            assert!(matches!(p.tier_for_mint(&child(overlapping)), Some((GuardTier::Sealed, _))), "{overlapping}");
+        }
+        assert!(p.tier_for_mint(&child("/srv/app/public")).is_none(), "a disjoint child is not gated");
+        // Request time: a request that could reach the sealed region is refused as sealed.
+        for req in ["fs_read:/srv/app", "fs_read:/srv/app/secret/key.pem", "fs_read:*"] {
+            let s = GuardSubset::parse(&[req.to_string()]).unwrap();
+            assert!(matches!(p.tier_for_subset(&s), Some((GuardTier::Sealed, _))), "{req}");
+        }
+        let s = GuardSubset::parse(&["fs_read:/srv/app/public".to_string()]).unwrap();
+        assert!(p.tier_for_subset(&s).is_none(), "a disjoint request is not gated");
+        // A permit approved for a directory covers the files beneath it, and nothing beside it.
+        let permit = GuardSubset::parse(&["fs_write:/srv/app/drafts".to_string()]).unwrap();
+        assert!(permit.covers_use(Op::FsWrite, Some("/srv/app/drafts/d1.txt")));
+        assert!(!permit.covers_use(Op::FsWrite, Some("/srv/app/drafts2/d1.txt")));
+    }
+
+    /// GUARD-SCOPE-1, the spellings: a glob is refused as a dead pattern (it could never match), and a
+    /// Windows-drive rule matches whatever case the runtime spells the path in — for a rule that
+    /// refuses, a case-sensitive miss would fail OPEN.
+    #[test]
+    fn a_glob_is_refused_and_a_drive_path_matches_in_any_case() {
+        for glob in ["/srv/app/secret/**", "/srv/app/*.pem", "C:/data/secret?", "/srv/[ab]"] {
+            let why = dead_pattern_reason(GuardClass::FsRead, glob).expect("a glob is dead");
+            assert!(why.contains("not globs"), "{glob}: {why}");
+        }
+        assert!(dead_pattern_reason(GuardClass::FsRead, "/srv/app/secret").is_none());
+        assert!(pattern_matches(GuardClass::FsRead, "C:/Users/J/Data/Secret", Some("c:\\users\\j\\data\\secret\\k.txt")));
+        assert!(pattern_matches(GuardClass::FsRead, "c:/users/j/data/secret", Some("C:\\Users\\J\\Data\\Secret\\k.txt")));
+        assert!(!pattern_matches(GuardClass::FsRead, "C:/Users/J/Data/Secret", Some("C:\\Users\\J\\Data\\Secrets\\k.txt")));
     }
 }

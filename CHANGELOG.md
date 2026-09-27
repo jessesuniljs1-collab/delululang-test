@@ -9,6 +9,51 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 P5b: what the multi-OS agent pass found, 2026-09-27
+
+- **Security, fixed: a Guard rule on a directory sealed only the directory entry** (GUARD-SCOPE-1,
+  D-V2-43). `guard policy set "fs_read:/srv/app/secret" sealed` let a lease holder read
+  `/srv/app/secret/key.pem`, sandboxed or not, and `…/secret/**` was accepted while matching nothing. A
+  path rule now covers the path and everything beneath it (the grant vocabulary), a glob is refused when
+  the rule is set, and case is folded on Windows and macOS.
+- **Security, fixed: a file effect could be redirected between its check and its use** (FS-RACE-1). A
+  link swapped into a granted directory after the scope check let `write_text` land outside the grant
+  (81 of 150 runs in the agent's reproduction, on Linux, with and without `--sandbox`). Every file effect
+  now opens the path the check approved one component at a time, following no link that appeared since.
+- **Fixed: reading a FIFO in a granted directory hung for ever.** Only regular files are read or written;
+  a FIFO, device or socket is refused, at once.
+- **Fixed: the audit chain broke when a sandboxed run and the broker daemon both wrote it**
+  (AUDIT-WRITERS-1): `audit verify` failed DL1405 on a chain nobody had touched. Every writer now appends
+  under one lock and first catches up with the others.
+- **New: a sandboxed program runs under a lease or the broker daemon** (REMAINING_WORK 4.20's remaining
+  half). `run --sandbox --lease TOKEN` and `--broker daemon` were refused; the host now asks the broker
+  about every operation the guest requests — revocation, expiry, the Guard's tiers and permits — the
+  lease's budget narrows the guest's limits, and the run report names the node (`custody`).
+- **Fixed: 36 commands printed a raw operating-system error** (`os error 5`, `Is a directory`) for a
+  path they could not read; each says what is wrong in words now, and a test sweeps every command.
+  `--grant fs.read` without a value says it needs one, and `--limits` names its units.
+
+## Unreleased — V2 P5: the distribution, and a package that runs sandboxed, 2026-09-27
+
+- **The release workflow** (`.github/workflows/release.yml`, ruling D-V2-42): the portable archive on
+  Linux x86-64 and arm64, macOS arm64 and Windows x64, each checked to be its target, to name its commit,
+  and INSTALLED the way `INSTALL.md` says. It publishes nothing unless the owner says so (D-NE-7): a dry
+  run distributes nothing, a `v*` tag keeps and attests the archives, and a draft release needs the
+  repository's `RELEASES` switch as well. A tag without its `CHANGELOG.md` section is refused.
+- **`INSTALL.md` §1 is a tested path**: its `install-gate` block — verify, unpack, `PATH`, `new`, `test`,
+  `authority --grants`, `run`, `run --sandbox` — is executed as written by `scripts/check-install.sh`.
+- **The archive** carries the surface morphs beside `bin/` (found there by the binary, last) and the
+  guided tour `examples/guide/`; `INSTALL.txt` names the sandbox and the morph commands.
+- **`delulu --version --json`** names the `target` and the `commit` it was built from (`null` when not
+  told; `-dirty` for an uncommitted tree).
+- **Fixed: `delulu run <package> --sandbox`** failed with the raw OS error; a package now runs sandboxed
+  exactly as it runs without the sandbox, and `sandbox policy <package>` and `atlas chain <package>`
+  answer from the same flattened program.
+- **Fixed: the manifest did not bind a sandboxed run.** A program whose `main` performs more than its
+  `delulu.toml` declares was refused by `run` (DL0701) and ran under `run --sandbox`. Both refuse it now.
+- **Fixed: a sandboxed program that did not check** was refused without its diagnostics; the host now
+  prints them, and no guest is started.
+
 ## Unreleased — V2 P6: the documentation, consolidated, 2026-09-27
 
 - **`HANDOFF.md` is a current briefing** (1,201 → 522 lines, D-V2-41): where things stand, the standing

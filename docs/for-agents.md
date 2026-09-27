@@ -305,8 +305,10 @@ each, with the scopes the code names) → `plugins` → `actors` → `devices` (
 compute) → `execution_boundary` (what an ordinary run and a sandboxed run are, custody, the foreign
 boundary). It is a view over `atlas/1`, never a second model: every fact is read from the Atlas and
 the sandbox derivation, and a test holds it against `sandbox policy`, `authority` and the Atlas for
-every example. `carried` is `null` for a package: `--sandbox` runs one file. The shape is `delulu
-schema chain`; the MCP tool is `atlas_chain`.
+every example. For a package, `carried` is answered from the flattened program `run <dir> --sandbox`
+hands its guest (since P5); it is `null` only where there is no sandboxed run to ask about — a saved
+Atlas, or a package `delulu run` would refuse. The shape is `delulu schema chain`; the MCP tool is
+`atlas_chain`.
 
 ## [agents.authority] The authority report
 

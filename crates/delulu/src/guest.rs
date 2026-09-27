@@ -345,6 +345,12 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     // PS-C: `--isolation microvm` chooses the boundary a sandboxed run gets; any other value is refused
     // by `isolation_of` before anything runs.
     "--isolation",
+    // REMAINING_WORK 4.20, closed: broker custody for guests. Under `--broker daemon` or `--lease` the
+    // host authorizes every operation the guest asks for through the broker before performing it —
+    // revocation, expiry, the Guard's tiers and permits — as it does for a program it interprets.
+    "--broker",
+    "--lease",
+    "--epoch-ms",
 ];
 
 /// Which boundary a sandboxed run asked for: the jailed guest process (L1, `--sandbox`) or the
@@ -408,13 +414,6 @@ fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> 
          ignored reads exactly like a flag that was applied. Drop it, or run without `--sandbox`.",
         dropped.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", ")
     );
-    if dropped.iter().any(|f| *f == "--lease" || *f == "--broker") {
-        eprintln!(
-            "  `--lease` and `--broker`: a guest's effects are performed by the host in embedded \
-             custody, and the channel does not carry broker custody yet. A lease runs without \
-             `--sandbox`, under exactly its delegated authority and budget."
-        );
-    }
     Some(2)
 }
 
@@ -445,11 +444,25 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             return crate::run_cmd::refuse_microvm(file, &detail, opts.json);
         }
     }
-    let program = match std::fs::read_to_string(file) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
-            return 2;
+    // P5 (D-V2-42): a package directory runs sandboxed exactly as it runs without the sandbox —
+    // resolved, checked authoritatively and flattened by `load_package_for_run`, the ordinary run's
+    // own loader — and the guest is handed the flattened text. It used to be read as a file, so
+    // `delulu run . --sandbox`, the command a new package's own output teaches, died on the raw OS
+    // error (`Access is denied. (os error 5)` on Windows, `Is a directory` on Linux): C27's defect,
+    // back in the one path C27's fix had not reached.
+    let is_package = std::path::Path::new(file).is_dir();
+    let (program, loaded) = if is_package {
+        match crate::run_cmd::load_package_for_run(file, opts) {
+            Ok((map, checked, flat)) => (flat, Some((map, checked))),
+            Err(c) => return c,
+        }
+    } else {
+        match std::fs::read_to_string(file) {
+            Ok(s) => (s, None),
+            Err(e) => {
+                eprintln!("error: {}", crate::cli::unreadable(&file, &e));
+                return 2;
+            }
         }
     };
     let profile = match opts.sandbox_profile.as_deref() {
@@ -462,7 +475,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             }
         },
     };
-    let limits = match parse_limits(opts.limits.as_deref(), profile) {
+    let mut limits = match parse_limits(opts.limits.as_deref(), profile) {
         Ok(l) => l,
         Err(why) => {
             eprintln!("error: {why}");
@@ -521,6 +534,28 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
         );
         return 2;
     }
+    // Checked here, as the ordinary run checks it, before a guest exists: a program that does not
+    // check is refused with its diagnostics, where the guest could only say "the host sent a program
+    // that does not check" and hang up — the reader got no line, no code, no fix. The guest still
+    // checks what it is sent; this is the reader's copy, not the gate's only one. (A package was
+    // checked by its loader.) Then the manifest binds the sandboxed run as it binds the ordinary one:
+    // a package's own, or the one beside a single file.
+    let (map, checked) = match loaded {
+        Some(x) => x,
+        None => {
+            let mut map = delulu_diag::SourceMap::new();
+            let fid = map.add_file(file.to_string(), program.clone());
+            let checked = delulu_check::check_source(fid, &program);
+            if checked.diagnostics.iter().any(|d| d.is_error()) {
+                crate::cli::print_diagnostics("run", &checked.diagnostics, &map, None, opts.json);
+                return 1;
+            }
+            (map, checked)
+        }
+    };
+    if let Err(c) = crate::run_cmd::manifest_gate(file, is_package, &checked, &map, opts.json) {
+        return c;
+    }
     let mut grants = delulu_runtime::broker::Grants::default();
     for g in &opts.grants {
         if let Err(e) = grants.add(g) {
@@ -528,8 +563,74 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             return 2;
         }
     }
+    // Broker custody for the guest (REMAINING_WORK 4.20). The same two doors as the ordinary run and
+    // the same code behind the first: `--lease` redeems the token with `run_cmd::redeem_lease` — the
+    // grants become the node's own, a local grant beside it is refused, the Guard's status line is
+    // printed — and a node's budget narrows the guest's limits (never widens them); `--broker daemon`
+    // issues a root from the grants, recording the guest's limits as its budget. Decided after the
+    // audit branch above, because redeeming a lease is not a dry run.
+    let lease_mode = opts.lease.is_some();
+    let daemon_mode = match opts.broker.as_deref() {
+        None | Some("embedded") => lease_mode,
+        Some("daemon") => true,
+        Some(other) => {
+            eprintln!("error: unknown --broker mode `{other}` (embedded | daemon)");
+            return 2;
+        }
+    };
+    let mut custody: Option<crate::broker_client::BrokerClientCustody> = None;
+    if let Some(token) = &opts.lease {
+        let json = opts.json;
+        let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
+            limits.memory_bytes = limits.memory_bytes.min(ceiling.memory_bytes);
+            limits.cpu_seconds = limits.cpu_seconds.min(ceiling.cpu_seconds);
+            if !json {
+                eprintln!(
+                    "lease: the guest held to the delegated budget, mem={} bytes, cpu={} s",
+                    limits.memory_bytes, limits.cpu_seconds
+                );
+            }
+            Ok(())
+        };
+        match crate::run_cmd::redeem_lease(token, &mut grants, opts, &map, &mut hold) {
+            Ok(c) => custody = Some(c),
+            Err(code) => return code,
+        }
+    }
+    if daemon_mode && !opts.json {
+        eprintln!("custody: daemon");
+    }
+    if daemon_mode && custody.is_none() {
+        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+            return 2;
+        };
+        let mut spec = crate::cli::authority_spec_from_grants(&grants, file);
+        spec.budget = Some(
+            delulu_broker::BudgetScope { memory_bytes: limits.memory_bytes, cpu_seconds: limits.cpu_seconds }
+                .to_grant_string(),
+        );
+        match crate::broker_client::BrokerClientCustody::issue_root(state_dir, spec, opts.epoch_ms) {
+            Ok(c) => custody = Some(c),
+            Err(d) => {
+                let diag = delulu_diag::Diagnostic::error(d.code, d.message);
+                crate::cli::print_diagnostics("run", &[diag], &map, None, opts.json);
+                return 1;
+            }
+        }
+    }
+    let custody_record = custody.as_ref().map(|c| serde_json::json!({ "mode": "daemon", "node": c.node().to_string() }));
     let root = Rc::new(crate::cli::build_root(&grants));
-    let served = spawn_and_serve_with(&program, root, 0xDE1, None, limits, profile, opts.report_out.as_deref(), isolation);
+    let served = spawn_and_serve_custody(
+        &program,
+        root,
+        limits,
+        profile,
+        opts.report_out.as_deref(),
+        isolation,
+        custody.map(|c| Box::new(c) as Box<dyn delulu_runtime::Custody>),
+        custody_record,
+    );
     let egress = delulu_runtime::egress::take_log();
     if !opts.json {
         crate::run_cmd::print_egress_notes(&egress);
@@ -552,7 +653,7 @@ fn parse_limits(spec: Option<&str>, profile: crate::policy::Profile) -> Result<c
         let (key, value) = part
             .split_once('=')
             .ok_or_else(|| format!("`--limits {part}` needs the form mem=BYTES or cpu=SECONDS"))?;
-        let n: u64 = value.parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}`"))?;
+        let n: u64 = value.parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}` — memory is a count of bytes (1 GiB is 1073741824), processor and wall time are seconds"))?;
         match key.trim() {
             "mem" => limits.memory_bytes = n.min(limits.memory_bytes),
             "cpu" => limits.cpu_seconds = n.min(limits.cpu_seconds),
@@ -572,7 +673,7 @@ pub fn run_sandboxed_cli(args: &[String]) -> i32 {
     let program = match std::fs::read_to_string(&file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -630,6 +731,38 @@ pub fn spawn_and_serve_with(
     report_out: Option<&str>,
     isolation: Isolation,
 ) -> io::Result<i32> {
+    serve_under(program, root, seed, fixed_clock_ms, limits, profile, report_out, isolation, None, None)
+}
+
+/// `run --sandbox` itself: the same, under the custody the run chose — the broker's, when there is
+/// one, which then authorizes every operation the guest asks for.
+#[allow(clippy::too_many_arguments)]
+fn spawn_and_serve_custody(
+    program: &str,
+    root: Rc<RootVal>,
+    limits: crate::jail::Limits,
+    profile: crate::policy::Profile,
+    report_out: Option<&str>,
+    isolation: Isolation,
+    custody: Option<Box<dyn delulu_runtime::Custody>>,
+    custody_record: Option<serde_json::Value>,
+) -> io::Result<i32> {
+    serve_under(program, root, 0xDE1, None, limits, profile, report_out, isolation, custody, custody_record)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn serve_under(
+    program: &str,
+    root: Rc<RootVal>,
+    seed: u64,
+    fixed_clock_ms: Option<i64>,
+    limits: crate::jail::Limits,
+    profile: crate::policy::Profile,
+    report_out: Option<&str>,
+    isolation: Isolation,
+    custody: Option<Box<dyn delulu_runtime::Custody>>,
+    custody_record: Option<serde_json::Value>,
+) -> io::Result<i32> {
     let exe = std::env::current_exe()?;
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
@@ -678,7 +811,7 @@ pub fn spawn_and_serve_with(
     );
 
     let mut evidence = Evidence::default();
-    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, &mut evidence);
+    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, custody, &mut evidence);
     let denied = evidence.denied;
     // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
     // chain — they were in force before the program's first line, and the host checked the words.
@@ -761,6 +894,8 @@ pub fn spawn_and_serve_with(
             "sandbox": with_image(policy.to_json_with(backend, &applied, &denied.0, denied.1)),
             "outcome": { "ran": true, "exit": exit },
             "egress": egress.to_json(),
+            // Who decided each use: the broker's node when the run was under it, else embedded.
+            "custody": custody_record.clone().unwrap_or_else(|| serde_json::json!({ "mode": "embedded", "node": null })),
         });
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
         if let Err(e) = std::fs::write(path, format!("{text}\n")) {
@@ -1054,6 +1189,7 @@ struct Evidence {
 }
 
 /// Connect to the guest, tell it what to run, and serve it until it is done.
+#[allow(clippy::too_many_arguments)]
 fn converse(
     child: &mut Guest,
     dir: &std::path::Path,
@@ -1061,6 +1197,7 @@ fn converse(
     root: Rc<RootVal>,
     seed: u64,
     fixed_clock_ms: Option<i64>,
+    custody: Option<Box<dyn delulu_runtime::Custody>>,
     // Filled in on EVERY path, including the failing ones: this phase has already lost a diagnosis
     // three CI runs in a row to a value that was only reported in the success branch.
     evidence: &mut Evidence,
@@ -1075,6 +1212,9 @@ fn converse(
     };
     write_frame(&mut conn, &hello)?;
     let mut host = HostChannel::new(LocalSink).with_root(root);
+    if let Some(c) = custody {
+        host = host.with_custody(c);
+    }
     // The refusals come back with the exit code, because a report that lists only what was allowed
     // says nothing about what the program TRIED — which is the interesting half when the program is
     // one nobody wrote. They are read after `serve` returns, on both paths, so a guest that died
@@ -1349,14 +1489,11 @@ fn append_audit(
     use delulu_broker::audit::{AuditEntry, AuditLog, AuditSink};
     let dir = state.join("audit");
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create the audit chain at `{}`: {e}", dir.display()))?;
-    // ONE writer at a time. The chain is single-writer by design — the broker daemon owns it — and
-    // making every sandboxed run a writer broke that immediately: two runs in parallel each read the
-    // same head, and their records landed on ONE line, `}{` in the middle, which `audit verify` then
-    // reported as malformed. Found locally, by `doctor` refusing its own machine.
-    //
-    // The lock is an atomic create: whoever makes the file owns the append, and the head is read
-    // AFTER it is held, so no writer chains onto a head that another has already moved.
-    let _lock = AppendLock::take(&dir).ok_or("the audit chain's append lock could not be taken")?;
+    // ONE writer at a time, and never onto a stale head. Making every sandboxed run a writer broke
+    // the chain's single-writer design twice: two runs in parallel landed their records on ONE line
+    // (found by `doctor` refusing its own machine), and a run beside the broker daemon made the
+    // daemon's next record chain onto a head it had cached before the run's (AUDIT-WRITERS-1). The
+    // log itself now takes the append lock and catches up under it, for every writer.
     let mut log = AuditLog::open(&dir).map_err(|e| format!("the audit chain cannot be opened: {e:?}"))?;
     // Continue the chain's numbering: the last record's seq plus one, or 1 for an empty log.
     let seq = delulu_broker::audit::tail(&dir, 1).ok().and_then(|r| r.last().map(|x| x.seq + 1)).unwrap_or(1);
@@ -1374,44 +1511,6 @@ fn append_audit(
         decision: decision.to_string(),
     };
     log.append(entry).map(|_| ()).map_err(|e| format!("the audit record could not be written: {e:?}"))
-}
-
-/// Exclusive access to an audit directory for the length of one append.
-///
-/// `create_new` is the whole mechanism: it succeeds for exactly one process. A stale lock from a
-/// killed run is taken over after a short wait rather than blocking for ever, because an audit record
-/// is evidence and must not be able to hang a run.
-struct AppendLock(std::path::PathBuf);
-
-impl AppendLock {
-    fn take(dir: &std::path::Path) -> Option<AppendLock> {
-        let path = dir.join("append.lock");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        loop {
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(_) => return Some(AppendLock(path)),
-                Err(_) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(5));
-                }
-                // A lock nobody released: take it over rather than lose the record entirely.
-                Err(_) => {
-                    let _ = std::fs::remove_file(&path);
-                    return std::fs::OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(&path)
-                        .ok()
-                        .map(|_| AppendLock(path));
-                }
-            }
-        }
-    }
-}
-
-impl Drop for AppendLock {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
 }
 
 /// A per-call channel name: the clock alone collides when runs start together.

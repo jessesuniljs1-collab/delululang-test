@@ -226,7 +226,9 @@ impl Grants {
     /// Parse one `--grant` argument. Returns an error string on malformed input.
     pub fn add(&mut self, spec: &str) -> Result<(), String> {
         if let Some(rest) = spec.strip_prefix("secret:") {
-            let (name, source) = rest.split_once('=').ok_or_else(|| format!("bad secret grant `{spec}` (use secret:NAME=VALUE)"))?;
+            let (name, source) = rest.split_once('=').ok_or_else(|| {
+                format!("grant `{spec}` needs a value: `--grant {spec}=VALUE` or `--grant {spec}=env:VAR`")
+            })?;
             let value = if let Some(var) = source.strip_prefix("env:") {
                 std::env::var(var).map_err(|_| format!("env var `{var}` for secret `{name}` is not set"))?
             } else {
@@ -356,7 +358,20 @@ impl Grants {
                 // human-issued, default-off. (No native tier exists in v1.x; granting this today
                 // changes nothing but the DL1906 note, and that honesty is deliberate.)
                 "exec.native" => self.exec_native = true,
-                other => return Err(format!("unknown grant `{other}`")),
+                // A grant that takes a value, written without one (`--grant fs.read`), is not an
+                // unknown grant — calling it one sent the reader looking for a different name. Asked
+                // of the parser itself, so the list of value-taking keys has one copy.
+                other => {
+                    let takes_a_value = match Grants::default().add(&format!("{other}=x")) {
+                        Ok(()) => true,
+                        Err(e) => !e.starts_with("unknown grant"),
+                    };
+                    return Err(if takes_a_value {
+                        format!("grant `{other}` needs a value: `--grant {other}=…` (`delulu help run` shows each form)")
+                    } else {
+                        format!("unknown grant `{other}`")
+                    });
+                }
             },
         }
         Ok(())
@@ -496,6 +511,14 @@ mod tests {
         assert_eq!(listed, parsed, "GRANT_FORMS and Grants::add disagree");
         let mut g = Grants::default();
         assert!(g.add("nosuch=1").is_err() && g.add("nosuch").is_err(), "an unknown grant is refused");
+        // A known grant with its value missing says that, not "unknown" (found by the 2026-09-27
+        // multi-OS test pass); a bare grant that takes no value is unchanged.
+        for key in ["fs.read", "fs.write", "net", "plugin", "sensor", "secret:API_KEY"] {
+            let e = Grants::default().add(key).unwrap_err();
+            assert!(e.contains("needs a value") && e.contains(&format!("{key}=")), "{key}: {e}");
+        }
+        assert!(Grants::default().add("nosuch").unwrap_err().starts_with("unknown grant"));
+        assert!(Grants::default().add("console").is_ok());
     }
 
     /// P2 (D-V2-27): the loading grant. A grant is a path spelling too, so every hostile form the

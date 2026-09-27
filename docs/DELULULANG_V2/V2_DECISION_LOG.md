@@ -875,9 +875,56 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
 3. **Explicit links in the moved text are rewritten to reach their targets from the archive; prose
    citations are left as written** — the V2-0 manifest's rule, for the same reason.
 
+## D-V2-42 — P5, the distribution: D-NE-8 taken in part, D-NE-7 left with the owner — TAKEN (head chef, 2026-09-27, under the owner's delegation)
+
+1. **A hand-written release workflow around `scripts/package-toolchain.sh`, not `cargo-dist`** (D-NE-8's
+   first half, as proposed). The script already encodes what the archive must be — the Python-less
+   build with the network client, what a recipient is owed, checksums from the staged tree — and a
+   generator would re-decide those and add a tool the dependency rule would need a ruling for.
+2. **No installer scripts.** A `curl | sh` installer is the field's norm and a security posture; which
+   posture DeluluLang takes is the owner's (D-NE-8's second half stays open). Until he chooses, the
+   documented manual path is the install — and it is TESTED: `INSTALL.md` §1's `install-gate` block is
+   executed as written by `scripts/check-install.sh` against a real archive on every target.
+3. **Publication stays the owner's (D-NE-7), and so does anything public and permanent.** A run of the
+   release workflow that was not started by a `v*` tag — the manual dry run and the weekly run — builds,
+   checks and installs the archive, then discards it: no workflow artifact (a public repository's
+   artifacts are downloadable, and the owner has said this repository is not a distribution channel)
+   and no provenance attestation (the public attestation log is permanent). A `v*` tag — pushing one is
+   itself the owner's act — keeps and attests the archives; a GitHub release is created only when the
+   repository variable `RELEASES` is also `on`, and only as a DRAFT a person publishes. `RELEASES` is
+   off. Consequence, recorded rather than hidden: P5-01's verification "`gh attestation verify`
+   recorded" waits for the owner's first tag.
+4. **A tag must have its `## [X.Y.Z]` section in `CHANGELOG.md`** (P5-04), checked before anything is
+   built for it; a test holds the current version to the same rule.
+5. **The build names itself**: `--version --json` carries `target` and `commit`; the commit is `null`
+   when the builder did not say, never read from the environment by guesswork, so two builds told the
+   same thing stay byte-identical (the microVM guest's reproducibility check relies on that).
+
+## D-V2-43 — what the 2026-09-27 agent pass changed in the architecture — TAKEN (head chef, 2026-09-27, under the owner's delegation; FLAGGED for the owner's review)
+
+1. **A Guard path rule covers the path and everything beneath it** (GUARD-SCOPE-1). Exact equality made
+   a seal on a directory seal nothing in it. The addendum's §2.3 promised the broker's own matcher
+   vocabulary; for a path that vocabulary is containment (`fs.read=DIR` grants the subtree), so a rule now
+   covers exactly what a grant of the same path would. At mint and request time a path scope is judged by
+   overlap in either direction (`/srv/app` includes a sealed `/srv/app/secret`). **Globs are refused**
+   when a rule is set — the directory is the spelling that means "all of this", and a pattern that is
+   stored and can never match is the failure this entry closes. **Case is folded** on Windows and macOS
+   and for any drive-letter path: the lattice compares case-sensitively because for a GRANT that only
+   narrows, but a Guard rule REFUSES, and the same choice would fail open. Flagged because the Guard's
+   addendum is a design document the owner reviewed; this is its promise kept, not a change of intent.
+2. **The audit chain is multi-writer, under one lock** (AUDIT-WRITERS-1). Sandboxed runs, `reconcile`
+   and a run's own records already wrote it beside the daemon; the log now owns the lock and catches up
+   under it, rather than every writer being asked to be careful. A `seq` is still a writer's own number
+   (the broker restarts its count per daemon life); the chain's integrity is its hashes and anchor.
+3. **A checked path is opened, not looked up again** (FS-RACE-1). Containment is decided on the resolved
+   path and the SAME path is opened with no link followed (`beneath.rs`). Two OS-specific APIs
+   (`openat`/`O_NOFOLLOW`, `NtCreateFile` relative opens) through crates already in the tree.
+4. **A guest runs under the broker when the run does** (REMAINING_WORK 4.20): the host authorizes each
+   channel request through the run's custody, with the interpreter's op mapping, before performing it.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
-D-NE-6 (decided under delegation as D-V2-38), D-NE-7, D-NE-8, D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
+D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a
 code of conduct; the four pre-public-repository items. Each is asked at the start of the phase that
 needs it (`V2_MASTER_PLAN.md` §7).
 

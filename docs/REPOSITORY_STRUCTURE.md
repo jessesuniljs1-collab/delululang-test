@@ -276,7 +276,10 @@ DeluluLang/
 │   │   ├── fetch-firecracker.sh    #   the tested Firecracker + jailer, checked against the pinned sha256
 │   │   └── redteam/                #   [PS-C-06] a native probe on the image's own kernel, and five
 │   │                               #   hostile guests against the host — both gates on the KVM CI job
-│   ├── package-toolchain.sh        # build the self-contained distributable archive
+│   ├── package-toolchain.sh        # build the self-contained distributable archive (the release
+│   │                               #   workflow runs this same script; it names the build's commit)
+│   ├── check-install.sh            # [P5-05] the install gate: runs INSTALL.md's `install-gate` block,
+│   │                               #   read out of the page, against a real archive
 │   └── cli-sweep.sh                # [P17-F] the CLI + compiler sweep as a SCRIPT (27 cases at
 │                                   #   P19; 22 when written at P17-F), each asserting an exact
 │                                   #   exit code. It was performed by hand every pass before
@@ -298,6 +301,9 @@ DeluluLang/
 ├── CHANGELOG.md                    # notable changes; every entry names its authorizing ruling
 ├── CONTRIBUTING.md                 # contribution rules; §4 governs AI-authored RFCs
 ├── .github/workflows/              # the three-OS CI matrix (live since 2026-09-14; runs recorded in CROSS_PLATFORM_VERIFICATION §9)
+│                                   #   + release.yml [P5, D-V2-42]: the archive on four targets, installed
+│                                   #   as INSTALL.md says; publishes nothing without a tag AND the owner's
+│                                   #   `RELEASES` switch, and then only a draft
 │
 ├── measurements/                   # [Stage 9] the published proof (studies A/B/C), reproducible
 │   └── METHODOLOGY.md              # how every published number was produced

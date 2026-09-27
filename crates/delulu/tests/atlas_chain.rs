@@ -215,7 +215,7 @@ fn devices_plugins_and_actors_are_on_the_chain_with_the_scopes_the_code_names() 
 }
 
 #[test]
-fn the_profile_is_the_sandboxs_and_a_package_says_it_has_no_sandboxed_run() {
+fn the_profile_is_the_sandboxs_and_a_package_is_asked_about_its_flattened_program() {
     let t = "examples/guide/04_effects.delulu";
     let hostile = json_of(&["atlas", "chain", t, "--sandbox-profile", "hostile-agent", "--json"])["chain"]["sandbox_policy"].clone();
     let policy = json_of(&["sandbox", "policy", t, "--sandbox-profile", "hostile-agent", "--json"])["policy"].clone();
@@ -224,9 +224,20 @@ fn the_profile_is_the_sandboxs_and_a_package_says_it_has_no_sandboxed_run() {
     let contained = json_of(&["atlas", "chain", t, "--json"])["chain"]["sandbox_policy"].clone();
     assert_ne!(hostile["policy_hash"], contained["policy_hash"], "the profile is part of the policy");
 
+    // P5 (D-V2-42): `run <package> --sandbox` runs the flattened program, so the chain answers for a
+    // package from that text; only a target with no sandboxed run (a saved Atlas) says it has none.
     let pkg = json_of(&["atlas", "chain", "examples/greeter", "--json"])["chain"]["sandbox_policy"].clone();
-    assert_eq!(pkg["carried"], Value::Null);
-    assert!(pkg["carried_note"].as_str().unwrap().contains("one file"), "{pkg}");
+    assert_eq!(pkg["carried"], true, "{pkg}");
+    assert_eq!(pkg["carried_note"], Value::Null, "{pkg}");
+    let dir = std::env::temp_dir().join(format!("delulu-chain-saved-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let saved = dir.join("atlas.json");
+    std::fs::write(&saved, serde_json::to_string(&json_of(&["atlas", t, "--json"])["atlas"]).unwrap()).unwrap();
+    let from_saved =
+        json_of(&["atlas", "chain", saved.to_str().unwrap(), "--json"])["chain"]["sandbox_policy"].clone();
+    assert_eq!(from_saved["carried"], Value::Null);
+    assert!(from_saved["carried_note"].as_str().unwrap().contains("no sandboxed run"), "{from_saved}");
+    let _ = std::fs::remove_dir_all(&dir);
 
     for bad in [
         vec!["atlas", "chain", t, "--sandbox-profile", "lax"],

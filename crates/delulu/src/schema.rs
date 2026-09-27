@@ -603,6 +603,8 @@ pub fn document(name: &str) -> Option<Value> {
                 &req,
                 &[
                     ("egress", r("egress")),
+                    // A sandboxed run's custody: the broker's node when one decided every use.
+                    ("custody", obj(&[("mode", t("string")), ("node", nullable("string"))], &[])),
                     (
                         "audit",
                         obj(
@@ -787,12 +789,13 @@ pub fn cmd_schema(rest: &[String]) -> i32 {
         }
         ["validate", name, file] => {
             let Some(doc) = document(name) else { return unknown(name) };
-            let value: Value = match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|s| {
-                serde_json::from_str(&s).map_err(|e| format!("it is not JSON: {e}"))
-            }) {
+            let value: Value = match std::fs::read_to_string(file)
+                .map_err(|e| crate::cli::unreadable(file, &e))
+                .and_then(|s| serde_json::from_str(&s).map_err(|e| format!("cannot read `{file}`: it is not JSON: {e}")))
+            {
                 Ok(v) => v,
                 Err(e) => {
-                    eprintln!("error: cannot read `{file}`: {e}");
+                    eprintln!("error: {e}");
                     return 2;
                 }
             };

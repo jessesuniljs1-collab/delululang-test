@@ -1,0 +1,116 @@
+# P5 — the distribution (D-V2-42). Builds the portable toolchain archive on the four targets the
+# project claims, checksums it, attests where it came from, and then INSTALLS it the way `INSTALL.md`
+# says, on each target, as a gate.
+#
+# What it does NOT do unless the owner says so: publish. The publication target is the owner's
+# decision (D-NE-7), and this is a public testing repository the owner has said is not a distribution
+# channel. So a run that was not started by a `v*` tag — the dry run — builds, checks and INSTALLS the
+# archive and then throws it away: nothing is uploaded, and nothing is written to the public
+# attestation log, which is permanent. Only a `v*` tag (pushing one is itself the owner's act) keeps
+# the archives as workflow artifacts and attests them; and a GitHub release — always a DRAFT, which a
+# person publishes — is created only when the repository variable `RELEASES` is also `on`
+# (Settings → Secrets and variables → Actions → Variables). It is off.
+#
+# Run it by hand from Actions → release → Run workflow: that is the dry run the roadmap asks for. It
+# also runs weekly, so the install gate keeps being executed against a real archive rather than being
+# a claim about one.
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+  schedule:
+    - cron: "30 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      # P5-04: a tag is a release, and a release says what changed — `## [X.Y.Z]` in CHANGELOG.md for
+      # the tag `vX.Y.Z`, checked before anything is built for it.
+      - name: The tag has its CHANGELOG section
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: grep -q "^## \[${GITHUB_REF_NAME#v}\]" CHANGELOG.md || { echo "CHANGELOG.md has no '## [${GITHUB_REF_NAME#v}]' section for ${GITHUB_REF_NAME}"; exit 1; }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `dist/` inside the checkout (the script's default, and gitignored): a relative path is the
+      # one spelling every step below agrees on, the Windows runner's bash included.
+      - name: Package the portable toolchain
+        shell: bash
+        env:
+          DELULU_BUILD_COMMIT: ${{ github.sha }}
+        run: bash scripts/package-toolchain.sh
+      - name: The archive is for the target this job claims
+        shell: bash
+        run: ls -l dist && test -f dist/delulu-*-${{ matrix.target }}.tar.gz
+      # The binary names the build it came from, and the commit is the one this run checked out.
+      - name: The binary names its target and commit
+        shell: bash
+        run: |
+          bin=$(ls -d dist/delulu-*-${{ matrix.target }}/bin)
+          v=$("$bin/delulu" --version --json)
+          echo "$v"
+          echo "$v" | grep -q '"target": "${{ matrix.target }}"'
+          echo "$v" | grep -q '"commit": "${{ github.sha }}"'
+      # The provenance of each archive: which repository, commit and workflow built it. Verify a
+      # download with `gh attestation verify <file> -R <this repository>`. A tag's run only: the
+      # attestation log is public and permanent (D-NE-7).
+      - name: Attest the archive's provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/delulu-*.tar.gz
+      # P5-05's gate: verify → unpack → PATH → new → test → authority → run → run --sandbox, exactly as
+      # INSTALL.md writes it — the script runs the commands out of INSTALL.md itself, so the page
+      # cannot drift from what was tested.
+      - name: Install it the way INSTALL.md says
+        shell: bash
+        run: bash scripts/check-install.sh dist/delulu-*-${{ matrix.target }}.tar.gz
+      # Kept for the release job — a tag's run only; a dry run distributes nothing (D-NE-7).
+      - name: Keep the archive for the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: delulu-${{ matrix.target }}
+          path: |
+            dist/delulu-*.tar.gz
+            dist/delulu-*.tar.gz.sha256
+          if-no-files-found: error
+
+  # A draft release, and only when the owner has switched releases on (D-NE-7).
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASES == 'on'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: One checksum file for the release
+        run: cd dist && sha256sum delulu-*.tar.gz > SHA256SUMS && cat SHA256SUMS
+      - name: A draft release — a person publishes it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --draft --verify-tag --title "DeluluLang ${GITHUB_REF_NAME}" --notes "Draft. See CHANGELOG.md; verify with sha256sum -c SHA256SUMS and gh attestation verify." -R "${GITHUB_REPOSITORY}"

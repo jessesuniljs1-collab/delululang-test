@@ -245,6 +245,105 @@ fn a_sandbox_that_cannot_apply_refuses_instead_of_running_unconfined() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// P5 (D-V2-42): a package runs sandboxed exactly as it runs without the sandbox. `delulu run .
+/// --sandbox` — a new package's own directory — died on the raw OS error (`Access is denied. (os
+/// error 5)` on Windows, `Is a directory` on Linux), because this path read its target as a file:
+/// C27's defect in the one path C27's fix had not reached. The package is resolved, checked and
+/// flattened by the ordinary run's own loader, the guest is handed that text, and the manifest binds
+/// both runs: what DL0701 refuses without `--sandbox`, it refuses with it.
+#[test]
+fn a_package_runs_sandboxed_as_it_runs_plainly_and_its_manifest_binds_both() {
+    let dir = tmp("pkg");
+    let pkg = dir.join("two");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    let manifest = |effects: &str| {
+        format!("[package]\nname = \"two\"\nversion = \"0.1.0\"\nkind = \"bin\"\n\n[authority]\neffects = [{effects}]\n")
+    };
+    std::fs::write(pkg.join("delulu.toml"), manifest("\"Write\"")).unwrap();
+    std::fs::write(
+        pkg.join("src").join("words.delulu"),
+        "module two.words\n\npub fn greeting(name: Str) -> Str {\n    \"hello, \" + name\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("main.delulu"),
+        "module two\n\nimport two.words\n\nfn main(root: Root) ! {Write} {\n    root.console().println(greeting(\"package\"))\n}\n",
+    )
+    .unwrap();
+    let p = pkg.to_str().unwrap();
+
+    let plain = delulu(&["run", p, "--grant", "console"]);
+    assert_eq!(plain.status.code(), Some(0), "{}", out(&plain));
+    let boxed = delulu(&["run", p, "--sandbox", "--grant", "console"]);
+    assert_eq!(boxed.status.code(), Some(0), "{}", out(&boxed));
+    assert_eq!(String::from_utf8_lossy(&boxed.stdout), "hello, package\n", "{}", out(&boxed));
+    assert_eq!(boxed.stdout, plain.stdout, "the guest ran the program the ordinary run runs");
+    // Ungranted, it is refused by the host that holds the authority, as it is without the sandbox.
+    let refused = delulu(&["run", p, "--sandbox"]);
+    assert_eq!(refused.status.code(), Some(1), "{}", out(&refused));
+    assert!(out(&refused).contains("DL0703"), "{}", out(&refused));
+
+    // The manifest binds the sandboxed run: a package declaring no effects runs under neither.
+    std::fs::write(pkg.join("delulu.toml"), manifest("")).unwrap();
+    for args in [vec!["run", p, "--grant", "console"], vec!["run", p, "--sandbox", "--grant", "console"]] {
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(1), "`{}`: {}", args.join(" "), out(&o));
+        assert!(out(&o).contains("DL0701"), "`{}`: {}", args.join(" "), out(&o));
+        assert!(o.stdout.is_empty(), "nothing ran: {}", out(&o));
+    }
+
+    // A single file beside a manifest, the same: the file's own directory is its manifest's.
+    let single = dir.join("single");
+    std::fs::create_dir_all(&single).unwrap();
+    std::fs::write(single.join("delulu.toml"), manifest("")).unwrap();
+    let f = single.join("main.delulu");
+    std::fs::write(&f, "module one\n\nfn main(root: Root) ! {Write} {\n    root.console().println(\"one\")\n}\n").unwrap();
+    for sandbox in [false, true] {
+        let mut args = vec!["run", f.to_str().unwrap(), "--grant", "console"];
+        if sandbox {
+            args.push("--sandbox");
+        }
+        let o = delulu(&args);
+        assert_eq!(o.status.code(), Some(1), "`{}`: {}", args.join(" "), out(&o));
+        assert!(out(&o).contains("DL0701"), "`{}`: {}", args.join(" "), out(&o));
+    }
+
+    // A program that does not check is refused WITH its diagnostic, before a guest exists — the
+    // guest alone could only say the host had sent one and hang up.
+    let bad = dir.join("bad.delulu");
+    std::fs::write(&bad, "module bad\n\nfn main(root: Root) ! {Write} {\n    root.console().println(nowhere(1))\n}\n").unwrap();
+    let o = delulu(&["run", bad.to_str().unwrap(), "--sandbox", "--grant", "console"]);
+    assert_eq!(o.status.code(), Some(1), "{}", out(&o));
+    assert!(out(&o).contains("DL0301") && out(&o).contains("nowhere"), "the reader gets the line: {}", out(&o));
+    assert!(!out(&o).contains("the guest is confined"), "no guest was started for it: {}", out(&o));
+
+    // `sandbox policy` previews a package from the same flattened text, so it previews the policy the
+    // package's sandboxed run applies — same hash.
+    std::fs::write(pkg.join("delulu.toml"), manifest("\"Write\"")).unwrap();
+    let preview = delulu(&["sandbox", "policy", p, "--json"]);
+    assert_eq!(preview.status.code(), Some(0), "{}", out(&preview));
+    let preview: serde_json::Value = serde_json::from_slice(&preview.stdout).unwrap();
+    assert_eq!(preview["policy"]["unsupported_surface"], serde_json::Value::Null, "{preview}");
+    let report = dir.join("pkg-report.json");
+    let o = delulu(&["run", p, "--sandbox", "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", out(&o));
+    let ran: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(ran["sandbox"]["policy_hash"], preview["policy"]["policy_hash"], "{ran}");
+
+    // A directory that is not a package says so in words, never as an OS error — to a run and to a
+    // preview alike.
+    let empty = dir.join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    let o = delulu(&["run", empty.to_str().unwrap(), "--sandbox", "--grant", "console"]);
+    assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    assert!(out(&o).contains("not a DeluluLang package"), "{}", out(&o));
+    assert!(!out(&o).contains("os error"), "{}", out(&o));
+    let o = delulu(&["sandbox", "policy", empty.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{}", out(&o));
+    assert!(out(&o).contains("no sandboxed run to preview") && !out(&o).contains("os error"), "{}", out(&o));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A surface the channel cannot carry is refused, not run unconfined. Actors are the case that
 /// matters most here: they are a language feature rather than a capability, so a gate that read only
 /// capability kinds let them through — which is the "quietly did not apply" failure itself.
@@ -254,12 +353,17 @@ fn a_program_the_channel_cannot_carry_is_refused() {
     for (name, src) in [
         (
             "actors",
-            "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) {\n    let c = C()\n    c.tick()\n}\n",
+            "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) ! {Async} {\n    let c = spawn C()\n    c.tick()\n}\n",
         ),
         ("foreign code", "module f\n\nforeign \"c\" lib m {\n    fn abs(x: Int) -> Int\n}\n\nfn main(root: Root) {\n}\n"),
     ] {
         let p = dir.join(format!("{}.delulu", name.replace(' ', "_")));
         std::fs::write(&p, src).unwrap();
+        // A program that checks, so the refusal below is the surface's and not the checker's. The
+        // actor program here did not (`C()` for `spawn C()`), and passed only because this refusal
+        // happened to come before any check — found when P5 made the host check what it runs.
+        let checked = delulu(&["check", p.to_str().unwrap()]);
+        assert_eq!(checked.status.code(), Some(0), "{name}: the test program must check: {}", out(&checked));
         let o = delulu(&["run", p.to_str().unwrap(), "--sandbox"]);
         let err = String::from_utf8_lossy(&o.stderr);
         assert_eq!(o.status.code(), Some(2), "{name} must be refused: {err}");
@@ -296,7 +400,7 @@ fn an_audit_run_performs_nothing_and_reports_what_a_run_would_need() {
     let act = dir.join("a.delulu");
     std::fs::write(
         &act,
-        "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) {\n    let c = C()\n    c.tick()\n}\n",
+        "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) ! {Async} {\n    let c = spawn C()\n    c.tick()\n}\n",
     )
     .unwrap();
     let o = delulu(&["run", act.to_str().unwrap(), "--sandbox", "--mode", "audit"]);
@@ -348,7 +452,7 @@ fn sandbox_policy_previews_exactly_what_a_run_would_use() {
     // A program the channel cannot carry is named as such, and a bad profile is refused rather than
     // quietly previewing a different policy from the one a run would use.
     let act = dir.join("a.delulu");
-    std::fs::write(&act, "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) {\n    let c = C()\n    c.tick()\n}\n").unwrap();
+    std::fs::write(&act, "module a\n\nactor C {\n    var n: Int\n    new() { self.n = 0 }\n    be tick() { self.n = self.n + 1 }\n}\n\nfn main(root: Root) ! {Async} {\n    let c = spawn C()\n    c.tick()\n}\n").unwrap();
     let o = delulu(&["sandbox", "policy", act.to_str().unwrap(), "--sandbox-profile", "hostile-agent", "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&o.stdout)).unwrap();

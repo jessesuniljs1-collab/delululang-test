@@ -70,7 +70,7 @@ impl Budget {
             let (key, value) = part
                 .split_once('=')
                 .ok_or_else(|| format!("`--limits {part}` needs the form mem=BYTES, cpu=SECONDS or wall=SECONDS"))?;
-            let n: u64 = value.trim().parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}`"))?;
+            let n: u64 = value.trim().parse().map_err(|_| format!("`{value}` is not a number in `--limits {part}` — memory is a count of bytes (1 GiB is 1073741824), processor and wall time are seconds"))?;
             if n == 0 {
                 return Err(format!(
                     "`--limits {part}`: a budget of zero is refused — it would mean either \"stop at once\" \

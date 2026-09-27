@@ -36,7 +36,13 @@ use super::cli::*;
 /// the same bargain the WASM backend makes with DL1201: a bounded capability with a fail-closed edge
 /// beats an unbounded one that sometimes runs the wrong function. Lifting it needs per-module
 /// resolution inside `Interp`, for which the checker already computes `Program::call_owner`.
-fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_check::Checked), i32> {
+///
+/// The third value is the flattened text itself: a sandboxed run hands exactly that to its guest, so
+/// the program a guest runs is the program an ordinary run would have run (P5, D-V2-42).
+pub(crate) fn load_package_for_run(
+    dir: &str,
+    opts: &Opts,
+) -> Result<(SourceMap, delulu_check::Checked, String), i32> {
     // A directory that is not a package at all. Before D61 this said "is a directory — try `delulu
     // build`", which was right then and is wrong now: `run` DOES take a directory. What it must never
     // do is leak the raw OS error (`Access is denied. (os error 5)` on Windows, `Is a directory` on
@@ -101,6 +107,7 @@ fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_che
     let mut map = ws.source_map;
     let fid = map.add_file(format!("{dir} (flattened for execution)"), flat_src.clone());
     let flat = check_source(fid, &flat_src);
+    let flat_src_out = flat_src;
 
     if errors(&flat.diagnostics) > 0 {
         // The workspace accepted this program, so these are not the author's errors: flattening
@@ -129,7 +136,58 @@ fn load_package_for_run(dir: &str, opts: &Opts) -> Result<(SourceMap, delulu_che
         return Err(1);
     }
 
-    Ok((map, flat))
+    Ok((map, flat, flat_src_out))
+}
+
+/// The flattened text of a package that would run — resolved, checked clean and flattened with no
+/// collision, exactly as `load_package_for_run` would hand it to the interpreter or a guest — or
+/// `None` when `run <dir>` would refuse it. Quiet, for a caller asking a question ABOUT the run
+/// (`atlas chain`'s `carried`) rather than making one; the run itself says why it refused.
+pub(crate) fn flattened_package(dir: &str) -> Option<String> {
+    if !std::path::Path::new(dir).join("delulu.toml").is_file() {
+        return None;
+    }
+    let ws = delulu_check::deps::resolve_workspace(dir);
+    if ws.modules.is_empty() {
+        return None;
+    }
+    let program = delulu_check::deps::check_workspace(&ws);
+    if errors(&ws.diagnostics) + errors(&program.diagnostics) > 0 {
+        return None;
+    }
+    let entry = program.entry_module.clone().or_else(|| ws.root_entry_module())?;
+    if !ws.modules.iter().any(|m| m.unit.name == entry) {
+        return None;
+    }
+    let texts: Vec<&str> = ws.modules.iter().map(|m| ws.source_map.file(m.unit.file).src.as_str()).collect();
+    let flat = delulu_check::flatten_sources(&entry, &texts);
+    (errors(&check_source(0, &flat).diagnostics) == 0).then_some(flat)
+}
+
+/// DL0701 against the manifest a program runs under — a package's own `delulu.toml`, or the one
+/// beside a single file: `main`'s checked row must lie inside what the manifest declares. Shared by
+/// the ordinary run and the sandboxed one, so a program one of them refuses for its manifest the
+/// other cannot run. The manifest comes back for the ordinary run's grant flow.
+pub(crate) fn manifest_gate(
+    file: &str,
+    is_package: bool,
+    checked: &delulu_check::Checked,
+    map: &SourceMap,
+    json: bool,
+) -> Result<Option<delulu_runtime::Manifest>, i32> {
+    let file_dir = std::path::Path::new(file).parent().unwrap_or_else(|| std::path::Path::new("."));
+    let dir = if is_package { std::path::Path::new(file) } else { file_dir };
+    let manifest = std::fs::read_to_string(dir.join("delulu.toml")).ok().map(|s| parse_manifest(&s));
+    let empty = std::collections::BTreeSet::new();
+    let main_row = checked.result.main_row.as_ref().unwrap_or(&empty);
+    if let Some(m) = &manifest {
+        let d = m.check_main_row(main_row);
+        if !d.is_empty() {
+            print_diagnostics("run", &d, map, None, json);
+            return Err(1);
+        }
+    }
+    Ok(manifest)
 }
 
 /// `run <file>.dwx`: re-verify a pre-built artifact's embedded `delulu:authority` manifest against
@@ -139,7 +197,7 @@ fn run_dwx_artifact(file: &str, opts: &Opts) -> i32 {
     let bytes = match std::fs::read(file) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("error: cannot read `{file}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&file, &e));
             return 2;
         }
     };
@@ -448,6 +506,154 @@ fn run_report(opts: &Opts, exit: i32, egress: &delulu_runtime::egress::EgressLog
     env
 }
 
+/// `--lease <token>`: redeem a delegated lease and bind custody to EXACTLY that node (Stage 5 phase
+/// 5j, spec §3.2/§3.3). The grants become the node's own — never widened locally — and every use is
+/// then decided by the broker, the Guard included. Shared by the ordinary run and the sandboxed one
+/// (REMAINING_WORK 4.20's "broker custody and leases for guests"), so the two cannot disagree about
+/// what a lease is. `hold` receives the node's budget when it carries one: the ordinary run holds
+/// its watchdog to it, the sandboxed run its guest's limits. Fail closed: broker down ⇒ DL1401; a
+/// bad, expired or already-redeemed token ⇒ DL1407/DL1402 — before `main` runs.
+pub(crate) fn redeem_lease(
+    token: &str,
+    grants: &mut Grants,
+    opts: &Opts,
+    map: &SourceMap,
+    hold: &mut dyn FnMut(&delulu_broker::BudgetScope) -> Result<(), i32>,
+) -> Result<crate::broker_client::BrokerClientCustody, i32> {
+    if opts.broker.as_deref() == Some("embedded") {
+        eprintln!("error: `--lease` runs under the broker daemon; it cannot be combined with `--broker embedded`");
+        return Err(2);
+    }
+    // The lease IS the authority. Local `--grant` flags may only supply `foreign.c` binary
+    // PATHS (the path is grant data — a human decision; the lease's `foreign.c` scope still
+    // bounds WHICH libs, enforced by the broker's ForeignBind check). Anything else would be a
+    // confusing local widening the broker would deny anyway — refuse it up front.
+    // 10g: device grants are named here explicitly, and the reason is worth recording. This
+    // list enumerates what a lease run may NOT be given locally, so every grant kind added
+    // after it was written fell through to `else` and was silently DISCARDED by
+    // `grants_from_lease` below. That is exactly what happened to `actuator=`/`sensor=`: the
+    // operator typed a device grant, was told nothing, and the program then died at the mint
+    // with `DL0703: actuator was not granted` — a diagnostic that blames the program for the
+    // CLI having thrown the grant away. A refusal list is a skip branch wearing a disguise.
+    if grants.console
+        || grants.clock
+        || grants.rand
+        || grants.declassify
+        || !grants.fs_read.is_empty()
+        || !grants.fs_write.is_empty()
+        || !grants.net.is_empty()
+        || !grants.secrets.is_empty()
+        || !grants.foreign_python.is_empty()
+        || opts.grant_manifest
+    {
+        eprintln!(
+            "error: a `--lease` run derives its authority from the delegated node — only \
+             `--grant foreign.c=LIB:PATH` (the binary path, which is grant data) may accompany it"
+        );
+        return Err(2);
+    }
+    // Devices get their own refusal, because the honest answer is not "you may not" but "this
+    // cannot be delegated yet". A grant tree node carries the authority to actuate; it cannot
+    // yet carry an ENVELOPE (`Scopes` has no actuator dimension), so there is no way for the
+    // delegating side to say *how far* the holder may move a machine. Rather than run with the
+    // device silently absent, say which grant was refused and why.
+    // Two different refusals now, because the two cases stopped having the same reason.
+    //
+    // An actuator IS expressible in a grant node since RFC 0001 F1, so the refusal is no longer
+    // "this cannot be bounded" — it is "you do not get to bound it yourself." A holder that
+    // could hand itself a local envelope would be choosing its own corridor, which is precisely
+    // the authority the delegating side is supposed to hold.
+    if !grants.actuators.is_empty() {
+        eprintln!(
+            "error: a `--lease` run cannot take a local `--grant actuator=`: its device \
+             authority comes FROM the delegation, bounded by whoever delegated it. Put the \
+             envelope on the delegation instead:\n  \
+             delulu grants delegate --effects Actuate --device \
+             'arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold'"
+        );
+        return Err(2);
+    }
+    // A sensor still has no scope dimension at all, so this half of the old refusal stands
+    // unchanged, with its original reason (build-order D12e, narrowed to sensors).
+    if !grants.sensors.is_empty() {
+        eprintln!(
+            "error: a `--lease` run cannot take a local `--grant sensor=`: a sensor read is \
+             `Read` under a sensor scope, and `Scopes` has no sensor dimension yet, so the \
+             delegating side could not bound it. Run the program under `--broker daemon` with \
+             its own sensor grants instead (Stage 10 build order, ruling D12e)."
+        );
+        return Err(2);
+    }
+    let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
+        eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
+        return Err(2);
+    };
+    let fail = |code: &str, message: String| -> i32 {
+        let d = Diagnostic::error(crate::broker_client::static_code(code), message);
+        print_diagnostics("run", &[d], map, None, opts.json);
+        1
+    };
+    let unreachable_msg = |e: &dyn std::fmt::Display| {
+        format!(
+            "broker unreachable: {e} — start it with `delulu broker start` \
+             (fail closed, invariant 27: a lease run never falls back to embedded custody)"
+        )
+    };
+    let peer = format!("pid:{}", std::process::id());
+    let node = match crate::brokerd::request(
+        &state_dir,
+        crate::broker_ipc::ReqBody::Redeem { token: token.to_string(), peer },
+    ) {
+        Ok(crate::broker_ipc::Response::Redeemed { node }) => node,
+        Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return Err(fail(&code, message)),
+        Ok(other) => return Err(fail("DL1401", format!("unexpected redeem response: {other:?}"))),
+        Err(e) => return Err(fail("DL1401", unreachable_msg(&e))),
+    };
+    // Learn this run's OWN node's authority (its slice — never a parent's or a sibling's;
+    // invariant 25 is upheld by what the ops expose, and this asks only about itself).
+    let info = match crate::brokerd::request(
+        &state_dir,
+        crate::broker_ipc::ReqBody::Inspect { node: node.clone() },
+    ) {
+        Ok(crate::broker_ipc::Response::Inspected { node }) => node,
+        Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return Err(fail(&code, message)),
+        Ok(other) => return Err(fail("DL1401", format!("unexpected inspect response: {other:?}"))),
+        Err(e) => return Err(fail("DL1401", unreachable_msg(&e))),
+    };
+    let authority = crate::brokerd::spec_to_authority(&info.authority_spec());
+    // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
+    // and, for what `--limits` leaves unnamed, the default. Decided here, before `main`, from the
+    // same converted authority the custody below enforces (so an unreadable budget on the wire is
+    // already the smallest one, never none). A node without one leaves the operator's budget
+    // exactly as it was.
+    if let Some(ceiling) = authority.scopes.budget {
+        hold(&ceiling)?;
+    }
+    *grants = grants_from_lease(&info, std::mem::take(&mut grants.foreign_c));
+    // The guard awareness line (addendum §2.7, criterion 8): EVERY `run --lease` prints one
+    // guard status line before user code output — stderr always (in `--json` mode too: stdout
+    // stays the machine surface, decorations ride stderr — the dcg robot-mode convention).
+    // Sourced from a GuardStatus wire call post-redeem; an unreachable broker here would already
+    // have failed the redeem above, but fail closed anyway.
+    match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::GuardStatus) {
+        Ok(crate::broker_ipc::Response::GuardStatus { bypass, poisoned, rules, .. }) => {
+            eprintln!("{}", lease_guard_status_line(bypass, poisoned, &rules));
+        }
+        Ok(other) => return Err(fail("DL1401", format!("unexpected guard status response: {other:?}"))),
+        Err(e) => return Err(fail("DL1401", unreachable_msg(&e))),
+    }
+    let custody = crate::broker_client::BrokerClientCustody::for_node(
+        state_dir,
+        delulu_broker::GrantId::from_trusted(node),
+        authority,
+        opts.epoch_ms,
+    );
+    if !opts.json {
+        eprintln!("lease: running under delegated node `{}`", custody.node());
+    }
+    Ok(custody)
+}
+
 pub(crate) fn cmd_run(rest: &[String]) -> i32 {
     RUN_STATE.with(|s| s.set((false, false)));
     let (file, opts) = parse_opts(rest);
@@ -734,7 +940,7 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     let is_package = std::path::Path::new(&file).is_dir();
     let (map, checked) = if is_package {
         match load_package_for_run(&file, &opts) {
-            Ok(x) => x,
+            Ok((map, checked, _)) => (map, checked),
             Err(c) => return c,
         }
     } else {
@@ -756,19 +962,15 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
 
     // Grant flow (§7.2): manifest DL0701 check, then reconcile grants. For a package the manifest
     // is the package's own; for a single file it is whatever sits beside it.
-    let file_dir = std::path::Path::new(&file).parent().unwrap_or_else(|| std::path::Path::new("."));
-    let dir = if is_package { std::path::Path::new(&file) } else { file_dir };
-    let manifest = std::fs::read_to_string(dir.join("delulu.toml")).ok().map(|s| parse_manifest(&s));
+    let manifest = match manifest_gate(&file, is_package, &checked, &map, opts.json) {
+        Ok(m) => m,
+        Err(c) => return c,
+    };
     let empty = std::collections::BTreeSet::new();
     let main_row = checked.result.main_row.as_ref().unwrap_or(&empty);
 
     let mut grants = Grants::default();
     if let Some(m) = &manifest {
-        let d = m.check_main_row(main_row);
-        if !d.is_empty() {
-            print_diagnostics("run", &d, &map, None, opts.json);
-            return 1;
-        }
         if opts.grant_manifest {
             grants.accept_manifest(m);
         }
@@ -834,123 +1036,19 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
     let lease_mode = opts.lease.is_some();
     let mut lease_custody: Option<crate::broker_client::BrokerClientCustody> = None;
     if let Some(token) = &opts.lease {
-        if opts.broker.as_deref() == Some("embedded") {
-            eprintln!("error: `--lease` runs under the broker daemon; it cannot be combined with `--broker embedded`");
-            return 2;
-        }
-        // The lease IS the authority. Local `--grant` flags may only supply `foreign.c` binary
-        // PATHS (the path is grant data — a human decision; the lease's `foreign.c` scope still
-        // bounds WHICH libs, enforced by the broker's ForeignBind check). Anything else would be a
-        // confusing local widening the broker would deny anyway — refuse it up front.
-        // 10g: device grants are named here explicitly, and the reason is worth recording. This
-        // list enumerates what a lease run may NOT be given locally, so every grant kind added
-        // after it was written fell through to `else` and was silently DISCARDED by
-        // `grants_from_lease` below. That is exactly what happened to `actuator=`/`sensor=`: the
-        // operator typed a device grant, was told nothing, and the program then died at the mint
-        // with `DL0703: actuator was not granted` — a diagnostic that blames the program for the
-        // CLI having thrown the grant away. A refusal list is a skip branch wearing a disguise.
-        if grants.console
-            || grants.clock
-            || grants.rand
-            || grants.declassify
-            || !grants.fs_read.is_empty()
-            || !grants.fs_write.is_empty()
-            || !grants.net.is_empty()
-            || !grants.secrets.is_empty()
-            || !grants.foreign_python.is_empty()
-            || opts.grant_manifest
-        {
-            eprintln!(
-                "error: a `--lease` run derives its authority from the delegated node — only \
-                 `--grant foreign.c=LIB:PATH` (the binary path, which is grant data) may accompany it"
-            );
-            return 2;
-        }
-        // Devices get their own refusal, because the honest answer is not "you may not" but "this
-        // cannot be delegated yet". A grant tree node carries the authority to actuate; it cannot
-        // yet carry an ENVELOPE (`Scopes` has no actuator dimension), so there is no way for the
-        // delegating side to say *how far* the holder may move a machine. Rather than run with the
-        // device silently absent, say which grant was refused and why.
-        // Two different refusals now, because the two cases stopped having the same reason.
-        //
-        // An actuator IS expressible in a grant node since RFC 0001 F1, so the refusal is no longer
-        // "this cannot be bounded" — it is "you do not get to bound it yourself." A holder that
-        // could hand itself a local envelope would be choosing its own corridor, which is precisely
-        // the authority the delegating side is supposed to hold.
-        if !grants.actuators.is_empty() {
-            eprintln!(
-                "error: a `--lease` run cannot take a local `--grant actuator=`: its device \
-                 authority comes FROM the delegation, bounded by whoever delegated it. Put the \
-                 envelope on the delegation instead:\n  \
-                 delulu grants delegate --effects Actuate --device \
-                 'arm0/elbow:angle_deg=-30..95,heartbeat_ms=200,ttl_ms=60000,fail=hold'"
-            );
-            return 2;
-        }
-        // A sensor still has no scope dimension at all, so this half of the old refusal stands
-        // unchanged, with its original reason (build-order D12e, narrowed to sensors).
-        if !grants.sensors.is_empty() {
-            eprintln!(
-                "error: a `--lease` run cannot take a local `--grant sensor=`: a sensor read is \
-                 `Read` under a sensor scope, and `Scopes` has no sensor dimension yet, so the \
-                 delegating side could not bound it. Run the program under `--broker daemon` with \
-                 its own sensor grants instead (Stage 10 build order, ruling D12e)."
-            );
-            return 2;
-        }
-        let Some(state_dir) = crate::brokerd::resolve_state_dir(None) else {
-            eprintln!("error: cannot resolve the broker state directory (no HOME/USERPROFILE)");
-            return 2;
-        };
-        let fail = |code: &str, message: String| -> i32 {
-            let d = Diagnostic::error(crate::broker_client::static_code(code), message);
-            print_diagnostics("run", &[d], &map, None, opts.json);
-            1
-        };
-        let unreachable_msg = |e: &dyn std::fmt::Display| {
-            format!(
-                "broker unreachable: {e} — start it with `delulu broker start` \
-                 (fail closed, invariant 27: a lease run never falls back to embedded custody)"
-            )
-        };
-        let peer = format!("pid:{}", std::process::id());
-        let node = match crate::brokerd::request(
-            &state_dir,
-            crate::broker_ipc::ReqBody::Redeem { token: token.clone(), peer },
-        ) {
-            Ok(crate::broker_ipc::Response::Redeemed { node }) => node,
-            Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return fail(&code, message),
-            Ok(other) => return fail("DL1401", format!("unexpected redeem response: {other:?}")),
-            Err(e) => return fail("DL1401", unreachable_msg(&e)),
-        };
-        // Learn this run's OWN node's authority (its slice — never a parent's or a sibling's;
-        // invariant 25 is upheld by what the ops expose, and this asks only about itself).
-        let info = match crate::brokerd::request(
-            &state_dir,
-            crate::broker_ipc::ReqBody::Inspect { node: node.clone() },
-        ) {
-            Ok(crate::broker_ipc::Response::Inspected { node }) => node,
-            Ok(crate::broker_ipc::Response::Error { code, message, .. }) => return fail(&code, message),
-            Ok(other) => return fail("DL1401", format!("unexpected inspect response: {other:?}")),
-            Err(e) => return fail("DL1401", unreachable_msg(&e)),
-        };
-        let authority = crate::brokerd::spec_to_authority(&info.authority_spec());
         // PS-B-05: a node that carries a budget holds its runs to it — the delegation is the ceiling
-        // and, for what `--limits` leaves unnamed, the default. Decided here, before `main`, from the
-        // same converted authority the custody below enforces (so an unreadable budget on the wire is
-        // already the smallest one, never none). A node without one leaves the operator's budget
-        // exactly as it was.
-        if let Some(ceiling) = authority.scopes.budget {
-            let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), &ceiling) {
+        // and, for what `--limits` leaves unnamed, the default.
+        let mut hold = |ceiling: &delulu_broker::BudgetScope| -> Result<(), i32> {
+            let held = match crate::budget::Budget::under_delegation(opts.limits.as_deref(), ceiling) {
                 Ok(b) => b,
                 Err(e) => {
                     eprintln!("error: {e}");
-                    return 2;
+                    return Err(2);
                 }
             };
             if let Err(e) = hold_run_to(held) {
                 eprintln!("error: cannot hold this lease run to its delegated budget: {e}");
-                return 2;
+                return Err(2);
             }
             if !opts.json {
                 eprintln!(
@@ -958,30 +1056,12 @@ fn cmd_run_inner(rest: &[String]) -> i32 {
                     held.memory_bytes, held.cpu_seconds
                 );
             }
+            Ok(())
+        };
+        match redeem_lease(token, &mut grants, &opts, &map, &mut hold) {
+            Ok(custody) => lease_custody = Some(custody),
+            Err(code) => return code,
         }
-        grants = grants_from_lease(&info, std::mem::take(&mut grants.foreign_c));
-        // The guard awareness line (addendum §2.7, criterion 8): EVERY `run --lease` prints one
-        // guard status line before user code output — stderr always (in `--json` mode too: stdout
-        // stays the machine surface, decorations ride stderr — the dcg robot-mode convention).
-        // Sourced from a GuardStatus wire call post-redeem; an unreachable broker here would already
-        // have failed the redeem above, but fail closed anyway.
-        match crate::brokerd::request(&state_dir, crate::broker_ipc::ReqBody::GuardStatus) {
-            Ok(crate::broker_ipc::Response::GuardStatus { bypass, poisoned, rules, .. }) => {
-                eprintln!("{}", lease_guard_status_line(bypass, poisoned, &rules));
-            }
-            Ok(other) => return fail("DL1401", format!("unexpected guard status response: {other:?}")),
-            Err(e) => return fail("DL1401", unreachable_msg(&e)),
-        }
-        let custody = crate::broker_client::BrokerClientCustody::for_node(
-            state_dir,
-            delulu_broker::GrantId::from_trusted(node),
-            authority,
-            opts.epoch_ms,
-        );
-        if !opts.json {
-            eprintln!("lease: running under delegated node `{}`", custody.node());
-        }
-        lease_custody = Some(custody);
     }
 
     // Foreign grant flow (Stage 4, spec §4.1 / criterion 4): every `foreign` lib the program binds

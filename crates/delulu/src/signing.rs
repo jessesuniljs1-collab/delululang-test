@@ -252,7 +252,7 @@ pub fn cmd_sign(rest: &[String]) -> i32 {
     let data = match std::fs::read(&artifact) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("error: cannot read {artifact}: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&artifact, &e));
             return 2;
         }
     };
@@ -319,7 +319,7 @@ pub fn cmd_verify_sig(rest: &[String]) -> i32 {
     let data = match std::fs::read(&artifact) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("error: cannot read {artifact}: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&artifact, &e));
             return 2;
         }
     };
@@ -520,7 +520,7 @@ pub fn cmd_publish(rest: &[String], authority_of: impl Fn(&str) -> Option<Value>
     let manifest = match std::fs::read_to_string(&manifest_path) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("error: cannot read {}: {e}", manifest_path.display());
+            eprintln!("error: {}", crate::cli::unreadable(&manifest_path, &e));
             return 2;
         }
     };

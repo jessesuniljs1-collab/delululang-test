@@ -284,6 +284,13 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     answered: u64,
     /// What the guest reported applying to itself, each word one of [`SELF_APPLIED`].
     self_applied: Vec<&'static str>,
+    /// The custody every capability operation is authorized by BEFORE it is performed — the
+    /// interpreter's gate (`Interp::with_custody`), at the same point, for a guest. Absent means
+    /// embedded custody: the root's own scopes are the enforcement, as in an embedded local run.
+    /// Present when the run is under the broker daemon (`--broker daemon`, `--lease`): then every use
+    /// is decided by the broker — revocation, expiry, the Guard's `guarded` and `sealed` tiers and
+    /// its permits — exactly as for a program the host interprets itself (REMAINING_WORK 4.20).
+    custody: Option<Box<dyn crate::custody::Custody>>,
 }
 
 /// How many refusals a report keeps. Past this the count still rises but nothing more is stored.
@@ -299,7 +306,19 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             denied_total: 0,
             answered: 0,
             self_applied: Vec::new(),
+            custody: None,
         }
+    }
+
+    /// Authorize every capability operation through `custody` before performing it (see the field).
+    pub fn with_custody(mut self, custody: Box<dyn crate::custody::Custody>) -> Self {
+        self.custody = Some(custody);
+        self
+    }
+
+    /// The custody label a report states: `"daemon"` when a broker decides, `"embedded"` otherwise.
+    pub fn custody_mode(&self) -> &'static str {
+        self.custody.as_ref().map_or("embedded", |c| c.mode())
     }
 
     /// The boundaries the guest reported applying to itself, before its program ran (RW 4.23).
@@ -453,6 +472,19 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                     }
                 }
                 let span = delulu_diag::Span::new(*file, *start, *end);
+                // The custody gate, where the interpreter has it: after the arguments are known,
+                // before the effect happens, with the same op and argument (`custody_op_for` is the
+                // interpreter's own mapping, so the two cannot name an operation differently). A
+                // denial is the broker's code and words — DL1403 revoked, DL1410 guarded, DL1413
+                // sealed — returned to the guest as the fault the program would have raised locally.
+                if let Some(custody) = self.custody.as_mut() {
+                    let recv = Value::Cap(capv.clone());
+                    if let Some((op, arg)) = crate::interp::custody_op_for(&recv, method, &decoded) {
+                        if let crate::custody::CustodyDecision::Deny(d) = custody.check(op, arg.as_deref()) {
+                            return Response::Fault { code: d.code.to_string(), message: d.message };
+                        }
+                    }
+                }
                 match self.sink.cap_method(&capv, method, &decoded, span) {
                     Ok(v) => self.encode_result(v),
                     Err(f) => Response::Fault { code: f.code.to_string(), message: f.message.clone() },

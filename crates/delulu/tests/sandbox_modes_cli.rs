@@ -286,9 +286,24 @@ fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
     let (src, scope) = writer(&dir);
     let grant = format!("fs.write={scope}");
     let made = dir.join("out").join("made.txt");
+    // `--lease` and `--broker` were on this list until 2026-09-27 (P5b): a sandboxed run now applies
+    // them — the host asks the broker about every request the guest makes (`sandbox_guard_e2e.rs`).
+    // What a lease holder meets is the ordinary run's refusal, and never advice to step outside it.
+    for extra in [vec!["--grant", grant.as_str()], vec![]] {
+        let _ = std::fs::remove_file(&made);
+        let mut args = vec!["run", src.to_str().unwrap(), "--sandbox", "--lease", "lt_never_redeemed"];
+        args.extend(extra.iter().copied());
+        let o = delulu(&args);
+        let text = out(&o);
+        assert_ne!(o.status.code(), Some(0), "a lease that was never delegated ran: {text}");
+        assert!(!made.exists(), "the run happened anyway: {text}");
+        assert!(!text.contains("pass `--grant"), "never the advice that steps outside a delegation: {text}");
+        if !extra.is_empty() {
+            assert_eq!(o.status.code(), Some(2), "{text}");
+            assert!(text.contains("derives its authority from the delegated node"), "{text}");
+        }
+    }
     for flag in [
-        vec!["--lease", "lt_never_redeemed"],
-        vec!["--broker", "daemon"],
         vec!["--trace-out", "t.jsonl"],
         vec!["--trace-effects"],
         vec!["--engine", "wasm"],
@@ -308,10 +323,6 @@ fn a_flag_the_sandboxed_run_does_not_apply_is_refused_not_dropped() {
         assert_eq!(o.status.code(), Some(2), "`{flag:?}` was accepted under `--sandbox` and not applied: {text}");
         assert!(text.contains(&format!("`{}`", flag[0])) && text.contains("Nothing ran"), "{text}");
         assert!(!made.exists(), "`{flag:?}` was dropped and the run happened anyway: {text}");
-        if flag[0] == "--lease" {
-            assert!(text.contains("runs without `--sandbox`"), "a lease holder is told where a lease runs: {text}");
-            assert!(!text.contains("pass `--grant"), "never the advice that steps outside a delegation: {text}");
-        }
     }
     // What the ordinary path already refused was accepted under `--sandbox` too, because those
     // refusals ran after the dispatch: a misspelled flag, a flag with no value, a second file.

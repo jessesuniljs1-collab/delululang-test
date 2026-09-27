@@ -141,6 +141,23 @@ rustls-native-certs = { version = "0.8", optional = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 libffi = { version = "3", features = ["system"] }
 
+# FS-RACE-1 (`src/beneath.rs`): a checked path is opened one component at a time, following no link
+# that appeared after the check — `openat(…, O_NOFOLLOW)` on Unix, `NtCreateFile` relative to the
+# parent's handle on Windows. Neither is in `std`. Both crates are already direct dependencies of the
+# CLI at these versions (`crates/delulu/Cargo.toml`), so the lockfile gains no crate.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
+
 [dev-dependencies]
 # PS-B-02's tests of the REAL transport stand up a TLS server on loopback, which needs a certificate
 # nobody trusts and a server to present it. `rcgen` makes the certificate at test time, so no private

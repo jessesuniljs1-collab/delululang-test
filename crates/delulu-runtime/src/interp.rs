@@ -1562,28 +1562,38 @@ impl Interp {
                 "the path `{path}` is refused: {why}"
             )))));
         }
-        let mut found: Option<std::path::PathBuf> = None;
+        let mut found: Option<(std::path::PathBuf, &std::path::PathBuf)> = None;
         for root in roots {
             let candidate = crate::prim::resolve_norm(root, path);
             // Inside the root, or the root itself when the grant named a single file.
             if candidate.starts_with(root) || &candidate == root {
-                found = Some(candidate);
+                found = Some((candidate, root));
                 break;
             }
         }
-        let Some(file) = found else {
+        let Some((file, plugin_root)) = found else {
             return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
                 "`{path}` is outside every granted plugin root ({}) — pass `--grant plugin=<dir>` for \
                  the directory the artifact is in",
                 roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>().join(", ")
             )))));
         };
-        let bytes = match std::fs::read(&file) {
-            Ok(b) => b,
-            Err(e) => {
+        // Read through `beneath` (FS-RACE-1): the lexical check above cannot see a link, and the
+        // artifact's bytes must come from inside the root the operator granted — not from wherever a
+        // link in it points, at check time or later.
+        let bytes = match crate::beneath::read_bytes(plugin_root, &file) {
+            crate::beneath::Outcome::Done(b) => b,
+            crate::beneath::Outcome::Io(e) => {
                 return Ok(Value::err(plugin_err_value(&PluginErr::BadArtifact(format!(
-                    "cannot read `{}`: {e}",
-                    file.display()
+                    "cannot read `{}`: {}",
+                    file.display(),
+                    e
+                )))))
+            }
+            crate::beneath::Outcome::Escaped(why) => {
+                return Ok(Value::err(plugin_err_value(&PluginErr::NotGranted(format!(
+                    "`{path}` is not inside the granted plugin root `{}`: {why}",
+                    plugin_root.display()
                 )))))
             }
         };
@@ -2297,7 +2307,7 @@ fn trace_detail(recv: &Value, cap_kind: &str, method: &str, args: &[Value]) -> O
 /// (attenuation like `fs.narrow`, `Str`/`List` methods, `Root` minting) — those never gate. The fs
 /// argument is the resolved absolute path (the exact string the daemon node's fs scope was granted
 /// against); the net argument is the URL host.
-fn custody_op_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<(CustodyOp, Option<String>)> {
+pub(crate) fn custody_op_for(recvv: &Value, method: &str, argvals: &[Value]) -> Option<(CustodyOp, Option<String>)> {
     let Value::Cap(c) = recvv else { return None };
     match (c.kind, method) {
         (ResourceKind::Console, "println") | (ResourceKind::Console, "print") => Some((CustodyOp::Console, None)),

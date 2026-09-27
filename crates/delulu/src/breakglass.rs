@@ -681,7 +681,7 @@ pub fn cmd_ticket(args: &[String], json: bool) -> i32 {
             return 2;
         }
         Err(e) => {
-            eprintln!("error: cannot read `{key}`: {e}");
+            eprintln!("error: {}", crate::cli::unreadable(&key, &e));
             return 2;
         }
     };
@@ -689,7 +689,7 @@ pub fn cmd_ticket(args: &[String], json: bool) -> i32 {
         Some(p) => match std::fs::read(p) {
             Ok(b) => Some(b),
             Err(e) => {
-                eprintln!("error: cannot read `{p}`: {e}");
+                eprintln!("error: {}", crate::cli::unreadable(&p, &e));
                 return 2;
             }
         },

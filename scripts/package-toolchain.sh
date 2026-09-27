@@ -41,7 +41,17 @@ case "$HOST" in *windows*) EXE=".exe" ;; esac
 NAME="delulu-$VERSION-$HOST"
 STAGE="$OUT/$NAME"
 
+# P5-04: the build says which commit it came from (`delulu --version --json`). The release workflow
+# passes it; a local run reads it from git, and marks a tree with uncommitted changes `-dirty`, because
+# a binary that names a commit it was not built from is worse than one that names none.
+if [ -z "${DELULU_BUILD_COMMIT:-}" ] && git -C "$ROOT" rev-parse HEAD >/dev/null 2>&1; then
+  DELULU_BUILD_COMMIT=$(git -C "$ROOT" rev-parse HEAD)
+  git -C "$ROOT" diff --quiet HEAD -- 2>/dev/null || DELULU_BUILD_COMMIT="$DELULU_BUILD_COMMIT-dirty"
+fi
+export DELULU_BUILD_COMMIT="${DELULU_BUILD_COMMIT:-}"
+
 echo "packaging  $NAME"
+echo "  commit:         ${DELULU_BUILD_COMMIT:-unknown}"
 echo "  portable build: cargo build --release -p delulu --no-default-features --features net"
 cargo build --release -p delulu --no-default-features --features net
 
@@ -70,11 +80,19 @@ cp examples/*.delulu "$STAGE/examples/" 2>/dev/null || true
 for d in examples/*/; do
   test -f "$d/delulu.toml" && cp -r "$d" "$STAGE/examples/" 2>/dev/null || true
 done
+# P5-02: the guided tour too (`examples/guide/`, six single files in reading order) — GETTING_STARTED
+# walks a newcomer through them one by one, and an archive without them sent that reader to a path
+# that was not there.
+test -d examples/guide && cp -r examples/guide "$STAGE/examples/"
 # P4a (D-V2-28): the Agent Skill, in the layout a harness expects (`skills/<name>/SKILL.md`). Most
 # recipients of this archive are not people — and the binary can print the same bytes with
 # `delulu skill`, so a harness with only the binary is not stuck either.
 mkdir -p "$STAGE/skills/delulu"
 cp skills/delulu/SKILL.md "$STAGE/skills/delulu/" 2>/dev/null || true
+# P5-02: the surface morphs, beside `bin/`, where the binary looks last (`morph_file.rs`) — so
+# `delulu morph list` and `delulu morph render <file> --to <id>` work from the archive with nothing installed.
+mkdir -p "$STAGE/morphs"
+cp morphs/*.toml "$STAGE/morphs/"
 
 cat > "$STAGE/INSTALL.txt" <<TXT
 DeluluLang $VERSION — $HOST
@@ -110,6 +128,12 @@ requires that specific CPython version at runtime.
 This build HAS the network client: http.get fetches over verified HTTPS from
 the hosts a '--grant net=HOST' names, checking certificates against this
 machine's own trust store. 'delulu doctor' says how many trust roots it found.
+
+To run a program you did not write, add --sandbox: it runs as a guest that
+holds no authority of its own, and the host performs each thing it asks for
+under the same grants. 'delulu sandbox probe' says what this machine can
+confine. The morphs in morphs/ are found without installing anything:
+'delulu morph list', then 'delulu morph render <file> --to compact-ai'.
 
 Verify what you downloaded before trusting it:
   sha256sum -c SHA256SUMS      (Linux/macOS)

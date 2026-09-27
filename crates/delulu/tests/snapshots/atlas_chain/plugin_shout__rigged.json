@@ -83,7 +83,7 @@
   "sandbox_policy": {
     "backend": "process",
     "carried": null,
-    "carried_note": "`--sandbox` runs one file: ask `atlas chain` of the file to be run",
+    "carried_note": "no sandboxed run to ask about: `--sandbox` runs a `.delulu` file, or a package `delulu run` would run",
     "limits": {
       "cpu_seconds": 300,
       "memory_bytes": 1073741824
