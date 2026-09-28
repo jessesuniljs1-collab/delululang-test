@@ -1,0 +1,39 @@
+# RW 7.4's "next": the editor's REAL end-to-end test — a real VS Code, the packaged extension, the real
+# `delulu lsp` — on Linux, in CI. `editors/vscode/e2e.js` ran on Windows only until 2026-09-28, when the
+# first cloud routine run gave it a POSIX branch and ran it in the cloud VM (VS Code from Microsoft's apt
+# repository, under xvfb-run): it passed, and failed as it should against a server that dies.
+#
+# By hand for now (workflow_dispatch): its first CI run is an experiment, and an experiment must not turn
+# the push run red. Once a run has been read green it joins the push triggers. Read the result and record
+# it (docs/DELULULANG_V2/V2_LOG.md); "activated" is not "executed".
+name: editor-e2e
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: VS Code, from Microsoft's apt repository, and a virtual display
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > "$RUNNER_TEMP/microsoft.gpg"
+          sudo install -D -o root -g root -m 644 "$RUNNER_TEMP/microsoft.gpg" /etc/apt/keyrings/packages.microsoft.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
+          sudo apt-get update
+          sudo apt-get install -y code xvfb
+          code --version
+      - name: Build delulu (the server the extension starts)
+        run: cargo build -p delulu
+      - name: Package the extension
+        working-directory: editors/vscode
+        run: npm ci && npm run package
+      - name: The real VS Code against the real server (e2e.js)
+        working-directory: editors/vscode
+        run: xvfb-run -a node e2e.js "$GITHUB_WORKSPACE/target/debug/delulu"
