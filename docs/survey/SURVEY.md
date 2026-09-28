@@ -27,7 +27,7 @@ files, so it still opens when the tree does not build.
 | Rust lines | 145843 |
 | Rust files outside `src/` (test/bench targets) | 128 |
 | Markdown documents | 252 |
-| Markdown lines | 64918 |
+| Markdown lines | 64925 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |

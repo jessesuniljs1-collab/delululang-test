@@ -129,8 +129,8 @@ audit. Three consequences follow, and every design choice below comes from one o
    `SandboxPolicy` (PS-A). The question OpenShell's prover asks of a *policy*, DeluluLang can ask of
    a *program*: "can anything this code does exceed this boundary?" — and point at the line.
 3. **DeluluLang's order is proved once, not per policy.** `⊑` is proved an order in Z3 over ten
-   dimensions (`MATHEMATICS.md` §1, the budget dimension §6b); every delegation is checked against it. A boundary check is a
-   `⊑` query, not a new model.
+   dimensions (`MATHEMATICS.md` §1, the budget dimension §6b); every delegation is checked against
+   it. A boundary check is a `⊑` query, not a new model.
 
 The two are complementary, not rivals: OpenShell is the right wall around an agent written in any
 language; DeluluLang is the language whose programs can say exactly what that wall must permit.
@@ -302,12 +302,15 @@ profile)` that PS-A built, emit an OpenShell policy (`version: 1`) for running `
 OpenShell sandbox:
 
 - `filesystem_policy`: `read_only` = the system paths plus each `fs.read` grant's root; `read_write`
-  = each `fs.write` grant's root; `include_workdir: false`; `landlock.compatibility: hard_requirement`;
+  = each `fs.write` grant's root — each as the absolute, resolved path the CLI already stores (Ruling 2:
+  resolve at the edges), because OpenShell accepts only absolute paths with no `..`;
+  `include_workdir: false`; `landlock.compatibility: hard_requirement`;
 - `process`: a non-root `run_as_user`/`run_as_group`;
 - `network_policies`: one rule per granted host — the endpoint on 443, `protocol: rest`,
-  `enforcement: enforce`, `access: read-only` (the language's `http` performs `GET` only — derived from
-  the primitive table, so P9-05 widens it only when the language does), and **one binary: the
-  `delulu` executable's real path** in the image;
+  `enforcement: enforce`, and an explicit rule allowing `GET` on every path — **not** the `read-only`
+  preset, which also allows `HEAD` and `OPTIONS`, a method set wider than the program's authority (the
+  language's `http` performs `GET` only — derived from the primitive table, so P9-05 widens the rule only
+  when the language does) — and **one binary: the `delulu` executable's real path** in the image;
 - a grant with no OpenShell equivalent (`net.special=` to a loopback or link-local address, which
   OpenShell never authorizes; a budget; a device) **refuses the export** by name, or — for dimensions
   OpenShell simply does not model (budgets map to `--cpu`/`--memory` at creation) — is listed under

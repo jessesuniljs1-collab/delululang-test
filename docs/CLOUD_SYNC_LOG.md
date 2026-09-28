@@ -196,9 +196,13 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master`, from the laptop   Pull request: none   Merged: n/a
 - Base: `dd543e5` (the laptop fast-forwarded to it from `5bb39bc` first — every commit in routine run 1's
   entry above; `git ls-files --eol` clean; on Windows `survey check` ok, 1,462 nodes; `findings` 0
-  errors, 14 warnings; `doctor --check` 29 passed). **This commit is `Cloud handoff (7)` — the new
-  baseline** for the sync procedure above; everything after it on `origin` is the cloud's again.
-- Commits: `Cloud handoff (7): NVIDIA OpenShell studied — PS-E, P8-04 and P9 designed`
+  errors, 14 warnings; `doctor --check` 29 passed). **The newest `Cloud handoff` commit below is the
+  new baseline** for the sync procedure above; everything after it on `origin` is the cloud's again.
+- Commits: (1) `fed54cb` Cloud handoff (7): NVIDIA OpenShell studied — PS-E, P8-04 and P9 designed;
+  (2) `Cloud handoff (8): the OpenShell export allows GET, not a preset` — a soundness correction to the
+  study's §4.5 found on re-reading it (the `read-only` preset also allows `HEAD` and `OPTIONS`, wider
+  than a program's authority; grant roots are exported as absolute resolved paths), and the memory
+  index's stale V2 line
 - Files and folders:
   A `docs/DELULULANG_V2/V2_OPENSHELL_STUDY.md` — the study: what was read, the two designs side by side,
     what DeluluLang takes (each slice's design, witness, falsifier) and does not, the phase changes
