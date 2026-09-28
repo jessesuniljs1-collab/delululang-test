@@ -977,6 +977,33 @@ The prerequisites record is `V2_PS_C_PREREQUISITES.md`; every one was present, s
 6. `--sandbox-backend` without `--sandbox`, with `--isolation microvm`, or in a mode that refuses
    sandbox options (PS-A-10) is refused with exit 2 before anything runs.
 
+## D-V2-47 — criterion 1's speed-up is judged against a control, on a machine that is free — TAKEN (head chef, 2026-09-28, under the owner's delegation; the first cloud routine run)
+
+`actors_pingpong`'s criterion 1 (1.5x at 4 workers against 1) went red on Windows on `937aea8`, a commit
+that changed only documents (1.31x, best of two). Witnessed in the 4-vCPU cloud VM by starving it, never
+by loosening the bar: idle, 1.89–2.18x; one CPU busy 1.82x, two 1.54x, three **1.20x — red**, the shape
+of the Windows failure, with the same runtime binary. The test was measuring how many of the runner's
+four CPUs were free.
+
+1. **A control brackets every attempt**: four equal CPU-bound units, run one after another and then at
+   once on four threads, each phase the best of three — the machine's parallel speed-up for perfectly
+   parallel work, right now (3.2–4.1 on the idle VM, 1.8–2.4 with three CPUs busy). It is the `hw < 4`
+   rule the test already had, measured instead of read from the hardware's name.
+2. **An attempt counts only where the control gave at least 3.0x on both sides of it.** Below that a
+   parallel runtime and a serial one overlap (the runtime gives about half the control's figure), so the
+   ratio is printed as NOT MEASURED with its numbers — exactly as on a machine with fewer than four
+   threads. Up to three attempts.
+3. **The bar is the criterion's share of what the machine gave:** 1.5 of 4, 37.5%, so exactly 1.5x on
+   four free threads (capped there) and proportionally less on a machine that gave less — never under
+   1.125x, which a runtime that runs its actors one at a time (1.00x) does not reach.
+4. **Falsified:** a runtime that starts one worker whatever it is asked for is red on the idle VM (1.00x
+   against a bar of 1.21–1.41x, three attempts); starving three CPUs now reports NOT MEASURED instead of a
+   defect.
+5. **The residual, named:** a passing log does not show whether a run measured or skipped (cargo shows a
+   passing test's output only with `--nocapture`), so how often CI's runners are "busy" by this rule is
+   not yet known; a red now always carries the control's figure, which says whether the runtime or the
+   runner was slow.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

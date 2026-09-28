@@ -24,15 +24,15 @@ files, so it still opens when the tree does not build.
 | … shipped language crates | 9 |
 | … repository tooling (`publish = false`) | 4 |
 | Rust files | 283 |
-| Rust lines | 144537 |
+| Rust lines | 144642 |
 | Rust files outside `src/` (test/bench targets) | 127 |
 | Markdown documents | 249 |
-| Markdown lines | 63206 |
+| Markdown lines | 63284 |
 | DeluluLang programs | 251 |
 | Registered diagnostic codes | 154 |
 | Recorded rulings | 144 |
 | Recorded campaign findings | 92 |
-| Nodes / edges in this map | 1457 / 12477 |
+| Nodes / edges in this map | 1457 / 12484 |
 | Open discrepancies | 52 |
 
 Lines are counted as text lines. Test *counts* are not here: the number of passing tests

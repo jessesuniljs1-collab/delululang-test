@@ -2168,3 +2168,34 @@ first task, investigated by starving a runner, never by loosening the bar blindl
 `36381950975` (on `047da1d`): `delulu-syntax` green, and `delulu-check` green — every one of its tests run
 under Miri to the end for the first time (59 minutes); `delulu-broker` still running.**
 
+
+## 2026-09-28 — the first cloud routine run: CI read, and the ping-pong criterion judged against a control (D-V2-47)
+
+The first scheduled run of `docs/CLOUD_ROUTINE.md` (Opus 5.5, xhigh, started 07:11 UTC in the 4-vCPU
+Ubuntu VM). **Health:** `survey check` ok (1,457 nodes, 12,477 edges); `doctor --check` exit 0, all checks
+pass. **CI read:** every push run of the handoff commits was already recorded by the laptop at 07:10;
+`5bb39bc`'s push run `36390274072` was still running at the start. `miri-slow` `36381950975` on `047da1d`:
+`delulu-syntax` green (20 min), `delulu-check` green (58 min — every test to the end), `delulu-broker`
+still running at 07:30 (it took 176 min last time).
+
+**The inbox's first item — `937aea8`'s Windows red — investigated the project's way.** `actors_pingpong`
+criterion 1 asks for 1.5x at 4 workers against 1; Windows measured 1.31x (best of two) on a commit that
+changed only documents, and the commits either side passed. Reproduced in the VM by STARVING it, the
+bar untouched: idle 1.89x and 2.18x; one CPU held by a busy loop 1.82x; two 1.54x; **three 1.20x, red** —
+the Windows shape, from the same runtime binary. The test was measuring how many of the runner's four
+CPUs were free, which its own `hw < 4` comment already says it must not.
+
+**Fixed (D-V2-47)** by giving the test a control rather than a looser bar: before and after every attempt
+it measures what parallel speed-up the machine gives four perfectly parallel CPU-bound units (each phase
+best of three); an attempt counts only where that was at least 3.0x on both sides, and is held to the
+criterion's share of it — 1.5 of 4, so exactly 1.5x on four free threads and never under 1.125x.
+Evidence, all on this VM: idle — measured, 2.03x / 2.05x / 2.15x / 2.16x against controls of 3.1–4.1;
+three CPUs starved — NOT MEASURED, printed with every attempt's numbers (controls 1.9–2.2, speed-ups
+1.10–1.22x), where the old test was red; **falsified** — a runtime mutant that starts one worker whatever
+it is asked for is red on the idle VM (1.00x against bars of 1.21–1.41x, three attempts). One control
+reading of 3.05–3.18 on the idle VM is why each phase is best-of-three. `cargo clippy -p delulu-runtime
+--all-targets -D warnings` clean. The residual: a passing log does not say whether a run measured or
+skipped, so how often CI's runners count as busy is not yet known (D-V2-47 §5).
+
+A Survey note for the next run: a test file's node is `test:<path>`, not `mod:<path>` — `impact
+mod:crates/delulu-runtime/tests/actors_pingpong.rs` answers "no node".

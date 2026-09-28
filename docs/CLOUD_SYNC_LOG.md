@@ -110,3 +110,23 @@ it on `origin` was made in the cloud and is listed below.
   runner, never lengthen or loosen blindly) and record the verdict. `miri-slow` `36381950975`: syntax
   green, **check green — its first complete run ever** (59 min), broker still running. Then
   **PS-D-02**, then `docs/CLOUD_ROUTINE.md` step 4's order.
+
+### 2026-09-28 — routine run 1: CI read; the ping-pong criterion judged against a control (D-V2-47)
+- Session: `https://claude.ai/code/session_013AZJ6RqYq59CeMgkvLV1BM`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there, `docs/CLOUD_ROUTINE.md`)   Pull request: none   Merged: n/a
+- Base: `5bb39bc`
+- Commits: (1) `actors_pingpong: judge criterion 1 against a control on a free machine (D-V2-47)`
+- Files and folders:
+  M `crates/delulu-runtime/tests/actors_pingpong.rs` — the control, the quiet-machine rule, the share-of-machine bar
+  M `docs/DELULULANG_V2/V2_DECISION_LOG.md` — D-V2-47
+  M `docs/DELULULANG_V2/V2_LOG.md` — this run's entry
+  M `docs/CLOUD_SYNC_LOG.md` — this entry
+  M `docs/survey/*` — regenerated
+- Survey and doctor (after the last edit): see the commit message of each slice.
+- Verified: in the VM — the ping-pong test idle (measured, 2.03–2.16x), with three CPUs starved (NOT
+  MEASURED, where the old test was red at 1.20x), and against a one-worker runtime mutant (red, 1.00x);
+  clippy on `delulu-runtime`. CI: `miri-slow` `36381950975` syntax and check green, broker running;
+  `5bb39bc`'s push run `36390274072` running at the start.
+- Redo on the laptop: nothing (a test-only change; Windows runs it in CI).
+- For the laptop's memory: nothing new yet.
+- Open / next: read `36381950975`'s broker job (green closes RW 5.6) and this commit's push run; PS-D-02.
