@@ -210,6 +210,15 @@ job (namespaces allowed) runs. (3) The report's properties equal what was measur
 OSes. **Mutants:** `send_program` reachable without `Confirmed` (a second constructor); a required
 property treated as established when `unknown`.
 
+**Built so far (2026-09-28, routine run 2, D-V2-56).** Building it found the "Now" above too kind: the
+host's first frame WAS the program, and the guest confined itself and reported only afterwards. The
+channel is now `/3` — `Open` (the generation, no program) → the guest's `Confined` for that generation →
+`Program` — and `crates/delulu/src/boundary.rs` holds the typestate (`Opened::confirm` the only
+constructor of `Confirmed`, `Confirmed::send_program` the only writer of the program). Every run has a
+generation, in the report and the launch and death records. Witness (1) is built in the form the channel
+allows before the required sets exist: a launcher that never confirms receives no program byte
+(`tests/sandbox_confirm_cli.rs`). Open: the five properties, the required sets and the refusal.
+
 ### 4.2 PS-E-02 — the guest ends with its host, on every backend, measured
 
 **Now.** Linux guests and the microVM's VMM carry `PR_SET_PDEATHSIG = SIGKILL`; Windows guests live in

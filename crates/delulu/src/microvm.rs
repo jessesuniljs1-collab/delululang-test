@@ -2,7 +2,7 @@
 //!
 //! The guest runs the INTERPRETER (D-NE-23) as PID 1 of its own kernel under Firecracker, and holds
 //! one thing: a vsock stream to its host. No network device, no filesystem device, no secret, no
-//! broker address. Every effect it asks for crosses that stream as a `delulu-sandbox-channel/2`
+//! broker address. Every effect it asks for crosses that stream as a `delulu-sandbox-channel/3`
 //! request the host authorizes and performs with the code that serves an L1 guest — the same guest
 //! behind a hypervisor, not a second design and not a second Authority.
 //!

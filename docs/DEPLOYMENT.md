@@ -183,7 +183,9 @@ and no network:
 #!/bin/sh
 # /usr/local/bin/delulu-gvisor — run with:
 #   delulu run app.delulu --grant … --sandbox --sandbox-backend external:/usr/local/bin/delulu-gvisor
-# The image must carry the SAME delulu version as the host (the channel is versioned), and needs no
+# The image must carry the SAME delulu version as the host (the channel is versioned — since
+# 2026-09-28 `delulu-sandbox-channel/3`, where the guest confirms its boundary before it is sent the
+# program; a guest of another version refuses in words), and needs no
 # files of yours: the guest performs no effects, so mount nothing.
 exec docker run -i --rm --init --network none --runtime=runsc \
   --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 \

@@ -2535,3 +2535,69 @@ on 2026-10-19, and the microVM job's kernel build, the user-namespace step and t
 all measured on 24.04 — a runner change should be a deliberate, measured step (a manual run on
 `ubuntu-26.04` first), never a Monday surprise. The witness is the next push run: the Node-20 warning
 gone from every job, and every job green.
+
+## 2026-09-28 (night) — PS-E-01, first step: the boundary is confirmed before the program is sent (D-V2-56)
+
+**The gap, witnessed.** `V2_OPENSHELL_STUDY.md` §4.1 said the order in `guest.rs` was right "by
+convention". It was not right at all for the guest's own layers: the host's FIRST frame on
+`delulu-sandbox-channel/2` was the `Hello` — the program itself — and the guest locked itself down and
+reported what it applied (RW 4.23's `Confined`) only afterwards. So a guest that never confined itself
+had already been handed the program. Witness, `tests/sandbox_confirm_cli.rs`, **red on `ff701ae`**: an
+external launcher (L3) that records every byte the host sends it for two seconds and never answers
+captured the whole program, canary included (`…println("CANARY-PS-E-01-14920")…`), exit 1. The second
+witness, red on the same binary: no `sandbox.generation` in a run report — only an attested L3 run had a
+nonce.
+
+**Built — `delulu-sandbox-channel/3`, and the order as a type.**
+- The host's first frame is `Open { version, generation }` — no program. The guest reads it, checks the
+  version, locks itself down (Landlock, seccomp: unchanged), and reports `Confined { applied, generation }`.
+  `HostChannel` accepts the report only for the generation it was opened with (`with_generation`), and a
+  host that opened none accepts no report at all. Only then does the host send `Program { program, hash,
+  seed, fixed_clock_ms }`; the guest checks the hash and the program after its lock-down (the checker
+  needs nothing the lock-down removes — the whole suite passes on Linux L1).
+- `crates/delulu/src/boundary.rs` (new): `open` → `Opened::confirm` → `Confirmed::send_program`, each
+  consuming the one before, fields private to the module — `confirm` is the only constructor of
+  `Confirmed`, and `send_program` the only way the program frame is written. A first request that is not
+  the confinement report is **not answered** (an answer to `root.console()` would be an effect performed
+  for a guest nobody confirmed). `guest.rs`'s run path and the `sandbox probe`'s contained-guest path both
+  go through it.
+- **A generation for every run** at every level: 32 bytes of the OS's randomness, in the `sandbox-launch`
+  and `sandbox-death` audit records and the report (`sandbox.generation`, required by the closed
+  `sandbox_run` schema). An attested run's nonce IS its generation (PS-D-02 unchanged otherwise).
+- A guest that does not confirm ends the run with exit 1 in words ("the guest never confirmed its
+  boundary, so it was not sent the program: …"), its report says `outcome.ran: false`, and its death
+  record `confirmed: false`.
+- An older host's first frame decodes (the generation is defaulted) so a version-skewed guest refuses on
+  the VERSION, in words — the case an operator's stale launcher image meets.
+
+**Witnesses and falsifiers.** `sandbox_confirm_cli.rs` (2 tests, red → green): the non-confirming
+launcher receives no program byte and the run says `ran: false`, `confirmed: false`; two runs have
+distinct 64-hex generations, each named by exactly one launch and one death record, the chain verifying.
+Unit tests: `boundary.rs` (an honest guest is confirmed and only then sent the program; four guests that
+do not confirm — hangs up, another run's generation, a word nobody applies, asks for the console first —
+are never sent it, and the fourth is never answered), `channel.rs` (a report only for the host's
+generation; the fuzz corpus now carries generations and decodes both host frames). **Mutants, each seen
+to land in the source and each killed:** M1 the program written before `confirm` → the e2e witness red
+(the canary captured); M2 any generation accepted → the channel test and the boundary test red; M3 a
+first request that is not the report answered → the boundary test red with "asks for the console first:
+confirmed" (its root DOES grant the console, so the mutant performed the mint).
+
+**The suite, alone, `-j 4`:** 2,002 passed, **1 failed**, 15 ignored, 152 binaries — the failure a real
+gate doing its job: `every_thread_either_sizes_its_stack_or_is_listed_as_never_running_a_program`
+(`actors.rs`) cuts each file at its first `#[cfg(test)]`, and `boundary.rs`'s test module was
+`#[cfg(all(test, unix))]`, so its scripted-guest thread read as shipped code with the OS default stack.
+Now `#[cfg(test)]` + `#[cfg(unix)]`; the gate and the module's tests re-run green. Clippy `--workspace
+--all-targets -D warnings` clean. Every sandbox, guest and schema test binary green before the suite
+(guest_cli 5, sandbox_attest 6, sandbox 3, sandbox_confirm 2, sandbox_external 3, sandbox_guard_e2e 1,
+sandbox_modes 11, sandbox_run 17, schema 4; the ten microVM tests are KVM-gated — CI's `microvm` job,
+whose guest image is built from this tree and so speaks `/3`).
+
+**CI read:** `ff701ae` (the workflows' Node-24 move) push run `36477748775` — success on every job; the
+Node-20 warning is gone from the logs read (arm64: `checkout@v5`; formal: `checkout@v5`, `setup-python@v6`,
+`setup-java@v5`); arm64's ping-pong MEASURED 2.88x against a 4.12x control, bar 1.50x, passed.
+
+**Not in this step (PS-E-01's next):** the five properties each `established { mechanism, evidence }`,
+`absent { why }` or `unknown`; the profiles' required sets (`hostile-agent` all five; `contained`
+filesystem, egress, resource; `dev` none); refusal before the program is sent when a required property
+is missing, and `host_guarantees` derived from the confirmation. The typestate now has the one place
+where that check goes: `Opened::confirm`.

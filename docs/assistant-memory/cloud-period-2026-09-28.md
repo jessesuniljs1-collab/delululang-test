@@ -46,6 +46,14 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   **NVIDIA OpenShell studied** on Jesse's commission → [[openshell-study-2026-09-28]]; PS-E is next,
   then P8 (+P8-04), then P9; the routine resumed with its connectors cleared again.
 - **Models, 2026-09-28 evening (official models page):** Sonnet 5.5 (`claude-sonnet-5-5`) RELEASED; Haiku 5.5 announced, NOT released (Haiku 4.5 still newest; retirement not sooner than 2026-10-15). Agents (Jesse's ruling): Sonnet 5.5; Haiku 5.5 once released; no Haiku 4.5 meanwhile. Opus 5.5 defaults to `medium` in Claude Code — repo `effortLevel: xhigh` raises it. A cyber-flagged request re-runs Opus 5.5 → Opus 4.8 and the session STAYS there: the trailer must name it. Cloud VM: `gh` listed as pre-installed in docs but run 1 found none — check; release assets only from the attached repo.
+- **ROUTINE RUN 2 (2026-09-28, 20:09 UTC,** session `session_01TfVRPwf7BAv6L8SzocuB1d`**):** pushing to
+  `master` worked from the routine's session (its harness names a `claude/…` branch; the routine's brief
+  wins). CI read green (`045c21a`, `7e9d97d`, `cfbfbdc`). Workflows moved to the Node-24 majors (each
+  checked from its `action.yml` on raw.githubusercontent.com, reachable from the VM) and pinned to
+  `ubuntu-24.04`. **PS-E-01 first step (D-V2-56):** the host's first channel frame WAS the program —
+  witnessed red with a capturing launcher — now `delulu-sandbox-channel/3`, `boundary.rs` typestate, a
+  generation per run. Traps: sandbox audit records need `<state>/audit` to exist; `sh` background jobs
+  read `/dev/null`.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

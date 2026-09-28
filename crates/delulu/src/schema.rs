@@ -451,6 +451,8 @@ fn defs() -> Value {
                 ("denied", str_list.clone()),
                 ("denied_total", t("integer")),
                 ("policy_hash", t("string")),
+                // PS-E-01: every sandboxed run's own generation, the nonce its guest confirmed against.
+                ("generation", t("string")),
             ],
             // PS-D-01: an external (L3) run names the launcher's PROGRAM (never its arguments, which
             // can carry an operator's token). PS-D-02: and what its attester said, when the run required it.

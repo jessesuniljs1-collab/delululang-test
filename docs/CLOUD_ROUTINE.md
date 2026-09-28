@@ -85,7 +85,8 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 `git log --oneline -15`. If `claude/cloud-dev` exists and is ahead of `master`, work from it (see above).
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
-`cargo run -p delulu -- doctor --check`. A failure here is the run's first task. Then `cargo fetch
+`cargo run -p delulu -- doctor --check` — start them in the background as soon as the run begins (the
+first `doctor` builds the whole `delulu` crate) and do step 1's reading while they build. A failure here is the run's first task. Then `cargo fetch
 --locked` once: a fresh VM holds only Linux's crates, and `egress_features` runs `cargo metadata
 --offline`, which needs every platform's (run 1 lost a suite result to it).
 
@@ -155,7 +156,8 @@ self-contained slice, record where the next run picks up.
 `query`; a test file's node is `test:<path>`, a source file's `mod:<path>`). **Witness the defect failing before fixing it; falsify every new test** (reintroduce the
 defect, watch it go red, restore). `cargo clippy --workspace --all-targets -- -D warnings`; the affected
 tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
-exit code. Freeze the tree while it runs.
+exit code. Freeze the tree while it runs: draft the records (step 6) as a patch script in the
+scratchpad meanwhile, and apply it once the suite has reported.
 
 **6. Close it.** After the last edit: `survey build`, `check`, `findings` (0 errors), `doctor --check`.
 Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees; a `D-V2-nn` for each

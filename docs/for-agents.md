@@ -449,7 +449,8 @@ measured none of that wall). Add `--require-attestation HEX` and the program is 
 launcher's attester has signed a statement over this run's nonce with that ed25519 key; its claims come
 back as `sandbox.attestation` — the attester's word, never counted as a host guarantee (PS-D-02;
 `delulu sandbox attest` is a software attester, `DEPLOYMENT.md` has the format). At every level the host
-decides and performs every effect.
+decides and performs every effect, and the guest is sent the program only after it has confirmed its
+boundary for this run's `sandbox.generation` (PS-E-01).
 
 Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
 performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may

@@ -9,6 +9,22 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-E-01 (first step): a sandbox guest confirms its boundary before it is sent the program, 2026-09-28
+
+- **Fixed: a sandboxed guest was handed the program before it had confined itself.** The host's first
+  frame was the program, and the guest locked itself down and reported what it applied only afterwards —
+  so a guest (or an external launcher) that never confined itself still received the program. The channel
+  is now `delulu-sandbox-channel/3`: the host opens with this run's generation and no program, the guest
+  locks itself down and reports, and only a report the host accepts — known words, first, for this
+  generation — lets the program be sent. A guest that does not confirm ends the run (exit 1, in words);
+  the report says `outcome.ran: false` (D-V2-56).
+- **Every sandboxed run has a generation** — 32 random bytes, at every level — in the run report
+  (`sandbox.generation`) and in the audit chain's launch and death records (the death record also says
+  whether the guest `confirmed`). An attested run's nonce is its generation.
+- **A host and a guest of different versions refuse each other in words** — an external launcher's image
+  must carry the host's `delulu` version.
+- **CI:** every GitHub action on its Node-24 major; every Ubuntu runner pinned to `ubuntu-24.04`.
+
 ## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
 
 - **`delulu run --sandbox --sandbox-backend external:CMD --require-attestation HEX`**: the run refuses to

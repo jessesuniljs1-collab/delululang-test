@@ -44,7 +44,13 @@ the assistant's memory — which now also travels file by file in
   side, what DeluluLang takes and why, what it does not. It added **PS-E** (the boundary, confirmed),
   **P8-04** (an out-of-band monitor, the shape of NVIDIA's Sentry) and **P9** (authority at the
   boundary); D-V2-52 to D-V2-55. Nothing of OpenShell is copied into the repository.
-- **Next:** **PS-E** — E-01 the boundary confirmed by construction, E-02 host loss ends the guest, E-03
+- **Begun in the cloud (routine run 2, 2026-09-28 night): PS-E-01's first step** (D-V2-56). Building it
+  found the host's FIRST channel frame was the program itself, so a guest that never confined itself had
+  already received it (witnessed red on `ff701ae`). Now `delulu-sandbox-channel/3`: the host opens with a
+  per-run generation and no program, the guest confirms its boundary, and `boundary.rs`'s `Confirmed` is
+  the only way the program is sent. The CI workflows moved to their Node-24 action majors and
+  `ubuntu-24.04`.
+- **Next:** **PS-E** — E-01's five properties, required sets and refusal (its first step is built), E-02 host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),
@@ -568,6 +574,9 @@ wins, and you should update the memory to match.
   then moves to the background; an **environment setup script** (configured by the owner in the
   environment dialog, not in the repository) is cached as a filesystem snapshot for about seven days if it
   finishes within about five minutes — a candidate for the Rust toolchain and `cargo fetch`.
+- **The cloud VM reads `raw.githubusercontent.com` for any public repository** (routine run 2): an
+  action's `action.yml` at a tag is readable there, which is how each action's runtime (`runs.using`)
+  was checked before the Node-24 move. Release ASSETS stay reachable only for this repository.
 - **Models (official models page, 2026-09-28):** Fable 5.1 (`claude-fable-5-1`), Opus 5.5
   (`claude-opus-5-5`), **Sonnet 5.5 (`claude-sonnet-5-5`, launched 2026-09-28; Claude Code ≥ v2.1.284 —
   the laptop has 2.1.284)**, Haiku 4.5 (`claude-haiku-4-5-20251001`, retirement not sooner than
@@ -762,6 +771,13 @@ Added in V2 (2026-09-17 → 2026-09-28):
   clock is ignored under Miri and runs natively on every push. `miri-slow` jobs get 240 minutes.
 - **Measure an OS limit before claiming it** — Windows' job time limit fires late; macOS does not enforce
   `RLIMIT_DATA`, so no memory ceiling is claimed there. A report states only what was measured.
+- **A sandboxed run writes its audit records only where the chain already exists**
+  (`guest.rs::audit_sandbox`): a test that reads them creates `<state>/audit` first, or it reads an empty
+  chain and fails for the wrong reason (routine run 2).
+- **In `sh`, a background command's standard input is `/dev/null`** unless it is redirected from a
+  descriptor opened before it (`exec 3<&0; cat <&3 > file &`). A fake launcher that listens in the
+  background otherwise hears nothing, and the absence it then "proves" is vacuous — so a capture
+  witness also asserts that it captured SOMETHING (routine run 2, PS-E-01).
 
 ### 11.6 If you are an assistant with memory, keep it current
 

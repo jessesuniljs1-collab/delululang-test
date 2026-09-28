@@ -1,5 +1,12 @@
-//! `delulu-sandbox-channel/2` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]): the wire
-//! between a guest interpreter and the host that performs its effects.
+//! `delulu-sandbox-channel/3` (PS-A-02; `/2` since RW 4.23 added [`ReqBody::Confined`]; `/3` since
+//! PS-E-01 split the host's first frame in two): the wire between a guest interpreter and the host that
+//! performs its effects.
+//!
+//! **The order, by construction (PS-E-01).** The host opens with an [`Open`] frame — the version and
+//! this run's generation, and no program. The guest locks itself down and answers with
+//! [`ReqBody::Confined`], its self-applied layers and the generation echoed back. Only when the host
+//! has accepted that report does it send the [`Program`] frame. Until `/3` the host's first frame WAS
+//! the program, so a guest that never confined itself had already been handed it.
 //!
 //! The framing is the broker's, deliberately: length-prefixed (u32 little-endian) canonical CBOR
 //! with a hard per-frame bound and a version tag in every request (`broker_ipc`, head-chef ruling 2).
@@ -22,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use crate::value::{CapVal, Value, VariantFields};
 
 /// The wire protocol version, present in every request frame.
-pub const CHANNEL_VERSION: &str = "delulu-sandbox-channel/2";
+pub const CHANNEL_VERSION: &str = "delulu-sandbox-channel/3";
 
 /// The only words a guest may report in [`ReqBody::Confined`]: the boundaries a guest applies to
 /// ITSELF (Landlock and seccomp on Linux, `delulu`'s `jail.rs`). A report of anything else is refused,
@@ -180,14 +187,27 @@ fn leaked_kind(_v: &Value) -> &'static str {
     "a value of a kind that does not cross the sandbox channel"
 }
 
-/// The one frame that travels HOST to GUEST, before the conversation turns around: what to run,
-/// the hash it must match, and the two knobs that make a run reproducible.
+/// The host's FIRST frame (PS-E-01): the protocol's version and this run's generation — a fresh nonce
+/// for every run — and nothing to run. The guest locks itself down, then reports what it applied with
+/// the generation echoed ([`ReqBody::Confined`]); a report for another generation is refused, so a
+/// confirmation belongs to one run.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Open {
+    pub version: String,
+    /// Defaulted when absent so that a host of an older protocol, whose first frame had no generation,
+    /// is refused on its VERSION, in words, rather than on a missing field.
+    #[serde(default)]
+    pub generation: String,
+}
+
+/// The frame that travels HOST to GUEST once the guest's boundary is confirmed, before the
+/// conversation turns around: what to run, the hash it must match, and the two knobs that make a run
+/// reproducible.
 ///
 /// It carries no grant and no scope. The guest is told what to execute, never what it may reach —
 /// that stays with the host, which is the whole point of the arrangement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Hello {
-    pub version: String,
+pub struct Program {
     pub program: String,
     /// The program's blake3 hash, so a guest refuses anything swapped in flight.
     pub hash: String,
@@ -216,8 +236,10 @@ pub enum ReqBody {
     Done { exit: i32 },
     /// What the guest applied to ITSELF, sent once, as its FIRST request: after it locked itself down
     /// and before a line of the program ran, while it is still the toolchain's own code (RW 4.23). A
-    /// report at the goodbye would come from a guest the program had already been running in.
-    Confined { applied: Vec<String> },
+    /// report at the goodbye would come from a guest the program had already been running in. Since
+    /// `/3` (PS-E-01) it comes before the guest has even been SENT the program, and it carries the
+    /// generation of the [`Open`] frame it answers.
+    Confined { applied: Vec<String>, generation: String },
 }
 
 /// The host's answer. A fault is the program's own error (an `IoErr`, a refusal the checks made);
@@ -287,6 +309,9 @@ pub struct HostChannel<S: crate::sink::EffectSink> {
     answered: u64,
     /// What the guest reported applying to itself, each word one of [`SELF_APPLIED`].
     self_applied: Vec<&'static str>,
+    /// PS-E-01: the generation this host opened the run with. A confinement report is accepted only
+    /// for it; a host that opened none accepts no report at all.
+    generation: Option<String>,
     /// The custody every capability operation is authorized by BEFORE it is performed — the
     /// interpreter's gate (`Interp::with_custody`), at the same point, for a guest. Absent means
     /// embedded custody: the root's own scopes are the enforcement, as in an embedded local run.
@@ -309,8 +334,16 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
             denied_total: 0,
             answered: 0,
             self_applied: Vec::new(),
+            generation: None,
             custody: None,
         }
+    }
+
+    /// PS-E-01: the generation this run was opened with ([`Open`]); the guest's confinement report must
+    /// echo it.
+    pub fn with_generation(mut self, generation: &str) -> Self {
+        self.generation = Some(generation.to_string());
+        self
     }
 
     /// Authorize every capability operation through `custody` before performing it (see the field).
@@ -409,13 +442,21 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
         }
         match &req.body {
             ReqBody::Done { .. } => Response::Ok(WireValue::Unit),
-            ReqBody::Confined { applied } => {
+            ReqBody::Confined { applied, generation } => {
                 // Once, and first: after anything else, the guest has been running the program, and
                 // what it says about itself is no longer the toolchain speaking.
                 if self.answered > 0 {
                     return Response::Error {
                         code: "DL1401".into(),
                         message: "a confinement report is accepted only as a guest's first request".into(),
+                    };
+                }
+                // PS-E-01: for THIS run. A report carrying another generation — replayed, relayed from
+                // another run, or made up — confirms nothing here.
+                if self.generation.as_deref() != Some(generation.as_str()) {
+                    return Response::Error {
+                        code: "DL1401".into(),
+                        message: "the confinement report names another run's generation".into(),
                     };
                 }
                 let mut known: Vec<&'static str> = Vec::with_capacity(applied.len());
@@ -586,13 +627,17 @@ impl<T: Read + Write> ChannelSink<T> {
         Ok(())
     }
 
-    /// Tell the host what this guest applied to itself. Called once, before the program runs; a host
-    /// that refuses the report is an error, because the guest and host disagree about the protocol.
-    pub fn confined(&self, applied: &[&str]) -> io::Result<()> {
+    /// Tell the host what this guest applied to itself, for the generation it was opened with. Called
+    /// once, before the guest is sent its program (PS-E-01); a host that refuses the report is an error,
+    /// and the guest then never receives a program at all.
+    pub fn confined(&self, applied: &[&str], generation: &str) -> io::Result<()> {
         let req = Request {
             version: CHANNEL_VERSION.into(),
             seq: self.next_seq(),
-            body: ReqBody::Confined { applied: applied.iter().map(|s| s.to_string()).collect() },
+            body: ReqBody::Confined {
+                applied: applied.iter().map(|s| s.to_string()).collect(),
+                generation: generation.to_string(),
+            },
         };
         let mut io = self.io.borrow_mut();
         write_frame(&mut *io, &req)?;
@@ -600,6 +645,12 @@ impl<T: Read + Write> ChannelSink<T> {
             Response::Ok(_) => Ok(()),
             Response::Fault { message, .. } | Response::Error { message, .. } => Err(io::Error::other(message)),
         }
+    }
+
+    /// One frame FROM the host that is not an answer: the [`Program`], once the host has confirmed this
+    /// guest's boundary (PS-E-01).
+    pub fn receive<M: serde::de::DeserializeOwned>(&self) -> io::Result<M> {
+        read_frame(&mut *self.io.borrow_mut())
     }
 
     fn next_seq(&self) -> u64 {
@@ -802,8 +853,11 @@ pub fn fuzz_one_frame(data: &[u8]) {
     if let Ok(v) = read_frame::<WireValue>(&mut &framed[..]) {
         stable(&v);
     }
-    if let Ok(h) = read_frame::<Hello>(&mut &framed[..]) {
-        stable(&h);
+    if let Ok(o) = read_frame::<Open>(&mut &framed[..]) {
+        stable(&o);
+    }
+    if let Ok(p) = read_frame::<Program>(&mut &framed[..]) {
+        stable(&p);
     }
     if let Ok(r) = read_frame::<Response>(&mut &framed[..]) {
         stable(&r);
@@ -812,7 +866,9 @@ pub fn fuzz_one_frame(data: &[u8]) {
         stable(&req);
         // `Done` and a guest's report of its own confinement perform nothing, so they may be `Ok`.
         let performs_nothing = matches!(req.body, ReqBody::Done { .. } | ReqBody::Confined { .. });
-        let mut host = HostChannel::new(crate::sink::LocalSink);
+        // Opened with a generation a well-formed corpus frame can carry, so an accepted confinement
+        // report is reached, not only refused ones.
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(&"ab".repeat(32));
         match host.answer(&req) {
             Response::Ok(_) => assert!(
                 performs_nothing,
@@ -840,11 +896,17 @@ fn stable<T: Serialize + for<'de> Deserialize<'de>>(v: &T) {
 mod tests {
     use super::*;
 
+    const GEN: &str = "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f";
+
     fn confined(seq: u64, words: &[&str]) -> Request {
+        confined_for(seq, words, GEN)
+    }
+
+    fn confined_for(seq: u64, words: &[&str], generation: &str) -> Request {
         Request {
             version: CHANNEL_VERSION.into(),
             seq,
-            body: ReqBody::Confined { applied: words.iter().map(|w| w.to_string()).collect() },
+            body: ReqBody::Confined { applied: words.iter().map(|w| w.to_string()).collect(), generation: generation.into() },
         }
     }
 
@@ -852,7 +914,7 @@ mod tests {
     /// — so the report can gain what the guest really applied and nothing a guest makes up.
     #[test]
     fn a_confinement_report_is_accepted_first_once_and_only_in_known_words() {
-        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
         let r = host.answer(&confined(1, &["no file writes", "no new programs", "no file writes"]));
         assert!(matches!(r, Response::Ok(_)), "{r:?}");
         assert_eq!(host.self_applied(), ["no file writes", "no new programs"], "known words, each once");
@@ -864,16 +926,37 @@ mod tests {
         assert_eq!(host.denied().1, 1, "and the refusal is on the record");
 
         // A word nobody applies is refused, whole: nothing of that report is kept.
-        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
         let r = host.answer(&confined(1, &["no new programs", "a separate identity: trust me"]));
         assert!(matches!(r, Response::Error { .. }), "{r:?}");
         assert!(host.self_applied().is_empty());
 
         // And not after an ordinary request either.
-        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
         let _ = host.answer(&Request { version: CHANNEL_VERSION.into(), seq: 1, body: ReqBody::Done { exit: 0 } });
         assert!(matches!(host.answer(&confined(2, &["no new programs"])), Response::Error { .. }));
         assert!(host.self_applied().is_empty());
+    }
+
+    /// PS-E-01: a confinement report belongs to ONE run — the generation the host opened it with. A
+    /// report for another generation, or to a host that opened none, confirms nothing and is recorded.
+    #[test]
+    fn a_confinement_report_is_accepted_only_for_the_generation_the_host_opened() {
+        let other = "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e";
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
+        let r = host.answer(&confined_for(1, &["no new programs"], other));
+        assert!(matches!(&r, Response::Error { message, .. } if message.contains("another run's generation")), "{r:?}");
+        assert!(host.self_applied().is_empty(), "nothing of a report for another run is kept");
+        assert_eq!(host.denied().1, 1, "and the refusal is on the record");
+
+        let mut host = HostChannel::new(crate::sink::LocalSink);
+        let r = host.answer(&confined(1, &["no new programs"]));
+        assert!(matches!(r, Response::Error { .. }), "a host that opened no generation takes no report: {r:?}");
+        assert!(host.self_applied().is_empty());
+
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
+        assert!(matches!(host.answer(&confined(1, &["no new programs"])), Response::Ok(_)), "its own generation is taken");
+        assert_eq!(host.self_applied(), ["no new programs"]);
     }
 
     fn no_caps() -> impl FnMut(&std::rc::Rc<CapVal>) -> Handle {
@@ -1117,6 +1200,7 @@ mod tests {
                                 applied: (0..next() % 3)
                                     .map(|_| ["no new programs", "no file writes", "root access", ""][(next() % 4) as usize].into())
                                     .collect(),
+                                generation: ["", "00", &"ab".repeat(32)][(next() % 3) as usize].into(),
                             },
                             1 => ReqBody::RootMethod {
                                 method: ["console", "fs_read", "fs_write", "clock", "nope"][(next() % 5) as usize].into(),

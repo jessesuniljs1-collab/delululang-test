@@ -1,9 +1,11 @@
 //! The sandbox guest (PS-A-03): `delulu __guest`, the child that runs a program while holding no
 //! authority of its own.
 //!
-//! The host sends one [`Hello`] frame — the program, the hash it must match, the seed and the clock
-//! — and then answers the guest's requests on `delulu-sandbox-channel/2` until the guest says it is
-//! done. The guest's own root is EMPTY: every capability it uses is a handle the host minted, so
+//! The host opens with an [`Open`] frame — this run's generation, and no program. The guest locks
+//! itself down and reports what it applied; only once the host has accepted that report
+//! (`boundary.rs`, PS-E-01) does it send the [`Program`] frame — the program, the hash it must match,
+//! the seed and the clock — and then it answers the guest's requests on `delulu-sandbox-channel/3`
+//! until the guest says it is done. The guest's own root is EMPTY: every capability it uses is a handle the host minted, so
 //! "the guest performs no effects" is true by construction rather than by policy.
 //!
 //! Standard input and standard output belong to the CHANNEL here. The program's own output is
@@ -19,7 +21,7 @@
 use std::io;
 use std::rc::Rc;
 
-use delulu_runtime::channel::{read_frame, write_frame, ChannelSink, Hello, HostChannel, CHANNEL_VERSION};
+use delulu_runtime::channel::{read_frame, ChannelSink, HostChannel, Open, Program, CHANNEL_VERSION};
 use delulu_runtime::interp::Interp;
 use delulu_runtime::sink::LocalSink;
 use delulu_runtime::value::{RootVal, Value};
@@ -270,35 +272,22 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     dir: Option<&std::path::Path>,
     measured: &[&'static str],
 ) -> i32 {
-    let hello: Hello = match read_frame(&mut conn) {
-        Ok(h) => h,
-        // No hello, no run: a guest reached by anything other than its host does nothing at all.
+    // PS-E-01: the host opens with this run's generation and NO program. The program comes only after
+    // this guest has locked itself down and the host has accepted its report of what it applied.
+    let open: Open = match read_frame(&mut conn) {
+        Ok(o) => o,
+        // No opening, no run: a guest reached by anything other than its host does nothing at all.
         Err(e) => {
-            eprintln!("error: the sandbox guest was started without a hello frame ({e})");
+            eprintln!("error: the sandbox guest was started without an opening frame from its host ({e})");
             return 2;
         }
     };
-    if hello.version != CHANNEL_VERSION {
-        eprintln!("error: the host speaks `{}`, this guest speaks `{CHANNEL_VERSION}`", hello.version);
-        return 2;
-    }
-    // The hash pins WHAT runs: a program swapped in flight is refused, not executed.
-    let got = blake3::hash(hello.program.as_bytes()).to_hex().to_string();
-    if got != hello.hash {
-        eprintln!("error: the program does not match the hash the host sent — refused");
+    if open.version != CHANNEL_VERSION {
+        eprintln!("error: the host speaks `{}`, this guest speaks `{CHANNEL_VERSION}`", open.version);
         return 2;
     }
 
-    let checked = delulu_check::check_source(0, &hello.program);
-    if checked.diagnostics.iter().any(|d| d.is_error()) {
-        eprintln!("error: the host sent a program that does not check");
-        return 1;
-    }
-
-    delulu_runtime::prim::set_rand_seed(hello.seed);
-    delulu_runtime::prim::set_fixed_clock_ms(hello.fixed_clock_ms);
-
-    // The last thing before the program runs: the guest narrows itself to what interpreting needs.
+    // The guest narrows itself to what interpreting needs — before it has been sent a program at all.
     // The filesystem first, because it is the one a guest needs none of — every read and write the
     // program asks for is performed by the HOST — and because the syscall filter below says nothing
     // about WHICH files a permitted syscall may reach.
@@ -333,12 +322,34 @@ pub(crate) fn serve_as_guest<C: std::io::Read + std::io::Write + 'static>(
     }
 
     let sink = Rc::new(ChannelSink::new(conn));
-    // Told to the host now — after the lock-down, before the program's first line — so the report
+    // Told to the host now — after the lock-down, before the guest holds any program — so the report
     // counts what this guest really applied, and the words come from the toolchain, not the program.
-    if let Err(e) = sink.confined(&own) {
+    if let Err(e) = sink.confined(&own, &open.generation) {
         eprintln!("error: the host would not take this guest's confinement report ({e}) — nothing ran");
         return 2;
     }
+    // Confirmed: only now does the host send what to run.
+    let hello: Program = match sink.receive() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: the host confirmed this guest but sent no program ({e}) — nothing ran");
+            return 2;
+        }
+    };
+    // The hash pins WHAT runs: a program swapped in flight is refused, not executed.
+    let got = blake3::hash(hello.program.as_bytes()).to_hex().to_string();
+    if got != hello.hash {
+        eprintln!("error: the program does not match the hash the host sent — refused");
+        return 2;
+    }
+    let checked = delulu_check::check_source(0, &hello.program);
+    if checked.diagnostics.iter().any(|d| d.is_error()) {
+        eprintln!("error: the host sent a program that does not check");
+        return 1;
+    }
+    delulu_runtime::prim::set_rand_seed(hello.seed);
+    delulu_runtime::prim::set_fixed_clock_ms(hello.fixed_clock_ms);
+
     let interp = Interp::new(&checked.module).with_effect_sink(sink.clone());
     // The guest's root grants NOTHING. Every capability the program obtains is minted by the host,
     // over the channel, from the root the operator actually granted.
@@ -364,7 +375,7 @@ pub const SANDBOX_RUN_SUBCOMMAND: &str = "__sandbox_run";
 /// exists to prevent (D-V2-25: refuse, never silently downgrade).
 ///
 /// Actors, foreign C, Python, plugins, devices and secrets are not here yet: each needs its own
-/// request kind on `delulu-sandbox-channel/2`, and a handle cannot stand in for a thread or a
+/// request kind on `delulu-sandbox-channel/3`, and a handle cannot stand in for a thread or a
 /// library. They arrive with the rest of PS-A.
 ///
 /// `Http` joined at PS-B-02, and needed no new request kind to do it: `get` is an ordinary
@@ -924,16 +935,19 @@ fn serve_under(
     let children_before = children_cpu();
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
-    // PS-D-02: a fresh nonce for this run, and the place in this run's own directory where the attester's
-    // document must appear.
+    // PS-E-01: every run has a generation — 32 bytes of the OS's randomness — at every level. The guest
+    // must echo it to confirm its boundary, the launch record and the report name it, and (PS-D-02) an
+    // attester signs over it: an attested run's nonce IS its generation.
+    let generation = match crate::attest::fresh_nonce() {
+        Ok(g) => g,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(io::Error::other(e));
+        }
+    };
+    // PS-D-02: the place in this run's own directory where the attester's document must appear.
     let attest_plan = match isolation {
-        Isolation::External(_, Some(key)) => match crate::attest::fresh_nonce() {
-            Ok(nonce) => Some((key, nonce, dir.join(crate::attest::FILE_NAME))),
-            Err(e) => {
-                let _ = std::fs::remove_dir_all(&dir);
-                return Err(io::Error::other(e));
-            }
-        },
+        Isolation::External(_, Some(key)) => Some((key, generation.clone(), dir.join(crate::attest::FILE_NAME))),
         _ => None,
     };
     let launched = match isolation {
@@ -1001,6 +1015,9 @@ fn serve_under(
     // were checked and booted.
     let image = child.image();
     let with_image = |mut v: serde_json::Value| {
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("generation".to_string(), serde_json::json!(generation));
+        }
         if let (Some(img), Some(obj)) = (&image, v.as_object_mut()) {
             obj.insert("image".to_string(), img.clone());
         }
@@ -1073,7 +1090,7 @@ fn serve_under(
         (None, None, _) | (_, _, None) => None,
         (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
     };
-    let served = converse(&mut child, &dir, program, root, seed, fixed_clock_ms, custody, &mut evidence);
+    let served = converse(&mut child, &dir, program, &generation, root, seed, fixed_clock_ms, custody, &mut evidence);
     // Stopped, and joined, BEFORE the guest is reaped below: until then its process id cannot have
     // been reused, so the watchdog can only ever have ended this guest.
     let fired = watch.and_then(Watchdog::stop);
@@ -1083,6 +1100,8 @@ fn serve_under(
         _ => None,
     };
     let denied = evidence.denied;
+    // PS-E-01: a guest that never confirmed its boundary was never sent the program, so it never ran.
+    let confirmed = evidence.confirmed;
     // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
     // chain — they were in force before the program's first line, and the host checked the words.
     for w in evidence.own {
@@ -1159,8 +1178,10 @@ fn serve_under(
             Err(e) => format!("channel failed: {e}"),
         }),
         // How many times the host said no, in the chain as well as the report: a run report can be
-        // discarded, and the audit chain is the copy an operator cannot quietly lose.
-        Some(serde_json::json!({ "denied_total": denied.1 })),
+        // discarded, and the audit chain is the copy an operator cannot quietly lose. And (PS-E-01)
+        // whether the guest confirmed its boundary, for which generation — so a guest that never did is
+        // on the record as one that was never sent the program.
+        Some(serde_json::json!({ "denied_total": denied.1, "confirmed": confirmed, "generation": generation })),
     );
 
     // PS-B-02: the guest's network requests were performed HERE, by the host, so their record is in
@@ -1172,7 +1193,7 @@ fn serve_under(
     }
     if let Some(path) = report_out {
         let exit = served.as_ref().copied().unwrap_or(1);
-        let mut outcome = serde_json::json!({ "ran": true, "exit": exit });
+        let mut outcome = serde_json::json!({ "ran": confirmed, "exit": exit });
         if let Some(s) = &stop {
             outcome["stopped_by"] = s.json.clone();
         }
@@ -1521,18 +1542,22 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
 /// What a conversation leaves for the report, whichever way it ended.
 #[derive(Default)]
 struct Evidence {
+    /// PS-E-01: whether the guest confirmed its boundary — and so whether it was ever sent the program.
+    confirmed: bool,
     /// Every refusal the host gave (bounded), and how many there were.
     denied: (Vec<String>, u64),
     /// What the guest reported applying to itself before its program ran (RW 4.23).
     own: Vec<&'static str>,
 }
 
-/// Connect to the guest, tell it what to run, and serve it until it is done.
+/// Connect to the guest, have it confirm its boundary, tell it what to run, and serve it until it is
+/// done.
 #[allow(clippy::too_many_arguments)]
 fn converse(
     child: &mut Guest,
     dir: &std::path::Path,
     program: &str,
+    generation: &str,
     root: Rc<RootVal>,
     seed: u64,
     fixed_clock_ms: Option<i64>,
@@ -1541,19 +1566,30 @@ fn converse(
     // three CI runs in a row to a value that was only reported in the success branch.
     evidence: &mut Evidence,
 ) -> io::Result<i32> {
-    let mut conn = open_channel(child, dir, CHANNEL_DEADLINE)?;
-    let hello = Hello {
-        version: CHANNEL_VERSION.to_string(),
+    let conn = open_channel(child, dir, CHANNEL_DEADLINE)?;
+    let mut host = HostChannel::new(LocalSink).with_root(root).with_generation(generation);
+    if let Some(c) = custody {
+        host = host.with_custody(c);
+    }
+    // PS-E-01: the boundary first. `boundary::open` sends the generation and no program; only the
+    // `Confirmed` that `confirm` builds from the guest's accepted report can send the program.
+    let confirmed = match crate::boundary::open(conn, generation).and_then(|o| o.confirm(&mut host)) {
+        Ok(c) => c,
+        Err(e) => {
+            let (list, total) = host.denied();
+            evidence.denied = (list.to_vec(), total);
+            return Err(e);
+        }
+    };
+    evidence.confirmed = true;
+    // RW 4.23: what the guest applied to itself, as the host accepted it.
+    evidence.own = confirmed.applied().to_vec();
+    let mut conn = confirmed.send_program(&Program {
         program: program.to_string(),
         hash: blake3::hash(program.as_bytes()).to_hex().to_string(),
         seed,
         fixed_clock_ms,
-    };
-    write_frame(&mut conn, &hello)?;
-    let mut host = HostChannel::new(LocalSink).with_root(root);
-    if let Some(c) = custody {
-        host = host.with_custody(c);
-    }
+    })?;
     // The refusals come back with the exit code, because a report that lists only what was allowed
     // says nothing about what the program TRIED — which is the interesting half when the program is
     // one nobody wrote. They are read after `serve` returns, on both paths, so a guest that died
@@ -1563,7 +1599,6 @@ fn converse(
     // reports what it had been refused up to then.
     let (list, total) = host.denied();
     evidence.denied = (list.to_vec(), total);
-    evidence.own = host.self_applied().to_vec();
     served
 }
 
@@ -1711,18 +1746,18 @@ pub fn attempt_launch() -> Result<String, String> {
     #[cfg(any(windows, target_os = "linux"))]
     if matches!(child, Guest::Contained(_)) {
         let answered = (|| -> io::Result<i32> {
-            let mut conn = open_channel(&mut child, &dir, std::time::Duration::from_secs(3))?;
-            write_frame(
-                &mut conn,
-                &Hello {
-                    version: CHANNEL_VERSION.to_string(),
-                    program: PROBE_PROGRAM.to_string(),
-                    hash: blake3::hash(PROBE_PROGRAM.as_bytes()).to_hex().to_string(),
-                    seed: 0,
-                    fixed_clock_ms: None,
-                },
-            )?;
-            HostChannel::new(LocalSink).with_root(Rc::new(RootVal::default())).serve(&mut conn)
+            let conn = open_channel(&mut child, &dir, std::time::Duration::from_secs(3))?;
+            // The same order as a run (PS-E-01): the guest confirms its boundary before it is sent even
+            // the probe's empty program.
+            let generation = crate::attest::fresh_nonce().map_err(io::Error::other)?;
+            let mut host = HostChannel::new(LocalSink).with_root(Rc::new(RootVal::default())).with_generation(&generation);
+            let mut conn = crate::boundary::open(conn, &generation)?.confirm(&mut host)?.send_program(&Program {
+                program: PROBE_PROGRAM.to_string(),
+                hash: blake3::hash(PROBE_PROGRAM.as_bytes()).to_hex().to_string(),
+                seed: 0,
+                fixed_clock_ms: None,
+            })?;
+            host.serve(&mut conn)
         })();
         return match answered {
             Ok(0) => finish(Ok(confined(&applied)), Some(&mut child)),

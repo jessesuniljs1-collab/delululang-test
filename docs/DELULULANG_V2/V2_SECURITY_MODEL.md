@@ -21,7 +21,7 @@ principal                   who is asking — human, agent, robot, service: one 
   ↓ Guard                   is this operation or delegation allowed? tiers, permits     [implemented]
   ↓ sandbox policy          derive(authority, grant, profile) → SandboxPolicy           [implemented (PS-A): `delulu sandbox policy`, the report's `policy_hash`]
   ↓ sandbox backend         a launcher and a channel: process, microvm, external        [process and microvm implemented (PS-A, PS-C); external implemented, its wall measured by nobody (PS-D-01)]
-  ↓ host effect channel     the guest asks; the host performs                           [implemented (PS-A): `delulu-sandbox-channel/2`, the same host code for L1, L2 and L3]
+  ↓ host effect channel     the guest asks; the host performs                           [implemented (PS-A): `delulu-sandbox-channel/3`, the same host code for L1, L2 and L3]
   ↓ broker / custody        is this request backed by valid custody?                    [implemented]
   ↓ real effect             the host performs it, under containment                     [implemented]
   ↓ audit                   what happened, hash-chained, anchored                       [implemented]
@@ -209,7 +209,9 @@ unchanged; four of their enforcements get stronger, as phase PS-E (D-V2-53) and 
 
 - **"Never a guarantee that was not measured" becomes a type** (PS-E-01): the program is sendable
   only from a `Confirmed` state built from five measured properties, bound to a per-run generation; a
-  profile's required property that is absent refuses the run before the program is sent.
+  profile's required property that is absent refuses the run before the program is sent. *Built so far
+  (D-V2-56): the order and the generation — `delulu-sandbox-channel/3` sends the program only through
+  `boundary.rs`'s `Confirmed`; the properties and required sets are next.*
 - **"The guest reaches nothing but the channel" is enforced beyond TCP** (PS-E-03, if its witness is
   red): Landlock mediates TCP only, so a guest that escaped the interpreter could still open UDP,
   netlink or Unix sockets on Linux; the guest needs none after lock-down, so `socket` is denied.

@@ -1196,6 +1196,24 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 3. P9-04 and P9-05 change the language and `⊑`: each carries its primitive-table version, conformance
    anchors, Z3 obligations with mutants, and `MATHEMATICS.md` entry, as PS-B-05 did.
 
+## D-V2-56 — PS-E-01's first step: the channel opens with a generation and the program follows the confirmation — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **The channel is `delulu-sandbox-channel/3`.** The host's first frame (`Open`) carries the version and
+   the run's generation and no program; the guest's first request is its confinement report echoing the
+   generation; the program (`Program`) is sent only after the host accepts it. A host and a guest of
+   different versions refuse each other in words — so an external launcher's image must carry the same
+   `delulu` as the host, as `DEPLOYMENT.md` already told operators.
+2. **The order is a type** (`crates/delulu/src/boundary.rs`): `Confirmed` has one constructor,
+   `Opened::confirm`, and the program frame one writer, `Confirmed::send_program`. A first request that is
+   not the confinement report is refused unanswered.
+3. **Every run has a generation**, fresh from the OS, at every level — in the launch and death records and
+   the report. An attested run signs over it: one nonce per run, not two.
+4. **A guest that does not confirm is a failed run (exit 1), not yet a refusal code.** Its report says
+   `ran: false` — the program was never sent. The refusal under DL1408's rule belongs with the required
+   sets (the next step), where there is a property to name.
+5. **Split, so each step is witnessed on its own:** this step (the order and the generation); next, the
+   five properties, the profiles' required sets and the refusal (D-V2-53 §2), then E-02 … E-06.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

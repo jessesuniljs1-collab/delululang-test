@@ -6,6 +6,7 @@
 mod advisories;
 mod atlas_chain;
 mod attest;
+mod boundary;
 mod broker_client;
 mod broker_ipc;
 mod broker_transport;
