@@ -2318,3 +2318,37 @@ The full suite after ADAPTER-SPELL-1, alone in the VM (`-j 4`, cargo's exit 0): 
 passed, 0 failed, 15 ignored**; clippy `--workspace --all-targets -D warnings` clean. Inside the suite
 `actors_pingpong` wrote "MEASURED: 2.12x where the machine gave perfectly parallel work 3.54x, against
 a bar of 1.33x — passed".
+
+### ATTEST-FIFO-1 — the attestation seam could be made to hang its host (found and fixed the same day)
+
+An adversarial reading of PS-D-02's own code, the question from P5b's FIFO finding: *what if the
+thing at the path is not a file?* The host waits for the document with `metadata` and then
+`File::open` — and it does so before any watchdog runs, at a path the (possibly hostile) launcher
+controls. **Witnessed** (Unix): a launcher that runs `mkfifo "$DELULU_ATTEST_OUT"` and then the guest
+held the host in a blocking `open` until the test killed it at 30 s; left alone it would never end. A
+link there would have had the host read whatever the link names (it would then have been refused as
+not a document, but the host should not be opening it at all). **Fixed:** a regular file only —
+`symlink_metadata` first, then `O_NOFOLLOW | O_NONBLOCK` on Unix (a link swapped in afterwards is
+`ELOOP`, refused the same way), then the open handle's own metadata; refusal `not-a-file`, "… is not a
+regular file (a link, a pipe or a device)". The new test
+(`a_launcher_cannot_make_the_host_open_a_pipe_or_follow_a_link`) hung on the old code and passes now,
+promptly, for both a pipe and a link; the program never runs in either. D-V2-48 §8.
+
+### P7 closes; ATTEST-FIFO-1's suite; `ed74683`'s verdicts
+
+- **`miri-slow` `36381950975` (on `047da1d`): success on all three crates** — `delulu-syntax` 20 min,
+  `delulu-check` 58 min, `delulu-broker` 172 min (05:27 → 08:19), 0 UB, every test run to the end
+  within the 240-minute budget. **RW 5.6 closed.** With RW 5.2/5.3 (`b7abcfb`, push run `36396386742`
+  green on every job), **P7 is complete** (`V2_PHASE_STATUS.md` row 12).
+- **`ed74683`'s push run `36395623730`: green on every job**, the new verdict step included on all four
+  test jobs. The arm64 runner's verdict, extracted from its log by a Haiku 4.5 sous-chef: "MEASURED:
+  2.80x where the machine gave perfectly parallel work 4.11x, against a bar of 1.50x — passed" — the
+  first time the criterion's full 1.5x bar is known to have been asserted, and met, on a CI runner.
+- The full suite with ATTEST-FIFO-1, alone in the VM: **1,998 passed, 0 failed**, 15 ignored (cargo exit
+  0); ping-pong inside it "MEASURED: 2.07x … control 3.26x … bar 1.22x — passed".
+- **The verdict step moved to the end of each test job** (and became a `notice` annotation as well). Asked
+  for Linux, macOS and Windows, the sous-chef found no verdict line, and — asked for its evidence rather
+  than taken at its word — showed why: the MCP log tool returns a job's last 5,000 lines, and in those
+  three jobs the CLI sweep and the fuzz campaign after the verdict step print more than that. The arm64
+  job has nothing after it, which is why its line was found. `docs/CLOUD_ROUTINE.md` step 3 records the
+  cap.

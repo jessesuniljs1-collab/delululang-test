@@ -26,19 +26,21 @@ the assistant's memory — which now also travels file by file in
   D-NE-27), **P6** (this file, the README and the Book) and **P5** (distribution: the release workflow,
   whose dry run packages, checks and installs four targets and publishes nothing — only the owner's
   first `v*` tag releases anything, D-NE-7).
-- **In progress:**
-  - **P7, verification depth.** Done: the NIST vectors checked byte-exact (`nist_kat.rs`), six
-    `cargo-fuzz` targets under AddressSanitizer, the Miri-slow tests shrunk under `cfg!(miri)`. The
-    `miri-slow` run `36368020490` ran every test in all three crates to the end with 0 UB, and found
-    AUDIT-LOCK-TAKEOVER-1 (fixed); run `36381950975` on `047da1d` should be the first fully green one,
-    which closes REMAINING_WORK 5.6 — **read it first**. RW 5.2 (restating Progress in
-    `DELULU_CORE.md`) is the owner's: the file is entrenched.
+- **Done in the cloud period** (the first routine run, 2026-09-28, each CI run read green):
+  - **P7, verification depth — complete.** The NIST vectors checked byte-exact (`nist_kat.rs`), six
+    `cargo-fuzz` targets under AddressSanitizer, the Miri-slow tests shrunk under `cfg!(miri)`; the
+    `miri-slow` run `36381950975` on `047da1d` green on all three crates, closing REMAINING_WORK 5.6
+    (its predecessor `36368020490` had found AUDIT-LOCK-TAKEOVER-1); and RW 5.2/5.3 —
+    `DELULU_CORE.md` v0.3, progress-or-fault and the higher-order primitive, an entrenched edit under the
+    owner's delegation (D-V2-49, flagged for his review).
   - **PS-D, external launchers and the attestation seam.** PS-D-01 is done:
     `--sandbox --sandbox-backend external:CMD`, level 3, measured by nobody and reported so (D-V2-46).
     **PS-D-02 is built** (2026-09-28, the first cloud routine run, D-V2-48): `--require-attestation HEX`
     at L3, `delulu sandbox attest` as the software attester. **PS-D is complete** — `fef8ccd`'s push
     run `36395256154` green on every job.
-- **Not started:** P8, safe autonomy (the signed adapter) — owner-gated.
+- **Next:** P8, safe autonomy (the signed Verified-class adapter), as far as software reaches — the
+  owner's mandate of 2026-09-28 names it; a real device stays environment-blocked. ADAPTER-SPELL-1 (the
+  subprocess driver verified as one file and started as another) was found and fixed while sizing it.
 - **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
   every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
   run green with nothing published — and `047da1d`'s push run was green.

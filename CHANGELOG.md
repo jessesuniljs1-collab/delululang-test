@@ -17,6 +17,10 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   and in the audit chain). The report carries `sandbox.attestation`: the attester's name and claims, as
   the attester's, beside `host_guarantees` and never merged into them; the level stays 3. Refused (exit 2)
   without `external:`, where the host measures the boundary itself (D-V2-48).
+- **The attestation is read only from a regular file** (ATTEST-FIFO-1, found by the head chef's own
+  adversarial reading the same day): a launcher that put a named pipe where the document goes held the
+  host in a blocking `open` for ever, before any watchdog runs, and a link would have had the host read
+  whatever it named. Both are refused at once, "not a regular file".
 - **`delulu sandbox attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND..`**: a reference,
   software attester — it signs what its key's holder says, writes the document where the host asked, and
   becomes COMMAND. The document format and its signed bytes are in `DEPLOYMENT.md`.

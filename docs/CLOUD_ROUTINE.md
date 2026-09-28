@@ -72,12 +72,15 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
   log-download URLs (measured by run 1). `mcp__github__actions_list` — `list_workflow_runs` (`perPage`
   10, `workflow_runs_filter.branch` `master`) and `list_workflow_jobs` for one run's jobs;
   `mcp__github__actions_get` `get_workflow_run` for one run's conclusion; `mcp__github__get_job_logs`
-  with `run_id` + `failed_only: true` + a small `tail_lines` for a red run's failing jobs. A failure's
-  own lines sit in the middle of a 3,000-line log: a Haiku sous-chef can fetch the whole log in its own
-  context and return only the matching lines (run 1 did, for 36 k tokens). **Read** every completed run
+  with `run_id` + `failed_only: true` + a small `tail_lines` for a red run's failing jobs — it returns at
+  most a job's LAST 5,000 lines, so a step followed by a long one is out of its reach (a test job's
+  sweep and fuzz campaign print more than that). A failure's own lines sit mid-log: a Haiku sous-chef
+  can fetch the log in its own context and return only the matching lines (run 1 did, for ~35 k tokens
+  a time). `list_workflow_jobs` returns every step of every job — ask it only for a red run. **Read** every completed run
   since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
   passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
-  verdict that matters for timing, `actors_pingpong`'s, in its own step (D-V2-47).
+  verdict that matters for timing, `actors_pingpong`'s, as each test job's LAST step and as a `notice`
+  annotation (D-V2-47) — record each OS's verdict.
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
   it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
   NEWER commit already fixed is not a new task: read the newer commit's push run, and record both. **If the previous run's

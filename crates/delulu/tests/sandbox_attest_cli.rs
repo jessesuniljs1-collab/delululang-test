@@ -273,3 +273,54 @@ fn the_reference_attester_refuses_in_words_and_never_reads_its_commands_words() 
     assert_eq!(doc["statement"]["nonce"], "ab".repeat(32));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// ATTEST-FIFO-1: the host reads the attester's document before any watchdog runs, so what it opens
+/// must be a document. A hostile launcher that makes the path a named pipe would hold a blocking open
+/// for ever; one that makes it a link would have the host read whatever the link names. Both are
+/// refused, promptly, as not a regular file.
+#[cfg(unix)]
+#[test]
+fn a_launcher_cannot_make_the_host_open_a_pipe_or_follow_a_link() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let d = lab("fifo");
+    program(&d);
+    let (_, public) = keygen(&d, "attester");
+    let exe = exe();
+    for (tag, make) in [("fifo", "mkfifo \"$DELULU_ATTEST_OUT\""), ("link", "ln -s /etc/hostname \"$DELULU_ATTEST_OUT\"")] {
+        let script = d.join(format!("{tag}.sh"));
+        std::fs::write(&script, format!("#!/bin/sh\n{make}\nexec {exe} __guest --stdio-pipes\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let out = d.join("out").display().to_string();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_delulu"))
+            .current_dir(&d)
+            .env("DELULU_STATE_DIR", d.join("s"))
+            .env("DELULU_HOME", d.join("home"))
+            .env("DELULU_NO_FIRST_RUN", "1")
+            .args([
+                "run", "w.delulu", "--grant", "console", "--grant", &format!("fs.write={out}"), "--sandbox",
+                "--sandbox-backend", &format!("external:{}", script.display()), "--require-attestation", &public,
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let t = std::time::Instant::now();
+        let status = loop {
+            if let Some(st) = child.try_wait().unwrap() {
+                break Some(st);
+            }
+            if t.elapsed() > std::time::Duration::from_secs(30) {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        let o = child.wait_with_output().unwrap();
+        let st = status.unwrap_or_else(|| panic!("{tag}: the host hung on what the launcher put at the attestation's path"));
+        assert_eq!(st.code(), Some(1), "{tag}: {}", text(&o));
+        assert!(text(&o).contains("not a regular file"), "{tag}: {}", text(&o));
+        assert!(!d.join("out").join("made.txt").exists(), "{tag}: the program ran");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}

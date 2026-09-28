@@ -1037,7 +1037,10 @@ Built from the design in `HANDOFF.md` §0, with these choices:
 7. **`delulu` reads nothing after a bare `--`** — not `--help`/`-h`, `--json`, `--color`, `--locale`, nor
    the undocumented-flag refusal. Found while building 6: `docker run -h HOST` after `--` would have
    printed `delulu sandbox`'s help. No command used `--` before.
-8. **Not built, deliberately:** a lease-level "only attested" constraint (it changes the authority model —
+8. **The document is read from a regular file only** (ATTEST-FIFO-1): judged by `symlink_metadata`,
+   opened `O_NOFOLLOW | O_NONBLOCK` on Unix, judged again on the handle. The read precedes every
+   watchdog, so a pipe there would hang the host for ever — witnessed before the fix.
+9. **Not built, deliberately:** a lease-level "only attested" constraint (it changes the authority model —
    RFC territory); level 4 `attested` (it waits for a hardware attester whose quote the host itself
    checks); key rotation or a list of pinned keys (one key per run; an operator's script picks it).
 

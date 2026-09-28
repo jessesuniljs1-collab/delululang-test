@@ -166,6 +166,8 @@ pub enum Refusal {
     /// The launcher ended before it wrote one.
     LauncherEnded(String),
     Unreadable(String),
+    /// ATTEST-FIFO-1: the path held a link, a pipe or a device, not a document.
+    NotAFile,
     TooLarge,
     NotADocument(String),
     WrongFormat(String),
@@ -181,6 +183,7 @@ impl Refusal {
             Refusal::Absent(_) => "absent",
             Refusal::LauncherEnded(_) => "launcher-ended",
             Refusal::Unreadable(_) => "unreadable",
+            Refusal::NotAFile => "not-a-file",
             Refusal::TooLarge => "too-large",
             Refusal::NotADocument(_) => "not-a-document",
             Refusal::WrongFormat(_) => "wrong-format",
@@ -199,6 +202,11 @@ impl Refusal {
             ),
             Refusal::LauncherEnded(st) => format!("the launcher ended ({st}) before it wrote an attestation"),
             Refusal::Unreadable(e) => format!("the attestation cannot be read ({e})"),
+            Refusal::NotAFile => {
+                "what the launcher put where the attestation goes is not a regular file (a link, a pipe or a \
+                 device) — the host reads a document there, nothing else"
+                    .to_string()
+            }
             Refusal::TooLarge => format!("the attestation is larger than {MAX_DOCUMENT_BYTES} bytes"),
             Refusal::NotADocument(e) => format!("the attestation is not a `{FORMAT}` document ({e})"),
             Refusal::WrongFormat(f) => format!("the attestation's format is `{f}`, and this build reads `{FORMAT}`"),
@@ -254,12 +262,25 @@ pub fn await_and_verify(
 ) -> Result<Attested, Refusal> {
     let until = std::time::Instant::now() + deadline;
     loop {
-        match std::fs::metadata(path) {
+        // ATTEST-FIFO-1: this read happens before any watchdog runs, and the launcher chose what is at
+        // the path. A named pipe held the host in a blocking `open` for ever (witnessed); a link would
+        // have had it read whatever the link names. So: a regular file, judged without following a
+        // link, opened without following one and without blocking, and judged again on the handle —
+        // the thing opened, not the name, is what is read.
+        match std::fs::symlink_metadata(path) {
+            Ok(m) if !m.file_type().is_file() => return Err(Refusal::NotAFile),
             Ok(m) if m.len() > MAX_DOCUMENT_BYTES => return Err(Refusal::TooLarge),
             Ok(_) => {
                 use std::io::Read as _;
                 let mut bytes = Vec::new();
-                let f = std::fs::File::open(path).map_err(|e| Refusal::Unreadable(e.to_string()))?;
+                let f = open_document(path).map_err(|e| match e.raw_os_error() {
+                    #[cfg(unix)]
+                    Some(libc::ELOOP) => Refusal::NotAFile,
+                    _ => Refusal::Unreadable(e.to_string()),
+                })?;
+                if !f.metadata().map(|m| m.is_file()).unwrap_or(false) {
+                    return Err(Refusal::NotAFile);
+                }
                 // Bounded whatever the file does between the size check and the read.
                 f.take(MAX_DOCUMENT_BYTES + 1).read_to_end(&mut bytes).map_err(|e| Refusal::Unreadable(e.to_string()))?;
                 return verify(&bytes, pinned, nonce);
@@ -279,6 +300,19 @@ pub fn await_and_verify(
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+}
+
+/// Open the document without following a link and without blocking on a pipe (Unix); elsewhere the
+/// `symlink_metadata` check before it and the handle's own metadata after it are what hold.
+fn open_document(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    let mut o = std::fs::OpenOptions::new();
+    o.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        o.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    o.open(path)
 }
 
 // ----- `delulu sandbox attest` — the reference (software) attester --------------------------------
