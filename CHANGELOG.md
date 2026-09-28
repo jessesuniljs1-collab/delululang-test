@@ -25,6 +25,9 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   confinement, egress confinement, privilege floor, host loss ends the guest, resource ceiling — each
   `established` (by what), `absent` (why) or `unknown` (an external launcher's), answered from the same
   posture the report carries. Reported only: no profile refuses on them yet (D-V2-57).
+- **Fixed: an external launcher outlived a host that was killed** (Linux). It now carries the same death
+  signal as a jailed guest (PS-E-02). What the launcher started — a container — remains the launcher's
+  to end.
 - **An external launcher's guest no longer vouches for itself in the report.** At L3 the words the guest
   says it applied to itself are reported as `sandbox.guest_reported` — its own word — and no longer
   appear among `host_guarantees` or in the posture (RW 4.31).

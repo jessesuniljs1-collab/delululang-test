@@ -53,7 +53,7 @@ the assistant's memory — which now also travels file by file in
   Node-24 action majors and `ubuntu-24.04`. A red-team sous-chef found seven defects around the new
   guarantee (which held); all verified and fixed the same run (D-V2-58) but F7 (RW 4.31). And, on CI's
   measured properties, `hostile-agent` now requires all five (D-V2-59 — flagged for the owner).
-- **Next:** **PS-E** — E-01's remainder (`contained`'s set; attesters' claims as properties), E-02 host loss ends the guest, E-03
+- **Next:** **PS-E** — E-02's rest (the macOS watcher — the red one; the Windows launcher's Job Object; its Linux launcher half is built), E-01's remainder (`contained`'s set; attesters' claims as properties) host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
   control program in a guest, P8-02 the Verified-class adapter, P8-03 a reference transport, P8-04),

@@ -260,7 +260,8 @@ it on `origin` was made in the cloud and is listed below.
   (3) `6ceaf2d` PS-E-01, second step: every sandboxed run reports its boundary's five properties (D-V2-57);
   (4) `8b2994a` The red-team pass on channel /3: seven defects around a guarantee that held, fixed (D-V2-58);
   (5) `42f5ea0` PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59);
-  (6) `RW 4.31 closed: an external guest's words about itself are its own`
+  (6) `71221d3` RW 4.31 closed: an external guest's words about itself are its own;
+  (7) `PS-E-02, first part: an external launcher ends with its host (Linux)`
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -315,6 +316,9 @@ it on `origin` was made in the cloud and is listed below.
     `crates/delulu/tests/sandbox_confirm_cli.rs` (the witness), `crates/delulu/tests/sandbox_external_cli.rs`
     (the strict assertion), `CHANGELOG.md`, `HANDOFF.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md`
     (4.31 closed), `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.1 — (6)
+  M `crates/delulu/src/guest.rs` (`launch_external`: `PR_SET_PDEATHSIG`, the parent re-check),
+    `crates/delulu/tests/sandbox_confirm_cli.rs` (the witness), `CHANGELOG.md`, `HANDOFF.md`,
+    `docs/REMAINING_WORK.md` 4.26, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.2 — (7)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entries
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
@@ -344,15 +348,18 @@ it on `origin` was made in the cloud and is listed below.
   0 failed, 15 ignored. CI read: `8b2994a` `36486821458` and `42f5ea0` `36487993092` — success on every
   job (macOS's `hostile-agent` refusal real; the microVM's `hostile-agent` runs still run). (6): the
   witness red on `42f5ea0`, green after; M11 killed; clippy clean; the full suite alone 2,015 passed,
-  0 failed, 15 ignored.
+  0 failed, 15 ignored. (7): the witness red on `71221d3` (the launcher outlived its killed host), green
+  after, twice; clippy clean; the full suite alone 2,016 passed, 0 failed, 15 ignored.
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read (6)'s push run (the last commit of this run, and its sync-log commit's); (2)
-  PS-E-01's remainder — an attester's claims mapped to properties (so an attested L3 can satisfy
-  `hostile-agent`), then `contained`'s set once its gaps close; (3) **E-02** — the macOS guest outlives its
-  host (the red one; CI only: a watcher thread, `kqueue NOTE_EXIT`, `getppid` fallback), the external
-  launcher's death signal / Job Object; then E-03 … E-06, P8, P9; RW 4.32's channel hygiene. **For the
+- Open / next: (1) read (6)'s and (7)'s push runs — unread at this entry's writing; (2) **E-02's rest** —
+  the macOS guest outlives its host (the red one; CI only: a watcher thread before the program starts,
+  `kqueue` `NOTE_EXIT` on the host's pid, `getppid() == 1` fallback, `_exit` at once; witnessed on the
+  macOS runner by killing the host and timing the guest from outside), and the Windows launcher's Job
+  Object with kill-on-close; (3) PS-E-01's remainder — an attester's claims mapped to properties (so an
+  attested L3 can satisfy `hostile-agent`), then `contained`'s set once macOS's gaps close; (4) E-03 …
+  E-06, P8, P9; RW 4.32's channel hygiene. **For the
   owner:** D-V2-59 narrows D-V2-53 §2 (flagged); D-V2-49 and D-V2-53's consequence stay flagged.

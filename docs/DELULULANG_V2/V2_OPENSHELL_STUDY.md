@@ -247,6 +247,10 @@ attester claims more.
 `SIGKILL` / `TerminateProcess`; the guest's pid gone within 1 s, measured from outside both. macOS
 first, because it is the red one. **Mutant:** remove the watcher → the macOS witness goes red.
 
+**Built so far (2026-09-28, routine run 2):** the Linux external launcher — `PR_SET_PDEATHSIG` in its
+`pre_exec`, witnessed red first (a host killed with SIGKILL left its launcher running). Open: the macOS
+watcher and the Windows launcher's Job Object, both CI-only.
+
 ### 4.3 PS-E-03 — the guest's kernel surface, narrowed to what a guest that performs no effects needs
 
 OpenShell's filter is broad because its agent must keep working; DeluluLang's guest has already

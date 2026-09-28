@@ -136,6 +136,27 @@ fn launch_external(
     if let Some((nonce, out)) = attest {
         c.env(crate::attest::ENV_NONCE, nonce).env(crate::attest::ENV_OUT, out);
     }
+    // PS-E-02 (§4.2): the launcher ends with its host, as a jailed guest always has. It was started with
+    // no death signal, so a host killed with SIGKILL left it running (witnessed on `71221d3`). What the
+    // launcher itself started — a container — is the launcher's to end; the report does not claim it.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt as _;
+        let host = std::process::id();
+        // SAFETY: only async-signal-safe calls (`prctl`, `getppid`, `_exit`) between fork and exec.
+        unsafe {
+            c.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                // The host may have died between the fork and the prctl: then no signal will come.
+                if libc::getppid() as u32 != host {
+                    libc::_exit(1);
+                }
+                Ok(())
+            });
+        }
+    }
     let child = c.spawn().map_err(|e| {
         let why = match e.kind() {
             io::ErrorKind::NotFound => "there is no such program (a bare name is looked up on PATH)".to_string(),

@@ -421,3 +421,60 @@ fn an_external_guests_own_words_are_its_own_not_the_hosts() {
     }
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// Is this process gone — exited, or a zombie nobody has reaped yet (in a container, PID 1 may never)?
+#[cfg(target_os = "linux")]
+fn gone(pid: u32) -> bool {
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Err(_) => true,
+        // The state is the first field after the command's closing parenthesis.
+        Ok(stat) => stat.rsplit_once(") ").is_some_and(|(_, rest)| rest.starts_with('Z') || rest.starts_with('X')),
+    }
+}
+
+/// PS-E-02 (`V2_OPENSHELL_STUDY.md` §4.2), its Linux half for an external launcher: the launcher ends when
+/// its host is killed. A jailed guest always had `PR_SET_PDEATHSIG`; the launcher was started with none,
+/// so a host killed with SIGKILL left it running (red on `71221d3`: the launcher outlived the host).
+#[cfg(target_os = "linux")]
+#[test]
+fn an_external_launcher_ends_when_its_host_is_killed() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let d = lab("orphan");
+    canary_program(&d, "never");
+    let pidfile = d.join("launcher.pid");
+    let script = d.join("launcher.sh");
+    std::fs::write(&script, format!("#!/bin/sh\necho $$ > '{}'\nexec sleep 60\n", pidfile.display())).unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut host = Command::new(env!("CARGO_BIN_EXE_delulu"))
+        .current_dir(&d)
+        .env("DELULU_STATE_DIR", d.join("s"))
+        .env("DELULU_HOME", d.join("home"))
+        .env("DELULU_NO_FIRST_RUN", "1")
+        .args(["run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the host starts");
+    let t = std::time::Instant::now();
+    let pid: u32 = loop {
+        if let Some(p) = std::fs::read_to_string(&pidfile).ok().and_then(|s| s.trim().parse().ok()) {
+            break p;
+        }
+        assert!(t.elapsed() < std::time::Duration::from_secs(10), "the launcher never started");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert!(!gone(pid), "the launcher is running before its host is killed");
+    host.kill().expect("the host is killed");
+    let _ = host.wait();
+    let t = std::time::Instant::now();
+    while !gone(pid) && t.elapsed() < std::time::Duration::from_secs(3) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let outlived = !gone(pid);
+    if outlived {
+        // SAFETY: a plain signal to the stray launcher this test started, so it does not linger.
+        unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+    }
+    assert!(!outlived, "the external launcher outlived its host");
+    let _ = std::fs::remove_dir_all(&d);
+}

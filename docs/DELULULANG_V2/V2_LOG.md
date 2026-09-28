@@ -2760,3 +2760,23 @@ no host guarantee, every posture row "not confined", and what the guest says it 
 strict one. Mutant M11 (the words merged again at L3) red.
 
 **Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2015 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+## 2026-09-28 (night) — PS-E-02, first part: an external launcher ends with its host (Linux)
+
+`V2_OPENSHELL_STUDY.md` §4.2 named two gaps in "host loss ends the guest": the macOS guest (no death
+signal) and the external launcher (started with neither a death signal nor a Job Object). The Linux half
+of the second is witnessable in this VM: `an_external_launcher_ends_when_its_host_is_killed` starts a run
+whose launcher records its pid and `exec`s `sleep 60`, kills the HOST with SIGKILL, and requires the
+launcher gone (exited, or a zombie) within 3 s — **red on `71221d3`: the launcher outlived its host.**
+
+**Fixed:** `launch_external` sets `PR_SET_PDEATHSIG = SIGKILL` in the launcher's `pre_exec`, as the jailed
+guest always had, and exits at once if the host already died between the fork and the `prctl` (the
+parent-pid re-check). The launcher now dies with its host (the witness passes in 0.02 s, twice). What the
+launcher itself started — a container — is the launcher's to end, and nothing claims otherwise
+(`host_loss_ends_guest` stays `unknown` at L3).
+
+**Open (PS-E-02's rest, CI-only):** the macOS guest's watcher (`kqueue` `NOTE_EXIT` on the host, `getppid`
+fallback) — the red one; the external launcher's Job Object with kill-on-close on Windows; each OS's
+witness measured from outside both processes.
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2016 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
