@@ -1227,6 +1227,20 @@ engage (implemented), the guest ends. It can grant nothing and perform nothing. 
 3. **The privilege floor counts a separate identity** — a per-run AppContainer, a subordinate uid, the
    jailer's uid for the VMM — as well as `no_new_privs` and Seatbelt's deny-by-default, as §4.1 lists.
 
+## D-V2-58 — the red-team pass on `/3`: a failed channel ends its guest, `ran` means sent, a guest's words are data — TAKEN (head chef, 2026-09-28, under the owner's delegation)
+
+1. **A conversation that failed ends the guest**; a guest that said goodbye has 10 s to exit, then is
+   ended. The host never waits on a guest's goodwill (GUEST-WAIT-1).
+2. **`outcome.ran` means the program was sent** — written whole to a confirmed guest. The death record
+   carries `confirmed`, `sent` and `ended_by_host`. A program larger than the channel's frame is refused
+   before launch, exit 2 (RAN-SENT-1).
+3. **A guest's words are data**: escaped and bounded (`channel::shown`) wherever they can reach the
+   terminal, the report or the chain (GUEST-TEXT-1).
+4. **An external launcher's pipes are bounded both ways**: a write keeps the channel's deadline; unread
+   output waits in a bounded queue (PIPE-WRITE-1, PIPE-FLOOD-1).
+5. **F7 is the next step's decision**: an external guest's self-report must stop counting as a host
+   guarantee (RW 4.31), taken with the profiles' required sets.
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

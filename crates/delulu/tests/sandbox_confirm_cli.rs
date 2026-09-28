@@ -215,3 +215,139 @@ fn an_external_launchers_properties_are_unknown() {
     }
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---- The red-team pass on `/3` (2026-09-28, a Sonnet 5.5 sous-chef; each finding re-run here) --------
+
+/// A fake guest for an external launcher, in Python: it reads the host's `Open` frame, takes this run's
+/// generation out of it, and answers with `frame` — a `Confined` request the TEST built from the real
+/// channel types, with `G`×64 where the generation goes — and then does `after` (Python statements).
+#[cfg(unix)]
+fn fake_guest(d: &Path, applied: &[&str], after: &str) -> String {
+    use delulu_runtime::channel::{write_frame, ReqBody, Request, CHANNEL_VERSION};
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut frame = Vec::new();
+    write_frame(
+        &mut frame,
+        &Request {
+            version: CHANNEL_VERSION.into(),
+            seq: 1,
+            body: ReqBody::Confined { applied: applied.iter().map(|w| w.to_string()).collect(), generation: "G".repeat(64) },
+        },
+    )
+    .unwrap();
+    let hex: String = frame.iter().map(|b| format!("{b:02x}")).collect();
+    let script = d.join("fake_guest.py");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/usr/bin/env python3\nimport os, re, sys, time\ni, o = sys.stdin.buffer, sys.stdout.buffer\n\
+             n = int.from_bytes(i.read(4), 'little')\nopen_frame = i.read(n)\n\
+             g = re.search(rb'[0-9a-f]{{64}}', open_frame).group(0)\n\
+             o.write(bytes.fromhex('{hex}').replace(b'G' * 64, g))\no.flush()\n{after}\n"
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    format!("external:{}", script.display())
+}
+
+/// F4: a guest whose channel fails is ENDED by the host. A launcher that closes its channel and then
+/// lingers used to hold the host in `wait()` for as long as it liked — the channel's deadline "ended the
+/// run" only in words (red on `6ceaf2d`: the host waited out the launcher's whole sleep).
+#[cfg(unix)]
+#[test]
+fn a_guest_whose_channel_failed_is_ended_not_waited_for() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let d = lab("linger");
+    canary_program(&d, "never");
+    let script = d.join("linger.sh");
+    std::fs::write(&script, "#!/bin/sh\nexec >&-\nexec sleep 40\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let t = std::time::Instant::now();
+    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &format!("external:{}", script.display()), "--grant", "console"]);
+    assert_eq!(r.status.code(), Some(1), "{}", text(&r));
+    assert!(t.elapsed() < std::time::Duration::from_secs(20), "the host waited for a guest it should have ended: {:?}", t.elapsed());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// F1: `outcome.ran` says the program was SENT, not merely that the guest confirmed. A guest that confirms
+/// and then goes away before reading a program too large for the pipe's buffer was never sent it (red on
+/// `6ceaf2d`: `ran: true`).
+#[cfg(unix)]
+#[test]
+fn a_confirmed_guest_that_never_takes_the_program_did_not_run_it() {
+    let d = lab("gone");
+    std::fs::create_dir_all(d.join("s").join("audit")).unwrap();
+    std::fs::write(
+        d.join("c.delulu"),
+        format!("module c\n\nfn main(root: Root) ! {{Write}} {{\n    root.console().println(\"{}\")\n}}\n", "x".repeat(300_000)),
+    )
+    .unwrap();
+    // It reads the host's acceptance of its report — so it IS confirmed — and only then goes away.
+    let launcher = fake_guest(
+        &d,
+        &[],
+        "n = int.from_bytes(i.read(4), 'little')\nassert len(i.read(n)) == n\nos.close(0)\nos.close(1)\ntime.sleep(0.5)",
+    );
+    let report = d.join("r.json");
+    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(r.status.code(), Some(1), "{}", text(&r));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    assert_eq!(v["outcome"]["ran"], false, "the program was never sent: {v}");
+    // It did confirm: the chain says so, and says the program was not sent.
+    let q = delulu(&d, &["audit", "query", "--json"]);
+    let chain: serde_json::Value = serde_json::from_slice(&q.stdout).unwrap_or_else(|_| panic!("{}", text(&q)));
+    let death = chain["records"].as_array().unwrap().iter().find(|r| r["action"] == "sandbox-death").cloned();
+    let death = death.unwrap_or_else(|| panic!("no death record: {chain}"));
+    assert_eq!(death["authority"]["confirmed"], true, "{death}");
+    assert_eq!(death["authority"]["sent"], false, "{death}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// F1, the other half: a program too large for the channel's frame is refused BEFORE a guest exists,
+/// in words — it used to launch a guest, confirm it, and then fail to send.
+#[test]
+fn a_program_larger_than_the_channel_carries_is_refused_before_a_guest_exists() {
+    let d = lab("huge");
+    std::fs::write(
+        d.join("c.delulu"),
+        format!("module c\n\nfn main(root: Root) ! {{Write}} {{\n    root.console().println(\"{}\")\n}}\n", "x".repeat(17 * 1024 * 1024)),
+    )
+    .unwrap();
+    let t = std::time::Instant::now();
+    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--grant", "console"]);
+    assert_eq!(r.status.code(), Some(2), "{}", text(&r));
+    assert!(text(&r).contains("larger than the sandbox channel carries"), "{}", text(&r));
+    assert!(!text(&r).contains("sandbox: the guest"), "no guest was launched: {}", text(&r));
+    assert!(t.elapsed() < std::time::Duration::from_secs(20), "{:?}", t.elapsed());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// F2 and F3: what a guest says is data. A refused confinement word carrying line breaks and terminal
+/// escapes, a megabyte long, reaches the operator's terminal, the report's `denied` and the audit chain
+/// escaped and bounded — not as forged lines, escape sequences or megabytes (red on `6ceaf2d`).
+#[cfg(unix)]
+#[test]
+fn a_guests_words_reach_the_operator_escaped_and_bounded() {
+    let d = lab("words");
+    canary_program(&d, "never");
+    std::fs::create_dir_all(d.join("s").join("audit")).unwrap();
+    let evil = format!("x\nseq 4 sandbox-death allow FORGED\x1b[31mRED\x1b[0m\r{}", "y".repeat(1_000_000));
+    let launcher = fake_guest(&d, &[evil.as_str()], "time.sleep(0.5)");
+    let report = d.join("r.json");
+    let r = delulu(&d, &["run", "c.delulu", "--sandbox", "--sandbox-backend", &launcher, "--grant", "console", "--report-out", report.to_str().unwrap()]);
+    assert_eq!(r.status.code(), Some(1), "{}", text(&r));
+    let stderr = String::from_utf8_lossy(&r.stderr).to_string();
+    assert!(!stderr.contains('\x1b') && !stderr.contains("\nseq 4"), "raw guest text on the terminal: {:?}", &stderr[..stderr.len().min(400)]);
+    assert!(stderr.len() < 16 * 1024, "a megabyte of guest text on the terminal: {} bytes", stderr.len());
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&report).unwrap()).unwrap();
+    for entry in v["sandbox"]["denied"].as_array().unwrap() {
+        let e = entry.as_str().unwrap();
+        assert!(e.len() <= 1024 && !e.contains('\n') && !e.contains('\x1b'), "an unbounded or raw entry: {:?}", &e[..e.len().min(200)]);
+    }
+    let q = delulu(&d, &["audit", "query"]);
+    let chain = String::from_utf8_lossy(&q.stdout).to_string();
+    assert!(!chain.contains("FORGED\n") && !chain.lines().any(|l| l.trim_start().starts_with("seq 4 sandbox-death allow")), "a forged row: {chain}");
+    assert!(chain.len() < 64 * 1024, "{} bytes of chain text", chain.len());
+    let _ = std::fs::remove_dir_all(&d);
+}

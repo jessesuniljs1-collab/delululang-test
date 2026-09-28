@@ -53,7 +53,11 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
   `ubuntu-24.04`. **PS-E-01 first step (D-V2-56):** the host's first channel frame WAS the program —
   witnessed red with a capturing launcher — now `delulu-sandbox-channel/3`, `boundary.rs` typestate, a
   generation per run. Traps: sandbox audit records need `<state>/audit` to exist; `sh` background jobs
-  read `/dev/null`.
+  read `/dev/null`. **PS-E-01 second step (D-V2-57):** `sandbox.properties` reported; CI measured Linux
+  x86/arm64/Windows all five, macOS egress + privilege only. **Red-team pass (Sonnet 5.5, frozen binary
+  copy):** guarantee held; seven defects around it, verified and fixed (D-V2-58): GUEST-WAIT-1,
+  RAN-SENT-1, GUEST-TEXT-1, PIPE-WRITE-1, PIPE-FLOOD-1, F8, F10; F7 (L3 self-report as host
+  guarantee) → RW 4.31. A racing witness let mutant M8 live — fake peers read before they hang up.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.

@@ -39,18 +39,29 @@ pub use win::{duplex_pair, HostPipe};
 /// the PS-B-03 design this module left behind for speed on Windows. For an external launcher — whose
 /// guest may be in a container, or on another machine behind `ssh` — the extra hop is not where the time
 /// goes, and a deadline on every read is not optional.
-pub struct HostPipes<W: Write> {
+pub struct HostPipes {
     rx: std::sync::mpsc::Receiver<io::Result<Vec<u8>>>,
     buf: Vec<u8>,
     pos: usize,
     closed: bool,
-    writer: W,
+    /// Each write goes to a writer thread and is acknowledged — within the deadline, or the channel has
+    /// failed (the red-team pass on `/3`, F5: a guest that stopped reading its input held the host in a
+    /// blocking pipe write for ever).
+    writes: std::sync::mpsc::SyncSender<Vec<u8>>,
+    written: std::sync::mpsc::Receiver<io::Result<()>>,
+    /// A write outlived the deadline: the writer thread is still inside it, so nothing more is sent.
+    write_stuck: bool,
     deadline: Duration,
 }
 
-impl<W: Write> HostPipes<W> {
-    pub fn new<R: Read + Send + 'static>(mut reader: R, writer: W, deadline: Duration) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel();
+/// How many chunks of an external guest's output may wait unread (F6). Past it the reader thread stops
+/// reading, the guest's pipe fills, and the GUEST's writes block — the host never buffers what it has not
+/// asked for (the red team grew the host to 3 GB in eight seconds through the unbounded queue).
+const QUEUED_CHUNKS: usize = 16;
+
+impl HostPipes {
+    pub fn new<R: Read + Send + 'static, W: Write + Send + 'static>(mut reader: R, mut writer: W, deadline: Duration) -> Self {
+        let (tx, rx) = std::sync::mpsc::sync_channel(QUEUED_CHUNKS);
         std::thread::spawn(move || {
             let mut chunk = vec![0u8; 64 * 1024];
             loop {
@@ -71,11 +82,24 @@ impl<W: Write> HostPipes<W> {
                 }
             }
         });
-        HostPipes { rx, buf: Vec::new(), pos: 0, closed: false, writer, deadline }
+        // The writer: one write at a time, each acknowledged. A rendezvous channel, so a write is handed
+        // over only when the thread is free — never queued behind one that is stuck.
+        let (writes, pending) = std::sync::mpsc::sync_channel::<Vec<u8>>(0);
+        let (ack, written) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for bytes in pending {
+                let r = writer.write_all(&bytes).and_then(|()| writer.flush());
+                let failed = r.is_err();
+                if ack.send(r).is_err() || failed {
+                    return;
+                }
+            }
+        });
+        HostPipes { rx, buf: Vec::new(), pos: 0, closed: false, writes, written, write_stuck: false, deadline }
     }
 }
 
-impl<W: Write> Read for HostPipes<W> {
+impl Read for HostPipes {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
         if self.pos >= self.buf.len() {
             if self.closed {
@@ -107,13 +131,30 @@ impl<W: Write> Read for HostPipes<W> {
     }
 }
 
-impl<W: Write> Write for HostPipes<W> {
+impl Write for HostPipes {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
-        self.writer.write(b)
+        if self.write_stuck {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "an earlier write to the external guest never completed"));
+        }
+        if self.writes.send(b.to_vec()).is_err() {
+            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "the external guest's input is closed"));
+        }
+        match self.written.recv_timeout(self.deadline) {
+            Ok(Ok(())) => Ok(b.len()),
+            Ok(Err(e)) => Err(e),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                self.write_stuck = true;
+                Err(io::Error::new(io::ErrorKind::TimedOut, "the external guest read nothing within the deadline"))
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "the external guest's input is closed"))
+            }
+        }
     }
 
+    /// Each write is flushed by the writer thread before it is acknowledged.
     fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
+        Ok(())
     }
 }
 
@@ -473,5 +514,60 @@ mod tests {
         c.write_all(b"xy").unwrap();
         assert_eq!(c.writer, b"xy", "writes go straight through");
         assert!(c.set_read_timeout(Some(Duration::ZERO)).is_err(), "a zero deadline is refused, as a socket refuses it");
+    }
+
+    /// A writer that never takes a byte: an external guest that stopped reading its input.
+    struct Stuck(std::sync::mpsc::Receiver<()>);
+    impl Write for Stuck {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            let _ = self.0.recv();
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "released"))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The red-team pass on `/3` (F5): a write to an external guest that never reads keeps the channel's
+    /// deadline — it used to block for ever, with the program half-sent and the host hung.
+    #[test]
+    fn a_write_to_a_guest_that_never_reads_keeps_the_deadline() {
+        let (_release_reader, gate) = std::sync::mpsc::channel();
+        let (_release_writer, stuck) = std::sync::mpsc::channel();
+        let hp = HostPipes::new(Slow(Vec::new(), gate), Stuck(stuck), Duration::from_millis(200));
+        let (done_tx, done) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut hp = hp;
+            let first = hp.write_all(&[0u8; 100_000]);
+            let second = hp.write_all(b"more");
+            let _ = done_tx.send((first, second));
+        });
+        let (first, second) = done.recv_timeout(Duration::from_secs(5)).expect("the write kept its deadline");
+        assert_eq!(first.unwrap_err().kind(), io::ErrorKind::TimedOut);
+        assert!(second.is_err(), "and the channel stays failed rather than queueing behind a stuck write");
+    }
+
+    /// A reader that offers `left` bytes as fast as it is asked, counting what it has handed over.
+    struct Flood(usize, std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl Read for Flood {
+        fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+            let n = out.len().min(self.0);
+            self.0 -= n;
+            self.1.fetch_add(n, std::sync::atomic::Ordering::SeqCst);
+            Ok(n)
+        }
+    }
+
+    /// The red-team pass on `/3` (F6): what an external guest writes while the host is not reading waits
+    /// in a BOUNDED queue — past it the guest's own writes block — instead of growing the host's memory
+    /// without limit (the red team watched 3 GB in eight seconds).
+    #[test]
+    fn a_guest_that_floods_while_the_host_is_not_reading_is_held_back() {
+        let taken = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hp = HostPipes::new(Flood(64 * 1024 * 1024, taken.clone()), Vec::new(), Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(500));
+        let held = taken.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(held < 8 * 1024 * 1024, "the host buffered {held} bytes it never asked for");
+        drop(hp);
     }
 }

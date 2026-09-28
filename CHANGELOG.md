@@ -25,6 +25,14 @@ Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
   confinement, egress confinement, privilege floor, host loss ends the guest, resource ceiling — each
   `established` (by what), `absent` (why) or `unknown` (an external launcher's), answered from the same
   posture the report carries. Reported only: no profile refuses on them yet (D-V2-57).
+- **Fixed (found by a red-team pass on the new channel, each re-run by the head chef first):** a guest
+  whose channel failed was waited for rather than ended, so a lingering launcher could hold the host
+  indefinitely; `outcome.ran` said "confirmed" where it must say "sent"; a guest's refused words reached
+  the terminal, the report and `audit query` raw (line breaks, terminal escapes, forged rows) and
+  unbounded (a 10 MB word became a 20 MB chain); an external launcher's input had no write deadline and
+  its output an unbounded queue. A failed conversation now ends the guest (10 s grace after a goodbye),
+  `ran` is true only once the program was sent, a guest's text is escaped and bounded, the pipes are
+  bounded both ways, and a program larger than the channel carries is refused before launch (D-V2-58).
 - **A host and a guest of different versions refuse each other in words** — an external launcher's image
   must carry the host's `delulu` version.
 - **CI:** every GitHub action on its Node-24 major; every Ubuntu runner pinned to `ubuntu-24.04`.

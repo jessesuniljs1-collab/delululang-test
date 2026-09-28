@@ -2639,3 +2639,69 @@ established (the unit test's no-Landlock case red); M6 the identity not counted 
 unit test's Windows case red).
 
 **Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2006 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+## 2026-09-28 (night) — the red-team pass on `delulu-sandbox-channel/3`: seven defects around a guarantee that held (D-V2-58)
+
+**The pass.** One sous-chef (Sonnet 5.5, the `sonnet` alias — `AGENTS.md`), briefed to break PS-E-01's
+guarantee and to report evidence only, worked against a frozen copy of `6ceaf2d`'s binary in a scratch
+directory outside the repository (it wrote nothing into it; it ran one read-only `git status`, against the
+brief, and said so). About 85 scripted attempts — wrong, empty, replayed and malformed generations, words
+outside the allowlist, requests before the report, reports twice, junk and oversized and deeply nested
+frames, a version-skewed guest, attestation with a lying guest — and 700 mutated first frames: **the
+guarantee held every time**: no program byte and no effect reached a guest before an accepted report
+(baselines — the honest launcher, an honest Python guest, a plain L1 run — all succeeded, so each refusal
+was evidence). Around it, it reported fifteen items. **Each was re-run by the head chef before a word of
+it was used** (`AGENTS.md`: judge an agent by its logs); the witnesses below are the head chef's own,
+each red on `6ceaf2d`.
+
+**Verified and fixed (each witness red on `6ceaf2d`, green now; mutants landed and killed):**
+- **GUEST-WAIT-1 (F4)** — a guest whose channel failed was WAITED for, not ended: `serve_under` called
+  `wait()` with no kill, so a launcher that closed its channel and lingered held the host for its whole
+  life (witness: a launcher that closes its output and sleeps 40 s — the host took 40 s). Now `end_guest`:
+  a failed conversation ends the guest (after 250 ms, so one already dying keeps its own exit status), and
+  one that said goodbye gets 10 s to exit (a launcher removing its container) before it is ended. A guest
+  the host ended is not named as a ceiling; the death record says `ended_by_host`. Mutant M7 (never kill)
+  red.
+- **RAN-SENT-1 (F1)** — `outcome.ran` said "confirmed", not "sent": a guest that confirmed and went away
+  before reading a program larger than its pipe was reported as having run it. Now `ran` is true only once
+  the program frame was written whole (`Evidence.sent`; the death record carries `confirmed` and `sent`),
+  and a program larger than the channel's frame (16 MiB less 64 KiB) is refused before a guest exists
+  (exit 2, in words). Mutant M8 (`ran` = confirmed) **survived the first witness**: its fake guest closed
+  its input before reading the host's acceptance, so a race chose which write failed. The witness now
+  reads the acceptance first; M8 red three times in three.
+- **GUEST-TEXT-1 (F2, F3)** — what a guest says reached the operator raw and unbounded: a refused
+  confinement word carrying `\n` and ANSI escapes forged rows in `delulu audit query` and lines on the
+  terminal, and a 10 MB word became a 10 MB report and a 20 MB audit chain (`denied` was bounded in count,
+  never in size). Now `channel::shown` escapes control characters and bounds the text (64 characters for a
+  quoted word, 512 per refusal, 1,024 per channel error) — at the refusal itself, in `note_denied`, and
+  once over the conversation's error before the terminal, the report and the chain see it. Mutant M9
+  (`shown` a pass-through) red in the e2e test and the unit test.
+- **PIPE-WRITE-1 (F5)** — a write to an external guest that stopped reading had no deadline: a program
+  larger than the pipe held the host for ever. `HostPipes` now writes through a writer thread, each write
+  acknowledged within the channel's deadline or the channel fails (and then the guest is ended, above).
+  Unit witness red on the old code (the write never returned).
+- **PIPE-FLOOD-1 (F6)** — the queue between an external guest's output and the host was unbounded: while
+  the host was stuck, a guest streaming zeros grew it to 3 GB in eight seconds (the sous-chef's RSS trace).
+  Now 16 chunks of 64 KiB; past them the guest's own writes block. Unit witness red on the old code (64 MiB
+  buffered).
+- **F8** — a first request that was not the report was (rightly) not answered, and not recorded either:
+  now `HostChannel::record_unanswered` puts it in `denied`. **F10** — the death record of a run refused on
+  its attestation now carries `generation`, `confirmed`, `sent` and `ended_by_host`, like every other.
+
+**Recorded, not fixed here:**
+- **F7 (a design gap, the next step's):** an EXTERNAL guest's self-report — the word of a binary the
+  launcher chose — enters `host_guarantees` and the posture, so a lying guest's report says "writes denied,
+  network only the channel" while its `properties` (correctly) say `unknown`: the report contradicts
+  itself. RW 4.31.
+- **F9:** the audit chain carries `confirmed`/`sent` but not the guest's accepted words (they are in the
+  report). **F11:** the channel's deadline is per read, not per frame (a guest dripping one byte every 40 s
+  keeps a frame open past 60 s). **F12:** bytes after a frame's CBOR value are ignored. **F13:** some
+  decoder messages reach the operator in the decoder's words (now bounded and escaped). **Residual:** a
+  guest's standard error is the operator's terminal by design, so a guest can print lines that look like
+  the host's. RW 4.32.
+- **Not defects:** F14 (a guest accepts an `Open` without a generation — so a version-skewed host is
+  refused on its version, in words); F15 (an external launcher inherits the operator's environment and can
+  read the program from disk: it is the operator's own program; the generation binds a report to a run and
+  is not a secret).
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2013 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.

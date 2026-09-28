@@ -160,6 +160,11 @@ tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 
 exit code. Freeze the tree while it runs: draft the records (step 6) as a patch script in the
 scratchpad meanwhile, and apply it once the suite has reported.
 
+After a security-relevant slice, a **red-team pass** is worth its cost: one Sonnet 5.5 sous-chef, briefed
+to break the new guarantee and to list every oddity, against a frozen COPY of the binary in a scratch
+directory outside the repository, while the head chef keeps working (run 2's found seven defects
+around a guarantee that held). Re-run each finding before using it.
+
 **6. Close it.** After the last edit: `survey build`, `check`, `findings` (0 errors), `doctor --check`.
 Write the records: a `V2_LOG.md` entry; `CHANGELOG.md` for anything a user sees; a `D-V2-nn` for each
 decision; `V2_PHASE_STATUS.md`; `REMAINING_WORK.md`; `HANDOFF.md` §11 and `docs/assistant-memory/` for a
@@ -168,7 +173,8 @@ and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open 
 Commit with the trailers in `CLAUDE.md`, push.
 
 **7. Watch the push run.** Wait for it (poll `mcp__github__actions_get` `get_workflow_run` — a push run
-takes about 15 minutes) within the budget,
+takes about 15 minutes; each run listing or `get_workflow_run` carries the whole commit message, and
+`list_workflow_jobs` every step — page it with `perPage` 1 to read one job cheaply) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
 

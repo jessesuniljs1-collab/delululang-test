@@ -47,6 +47,8 @@ pub(crate) fn open<C: Read + Write>(mut conn: C, generation: &str) -> io::Result
 
 /// Why a guest's boundary was not confirmed, in words an operator can act on.
 fn unconfirmed(why: impl std::fmt::Display) -> io::Error {
+    // What the guest sent may be quoted in `why` (a decoder's message, a refused word): shown bounded.
+    let why = delulu_runtime::channel::shown(&why.to_string(), 512);
     io::Error::other(format!("the guest never confirmed its boundary, so it was not sent the program: {why}"))
 }
 
@@ -64,6 +66,7 @@ impl<C: Read + Write> Opened<C> {
             })
         })?;
         if !matches!(req.body, ReqBody::Confined { .. }) {
+            host.record_unanswered("DL1401 on a first request that was not the guest's confinement report (not answered)");
             return Err(unconfirmed("its first request was not its confinement report"));
         }
         let resp = host.answer(&req);
@@ -285,6 +288,7 @@ mod tests {
             assert!(!heard.contains("module p"), "{name}: the program reached the guest: {heard:?}");
             if name == "asks for the console first" {
                 assert!(heard.is_empty(), "{name}: an unconfirmed guest's request was answered: {heard:?}");
+                assert_eq!(host.denied().1, 1, "{name}: the unanswered request is on the record");
             }
         }
     }

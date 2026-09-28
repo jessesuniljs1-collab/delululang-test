@@ -50,7 +50,8 @@ the assistant's memory — which now also travels file by file in
   per-run generation and no program, the guest confirms its boundary, and `boundary.rs`'s `Confirmed` is
   the only way the program is sent; and every run reports its boundary's five properties (D-V2-57 —
   macOS's gaps visible: reads open, no memory ceiling, no death signal). The CI workflows moved to their
-  Node-24 action majors and `ubuntu-24.04`.
+  Node-24 action majors and `ubuntu-24.04`. A red-team sous-chef found seven defects around the new
+  guarantee (which held); all verified and fixed the same run (D-V2-58) but F7 (RW 4.31).
 - **Next:** **PS-E** — E-01's required sets and refusal, decided on each OS's reported properties (its first two steps are built), E-02 host loss ends the guest, E-03
   the guest's kernel surface (six hypotheses, each witnessed before it is fixed), E-04 the launcher
   pinned, E-05 OpenShell as a tested L3 and a policy target, E-06 OCSF export. Then **P8** (P8-01 the
@@ -707,7 +708,12 @@ wins, and you should update the memory to match.
   fallback envelope said exit 2 and "usage" for every failure. **ADAPTER-SPELL-1** (2026-09-28, the
   first cloud routine run): a hardware driver's signature was checked on `./NAME` and the driver started
   as `NAME` from `PATH` — a pinned key vouched for a file that never ran; now resolved once, and that
-  file is both verified and started.
+  file is both verified and started. **CONFIRM-ORDER-1** (2026-09-28, routine run 2, PS-E-01): the
+  host's FIRST channel frame was the program, so a guest that never confined itself had already
+  received it — now `/3`, the program sendable only from `boundary.rs`'s `Confirmed`. And, from that
+  run's red-team pass: **GUEST-WAIT-1** (a failed channel's guest was waited for, not ended),
+  **RAN-SENT-1** (`ran` meant confirmed, not sent), **GUEST-TEXT-1** (a guest's words forged audit rows
+  and filled the chain), **PIPE-WRITE-1** and **PIPE-FLOOD-1** (an external launcher's pipes unbounded).
 
 **The search key that found four of the 2026-08-10 defects, worth applying to anything new:** a
 security decision made on an **unnormalized or unresolved representation**, walked past by a different
@@ -775,6 +781,10 @@ Added in V2 (2026-09-17 → 2026-09-28):
 - **A sandboxed run writes its audit records only where the chain already exists**
   (`guest.rs::audit_sandbox`): a test that reads them creates `<state>/audit` first, or it reads an empty
   chain and fails for the wrong reason (routine run 2).
+- **A witness that races two writes lets a mutant live** (routine run 2, M8): a fake guest that closed
+  its input before reading the host's acceptance let a race decide which write failed, and `ran =
+  confirmed` passed the test. A fake peer reads everything it must before it goes away — then the one
+  write left is the one the witness is about. Run a mutant more than once when timing is involved.
 - **In `sh`, a background command's standard input is `/dev/null`** unless it is redirected from a
   descriptor opened before it (`exec 3<&0; cat <&3 > file &`). A fake launcher that listens in the
   background otherwise hears nothing, and the absence it then "proves" is vacuous — so a capture
@@ -806,6 +816,10 @@ git history, past fixes. Record what was *non-obvious*: the reasoning, the trap,
   GUARD-STALE-1 and SECRETS-STALE-1 while writing the fix for an agent's finding — agents and the head
   chef each find what the other misses.
 - **No chain-of-thought is kept** — findings, evidence and decisions only (owner, 2026-09-17).
+- **The defects are rarely IN the guarantee under test** (routine run 2): a Sonnet 5.5 red-team pass on
+  `/3` found the guarantee held in ~85 attempts and 700 fuzzed frames — and seven real defects AROUND it
+  (waiting, reporting, text, pipes). Brief a tester to attack the guarantee and to list every oddity.
+  Give it a frozen COPY of the binary outside the repository, so the head chef can keep building.
 
 ### 11.8 What building and running DeluluLang V2 taught
 

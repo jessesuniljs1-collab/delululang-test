@@ -53,6 +53,31 @@ pub const SELF_APPLIED: &[&str] = &[
     "memory refused to the guest before its kernel runs out",
 ];
 
+/// Text a GUEST chose — a word in its confinement report, a method name, a decoder's quotation of its
+/// frame — as it may reach the operator: control characters escaped, so it cannot break a line, move the
+/// cursor or forge a row of `audit query`; and at most `max_chars` characters, with how many bytes were
+/// cut, so a guest cannot make the host write megabytes into a report or the audit chain. (The red-team
+/// pass on `/3`, 2026-09-28: a refused word carrying `\n` and ANSI escapes forged audit rows and terminal
+/// lines, and a 10 MB word became a 10 MB report and a 20 MB chain.)
+pub fn shown(text: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (taken, (i, c)) in text.char_indices().enumerate() {
+        if taken == max_chars {
+            out.push_str(&format!("… (+{} bytes)", text.len() - i));
+            return out;
+        }
+        if c.is_control() || c == '\u{2028}' || c == '\u{2029}' {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// How much of one refusal a report and the chain keep.
+pub const MAX_DENIED_CHARS: usize = 512;
+
 /// Hard ceiling on one frame (16 MiB), as on the broker wire: a corrupt or hostile length prefix
 /// must not make the peer allocate unboundedly.
 pub const MAX_FRAME: u32 = 16 * 1024 * 1024;
@@ -373,8 +398,16 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
     fn note_denied(&mut self, what: &str) {
         self.denied_total += 1;
         if self.denied.len() < MAX_DENIED_RECORDED {
-            self.denied.push(what.to_string());
+            // Bounded and escaped: the text quotes what the guest sent (`shown`).
+            self.denied.push(shown(what, MAX_DENIED_CHARS));
         }
+    }
+
+    /// Record a refusal the host made WITHOUT answering — a guest's first request that was not its
+    /// confinement report (PS-E-01): not answered, because an answer could be an effect, and still on
+    /// the record (the red-team pass on `/3`, F8: it had left `denied` empty).
+    pub fn record_unanswered(&mut self, what: &str) {
+        self.note_denied(what);
     }
 
     /// Give the host the root this run was granted, so the guest can mint from it by asking.
@@ -467,7 +500,7 @@ impl<S: crate::sink::EffectSink> HostChannel<S> {
                         None => {
                             return Response::Error {
                                 code: "DL1401".into(),
-                                message: format!("`{word}` is not a boundary a guest applies to itself"),
+                                message: format!("`{}` is not a boundary a guest applies to itself", shown(word, 64)),
                             }
                         }
                     }
@@ -940,6 +973,26 @@ mod tests {
 
     /// PS-E-01: a confinement report belongs to ONE run — the generation the host opened it with. A
     /// report for another generation, or to a host that opened none, confirms nothing and is recorded.
+    /// The red-team pass on `/3`: a guest's text is escaped and bounded before it can reach the operator.
+    #[test]
+    fn a_guests_text_is_shown_escaped_and_bounded() {
+        assert_eq!(shown("no new programs", 64), "no new programs");
+        let s = shown("a\nseq 4 FORGED\x1b[31m\r\u{2028}é", 64);
+        assert!(!s.contains('\n') && !s.contains('\x1b') && !s.contains('\r') && !s.contains('\u{2028}'), "{s:?}");
+        assert!(s.contains("\\n") && s.contains('é'), "{s:?}");
+        let long = "y".repeat(1_000_000);
+        let s = shown(&long, 64);
+        assert!(s.starts_with(&"y".repeat(64)) && s.ends_with("(+999936 bytes)"), "{}", &s[..80]);
+        // Through the host: a refused word and the refusal it records are both bounded.
+        let mut host = HostChannel::new(crate::sink::LocalSink).with_generation(GEN);
+        let word = format!("x\n{}", "z".repeat(100_000));
+        let r = host.answer(&confined(1, &[word.as_str()]));
+        let Response::Error { message, .. } = &r else { panic!("{r:?}") };
+        assert!(message.len() < 300 && !message.contains('\n'), "{message:?}");
+        let (denied, _) = host.denied();
+        assert!(denied[0].len() <= MAX_DENIED_CHARS * 4 + 32 && !denied[0].contains('\n'), "{}", denied[0].len());
+    }
+
     #[test]
     fn a_confinement_report_is_accepted_only_for_the_generation_the_host_opened() {
         let other = "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e";

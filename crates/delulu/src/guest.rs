@@ -461,6 +461,10 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--require-attestation",
 ];
 
+/// The largest program a sandboxed run sends: the channel's frame bound, less room for the frame's other
+/// fields (the hash, the seed, the clock and the encoding).
+const MAX_PROGRAM_BYTES: usize = delulu_runtime::channel::MAX_FRAME as usize - 64 * 1024;
+
 /// Which boundary a sandboxed run asked for: the jailed guest process (L1, `--sandbox`) or the
 /// microVM (L2, `--isolation microvm`, PS-C). The guest and the channel are the same in both; what
 /// differs is what stands between the guest and the host.
@@ -627,6 +631,18 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             }
         }
     };
+    // The red-team pass on `/3` (F1): a program the channel cannot carry in one frame is refused here,
+    // before a guest exists — it used to launch a guest, confirm it, and then fail to send.
+    if program.len() > MAX_PROGRAM_BYTES {
+        eprintln!(
+            "error: `{file}` is {} bytes, larger than the sandbox channel carries in one frame ({} bytes). \
+             Nothing ran: split the program into modules, or run it without `--sandbox` if you accept no \
+             confinement.",
+            program.len(),
+            MAX_PROGRAM_BYTES
+        );
+        return 2;
+    }
     let profile = match opts.sandbox_profile.as_deref() {
         None => crate::policy::Profile::Contained,
         Some(name) => match crate::policy::Profile::parse(name) {
@@ -1068,7 +1084,14 @@ fn serve_under(
                         "sandbox-death",
                         "deny",
                         Some(format!("attestation refused ({})", refusal.code())),
-                        Some(serde_json::json!({ "denied_total": 0 })),
+                        // The red-team pass on `/3` (F10): the same fields as every other death record.
+                        Some(serde_json::json!({
+                            "denied_total": 0,
+                            "confirmed": false,
+                            "sent": false,
+                            "ended_by_host": true,
+                            "generation": generation,
+                        })),
                     );
                     return Err(io::Error::other(format!("the guest was not served: {why}")));
                 }
@@ -1090,7 +1113,17 @@ fn serve_under(
         (None, None, _) | (_, _, None) => None,
         (w, c, Some(k)) => Some(Watchdog::start(k, w.map(std::time::Duration::from_secs), c)),
     };
-    let served = converse(&mut child, &dir, program, &generation, root, seed, fixed_clock_ms, custody, &mut evidence);
+    let served = converse(&mut child, &dir, program, &generation, root, seed, fixed_clock_ms, custody, &mut evidence)
+        // The red-team pass on `/3` (F2, F3): a channel error can quote what the guest sent — a refused
+        // word, a decoder's quotation of a frame — and this text reaches the terminal, the report and the
+        // chain. Escaped and bounded here, once, before any of them.
+        .map_err(|e| io::Error::new(e.kind(), delulu_runtime::channel::shown(&e.to_string(), 1024)));
+    // The red-team pass on `/3` (F4): a conversation that failed ENDS the guest, and one that said
+    // goodbye gets a short grace to exit. `wait()` alone let a guest — an external launcher above all —
+    // hold the host for as long as it liked after its channel had failed: "the channel's deadline ended
+    // the run" was true only in words. Still before the watchdog is stopped and the guest reaped, so a
+    // process id cannot have been reused.
+    let host_ended = end_guest(&mut child, served.is_err());
     // Stopped, and joined, BEFORE the guest is reaped below: until then its process id cannot have
     // been reused, so the watchdog can only ever have ended this guest.
     let fired = watch.and_then(Watchdog::stop);
@@ -1100,8 +1133,10 @@ fn serve_under(
         _ => None,
     };
     let denied = evidence.denied;
-    // PS-E-01: a guest that never confirmed its boundary was never sent the program, so it never ran.
+    // PS-E-01: a guest that never confirmed its boundary was never sent the program, so it never ran —
+    // and (the red-team pass, F1) neither did one that confirmed and then never took the program.
     let confirmed = evidence.confirmed;
+    let sent = evidence.sent;
     // RW 4.23: the layers the guest applied to itself count as applied, in the report and in the
     // chain — they were in force before the program's first line, and the host checked the words.
     for w in evidence.own {
@@ -1121,8 +1156,9 @@ fn serve_under(
         guest_cpu: children_cpu().zip(children_before).map(|(after, before)| after.saturating_sub(before)),
         vm_memory: child.vm_memory_ceiling(),
     };
+    // A guest the HOST ended (F4) was stopped by nothing a report should name as a ceiling.
     let stop = match (&served, &status) {
-        (Err(_), Ok(st)) => stop_reason(st, limits, evidence_of_stop, &jail),
+        (Err(_), Ok(st)) if !host_ended => stop_reason(st, limits, evidence_of_stop, &jail),
         _ => None,
     };
     // The run report (D-V2-21): written by the RUNTIME to the file the operator named, never on the
@@ -1153,7 +1189,7 @@ fn serve_under(
     // set. Nothing is inferred beyond that — the record says which status was observed, and does not
     // claim WHICH limit fired when the status cannot tell.
     if let Ok(st) = &status {
-        if !st.success() {
+        if !st.success() && !host_ended {
             let why = stop.as_ref().map(|s| s.message.clone()).or_else(|| limit_kill_reason(st));
             if let Some(why) = why {
                 audit_sandbox(
@@ -1181,7 +1217,13 @@ fn serve_under(
         // discarded, and the audit chain is the copy an operator cannot quietly lose. And (PS-E-01)
         // whether the guest confirmed its boundary, for which generation — so a guest that never did is
         // on the record as one that was never sent the program.
-        Some(serde_json::json!({ "denied_total": denied.1, "confirmed": confirmed, "generation": generation })),
+        Some(serde_json::json!({
+            "denied_total": denied.1,
+            "confirmed": confirmed,
+            "sent": sent,
+            "ended_by_host": host_ended,
+            "generation": generation,
+        })),
     );
 
     // PS-B-02: the guest's network requests were performed HERE, by the host, so their record is in
@@ -1193,7 +1235,7 @@ fn serve_under(
     }
     if let Some(path) = report_out {
         let exit = served.as_ref().copied().unwrap_or(1);
-        let mut outcome = serde_json::json!({ "ran": confirmed, "exit": exit });
+        let mut outcome = serde_json::json!({ "ran": sent, "exit": exit });
         if let Some(s) = &stop {
             outcome["stopped_by"] = s.json.clone();
         }
@@ -1543,11 +1585,32 @@ fn guest_command(exe: &std::path::Path, dir: &std::path::Path) -> (std::process:
     (cmd, launched)
 }
 
+/// How long a guest that said goodbye may take to exit before the host ends it (F4): a launcher that
+/// cleans up — `docker run --rm` removing its container — takes a moment; one that lingers is ended.
+const EXIT_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// After a conversation: a guest whose channel FAILED is ended at once (after a moment, so a guest that
+/// is already exiting — a ceiling fired — finishes and its status still says why); one that said goodbye
+/// gets [`EXIT_GRACE`]. True when the host ended it.
+fn end_guest(child: &mut Guest, failed: bool) -> bool {
+    let grace = if failed { std::time::Duration::from_millis(250) } else { EXIT_GRACE };
+    let until = std::time::Instant::now() + grace;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) | Err(_) => return false,
+            Ok(None) if std::time::Instant::now() >= until => return child.kill().is_ok(),
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+}
+
 /// What a conversation leaves for the report, whichever way it ended.
 #[derive(Default)]
 struct Evidence {
-    /// PS-E-01: whether the guest confirmed its boundary — and so whether it was ever sent the program.
+    /// PS-E-01: whether the guest confirmed its boundary.
     confirmed: bool,
+    /// Whether the program was then SENT — written whole to the channel (the red-team pass, F1).
+    sent: bool,
     /// Every refusal the host gave (bounded), and how many there were.
     denied: (Vec<String>, u64),
     /// What the guest reported applying to itself before its program ran (RW 4.23).
@@ -1594,6 +1657,7 @@ fn converse(
         seed,
         fixed_clock_ms,
     })?;
+    evidence.sent = true;
     // The refusals come back with the exit code, because a report that lists only what was allowed
     // says nothing about what the program TRIED — which is the interesting half when the program is
     // one nobody wrote. They are read after `serve` returns, on both paths, so a guest that died
