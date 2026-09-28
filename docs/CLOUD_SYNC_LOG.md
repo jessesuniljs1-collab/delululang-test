@@ -261,7 +261,8 @@ it on `origin` was made in the cloud and is listed below.
   (4) `8b2994a` The red-team pass on channel /3: seven defects around a guarantee that held, fixed (D-V2-58);
   (5) `42f5ea0` PS-E-01, third step: hostile-agent refuses a boundary that lacks a property (D-V2-59);
   (6) `71221d3` RW 4.31 closed: an external guest's words about itself are its own;
-  (7) `PS-E-02, first part: an external launcher ends with its host (Linux)`
+  (7) `aeea324` PS-E-02, first part: an external launcher ends with its host (Linux);
+  (8) `A channel frame means one value; CI's downloads retry (the microvm job's red run 36490575764)`
 - Files and folders:
   M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
     `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
@@ -319,6 +320,9 @@ it on `origin` was made in the cloud and is listed below.
   M `crates/delulu/src/guest.rs` (`launch_external`: `PR_SET_PDEATHSIG`, the parent re-check),
     `crates/delulu/tests/sandbox_confirm_cli.rs` (the witness), `CHANGELOG.md`, `HANDOFF.md`,
     `docs/REMAINING_WORK.md` 4.26, `V2_PHASE_STATUS.md`, `V2_OPENSHELL_STUDY.md` §4.2 — (7)
+  M `crates/delulu-runtime/src/channel.rs` (`read_frame` refuses bytes after a frame's value; the witness),
+    `scripts/microvm/fetch-firecracker.sh`, `scripts/microvm/build-image.sh`, `.github/workflows/ci.yml`
+    (`curl --retry 4 --retry-delay 5` on the four downloads), `docs/REMAINING_WORK.md` 4.32 — (8)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entries
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
@@ -349,13 +353,18 @@ it on `origin` was made in the cloud and is listed below.
   job (macOS's `hostile-agent` refusal real; the microVM's `hostile-agent` runs still run). (6): the
   witness red on `42f5ea0`, green after; M11 killed; clippy clean; the full suite alone 2,015 passed,
   0 failed, 15 ignored. (7): the witness red on `71221d3` (the launcher outlived its killed host), green
-  after, twice; clippy clean; the full suite alone 2,016 passed, 0 failed, 15 ignored.
+  after, twice; clippy clean; the full suite alone 2,016 passed, 0 failed, 15 ignored. **CI red:**
+  `71221d3`'s run `36490575764` failed in one job — `microvm`, GitHub's release download answered HTTP 500
+  to `fetch-firecracker.sh`, which had no retry; reproduced locally (a 500 once: exit 22; with `--retry`:
+  exit 0), fixed in (8), the failed job re-run once. (8): the strict-frame witness red on `aeea324`, green
+  after; clippy clean; the full suite alone 2,017 passed, 0 failed, 15 ignored.
 - Redo on the laptop: (2) changes the channel to `/3` — **rebuild the WSL microVM guest images**
   (`~/microvm-image-a`, `~/microvm-image-b`: a `/2` guest refuses a `/3` host), and run the suite on Windows
   (the AppContainer guest and `sandbox probe`'s contained path run only there and on CI).
 - For the laptop's memory: `HANDOFF.md` §11.3 (raw.githubusercontent.com reachable) and §11.5 (two traps);
   `docs/assistant-memory/cloud-period-2026-09-28.md` (routine run 2).
-- Open / next: (1) read (6)'s and (7)'s push runs — unread at this entry's writing; (2) **E-02's rest** —
+- Open / next: (1) read `36490575764`'s re-run of `microvm` (queued by this run), and the push runs of (7)
+  and (8) — unread at this entry's writing if this line still says so; (2) **E-02's rest** —
   the macOS guest outlives its host (the red one; CI only: a watcher thread before the program starts,
   `kqueue` `NOTE_EXIT` on the host's pid, `getppid() == 1` fallback, `_exit` at once; witnessed on the
   macOS runner by killing the host and timing the guest from outside), and the Windows launcher's Job

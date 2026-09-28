@@ -20,7 +20,7 @@ esac
 DEST=${1:-$HOME/.local/bin}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL -o "$TMP/fc.tgz" "https://github.com/firecracker-microvm/firecracker/releases/download/${VERSION}/firecracker-${VERSION}-${ARCH}.tgz"
+curl -fsSL --retry 4 --retry-delay 5 -o "$TMP/fc.tgz" "https://github.com/firecracker-microvm/firecracker/releases/download/${VERSION}/firecracker-${VERSION}-${ARCH}.tgz"
 got=$(sha256sum "$TMP/fc.tgz" | cut -d' ' -f1)
 if [ "$got" != "$SHA256" ]; then
     echo "fetch-firecracker: firecracker-${VERSION}-${ARCH}.tgz has sha256 $got, not the pinned $SHA256 — refused" >&2

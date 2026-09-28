@@ -563,7 +563,7 @@ jobs:
         with: { distribution: temurin, java-version: "21" }
 
       - name: Fetch TLA+ tools
-        run: curl -sSfL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+        run: curl -sSfL --retry 4 --retry-delay 5 -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
 
       # The grant tree: 585,771 distinct states, no error.
       - name: Model-check the grant tree
@@ -621,6 +621,6 @@ jobs:
       # type-checked; the file's own `#print axioms` block is what proves no `sorry` is hiding.
       - name: Machine-check Delulu Core (Lean)
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.32.2
+          curl -sSfL --retry 4 --retry-delay 5 https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.32.2
           . "$HOME/.elan/env"
           cd docs/design/models/lean && lean DeluluCore.lean

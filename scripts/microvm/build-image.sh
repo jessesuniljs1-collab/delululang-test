@@ -55,7 +55,7 @@ done
 TARBALL="$CACHE/linux-${KERNEL_VERSION}.tar.xz"
 if [ ! -f "$TARBALL" ]; then
     step "fetching linux-${KERNEL_VERSION}"
-    curl -fsSL -o "$TARBALL.part" "$KERNEL_URL"
+    curl -fsSL --retry 4 --retry-delay 5 -o "$TARBALL.part" "$KERNEL_URL"
     mv "$TARBALL.part" "$TARBALL"
 fi
 got=$(sha256sum "$TARBALL" | cut -d' ' -f1)

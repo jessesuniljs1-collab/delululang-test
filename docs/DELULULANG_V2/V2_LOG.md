@@ -2780,3 +2780,25 @@ fallback) — the red one; the external launcher's Job Object with kill-on-close
 witness measured from outside both processes.
 
 **Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2016 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+## 2026-09-28 (night) — RW 4.32, one item: a channel frame means exactly one value
+
+The red-team pass's F12: `channel::read_frame` decoded a frame's CBOR value and ignored whatever followed it
+inside the frame's length, so one frame had many spellings (the sous-chef's `trailing` guest was confirmed
+and served with 16 garbage bytes after its report). Witness `a_frame_with_bytes_after_its_value_is_refused`
+— red on `aeea324` (decoded); now the frame is refused, "the frame carries 16 byte(s) after its value".
+Every frame this protocol writes is exactly its value, so nothing legitimate changes (the sandbox, guest
+and channel tests all pass). RW 4.32's other items stay open: a per-frame deadline, the accepted words in the
+death record, the guest's standard error relayed with a prefix.
+
+**Verified:** clippy `--workspace --all-targets -D warnings` clean; the full suite alone: 2017 passed, 0 failed, 15 ignored, 152 binaries — cargo exit 0.
+
+**CI red, read and fixed at its root (the same commit).** `71221d3`'s push run `36490575764` — **failure**,
+one job: `microvm`, step "The pinned Firecracker": `curl: (22) The requested URL returned error: 500` from
+GitHub's release download, before any test body ran; every other job green. Not this diff's (it touched no
+workflow and no script), and not a flake to shrug at: `fetch-firecracker.sh` fetched with no retry at all.
+Reproduced in the VM against a local server that answers 500 once — plain `curl -f` exits 22; with
+`--retry 4 --retry-delay 5` it retries and exits 0. The four downloads CI depends on now retry (the
+Firecracker release, the kernel source in `build-image.sh`, TLA+'s tools, Lean's installer); plain `--retry`
+covers HTTP 500 and runs on the laptop's older WSL curl, which `--retry-all-errors` would not; the sha256
+pins still decide what is accepted. The failed job was re-run once (allowed: it died in a download step).

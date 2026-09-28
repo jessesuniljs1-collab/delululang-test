@@ -305,7 +305,17 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     }
     let mut buf = vec![0u8; len as usize];
     r.read_exact(&mut buf)?;
-    ciborium::from_reader(&buf[..]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
+    let mut rest: &[u8] = &buf[..];
+    let value = ciborium::from_reader(&mut rest).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    // RW 4.32 (the red-team pass's F12): one frame, one value. Bytes after it would give a frame many
+    // spellings, and a peer that adds them is not speaking this protocol.
+    if !rest.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("the frame carries {} byte(s) after its value", rest.len()),
+        ));
+    }
+    Ok(value)
 }
 
 /// The host side of the channel: it mints the handles, resolves them, and performs each operation
@@ -1057,6 +1067,22 @@ mod tests {
         bytes.extend_from_slice(&[0u8; 8]);
         let err = read_frame::<WireValue>(&mut &bytes[..]).expect_err("the bound must hold");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    /// RW 4.32 (the red-team pass's F12): a frame means exactly one value. Bytes after it inside the
+    /// frame's length were ignored, so one frame had many spellings — now it is refused.
+    #[test]
+    fn a_frame_with_bytes_after_its_value_is_refused() {
+        let open = Open { version: CHANNEL_VERSION.into(), generation: GEN.into() };
+        let mut frame = Vec::new();
+        write_frame(&mut frame, &open).unwrap();
+        assert_eq!(read_frame::<Open>(&mut &frame[..]).unwrap(), open, "the exact frame decodes");
+        let len = u32::from_le_bytes(frame[..4].try_into().unwrap()) + 16;
+        frame[..4].copy_from_slice(&len.to_le_bytes());
+        frame.extend([0xAA_u8; 16]);
+        let e = read_frame::<Open>(&mut &frame[..]).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData, "{e}");
+        assert!(e.to_string().contains("after its value"), "{e}");
     }
 
     /// A truncated frame is a transport failure, never a half-read value.
