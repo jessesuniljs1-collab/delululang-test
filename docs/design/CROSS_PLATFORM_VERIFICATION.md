@@ -7,8 +7,8 @@ badge that never executed.
 
 ## 1. Why this exists, and the honest starting point
 
-`.github/workflows/ci.yml` declares a three-OS matrix (`ubuntu-latest`, `macos-latest`,
-`windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
+`.github/workflows/ci.yml` declares a three-OS matrix (`ubuntu-latest` — pinned to `ubuntu-24.04` on
+2026-09-28, before `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19 — `macos-latest`, `windows-latest`) that, in its own words, "activates automatically once this repository is pushed to
 GitHub." **Until 2026-09-14 this repository was never pushed** (owner policy), so that matrix **never
 executed.** On 2026-09-14 the owner had it pushed to a **private testing remote**, public since 2026-09-17 (`HANDOFF.md`
 §1.1), which activated the workflow, and its first run is transcribed in **§9** — failures first. The fifth

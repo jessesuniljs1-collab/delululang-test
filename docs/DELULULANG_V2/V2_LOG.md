@@ -2499,3 +2499,39 @@ model configuration, routines and cloud-environments pages. What held, and what 
   before they bite: `actions/checkout@v4` and `actions/cache@v4` target Node.js 20, which GitHub now forces
   onto Node 24; and `ubuntu-latest` migrates to Ubuntu 26 from 2026-10-19.
 
+
+## 2026-09-28 (night) — routine run 2: CI read; the workflows off Node 20 and pinned to Ubuntu 24.04
+
+**Health first.** `survey check`: ok (1,464 nodes, 12,653 edges); `doctor --check`: ok, all checks pass
+(26 in this VM; `identity separation none` here — the VM has no `uidmap`). `command -v gh`: none again —
+CI read with the GitHub MCP tools. `cargo fetch --locked`: done before any suite.
+
+**CI read (step 3).** Every push run since the last recorded one, each by id:
+- `045c21a` (Cloud handoff 8) — `36463375580`: success. `7e9d97d` (Cloud handoff 9) — `36464748581`: success.
+- `cfbfbdc` (Cloud handoff 10) — `36465304879`: success on every job (16: three test OSes, arm64, lints,
+  supply-chain, formal, editor, fuzz, miri ×2, miri-ffi, microvm, microvm-reproducible; heavy-gates and
+  miri-slow skipped by design). The ping-pong verdicts, each job's last step: **arm64 MEASURED 2.91x
+  against a 4.13x control, bar 1.50x — passed**; Linux x86-64 NOT MEASURED (controls 2.03–2.05x, SMT);
+  Windows NOT MEASURED (controls 1.51–1.67x); macOS NOT MEASURED (three hardware threads; 2.19x, control
+  3.24x/2.78x).
+- Also completed since: the nightly `CI` `36402530469` on `dd543e5` (schedule) — success; `release`
+  `36413736270` (schedule, a dry run) — success; `editor-e2e` `36401854421` (by hand) — success.
+  Routine run 1's own last pushes (`e430c2a` … `dd543e5`) were green in the listing, as the laptop's
+  evening entry found.
+
+**The inbox's CI hygiene (sync log, "Open / next" 1b), done.** Every job's log ends with GitHub's
+warning that `actions/checkout@v4`, `actions/setup-python@v5` (and, in other jobs, `actions/cache@v4`)
+"target Node.js 20 but are being forced to run on Node.js 24". Each replacement major was **measured,
+not remembered**: the `runs.using` line of its `action.yml` at that tag, fetched from
+`raw.githubusercontent.com` — `checkout@v5` node24, `cache@v5` node24 (`v4` node20), `setup-node@v5`
+node24, `setup-python@v6` node24, `setup-java@v5` node24, `upload-artifact@v6` node24 (`v5` still node20),
+`download-artifact@v7` node24 (`v6` still node20), `attest-build-provenance@v3` a composite over
+`actions/attest` v3.0.0, node24 (`v2` wraps v2.4.0, node20). The inputs this repository passes
+(`subject-path`, `path`, `merge-multiple`) exist at the new tags; `editors/vscode/package.json` has no
+`packageManager`, so `setup-node@v5`'s automatic caching does not switch on. `Swatinem/rust-cache@v2`
+is already node24; `cargo-deny-action` is a Docker action. **Every `ubuntu-latest` is pinned to
+`ubuntu-24.04`** (what `ubuntu-latest` is today) in all six workflows: `ubuntu-latest` becomes Ubuntu 26
+on 2026-10-19, and the microVM job's kernel build, the user-namespace step and the red-team gates were
+all measured on 24.04 — a runner change should be a deliberate, measured step (a manual run on
+`ubuntu-26.04` first), never a Monday surprise. The witness is the next push run: the Node-20 warning
+gone from every job, and every job green.

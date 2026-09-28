@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: kernel, kvm, user namespaces, landlock
         continue-on-error: true
@@ -75,7 +75,7 @@ jobs:
   # ---- PS-0-08 experiments (2026-09-18). Each prints a verdict line `RESULT <name>: <PASS|FAIL> …`
   # that the head chef transcribes; `continue-on-error` keeps a missing capability a fact, not a red run.
   linux-kvm-boot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: can this runner open /dev/kvm, and boot a fetched VMM to /init?
@@ -145,7 +145,7 @@ jobs:
   # which must read it — or nothing below measures separation) and by a child mapped to a SUBORDINATE
   # uid through newuidmap and /etc/subuid (`unshare --map-auto`), which must be refused.
   linux-subordinate-uid:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: prerequisites, then a mapped read against a control
@@ -462,7 +462,7 @@ jobs:
           $RUNG_meta"
           try "c-narrowed-reads" "$NARROW" "$EXE" "$S"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
       - name: does the REAL guest start under the same profile?
@@ -526,7 +526,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: which reads does startup need, and which allowances are load-bearing?
         continue-on-error: true

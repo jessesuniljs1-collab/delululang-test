@@ -250,3 +250,29 @@ it on `origin` was made in the cloud and is listed below.
   stand, re-ordered: P8-01 now follows PS-E; the adversarial pass on PS-D-02 (its item 3) still stands.
   **For the owner:** D-V2-49 (an entrenched edit, `DELULU_CORE.md` v0.3) and D-V2-53's consequence for
   `hostile-agent` on hosts without user namespaces are flagged for his review.
+
+### 2026-09-28 (night) — routine run 2: CI read; workflows off Node 20, pinned to Ubuntu 24.04; PS-E-01 begun
+- Session: `https://claude.ai/code/session_01TfVRPwf7BAv6L8SzocuB1d`   Model: Claude Opus 5.5 (the scheduled routine)
+- Branch: `master` (the routine pushes there)   Pull request: none   Merged: n/a
+- Base: `cfbfbdc` (the newest `Cloud handoff` commit — the laptop's baseline)
+- Commits: (1) `CI hygiene: every action on its Node-24 major, every Ubuntu runner pinned to 24.04`
+- Files and folders:
+  M `.github/workflows/ci.yml`, `release.yml`, `container.yml`, `editor-e2e.yml`, `channel-measure.yml`,
+    `host-capability-probe.yml` — (1) `checkout@v5`, `cache@v5`, `setup-node@v5`, `setup-python@v6`,
+    `setup-java@v5`, `upload-artifact@v6`, `download-artifact@v7`, `attest-build-provenance@v3`;
+    `ubuntu-latest` → `ubuntu-24.04` (the test matrix's job is now `test (ubuntu-24.04)`)
+  M `docs/design/CROSS_PLATFORM_VERIFICATION.md` — (1) the pin, noted where the matrix is described
+  M `docs/DELULULANG_V2/V2_LOG.md` — this run's entry
+  M `docs/CLOUD_SYNC_LOG.md` — this entry
+  M `docs/survey/*` — regenerated
+  Deleted: nothing.
+- Survey and doctor (start of run): `survey check` ok (1,464 nodes, 12,653 edges); `doctor --check` ok,
+  all checks pass (26 in this VM). After each slice: in its commit message.
+- Verified: CI read by id — `36463375580` (`045c21a`), `36464748581` (`7e9d97d`), `36465304879`
+  (`cfbfbdc`, every job; ping-pong arm64 MEASURED 2.91x/4.13x passed, the x86 runners and macOS NOT
+  MEASURED), the nightly `36402530469`, `release` `36413736270`, `editor-e2e` `36401854421` — all
+  success. Each new action major's runtime read from its `action.yml` at the tag (`V2_LOG.md`).
+- Redo on the laptop: nothing for (1).
+- For the laptop's memory: nothing yet.
+- Open / next: (1) read (1)'s push run — the Node-20 warning must be gone from every job, and every job
+  green on `ubuntu-24.04`; (2) PS-E-01, in progress in this run.

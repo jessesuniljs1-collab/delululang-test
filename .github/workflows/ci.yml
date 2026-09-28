@@ -42,10 +42,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -55,7 +55,7 @@ jobs:
 
       # Criterion 6: Python pinned to ONE version so cross-engine parity is stable.
       - name: Install Python 3.13 (pinned)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -160,7 +160,7 @@ jobs:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Full workspace test suite (aarch64)
@@ -198,9 +198,9 @@ jobs:
   # formatting is not enforced, and this comment is where that is admitted.
   lints:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with: { components: clippy }
       - uses: Swatinem/rust-cache@v2
@@ -238,14 +238,14 @@ jobs:
   # `miri-slow` below, and the numbers that put them there are in its comment.
   miri:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         crate: [delulu-diag, delulu-atlas]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with: { components: "miri, rust-src" }
       - uses: Swatinem/rust-cache@v2
@@ -269,14 +269,14 @@ jobs:
   # or `miri-slow`), with a 240-minute budget — which no run has yet confirmed is enough.
   miri-slow:
     if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'heavy-gates')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
         crate: [delulu-broker, delulu-syntax, delulu-check]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with: { components: "miri, rust-src" }
       - uses: Swatinem/rust-cache@v2
@@ -303,10 +303,10 @@ jobs:
   # `heavy` or `heavy-gates`).
   heavy-gates:
     if: (github.event_name == 'schedule' && vars.NIGHTLY != 'off') || (github.event_name == 'workflow_dispatch' && inputs.jobs != 'miri-slow')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Criterion 4 — the 100k-program formatter gate
@@ -337,10 +337,10 @@ jobs:
   # not a gate, and that applies to the tool as much as to the test.
   miri-ffi:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with: { components: "miri, rust-src" }
       - uses: Swatinem/rust-cache@v2
@@ -365,10 +365,10 @@ jobs:
   # nightly can be pointed at it for longer when there is something to look for.
   fuzz:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: "fuzz" }
@@ -407,10 +407,10 @@ jobs:
   # which kernel.org publishes and the build checks against its pinned sha256.
   microvm:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: What the kernel and the static guest are built with
@@ -421,7 +421,7 @@ jobs:
           sudo chmod 666 /dev/kvm
           python3 -c 'import os, fcntl; fd = os.open("/dev/kvm", os.O_RDWR); print("KVM API", fcntl.ioctl(fd, 0xAE00, 0))'
       - name: Cache the kernel source (checked against its pinned hash on every use)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/delulu-microvm/linux-*.tar.xz
           key: linux-source-${{ hashFiles('scripts/microvm/build-image.sh') }}
@@ -455,15 +455,15 @@ jobs:
   # full builds and nothing else needs to wait for it.
   microvm-reproducible:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: What the kernel and the static guest are built with
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential flex bison bc libelf-dev musl-tools
       - name: Cache the kernel source (checked against its pinned hash on every use)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/delulu-microvm/linux-*.tar.xz
           key: linux-source-${{ hashFiles('scripts/microvm/build-image.sh') }}
@@ -479,10 +479,10 @@ jobs:
   # workspace suite) compares them; this job proves the artifact a user would actually install works.
   editor:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: "22" }
       - name: Build the extension
         working-directory: editors/vscode
@@ -511,9 +511,9 @@ jobs:
   # line, and the green line is what people read.
   supply-chain:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
@@ -528,12 +528,12 @@ jobs:
   # docs/design/models/README.md; these steps make them reproducible rather than transcribed.
   formal:
     if: (github.event_name != 'schedule' || vars.NIGHTLY != 'off') && (github.event_name != 'workflow_dispatch' || inputs.jobs == 'everything')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Java (for TLC)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
 
       - name: Fetch TLA+ tools
@@ -571,7 +571,7 @@ jobs:
             echo "::error::CustodyC29.cfg did NOT fail — the model has lost its teeth"; exit 1
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.13" }
       - name: The ten-dimension authority algebra (Z3, 26 obligations)
         run: |

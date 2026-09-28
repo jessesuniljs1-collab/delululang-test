@@ -13,10 +13,10 @@ permissions:
   contents: read
 jobs:
   dockerfile:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: docker build — the Dockerfile as committed
         run: docker build --progress=plain -t delulu:ci .
       - name: the image answers, and runs a program with a grant and without one
@@ -32,10 +32,10 @@ jobs:
           # Without the grant it is refused — the language's claim, inside the container too.
           if docker run --rm -v "$PWD/work:/home/delulu/work" delulu:ci run hello.delulu; then echo "ran without a grant"; exit 1; fi
   devcontainer:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: devcontainer up — the definition as committed (its postCreateCommand builds delulu)
         run: npx --yes @devcontainers/cli@0.72.0 up --workspace-folder . --log-level info
       - name: the toolchain inside answers
