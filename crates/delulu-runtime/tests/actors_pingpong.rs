@@ -126,6 +126,18 @@ const SHARE_OF_MACHINE: f64 = 1.5 / 4.0;
 /// machine measures 3.6-4.1.
 const QUIET_MACHINE: f64 = 3.0;
 
+/// The verdict, on stderr and in `target/tmp/actors_pingpong-criterion1.txt`, which CI prints after the
+/// suite whether the test passed or not: cargo shows a passing test's output only with `--nocapture`,
+/// so without the file nobody could tell a runner that MEASURED the criterion from one that was too
+/// busy to (D-V2-47 §5).
+fn verdict(line: &str) {
+    eprintln!("{line}");
+    let _ = std::fs::write(
+        std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("actors_pingpong-criterion1.txt"),
+        format!("{line}\n"),
+    );
+}
+
 /// The bar for a machine whose control measured `machine`.
 fn bar(machine: f64) -> f64 {
     SHARE_OF_MACHINE * machine.min(4.0)
@@ -168,10 +180,10 @@ fn criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel() {
     // be observed, and where it cannot, that is printed with the thread count rather than hidden.
     let hw = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
     if hw < 4 {
-        eprintln!(
+        verdict(&format!(
             "ping-pong speedup NOT MEASURED: this machine offers {hw} hardware thread(s) and criterion 1 \
-             is stated at 4 workers ({speedup:.2}x observed, asserted nothing)"
-        );
+             is stated at 4 workers ({speedup:.2}x observed, control {before:.2}x / {after:.2}x, asserted nothing)"
+        ));
         return;
     }
     // Wall-clock scaling depends on the machine's thermal state: this box has witnessed
@@ -207,14 +219,20 @@ fn criterion1_pingpong_a_million_messages_quiesce_deterministic_and_parallel() {
     // ran on, never against another attempt's.
     let counted = attempts.iter().filter(|&&(_, machine)| machine >= QUIET_MACHINE);
     let Some(&(best, machine)) = counted.max_by(|a, b| (a.0 / bar(a.1)).total_cmp(&(b.0 / bar(b.1)))) else {
-        eprintln!(
+        verdict(&format!(
             "ping-pong speedup NOT MEASURED: in {} attempts this machine never gave perfectly parallel work \
              {QUIET_MACHINE}x at 4 threads on both sides of a run — it is busy, and criterion 1 is stated for \
              4 workers on 4 free threads ({attempts:?} as (speedup, control), asserted nothing)",
             attempts.len()
-        );
+        ));
         return;
     };
+    verdict(&format!(
+        "ping-pong speedup MEASURED: {best:.2}x where the machine gave perfectly parallel work {machine:.2}x, \
+         against a bar of {:.2}x — {} ({attempts:?} as (speedup, control))",
+        bar(machine),
+        if best >= bar(machine) { "passed" } else { "FAILED" }
+    ));
     assert!(
         best >= bar(machine),
         "criterion 1: parallel execution must be meaningfully faster at 4 threads, got {best:.2}x where this machine \

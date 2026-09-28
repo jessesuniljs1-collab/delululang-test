@@ -79,6 +79,14 @@ jobs:
       - name: Full workspace test suite
         run: cargo test --workspace --no-fail-fast
 
+      # D-V2-47: whether `actors_pingpong`'s criterion 1 was MEASURED on this runner or skipped as busy
+      # is invisible in a passing log (cargo shows a passing test's output only with `--nocapture`), so
+      # the test writes its verdict, with its control's figures, and this prints it — pass or fail.
+      - name: actors_pingpong criterion 1 — the verdict and its control (D-V2-47)
+        if: always()
+        shell: bash
+        run: cat target/tmp/actors_pingpong-criterion1.txt 2>/dev/null || echo "not written — the test did not reach its verdict"
+
       # Stage 8 criterion 10: `delulu fmt --check` and locale invariance are permanent CI
       # gates. The suite already carries them (fmt identity/idempotence over the corpus +
       # generative gate in delulu-syntax::fmt; locale-invariant JSON in delulu/tests/
@@ -151,6 +159,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Full workspace test suite (aarch64)
         run: cargo test --workspace --no-fail-fast
+      - name: actors_pingpong criterion 1 — the verdict and its control (D-V2-47)
+        if: always()
+        shell: bash
+        run: cat target/tmp/actors_pingpong-criterion1.txt 2>/dev/null || echo "not written — the test did not reach its verdict"
 
   # ---- Lints -------------------------------------------------------------------------------
   # THIS JOB COULD NOT PASS UNTIL 2026-08-07, and nobody knew, because CI has never run.

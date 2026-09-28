@@ -61,7 +61,7 @@ freshness and integrity). **Use both at every one of these points, and write the
 | When | Run | It must say |
 |---|---|---|
 | **Start of every session** | `cargo run -p delulu-survey -- check` and `cargo run -p delulu -- doctor --check` | `ok: the Survey matches the tree`; `ok: N check(s) passed`. Anything else is the first thing to fix or record. |
-| **Before any change** | `cargo run -p delulu-survey -- impact <id>` (what breaks), `affected-by <id>` (what it rests on), `query <id>` (both directions, and ENTRENCHED) | read what it reaches before editing. IDs: `crate:delulu-check`, `mod:crates/delulu/src/guest.rs`, `doc:README.md`, `code:DL0501`, `ruling:S10-D64` |
+| **Before any change** | `cargo run -p delulu-survey -- impact <id>` (what breaks), `affected-by <id>` (what it rests on), `query <id>` (both directions, and ENTRENCHED) | read what it reaches before editing. IDs: `crate:delulu-check`, `mod:crates/delulu/src/guest.rs`, `test:crates/delulu/tests/guest_cli.rs`, `doc:README.md`, `code:DL0501`, `ruling:S10-D64` |
 | **Reviewing a branch** | `cargo run -p delulu-survey -- diff <base>` | every changed path and the nodes it reaches — also the file list for `docs/CLOUD_SYNC_LOG.md` |
 | **After the LAST edit** | `cargo run -p delulu-survey -- build`, then `-- check`, then `-- findings`, then `cargo run -p delulu -- doctor --check` | the map fresh; **0 errors** in `findings` (a warning is for a human to judge); all doctor checks pass |
 | **Before every commit and pull request** | `survey check` and `doctor --check` again | their results go into the pull request and the sync-log entry |
@@ -132,6 +132,7 @@ fails `doctor_cli` and the Survey's freshness test: regenerate it after the last
 - **Miri is ~100× slower:** shrink a test under `cfg!(miri)` only where its size is not the witness;
   ignore under Miri a test whose witness is the wall clock.
 - A wall-clock test failing only on CI may be measuring the RUNNER: reproduce by starving it, never by
-  lengthening sleeps.
+  lengthening sleeps — and give it a control measured on the same machine (D-V2-47: busy loops on three of
+  four CPUs turned `actors_pingpong` red at 1.20x; its control now reports such a runner as busy).
 - macOS: unix-socket paths are limited to 104 bytes; a socket answers `EOPNOTSUPP`, not `ENXIO`; its
   clock is microsecond-grained (add a counter to scratch names). Windows: 8.3 names and junctions.

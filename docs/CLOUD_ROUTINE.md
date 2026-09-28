@@ -63,14 +63,24 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
 `git log --oneline -15`. If `claude/cloud-dev` exists and is ahead of `master`, work from it (see above).
 
 **2. Health — the Survey and `doctor` first.** `cargo run -p delulu-survey -- check` and
-`cargo run -p delulu -- doctor --check`. A failure here is the run's first task.
+`cargo run -p delulu -- doctor --check`. A failure here is the run's first task. Then `cargo fetch
+--locked` once: a fresh VM holds only Linux's crates, and `egress_features` runs `cargo metadata
+--offline`, which needs every platform's (run 1 lost a suite result to it).
 
 **3. Verify the previous run — the verification loop.** A run does not trust the one before it:
-- `gh run list -R jessesuniljs1-collab/delululang-test --limit 12`: **read** every completed run since the
-  last recorded one (`gh run view <id>`, a job's log with `gh api …/actions/jobs/<id>/logs`) and record
-  each in `V2_LOG.md` — conclusion, test counts, anything red and why.
+- **Read CI with the GitHub MCP tools: a routine run has no `gh`**, and the proxy refuses the signed
+  log-download URLs (measured by run 1). `mcp__github__actions_list` — `list_workflow_runs` (`perPage`
+  10, `workflow_runs_filter.branch` `master`) and `list_workflow_jobs` for one run's jobs;
+  `mcp__github__actions_get` `get_workflow_run` for one run's conclusion; `mcp__github__get_job_logs`
+  with `run_id` + `failed_only: true` + a small `tail_lines` for a red run's failing jobs. A failure's
+  own lines sit in the middle of a 3,000-line log: a Haiku sous-chef can fetch the whole log in its own
+  context and return only the matching lines (run 1 did, for 36 k tokens). **Read** every completed run
+  since the last recorded one and record each in `V2_LOG.md` — conclusion, anything red and why. A
+  passing test's output is in no log (cargo prints it only with `--nocapture`); CI prints the one
+  verdict that matters for timing, `actors_pingpong`'s, in its own step (D-V2-47).
 - **If the newest `master` push run is red, fixing it is this run's only task** — find the cause, witness
-  it, fix it or revert the commit that broke it (`git revert`, never a rewrite). **If the previous run's
+  it, fix it or revert the commit that broke it (`git revert`, never a rewrite). A red on a commit that a
+  NEWER commit already fixed is not a new task: read the newer commit's push run, and record both. **If the previous run's
   entry also says it left CI red, this run is in SAFE MODE:** revert to the last green commit's behaviour,
   record the failure in full, and do no new work until `master` is green again.
 - Re-run, in the VM, the tests the previous run's entry says it added, and check each claim in that entry
@@ -92,7 +102,8 @@ lines are this run's inbox) and of `docs/DELULULANG_V2/V2_LOG.md`, and `V2_PHASE
    under `xvfb-run`, installed by `apt`), **2.2**, **2.4**, **2.10**, **4.17**, **7.16** — each as a small,
    witnessed change.
 5. **A verification sweep** at least once a week (Sundays, UTC) and whenever nothing above is ready:
-   dispatch `gh workflow run ci.yml -f jobs=everything`, read every job, run an adversarial testing pass
+   dispatch CI by hand (`mcp__github__actions_run_trigger` `run_workflow`, `workflow_id` `ci.yml`, `ref`
+   `master`, `inputs` `{"jobs": "everything"}`), read every job, run an adversarial testing pass
    on the newest feature (a sous-chef agent may do it — `AGENTS.md`), and scan the live documents for
    claims the code has overtaken (`HANDOFF.md` §11.8's last lesson).
 6. **When every phase is built: keep improving and verifying DeluluLang, the language of the future** —
@@ -104,7 +115,7 @@ Size the work to finish, verified and pushed, inside the run's budget. A phase i
 self-contained slice, record where the next run picks up.
 
 **5. Build it — the inner loop, for every change.** Ask the Survey first (`impact`, `affected-by`,
-`query`). **Witness the defect failing before fixing it; falsify every new test** (reintroduce the
+`query`; a test file's node is `test:<path>`, a source file's `mod:<path>`). **Witness the defect failing before fixing it; falsify every new test** (reintroduce the
 defect, watch it go red, restore). `cargo clippy --workspace --all-targets -- -D warnings`; the affected
 tests, then the full suite **alone**, `cargo test --workspace --no-fail-fast -j 4`, reading cargo's own
 exit code. Freeze the tree while it runs.
@@ -116,7 +127,8 @@ durable lesson; and **this run's `docs/CLOUD_SYNC_LOG.md` entry** (the template 
 and folder, Survey and doctor results, CI runs read, redo on the laptop, **Open / next for the next run**).
 Commit with the trailers in `CLAUDE.md`, push.
 
-**7. Watch the push run.** Wait for it (`gh run watch <id>` or poll `gh run view`) within the budget,
+**7. Watch the push run.** Wait for it (poll `mcp__github__actions_get` `get_workflow_run` — a push run
+takes about 15 minutes) within the budget,
 read it, and record it. If it goes red and the budget allows, that is step 3 again, now. If the budget
 is spent, the entry's "Open / next" says the run is unread — the next run reads it first.
 

@@ -116,9 +116,10 @@ it on `origin` was made in the cloud and is listed below.
 - Branch: `master` (the routine pushes there, `docs/CLOUD_ROUTINE.md`)   Pull request: none   Merged: n/a
 - Base: `5bb39bc`
 - Commits: (1) `9ac5477` actors_pingpong: judge criterion 1 against a control on a free machine (D-V2-47);
-  (2) `PS-D-02: the attestation seam — --require-attestation, sandbox attest (D-V2-48)`
+  (2) `fef8ccd` PS-D-02: the attestation seam — --require-attestation, sandbox attest (D-V2-48);
+  (3) `Loop engineering: CI read through MCP, cargo fetch, the ping-pong verdict printed by CI`
 - Files and folders:
-  M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar
+  M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar; (3) its verdict file
   A `crates/delulu/src/attest.rs` — (2) the statement, its canonical bytes, the verifier, the reference attester
   A `crates/delulu/tests/sandbox_attest_cli.rs` — (2) five end-to-end tests
   M `crates/delulu/src/guest.rs` — (2) the pinned key on the external backend; nonce and path to the launcher; verify before the hello
@@ -128,6 +129,10 @@ it on `origin` was made in the cloud and is listed below.
   M `docs/DELULULANG_V2/V2_DECISION_LOG.md` — D-V2-47 (1), D-V2-48 (2)
   M `docs/DELULULANG_V2/V2_LOG.md` — this run's entry (1)(2)
   M `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `V2_IMPLEMENTATION_ROADMAP.md`, `V2_SECURITY_MODEL.md` — (2) PS-D-02 built
+  M `.github/workflows/ci.yml` — (3) the test and arm64 jobs print `actors_pingpong`'s verdict after the suite
+  M `docs/CLOUD_ROUTINE.md`, `CLAUDE.md`, `AGENTS.md` — (3) CI through the GitHub MCP tools (no `gh` in the VM),
+    `cargo fetch --locked` before the suite, `test:` Survey ids, a red already fixed by a newer commit
+  M `docs/assistant-memory/cloud-period-2026-09-28.md` — (3) what routine run 1 learned
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
 - Survey and doctor (after the last edit): see the commit message of each slice.
@@ -137,7 +142,7 @@ it on `origin` was made in the cloud and is listed below.
   `-D warnings`) clean; the full suite alone, 1,995 passed and 1 failed — `egress_features`, which needs
   `cargo fetch` in a fresh VM and then passes (1,996 of 1,996). CI: `miri-slow` `36381950975` syntax and
   check green, broker running; `5bb39bc`'s push run `36390274072` red on Windows only, `actors_pingpong`
-  1.31x/1.28x — the defect (1) fixes.
+  1.31x/1.28x — the defect (1) fixes; `9ac5477`'s push run `36393016213` green on every job.
 - Redo on the laptop: nothing (CI runs Windows and macOS).
 - For the laptop's memory: a fresh VM needs `cargo fetch --locked` before the suite (`egress_features`
   runs `cargo metadata --offline`); a routine run has no `gh` — CI is read with the GitHub MCP tools.

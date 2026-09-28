@@ -2255,3 +2255,14 @@ by a Haiku 4.5 sous-chef and checked against the job id. Two Windows runners, 1.
 near-identical times: systematic on some Windows runners rather than a moment's noise — fewer real cores
 behind the four vCPUs, or a busy image — which is what D-V2-47's control now tells apart. `9ac5477`
 (D-V2-47) is the first push with the control; its run is this run's to read.
+
+**Loop engineering (`docs/CLOUD_ROUTINE.md` step 8).** What this run lost time to, fixed where it lives:
+the routine told a run to read CI with `gh`, which the cloud VM does not have (and the proxy refuses the
+signed log URLs) — step 3, step 4's weekly sweep and step 7 now name the GitHub MCP tools, and CLAUDE.md says
+`gh` is the laptop's; a fresh VM needs `cargo fetch --locked` before the suite (step 2); a test file's
+Survey node is `test:<path>` (step 5, AGENTS.md); a red that a newer commit already fixed is read, not
+re-fixed (step 3). And D-V2-47's own residual: `actors_pingpong` now writes its verdict — MEASURED with
+its control's figures, or NOT MEASURED and why — to `target/tmp/actors_pingpong-criterion1.txt`, and
+CI's test and arm64 jobs print it after the suite, pass or fail (idle VM: "MEASURED: 2.18x where the
+machine gave perfectly parallel work 3.24x, against a bar of 1.21x — passed"). `9ac5477`'s push run
+`36393016213` — the first with the control — was green on every job.

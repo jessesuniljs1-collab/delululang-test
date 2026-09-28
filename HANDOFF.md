@@ -516,6 +516,11 @@ wins, and you should update the memory to match.
 
 *Most of these are the laptop's; a cloud session has none of them (§0).*
 
+- **The cloud VM (measured by the first routine run, 2026-09-28):** no `gh` — CI is read with the GitHub
+  MCP tools, and the proxy refuses the signed log-download URLs (`docs/CLOUD_ROUTINE.md` step 3); Docker,
+  Node 22 and `xvfb-run` are there; a fresh clone holds only Linux's crates, so `cargo fetch --locked`
+  goes before the suite or `egress_features` fails offline.
+
 - **WSL2 has KVM (since 2026-09-26):** `nestedVirtualization` plus a boot-time `modprobe` in
   `wsl.conf`. The PS-C toolchain lives there: Firecracker at `~/bin/firecracker`, guest images at
   `~/microvm-image-a` and `~/microvm-image-b`, the gated microVM tests built into `~/delulu-kvm-target`

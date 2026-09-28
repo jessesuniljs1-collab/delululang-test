@@ -27,6 +27,13 @@ which is already connected. The laptop checkout `D:\nelan\DeluluLang` is synced 
 - **Same day:** "run everything on github" (heavy runs on CI, not the laptop — it ran out of RAM and
   Claude Code reaped the suite and a Miri run); "stop before PS-D-02" (its design draft is in
   `HANDOFF.md` §0).
+- **ROUTINE RUN 1 (2026-09-28, 07:11 UTC) learned:** the cloud VM has NO `gh` and the proxy refuses the
+  signed log URLs → read CI with the GitHub MCP tools (`actions_list`, `actions_get`, `get_job_logs`
+  `failed_only`), a Haiku sous-chef to pull lines out of a long log; run `cargo fetch --locked` before
+  the suite (`egress_features` runs `cargo metadata --offline`); Survey test nodes are `test:<path>`.
+  `actors_pingpong` went red on Windows twice at 1.31x — starving the VM reproduced it; D-V2-47 gave it a
+  control and CI now prints its verdict. PS-D-02 built (D-V2-48): `--require-attestation HEX`,
+  `delulu sandbox attest`; `delulu` reads nothing after a bare `--`.
 - **Back on the laptop:** follow `docs/CLOUD_SYNC_LOG.md` *Syncing the laptop afterwards* — ff-only
   pull, CRLF check, Survey + doctor, full suite Win + WSL, each entry's redo items, then merge
   `docs/assistant-memory/` and HANDOFF §11 changes back into this directory.
