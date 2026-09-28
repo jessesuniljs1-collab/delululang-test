@@ -703,6 +703,7 @@ pub(crate) fn cmd_run(rest: &[String]) -> i32 {
             ("--mode", opts.sandbox_mode.is_some()),
             ("--sandbox-profile", opts.sandbox_profile.is_some()),
             ("--sandbox-backend", opts.sandbox_backend.is_some()),
+            ("--require-attestation", opts.require_attestation.is_some()),
         ] {
             if asked {
                 eprintln!(

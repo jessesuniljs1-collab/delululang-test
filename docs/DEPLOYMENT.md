@@ -197,6 +197,44 @@ own time limit, or run the launcher under something that reaps it. And `--memory
 not the program's budget as DeluluLang accounts it: the run report records what was asked, and the
 launcher is what enforces it.
 
+**Requiring an attester's word (PS-D-02).** `--require-attestation HEX` (with `external:` only) makes the
+run refuse to serve a guest nobody vouched for. The host picks a fresh nonce for the run and gives the
+launcher `DELULU_ATTEST_NONCE` (64 hex digits) and `DELULU_ATTEST_OUT` (a path in the host's own per-run
+directory). Before the program is sent, a document must appear there, written whole (a temporary file,
+then a rename), within 10 seconds of the launch:
+
+```json
+{"format": "delulu-attestation-v1",
+ "statement": {"attester": "ci-image-builder", "guarantees": ["runsc", "no network"], "nonce": "<DELULU_ATTEST_NONCE>"},
+ "signature": "<hex of the signer's 32-byte public key followed by its 64-byte ed25519 signature>"}
+```
+
+The signature covers `delulu-attestation-v1` and a newline, followed by the statement's canonical JSON —
+keys in byte order, no whitespace; Python's `json.dumps(statement, sort_keys=True, separators=(",", ":"),
+ensure_ascii=False)` writes those bytes. The host checks the signature, that the signer is the key you
+pinned, and that the nonce is this run's; a claim is printable text of at most 256 characters, at most 32
+of them, and an unknown field anywhere is refused. On any failure — another key, no document, a launcher
+that exits first, a document replayed from another run — the guest is ended having been told nothing,
+the run exits 1 in words, and the refusal is in the audit chain (`sandbox-attestation`). On success the
+report carries `sandbox.attestation = {key, attester, guarantees, verified: true}`: the ATTESTER's claims,
+beside `host_guarantees` and never merged into them. The level stays 3 — DeluluLang still measured none
+of the wall; it checked who said what about it.
+
+Who the attester is decides what that is worth: a verifier service that checked a hardware quote, a CI
+system that built the image, or you. `delulu sandbox attest --key SEED --attester NAME --guarantee TEXT..
+-- COMMAND..` is a **software** attester — it signs whatever its key's holder tells it to, then becomes
+COMMAND with the channel on its standard input and output — useful for binding a run to an image your
+pipeline signed, and as a test double; it is not evidence about hardware. With the recipe above:
+
+```sh
+#!/bin/sh
+# /usr/local/bin/delulu-gvisor-attested — run with:
+#   delulu run app.delulu --grant … --sandbox --require-attestation "$(cat ~/.delulu/keys/ci.pub)" \
+#     --sandbox-backend external:/usr/local/bin/delulu-gvisor-attested
+exec delulu sandbox attest --key /etc/delulu/ci.seed --attester "ci image delulu-guest:1.0.0" \
+  --guarantee "gVisor runsc" --guarantee "no network" -- /usr/local/bin/delulu-gvisor
+```
+
 ---
 
 ## 3. Verify it — do not assume it
@@ -290,7 +328,9 @@ These are known, documented, and not fixable by configuration:
 - **An external launcher's wall.** At L3 (`--sandbox-backend external:CMD`) the boundary around the
   guest is whatever your launcher builds; DeluluLang measures none of it, and the report says level 3
   with no host guarantee. Authority is unaffected — the host still decides every effect — but
-  containment is only as good as the launcher.
+  containment is only as good as the launcher. `--require-attestation` (PS-D-02) adds an attester's
+  signed word about it, checked for key and freshness; the word is only as good as the attester's key
+  custody and what it checked.
 
 ---
 

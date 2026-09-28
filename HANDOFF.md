@@ -35,8 +35,8 @@ the assistant's memory — which now also travels file by file in
     `DELULU_CORE.md`) is the owner's: the file is entrenched.
   - **PS-D, external launchers and the attestation seam.** PS-D-01 is done:
     `--sandbox --sandbox-backend external:CMD`, level 3, measured by nobody and reported so (D-V2-46).
-    **PS-D-02 is next** — the owner's morning stop was superseded the same day by his delegation (§0);
-    its design is in §0.
+    **PS-D-02 is built** (2026-09-28, the first cloud routine run, D-V2-48): `--require-attestation HEX`
+    at L3, `delulu sandbox attest` as the software attester; PS-D closes when its CI run is read green.
 - **Not started:** P8, safe autonomy (the signed adapter) — owner-gated.
 - **Last pushed from the laptop:** the handoff commit after `047da1d`. CI on `30a6b8d` was green on
   every job — 1,967 tests passed on Windows, 1,985 on Linux, 1,975 on macOS, 0 failed; the release dry
@@ -132,7 +132,10 @@ directory itself.
 laptop tree, a fast-forward pull, the CRLF check, the Survey and `doctor`, the suite on Windows and in
 WSL, each entry's "redo on the laptop" items, and the memory carried back by hand.
 
-**PS-D-02 — designed, not started; next.** The draft the next run starts from:
+**PS-D-02 — built on 2026-09-28 by the first cloud routine run (D-V2-48).** The design it was built
+from, kept because D-V2-48 records where the build departed from it (the reference attester became the
+verb `delulu sandbox attest --key SEEDFILE --attester NAME …`, beside `sandbox ticket`, rather than a new
+top-level command; and `delulu` now reads nothing after a bare `--`):
 
 1. The seam verifies a **statement**, not a platform. An attestation document is
    `{"format":"delulu-attestation-v1","statement":{"nonce","attester","guarantees":[…]},"signature"}` —

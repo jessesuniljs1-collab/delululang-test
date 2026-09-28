@@ -2199,3 +2199,59 @@ skipped, so how often CI's runners count as busy is not yet known (D-V2-47 §5).
 
 A Survey note for the next run: a test file's node is `test:<path>`, not `mod:<path>` — `impact
 mod:crates/delulu-runtime/tests/actors_pingpong.rs` answers "no node".
+
+### PS-D-02 — the attestation seam, built (D-V2-48)
+
+From the `HANDOFF.md` §0 design. **`delulu run … --sandbox --sandbox-backend external:CMD
+--require-attestation HEX`**: the host picks a fresh 32-byte nonce, gives the launcher
+`DELULU_ATTEST_NONCE` and `DELULU_ATTEST_OUT` (a path in its own per-run directory), and before it sends
+the program waits — up to 10 s, and no longer than the launcher lives — for a `delulu-attestation-v1`
+document: a statement `{attester, guarantees, nonce}` signed (ed25519, the detached public-key-then-
+signature form) over `delulu-attestation-v1\n` and the statement's canonical JSON. It checks the
+signature, that the signer is the pinned key, and that the nonce is this run's — nothing else. Refused:
+the guest is ended having been told nothing, the run exits 1 in words ("… Nothing ran: the program was
+never sent to the guest"), `sandbox-attestation` (deny, with the reason) and `sandbox-death` go into the
+audit chain. Verified: the stderr line and the report's `sandbox.attestation = {key, attester,
+guarantees, verified: true}` carry the claims **as the attester's**, beside `host_guarantees` and never
+merged; level 3, `fully_enforced` false. A dry run reports the requirement, `verified: false`. The flag
+is refused (exit 2) at L1 and L2, which the host measures itself, and without `--sandbox`.
+**`delulu sandbox attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND..`** is the reference,
+software attester (and the tests' fake): it signs, writes the document whole (temporary file, rename),
+removes the two variables and becomes COMMAND (`exec` on Unix). Building it found that `delulu` read
+words after a bare `--` — `docker run -h HOST` there would have printed `delulu sandbox`'s help — so
+the CLI now reads nothing after `--` (`cli::own_words`).
+
+**Tests.** `crates/delulu/src/attest.rs`, six: a pinned, fresh statement verifies and file whitespace
+and key order do not matter; the canonical form is the documented one (the same bytes Python's
+`json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)` writes — checked); every wrong
+document is refused and named (another run's nonce, a key nobody pinned, a claim added after signing,
+the pinned key's bytes spliced before a stranger's signature, another format, an unknown field in the
+statement or the document, not JSON, not UTF-8, over 64 KiB, a signature that is not hex); a statement
+that could fill a terminal or a report (no claim, a blank name, an escape sequence, 257 characters, 33
+claims) is refused by the attester AND, signed anyway, by the host; keys and nonces; the wait ends at
+once when the launcher ends and at the deadline when it stays silent. `tests/sandbox_attest_cli.rs`,
+five, with the binary as attester, launcher and guest: attested and served, the report checked field by
+field and validated against `delulu schema sandbox`, the seed's path never recorded; refused before the
+program is sent — another key, a launcher that never attests (the 10 s deadline), one that exits, an
+attester that refuses to sign — each with the program's file NOT written, then the same launcher served
+when pinned right; a document replayed from another run refused on its nonce (Unix: a script hands the
+host a valid old document); the flag's refusals and the dry run; the attester's own refusals and the
+`--` rule (`-- delulu check -h` prints `check`'s help, not `sandbox`'s). **Falsified, six mutants, each
+red on its own assertion:** no nonce check (the replay test and the unit test), any signer accepted
+(case 0: the program ran), served despite a refusal (case 0), `--help` read past `--`, the dry run
+dropping the requirement, the report dropping the attestation. `cargo clippy --workspace --all-targets
+-D warnings` clean.
+
+**The full suite, alone in the VM** (`cargo test --workspace --no-fail-fast -j 4`, cargo's own exit read):
+151 test binaries, **1,995 passed, 1 failed, 15 ignored** — the one failure environmental:
+`egress_features::no_refused_reqwest_feature_is_enabled_anywhere_in_the_resolved_graph` runs `cargo
+metadata --offline --locked`, which needs every platform's crates, and a fresh VM has fetched only
+Linux's (`failed to download core-foundation … --offline was specified`). After `cargo fetch --locked` it
+passes (2/2), so 1,996 of 1,996. Written into `docs/CLOUD_ROUTINE.md` step 2 for the next run.
+
+**CI read during this run.** `5bb39bc`'s push run `36390274072`: **red on Windows only, the same
+`actors_pingpong` criterion** — 1.31x, retry 1.28x (19.7 s against 15.0 s), extracted from the job's log
+by a Haiku 4.5 sous-chef and checked against the job id. Two Windows runners, 1.31x and 1.31x/1.28x with
+near-identical times: systematic on some Windows runners rather than a moment's noise — fewer real cores
+behind the four vCPUs, or a busy image — which is what D-V2-47's control now tells apart. `9ac5477`
+(D-V2-47) is the first push with the control; its run is this run's to read.

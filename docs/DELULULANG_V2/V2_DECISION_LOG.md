@@ -1004,6 +1004,43 @@ four CPUs were free.
    not yet known; a red now always carries the control's figure, which says whether the runtime or the
    runner was slow.
 
+## D-V2-48 — PS-D-02: the attestation seam verifies a statement, not a platform — TAKEN (head chef, 2026-09-28, under the owner's delegation; the first cloud routine run)
+
+Built from the design in `HANDOFF.md` §0, with these choices:
+
+1. **What is checked, and nothing more:** an ed25519 signature over `delulu-attestation-v1\n` and the
+   statement's canonical JSON (keys in byte order, no whitespace; control characters refused, so only `\"`
+   and `\\` are ever escaped — Python's `json.dumps(sort_keys=True, separators=(",", ":"),
+   ensure_ascii=False)` writes the same bytes, checked); the signer is the key pinned on the command line
+   (`--require-attestation HEX`); the statement carries this run's nonce (32 bytes of OS randomness).
+   The signature field is the detached form every other signature here uses (public key ‖ signature).
+2. **Checked before the program is sent.** The host waits up to 10 s (`CONNECT_DEADLINE`, the time a
+   guest has to come up) for the document, refuses at once when the launcher exits first, and on any
+   refusal ends the guest having told it nothing: the run exits 1 in words, and `sandbox-attestation`
+   (deny, with the reason) and `sandbox-death` are in the audit chain. No run report is written for a
+   refused run, as for a launch that failed.
+3. **The claims are the attester's.** `sandbox.attestation = {key, attester, guarantees, verified}` sits
+   beside `host_guarantees`, never merged; the level stays 3 and `fully_enforced` false. A dry run
+   (`--mode audit`) reports the requirement with `verified: false`.
+4. **Bounded, closed documents:** at most 64 KiB, 32 claims of at most 256 printable characters, an
+   unknown field anywhere refused — a claim silently not carried reads like one never made, and a claim
+   is shown on a terminal and kept in a report.
+5. **L3 only.** With `--sandbox` alone (L1) or `--isolation microvm` (L2) the flag is refused, exit 2: the
+   host measures those boundaries itself, and nothing an attester says would be checked against them.
+   Without `--sandbox` it is refused like the other sandbox options (PS-A-10).
+6. **The reference attester is a verb, `delulu sandbox attest`, beside `sandbox ticket`** — not the
+   design's new top-level `attest launch`: it is the same kind of act as minting a break-glass ticket, and
+   a verb under `sandbox` needs no new command in the dispatcher, the completions, the MCP door rule or
+   the Skill. `--key` names a seed FILE, as `sandbox ticket`'s does. It refuses `--json` (its standard
+   output is the channel), removes the two variables from its command's environment, and on Unix
+   becomes the command (`exec`), so the host's watchdog reaches it.
+7. **`delulu` reads nothing after a bare `--`** — not `--help`/`-h`, `--json`, `--color`, `--locale`, nor
+   the undocumented-flag refusal. Found while building 6: `docker run -h HOST` after `--` would have
+   printed `delulu sandbox`'s help. No command used `--` before.
+8. **Not built, deliberately:** a lease-level "only attested" constraint (it changes the authority model —
+   RFC territory); level 4 `attested` (it waits for a hardware attester whose quote the host itself
+   checks); key rotation or a list of pinned keys (one key per run; an operator's script picks it).
+
 ## Owner decisions carried from V1, still open
 D-NE-3 (snapshot regeneration is a reviewed act — the diff is shown in each phase's log),
 D-NE-6 (decided under delegation as D-V2-38), D-NE-7 (the workflow is built and publishes nothing without it, D-V2-42), D-NE-8's installer posture (its workflow half taken in D-V2-42), D-NE-25, D-NE-27; the Constitution §5.15 wording (RW 7.10a); rustfmt and a

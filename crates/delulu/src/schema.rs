@@ -431,7 +431,8 @@ fn defs() -> Value {
                 ("break_glass", t("boolean")),
                 ("policy_hash", t("string")),
             ],
-            &[("unsupported_surface", nullable("string"))],
+            // PS-D-02: `--mode audit` with `--require-attestation` says so, verified false.
+            &[("unsupported_surface", nullable("string")), ("attestation", r("attestation"))],
         ), "a policy that WOULD hold (`sandbox policy`, `--mode audit`): nothing ran, so no posture"),
         "sandbox_run": described(obj(
             &[
@@ -452,9 +453,19 @@ fn defs() -> Value {
                 ("policy_hash", t("string")),
             ],
             // PS-D-01: an external (L3) run names the launcher's PROGRAM (never its arguments, which
-            // can carry an operator's token).
-            &[("image", r("microvm_image")), ("launcher", t("string"))],
+            // can carry an operator's token). PS-D-02: and what its attester said, when the run required it.
+            &[("image", r("microvm_image")), ("launcher", t("string")), ("attestation", r("attestation"))],
         ), "a sandboxed run: what the host applied, what it answers, and what it refused"),
+        "attestation": described(obj(
+            &[
+                ("key", t("string")),
+                ("attester", nullable("string")),
+                ("guarantees", str_list.clone()),
+                ("verified", t("boolean")),
+            ],
+            &[],
+        ), "PS-D-02: an external launcher's attester's statement — its claims, as its own; `verified` is true only \
+            where the signature, the pinned key and this run's nonce all checked (a dry run verifies nothing)"),
         "microvm_image": described(obj(
             &[("kernel_sha256", t("string")), ("initramfs_sha256", t("string")), ("kernel_version", t("string"))],
             &[],

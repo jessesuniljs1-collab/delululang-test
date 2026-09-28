@@ -425,6 +425,8 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
         Some("require") => return crate::breakglass::cmd_require(rest, json),
         Some("release") => return crate::breakglass::cmd_release(rest, json),
         Some("ticket") => return crate::breakglass::cmd_ticket(rest, json),
+        // PS-D-02: the reference attester. Its words after `--` are the command it becomes.
+        Some("attest") => return crate::attest::cmd_attest(rest),
         _ => {}
     }
     // A flag's VALUE is not a verb: `policy f.delulu --sandbox-profile dev` has one verb and one
@@ -540,7 +542,8 @@ pub fn cmd_sandbox(rest: &[String]) -> i32 {
                     "error: `sandbox` needs a verb: probe [--json] | status [--json] | ",
                     "policy <file.delulu> [--sandbox-profile P] [--json] | ",
                     "require (--break-glass-key HEX.. | --no-break-glass) | release --break-glass TICKET | ",
-                    "ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE]"
+                    "ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE] | ",
+                    "attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND.."
                 )
             );
             2

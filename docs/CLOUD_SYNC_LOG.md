@@ -115,18 +115,32 @@ it on `origin` was made in the cloud and is listed below.
 - Session: `https://claude.ai/code/session_013AZJ6RqYq59CeMgkvLV1BM`   Model: Claude Opus 5.5 (the scheduled routine)
 - Branch: `master` (the routine pushes there, `docs/CLOUD_ROUTINE.md`)   Pull request: none   Merged: n/a
 - Base: `5bb39bc`
-- Commits: (1) `actors_pingpong: judge criterion 1 against a control on a free machine (D-V2-47)`
+- Commits: (1) `9ac5477` actors_pingpong: judge criterion 1 against a control on a free machine (D-V2-47);
+  (2) `PS-D-02: the attestation seam — --require-attestation, sandbox attest (D-V2-48)`
 - Files and folders:
-  M `crates/delulu-runtime/tests/actors_pingpong.rs` — the control, the quiet-machine rule, the share-of-machine bar
-  M `docs/DELULULANG_V2/V2_DECISION_LOG.md` — D-V2-47
-  M `docs/DELULULANG_V2/V2_LOG.md` — this run's entry
+  M `crates/delulu-runtime/tests/actors_pingpong.rs` — (1) the control, the quiet-machine rule, the share-of-machine bar
+  A `crates/delulu/src/attest.rs` — (2) the statement, its canonical bytes, the verifier, the reference attester
+  A `crates/delulu/tests/sandbox_attest_cli.rs` — (2) five end-to-end tests
+  M `crates/delulu/src/guest.rs` — (2) the pinned key on the external backend; nonce and path to the launcher; verify before the hello
+  M `crates/delulu/src/cli.rs` — (2) `--require-attestation`; the help lines; `own_words` (nothing after `--` is delulu's)
+  M `crates/delulu/src/main.rs`, `run_cmd.rs`, `sandbox.rs`, `schema.rs` — (2) the module; the refusal without `--sandbox`; the verb; `sandbox.attestation`
+  M `CHANGELOG.md`, `HANDOFF.md`, `docs/DEPLOYMENT.md`, `docs/for-agents.md`, `docs/REMAINING_WORK.md` (4.24) — (2)
+  M `docs/DELULULANG_V2/V2_DECISION_LOG.md` — D-V2-47 (1), D-V2-48 (2)
+  M `docs/DELULULANG_V2/V2_LOG.md` — this run's entry (1)(2)
+  M `docs/DELULULANG_V2/V2_PHASE_STATUS.md`, `V2_IMPLEMENTATION_ROADMAP.md`, `V2_SECURITY_MODEL.md` — (2) PS-D-02 built
   M `docs/CLOUD_SYNC_LOG.md` — this entry
   M `docs/survey/*` — regenerated
 - Survey and doctor (after the last edit): see the commit message of each slice.
-- Verified: in the VM — the ping-pong test idle (measured, 2.03–2.16x), with three CPUs starved (NOT
+- Verified: in the VM — (1) the ping-pong test idle (measured, 2.03–2.16x), with three CPUs starved (NOT
   MEASURED, where the old test was red at 1.20x), and against a one-worker runtime mutant (red, 1.00x);
-  clippy on `delulu-runtime`. CI: `miri-slow` `36381950975` syntax and check green, broker running;
-  `5bb39bc`'s push run `36390274072` running at the start.
-- Redo on the laptop: nothing (a test-only change; Windows runs it in CI).
-- For the laptop's memory: nothing new yet.
-- Open / next: read `36381950975`'s broker job (green closes RW 5.6) and this commit's push run; PS-D-02.
+  (2) six unit and five end-to-end tests, six mutants each red on its own assertion; clippy (workspace,
+  `-D warnings`) clean; the full suite alone, 1,995 passed and 1 failed — `egress_features`, which needs
+  `cargo fetch` in a fresh VM and then passes (1,996 of 1,996). CI: `miri-slow` `36381950975` syntax and
+  check green, broker running; `5bb39bc`'s push run `36390274072` red on Windows only, `actors_pingpong`
+  1.31x/1.28x — the defect (1) fixes.
+- Redo on the laptop: nothing (CI runs Windows and macOS).
+- For the laptop's memory: a fresh VM needs `cargo fetch --locked` before the suite (`egress_features`
+  runs `cargo metadata --offline`); a routine run has no `gh` — CI is read with the GitHub MCP tools.
+- Open / next: read `9ac5477`'s and this commit's push runs (PS-D closes when the latter is green on
+  every job — then `V2_PHASE_STATUS.md` row 13 says complete), and `36381950975`'s broker job (green
+  closes RW 5.6); then P7's RW 5.2 (Progress restated as progress-or-fault in `DELULU_CORE.md`).

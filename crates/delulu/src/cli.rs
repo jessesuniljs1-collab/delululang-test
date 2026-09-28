@@ -258,6 +258,9 @@ pub(crate) struct Opts {
     /// `--sandbox-backend external:CMD` (PS-D-01, L3): the operator's launcher runs the guest in THEIR
     /// environment and carries the channel on its standard input and output.
     pub(crate) sandbox_backend: Option<String>,
+    /// `--require-attestation HEX` (PS-D-02, L3 only): the ed25519 key the external launcher's attester
+    /// must sign this run's statement with, before the program is sent.
+    pub(crate) require_attestation: Option<String>,
     /// `--limits mem=<bytes>,cpu=<seconds>`: narrow the profile's limits. Never widens past a
     /// profile that is already tighter — a flag may only ask for less.
     pub(crate) limits: Option<String>,
@@ -384,6 +387,7 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
         sandbox_said: Vec::new(),
         sandbox_profile: None,
         sandbox_backend: None,
+        require_attestation: None,
         limits: None,
         sandbox_mode: None,
         assert_trace: false,
@@ -487,6 +491,17 @@ pub(crate) fn parse_opts(rest: &[String]) -> (Option<String>, Opts) {
             }
             s if s.starts_with("--sandbox-backend=") => {
                 opts.sandbox_backend = Some(s["--sandbox-backend=".len()..].to_string())
+            }
+            "--require-attestation" => {
+                if i + 1 < rest.len() {
+                    opts.require_attestation = Some(rest[i + 1].clone());
+                    i += 1;
+                } else {
+                    opts.missing_values.push("--require-attestation".to_string());
+                }
+            }
+            s if s.starts_with("--require-attestation=") => {
+                opts.require_attestation = Some(s["--require-attestation=".len()..].to_string())
             }
             s if s.starts_with("--sandbox-profile=") => {
                 opts.sandbox_profile = Some(s["--sandbox-profile=".len()..].to_string())
@@ -994,8 +1009,15 @@ fn print_option_refusal(cmd: &str, refused: &[String]) {
 /// `--assert-trace` is deliberately NOT capped — see `TraceSink`'s docs.
 pub(crate) const TRACE_RECORD_CAP: usize = 200_000;
 
+/// The words `delulu` itself reads: everything before a bare `--`. What follows it belongs to the
+/// command a verb runs (`sandbox attest -- docker run -h HOST …`, PS-D-02) and is passed on untouched —
+/// never read as `--help`, `--json`, `--color` or `--locale`, and never refused as an unknown flag.
+pub(crate) fn own_words(args: &[String]) -> &[String] {
+    &args[..args.iter().position(|a| a == "--").unwrap_or(args.len())]
+}
+
 pub fn run(args: &[String]) -> i32 {
-    let wants_json = args.iter().any(|a| a == "--json");
+    let wants_json = own_words(args).iter().any(|a| a == "--json");
     let code = run_inner(args);
     if wants_json && code != 0 && !JSON_EMITTED.load(std::sync::atomic::Ordering::Relaxed) {
         // No DL code is invented here. The registry is a stable contract and a usage error is not a
@@ -1030,7 +1052,8 @@ fn run_inner(args: &[String]) -> i32 {
     // Resolve the global color/theme surface once, and strip `--color`/`--theme` so the per-command
     // parsers never mistake their values for a positional. A malformed theme is a DL1790 warning
     // (never a hard failure — addendum §2.5).
-    let (args, surface_warnings) = init_surface(args);
+    let passed_on = &args[own_words(args).len()..];
+    let (args, surface_warnings) = init_surface(own_words(args));
     enable_vt();
     if !surface_warnings.is_empty() {
         let map = SourceMap::new();
@@ -1042,7 +1065,8 @@ fn run_inner(args: &[String]) -> i32 {
     // The locale surface (Stage 8, spec §6.2): strips `--locale`, runs the first-run
     // picker + welcome when — and only when — every machine channel is absent
     // (invariant 40), and pins the active catalog for human rendering.
-    let (args, locale_warnings) = crate::locale::init_locale(&args);
+    let (mut args, locale_warnings) = crate::locale::init_locale(&args);
+    args.extend_from_slice(passed_on);
     for w in &locale_warnings {
         eprintln!("{w}");
     }
@@ -1058,7 +1082,7 @@ fn run_inner(args: &[String]) -> i32 {
     // GENERATE A KEY, `delulu test --help` ran the suite, and `delulu repl --help` opened the
     // REPL. Asking a tool what it does must never make it do the thing. Answered here rather than
     // in each subcommand so no future subcommand can forget.
-    if rest.iter().any(|a| a == "--help" || a == "-h") {
+    if own_words(rest).iter().any(|a| a == "--help" || a == "-h") {
         println!("{}", subcommand_help(cmd));
         return 0;
     }
@@ -1067,7 +1091,7 @@ fn run_inner(args: &[String]) -> i32 {
     // document it, for every command, before it runs. Commands with their own parsers never looked
     // at such a flag, so `keygen --grants` minted a key and exited 0 having ignored it.
     if SUBCOMMANDS.contains(&cmd.as_str()) {
-        if let Some(code) = refuse_undocumented_shared_flags(cmd, rest) {
+        if let Some(code) = refuse_undocumented_shared_flags(cmd, own_words(rest)) {
             return code;
         }
     }
@@ -1305,6 +1329,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--sandbox-backend external:CMD]  (L3, with --sandbox: the operator's launcher — Docker + gVisor, Kata,\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 a cloud sandbox, ssh — runs `delulu __guest --stdio-pipes` in THEIR environment on its stdin/stdout;\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 the level is labelled external and its guarantees unknown — DeluluLang measures none of them)\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--require-attestation HEX]  (PS-D-02, with external: only: the launcher's attester must sign a statement\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 over this run's nonce with this pinned ed25519 key, or the program is never sent; its claims are\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 reported as the attester's, never as the host's — `delulu sandbox attest` is a software attester)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--actors-threads N] [--on-quiesce report] [--on-actor-death abort] [--debug-rcaps]  (Stage 7 actors)\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--foreign-isolation inproc|process] [--foreign-max-ret BYTES] [--trace-memory] [--adapter-record DIR]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--broker-profile sim|hw:ADAPTER] [--sim-step MS] [--signoff F] [--approved F]  (devices: sim is deterministic under --seed;\n\
@@ -1348,6 +1375,9 @@ fn usage() -> &'static str {
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 only a ticket signed by a pinned key lets one program past it, or takes the policy off)\n\
      \x20 delulu sandbox   ticket --key SEED (--program FILE | --release) --ttl 15m --reason TEXT [--out FILE]\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (mint a break-glass ticket, wherever the private key is — not on the host it is for)\n\
+     \x20 delulu sandbox   attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND..\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 (PS-D-02: a SOFTWARE attester, run as an external launcher: signs the statement over the run's\n\
+     \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 nonce, writes it where the host asked, then becomes COMMAND — it says what its key's holder says)\n\
      \x20 delulu grants    list | tree | inspect <g_ID> | revoke <g_ID>  [--json]\n\
      \x20 delulu grants    delegate [--parent g_ID] --effects E,.. [--fs-read P].. [--fs-write P]..\n\
      \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20 [--net H].. [--secret N].. [--declassify N].. [--device DEV:dim=lo..hi,..].. [--ttl 1h]\n\

@@ -110,7 +110,14 @@ fn stdio_pipes_channel() -> Result<crate::pipe_channel::GuestChannel<std::fs::Fi
 /// is told, in its environment, the guest's own words and the limits the run asked for, so a recipe can
 /// map them (`docker --memory`, `--cpus`); enforcing them is the launcher's — DeluluLang measures none of
 /// it, and the report says so.
-fn launch_external(cmd: &str, limits: crate::jail::Limits) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
+///
+/// PS-D-02: where this run requires attestation, the launcher is also told the run's nonce and where to
+/// write its attester's document ([`crate::attest::ENV_NONCE`], [`crate::attest::ENV_OUT`]).
+fn launch_external(
+    cmd: &str,
+    limits: crate::jail::Limits,
+    attest: Option<(&str, &std::path::Path)>,
+) -> io::Result<(Guest, crate::jail::Jail, Vec<&'static str>)> {
     let mut words = cmd.split_whitespace();
     let program = words.next().ok_or_else(|| io::Error::other("the external launcher's command is empty"))?;
     let mut c = std::process::Command::new(program);
@@ -123,6 +130,9 @@ fn launch_external(cmd: &str, limits: crate::jail::Limits) -> io::Result<(Guest,
         .stderr(std::process::Stdio::inherit());
     if let Some(w) = limits.wall_seconds {
         c.env("DELULU_LIMIT_WALL_SECONDS", w.to_string());
+    }
+    if let Some((nonce, out)) = attest {
+        c.env(crate::attest::ENV_NONCE, nonce).env(crate::attest::ENV_OUT, out);
     }
     let child = c.spawn().map_err(|e| {
         let why = match e.kind() {
@@ -436,6 +446,8 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
     "--epoch-ms",
     // PS-D-01: `external:CMD` chooses an L3 launcher for the guest.
     "--sandbox-backend",
+    // PS-D-02: an external launcher's attester must vouch for the guest before the program is sent.
+    "--require-attestation",
 ];
 
 /// Which boundary a sandboxed run asked for: the jailed guest process (L1, `--sandbox`) or the
@@ -445,8 +457,9 @@ const APPLIED_UNDER_SANDBOX: &[&str] = &[
 pub enum Isolation {
     Process,
     MicroVm,
-    /// PS-D-01 (L3): an operator-supplied launcher, the command (its words, no shell) as given.
-    External(&'static str),
+    /// PS-D-01 (L3): an operator-supplied launcher, the command (its words, no shell) as given; and
+    /// (PS-D-02) the key its attester must sign with, when the run requires attestation.
+    External(&'static str, Option<&'static str>),
 }
 
 impl Isolation {
@@ -454,7 +467,7 @@ impl Isolation {
         match self {
             Isolation::Process => 1,
             Isolation::MicroVm => 2,
-            Isolation::External(_) => 3,
+            Isolation::External(..) => 3,
         }
     }
 
@@ -462,7 +475,7 @@ impl Isolation {
         match self {
             Isolation::Process => "process",
             Isolation::MicroVm => "microvm",
-            Isolation::External(_) => "external",
+            Isolation::External(..) => "external",
         }
     }
 }
@@ -493,7 +506,23 @@ fn isolation_of(opts: &crate::cli::Opts) -> Result<Isolation, String> {
                 "`--isolation {i}` and `--sandbox-backend external:…` name two different boundaries. Nothing ran: say which one you mean."
             ));
         }
-        return Ok(Isolation::External(Box::leak(cmd.to_string().into_boxed_str())));
+        let pinned = match opts.require_attestation.as_deref() {
+            None => None,
+            Some(given) => {
+                let key = crate::attest::pinned_key(given).map_err(|why| format!("{why}. Nothing ran."))?;
+                Some(&*Box::leak(key.into_boxed_str()))
+            }
+        };
+        return Ok(Isolation::External(Box::leak(cmd.to_string().into_boxed_str()), pinned));
+    }
+    // PS-D-02: an attester vouches for a boundary this host did NOT measure. L1 and L2 are measured here,
+    // and nothing an attester says would be checked against them, so the flag is refused rather than
+    // accepted and ignored.
+    if opts.require_attestation.is_some() {
+        return Err("`--require-attestation` is for an external launcher (`--sandbox-backend external:CMD`, level 3): \
+                    this host measures the jailed process and the microVM itself, and the report says what it \
+                    measured. Nothing ran."
+            .to_string());
     }
     match opts.isolation.as_deref() {
         None => Ok(Isolation::Process),
@@ -528,6 +557,15 @@ fn refuse_what_the_guest_does_not_apply(opts: &crate::cli::Opts) -> Option<i32> 
         dropped.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", ")
     );
     Some(2)
+}
+
+/// PS-D-02: a dry run launches nothing, so an attestation it requires is reported as required and not
+/// verified — never left out, which would read as a run that asked for none.
+fn with_attestation_required(mut sandbox: serde_json::Value, isolation: Isolation) -> serde_json::Value {
+    if let Isolation::External(_, Some(key)) = isolation {
+        sandbox["attestation"] = crate::attest::required_json(key);
+    }
+    sandbox
 }
 
 /// `delulu run <file> --sandbox …` (PS-A-07): run the program as a jailed guest.
@@ -618,7 +656,7 @@ pub fn cmd_run_sandboxed(file: Option<&str>, opts: &crate::cli::Opts, _rest: &[S
             "delulu_version": env!("CARGO_PKG_VERSION"),
             "diagnostics": [],
             "summary": { "errors": 0, "warnings": 0 },
-            "sandbox": policy.to_json("none", &[]),
+            "sandbox": with_attestation_required(policy.to_json("none", &[]), isolation),
             "audit": {
                 "required_grants": required,
                 "unsupported_surface": carried,
@@ -886,15 +924,29 @@ fn serve_under(
     let children_before = children_cpu();
     let dir = std::env::temp_dir().join(format!("delulu-guest-{}-{}", std::process::id(), channel_tag()));
     std::fs::create_dir_all(&dir)?;
+    // PS-D-02: a fresh nonce for this run, and the place in this run's own directory where the attester's
+    // document must appear.
+    let attest_plan = match isolation {
+        Isolation::External(_, Some(key)) => match crate::attest::fresh_nonce() {
+            Ok(nonce) => Some((key, nonce, dir.join(crate::attest::FILE_NAME))),
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                return Err(io::Error::other(e));
+            }
+        },
+        _ => None,
+    };
     let launched = match isolation {
         Isolation::Process => launch(&exe, &dir, limits, false),
         Isolation::MicroVm => launch_vm(limits, false),
-        Isolation::External(cmd) => launch_external(cmd, limits),
+        Isolation::External(cmd, _) => {
+            launch_external(cmd, limits, attest_plan.as_ref().map(|(_, nonce, path)| (nonce.as_str(), path.as_path())))
+        }
     };
-    let external = matches!(isolation, Isolation::External(_));
+    let external = matches!(isolation, Isolation::External(..));
     let launcher = match isolation {
         // The program only: an argument can carry an operator's token, and a report is shared.
-        Isolation::External(cmd) => cmd.split_whitespace().next().map(str::to_string),
+        Isolation::External(cmd, _) => cmd.split_whitespace().next().map(str::to_string),
         _ => None,
     };
     let (mut child, jail, mut applied) = match launched {
@@ -963,6 +1015,49 @@ fn serve_under(
         Some(blake3::hash(program.as_bytes()).to_hex().to_string()),
         Some(with_image(policy.to_json_with(backend, &applied, &[], 0))),
     );
+    // PS-D-02: the attester's document is read and checked BEFORE the program is sent. On a refusal the
+    // guest is ended having been told nothing, so the program never ran and no effect was performed
+    // under the grants or a lease; the refusal is in the audit chain, beside the launch it ends.
+    let attested = match &attest_plan {
+        None => None,
+        Some((key, nonce, path)) => {
+            let checked = crate::attest::await_and_verify(path, key, nonce, CONNECT_DEADLINE, || {
+                child.try_wait().ok().flatten().map(|st| st.to_string())
+            });
+            match checked {
+                Ok(a) => {
+                    eprintln!(
+                        "sandbox: attested by `{}`, signed with the pinned key {}… for this run: {} — the attester's \
+                         word, not a measurement; the host's own guarantees are unchanged",
+                        a.attester,
+                        &a.key[..16],
+                        a.guarantees.join("; ")
+                    );
+                    audit_sandbox("sandbox-attestation", "allow", Some(a.attester.clone()), Some(a.to_json()));
+                    Some(a)
+                }
+                Err(refusal) => {
+                    let why = refusal.explain();
+                    audit_sandbox(
+                        "sandbox-attestation",
+                        "deny",
+                        Some(refusal.code().to_string()),
+                        Some(serde_json::json!({ "key": key, "reason": why })),
+                    );
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = std::fs::remove_dir_all(&dir);
+                    audit_sandbox(
+                        "sandbox-death",
+                        "deny",
+                        Some(format!("attestation refused ({})", refusal.code())),
+                        Some(serde_json::json!({ "denied_total": 0 })),
+                    );
+                    return Err(io::Error::other(format!("the guest was not served: {why}")));
+                }
+            }
+        }
+    };
 
     let mut evidence = Evidence::default();
     // SANDBOX-STOP-1: the operator's wall-clock ceiling for a process guest (a microVM's VMM carries
@@ -1093,6 +1188,11 @@ fn serve_under(
             // Who decided each use: the broker's node when the run was under it, else embedded.
             "custody": custody_record.clone().unwrap_or_else(|| serde_json::json!({ "mode": "embedded", "node": null })),
         });
+        // PS-D-02: the attester's claims, as the attester's — beside `host_guarantees`, never in them.
+        let mut report = report;
+        if let Some(a) = &attested {
+            report["sandbox"]["attestation"] = a.to_json();
+        }
         let text = serde_json::to_string_pretty(&report).expect("the run report serializes");
         if let Err(e) = std::fs::write(path, format!("{text}\n")) {
             eprintln!("error: cannot write the run report to `{path}`: {e}");

@@ -9,6 +9,24 @@ Every entry names the ruling that authorized it. Rulings live in
 `docs/design/STAGE10_BUILD_ORDER.md` (`D<n>`) and, for Stage 9, `STAGE9_BUILD_ORDER.md` (`S9-D<n>`).
 Campaign findings (`C<n>`) live in `docs/design/HARDENING_CAMPAIGN.md`.
 
+## Unreleased — V2 PS-D-02: an external launcher's attester can vouch for the guest, 2026-09-28
+
+- **`delulu run --sandbox --sandbox-backend external:CMD --require-attestation HEX`**: the run refuses to
+  serve a guest unless the launcher's attester signed a statement over this run's fresh nonce with the
+  pinned ed25519 key — checked before the program is sent, so a refused run never ran (exit 1, in words,
+  and in the audit chain). The report carries `sandbox.attestation`: the attester's name and claims, as
+  the attester's, beside `host_guarantees` and never merged into them; the level stays 3. Refused (exit 2)
+  without `external:`, where the host measures the boundary itself (D-V2-48).
+- **`delulu sandbox attest --key SEED --attester NAME --guarantee TEXT.. -- COMMAND..`**: a reference,
+  software attester — it signs what its key's holder says, writes the document where the host asked, and
+  becomes COMMAND. The document format and its signed bytes are in `DEPLOYMENT.md`.
+- **`delulu` reads nothing after a bare `--`.** Those words belong to the command a verb runs, so
+  `sandbox attest -- docker run -h HOST …` passes `-h` to `docker`, where `delulu` used to answer it with
+  its own help.
+- **Tests:** `actors_pingpong`'s parallel speed-up is now judged against a control measured on the same
+  machine, so a CI runner that is busy is reported as busy rather than as a runtime that stopped running in
+  parallel (D-V2-47).
+
 ## Unreleased — V2 PS-D-01: an external launcher carries the sandbox (L3), 2026-09-28
 
 - **`delulu run --sandbox --sandbox-backend external:CMD`**: a boundary DeluluLang does not build — Docker

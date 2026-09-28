@@ -445,7 +445,11 @@ jailed process, all three systems); **L2** `--isolation microvm` (its own kernel
 Linux x86_64 with KVM and an image built from source; elsewhere `DL1408`, never something weaker);
 **L3** `--sandbox --sandbox-backend external:CMD` (your launcher — Docker with gVisor, Kata, a cloud
 sandbox — carries the guest; the report says level 3 and **no host guarantee**, because DeluluLang
-measured none of that wall). At every level the host decides and performs every effect.
+measured none of that wall). Add `--require-attestation HEX` and the program is sent only after the
+launcher's attester has signed a statement over this run's nonce with that ed25519 key; its claims come
+back as `sandbox.attestation` — the attester's word, never counted as a host guarantee (PS-D-02;
+`delulu sandbox attest` is a software attester, `DEPLOYMENT.md` has the format). At every level the host
+decides and performs every effect.
 
 Three profiles (the owner's ruling D-V2-25), differing in what a guest may consume, never in who
 performs its effects: `dev`, `contained` (the default), `hostile-agent`. `--limits mem=N,cpu=S` may
